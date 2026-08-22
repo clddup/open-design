@@ -71,6 +71,44 @@ export interface VariableProjectionResult {
   issues: readonly VariableDocumentIssue[];
 }
 
+export function variableCollectionDefinition(
+  document: DesignDocument,
+  collectionId: string,
+): VariableCollectionDefinition | undefined {
+  return (
+    document.variableCollectionsById[collectionId] ??
+    document.libraryVariableCollectionsById[collectionId]?.collection
+  );
+}
+
+export function variableDefinition(
+  document: DesignDocument,
+  variableId: string,
+) {
+  return (
+    document.variablesById[variableId] ??
+    document.libraryVariablesById[variableId]?.variable
+  );
+}
+
+export function variableCollectionDefinitions(document: DesignDocument) {
+  return [
+    ...Object.values(document.variableCollectionsById),
+    ...Object.values(document.libraryVariableCollectionsById).map(
+      (source) => source.collection,
+    ),
+  ];
+}
+
+export function variableDefinitions(document: DesignDocument) {
+  return [
+    ...Object.values(document.variablesById),
+    ...Object.values(document.libraryVariablesById).map(
+      (source) => source.variable,
+    ),
+  ];
+}
+
 export function resolveVariableForConsumer(
   document: DesignDocument,
   variableId: string,
@@ -96,7 +134,7 @@ export function resolveVariableForConsumer(
   let expectedType: VariableResolvedDataType | undefined;
 
   while (true) {
-    const variable = document.variablesById[currentId];
+    const variable = variableDefinition(document, currentId);
     if (!variable) {
       return failure(
         aliasChain.length === 0 ? "missing-variable" : "missing-alias",
@@ -121,8 +159,10 @@ export function resolveVariableForConsumer(
         currentId,
       );
     }
-    const collection =
-      document.variableCollectionsById[variable.variableCollectionId];
+    const collection = variableCollectionDefinition(
+      document,
+      variable.variableCollectionId,
+    );
     if (!collection) {
       return failure(
         "missing-collection",
@@ -325,12 +365,12 @@ export function validateVariableDocument(
       ),
     );
   }
+  validateLibraryVariableSources(document, issues);
   const collectionKeys = new Set<string>();
   const variableKeys = new Set<string>();
-  for (const [collectionId, collection] of Object.entries(
-    document.variableCollectionsById,
-  )) {
-    const path = `/variableCollectionsById/${escapePointer(collectionId)}`;
+  for (const collection of variableCollectionDefinitions(document)) {
+    const collectionId = collection.id;
+    const path = collectionPath(document, collectionId);
     if (collection.id !== collectionId) {
       issues.push(
         issue(
@@ -369,7 +409,7 @@ export function validateVariableDocument(
         ),
       );
     }
-    const actual = Object.values(document.variablesById)
+    const actual = variableDefinitions(document)
       .filter((variable) => variable.variableCollectionId === collectionId)
       .map((variable) => variable.id);
     if (!sameMembers(collection.variableIds, actual)) {
@@ -382,8 +422,9 @@ export function validateVariableDocument(
       );
     }
   }
-  for (const [variableId, variable] of Object.entries(document.variablesById)) {
-    const path = `/variablesById/${escapePointer(variableId)}`;
+  for (const variable of variableDefinitions(document)) {
+    const variableId = variable.id;
+    const path = variablePath(document, variableId);
     if (variable.id !== variableId) {
       issues.push(
         issue(
@@ -405,8 +446,10 @@ export function validateVariableDocument(
       );
     }
     variableKeys.add(variable.key);
-    const collection =
-      document.variableCollectionsById[variable.variableCollectionId];
+    const collection = variableCollectionDefinition(
+      document,
+      variable.variableCollectionId,
+    );
     if (!collection) {
       issues.push(
         issue(
@@ -444,7 +487,7 @@ export function validateVariableDocument(
         );
       }
       if (isVariableAlias(value)) {
-        const target = document.variablesById[value.id];
+        const target = variableDefinition(document, value.id);
         if (!target) {
           issues.push(
             issue(
@@ -494,12 +537,12 @@ function validateAliasCycles(
     stack: readonly string[],
     active: ReadonlySet<string>,
   ): void => {
-    const variable = document.variablesById[variableId];
+    const variable = variableDefinition(document, variableId);
     if (!variable) return;
     const nextStack = [...stack, variableId];
     const nextActive = new Set(active).add(variableId);
     for (const value of Object.values(variable.valuesByMode)) {
-      if (!isVariableAlias(value) || !document.variablesById[value.id])
+      if (!isVariableAlias(value) || !variableDefinition(document, value.id))
         continue;
       if (nextActive.has(value.id)) {
         const cycleStart = nextStack.indexOf(value.id);
@@ -520,10 +563,121 @@ function validateAliasCycles(
       visit(value.id, nextStack, nextActive);
     }
   };
-  for (const variableId of Object.keys(document.variablesById)) {
+  for (const variableId of variableDefinitions(document).map(({ id }) => id)) {
     visit(variableId, [], new Set());
   }
   return issues;
+}
+
+function validateLibraryVariableSources(
+  document: DesignDocument,
+  issues: VariableDocumentIssue[],
+): void {
+  for (const [collectionId, source] of Object.entries(
+    document.libraryVariableCollectionsById,
+  )) {
+    const path = `/libraryVariableCollectionsById/${escapePointer(collectionId)}`;
+    if (document.variableCollectionsById[collectionId]) {
+      issues.push(
+        issue(
+          "invalid-collection",
+          path,
+          `Library Collection ${collectionId} conflicts with a local Collection`,
+        ),
+      );
+    }
+    if (
+      source.collection.id !== collectionId ||
+      source.source.sourceVariableCollectionId !== collectionId
+    ) {
+      issues.push(
+        issue(
+          "invalid-collection",
+          path,
+          "Library Collection identity must match its map key",
+        ),
+      );
+    }
+  }
+  for (const [variableId, source] of Object.entries(
+    document.libraryVariablesById,
+  )) {
+    const path = `/libraryVariablesById/${escapePointer(variableId)}`;
+    if (document.variablesById[variableId]) {
+      issues.push(
+        issue(
+          "invalid-value",
+          path,
+          `Library Variable ${variableId} conflicts with a local Variable`,
+          variableId,
+        ),
+      );
+    }
+    if (
+      source.variable.id !== variableId ||
+      source.source.sourceVariableId !== variableId
+    ) {
+      issues.push(
+        issue(
+          "invalid-value",
+          path,
+          "Library Variable identity must match its map key",
+          variableId,
+        ),
+      );
+    }
+    const collection =
+      document.libraryVariableCollectionsById[
+        source.variable.variableCollectionId
+      ];
+    if (!collection || !sameLibraryIdentity(source.source, collection.source)) {
+      issues.push(
+        issue(
+          "missing-collection",
+          `${path}/variable/variableCollectionId`,
+          "Library Variable must use a Collection from the same Library release",
+          variableId,
+        ),
+      );
+    }
+  }
+}
+
+function sameLibraryIdentity(
+  left: {
+    libraryId: string;
+    releaseId: string;
+    sourceProjectId: string;
+    sourceDesignFileId: string;
+    sourceDocumentId: string;
+  },
+  right: {
+    libraryId: string;
+    releaseId: string;
+    sourceProjectId: string;
+    sourceDesignFileId: string;
+    sourceDocumentId: string;
+  },
+): boolean {
+  return (
+    left.libraryId === right.libraryId &&
+    left.releaseId === right.releaseId &&
+    left.sourceProjectId === right.sourceProjectId &&
+    left.sourceDesignFileId === right.sourceDesignFileId &&
+    left.sourceDocumentId === right.sourceDocumentId
+  );
+}
+
+function collectionPath(document: DesignDocument, collectionId: string) {
+  return document.variableCollectionsById[collectionId]
+    ? `/variableCollectionsById/${escapePointer(collectionId)}`
+    : `/libraryVariableCollectionsById/${escapePointer(collectionId)}/collection`;
+}
+
+function variablePath(document: DesignDocument, variableId: string) {
+  return document.variablesById[variableId]
+    ? `/variablesById/${escapePointer(variableId)}`
+    : `/libraryVariablesById/${escapePointer(variableId)}/variable`;
 }
 
 function validateExplicitModes(
@@ -533,7 +687,7 @@ function validateExplicitModes(
   issues: VariableDocumentIssue[],
 ): void {
   for (const [collectionId, modeId] of Object.entries(modes ?? {})) {
-    const collection = document.variableCollectionsById[collectionId];
+    const collection = variableCollectionDefinition(document, collectionId);
     const path = `${ownerPath}/explicitVariableModes/${escapePointer(collectionId)}`;
     if (!collection) {
       issues.push(
@@ -563,7 +717,7 @@ function validateNodeBindings(
 ): void {
   for (const [field, alias] of Object.entries(node.boundVariables ?? {})) {
     const expected = nodeBindingType(field);
-    const variable = document.variablesById[alias.id];
+    const variable = variableDefinition(document, alias.id);
     const fieldPath = `${path}/boundVariables/${field}`;
     if (!variable) {
       issues.push(
@@ -599,7 +753,7 @@ function validateNodeBindings(
     paints.forEach((paint, index) => {
       if (paint.type !== "solid" || !paint.boundVariables?.color) return;
       const alias = paint.boundVariables.color;
-      const variable = document.variablesById[alias.id];
+      const variable = variableDefinition(document, alias.id);
       const fieldPath = `${path}/properties/${paintField}/${index}/boundVariables/color`;
       if (!variable) {
         issues.push(

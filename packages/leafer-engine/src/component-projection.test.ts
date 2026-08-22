@@ -480,6 +480,8 @@ function fixture(): DesignDocument {
     libraryComponentsById: {},
     libraryVariantSetsById: {},
     libraryStylesById: {},
+    libraryVariableCollectionsById: {},
+    libraryVariablesById: {},
     variableCollectionOrder: [],
     variableCollectionsById: {},
     variablesById: {},

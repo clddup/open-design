@@ -22,8 +22,7 @@
   white-space: nowrap;
 }
 
-.row select,
-.bindingRow select {
+.row select {
   min-width: 0;
   height: 27px;
   border: 1px solid var(--border-subtle);
@@ -31,6 +30,31 @@
   background: var(--surface-control);
   color: var(--text-primary);
   font: inherit;
+}
+
+.bindingRow :global(.ui-combobox) {
+  min-width: 0;
+  width: 100%;
+}
+
+.option {
+  display: grid;
+  min-width: 0;
+  width: 100%;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 5px;
+
+  > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  > small {
+    color: var(--text-tertiary);
+    font-size: 9px;
+  }
 }
 
 .bindingRow small {

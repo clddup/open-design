@@ -738,6 +738,8 @@ describe("Figma component property compatibility", () => {
       libraryComponentsById: {},
       libraryVariantSetsById: {},
       libraryStylesById: {},
+      libraryVariableCollectionsById: {},
+      libraryVariablesById: {},
       variableCollectionOrder: [],
       variableCollectionsById: {},
       variablesById: {},

@@ -19,7 +19,11 @@ export function applyDesignSystemOperation(
     command.type === "put_variable" ||
     command.type === "delete_variable" ||
     command.type === "set_explicit_variable_modes" ||
-    command.type === "set_variable_binding"
+    command.type === "set_variable_binding" ||
+    command.type === "put_library_variable_collection_source" ||
+    command.type === "delete_library_variable_collection_source" ||
+    command.type === "put_library_variable_source" ||
+    command.type === "delete_library_variable_source"
   ) {
     applyVariableOperation(document, command);
     return true;

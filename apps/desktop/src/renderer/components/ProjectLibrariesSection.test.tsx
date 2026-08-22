@@ -31,6 +31,30 @@ describe("ProjectLibrariesSection", () => {
       extensions: {},
     };
     document.styleOrderByType.PAINT.push("brand_primary");
+    document.variableCollectionOrder = ["spacing"];
+    document.variableCollectionsById.spacing = {
+      id: "spacing",
+      key: "spacing-key",
+      name: "Spacing",
+      hiddenFromPublishing: false,
+      modes: [{ modeId: "default", name: "Default" }],
+      variableIds: ["spacing_base"],
+      defaultModeId: "default",
+      extensions: {},
+    };
+    document.variablesById.spacing_base = {
+      id: "spacing_base",
+      key: "spacing-base-key",
+      name: "Spacing/Base",
+      description: "",
+      hiddenFromPublishing: false,
+      variableCollectionId: "spacing",
+      resolvedType: "FLOAT",
+      valuesByMode: { default: 8 },
+      scopes: ["ALL_SCOPES"],
+      codeSyntax: {},
+      extensions: {},
+    };
     const release = createLibraryReleaseSnapshot(document, {
       libraryId: "library_acme",
       releaseId: "release_current",
@@ -47,6 +71,9 @@ describe("ProjectLibrariesSection", () => {
     const applyStyle = vi
       .fn()
       .mockResolvedValue({ ok: true, message: "Applied Brand/Primary" });
+    const applyVariable = vi
+      .fn()
+      .mockResolvedValue({ ok: true, message: "Applied Spacing/Base" });
     const acceptUpdate = vi.fn().mockResolvedValue(undefined);
     const ignoreUpdate = vi.fn().mockResolvedValue(undefined);
     const actions: ProjectLibraryActions = {
@@ -84,6 +111,7 @@ describe("ProjectLibrariesSection", () => {
       setEnabled,
       placeComponent,
       applyStyle,
+      applyVariable,
       acceptUpdate,
       ignoreUpdate,
       clearError: vi.fn(),
@@ -118,6 +146,8 @@ describe("ProjectLibrariesSection", () => {
     );
     expect(screen.getByText("Brand/Primary")).toBeVisible();
     expect(screen.getByText("Paint")).toBeVisible();
+    expect(screen.getByText("Spacing/Base")).toBeVisible();
+    expect(screen.getByText("1 variables")).toBeVisible();
 
     await user.click(screen.getByRole("button", { name: "Update" }));
     await user.click(screen.getByRole("button", { name: "Ignore" }));

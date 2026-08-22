@@ -8,13 +8,16 @@ import type {
 } from "@opendesign/design-contracts";
 import { materializeVariableBindings } from "@opendesign/variable-service";
 import { exportSvg } from "@opendesign/import-export-service";
+import { createLibraryReleaseSnapshot } from "@opendesign/library-service";
 import {
   createWelcomeDocument,
   EditorRuntime,
   planAddVariableMode,
+  planApplyLibraryVariable,
   planCreateVariable,
   planCreateVariableCollection,
   planDeleteVariable,
+  planDeleteVariableCollection,
   planSetExplicitVariableMode,
   planSetVariableBinding,
   planSvgExportRequest,
@@ -156,7 +159,140 @@ describe("Variables EditorRuntime v1", () => {
     if (title?.kind !== "text") throw new Error("Missing title");
     expect(title.properties.fills[0]).not.toHaveProperty("boundVariables");
   });
+
+  it("imports a Library Variable alias closure and binds it in one undoable revision", () => {
+    const source = structuredClone(createWelcomeDocument());
+    source.variableCollectionOrder = ["content", "internal"];
+    source.variableCollectionsById.content = collection("content", ["copy"]);
+    source.variableCollectionsById.internal = {
+      ...collection("internal", ["copy-base"]),
+      hiddenFromPublishing: true,
+    };
+    source.variablesById.copy = {
+      ...definition("copy", "STRING", {
+        default: { type: "VARIABLE_ALIAS", id: "copy-base" },
+      }),
+      variableCollectionId: "content",
+    };
+    source.variablesById["copy-base"] = {
+      ...definition("copy-base", "STRING", { default: "Library title" }),
+      hiddenFromPublishing: true,
+      variableCollectionId: "internal",
+    };
+    const release = createLibraryReleaseSnapshot(source, {
+      libraryId: "library_acme",
+      releaseId: "release_current",
+      sourceProjectId: "project_acme",
+      sourceDesignFileId: "design_system",
+      name: "Acme Library",
+      publishedAt: "2026-08-22T08:00:00.000Z",
+    });
+
+    const collectionConflict = new EditorRuntime(createWelcomeDocument());
+    applyPlan(
+      collectionConflict,
+      planCreateVariableCollection(collectionConflict.getSnapshot().document, {
+        collectionId: "local-content",
+        key: "content-key",
+        name: "Local content",
+        defaultModeId: "default",
+        defaultModeName: "Default",
+        commandPrefix: "local_content",
+      }),
+    );
+    expect(
+      planApplyLibraryVariable(
+        collectionConflict.getSnapshot().document,
+        release,
+        {
+          variableId: "copy",
+          target: {
+            kind: "node",
+            nodeId: "title_welcome",
+            field: "characters",
+          },
+          commandPrefix: "conflict",
+        },
+      ),
+    ).toMatchObject({ ok: false, code: "duplicate" });
+
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    const plan = planApplyLibraryVariable(
+      runtime.getSnapshot().document,
+      release,
+      {
+        variableId: "copy",
+        target: {
+          kind: "node",
+          nodeId: "title_welcome",
+          field: "characters",
+        },
+        commandPrefix: "apply_library_copy",
+      },
+    );
+
+    expect(plan.ok).toBe(true);
+    if (!plan.ok) throw new Error(plan.message);
+    expect(plan.commands.map((command) => command.type)).toEqual([
+      "put_library_variable_collection_source",
+      "put_library_variable_collection_source",
+      "put_library_variable_source",
+      "put_library_variable_source",
+      "set_variable_binding",
+    ]);
+    const result = runtime.apply(transaction(runtime, plan.commands));
+    expect(result.ok).toBe(true);
+    expect(runtime.getSnapshot().document.revision).toBe(1);
+    expect(
+      materializeVariableBindings(runtime.getSnapshot().document).document
+        .nodesById.title_welcome,
+    ).toMatchObject({ properties: { content: "Library title" } });
+
+    const modePlan = planSetExplicitVariableMode(
+      runtime.getSnapshot().document,
+      {
+        target: { kind: "node", id: "title_welcome" },
+        collectionId: "content",
+        modeId: "default",
+        commandPrefix: "set_library_mode",
+      },
+    );
+    expect(modePlan.ok).toBe(true);
+    expect(
+      planAddVariableMode(runtime.getSnapshot().document, {
+        collectionId: "content",
+        modeId: "other",
+        name: "Other",
+        valuesByVariableId: { copy: "Other" },
+        commandPrefix: "edit_imported",
+      }),
+    ).toMatchObject({ ok: false, code: "not-found" });
+    expect(
+      planDeleteVariableCollection(runtime.getSnapshot().document, {
+        collectionId: "content",
+        commandPrefix: "delete_imported",
+      }),
+    ).toMatchObject({ ok: false, code: "not-found" });
+    expect(runtime.undo("user")).toMatchObject({ ok: true, mode: "undo" });
+    expect(
+      runtime.getSnapshot().document.libraryVariableCollectionsById,
+    ).toEqual({});
+    expect(runtime.getSnapshot().document.libraryVariablesById).toEqual({});
+  });
 });
+
+function collection(id: string, variableIds: string[]) {
+  return {
+    id,
+    key: `${id}-key`,
+    name: id,
+    hiddenFromPublishing: false,
+    modes: [{ modeId: "default", name: "Default" }],
+    variableIds,
+    defaultModeId: "default",
+    extensions: {},
+  };
+}
 
 function definition(
   id: string,

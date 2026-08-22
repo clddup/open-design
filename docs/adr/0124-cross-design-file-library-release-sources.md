@@ -43,13 +43,13 @@ Source bundle 必须是从 Component root 完整可达的单树，节点 parent/
 
 Project-backed Design File 的 Assets 面板提供同一条主流程：当前文件先保存再发布；其他文件显式启用 Library 后浏览其 Component/Component Set；首次放置把 release source 与 Instance 合并为一笔 `DesignTransaction`，因此只有一个 revision 和一个 undo。已经消费旧 release 的文件继续浏览旧 release，不会因放置组件暗中升级；源文件重新发布后显示更新入口，用户可接受或忽略。接受时所有 source 更新仍是一笔事务，并按“Runtime 提交 → 明确保存消费文件 → catalog 记录 accepted”的顺序推进；保存失败不能把 catalog 提前标为已接受。禁用只隐藏可插入目录，缓存 source 和已有 Instance 保留。
 
-本 ADR 的原始范围只覆盖同 Project 的 Component/Variant 发布与消费。Shared Styles 已由 ADR-0126 在相同 release/catalog/事务边界上扩展；跨文件 Variables、Workspace 聚合、远端团队 Library 和发布权限仍不在当前实现中。
+本 ADR 的原始范围只覆盖同 Project 的 Component/Variant 发布与消费。Shared Styles 已由 ADR-0126、Variables 已由 ADR-0128 在相同 release/catalog/事务边界上扩展；Workspace 聚合、远端团队 Library 和发布权限仍不在当前实现中。
 
 ## 后果
 
 - OpenDesign 保持唯一文档事实、事务、revision 与撤销语义，不需要隐藏 Page 或渲染后端兼容层。
 - 同 Project 跨 Design File 是首个发布/消费切片；Workspace 聚合、团队权限和远端发布在相同 release 契约上扩展。
-- Components/Variants/Styles 的协议、runtime、projection、Main 持久化和 Assets/Library 用户流程共用同一 catalog/release；Variables 跨文件绑定必须继续复用该边界，不得另建私有缓存。
+- Components/Variants/Styles/Variables 的协议、runtime、projection、Main 持久化和 Assets/Library 用户流程共用同一 catalog/release，不建立私有缓存。
 
 ## 验证
 

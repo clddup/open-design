@@ -16,6 +16,132 @@ afterEach(() => {
 });
 
 describe("useProjectLibraryActions", () => {
+  it("imports and binds a Library Variable in one runtime transaction", async () => {
+    const source = structuredClone(createWelcomeDocument());
+    source.variableCollectionOrder = ["content"];
+    source.variableCollectionsById.content = {
+      id: "content",
+      key: "content-key",
+      name: "Content",
+      hiddenFromPublishing: false,
+      modes: [{ modeId: "default", name: "Default" }],
+      variableIds: ["title-copy"],
+      defaultModeId: "default",
+      extensions: {},
+    };
+    source.variablesById["title-copy"] = {
+      id: "title-copy",
+      key: "title-copy-key",
+      name: "Content/Title",
+      description: "",
+      hiddenFromPublishing: false,
+      variableCollectionId: "content",
+      resolvedType: "STRING",
+      valuesByMode: { default: "Library title" },
+      scopes: ["TEXT_CONTENT"],
+      codeSyntax: {},
+      extensions: {},
+    };
+    const release = createLibraryReleaseSnapshot(source, {
+      libraryId: "library_acme",
+      releaseId: "release_current",
+      sourceProjectId: "project_acme",
+      sourceDesignFileId: "design_system",
+      name: "Acme Library",
+      publishedAt: "2026-08-22T08:00:00.000Z",
+    });
+    const catalog: ProjectLibraryCatalog = {
+      version: 1,
+      libraries: [
+        {
+          libraryId: release.libraryId,
+          name: release.name,
+          sourceProjectId: release.sourceProjectId,
+          sourceDesignFileId: release.sourceDesignFileId,
+          sourceDocumentId: release.sourceDocumentId,
+          latestReleaseId: release.releaseId,
+          publishedAt: release.publishedAt,
+          releases: [
+            {
+              releaseId: release.releaseId,
+              publishedAt: release.publishedAt,
+            },
+          ],
+        },
+      ],
+      enabledLibraryIdsByDesignFileId: {
+        design_consumer: [release.libraryId],
+      },
+      acceptedReleaseIdsByDesignFileId: {},
+      ignoredReleaseIdsByDesignFileId: {},
+    };
+    window.desktop = {
+      listProjectLibraries: vi.fn().mockResolvedValue(catalog),
+      readProjectLibraryRelease: vi.fn().mockResolvedValue(release),
+    } as unknown as DesktopApi;
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    const applyCommands = vi.fn(
+      (label: string, commands: DesignOperation[]) => {
+        const current = runtime.getSnapshot().document;
+        return runtime.apply({
+          transactionId: "apply_library_variable",
+          documentId: current.documentId,
+          baseRevision: current.revision,
+          actor: { type: "user", id: "test" },
+          label,
+          commands,
+        }).ok;
+      },
+    );
+    const { result } = renderHook(() =>
+      useProjectLibraryActions({
+        activeDesignFileId: "design_consumer",
+        activePageId: "page_welcome",
+        activeProjectId: "project_acme",
+        applyCommands,
+        document: runtime.getSnapshot().document,
+        projectBacked: true,
+        runtime,
+        t: (key, parameters) => translate("en", key, parameters),
+        transactionCounter: { current: 0 },
+      }),
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      expect(
+        await result.current.applyVariable("library_acme", "title-copy", {
+          kind: "node",
+          nodeId: "title_welcome",
+          field: "characters",
+        }),
+      ).toMatchObject({ ok: true });
+    });
+
+    expect(applyCommands).toHaveBeenCalledTimes(1);
+    expect(
+      applyCommands.mock.calls[0]?.[1].map((command) => command.type),
+    ).toEqual([
+      "put_library_variable_collection_source",
+      "put_library_variable_source",
+      "set_variable_binding",
+    ]);
+    expect(runtime.getSnapshot().document).toMatchObject({
+      revision: 1,
+      libraryVariableCollectionsById: { content: {} },
+      libraryVariablesById: { "title-copy": {} },
+      nodesById: {
+        title_welcome: {
+          boundVariables: {
+            characters: { type: "VARIABLE_ALIAS", id: "title-copy" },
+          },
+        },
+      },
+    });
+    expect(runtime.undo("user")).toMatchObject({ ok: true, mode: "undo" });
+    expect(runtime.getSnapshot().document.libraryVariablesById).toEqual({});
+  });
+
   it("keeps an imported file on its accepted release until the user accepts an update", async () => {
     const source = structuredClone(createWelcomeDocument());
     source.componentsById.component_feature = {
@@ -29,6 +155,30 @@ describe("useProjectLibraryActions", () => {
     };
     source.stylesById.brand_primary = paintStyle("#2563eb");
     source.styleOrderByType.PAINT.push("brand_primary");
+    source.variableCollectionOrder = ["theme"];
+    source.variableCollectionsById.theme = {
+      id: "theme",
+      key: "theme-key",
+      name: "Theme",
+      hiddenFromPublishing: false,
+      modes: [{ modeId: "default", name: "Default" }],
+      variableIds: ["opacity-muted"],
+      defaultModeId: "default",
+      extensions: {},
+    };
+    source.variablesById["opacity-muted"] = {
+      id: "opacity-muted",
+      key: "opacity-muted-key",
+      name: "Opacity/Muted",
+      description: "",
+      hiddenFromPublishing: false,
+      variableCollectionId: "theme",
+      resolvedType: "FLOAT",
+      valuesByMode: { default: 0.8 },
+      scopes: ["OPACITY"],
+      codeSyntax: {},
+      extensions: {},
+    };
     const previous = createLibraryReleaseSnapshot(source, {
       libraryId: "library_acme",
       releaseId: "release_previous",
@@ -47,6 +197,7 @@ describe("useProjectLibraryActions", () => {
       throw new Error("Library Paint Style is missing");
     }
     latestStyle.paints = [{ type: "solid", color: "#db2777", opacity: 1 }];
+    source.variablesById["opacity-muted"].valuesByMode.default = 0.6;
     const latest = createLibraryReleaseSnapshot(source, {
       libraryId: "library_acme",
       releaseId: "release_current",
@@ -61,6 +212,10 @@ describe("useProjectLibraryActions", () => {
     consumer.libraryComponentsById = structuredClone(previous.componentsById);
     consumer.libraryVariantSetsById = structuredClone(previous.variantSetsById);
     consumer.libraryStylesById = structuredClone(previous.stylesById);
+    consumer.libraryVariableCollectionsById = structuredClone(
+      previous.variableCollectionsById,
+    );
+    consumer.libraryVariablesById = structuredClone(previous.variablesById);
     consumer.nodesById.consumer_shape = {
       id: "consumer_shape",
       kind: "rectangle",
@@ -73,6 +228,9 @@ describe("useProjectLibraryActions", () => {
       size: { width: 120, height: 80 },
       exportSettings: [],
       opacity: 1,
+      boundVariables: {
+        opacity: { type: "VARIABLE_ALIAS", id: "opacity-muted" },
+      },
       fillStyleId: "brand_primary",
       properties: {
         fills: [],
@@ -200,6 +358,10 @@ describe("useProjectLibraryActions", () => {
       expect.arrayContaining([
         expect.objectContaining({ type: "put_library_component_source" }),
         expect.objectContaining({ type: "put_library_style_source" }),
+        expect.objectContaining({
+          type: "put_library_variable_collection_source",
+        }),
+        expect.objectContaining({ type: "put_library_variable_source" }),
       ]),
     );
     expect(setProjectLibraryUpdateAccepted).toHaveBeenCalledWith({
@@ -219,6 +381,11 @@ describe("useProjectLibraryActions", () => {
       saveProjectDesignFile.mock.calls[0]?.[0].document.libraryStylesById
         .brand_primary?.source.releaseId,
     ).toBe("release_current");
+    expect(
+      saveProjectDesignFile.mock.calls[0]?.[0].document.libraryVariablesById[
+        "opacity-muted"
+      ]?.variable.valuesByMode.default,
+    ).toBe(0.6);
     expect(result.current.items[0]).toMatchObject({
       currentReleaseId: "release_current",
       updateAvailable: false,

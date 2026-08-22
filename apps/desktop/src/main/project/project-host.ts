@@ -1,6 +1,6 @@
 import {
   isDesignDocument,
-  isLibraryReleaseSnapshot,
+  migrateLibraryReleaseSnapshot,
   migrateDesignDocument,
   type DesignDocument,
   type LibraryReleaseSnapshot,
@@ -567,6 +567,16 @@ export class ProjectHost {
               ([styleId, style]) => [styleId, style.style],
             ),
           ),
+          variableCollectionsById: Object.fromEntries(
+            Object.entries(provisionalRelease.variableCollectionsById).map(
+              ([collectionId, source]) => [collectionId, source.collection],
+            ),
+          ),
+          variablesById: Object.fromEntries(
+            Object.entries(provisionalRelease.variablesById).map(
+              ([variableId, source]) => [variableId, source.variable],
+            ),
+          ),
         }),
       );
       const releaseId = `release_${sourceFingerprint.slice(0, 24)}`;
@@ -675,20 +685,21 @@ export class ProjectHost {
       MAX_LIBRARY_RELEASE_BYTES,
       "INVALID_PROJECT",
     );
+    const release = migrateLibraryReleaseSnapshot(value);
     if (
-      !isLibraryReleaseSnapshot(value) ||
-      value.libraryId !== libraryId ||
-      value.releaseId !== selectedReleaseId ||
-      value.sourceProjectId !== projectId ||
-      value.sourceDesignFileId !== entry.sourceDesignFileId ||
-      value.sourceDocumentId !== entry.sourceDocumentId
+      !release ||
+      release.libraryId !== libraryId ||
+      release.releaseId !== selectedReleaseId ||
+      release.sourceProjectId !== projectId ||
+      release.sourceDesignFileId !== entry.sourceDesignFileId ||
+      release.sourceDocumentId !== entry.sourceDocumentId
     ) {
       throw new ProjectHostError(
         "INVALID_PROJECT",
         "Published Library release does not match its catalog identity",
       );
     }
-    return structuredClone(value);
+    return structuredClone(release);
   }
 
   async setProjectLibraryEnabled(

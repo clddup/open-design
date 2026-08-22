@@ -4,9 +4,11 @@ import type {
   DesignOperation,
   LibraryReleaseSnapshot,
   StyleReferenceTarget,
+  VariableBindingTarget,
 } from "@opendesign/design-contracts";
 import {
   planApplyLibraryStyle,
+  planApplyLibraryVariable,
   planCreateLibraryInstance,
   type EditorRuntime,
 } from "@opendesign/editor-runtime";
@@ -47,6 +49,11 @@ export interface ProjectLibraryActions {
     libraryId: string,
     styleId: string,
     target: StyleReferenceTarget,
+  ) => Promise<AssetActionResult>;
+  applyVariable: (
+    libraryId: string,
+    variableId: string,
+    target: VariableBindingTarget,
   ) => Promise<AssetActionResult>;
   acceptUpdate: (libraryId: string) => Promise<void>;
   ignoreUpdate: (libraryId: string) => Promise<void>;
@@ -354,6 +361,84 @@ export function useProjectLibraryActions({
     ],
   );
 
+  const applyVariable = useCallback(
+    async (
+      libraryId: string,
+      variableId: string,
+      target: VariableBindingTarget,
+    ): Promise<AssetActionResult> => {
+      if (busyKey) {
+        return { ok: false, error: t("sidebar.libraryBusy") };
+      }
+      setBusyKey(`variable:${libraryId}:${variableId}`);
+      setError(null);
+      try {
+        const api = requireDesktopApi();
+        const release =
+          releases[libraryId] ??
+          (await api.readProjectLibraryRelease({
+            projectId: activeProjectId,
+            libraryId,
+          }));
+        const source = release.variablesById[variableId];
+        const collection = source
+          ? release.variableCollectionsById[
+              source.variable.variableCollectionId
+            ]
+          : undefined;
+        if (
+          !source ||
+          !collection ||
+          source.variable.hiddenFromPublishing ||
+          collection.collection.hiddenFromPublishing
+        ) {
+          return {
+            ok: false,
+            error: t("sidebar.libraryVariableUnavailable"),
+          };
+        }
+        const operationId = `library_variable_${Date.now()}_${++transactionCounter.current}`;
+        const plan = planApplyLibraryVariable(
+          runtime.getSnapshot().document,
+          release,
+          { variableId, target, commandPrefix: operationId },
+        );
+        if (!plan.ok) return { ok: false, error: plan.message };
+        if (!applyCommands(t("history.applyLibraryVariable"), plan.commands)) {
+          return {
+            ok: false,
+            error: t("sidebar.libraryVariableUnavailable"),
+          };
+        }
+        setReleases((currentReleases) => ({
+          ...currentReleases,
+          [libraryId]: release,
+        }));
+        return {
+          ok: true,
+          message: t("sidebar.libraryVariableApplied", {
+            name: source.variable.name,
+          }),
+        };
+      } catch (reason) {
+        const message = errorMessage(reason);
+        setError(message);
+        return { ok: false, error: message };
+      } finally {
+        setBusyKey(null);
+      }
+    },
+    [
+      activeProjectId,
+      applyCommands,
+      busyKey,
+      releases,
+      runtime,
+      t,
+      transactionCounter,
+    ],
+  );
+
   const acceptUpdate = useCallback(
     (libraryId: string) =>
       run(`accept:${libraryId}`, async () => {
@@ -468,6 +553,7 @@ export function useProjectLibraryActions({
     setEnabled,
     placeComponent,
     applyStyle,
+    applyVariable,
     acceptUpdate,
     ignoreUpdate,
     clearError: () => setError(null),
@@ -498,6 +584,18 @@ function collectImportedReleaseIds(document: DesignDocument) {
     releaseIds.add(source.source.releaseId);
     releaseIdsByLibraryId[source.source.libraryId] = releaseIds;
   }
+  for (const source of Object.values(document.libraryVariableCollectionsById)) {
+    const releaseIds =
+      releaseIdsByLibraryId[source.source.libraryId] ?? new Set<string>();
+    releaseIds.add(source.source.releaseId);
+    releaseIdsByLibraryId[source.source.libraryId] = releaseIds;
+  }
+  for (const source of Object.values(document.libraryVariablesById)) {
+    const releaseIds =
+      releaseIdsByLibraryId[source.source.libraryId] ?? new Set<string>();
+    releaseIds.add(source.source.releaseId);
+    releaseIdsByLibraryId[source.source.libraryId] = releaseIds;
+  }
   return releaseIdsByLibraryId;
 }
 
@@ -522,6 +620,14 @@ function importedLibrarySourceKey(document: DesignDocument) {
     ...Object.values(document.libraryStylesById).map(
       (source) =>
         `${source.source.libraryId}\u0000${source.source.releaseId}\u0000${source.style.id}`,
+    ),
+    ...Object.values(document.libraryVariableCollectionsById).map(
+      (source) =>
+        `${source.source.libraryId}\u0000${source.source.releaseId}\u0000${source.collection.id}`,
+    ),
+    ...Object.values(document.libraryVariablesById).map(
+      (source) =>
+        `${source.source.libraryId}\u0000${source.source.releaseId}\u0000${source.variable.id}`,
     ),
   ]
     .sort()

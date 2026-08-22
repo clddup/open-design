@@ -7,9 +7,12 @@ import type {
   LibraryComponentSource,
   LibraryReleaseSnapshot,
   LibraryStyleSource,
+  LibraryVariableCollectionSource,
+  LibraryVariableSource,
+  VariableDefinition,
 } from "@opendesign/design-contracts";
 
-export const LIBRARY_SERVICE_VERSION = 1 as const;
+export const LIBRARY_SERVICE_VERSION = 2 as const;
 
 export interface CreateLibraryReleaseOptions {
   libraryId: string;
@@ -25,6 +28,8 @@ export interface LibraryReleaseUpdatePlan {
   staleComponentIds: string[];
   staleVariantSetIds: string[];
   staleStyleIds: string[];
+  staleVariableCollectionIds: string[];
+  staleVariableIds: string[];
 }
 
 export function createLibraryReleaseSnapshot(
@@ -108,14 +113,83 @@ export function createLibraryReleaseSnapshot(
         return [style.id, source] as const;
       }),
   );
+  const publishedVariableIds = new Set<string>();
+  const publishedCollectionIds = new Set<string>();
+  for (const collection of Object.values(document.variableCollectionsById)) {
+    if (collection.hiddenFromPublishing) continue;
+    publishedCollectionIds.add(collection.id);
+    for (const variableId of collection.variableIds) {
+      const variable = document.variablesById[variableId];
+      if (variable && !variable.hiddenFromPublishing) {
+        publishedVariableIds.add(variableId);
+      }
+    }
+  }
+  for (const source of Object.values(componentsById)) {
+    for (const node of Object.values(source.nodesById)) {
+      for (const collectionId of Object.keys(
+        node.explicitVariableModes ?? {},
+      )) {
+        publishedCollectionIds.add(collectionId);
+      }
+      for (const variableId of nodeVariableIds(node)) {
+        publishedVariableIds.add(variableId);
+      }
+    }
+  }
+  expandVariableAliasClosure(
+    document,
+    publishedVariableIds,
+    publishedCollectionIds,
+  );
+  const variableCollectionsById = Object.fromEntries(
+    [...publishedCollectionIds].sort().map((collectionId) => {
+      const collection = document.variableCollectionsById[collectionId];
+      if (!collection) {
+        throw new Error(
+          `Published content references non-local Variable Collection ${collectionId}`,
+        );
+      }
+      const source: LibraryVariableCollectionSource = {
+        source: {
+          ...identity,
+          sourceVariableCollectionId: collectionId,
+        },
+        collection: {
+          ...structuredClone(collection),
+          variableIds: collection.variableIds.filter((variableId) =>
+            publishedVariableIds.has(variableId),
+          ),
+        },
+      };
+      return [collectionId, source] as const;
+    }),
+  );
+  const variablesById = Object.fromEntries(
+    [...publishedVariableIds].sort().map((variableId) => {
+      const variable = document.variablesById[variableId];
+      if (!variable) {
+        throw new Error(
+          `Published content references non-local Variable ${variableId}`,
+        );
+      }
+      const source: LibraryVariableSource = {
+        source: { ...identity, sourceVariableId: variableId },
+        variable: structuredClone(variable),
+      };
+      return [variableId, source] as const;
+    }),
+  );
   return {
-    version: 2,
+    version: 3,
     ...identity,
     name: options.name,
     publishedAt: options.publishedAt,
     componentsById,
     variantSetsById,
     stylesById,
+    variableCollectionsById,
+    variablesById,
   };
 }
 
@@ -128,6 +202,10 @@ export function planLibraryReleaseImport(
     componentIds: new Set(Object.keys(release.componentsById)),
     styleIds: new Set(Object.keys(release.stylesById)),
     variantSetIds: new Set(Object.keys(release.variantSetsById)),
+    variableCollectionIds: new Set(
+      Object.keys(release.variableCollectionsById),
+    ),
+    variableIds: new Set(Object.keys(release.variablesById)),
   });
 }
 
@@ -151,6 +229,16 @@ export function planLibraryReleaseUpdate(
       .filter(([, source]) => source.source.libraryId === release.libraryId)
       .map(([styleId]) => styleId),
   );
+  const variableCollectionIds = new Set(
+    Object.entries(document.libraryVariableCollectionsById)
+      .filter(([, source]) => source.source.libraryId === release.libraryId)
+      .map(([collectionId]) => collectionId),
+  );
+  const variableIds = new Set(
+    Object.entries(document.libraryVariablesById)
+      .filter(([, source]) => source.source.libraryId === release.libraryId)
+      .map(([variableId]) => variableId),
+  );
   for (const componentId of componentIds) {
     const source = release.componentsById[componentId];
     if (!source) continue;
@@ -160,11 +248,28 @@ export function planLibraryReleaseUpdate(
     if (source.component.variantSetId) {
       variantSetIds.add(source.component.variantSetId);
     }
+    for (const node of Object.values(source.nodesById)) {
+      for (const collectionId of Object.keys(
+        node.explicitVariableModes ?? {},
+      )) {
+        variableCollectionIds.add(collectionId);
+      }
+      for (const variableId of nodeVariableIds(node)) {
+        variableIds.add(variableId);
+      }
+    }
   }
+  expandReleaseVariableAliasClosure(
+    release,
+    variableIds,
+    variableCollectionIds,
+  );
   return planReleaseSources(document, release, commandPrefix, {
     componentIds,
     styleIds,
     variantSetIds,
+    variableCollectionIds,
+    variableIds,
   });
 }
 
@@ -176,9 +281,35 @@ function planReleaseSources(
     componentIds: ReadonlySet<string>;
     styleIds: ReadonlySet<string>;
     variantSetIds: ReadonlySet<string>;
+    variableCollectionIds: ReadonlySet<string>;
+    variableIds: ReadonlySet<string>;
   },
 ): LibraryReleaseUpdatePlan {
   const commands: DesignOperation[] = [];
+  for (const collectionId of included.variableCollectionIds) {
+    const source = release.variableCollectionsById[collectionId];
+    if (!source) continue;
+    const existing = document.libraryVariableCollectionsById[collectionId];
+    if (existing && JSON.stringify(existing) === JSON.stringify(source))
+      continue;
+    commands.push({
+      commandId: `${commandPrefix}_variable_collection_${commands.length}`,
+      type: "put_library_variable_collection_source",
+      source: structuredClone(source),
+    });
+  }
+  for (const variableId of included.variableIds) {
+    const source = release.variablesById[variableId];
+    if (!source) continue;
+    const existing = document.libraryVariablesById[variableId];
+    if (existing && JSON.stringify(existing) === JSON.stringify(source))
+      continue;
+    commands.push({
+      commandId: `${commandPrefix}_variable_${commands.length}`,
+      type: "put_library_variable_source",
+      source: structuredClone(source),
+    });
+  }
   for (const styleId of included.styleIds) {
     const source = release.stylesById[styleId];
     if (!source) continue;
@@ -238,6 +369,22 @@ function planReleaseSources(
           !release.stylesById[styleId],
       )
       .map(([styleId]) => styleId),
+    staleVariableCollectionIds: Object.entries(
+      document.libraryVariableCollectionsById,
+    )
+      .filter(
+        ([collectionId, source]) =>
+          source.source.libraryId === release.libraryId &&
+          !release.variableCollectionsById[collectionId],
+      )
+      .map(([collectionId]) => collectionId),
+    staleVariableIds: Object.entries(document.libraryVariablesById)
+      .filter(
+        ([variableId, source]) =>
+          source.source.libraryId === release.libraryId &&
+          !release.variablesById[variableId],
+      )
+      .map(([variableId]) => variableId),
   };
 }
 
@@ -298,6 +445,84 @@ function nodeStyleIds(node: DesignNode): string[] {
     }
   }
   return [...ids];
+}
+
+function nodeVariableIds(node: DesignNode): string[] {
+  const ids = new Set<string>();
+  for (const alias of Object.values(node.boundVariables ?? {})) {
+    ids.add(alias.id);
+  }
+  if (hasPaints(node)) {
+    for (const paint of [
+      ...node.properties.fills,
+      ...node.properties.strokes,
+    ]) {
+      if (paint.type === "solid" && paint.boundVariables?.color) {
+        ids.add(paint.boundVariables.color.id);
+      }
+    }
+  }
+  return [...ids];
+}
+
+function expandVariableAliasClosure(
+  document: DesignDocument,
+  variableIds: Set<string>,
+  collectionIds: Set<string>,
+): void {
+  expandAliases(
+    variableIds,
+    collectionIds,
+    (variableId) => document.variablesById[variableId],
+  );
+}
+
+function expandReleaseVariableAliasClosure(
+  release: LibraryReleaseSnapshot,
+  variableIds: Set<string>,
+  collectionIds: Set<string>,
+): void {
+  const available = new Set(
+    [...variableIds].filter((variableId) => release.variablesById[variableId]),
+  );
+  expandAliases(
+    available,
+    collectionIds,
+    (variableId) => release.variablesById[variableId]?.variable,
+  );
+  for (const variableId of available) variableIds.add(variableId);
+}
+
+function expandAliases(
+  variableIds: Set<string>,
+  collectionIds: Set<string>,
+  lookup: (variableId: string) => VariableDefinition | undefined,
+): void {
+  const pending = [...variableIds];
+  const visited = new Set<string>();
+  while (pending.length > 0) {
+    const variableId = pending.pop()!;
+    if (visited.has(variableId)) continue;
+    visited.add(variableId);
+    const variable = lookup(variableId);
+    if (!variable) {
+      throw new Error(
+        `Published content references unavailable Variable ${variableId}`,
+      );
+    }
+    variableIds.add(variableId);
+    collectionIds.add(variable.variableCollectionId);
+    for (const value of Object.values(variable.valuesByMode)) {
+      if (
+        typeof value === "object" &&
+        value !== null &&
+        "type" in value &&
+        value.type === "VARIABLE_ALIAS"
+      ) {
+        pending.push(value.id);
+      }
+    }
+  }
 }
 
 function hasPaints(

@@ -16,6 +16,14 @@ export function diffVariables(
   | "removedVariableIds"
   | "variableCollectionChanges"
   | "variableChanges"
+  | "addedLibraryVariableCollectionIds"
+  | "changedLibraryVariableCollectionIds"
+  | "removedLibraryVariableCollectionIds"
+  | "libraryVariableCollectionChanges"
+  | "addedLibraryVariableIds"
+  | "changedLibraryVariableIds"
+  | "removedLibraryVariableIds"
+  | "libraryVariableChanges"
 > {
   const addedVariableCollectionIds: string[] = [];
   const changedVariableCollectionIds: string[] = [];
@@ -107,6 +115,16 @@ export function diffVariables(
       }
     }
   }
+  const libraryCollections = diffLibrarySources(
+    before.libraryVariableCollectionsById,
+    after.libraryVariableCollectionsById,
+    "collectionId",
+  );
+  const libraryVariables = diffLibrarySources(
+    before.libraryVariablesById,
+    after.libraryVariablesById,
+    "variableId",
+  );
   return {
     addedVariableCollectionIds,
     changedVariableCollectionIds,
@@ -116,7 +134,67 @@ export function diffVariables(
     removedVariableIds,
     variableCollectionChanges,
     variableChanges,
+    addedLibraryVariableCollectionIds: libraryCollections.addedIds,
+    changedLibraryVariableCollectionIds: libraryCollections.changedIds,
+    removedLibraryVariableCollectionIds: libraryCollections.removedIds,
+    libraryVariableCollectionChanges: libraryCollections.changes,
+    addedLibraryVariableIds: libraryVariables.addedIds,
+    changedLibraryVariableIds: libraryVariables.changedIds,
+    removedLibraryVariableIds: libraryVariables.removedIds,
+    libraryVariableChanges: libraryVariables.changes,
   };
+}
+
+function diffLibrarySources<
+  Source extends object,
+  Field extends "collectionId" | "variableId",
+>(before: Record<string, Source>, after: Record<string, Source>, field: Field) {
+  const addedIds: string[] = [];
+  const changedIds: string[] = [];
+  const removedIds: string[] = [];
+  const changes: Array<
+    {
+      type: "added" | "updated" | "removed";
+      changedFields: string[];
+      before?: Source;
+      after?: Source;
+    } & Record<Field, string>
+  > = [];
+  for (const id of new Set([...Object.keys(before), ...Object.keys(after)])) {
+    const previous = before[id];
+    const next = after[id];
+    if (!previous && next) {
+      addedIds.push(id);
+      changes.push({
+        type: "added",
+        [field]: id,
+        after: next,
+        changedFields: ["source"],
+      } as (typeof changes)[number]);
+    } else if (previous && !next) {
+      removedIds.push(id);
+      changes.push({
+        type: "removed",
+        [field]: id,
+        before: previous,
+        changedFields: ["source"],
+      } as (typeof changes)[number]);
+    } else if (
+      previous &&
+      next &&
+      JSON.stringify(previous) !== JSON.stringify(next)
+    ) {
+      changedIds.push(id);
+      changes.push({
+        type: "updated",
+        [field]: id,
+        before: previous,
+        after: next,
+        changedFields: changedObjectFields(previous, next),
+      } as (typeof changes)[number]);
+    }
+  }
+  return { addedIds, changedIds, removedIds, changes };
 }
 
 function changedObjectFields(before: object, after: object): string[] {

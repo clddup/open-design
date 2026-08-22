@@ -7,7 +7,7 @@
   },
   "contracts": {
     "documentFormat": "dev.opendesign.document",
-    "documentSchemaVersion": "1.38.0",
+    "documentSchemaVersion": "1.39.0",
     "runtimeProtocolVersion": "0.1.0",
     "agentProtocolVersion": "3.11.0",
     "geometryServiceContractVersion": 13,
@@ -50,15 +50,15 @@
       "role": "cross-design-file-library-release-and-update-planner",
       "package": "@opendesign/library-service",
       "path": "packages/library-service",
-      "contractVersion": 1,
-      "productionStatus": "same-project-component-variant-and-shared-style-release-import-and-update-available-native-gate-pending"
+      "contractVersion": 2,
+      "productionStatus": "same-project-component-variant-shared-style-and-variable-release-import-and-update-available-native-gate-pending"
     },
     "variableService": {
       "role": "figma-compatible-variable-mode-alias-and-binding-resolution-service",
       "package": "@opendesign/variable-service",
       "path": "packages/variable-service",
       "contractVersion": 1,
-      "productionStatus": "same-file-collections-modes-aliases-and-core-bindings-available-native-gate-pending"
+      "productionStatus": "same-file-and-same-project-library-collections-modes-aliases-and-core-bindings-available-native-gate-pending"
     },
     "styleService": {
       "role": "figma-compatible-local-and-imported-shared-style-resolution-service",
@@ -185,7 +185,7 @@
     "contracts": "pnpm exec vitest run packages/design-contracts/src/index.test.ts",
     "editorRuntime": "pnpm exec vitest run packages/editor-runtime/src/index.test.ts",
     "components": "pnpm --filter @opendesign/component-service typecheck && pnpm --filter @opendesign/editor-runtime typecheck && pnpm --filter @opendesign/figma-interop typecheck && pnpm --filter @opendesign/leafer-engine typecheck && pnpm --filter @opendesign/desktop typecheck && pnpm exec vitest run packages/design-contracts/src/index.test.ts packages/editor-runtime/src/component-operations.test.ts packages/editor-runtime/src/component-property-operations.test.ts packages/editor-runtime/src/component-slot-operations.test.ts packages/editor-runtime/src/variant-set.test.ts packages/editor-runtime/src/component-svg-export.test.ts packages/figma-interop/src/index.test.ts packages/leafer-engine/src/component-projection.test.ts packages/leafer-engine/src/adapter.test.ts && pnpm --filter @opendesign/desktop exec vitest run src/shared/design-agent-tools.test.ts src/main/agent/global-task-coordinator.test.ts src/renderer/design-tool-execution.test.ts src/renderer/project-autosave.test.ts src/renderer/components/PropertiesPanel.test.tsx src/renderer/components/LeftSidebar.test.tsx",
-    "variables": "pnpm --filter @opendesign/variable-service typecheck && pnpm --filter @opendesign/editor-runtime typecheck && pnpm --filter @opendesign/figma-interop typecheck && pnpm --filter @opendesign/leafer-engine typecheck && pnpm --filter @opendesign/desktop typecheck && pnpm exec vitest run packages/design-contracts/src/index.test.ts packages/variable-service/src/index.test.ts packages/editor-runtime/src/variable-operations.test.ts packages/figma-interop/src/index.test.ts packages/leafer-engine/src/variable-projection.test.ts packages/leafer-engine/src/component-projection.test.ts packages/leafer-engine/src/adapter.test.ts && pnpm --filter @opendesign/desktop exec vitest run src/shared/design-variable-tool.test.ts src/shared/design-agent-tools.test.ts src/renderer/design-tool-execution.test.ts src/renderer/components/VariablesPanel.test.tsx src/renderer/components/properties/VariableSection.test.tsx src/renderer/components/PropertiesPanel.test.tsx src/renderer/components/LeftSidebar.test.tsx",
+    "variables": "pnpm --filter @opendesign/variable-service typecheck && pnpm --filter @opendesign/library-service typecheck && pnpm --filter @opendesign/editor-runtime typecheck && pnpm --filter @opendesign/figma-interop typecheck && pnpm --filter @opendesign/leafer-engine typecheck && pnpm --filter @opendesign/desktop typecheck && pnpm exec vitest run packages/design-contracts/src/index.test.ts packages/variable-service/src/index.test.ts packages/library-service/src/index.test.ts packages/editor-runtime/src/variable-operations.test.ts packages/figma-interop/src/index.test.ts packages/leafer-engine/src/variable-projection.test.ts packages/leafer-engine/src/component-projection.test.ts packages/leafer-engine/src/adapter.test.ts && pnpm --filter @opendesign/desktop exec vitest run src/shared/design-variable-tool.test.ts src/shared/design-agent-tools.test.ts src/renderer/design-tool-execution.test.ts src/renderer/design-variable-inspection.test.ts src/renderer/components/VariablesPanel.test.tsx src/renderer/components/properties/VariableSection.test.tsx src/renderer/components/ProjectLibrariesSection.test.tsx src/renderer/use-project-library-actions.test.tsx src/main/project/project-host.test.ts src/renderer/components/PropertiesPanel.test.tsx src/renderer/components/LeftSidebar.test.tsx",
     "styles": "pnpm --filter @opendesign/style-service typecheck && pnpm --filter @opendesign/editor-runtime typecheck && pnpm --filter @opendesign/figma-interop typecheck && pnpm --filter @opendesign/leafer-engine typecheck && pnpm --filter @opendesign/desktop typecheck && pnpm exec vitest run packages/design-contracts/src/index.test.ts packages/style-service/src/index.test.ts packages/editor-runtime/src/style-operations.test.ts packages/figma-interop/src/index.test.ts packages/leafer-engine/src/style-projection.test.ts packages/leafer-engine/src/component-projection.test.ts && pnpm --filter @opendesign/desktop exec vitest run src/shared/design-style-tool.test.ts src/shared/design-agent-tools.test.ts src/renderer/design-style-tool-execution.test.ts src/renderer/components/LocalStylesPanel.test.tsx src/renderer/components/PropertiesPanel.test.tsx",
     "vectorGeometry": "pnpm --filter @opendesign/geometry-service typecheck && pnpm exec vitest run packages/geometry-service/src/arrangement.test.ts packages/geometry-service/src/vector-path.test.ts packages/geometry-service/src/boolean-resolver.test.ts packages/geometry-service/src/editable-vector.test.ts packages/geometry-service/src/vector-edit.test.ts packages/editor-runtime/src/arrange-operations.test.ts packages/editor-runtime/src/vector-operations.test.ts",
     "leafer": "pnpm exec vitest run packages/leafer-engine/src/pen-tool.test.ts packages/leafer-engine/src/adapter.test.ts packages/leafer-engine/src/mapping.test.ts packages/leafer-engine/src/professional-fixtures.test.ts apps/desktop/src/renderer/App.test.tsx",

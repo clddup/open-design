@@ -542,6 +542,8 @@ describe("Renderer design tool scope", () => {
             },
             variableCollectionsById: { theme: { defaultModeId: "default" } },
             variablesById: { "title-copy": { resolvedType: "STRING" } },
+            libraryVariableCollectionsById: {},
+            libraryVariablesById: {},
             variableResolutionsByNodeId: {
               title_welcome: {
                 characters: {

@@ -101,7 +101,7 @@ export const componentMessages = {
     "sidebar.publishCurrentFile": "Publish current file as a Library",
     "sidebar.republishCurrentFile": "Publish Library changes",
     "sidebar.publishRequiresComponent":
-      "Create a component or publishable style before publishing this file",
+      "Create a component, publishable style, or variable collection before publishing this file",
     "sidebar.libraryPublished": "Library changes published",
     "sidebar.libraryEnabledNotice": "Library enabled",
     "sidebar.libraryDisabledNotice":
@@ -110,7 +110,7 @@ export const componentMessages = {
     "sidebar.libraryUpdateIgnored": "Update ignored",
     "sidebar.loadingLibraries": "Loading Libraries…",
     "sidebar.noProjectLibraries":
-      "Publish components or styles from another file to reuse them here.",
+      "Publish components, styles, or variables from another file to reuse them here.",
     "sidebar.libraryEnabled": "Enabled",
     "sidebar.libraryDisabled": "Not enabled",
     "sidebar.enableLibrary": "Enable {{name}}",
@@ -121,8 +121,10 @@ export const componentMessages = {
     "sidebar.libraryUnavailable": "Library is unavailable",
     "sidebar.libraryHasNoComponents": "This Library has no components.",
     "sidebar.libraryHasNoStyles": "This Library has no published styles.",
+    "sidebar.libraryHasNoVariables": "This Library has no published variables.",
     "sidebar.libraryComponents": "Components",
     "sidebar.libraryStyles": "Styles",
+    "sidebar.libraryVariables": "Variables",
     "sidebar.libraryBusy": "Another Library action is still running",
     "sidebar.libraryComponentUnavailable":
       "The Library component is no longer available",
@@ -130,6 +132,9 @@ export const componentMessages = {
     "sidebar.libraryStyleUnavailable":
       "The Library style is no longer available",
     "sidebar.libraryStyleApplied": "Applied {{name}}",
+    "sidebar.libraryVariableUnavailable":
+      "The Library variable is no longer available",
+    "sidebar.libraryVariableApplied": "Applied {{name}}",
     "sidebar.libraryUpdateFailed": "Library update could not be applied",
   },
   "zh-CN": {
@@ -232,14 +237,15 @@ export const componentMessages = {
     "sidebar.projectLibraries": "资源库",
     "sidebar.publishCurrentFile": "将当前文件发布为资源库",
     "sidebar.republishCurrentFile": "发布资源库更改",
-    "sidebar.publishRequiresComponent": "请先创建组件或可发布样式",
+    "sidebar.publishRequiresComponent": "请先创建组件、可发布样式或变量集合",
     "sidebar.libraryPublished": "资源库更改已发布",
     "sidebar.libraryEnabledNotice": "资源库已启用",
     "sidebar.libraryDisabledNotice": "资源库已停用，已有引用保持不变",
     "sidebar.libraryUpdated": "资源库资源已更新",
     "sidebar.libraryUpdateIgnored": "已忽略这次更新",
     "sidebar.loadingLibraries": "正在加载资源库…",
-    "sidebar.noProjectLibraries": "从其他文件发布组件或样式后，可在这里复用。",
+    "sidebar.noProjectLibraries":
+      "从其他文件发布组件、样式或变量后，可在这里复用。",
     "sidebar.libraryEnabled": "已启用",
     "sidebar.libraryDisabled": "未启用",
     "sidebar.enableLibrary": "启用 {{name}}",
@@ -250,13 +256,17 @@ export const componentMessages = {
     "sidebar.libraryUnavailable": "资源库当前不可用",
     "sidebar.libraryHasNoComponents": "这个资源库中没有组件。",
     "sidebar.libraryHasNoStyles": "这个资源库中没有已发布样式。",
+    "sidebar.libraryHasNoVariables": "这个资源库中没有已发布变量。",
     "sidebar.libraryComponents": "组件",
     "sidebar.libraryStyles": "样式",
+    "sidebar.libraryVariables": "变量",
     "sidebar.libraryBusy": "另一项资源库操作仍在进行",
     "sidebar.libraryComponentUnavailable": "该资源库组件已不可用",
     "sidebar.libraryComponentPlaced": "已放置 {{name}}",
     "sidebar.libraryStyleUnavailable": "该资源库样式已不可用",
     "sidebar.libraryStyleApplied": "已应用 {{name}}",
+    "sidebar.libraryVariableUnavailable": "该资源库变量已不可用",
+    "sidebar.libraryVariableApplied": "已应用 {{name}}",
     "sidebar.libraryUpdateFailed": "无法应用资源库更新",
   },
 } as const;

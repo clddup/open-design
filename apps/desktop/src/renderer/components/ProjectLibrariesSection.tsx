@@ -2,6 +2,7 @@ import type {
   DesignDocument,
   LibraryReleaseSnapshot,
   SharedStyleType,
+  VariableResolvedDataType,
 } from "@opendesign/design-contracts";
 import { Button, Icon, IconButton } from "@opendesign/ui";
 import { useMemo, useState } from "react";
@@ -26,6 +27,9 @@ export function ProjectLibrariesSection({
     Object.keys(document.componentsById).length > 0 ||
     Object.values(document.stylesById).some(
       (style) => !style.hiddenFromPublishing,
+    ) ||
+    Object.values(document.variableCollectionsById).some(
+      (collection) => !collection.hiddenFromPublishing,
     );
   if (!actions.available) return null;
 
@@ -179,6 +183,10 @@ export function ProjectLibrariesSection({
                       {t("sidebar.libraryStyles")}
                     </div>
                     <LibraryStyles query={query} release={item.release} />
+                    <div className={styles.resourceHeading}>
+                      {t("sidebar.libraryVariables")}
+                    </div>
+                    <LibraryVariables query={query} release={item.release} />
                   </div>
                 ) : null}
               </div>
@@ -187,6 +195,61 @@ export function ProjectLibrariesSection({
         </div>
       )}
     </section>
+  );
+}
+
+function LibraryVariables({
+  query,
+  release,
+}: {
+  query: string;
+  release: LibraryReleaseSnapshot | null;
+}) {
+  const { t } = useI18n();
+  const collections = useMemo(
+    () => (release ? releaseVariables(release, query) : []),
+    [query, release],
+  );
+  if (!release) {
+    return (
+      <div className={styles.componentEmpty}>
+        {t("sidebar.libraryUnavailable")}
+      </div>
+    );
+  }
+  if (collections.length === 0) {
+    return (
+      <div className={styles.componentEmpty}>
+        {t("sidebar.libraryHasNoVariables")}
+      </div>
+    );
+  }
+  return (
+    <div
+      aria-label={t("sidebar.libraryVariables")}
+      className={styles.variableCollections}
+    >
+      {collections.map((collection) => (
+        <div className={styles.variableCollection} key={collection.id}>
+          <div className={styles.variableCollectionName}>
+            <Icon name="lucide:database" size={13} />
+            <span>{collection.name}</span>
+            <small>
+              {t("variables.variableCount", {
+                count: collection.variables.length,
+              })}
+            </small>
+          </div>
+          {collection.variables.map((variable) => (
+            <div className={styles.variableItem} key={variable.id}>
+              <Icon name="lucide:variable" size={12} />
+              <span>{variable.name}</span>
+              <small>{variableTypeLabel(variable.resolvedType, t)}</small>
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -384,6 +447,53 @@ function releaseStyles(release: LibraryReleaseSnapshot, query: string) {
         left.name.localeCompare(right.name) ||
         left.id.localeCompare(right.id),
     );
+}
+
+function releaseVariables(release: LibraryReleaseSnapshot, query: string) {
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  return Object.values(release.variableCollectionsById)
+    .map((source) => {
+      const collection = source.collection;
+      const variables = collection.variableIds.flatMap((variableId) => {
+        const variable = release.variablesById[variableId]?.variable;
+        return variable && !variable.hiddenFromPublishing ? [variable] : [];
+      });
+      const collectionMatches = collection.name
+        .toLocaleLowerCase()
+        .includes(normalizedQuery);
+      return {
+        id: collection.id,
+        name: collection.name,
+        hidden: collection.hiddenFromPublishing,
+        variables: collectionMatches
+          ? variables
+          : variables.filter((variable) =>
+              variable.name.toLocaleLowerCase().includes(normalizedQuery),
+            ),
+      };
+    })
+    .filter(
+      (collection) =>
+        !collection.hidden &&
+        collection.variables.length > 0 &&
+        (!normalizedQuery ||
+          collection.name.toLocaleLowerCase().includes(normalizedQuery) ||
+          collection.variables.length > 0),
+    )
+    .sort(
+      (left, right) =>
+        left.name.localeCompare(right.name) || left.id.localeCompare(right.id),
+    );
+}
+
+function variableTypeLabel(
+  type: VariableResolvedDataType,
+  t: ReturnType<typeof useI18n>["t"],
+) {
+  if (type === "BOOLEAN") return t("variables.typeBoolean");
+  if (type === "COLOR") return t("variables.typeColor");
+  if (type === "FLOAT") return t("variables.typeNumber");
+  return t("variables.typeString");
 }
 
 function styleTypeKey(styleType: SharedStyleType) {

@@ -43,7 +43,7 @@ Agent inspection 可只读看到当前文档已导入的 `libraryStylesById`，�
 
 ## 当前边界
 
-当前只覆盖同 Project 的 Design File Library。跨文件 Variables、Workspace 聚合、远端团队 Library、发布权限、Style suggestions 与完整 Figma Plugin/REST/DTCG 互操作仍未实现。
+本 ADR 的原始范围只覆盖 Shared Styles；跨文件 Variables 已由 ADR-0128 在同一 Library 边界实现。Workspace 聚合、远端团队 Library、发布权限、Style suggestions 与完整 Figma Plugin/REST/DTCG 互操作仍未实现。
 
 ## 后果
 

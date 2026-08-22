@@ -387,6 +387,8 @@ function designDocument(
     libraryComponentsById: {},
     libraryVariantSetsById: {},
     libraryStylesById: {},
+    libraryVariableCollectionsById: {},
+    libraryVariablesById: {},
     nodesById: Object.fromEntries(nodes.map((node) => [node.id, node])),
     pageOrder: ["page"],
     pagesById: {

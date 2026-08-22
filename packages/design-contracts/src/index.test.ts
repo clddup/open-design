@@ -14,6 +14,7 @@ import {
   FIGMA_LAYER_STATE_DESIGN_SCHEMA_VERSION,
   LIBRARY_COMPONENT_SOURCE_DESIGN_SCHEMA_VERSION,
   LIBRARY_STYLE_SOURCE_DESIGN_SCHEMA_VERSION,
+  LIBRARY_VARIABLE_SOURCE_DESIGN_SCHEMA_VERSION,
   FONT_FACE_IDENTITY_DESIGN_SCHEMA_VERSION,
   FIGMA_TEXT_LISTS_DESIGN_SCHEMA_VERSION,
   AUTO_LAYOUT_GRID_DESIGN_SCHEMA_VERSION,
@@ -37,6 +38,7 @@ import {
   isDesignDocument,
   isDesignTransaction,
   migrateDesignDocument,
+  migrateLibraryReleaseSnapshot,
   migrateVariantSets,
   normalizeLineEndpoints,
   resolveRegularPolygonPoints,
@@ -92,9 +94,31 @@ it("keeps Auto Layout and Layout Guide schema milestones distinct", () => {
   expect(FIGMA_LAYER_STATE_DESIGN_SCHEMA_VERSION).toBe("1.36.0");
   expect(LIBRARY_COMPONENT_SOURCE_DESIGN_SCHEMA_VERSION).toBe("1.37.0");
   expect(LIBRARY_STYLE_SOURCE_DESIGN_SCHEMA_VERSION).toBe("1.38.0");
+  expect(LIBRARY_VARIABLE_SOURCE_DESIGN_SCHEMA_VERSION).toBe("1.39.0");
   expect(DESIGN_SCHEMA_VERSION).toBe(
-    LIBRARY_STYLE_SOURCE_DESIGN_SCHEMA_VERSION,
+    LIBRARY_VARIABLE_SOURCE_DESIGN_SCHEMA_VERSION,
   );
+});
+
+it("migrates a Library release without Variables to the current release contract", () => {
+  const migrated = migrateLibraryReleaseSnapshot({
+    version: 2,
+    libraryId: "library",
+    releaseId: "release",
+    sourceProjectId: "project",
+    sourceDesignFileId: "design-system",
+    sourceDocumentId: "document",
+    name: "Library",
+    publishedAt: "2026-08-22T08:00:00.000Z",
+    componentsById: {},
+    variantSetsById: {},
+    stylesById: {},
+  });
+  expect(migrated).toMatchObject({
+    version: 3,
+    variableCollectionsById: {},
+    variablesById: {},
+  });
 });
 
 it("migrates 1.37 documents with an empty imported Library Style store", () => {
@@ -107,6 +131,8 @@ it("migrates 1.37 documents with an empty imported Library Style store", () => {
   expect(migrateDesignDocument(source)).toMatchObject({
     schemaVersion: DESIGN_SCHEMA_VERSION,
     libraryStylesById: {},
+    libraryVariableCollectionsById: {},
+    libraryVariablesById: {},
   });
 });
 
@@ -1480,6 +1506,8 @@ describe("design contract schemas", () => {
       libraryComponentsById: {},
       libraryVariantSetsById: {},
       libraryStylesById: {},
+      libraryVariableCollectionsById: {},
+      libraryVariablesById: {},
     });
   });
 
@@ -1517,6 +1545,8 @@ describe("design contract schemas", () => {
       libraryComponentsById: {},
       libraryVariantSetsById: {},
       libraryStylesById: {},
+      libraryVariableCollectionsById: {},
+      libraryVariablesById: {},
     });
   });
 
@@ -1554,6 +1584,8 @@ describe("design contract schemas", () => {
       libraryComponentsById: {},
       libraryVariantSetsById: {},
       libraryStylesById: {},
+      libraryVariableCollectionsById: {},
+      libraryVariablesById: {},
     });
   });
 
@@ -1613,6 +1645,8 @@ describe("design contract schemas", () => {
       libraryComponentsById: {},
       libraryVariantSetsById: {},
       libraryStylesById: {},
+      libraryVariableCollectionsById: {},
+      libraryVariablesById: {},
     });
     const path = migrated?.nodesById.path_1;
     expect(path?.kind).toBe("path");

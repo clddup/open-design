@@ -35,6 +35,10 @@ export function createScopedVariableInspection(
     variableCollectionOrder: [...document.variableCollectionOrder],
     variableCollectionsById: structuredClone(document.variableCollectionsById),
     variablesById: structuredClone(document.variablesById),
+    libraryVariableCollectionsById: structuredClone(
+      document.libraryVariableCollectionsById,
+    ),
+    libraryVariablesById: structuredClone(document.libraryVariablesById),
     variableResolutionsByNodeId,
     designSystemIds: {
       variableCollections: Object.keys(document.variableCollectionsById),

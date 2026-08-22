@@ -71,6 +71,84 @@ function hash(contents: string) {
 }
 
 describe("ProjectHost", () => {
+  it("publishes a Variable-only Library and changes its release when a value changes", async () => {
+    const root = await createProjectRoot();
+    const host = new ProjectHost();
+    const sourceDocument = structuredClone(
+      createEmptyDesignDocument("document_variables", "page_variables"),
+    );
+    sourceDocument.variableCollectionOrder = ["spacing"];
+    sourceDocument.variableCollectionsById.spacing = {
+      id: "spacing",
+      key: "spacing-key",
+      name: "Spacing",
+      hiddenFromPublishing: false,
+      modes: [{ modeId: "default", name: "Default" }],
+      variableIds: ["spacing-base"],
+      defaultModeId: "default",
+      extensions: {},
+    };
+    sourceDocument.variablesById["spacing-base"] = {
+      id: "spacing-base",
+      key: "spacing-base-key",
+      name: "Spacing/Base",
+      description: "",
+      hiddenFromPublishing: false,
+      variableCollectionId: "spacing",
+      resolvedType: "FLOAT",
+      valuesByMode: { default: 8 },
+      scopes: ["ALL_SCOPES"],
+      codeSyntax: {},
+      extensions: {},
+    };
+    const sourceDescriptor = designFileDescriptor({
+      designFileId: "design_variables",
+      documentId: sourceDocument.documentId,
+      name: "Shared Variables",
+      relativePath: "designs/shared-variables.opendesign",
+    });
+    await host.createProject(
+      root,
+      { projectId: "project_acme", name: "Acme Design", now },
+      [{ descriptor: sourceDescriptor, document: sourceDocument }],
+    );
+
+    const first = await host.publishDesignFileLibrary(
+      "project_acme",
+      sourceDescriptor.designFileId,
+      "Acme Variables",
+      now,
+    );
+    expect(first.release.componentsById).toEqual({});
+    expect(first.release.stylesById).toEqual({});
+    expect(first.release.variablesById["spacing-base"]?.variable).toMatchObject(
+      { resolvedType: "FLOAT", valuesByMode: { default: 8 } },
+    );
+
+    const changedDocument = structuredClone(sourceDocument);
+    changedDocument.revision = 1;
+    changedDocument.variablesById["spacing-base"].valuesByMode.default = 12;
+    await host.saveDesignFile(
+      "project_acme",
+      sourceDescriptor.designFileId,
+      changedDocument,
+      later,
+    );
+    const second = await host.publishDesignFileLibrary(
+      "project_acme",
+      sourceDescriptor.designFileId,
+      undefined,
+      later,
+    );
+
+    expect(second.entry.libraryId).toBe(first.entry.libraryId);
+    expect(second.entry.latestReleaseId).not.toBe(first.entry.latestReleaseId);
+    expect(second.entry.releases).toHaveLength(2);
+    expect(
+      second.release.variablesById["spacing-base"]?.variable.valuesByMode,
+    ).toEqual({ default: 12 });
+  });
+
   it("publishes a Style-only Library and changes its release when Style content changes", async () => {
     const root = await createProjectRoot();
     const host = new ProjectHost();

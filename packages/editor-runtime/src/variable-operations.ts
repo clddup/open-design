@@ -1,12 +1,19 @@
 import type {
   DesignDocument,
   DesignOperation,
+  LibraryReleaseSnapshot,
   VariableBindingTarget,
   VariableCollectionDefinition,
   VariableDefinition,
   VariableValue,
 } from "@opendesign/design-contracts";
-import { validateVariableDocument } from "@opendesign/variable-service";
+import {
+  validateVariableDocument,
+  variableCollectionDefinition,
+  variableCollectionDefinitions,
+  variableDefinition,
+  variableDefinitions,
+} from "@opendesign/variable-service";
 
 export type VariableOperationFailureCode =
   "duplicate" | "invalid" | "not-found" | "referenced";
@@ -26,14 +33,14 @@ export function planCreateVariableCollection(
     commandPrefix: string;
   },
 ): VariableOperationPlan {
-  if (document.variableCollectionsById[input.collectionId]) {
+  if (variableCollectionDefinition(document, input.collectionId)) {
     return failure(
       "duplicate",
       `Collection ${input.collectionId} already exists`,
     );
   }
   if (
-    Object.values(document.variableCollectionsById).some(
+    variableCollectionDefinitions(document).some(
       (collection) => collection.key === input.key,
     )
   ) {
@@ -239,11 +246,11 @@ export function planCreateVariable(
     commandPrefix: string;
   },
 ): VariableOperationPlan {
-  if (document.variablesById[input.variable.id]) {
+  if (variableDefinition(document, input.variable.id)) {
     return failure("duplicate", `Variable ${input.variable.id} already exists`);
   }
   if (
-    Object.values(document.variablesById).some(
+    variableDefinitions(document).some(
       (entry) => entry.key === input.variable.key,
     )
   ) {
@@ -414,7 +421,7 @@ export function planSetExplicitVariableMode(
       "not-found",
       `${input.target.kind} ${input.target.id} does not exist`,
     );
-  const collection = document.variableCollectionsById[input.collectionId];
+  const collection = variableCollectionDefinition(document, input.collectionId);
   if (!collection)
     return failure(
       "not-found",
@@ -469,7 +476,7 @@ export function planSetVariableBinding(
           ? "FLOAT"
           : "STRING";
   const variable = input.variableId
-    ? document.variablesById[input.variableId]
+    ? variableDefinition(document, input.variableId)
     : undefined;
   if (input.variableId && !variable) {
     return failure("not-found", `Variable ${input.variableId} does not exist`);
@@ -490,6 +497,178 @@ export function planSetVariableBinding(
       },
     ],
   };
+}
+
+export function planApplyLibraryVariable(
+  document: DesignDocument,
+  release: LibraryReleaseSnapshot,
+  input: {
+    variableId: string;
+    target: VariableBindingTarget;
+    commandPrefix: string;
+  },
+): VariableOperationPlan {
+  const requiredVariableIds: string[] = [];
+  const requiredCollectionIds = new Set<string>();
+  const visiting = new Set<string>();
+  const visited = new Set<string>();
+  const visit = (variableId: string): VariableOperationPlan | null => {
+    if (visited.has(variableId)) return null;
+    if (visiting.has(variableId)) {
+      return failure(
+        "invalid",
+        `Library Variable alias cycle at ${variableId}`,
+      );
+    }
+    const source = release.variablesById[variableId];
+    if (!source) {
+      return failure(
+        "not-found",
+        `Variable ${variableId} is not part of Library ${release.libraryId}`,
+      );
+    }
+    const collectionId = source.variable.variableCollectionId;
+    if (!release.variableCollectionsById[collectionId]) {
+      return failure(
+        "invalid",
+        `Library Variable ${variableId} is missing Collection ${collectionId}`,
+      );
+    }
+    visiting.add(variableId);
+    for (const value of Object.values(source.variable.valuesByMode)) {
+      if (!isAlias(value)) continue;
+      const nested = visit(value.id);
+      if (nested) return nested;
+    }
+    visiting.delete(variableId);
+    visited.add(variableId);
+    requiredCollectionIds.add(collectionId);
+    requiredVariableIds.push(variableId);
+    return null;
+  };
+  const dependencyFailure = visit(input.variableId);
+  if (dependencyFailure) return dependencyFailure;
+
+  const staged = structuredClone(document);
+  const commands: DesignOperation[] = [];
+  for (const collectionId of [...requiredCollectionIds].sort()) {
+    const source = release.variableCollectionsById[collectionId]!;
+    const local = document.variableCollectionsById[collectionId];
+    if (local) {
+      return failure(
+        "duplicate",
+        `Library Collection ${collectionId} conflicts with a local Collection`,
+      );
+    }
+    const collectionKeyOwner = variableCollectionDefinitions(document).find(
+      (collection) =>
+        collection.id !== collectionId &&
+        collection.key === source.collection.key,
+    );
+    if (collectionKeyOwner) {
+      return failure(
+        "duplicate",
+        `Library Collection key ${source.collection.key} conflicts with Collection ${collectionKeyOwner.id}`,
+      );
+    }
+    const imported = document.libraryVariableCollectionsById[collectionId];
+    if (imported && !sameLibraryCollectionIdentity(imported, source)) {
+      return failure(
+        "duplicate",
+        `Collection ${collectionId} conflicts with another Library source`,
+      );
+    }
+    staged.libraryVariableCollectionsById[collectionId] =
+      structuredClone(source);
+    if (!imported || JSON.stringify(imported) !== JSON.stringify(source)) {
+      commands.push({
+        commandId: `${input.commandPrefix}_put_collection_${safeId(collectionId)}`,
+        type: "put_library_variable_collection_source",
+        source: structuredClone(source),
+      });
+    }
+  }
+  for (const variableId of requiredVariableIds) {
+    const source = release.variablesById[variableId]!;
+    const local = document.variablesById[variableId];
+    if (local) {
+      return failure(
+        "duplicate",
+        `Library Variable ${variableId} conflicts with a local Variable`,
+      );
+    }
+    const variableKeyOwner = variableDefinitions(document).find(
+      (variable) =>
+        variable.id !== variableId && variable.key === source.variable.key,
+    );
+    if (variableKeyOwner) {
+      return failure(
+        "duplicate",
+        `Library Variable key ${source.variable.key} conflicts with Variable ${variableKeyOwner.id}`,
+      );
+    }
+    const imported = document.libraryVariablesById[variableId];
+    if (imported && !sameLibraryVariableIdentity(imported, source)) {
+      return failure(
+        "duplicate",
+        `Variable ${variableId} conflicts with another Library source`,
+      );
+    }
+    staged.libraryVariablesById[variableId] = structuredClone(source);
+    if (!imported || JSON.stringify(imported) !== JSON.stringify(source)) {
+      commands.push({
+        commandId: `${input.commandPrefix}_put_variable_${safeId(variableId)}`,
+        type: "put_library_variable_source",
+        source: structuredClone(source),
+      });
+    }
+  }
+  const binding = planSetVariableBinding(staged, {
+    target: input.target,
+    variableId: input.variableId,
+    commandPrefix: input.commandPrefix,
+  });
+  if (!binding.ok) return binding;
+  commands.push(...binding.commands);
+  return { ok: true, commands };
+}
+
+function sameLibraryCollectionIdentity(
+  current: DesignDocument["libraryVariableCollectionsById"][string],
+  next: DesignDocument["libraryVariableCollectionsById"][string],
+): boolean {
+  return sameLibraryIdentity(current.source, next.source, "collection");
+}
+
+function sameLibraryVariableIdentity(
+  current: DesignDocument["libraryVariablesById"][string],
+  next: DesignDocument["libraryVariablesById"][string],
+): boolean {
+  return sameLibraryIdentity(current.source, next.source, "variable");
+}
+
+function sameLibraryIdentity(
+  current:
+    | DesignDocument["libraryVariablesById"][string]["source"]
+    | DesignDocument["libraryVariableCollectionsById"][string]["source"],
+  next:
+    | DesignDocument["libraryVariablesById"][string]["source"]
+    | DesignDocument["libraryVariableCollectionsById"][string]["source"],
+  kind: "collection" | "variable",
+): boolean {
+  return (
+    current.libraryId === next.libraryId &&
+    current.sourceProjectId === next.sourceProjectId &&
+    current.sourceDesignFileId === next.sourceDesignFileId &&
+    current.sourceDocumentId === next.sourceDocumentId &&
+    (kind === "collection"
+      ? "sourceVariableCollectionId" in current &&
+        "sourceVariableCollectionId" in next &&
+        current.sourceVariableCollectionId === next.sourceVariableCollectionId
+      : "sourceVariableId" in current &&
+        "sourceVariableId" in next &&
+        current.sourceVariableId === next.sourceVariableId)
+  );
 }
 
 function appendModeReplacementCommands(
@@ -620,7 +799,7 @@ function aliasReferenceOwner(
   targets: ReadonlySet<string>,
   ignoredOwners: ReadonlySet<string> = new Set(),
 ): string | null {
-  for (const variable of Object.values(document.variablesById)) {
+  for (const variable of variableDefinitions(document)) {
     if (ignoredOwners.has(variable.id)) continue;
     if (
       Object.values(variable.valuesByMode).some(

@@ -2,11 +2,17 @@ import type {
   DesignDocument,
   DesignNode,
   VariableBindingTarget,
+  VariableDefinition,
   VariableResolvedDataType,
   VariableScope,
 } from "@opendesign/design-contracts";
-import { resolveVariableForConsumer } from "@opendesign/variable-service";
+import { DesktopCombobox, Icon } from "@opendesign/ui";
+import {
+  resolveVariableForConsumer,
+  variableCollectionDefinitions,
+} from "@opendesign/variable-service";
 import { useI18n } from "../../i18n";
+import type { ProjectLibraryActions } from "../../use-project-library-actions";
 import { Section } from "./controls";
 import styles from "./VariableSection.module.scss";
 
@@ -16,6 +22,7 @@ export function VariableSection({
   node,
   onSetBinding,
   onSetExplicitMode,
+  projectLibraries,
 }: {
   activePageId: string;
   document: DesignDocument;
@@ -25,6 +32,7 @@ export function VariableSection({
     variableId: string | null,
   ) => void;
   onSetExplicitMode: (collectionId: string, modeId: string | null) => void;
+  projectLibraries?: ProjectLibraryActions;
 }) {
   const { t } = useI18n();
   const bindingRows: Array<{
@@ -78,9 +86,8 @@ export function VariableSection({
   return (
     <Section defaultOpen={false} title={t("variables.modeOverrides")}>
       <div className={styles.modeRows}>
-        {document.variableCollectionOrder.map((collectionId) => {
-          const collection = document.variableCollectionsById[collectionId];
-          if (!collection) return null;
+        {orderedCollections(document).map((collection) => {
+          const collectionId = collection.id;
           return (
             <label className={styles.row} key={collectionId}>
               <span title={collection.name}>{collection.name}</span>
@@ -112,7 +119,9 @@ export function VariableSection({
             label={row.label}
             nodeId={node.id}
             onChange={(variableId) => onSetBinding(row.target, variableId)}
+            projectLibraries={projectLibraries}
             scopes={row.scopes}
+            target={row.target}
             type={row.type}
             variableId={row.variableId}
           />
@@ -128,7 +137,9 @@ function BindingRow({
   label,
   nodeId,
   onChange,
+  projectLibraries,
   scopes,
+  target,
   type,
   variableId,
 }: {
@@ -137,23 +148,84 @@ function BindingRow({
   label: string;
   nodeId: string;
   onChange: (variableId: string | null) => void;
+  projectLibraries?: ProjectLibraryActions;
   scopes: readonly VariableScope[];
+  target: VariableBindingTarget;
   type: VariableResolvedDataType;
   variableId?: string;
 }) {
   const { t } = useI18n();
-  const compatible = Object.values(document.variablesById)
-    .filter((variable) => variable.resolvedType === type)
+  const localCandidates: VariableCandidate[] = Object.values(
+    document.variablesById,
+  ).map((variable) => ({
+    variable,
+    optionValue: localOptionValue(variable.id),
+    source: t("variables.local"),
+  }));
+  const libraryCandidates: VariableCandidate[] = (
+    projectLibraries?.items ?? []
+  ).flatMap((item) => {
+    if (!item.enabled || !item.release) return [];
+    return Object.values(item.release.variablesById).flatMap((source) => {
+      const variable = source.variable;
+      const collection =
+        item.release?.variableCollectionsById[variable.variableCollectionId]
+          ?.collection;
+      return collection &&
+        !collection.hiddenFromPublishing &&
+        !variable.hiddenFromPublishing
+        ? [
+            {
+              variable,
+              optionValue: libraryOptionValue(
+                item.entry.libraryId,
+                variable.id,
+              ),
+              source: item.entry.name,
+              libraryId: item.entry.libraryId,
+            },
+          ]
+        : [];
+    });
+  });
+  const currentImported = variableId
+    ? document.libraryVariablesById[variableId]
+    : undefined;
+  const compatible = [
+    ...localCandidates,
+    ...libraryCandidates,
+    ...(currentImported &&
+    !libraryCandidates.some(
+      (candidate) =>
+        candidate.variable.id === variableId &&
+        candidate.libraryId === currentImported.source.libraryId,
+    )
+      ? [
+          {
+            variable: currentImported.variable,
+            optionValue: libraryOptionValue(
+              currentImported.source.libraryId,
+              currentImported.variable.id,
+            ),
+            source: t("variables.disabledLibrary"),
+            libraryId: currentImported.source.libraryId,
+            unavailable: true,
+          },
+        ]
+      : []),
+  ]
+    .filter((candidate) => candidate.variable.resolvedType === type)
     .sort((left, right) => {
-      const leftRecommended = left.scopes.some((scope) =>
+      const leftRecommended = left.variable.scopes.some((scope) =>
         scopes.includes(scope),
       );
-      const rightRecommended = right.scopes.some((scope) =>
+      const rightRecommended = right.variable.scopes.some((scope) =>
         scopes.includes(scope),
       );
       return (
         Number(rightRecommended) - Number(leftRecommended) ||
-        left.name.localeCompare(right.name)
+        left.source.localeCompare(right.source) ||
+        left.variable.name.localeCompare(right.variable.name)
       );
     });
   const resolved = variableId
@@ -165,23 +237,67 @@ function BindingRow({
   return (
     <div className={styles.bindingRow}>
       <span title={label}>{label}</span>
-      <select
-        aria-label={t("variables.bindingLabel", { name: label })}
-        onChange={(event) => onChange(event.target.value || null)}
-        value={variableId ?? ""}
-      >
-        <option value="">{t("variables.clearBinding")}</option>
-        {compatible.length === 0 && (
-          <option disabled value="__none">
-            {t("variables.noCompatibleVariables")}
-          </option>
-        )}
-        {compatible.map((variable) => (
-          <option key={variable.id} value={variable.id}>
-            {variable.name}
-          </option>
-        ))}
-      </select>
+      <DesktopCombobox
+        ariaLabel={t("variables.bindingLabel", { name: label })}
+        emptyLabel={t("variables.noCompatibleVariables")}
+        onValueChange={(value) => {
+          if (value === NO_VARIABLE) {
+            onChange(null);
+            return;
+          }
+          const candidate = compatible.find(
+            (entry) => entry.optionValue === value,
+          );
+          if (!candidate || candidate.unavailable) return;
+          if (candidate.libraryId) {
+            void projectLibraries?.applyVariable(
+              candidate.libraryId,
+              candidate.variable.id,
+              target,
+            );
+            return;
+          }
+          onChange(candidate.variable.id);
+        }}
+        options={[
+          {
+            value: NO_VARIABLE,
+            label: t("variables.clearBinding"),
+            textValue: t("variables.clearBinding"),
+          },
+          ...compatible.map((candidate) => ({
+            value: candidate.optionValue,
+            textValue: `${candidate.variable.name} ${candidate.source}`,
+            keywords: candidate.source,
+            disabled: candidate.unavailable,
+            label: (
+              <span className={styles.option}>
+                <Icon
+                  name={
+                    candidate.libraryId ? "lucide:library" : "lucide:variable"
+                  }
+                  size={12}
+                />
+                <span>{candidate.variable.name}</span>
+                <small>{candidate.source}</small>
+              </span>
+            ),
+          })),
+        ]}
+        searchAriaLabel={t("variables.search")}
+        searchPlaceholder={t("variables.searchPlaceholder")}
+        size="compact"
+        value={
+          currentImported
+            ? libraryOptionValue(
+                currentImported.source.libraryId,
+                currentImported.variable.id,
+              )
+            : variableId
+              ? localOptionValue(variableId)
+              : NO_VARIABLE
+        }
+      />
       {resolved?.ok && (
         <small title={resolved.resolved.aliasChain.join(" → ")}>
           {formatValue(resolved.resolved.value)} ·{" "}
@@ -190,6 +306,43 @@ function BindingRow({
       )}
     </div>
   );
+}
+
+const NO_VARIABLE = "__opendesign_no_variable__";
+
+type VariableCandidate = {
+  variable: VariableDefinition;
+  optionValue: string;
+  source: string;
+  libraryId?: string;
+  unavailable?: boolean;
+};
+
+function orderedCollections(document: DesignDocument) {
+  const localOrder = new Map(
+    document.variableCollectionOrder.map((id, index) => [id, index]),
+  );
+  return variableCollectionDefinitions(document).sort((left, right) => {
+    const leftLocal = localOrder.get(left.id);
+    const rightLocal = localOrder.get(right.id);
+    if (leftLocal !== undefined || rightLocal !== undefined) {
+      return (
+        (leftLocal ?? Number.MAX_SAFE_INTEGER) -
+        (rightLocal ?? Number.MAX_SAFE_INTEGER)
+      );
+    }
+    return (
+      left.name.localeCompare(right.name) || left.id.localeCompare(right.id)
+    );
+  });
+}
+
+function localOptionValue(variableId: string) {
+  return `local\u0000${variableId}`;
+}
+
+function libraryOptionValue(libraryId: string, variableId: string) {
+  return `library\u0000${libraryId}\u0000${variableId}`;
 }
 
 function nodePaints(node: DesignNode) {

@@ -945,6 +945,7 @@ export function SelectedNodeProperties({
         node={node}
         onSetBinding={onSetVariableBinding}
         onSetExplicitMode={onSetVariableMode}
+        projectLibraries={projectLibraries}
       />
     </div>
   );

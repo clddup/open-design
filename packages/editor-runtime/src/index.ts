@@ -153,6 +153,7 @@ export {
 export { planReorderComponentProperties } from "./component-property-order-operations.js";
 export {
   planAddVariableMode,
+  planApplyLibraryVariable,
   planCreateVariable,
   planCreateVariableCollection,
   planDeleteVariable,

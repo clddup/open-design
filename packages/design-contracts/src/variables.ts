@@ -406,6 +406,19 @@ export type VariableCollectionChange = Static<
 >;
 export type VariableChange = Static<typeof VariableChangeSchema>;
 
+export function isVariableAliasValue(
+  value: VariableValue,
+): value is VariableAlias {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "type" in value &&
+    value.type === "VARIABLE_ALIAS" &&
+    "id" in value &&
+    typeof value.id === "string"
+  );
+}
+
 export function migrateFigmaVariables(
   document: Record<string, unknown>,
 ): boolean {

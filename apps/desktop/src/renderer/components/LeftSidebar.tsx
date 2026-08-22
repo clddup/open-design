@@ -355,6 +355,11 @@ const unavailableProjectLibraries: ProjectLibraryActions = {
       ok: false,
       error: "Project Library is unavailable",
     }),
+  applyVariable: () =>
+    Promise.resolve({
+      ok: false,
+      error: "Project Library is unavailable",
+    }),
   acceptUpdate: () => Promise.resolve(),
   ignoreUpdate: () => Promise.resolve(),
   clearError: () => undefined,

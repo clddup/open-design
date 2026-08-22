@@ -979,9 +979,40 @@ export const LibraryStyleSourceSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const LibraryVariableCollectionSourceSchema = Type.Object(
+  {
+    source: Type.Object(
+      {
+        ...LibraryReleaseIdentityProperties,
+        sourceVariableCollectionId: Type.String({
+          minLength: 1,
+          maxLength: 256,
+        }),
+      },
+      { additionalProperties: false },
+    ),
+    collection: variables.VariableCollectionDefinitionSchema,
+  },
+  { additionalProperties: false },
+);
+
+export const LibraryVariableSourceSchema = Type.Object(
+  {
+    source: Type.Object(
+      {
+        ...LibraryReleaseIdentityProperties,
+        sourceVariableId: Type.String({ minLength: 1, maxLength: 256 }),
+      },
+      { additionalProperties: false },
+    ),
+    variable: variables.VariableDefinitionSchema,
+  },
+  { additionalProperties: false },
+);
+
 export const LibraryReleaseSnapshotSchema = Type.Object(
   {
-    version: Type.Literal(2),
+    version: Type.Literal(3),
     libraryId: Type.String({ minLength: 1, maxLength: 256 }),
     releaseId: Type.String({ minLength: 1, maxLength: 256 }),
     sourceProjectId: Type.String({ minLength: 1, maxLength: 256 }),
@@ -1000,6 +1031,14 @@ export const LibraryReleaseSnapshotSchema = Type.Object(
     stylesById: Type.Record(
       Type.String({ minLength: 1, maxLength: 256 }),
       LibraryStyleSourceSchema,
+    ),
+    variableCollectionsById: Type.Record(
+      Type.String({ minLength: 1, maxLength: 256 }),
+      LibraryVariableCollectionSourceSchema,
+    ),
+    variablesById: Type.Record(
+      Type.String({ minLength: 1, maxLength: 256 }),
+      LibraryVariableSourceSchema,
     ),
   },
   { additionalProperties: false },
@@ -1030,6 +1069,11 @@ const DesignDocumentResourceProperties = {
     LibraryVariantSetSourceSchema,
   ),
   libraryStylesById: Type.Record(Type.String(), LibraryStyleSourceSchema),
+  libraryVariableCollectionsById: Type.Record(
+    Type.String(),
+    LibraryVariableCollectionSourceSchema,
+  ),
+  libraryVariablesById: Type.Record(Type.String(), LibraryVariableSourceSchema),
   styleOrderByType: StyleOrderByTypeSchema,
   stylesById: Type.Record(Type.String(), SharedStyleDefinitionSchema),
   interactionsById: Type.Record(Type.String(), JsonValueSchema),
@@ -1359,6 +1403,38 @@ export const DeleteLibraryStyleSourceCommandSchema = Type.Object(
   },
   { additionalProperties: false },
 );
+export const PutLibraryVariableCollectionSourceCommandSchema = Type.Object(
+  {
+    ...OperationBaseProperties,
+    type: Type.Literal("put_library_variable_collection_source"),
+    source: LibraryVariableCollectionSourceSchema,
+  },
+  { additionalProperties: false },
+);
+export const DeleteLibraryVariableCollectionSourceCommandSchema = Type.Object(
+  {
+    ...OperationBaseProperties,
+    type: Type.Literal("delete_library_variable_collection_source"),
+    collectionId: Type.String({ minLength: 1, maxLength: 256 }),
+  },
+  { additionalProperties: false },
+);
+export const PutLibraryVariableSourceCommandSchema = Type.Object(
+  {
+    ...OperationBaseProperties,
+    type: Type.Literal("put_library_variable_source"),
+    source: LibraryVariableSourceSchema,
+  },
+  { additionalProperties: false },
+);
+export const DeleteLibraryVariableSourceCommandSchema = Type.Object(
+  {
+    ...OperationBaseProperties,
+    type: Type.Literal("delete_library_variable_source"),
+    variableId: Type.String({ minLength: 1, maxLength: 256 }),
+  },
+  { additionalProperties: false },
+);
 export const InsertPageCommandSchema = Type.Object(
   {
     ...OperationBaseProperties,
@@ -1432,6 +1508,10 @@ export const DesignOperationSchema: TUnion<
     typeof DeleteLibraryVariantSetSourceCommandSchema,
     typeof PutLibraryStyleSourceCommandSchema,
     typeof DeleteLibraryStyleSourceCommandSchema,
+    typeof PutLibraryVariableCollectionSourceCommandSchema,
+    typeof DeleteLibraryVariableCollectionSourceCommandSchema,
+    typeof PutLibraryVariableSourceCommandSchema,
+    typeof DeleteLibraryVariableSourceCommandSchema,
     typeof variables.PutVariableCollectionCommandSchema,
     typeof variables.DeleteVariableCollectionCommandSchema,
     typeof variables.MoveVariableCollectionCommandSchema,
@@ -1462,6 +1542,10 @@ export const DesignOperationSchema: TUnion<
   DeleteLibraryVariantSetSourceCommandSchema,
   PutLibraryStyleSourceCommandSchema,
   DeleteLibraryStyleSourceCommandSchema,
+  PutLibraryVariableCollectionSourceCommandSchema,
+  DeleteLibraryVariableCollectionSourceCommandSchema,
+  PutLibraryVariableSourceCommandSchema,
+  DeleteLibraryVariableSourceCommandSchema,
   variables.PutVariableCollectionCommandSchema,
   variables.DeleteVariableCollectionCommandSchema,
   variables.MoveVariableCollectionCommandSchema,
@@ -1690,6 +1774,56 @@ export const LibraryStyleSourceChangeSchema: TSchema & {
   { additionalProperties: false },
 );
 
+type LibraryVariableCollectionSourceChangeValue = {
+  type: "added" | "updated" | "removed";
+  collectionId: string;
+  before?: Static<typeof LibraryVariableCollectionSourceSchema>;
+  after?: Static<typeof LibraryVariableCollectionSourceSchema>;
+  changedFields: string[];
+};
+
+export const LibraryVariableCollectionSourceChangeSchema: TSchema & {
+  static: LibraryVariableCollectionSourceChangeValue;
+} = Type.Object(
+  {
+    type: Type.Union([
+      Type.Literal("added"),
+      Type.Literal("updated"),
+      Type.Literal("removed"),
+    ]),
+    collectionId: Type.String({ minLength: 1 }),
+    before: Type.Optional(LibraryVariableCollectionSourceSchema),
+    after: Type.Optional(LibraryVariableCollectionSourceSchema),
+    changedFields: Type.Array(Type.String(), { uniqueItems: true }),
+  },
+  { additionalProperties: false },
+);
+
+type LibraryVariableSourceChangeValue = {
+  type: "added" | "updated" | "removed";
+  variableId: string;
+  before?: Static<typeof LibraryVariableSourceSchema>;
+  after?: Static<typeof LibraryVariableSourceSchema>;
+  changedFields: string[];
+};
+
+export const LibraryVariableSourceChangeSchema: TSchema & {
+  static: LibraryVariableSourceChangeValue;
+} = Type.Object(
+  {
+    type: Type.Union([
+      Type.Literal("added"),
+      Type.Literal("updated"),
+      Type.Literal("removed"),
+    ]),
+    variableId: Type.String({ minLength: 1 }),
+    before: Type.Optional(LibraryVariableSourceSchema),
+    after: Type.Optional(LibraryVariableSourceSchema),
+    changedFields: Type.Array(Type.String(), { uniqueItems: true }),
+  },
+  { additionalProperties: false },
+);
+
 const DesignChangeSetCoreProperties = {
   documentId: Type.String({ minLength: 1 }),
   fromRevision: Type.Integer({ minimum: 0 }),
@@ -1771,6 +1905,30 @@ const DesignChangeSetDetailProperties = {
   ),
   libraryStyleChanges: Type.Optional(
     Type.Array(LibraryStyleSourceChangeSchema),
+  ),
+  addedLibraryVariableCollectionIds: Type.Optional(
+    Type.Array(Type.String(), { uniqueItems: true }),
+  ),
+  changedLibraryVariableCollectionIds: Type.Optional(
+    Type.Array(Type.String(), { uniqueItems: true }),
+  ),
+  removedLibraryVariableCollectionIds: Type.Optional(
+    Type.Array(Type.String(), { uniqueItems: true }),
+  ),
+  libraryVariableCollectionChanges: Type.Optional(
+    Type.Array(LibraryVariableCollectionSourceChangeSchema),
+  ),
+  addedLibraryVariableIds: Type.Optional(
+    Type.Array(Type.String(), { uniqueItems: true }),
+  ),
+  changedLibraryVariableIds: Type.Optional(
+    Type.Array(Type.String(), { uniqueItems: true }),
+  ),
+  removedLibraryVariableIds: Type.Optional(
+    Type.Array(Type.String(), { uniqueItems: true }),
+  ),
+  libraryVariableChanges: Type.Optional(
+    Type.Array(LibraryVariableSourceChangeSchema),
   ),
   variantSetChanges: Type.Optional(Type.Array(VariantSetChangeSchema)),
   addedStyleIds: Type.Optional(
@@ -2139,6 +2297,10 @@ export type LibraryVariantSetSource = Static<
   typeof LibraryVariantSetSourceSchema
 >;
 export type LibraryStyleSource = Static<typeof LibraryStyleSourceSchema>;
+export type LibraryVariableCollectionSource = Static<
+  typeof LibraryVariableCollectionSourceSchema
+>;
+export type LibraryVariableSource = Static<typeof LibraryVariableSourceSchema>;
 export type LibraryReleaseSnapshot = Static<
   typeof LibraryReleaseSnapshotSchema
 >;
@@ -2193,6 +2355,18 @@ export type PutLibraryStyleSourceCommand = Static<
 export type DeleteLibraryStyleSourceCommand = Static<
   typeof DeleteLibraryStyleSourceCommandSchema
 >;
+export type PutLibraryVariableCollectionSourceCommand = Static<
+  typeof PutLibraryVariableCollectionSourceCommandSchema
+>;
+export type DeleteLibraryVariableCollectionSourceCommand = Static<
+  typeof DeleteLibraryVariableCollectionSourceCommandSchema
+>;
+export type PutLibraryVariableSourceCommand = Static<
+  typeof PutLibraryVariableSourceCommandSchema
+>;
+export type DeleteLibraryVariableSourceCommand = Static<
+  typeof DeleteLibraryVariableSourceCommandSchema
+>;
 export type InsertPageCommand = Static<typeof InsertPageCommandSchema>;
 export type UpdatePageCommand = Static<typeof UpdatePageCommandSchema>;
 export type MovePageCommand = Static<typeof MovePageCommandSchema>;
@@ -2214,6 +2388,12 @@ export type LibraryVariantSetSourceChange = Static<
 >;
 export type LibraryStyleSourceChange = Static<
   typeof LibraryStyleSourceChangeSchema
+>;
+export type LibraryVariableCollectionSourceChange = Static<
+  typeof LibraryVariableCollectionSourceChangeSchema
+>;
+export type LibraryVariableSourceChange = Static<
+  typeof LibraryVariableSourceChangeSchema
 >;
 export type DesignChangeSet = Static<typeof DesignChangeSetSchema>;
 export type DesignDiff = DesignChangeSet;
@@ -2427,8 +2607,61 @@ export function isLibraryReleaseSnapshot(
       ([styleId, style]) =>
         style.style.id === styleId &&
         identityMatches(style.source, style.source.sourceStyleId, styleId),
+    ) &&
+    Object.entries(release.variableCollectionsById).every(
+      ([collectionId, source]) =>
+        source.collection.id === collectionId &&
+        identityMatches(
+          source.source,
+          source.source.sourceVariableCollectionId,
+          collectionId,
+        ) &&
+        source.collection.variableIds.every(
+          (variableId) =>
+            release.variablesById[variableId]?.variable.variableCollectionId ===
+            collectionId,
+        ),
+    ) &&
+    Object.entries(release.variablesById).every(
+      ([variableId, source]) =>
+        source.variable.id === variableId &&
+        identityMatches(
+          source.source,
+          source.source.sourceVariableId,
+          variableId,
+        ) &&
+        Boolean(
+          release.variableCollectionsById[
+            source.variable.variableCollectionId
+          ]?.collection.variableIds.includes(variableId),
+        ) &&
+        Object.values(source.variable.valuesByMode).every(
+          (value) =>
+            !variables.isVariableAliasValue(value) ||
+            release.variablesById[value.id]?.variable.resolvedType ===
+              source.variable.resolvedType,
+        ),
     )
   );
+}
+
+export function migrateLibraryReleaseSnapshot(
+  value: unknown,
+): LibraryReleaseSnapshot | null {
+  if (isLibraryReleaseSnapshot(value)) return structuredClone(value);
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    Array.isArray(value) ||
+    (value as { version?: unknown }).version !== 2
+  ) {
+    return null;
+  }
+  const migrated = structuredClone(value) as Record<string, unknown>;
+  migrated.version = 3;
+  migrated.variableCollectionsById = {};
+  migrated.variablesById = {};
+  return isLibraryReleaseSnapshot(migrated) ? migrated : null;
 }
 
 export function isImagePlacement(value: unknown): value is ImagePlacement {
@@ -2460,6 +2693,8 @@ export function migrateDesignDocument(value: unknown): DesignDocument | null {
     normalized.libraryComponentsById ??= {};
     normalized.libraryVariantSetsById ??= {};
     normalized.libraryStylesById ??= {};
+    normalized.libraryVariableCollectionsById ??= {};
+    normalized.libraryVariablesById ??= {};
     return isDesignDocument(normalized) ? normalized : null;
   }
   try {
@@ -2468,6 +2703,8 @@ export function migrateDesignDocument(value: unknown): DesignDocument | null {
     migrated.libraryComponentsById ??= {};
     migrated.libraryVariantSetsById ??= {};
     migrated.libraryStylesById ??= {};
+    migrated.libraryVariableCollectionsById ??= {};
+    migrated.libraryVariablesById ??= {};
     if (
       schemaVersion === versions.ADVANCED_VECTOR_CUT_DESIGN_SCHEMA_VERSION &&
       hasLegacyInstanceNodes(migrated)
