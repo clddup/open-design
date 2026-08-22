@@ -2,7 +2,6 @@ import type {
   ComponentSelectionTarget,
   DesignChangeSet,
   DesignDocument,
-  DesignOperation,
   Point,
   Rect,
   SelectionState,
@@ -12,7 +11,6 @@ import type {
   VectorPointMode,
   ViewportState,
 } from "@opendesign/design-contracts";
-import { normalizeLineEndpoints } from "@opendesign/design-contracts";
 import { componentSourcePathKey } from "@opendesign/component-service";
 import {
   BOOLEAN_GEOMETRY_RESOLVER_VERSION,
@@ -124,13 +122,16 @@ import type {
   LeaferLayerHoverTarget,
   LeaferEngineOptions,
   LeaferEngineSyncInput,
-  LeaferOperationKind,
   LeaferRasterExportResult,
   LeaferTextStyleUpdate,
   LeaferVectorEditTool,
 } from "./types.js";
 import { BoxDrawController } from "./box-draw-controller.js";
 import { BoxSelectController } from "./box-select-controller.js";
+import {
+  DirectTransformController,
+  type DirectTransformElementState,
+} from "./direct-transform-controller.js";
 import { ImageCropController } from "./image-crop-controller.js";
 import { PenToolController } from "./pen-tool-controller.js";
 import { asLeaferEvent, eventClientPoint } from "./pointer-event.js";
@@ -141,13 +142,6 @@ type LeaferElement = InstanceType<LeaferModule["UI"]>;
 type LeaferGroup = InstanceType<LeaferModule["Group"]>;
 type LeaferEditor = InstanceType<LeaferModule["Editor"]>;
 type LeaferStroker = InstanceType<LeaferModule["Stroker"]>;
-
-interface ElementState {
-  linePoints?: readonly [number, number, number, number];
-  size: { height: number; width: number };
-  text?: string;
-  transform: Transform;
-}
 
 interface GenerationSkeletonLabel {
   element: LeaferElement;
@@ -178,13 +172,6 @@ interface GenerationSkeletonViewportState {
 interface ActiveGenerationTween {
   current: GenerationTweenFrame;
   plan: GenerationTweenPlan;
-}
-
-interface TransformSession {
-  before: Map<string, ElementState>;
-  changed: boolean;
-  kind: LeaferOperationKind;
-  selectionNodeIds: string[];
 }
 
 type VectorEditControl =
@@ -327,6 +314,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   readonly #editorOverlays: EditorOverlayController;
   readonly #boxDrawController: BoxDrawController;
   readonly #boxSelectController: BoxSelectController;
+  readonly #directTransformController: DirectTransformController;
   readonly #imageCropController: ImageCropController;
   readonly #penToolController: PenToolController;
   readonly #textRunEditor: TextRunEditController<LeaferElement>;
@@ -335,7 +323,6 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   #baseProjection: LeaferSceneProjection | null = null;
   #booleanNodeIds = new Set<string>();
   #booleanResolver: BooleanGeometryResolver | null = null;
-  #booleanPreviewFrame: number | null = null;
   #geometryLoadError: Error | null = null;
   #geometryLoadGeneration = 0;
   #geometryLoadPromise: Promise<void> | null = null;
@@ -343,7 +330,6 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   #input: LeaferEngineSyncInput | null = null;
   #projection: LeaferSceneProjection | null = null;
   #synchronizing = false;
-  #transform: TransformSession | null = null;
   #activeVectorEditNodeId: string | null = null;
   readonly #vectorEdits = new Map<string, VectorEditSession>();
   readonly #vectorEditControls = new WeakMap<
@@ -561,6 +547,31 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       nodeId: (element) => this.#nodeId(element),
       scheduleEditorRefresh: () => this.#scheduleEditorRefresh(),
     });
+    this.#directTransformController = new DirectTransformController({
+      canPreviewBoolean: () =>
+        !this.#disposed &&
+        this.#input?.booleanEditScope !== undefined &&
+        !this.#input.booleanEditScope.readOnly &&
+        this.#booleanResolver !== null &&
+        this.#baseProjection !== null,
+      current: () => ({
+        disposed: this.#disposed,
+        input: this.#input,
+        projection: this.#projection,
+        synchronizing: this.#synchronizing,
+      }),
+      editor: this.#editor,
+      element: (nodeId) => this.#elements.get(nodeId),
+      finishNodePresentation: (nodeId) => {
+        this.#finishGenerationRevealNode(nodeId);
+        this.#finishGenerationTweenNode(nodeId, true);
+      },
+      hasComponentTarget: () => this.#selectedComponentTarget() !== undefined,
+      nodeId: (element) => this.#nodeId(element),
+      onOperations: (request) => this.#callbacks.onOperations(request),
+      onPreviewBoolean: (states) => this.#previewBooleanTransform(states),
+      restoreProjection: () => this.#restoreProjection(),
+    });
     this.#penToolController = new PenToolController({
       current: () => ({
         disposed: this.#disposed,
@@ -666,6 +677,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     const sceneChanged = documentSceneChanged || textRunProjectionChanged;
     this.#boxDrawController.syncInput(input);
     this.#boxSelectController.syncInput(input);
+    this.#directTransformController.syncInput(input);
     this.#imageCropController.syncInput(input);
     this.#penToolController.prepareSync(input, sceneChanged);
     if (
@@ -697,7 +709,9 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       previous?.booleanEditScope,
       input.booleanEditScope,
     );
-    if (sceneChanged || editScopeChanged) this.#cancelBooleanPreview();
+    if (sceneChanged || editScopeChanged) {
+      this.#directTransformController.cancelPreview();
+    }
     let generationTweenStarts:
       ReadonlyMap<string, GenerationTweenEndpoint> | undefined;
 
@@ -777,6 +791,12 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
           input,
           projectionContinuityLost: textRunProjectionChanged,
         });
+        this.#directTransformController.syncProjection({
+          changedNodeIds,
+          input,
+          projection,
+          projectionContinuityLost: textRunProjectionChanged,
+        });
         this.#penToolController.syncProjection({
           changedNodeIds,
           input,
@@ -792,16 +812,6 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
           this.#cancelVectorEdit();
         }
         if (identityChanged) this.#editor.visible = false;
-        if (
-          identityChanged ||
-          !contiguousChanges ||
-          (this.#transform &&
-            [...this.#transform.before.keys()].some((nodeId) =>
-              invalidatesInteraction(nodeId),
-            ))
-        ) {
-          this.#transform = null;
-        }
         if (
           this.#editor.innerEditing &&
           (identityChanged ||
@@ -861,6 +871,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     } catch (error) {
       this.#boxDrawController.cancel();
       this.#boxSelectController.cancel();
+      this.#directTransformController.cancel();
       this.#penToolController.abortSync();
       this.finishGenerationPresentation();
       this.#report(error);
@@ -949,6 +960,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     this.#textRunEditor.clear();
     this.#boxDrawController.dispose();
     this.#boxSelectController.dispose();
+    this.#directTransformController.dispose();
     this.#penToolController.dispose();
     this.#cancelVectorEdit();
     this.#imageCropController.dispose();
@@ -958,7 +970,6 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     if (this.#generationViewportFrame !== null) {
       cancelAnimationFrame(this.#generationViewportFrame);
     }
-    this.#cancelBooleanPreview();
     this.#viewportFrame = null;
     this.#editorFrame = null;
     this.#generationViewportFrame = null;
@@ -1130,15 +1141,26 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     } = this.#leafer;
 
     this.#editor.on(EditorEvent.SELECT, () => this.#emitSelection());
-    this.#editor.editBox.on(DragEvent.START, () => this.#beginTransform());
-    this.#editor.editBox.on(DragEvent.END, () => this.#finishTransform());
+    this.#editor.editBox.on(DragEvent.START, () =>
+      this.#directTransformController.begin(),
+    );
+    this.#editor.editBox.on(DragEvent.END, () =>
+      this.#directTransformController.finish(),
+    );
 
-    const beforeTransform = () => this.#beginTransform();
-    const changed = () => this.#markTransformChanged();
-    this.#editor.on(EditorMoveEvent.BEFORE_MOVE, beforeTransform);
-    this.#editor.on(EditorScaleEvent.BEFORE_SCALE, beforeTransform);
-    this.#editor.on(EditorRotateEvent.BEFORE_ROTATE, beforeTransform);
-    this.#editor.on(EditorSkewEvent.BEFORE_SKEW, beforeTransform);
+    const changed = () => this.#directTransformController.markChanged();
+    this.#editor.on(EditorMoveEvent.BEFORE_MOVE, () =>
+      this.#directTransformController.begin("move"),
+    );
+    this.#editor.on(EditorScaleEvent.BEFORE_SCALE, () =>
+      this.#directTransformController.begin("resize"),
+    );
+    this.#editor.on(EditorRotateEvent.BEFORE_ROTATE, () =>
+      this.#directTransformController.begin("rotate"),
+    );
+    this.#editor.on(EditorSkewEvent.BEFORE_SKEW, () =>
+      this.#directTransformController.begin("skew"),
+    );
     this.#editor.on(EditorMoveEvent.MOVE, changed);
     this.#editor.on(EditorScaleEvent.SCALE, changed);
     this.#editor.on(EditorRotateEvent.ROTATE, changed);
@@ -1725,82 +1747,17 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     });
   }
 
-  #beginTransform(): void {
-    if (this.#synchronizing || this.#transform || this.#disposed) return;
-    if (this.#selectedComponentTarget()) return;
-    if (this.#selectionHasLockedElement()) return;
-    const nodeIds = this.#selectedSubtreeIds();
-    if (nodeIds.length === 0) return;
-    for (const nodeId of nodeIds) {
-      this.#finishGenerationRevealNode(nodeId);
-      this.#finishGenerationTweenNode(nodeId, true);
-    }
-    this.#transform = {
-      before: this.#capture(nodeIds),
-      changed: false,
-      kind: this.#currentTransformKind(),
-      selectionNodeIds: this.#selectedNodeIds(),
-    };
-  }
-
-  #markTransformChanged(): void {
-    if (this.#synchronizing || this.#disposed) return;
-    this.#beginTransform();
-    if (!this.#transform) {
-      if (this.#selectionHasLockedElement()) this.#restoreProjection();
-      return;
-    }
-    this.#transform.changed = true;
-    this.#scheduleBooleanPreview();
-    if (!this.#editor.editBox.dragging && !this.#editor.editBox.gesturing) {
-      queueMicrotask(() => this.#finishTransform());
-    }
-  }
-
-  #finishTransform(): void {
-    const session = this.#transform;
-    if (!session || this.#synchronizing || this.#disposed) return;
-    this.#transform = null;
-    if (!session.changed) return;
-    const operations = this.#operationsFrom(session.before);
-    if (operations.length === 0) return;
-    const accepted = this.#callbacks.onOperations({
-      kind: session.kind,
-      operations,
-      selectionNodeIds: session.selectionNodeIds,
-    });
-    if (!accepted) this.#restoreProjection();
-  }
-
-  #scheduleBooleanPreview(): void {
-    if (
-      this.#disposed ||
-      this.#booleanPreviewFrame !== null ||
-      !this.#input?.booleanEditScope ||
-      this.#input.booleanEditScope.readOnly ||
-      !this.#booleanResolver ||
-      !this.#baseProjection ||
-      !this.#transform
-    ) {
-      return;
-    }
-    this.#booleanPreviewFrame = requestAnimationFrame(() => {
-      this.#booleanPreviewFrame = null;
-      this.#previewBooleanTransform();
-    });
-  }
-
-  #previewBooleanTransform(): void {
+  #previewBooleanTransform(
+    states: ReadonlyMap<string, DirectTransformElementState>,
+  ): void {
     const input = this.#input;
     const base = this.#baseProjection;
     const resolver = this.#booleanResolver;
-    const transform = this.#transform;
     if (
       !input?.booleanEditScope ||
       input.booleanEditScope.readOnly ||
       !base ||
       !resolver ||
-      !transform ||
       this.#disposed
     ) {
       return;
@@ -1808,11 +1765,9 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     const nodesById: DesignDocument["nodesById"] = {
       ...input.document.nodesById,
     };
-    for (const nodeId of transform.before.keys()) {
+    for (const [nodeId, current] of states) {
       const node = input.document.nodesById[nodeId];
-      const element = this.#elements.get(nodeId);
-      if (!node || !element) continue;
-      const current = this.#readElementState(element);
+      if (!node) continue;
       nodesById[nodeId] = {
         ...node,
         transform: current.transform,
@@ -1854,134 +1809,6 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     } finally {
       this.#synchronizing = false;
     }
-  }
-
-  #cancelBooleanPreview(): void {
-    if (this.#booleanPreviewFrame === null) return;
-    cancelAnimationFrame(this.#booleanPreviewFrame);
-    this.#booleanPreviewFrame = null;
-  }
-
-  #capture(nodeIds: readonly string[]): Map<string, ElementState> {
-    const captured = new Map<string, ElementState>();
-    nodeIds.forEach((nodeId) => {
-      const element = this.#elements.get(nodeId);
-      if (!element) return;
-      captured.set(nodeId, this.#readElementState(element));
-    });
-    return captured;
-  }
-
-  #operationsFrom(
-    before: ReadonlyMap<string, ElementState>,
-  ): DesignOperation[] {
-    const document = this.#input?.document;
-    if (!document) return [];
-    const operations: DesignOperation[] = [];
-    for (const [nodeId, previous] of before) {
-      const node = document.nodesById[nodeId];
-      const element = this.#elements.get(nodeId);
-      const spec = this.#projection?.elementsById.get(nodeId);
-      if (!node || !element || isLockedSpec(spec)) continue;
-      const current = this.#readElementState(element);
-      const linePointsChanged =
-        node.kind === "line" &&
-        previous.linePoints !== undefined &&
-        current.linePoints !== undefined &&
-        !sameNumberList(previous.linePoints, current.linePoints);
-      let nextTransform = current.transform;
-      let nextSize = node.kind === "line" ? node.size : current.size;
-      let lineProperties:
-        | { start: { x: number; y: number }; end: { x: number; y: number } }
-        | undefined;
-      if (linePointsChanged && current.linePoints) {
-        const geometry = normalizeLineEndpoints(
-          { x: current.linePoints[0], y: current.linePoints[1] },
-          { x: current.linePoints[2], y: current.linePoints[3] },
-        );
-        nextTransform = translateLocalTransform(
-          current.transform,
-          geometry.bounds.x,
-          geometry.bounds.y,
-        );
-        nextSize = {
-          width: geometry.bounds.width,
-          height: geometry.bounds.height,
-        };
-        lineProperties = { start: geometry.start, end: geometry.end };
-      }
-      const transformChanged = !sameTransform(node.transform, nextTransform);
-      const sizeChanged =
-        node.kind !== "group" &&
-        node.kind !== "boolean" &&
-        node.kind !== "instance" &&
-        (!nearlyEqual(node.size.width, nextSize.width) ||
-          !nearlyEqual(node.size.height, nextSize.height));
-      if (!transformChanged && !sizeChanged && !lineProperties) continue;
-      operations.push({
-        commandId: `leafer_transform_${nodeId}`,
-        type: "update_properties",
-        nodeId,
-        ...(transformChanged ? { transform: nextTransform } : {}),
-        ...(sizeChanged ? { size: nextSize } : {}),
-        ...(lineProperties ? { properties: lineProperties } : {}),
-      });
-    }
-    return operations;
-  }
-
-  #readElementState(element: LeaferElement): ElementState {
-    const matrix = element.localTransform;
-    const tag = this.#tag(element);
-    const textBounds =
-      tag === "Text" ? element.getBounds("box", "inner") : undefined;
-    const linePoints =
-      tag === "Arrow" || tag === "Line" ? readLinePoints(element) : undefined;
-    return {
-      transform: normalizeTransform([
-        matrix.a,
-        matrix.b,
-        matrix.c,
-        matrix.d,
-        matrix.e,
-        matrix.f,
-      ]),
-      size: {
-        width: normalizeNumber(
-          element.width === undefined
-            ? (textBounds?.width ?? 0)
-            : Number(element.width) || 0,
-        ),
-        height: normalizeNumber(
-          element.height === undefined
-            ? (textBounds?.height ?? 0)
-            : Number(element.height) || 0,
-        ),
-      },
-      ...(linePoints ? { linePoints } : {}),
-      ...(tag === "Text" ? { text: readElementText(element) } : {}),
-    };
-  }
-
-  #selectedSubtreeIds(): string[] {
-    const projection = this.#projection;
-    if (!projection) return [];
-    const selected = this.#editor.list.flatMap((element) => {
-      const nodeId = this.#nodeId(element as LeaferElement);
-      return nodeId ? [nodeId] : [];
-    });
-    const result: string[] = [];
-    const visited = new Set<string>();
-    const visit = (nodeId: string) => {
-      if (visited.has(nodeId)) return;
-      visited.add(nodeId);
-      const spec = projection.elementsById.get(nodeId);
-      if (!spec) return;
-      result.push(nodeId);
-      spec.childIds.forEach(visit);
-    };
-    selected.forEach(visit);
-    return result;
   }
 
   #selectedNodeIds(): string[] {
@@ -2047,25 +1874,6 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       }
     }
     return undefined;
-  }
-
-  #currentTransformKind(): LeaferOperationKind {
-    if (this.#editor.resizing) return "resize";
-    if (this.#editor.rotating) return "rotate";
-    if (this.#editor.skewing) return "skew";
-    if (this.#editor.moving) return "move";
-    return "transform";
-  }
-
-  #selectionHasLockedElement(): boolean {
-    if (this.#selectedComponentTarget()) return true;
-    return this.#editor.list.some((element) => {
-      const nodeId = this.#nodeId(element as LeaferElement);
-      return (
-        nodeId !== undefined &&
-        isLockedSpec(this.#projection?.elementsById.get(nodeId))
-      );
-    });
   }
 
   #finishTextEdit(): void {
@@ -4511,6 +4319,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         return;
       }
     }
+    if (this.#directTransformController.handleKeyDown(event)) return;
     if (this.#boxSelectController.handleKeyDown(event)) return;
     if (this.#penToolController.handleKeyDown(event)) return;
     if (this.#boxDrawController.handleKeyDown(event)) return;
@@ -5041,10 +4850,6 @@ function isLockedSpec(spec: LeaferElementSpec | undefined): boolean {
   );
 }
 
-function normalizeTransform(transform: Transform): Transform {
-  return transform.map(normalizeNumber) as Transform;
-}
-
 function normalizeNumber(value: number): number {
   if (!Number.isFinite(value)) return 0;
   const rounded = Math.round(value * 1_000_000) / 1_000_000;
@@ -5144,74 +4949,6 @@ function sameViewport(left: ViewportState, right: ViewportState): boolean {
 function readElementText(element: LeaferElement): string {
   const text = (element as LeaferElement & { text?: unknown }).text;
   return typeof text === "string" ? text : "";
-}
-
-function readLinePoints(
-  element: LeaferElement,
-): readonly [number, number, number, number] | undefined {
-  const points = (element as LeaferElement & { points?: unknown }).points;
-  if (
-    Array.isArray(points) &&
-    points.length >= 4 &&
-    points.slice(0, 4).every((value) => typeof value === "number")
-  ) {
-    return points.slice(0, 4).map(normalizeNumber) as [
-      number,
-      number,
-      number,
-      number,
-    ];
-  }
-  if (
-    Array.isArray(points) &&
-    points.length >= 2 &&
-    points[0] &&
-    points[1] &&
-    typeof points[0] === "object" &&
-    typeof points[1] === "object"
-  ) {
-    const start = points[0] as { x?: unknown; y?: unknown };
-    const end = points[1] as { x?: unknown; y?: unknown };
-    if (
-      typeof start.x === "number" &&
-      typeof start.y === "number" &&
-      typeof end.x === "number" &&
-      typeof end.y === "number"
-    ) {
-      return [start.x, start.y, end.x, end.y].map(normalizeNumber) as [
-        number,
-        number,
-        number,
-        number,
-      ];
-    }
-  }
-  return undefined;
-}
-
-function translateLocalTransform(
-  transform: Transform,
-  x: number,
-  y: number,
-): Transform {
-  return normalizeTransform([
-    transform[0],
-    transform[1],
-    transform[2],
-    transform[3],
-    transform[0] * x + transform[2] * y + transform[4],
-    transform[1] * x + transform[3] * y + transform[5],
-  ]);
-}
-
-function sameNumberList(
-  left: readonly number[],
-  right: readonly number[],
-): boolean {
-  return (
-    left.length === right.length &&
-    left.every((value, index) => nearlyEqual(value, right[index] ?? 0))
-  );
 }
 
 function pointDistance(left: Point, right: Point): number {

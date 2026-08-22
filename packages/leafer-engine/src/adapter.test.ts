@@ -3927,6 +3927,190 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
+  it("commits one multi-selection direct manipulation and skips unchanged descendants", async () => {
+    const onOperations = vi.fn(() => true);
+    const input = createInput();
+    input.selection = {
+      nodeIds: ["feature_one", "feature_two"],
+      anchorNodeId: "feature_two",
+    };
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onOperations,
+    });
+    adapter.sync(input);
+    flushAnimationFrames();
+    const app = leaferHarness.app;
+    const first = app && findElement(app.tree, "feature_one");
+    const second = app && findElement(app.tree, "feature_two");
+    if (!app || !first || !second) throw new Error("Missing card fixtures");
+
+    app.editor.moving = true;
+    app.editor.editBox.dragging = true;
+    app.editor.emit("editor.before-move");
+    first.localTransform.e += 24;
+    second.localTransform.e += 24;
+    app.editor.emit("editor.move");
+    app.editor.editBox.dragging = false;
+    app.editor.editBox.emit("drag.end");
+
+    expect(onOperations).toHaveBeenCalledTimes(1);
+    expect(onOperations).toHaveBeenCalledWith({
+      kind: "move",
+      selectionNodeIds: ["feature_one", "feature_two"],
+      operations: [
+        expect.objectContaining({
+          nodeId: "feature_one",
+          type: "update_properties",
+        }),
+        expect.objectContaining({
+          nodeId: "feature_two",
+          type: "update_properties",
+        }),
+      ],
+    });
+    adapter.dispose();
+  });
+
+  it("classifies rotate and skew gestures without committing a no-op", async () => {
+    for (const fixture of [
+      {
+        beforeEvent: "editor.before-rotate",
+        changedEvent: "editor.rotate",
+        kind: "rotate" as const,
+        prepare: (app: FakeApp) => {
+          app.editor.rotating = true;
+        },
+        transform: { a: 0, b: 1, c: -1, d: 0 },
+      },
+      {
+        beforeEvent: "editor.before-skew",
+        changedEvent: "editor.skew",
+        kind: "skew" as const,
+        prepare: (app: FakeApp) => {
+          app.editor.skewing = true;
+        },
+        transform: { a: 1, b: 0, c: 0.25, d: 1 },
+      },
+    ]) {
+      const onOperations = vi.fn(() => true);
+      const adapter = await createLeaferEngineAdapter(createHost(), {
+        ...createCallbacks(),
+        onOperations,
+      });
+      adapter.sync(createInput());
+      flushAnimationFrames();
+      const app = leaferHarness.app;
+      const selected = app && findElement(app.tree, "feature_one");
+      if (!app || !selected) throw new Error("Missing selected fixture");
+
+      fixture.prepare(app);
+      app.editor.editBox.dragging = true;
+      app.editor.emit(fixture.beforeEvent);
+      app.editor.emit(fixture.changedEvent);
+      app.editor.editBox.dragging = false;
+      app.editor.editBox.emit("drag.end");
+      expect(onOperations).not.toHaveBeenCalled();
+
+      app.editor.editBox.dragging = true;
+      app.editor.emit(fixture.beforeEvent);
+      Object.assign(selected.localTransform, fixture.transform);
+      app.editor.emit(fixture.changedEvent);
+      app.editor.editBox.dragging = false;
+      app.editor.editBox.emit("drag.end");
+
+      expect(onOperations).toHaveBeenCalledWith(
+        expect.objectContaining({ kind: fixture.kind }),
+      );
+      adapter.dispose();
+    }
+  });
+
+  it("restores a direct manipulation on Escape, scope change, rejection, and dispose", async () => {
+    const onOperations = vi.fn(() => false);
+    const input = createInput();
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onOperations,
+    });
+    adapter.sync(input);
+    flushAnimationFrames();
+    const app = leaferHarness.app;
+    const selected = app && findElement(app.tree, "feature_one");
+    if (!app || !selected) throw new Error("Missing selected fixture");
+
+    app.editor.moving = true;
+    app.editor.editBox.dragging = true;
+    app.editor.emit("editor.before-move");
+    selected.localTransform.e = 36;
+    app.editor.emit("editor.move");
+    const escape = emitWindowKey("Escape");
+    expect(escape.preventDefault).toHaveBeenCalledTimes(1);
+    expect(selected.localTransform.e).toBe(0);
+    app.editor.editBox.dragging = false;
+    app.editor.editBox.emit("drag.end");
+    expect(onOperations).not.toHaveBeenCalled();
+
+    app.editor.editBox.dragging = true;
+    app.editor.emit("editor.before-move");
+    selected.localTransform.e = 48;
+    app.editor.emit("editor.move");
+    adapter.sync({ ...input, tool: "pen" });
+    expect(selected.localTransform.e).toBe(0);
+    app.editor.editBox.dragging = false;
+    app.editor.editBox.emit("drag.end");
+    expect(onOperations).not.toHaveBeenCalled();
+
+    adapter.sync(input);
+    app.editor.editBox.dragging = true;
+    app.editor.emit("editor.before-move");
+    selected.localTransform.e = 60;
+    app.editor.emit("editor.move");
+    app.editor.editBox.dragging = false;
+    app.editor.editBox.emit("drag.end");
+    expect(onOperations).toHaveBeenCalledTimes(1);
+    expect(selected.localTransform.e).toBe(0);
+
+    onOperations.mockClear();
+    app.editor.editBox.dragging = true;
+    app.editor.emit("editor.before-move");
+    selected.localTransform.e = 72;
+    app.editor.emit("editor.move");
+    adapter.dispose();
+    app.editor.editBox.dragging = false;
+    app.editor.editBox.emit("drag.end");
+    expect(onOperations).not.toHaveBeenCalled();
+  });
+
+  it("does not submit a direct manipulation after a non-contiguous revision", async () => {
+    const onOperations = vi.fn(() => true);
+    const input = createInput();
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onOperations,
+    });
+    adapter.sync(input);
+    flushAnimationFrames();
+    const app = leaferHarness.app;
+    const selected = app && findElement(app.tree, "feature_one");
+    if (!app || !selected) throw new Error("Missing selected fixture");
+
+    app.editor.moving = true;
+    app.editor.editBox.dragging = true;
+    app.editor.emit("editor.before-move");
+    selected.localTransform.e = 36;
+    app.editor.emit("editor.move");
+    const replacement = structuredClone(input.document);
+    replacement.revision += 1;
+    adapter.sync({ ...input, document: replacement });
+    app.editor.editBox.dragging = false;
+    app.editor.editBox.emit("drag.end");
+
+    expect(onOperations).not.toHaveBeenCalled();
+    expect(selected.localTransform.e).toBe(0);
+    adapter.dispose();
+  });
+
   it("keeps Auto Width text measured while moving and emits explicit bounds when resized", async () => {
     const onOperations = vi.fn(() => true);
     const adapter = await createLeaferEngineAdapter(createHost(), {
