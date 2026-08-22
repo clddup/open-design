@@ -1,6 +1,6 @@
 # ADR-0140：Renderer feature 所有权与语言 catalog
 
-- 状态：已接受
+- 状态：已接受（完成范围由 ADR-0141 澄清）
 - 日期：2026-08-22
 
 ## 背景
@@ -51,7 +51,7 @@ controller 可以组合纯 helper 和子 controller，但必须拥有完整业�
 
 第七个切片完成 locale catalog 的 feature ownership 迁移。App Shell、Settings、Workspace、Agent Conversation、Diagnostics、Canvas、Sidebar、Properties、Editor、Workbench、Native Dialog、Import/Export、Image、Layout、Component、Variable、Style 与 Typography 各自拥有独立英文和简体中文文件；原先把两种语言放在同一文件的五个 legacy `*-messages.ts` 已删除。每个中文 feature 通过英文 owner 的精确 key 集做编译期校验，顶层 `mergeCatalogs` 对跨 feature 重复 key 失败关闭，不再允许 spread 顺序静默覆盖；迁移由此发现并消除了历史重复 `properties.mixed`。`messages.ts` 继续只负责 locale registry、公共 key 类型和插值。
 
-本决策定义的渐进迁移已经完成。后续新增或实质修改文案必须直接进入对应 feature/locale，不得重新向顶层语言聚合文件或双语混合模块写业务文案。
+本决策列出的 feature controller 与 locale catalog 迁移已经完成。后续新增或实质修改文案必须直接进入对应 feature/locale，不得重新向顶层语言聚合文件或双语混合模块写业务文案。`AppContent` 的原子 destination、活动资源身份单 owner 和 Editor 生命周期隔离不在本决策已完成范围内，继续按 ADR-0141 推进。
 
 每个切片保持产品行为，补定向 controller 测试和少量 App 接线测试。需要改变产品契约时单独记录 ADR，不借架构迁移静默改变行为。
 

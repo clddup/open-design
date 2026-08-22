@@ -83,6 +83,8 @@ Phase 6 的第六个切片用 `MediaInputIpcHost` 接管附件选择/导入/预�
 
 Phase 6 的第七个切片用 `StandaloneDesignFileIpcHost` 接管脱离 Project 的 `.opendesign` 打开/保存 channel、原生对话框和唯一活动路径 lease；Project Design File 仍完全由 `ProjectHost` 持有，两者不共享路径状态。owner 在任何文件访问前执行 sender、参数数量、共享 payload、绝对路径和扩展名校验；打开时在 stat 后和 read 后分别执行 64MB 门禁并拒绝非文件与非法 UTF-8，保存时按 UTF-8 byte size 门禁并通过同目录随机临时文件原子替换。Save As 对无扩展名的原生选择补齐 `.opendesign`，取消或失败不提升活动路径，Renderer 只收到名称和内容而不获得绝对路径；application shutdown 清除 lease。Main 入口不再持有 standalone path、文件读写 helper 或这两个 channel 分支。
 
+Phase 6 的第八个切片用 `AgentIpcRouter` 接管 Renderer `agentRequest` channel、Agent event listener、Conversation/Run/Request 临时关联和事件分发顺序。owner 统一执行 sender、参数数量和 Agent request 校验，拒绝 Renderer handshake，按每次请求动态解析 Coordinator/Provider/Project/Reference service；history dispatch 失败回滚 request correlation，Run 终态释放 Renderer tool/reference/correlation，dispose 同时移除 Agent listener。Run、Continuation、Provider、Project、Reference 与设计状态仍由原 owner 持有；Agent process generation、ready watchdog、全部 Run lease 和 graceful shutdown 仍待统一 Supervisor，不能把本切片描述为 Phase 6 完成。
+
 ### 自动边界门禁与职责治理
 
 `pnpm architecture:check` 是根 `pnpm verify` 的必经步骤，并校验：
@@ -131,5 +133,6 @@ ADR-0086 已退休默认 800 行和历史逐文件行数预算：连续切片证
 - `model-service-ipc.test.ts`、`model-provider-host.test.ts`、`image-generation-host.test.ts`、shared desktop API 与 Settings 测试：完整 channel family、动态 host、凭据 payload 校验、成功后 catalog 通知、连接测试与设置持久化
 - `diagnostic-host.test.ts`、`diagnostic-log.test.ts`、`application-preferences-host.test.ts`、Application Menu、shared API、Renderer i18n/diagnostics 测试：有界 pending、source ownership、flush/clear、Locale 持久化/菜单/通知、Theme 投影及 sender/arity 失败关闭
 - `media-input-ipc.test.ts`、`agent-attachment-host.test.ts`、shared desktop API、Image Generation、mask/expand 与 lifecycle 测试：选择/导入/预览、内容寻址图片、8 类编辑输入、大小门禁、request lease、用户取消和 shutdown abort
+- `agent-ipc-router.test.ts`：sender/arity/payload 校验顺序、history correlation/rollback、重复 registration 与 listener dispose
 - Agent Runtime/Main/Renderer 定向测试：Run-scoped approval、Renderer 活动租约、版本化 Plan amendment 与 Text content 规范化
 - 全仓 `pnpm verify`

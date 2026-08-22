@@ -1,8 +1,4 @@
-import {
-  isAgentRequest,
-  type AgentEvent,
-  type AgentRequest,
-} from "@opendesign/agent-contracts";
+import type { AgentRequest } from "@opendesign/agent-contracts";
 import type {
   ToolCallRequest,
   TrustedToolContext,
@@ -42,11 +38,9 @@ import {
   designGenerationPerformanceDiagnostic,
 } from "./agent/design-generation-performance";
 import { reportAgentDiagnostic } from "./agent/agent-diagnostic-reporter";
-import { handleAgentApprovalRequest } from "./agent/agent-approval-handler";
 import { AgentContinuationScheduler } from "./agent/agent-continuation-scheduler";
-import { prepareAgentContinuation } from "./agent/agent-continuation-host";
-import { handleAgentRunControlRequest } from "./agent/agent-run-starter";
 import { prepareInitialDesignInspection } from "./agent/agent-initial-design-inspection";
+import { AgentIpcRouter } from "./agent/agent-ipc-router";
 import { handleDesignPlanTool } from "./agent/design-plan-tool-handler";
 import { handleDesignFirstSliceTool } from "./agent/design-first-slice-tool-handler";
 import {
@@ -102,7 +96,6 @@ import { configureFixtureSmoke } from "./professional-fixture-smoke";
 import type { RendererDesignCaptureTarget } from "../shared/design-tool-bridge";
 import { registerRendererDesignToolIpc } from "./agent/renderer-design-tool-ipc";
 import { channels } from "../shared/desktop-api";
-import type { DiagnosticContext } from "../shared/diagnostics";
 import { handleDesignSystemTool } from "./agent/design-system-tool-handler.js";
 import { translate } from "../shared/i18n/messages";
 import {
@@ -213,8 +206,6 @@ let agentSvgImportHost: AgentSvgImportHost | null = null;
 let agentRasterExportHost: AgentRasterExportHost | null = null;
 let svgFileService: SvgFileService | null = null;
 let rasterFileService: RasterFileService | null = null;
-const conversationIdByRunId = new Map<string, string>();
-const conversationIdByRequestId = new Map<string, string>();
 const diagnosticHost = new DiagnosticHost({
   fallback: (input) => {
     console.error(`[${input.source}:${input.code}] ${input.message}`);
@@ -248,6 +239,32 @@ const standaloneDesignFileIpcHost = new StandaloneDesignFileIpcHost({
   openDialog: (window, options) => dialog.showOpenDialog(window, options),
   saveDialog: (window, options) => dialog.showSaveDialog(window, options),
 });
+const agentIpcRouter = new AgentIpcRouter({
+  agentHost,
+  continuationScheduler: agentContinuationScheduler,
+  forgetRendererRun: (runId) => rendererDesignToolHost.forgetRun(runId),
+  getServices: () => ({
+    globalTaskCoordinator,
+    modelProviderHost,
+    projectHost,
+    referenceHost: agentReferenceHost,
+  }),
+  observeEvent: (event, context) => {
+    reportAgentDiagnostic(event, diagnosticHost.publish, () => context);
+    const performanceSummary =
+      designGenerationPerformance.recordAgentEvent(event);
+    if (performanceSummary) {
+      diagnosticHost.publish(
+        designGenerationPerformanceDiagnostic(
+          performanceSummary,
+          context?.conversationId,
+        ),
+      );
+    }
+  },
+  prepareInitialDesignInspection: prepareInitialInspectionForRun,
+  publish: (event) => desktopWindowHost.send(channels.agentEvent, event),
+});
 const applicationLifecycle = new ApplicationLifecycle({
   exit: (code) => app.exit(code),
   platform: process.platform,
@@ -265,14 +282,12 @@ const applicationLifecycle = new ApplicationLifecycle({
     detachAgentHandlers: () => {
       agentHost.setModelRequestHandler(null);
       agentHost.setDesignToolRequestHandler(null);
+      agentIpcRouter.dispose();
     },
     rejectRendererTools: () =>
       rendererDesignToolHost.rejectAll("OpenDesign is shutting down"),
     closeWorkspace: () => workspaceStore?.close(),
-    clearCorrelations: () => {
-      conversationIdByRunId.clear();
-      conversationIdByRequestId.clear();
-    },
+    clearCorrelations: () => agentIpcRouter.clear(),
     flushDiagnostics: () => diagnosticHost.flush(),
     clearServices: () => {
       projectIpc = null;
@@ -293,33 +308,6 @@ const applicationLifecycle = new ApplicationLifecycle({
     },
   },
 });
-
-function diagnosticContextForAgentEvent(
-  event: AgentEvent,
-): DiagnosticContext | undefined {
-  const runId = "runId" in event ? event.runId : undefined;
-  const requestId =
-    "requestId" in event
-      ? event.requestId
-      : event.type === "agent.error"
-        ? event.failure?.modelRequestId
-        : undefined;
-  const toolCallId = "toolCallId" in event ? event.toolCallId : undefined;
-  const conversationId = runId
-    ? conversationIdByRunId.get(runId)
-    : requestId
-      ? conversationIdByRequestId.get(requestId)
-      : event.type === "session.history"
-        ? event.sessionId
-        : undefined;
-  if (!conversationId && !runId && !requestId && !toolCallId) return undefined;
-  return {
-    ...(conversationId ? { conversationId } : {}),
-    ...(runId ? { runId } : {}),
-    ...(requestId ? { requestId } : {}),
-    ...(toolCallId ? { toolCallId } : {}),
-  };
-}
 
 function assertMainRenderer(event: Electron.IpcMainInvokeEvent) {
   desktopWindowHost.assertRenderer(event);
@@ -524,10 +512,6 @@ function requireImageGenerationHost(): ImageGenerationHost {
   return imageGenerationHost;
 }
 
-function assertArgumentCount(args: unknown[], count: number) {
-  if (args.length !== count) throw new TypeError("Unexpected IPC arguments");
-}
-
 function registerIpc(fontBinaryService: FontBinaryMainService) {
   svgFileService = new SvgFileService({
     selectOpenFile: selectSvgOpenFile,
@@ -604,118 +588,10 @@ function registerIpc(fontBinaryService: FontBinaryMainService) {
   fixtureSmoke.register(ipcMain, assertMainRenderer, () =>
     desktopWindowHost.current(),
   );
-  ipcMain.handle(channels.agentRequest, async (event, ...args: unknown[]) => {
-    desktopWindowHost.assertRenderer(
-      event,
-      "Agent request from unknown renderer",
-    );
-    assertArgumentCount(args, 1);
-    const request = args[0];
-    if (!isAgentRequest(request)) throw new TypeError("Invalid Agent request");
-    if (request.type === "handshake") {
-      throw new TypeError("Agent handshake is host-internal");
-    }
-    if (request.type === "approval.resolve") {
-      if (!globalTaskCoordinator) {
-        throw new Error("Global Task services are not initialized");
-      }
-      handleAgentApprovalRequest(request, {
-        agentHost,
-        globalTaskCoordinator,
-      });
-      return;
-    }
-    if (request.type === "run.start") {
-      if (!globalTaskCoordinator) {
-        throw new Error("Global Task services are not initialized");
-      }
-      await handleAgentRunControlRequest(request, {
-        agentHost,
-        continuationScheduler: agentContinuationScheduler,
-        conversationIdByRunId,
-        globalTaskCoordinator,
-        modelProviderHost: requireModelProviderHost(),
-        prepareInitialDesignInspection: prepareInitialInspectionForRun,
-        referenceHost: requireAgentReferenceHost(),
-        publish: (agentEvent) =>
-          desktopWindowHost.send(channels.agentEvent, agentEvent),
-      });
-      return;
-    }
-    if (request.type === "session.history") {
-      conversationIdByRequestId.set(request.requestId, request.sessionId);
-    }
-    if (request.type === "run.cancel") {
-      if (!globalTaskCoordinator) {
-        throw new Error("Global Task services are not initialized");
-      }
-      const handled = await handleAgentRunControlRequest(request, {
-        agentHost,
-        continuationScheduler: agentContinuationScheduler,
-        conversationIdByRunId,
-        globalTaskCoordinator,
-        modelProviderHost: requireModelProviderHost(),
-        referenceHost: requireAgentReferenceHost(),
-        publish: (agentEvent) =>
-          desktopWindowHost.send(channels.agentEvent, agentEvent),
-      });
-      if (handled) return;
-    }
-    try {
-      agentHost.send(request);
-    } catch (error) {
-      if (request.type === "session.history") {
-        conversationIdByRequestId.delete(request.requestId);
-      }
-      throw error;
-    }
-  });
-  agentHost.on((event) => {
-    reportAgentDiagnostic(
-      event,
-      diagnosticHost.publish,
-      diagnosticContextForAgentEvent,
-    );
-    const performanceSummary =
-      designGenerationPerformance.recordAgentEvent(event);
-    if (performanceSummary)
-      diagnosticHost.publish(
-        designGenerationPerformanceDiagnostic(
-          performanceSummary,
-          conversationIdByRunId.get(performanceSummary.runId),
-        ),
-      );
-    if (event.type === "session.history")
-      conversationIdByRequestId.delete(event.requestId);
-    if (event.type === "agent.error" && event.requestId)
-      conversationIdByRequestId.delete(event.requestId);
-    if (event.type === "run.completed") {
-      rendererDesignToolHost.forgetRun(event.runId);
-    }
-    prepareAgentContinuation(event, {
-      continuationScheduler: agentContinuationScheduler,
-      publish: (continuationEvent) =>
-        desktopWindowHost.send(channels.agentEvent, continuationEvent),
-      projectHost,
-      starter:
-        globalTaskCoordinator && modelProviderHost && agentReferenceHost
-          ? {
-              agentHost,
-              continuationScheduler: agentContinuationScheduler,
-              conversationIdByRunId,
-              globalTaskCoordinator,
-              modelProviderHost,
-              prepareInitialDesignInspection: prepareInitialInspectionForRun,
-              referenceHost: agentReferenceHost,
-            }
-          : null,
-    });
-    if (event.type === "run.completed") {
-      agentReferenceHost?.releaseRun(event.runId);
-      conversationIdByRunId.delete(event.runId);
-    }
-    globalTaskCoordinator?.handleAgentEvent(event);
-    desktopWindowHost.send(channels.agentEvent, event);
+  agentIpcRouter.register({
+    ipc: ipcMain,
+    assertRenderer: (event, message) =>
+      desktopWindowHost.assertRenderer(event, message),
   });
   nativeTheme.on("updated", () => {
     applicationPreferences.publishNativeThemeUpdated(
