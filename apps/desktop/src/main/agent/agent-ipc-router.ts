@@ -1,20 +1,14 @@
 import {
   isAgentRequest,
-  type AgentInitialDesignInspection,
   type AgentEvent,
   type AgentRequest,
 } from "@opendesign/agent-contracts";
 import type { IpcMainInvokeEvent } from "electron";
 import { channels } from "../../shared/desktop-api.js";
 import type { DiagnosticContext } from "../../shared/diagnostics.js";
-import type { ModelProviderHost } from "../model/model-provider-host.js";
-import type { ProjectHost } from "../project/project-host.js";
 import { handleAgentApprovalRequest } from "./agent-approval-handler.js";
-import type { AgentContinuationScheduler } from "./agent-continuation-scheduler.js";
-import { prepareAgentContinuation } from "./agent-continuation-host.js";
 import type { AgentHost } from "./agent-host.js";
-import type { AgentReferenceHost } from "./agent-reference-host.js";
-import { handleAgentRunControlRequest } from "./agent-run-starter.js";
+import type { AgentRunCoordinator } from "./agent-run-coordinator.js";
 import type { GlobalTaskCoordinator } from "./global-task-coordinator.js";
 
 type AgentIpcHandler = (
@@ -26,24 +20,12 @@ export interface AgentIpcRegistrar {
   handle(channel: string, listener: AgentIpcHandler): void;
 }
 
-export interface AgentRouterServices {
-  globalTaskCoordinator: GlobalTaskCoordinator | null;
-  modelProviderHost: ModelProviderHost | null;
-  projectHost: ProjectHost | null;
-  referenceHost: AgentReferenceHost | null;
-}
-
 export interface AgentIpcRouterOptions {
   agentHost: AgentHost;
-  continuationScheduler: AgentContinuationScheduler;
-  forgetRendererRun(runId: string): void;
-  getServices(): AgentRouterServices;
+  getCoordinator(): GlobalTaskCoordinator | null;
   observeEvent(event: AgentEvent, context: DiagnosticContext | undefined): void;
-  prepareInitialDesignInspection(
-    request: Extract<AgentRequest, { type: "run.start" }>,
-    signal: AbortSignal,
-  ): Promise<AgentInitialDesignInspection | undefined>;
   publish(event: AgentEvent): void;
+  runCoordinator: AgentRunCoordinator;
 }
 
 /**
@@ -53,7 +35,6 @@ export interface AgentIpcRouterOptions {
  */
 export class AgentIpcRouter {
   readonly #options: AgentIpcRouterOptions;
-  readonly #conversationIdByRunId = new Map<string, string>();
   readonly #conversationIdByRequestId = new Map<string, string>();
   #detachAgentListener: (() => void) | null = null;
 
@@ -83,7 +64,6 @@ export class AgentIpcRouter {
   }
 
   clear(): void {
-    this.#conversationIdByRunId.clear();
     this.#conversationIdByRequestId.clear();
   }
 
@@ -106,26 +86,8 @@ export class AgentIpcRouter {
       return;
     }
     if (request.type === "run.start" || request.type === "run.cancel") {
-      const services = this.#requireRunServices();
-      const handled = await handleAgentRunControlRequest(request, {
-        agentHost: this.#options.agentHost,
-        continuationScheduler: this.#options.continuationScheduler,
-        conversationIdByRunId: this.#conversationIdByRunId,
-        globalTaskCoordinator: services.globalTaskCoordinator,
-        modelProviderHost: services.modelProviderHost,
-        ...(request.type === "run.start"
-          ? {
-              prepareInitialDesignInspection: (runRequest, signal) =>
-                this.#options.prepareInitialDesignInspection(
-                  runRequest,
-                  signal,
-                ),
-            }
-          : {}),
-        publish: (agentEvent) => this.#options.publish(agentEvent),
-        referenceHost: services.referenceHost,
-      });
-      if (handled) return;
+      await this.#options.runCoordinator.handleRequest(request);
+      return;
     }
     if (request.type === "session.history") {
       this.#conversationIdByRequestId.set(request.requestId, request.sessionId);
@@ -149,36 +111,7 @@ export class AgentIpcRouter {
     if (event.type === "agent.error" && event.requestId) {
       this.#conversationIdByRequestId.delete(event.requestId);
     }
-    if (event.type === "run.completed") {
-      this.#options.forgetRendererRun(event.runId);
-    }
-
-    const services = this.#options.getServices();
-    prepareAgentContinuation(event, {
-      continuationScheduler: this.#options.continuationScheduler,
-      publish: (continuationEvent) => this.#options.publish(continuationEvent),
-      projectHost: services.projectHost,
-      starter:
-        services.globalTaskCoordinator &&
-        services.modelProviderHost &&
-        services.referenceHost
-          ? {
-              agentHost: this.#options.agentHost,
-              continuationScheduler: this.#options.continuationScheduler,
-              conversationIdByRunId: this.#conversationIdByRunId,
-              globalTaskCoordinator: services.globalTaskCoordinator,
-              modelProviderHost: services.modelProviderHost,
-              prepareInitialDesignInspection: (request, signal) =>
-                this.#options.prepareInitialDesignInspection(request, signal),
-              referenceHost: services.referenceHost,
-            }
-          : null,
-    });
-    if (event.type === "run.completed") {
-      services.referenceHost?.releaseRun(event.runId);
-      this.#conversationIdByRunId.delete(event.runId);
-    }
-    services.globalTaskCoordinator?.handleAgentEvent(event);
+    this.#options.runCoordinator.handleEvent(event);
     this.#options.publish(event);
   }
 
@@ -192,7 +125,7 @@ export class AgentIpcRouter {
           : undefined;
     const toolCallId = "toolCallId" in event ? event.toolCallId : undefined;
     const conversationId = runId
-      ? this.#conversationIdByRunId.get(runId)
+      ? this.#options.runCoordinator.conversationIdForRun(runId)
       : requestId
         ? this.#conversationIdByRequestId.get(requestId)
         : event.type === "session.history"
@@ -210,31 +143,11 @@ export class AgentIpcRouter {
   }
 
   #requireCoordinator(): GlobalTaskCoordinator {
-    const coordinator = this.#options.getServices().globalTaskCoordinator;
+    const coordinator = this.#options.getCoordinator();
     if (!coordinator) {
       throw new Error("Global Task services are not initialized");
     }
     return coordinator;
-  }
-
-  #requireRunServices(): {
-    globalTaskCoordinator: GlobalTaskCoordinator;
-    modelProviderHost: ModelProviderHost;
-    referenceHost: AgentReferenceHost;
-  } {
-    const services = this.#options.getServices();
-    if (
-      !services.globalTaskCoordinator ||
-      !services.modelProviderHost ||
-      !services.referenceHost
-    ) {
-      throw new Error("Global Task services are not initialized");
-    }
-    return {
-      globalTaskCoordinator: services.globalTaskCoordinator,
-      modelProviderHost: services.modelProviderHost,
-      referenceHost: services.referenceHost,
-    };
   }
 }
 

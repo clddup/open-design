@@ -89,7 +89,7 @@ MCP 只能依赖 Main 提供的稳定 resource handle、revision、`DesignReadPo
 
 每一步必须保持可运行，只做最小充分的定向测试、typecheck、lint、format 和 architecture check；不以本地原生安装包构建作为日常架构重构验证。
 
-当前步骤 1—4 已落地：`AgentIpcRouter`、原子 `AppNavigator`、活动 Project/Design File 身份单 owner 与完整 `EditorWorkbenchFeature` 均已有定向测试。Workbench controller、selection projection、Image edit、人工 Import/Export 和画布 session 只随 Editor destination 建立；Settings 与 Workspace 会释放这些订阅，返回 Editor 复用同一权威 `EditorRuntime`。步骤 5 的 process 子切片也已落地：`AgentSupervisor` 持有单一 utility-process generation、ready/handshake watchdog、协议失败、异常退出和有界停止，`ApplicationLifecycle` 等待其停止后才解绑桥接 handler。Run/preflight/continuation lease 的统一 coordinator 与 `DesktopApplication.start()` rollback 尚未完成，因此步骤 5、步骤 6—8 和全仓治理仍保持进行中。
+当前步骤 1—4 已落地：`AgentIpcRouter`、原子 `AppNavigator`、活动 Project/Design File 身份单 owner 与完整 `EditorWorkbenchFeature` 均已有定向测试。Workbench controller、selection projection、Image edit、人工 Import/Export 和画布 session 只随 Editor destination 建立；Settings 与 Workspace 会释放这些订阅，返回 Editor 复用同一权威 `EditorRuntime`。步骤 5 的 Agent 生命周期子切片也已落地：`AgentSupervisor` 持有单一 utility-process generation、ready/handshake watchdog、协议失败、异常退出和有界停止；`AgentRunCoordinator` 持有 Run→Conversation、preflight AbortController、continuation、Reference 与 Renderer/performance lease。进程级错误会中断 Global Task 并释放全部 Run lease，shutdown 按 `quiesce/cancelAll → Supervisor stop → detach/dispose` 执行。`DesktopApplication.start()` rollback 尚未完成，因此步骤 5、步骤 6—8 和全仓治理仍保持进行中。
 
 ## 后果
 
@@ -104,6 +104,6 @@ MCP 只能依赖 Main 提供的稳定 resource handle、revision、`DesignReadPo
 - `AgentIpcRouter`：sender 优先、参数/payload、history correlation、dispatch rollback、重复 registration 与 dispose。
 - `AppNavigator`：判别联合、原子提交、latest-wins、settings return、invalid destination 与删除中的资源。
 - Project/Workspace：活动 Project 派生、文件 identity/name 单 owner、保存/重命名/切换无双写。
-- Main Supervisor：已覆盖单 process generation、ready timeout、握手顺序、协议不兼容、异常退出、并发 start 与 graceful/forced stop；并发 Run 取消、continuation/reference 统一回收与 startup rollback 仍由后续切片验证。
+- Main Supervisor：已覆盖单 process generation、ready timeout、握手顺序、协议不兼容、异常退出、并发 start、graceful/forced stop、并发 Run 取消、preflight/continuation/reference/Renderer lease 统一回收；startup rollback 仍由后续切片验证。
 - Architecture verifier：进程 allowlist、源码 cycle、undeclared/unused/deep import 和 workspace app DAG fixtures。
 - 每个切片执行最小相关 Vitest、Desktop typecheck、ESLint、Prettier 与 `pnpm architecture:check`；原生 macOS/Windows package/smoke 仍在发布门禁执行。

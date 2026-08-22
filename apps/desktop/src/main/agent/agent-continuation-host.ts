@@ -23,6 +23,7 @@ type ContinuationProjectHost = {
 };
 
 export interface AgentContinuationHostDependencies {
+  canStart?: () => boolean;
   continuationScheduler: AgentContinuationScheduler;
   publish: (event: AgentEvent) => void;
   projectHost: ProjectHost | null;
@@ -33,7 +34,8 @@ export function prepareAgentContinuation(
   event: AgentEvent,
   dependencies: AgentContinuationHostDependencies,
 ): void {
-  const { continuationScheduler, projectHost, publish, starter } = dependencies;
+  const { canStart, continuationScheduler, projectHost, publish, starter } =
+    dependencies;
   if (!projectHost || !starter) return;
   const eventRunId =
     "runId" in event && typeof event.runId === "string"
@@ -70,6 +72,16 @@ export function prepareAgentContinuation(
   publish(scheduled);
   void request
     .then(async (next) => {
+      if (canStart && !canStart()) {
+        continuationScheduler.forgetRun(next.runId);
+        publish({
+          type: "run.completed",
+          runId: next.runId,
+          finishedAt: new Date().toISOString(),
+          stopReason: "cancelled",
+        });
+        return;
+      }
       const started = await startAgentRun(next, starter);
       if (started) return;
       publish({

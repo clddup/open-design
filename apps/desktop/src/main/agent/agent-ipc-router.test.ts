@@ -2,9 +2,9 @@ import type { AgentEvent, AgentRequest } from "@opendesign/agent-contracts";
 import type { IpcMainInvokeEvent } from "electron";
 import { describe, expect, it, vi } from "vitest";
 import { channels } from "../../shared/desktop-api.js";
-import { AgentContinuationScheduler } from "./agent-continuation-scheduler.js";
 import type { AgentHost, AgentHostListener } from "./agent-host.js";
 import { AgentIpcRouter, type AgentIpcRegistrar } from "./agent-ipc-router.js";
+import type { AgentRunCoordinator } from "./agent-run-coordinator.js";
 
 type Handler = Parameters<AgentIpcRegistrar["handle"]>[1];
 const event = {} as IpcMainInvokeEvent;
@@ -108,6 +108,25 @@ describe("AgentIpcRouter", () => {
     });
   });
 
+  it("delegates Run requests and Agent events to the Run coordinator", async () => {
+    const { emit, handleRunEvent, handleRunRequest, handlers, send } = setup();
+    const handler = requireAgentRequestHandler(handlers);
+    const cancel: AgentRequest = { type: "run.cancel", runId: "run_1" };
+
+    await expect(handler(event, cancel)).resolves.toBeUndefined();
+    expect(handleRunRequest).toHaveBeenCalledWith(cancel);
+    expect(send).not.toHaveBeenCalled();
+
+    const completed: AgentEvent = {
+      type: "run.completed",
+      runId: "run_1",
+      finishedAt: "2026-08-23T01:00:00.000Z",
+      stopReason: "complete",
+    };
+    emit(completed);
+    expect(handleRunEvent).toHaveBeenCalledWith(completed);
+  });
+
   it("registers once and detaches the Agent listener on dispose", () => {
     const { emit, observeEvent, publish, router } = setup();
 
@@ -147,19 +166,19 @@ function setup(overrides?: {
   } as unknown as AgentHost;
   const observeEvent = vi.fn();
   const publish = vi.fn();
+  const handleRunEvent = vi.fn();
+  const handleRunRequest = vi.fn(() => Promise.resolve());
+  const runCoordinator = {
+    conversationIdForRun: vi.fn(),
+    handleEvent: handleRunEvent,
+    handleRequest: handleRunRequest,
+  } as unknown as AgentRunCoordinator;
   const router = new AgentIpcRouter({
     agentHost,
-    continuationScheduler: new AgentContinuationScheduler(),
-    forgetRendererRun: vi.fn(),
-    getServices: () => ({
-      globalTaskCoordinator: null,
-      modelProviderHost: null,
-      projectHost: null,
-      referenceHost: null,
-    }),
+    getCoordinator: () => null,
     observeEvent,
-    prepareInitialDesignInspection: vi.fn(),
     publish,
+    runCoordinator,
   });
   const assertRenderer = overrides?.assertRenderer ?? vi.fn();
   router.register({
@@ -176,6 +195,8 @@ function setup(overrides?: {
   return {
     assertRenderer,
     emit,
+    handleRunEvent,
+    handleRunRequest,
     handlers,
     observeEvent,
     publish,

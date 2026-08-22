@@ -88,6 +88,7 @@ describe("AgentContinuationScheduler", () => {
     const initial = request();
     scheduler.registerRun(initial);
     recordDelivery(scheduler, initial.runId);
+    expect(scheduler.activeRunIds()).toEqual([initial.runId]);
 
     expect(scheduler.record(completed(initial.runId, "budget"))).toEqual({
       kind: "schedule",
@@ -101,6 +102,7 @@ describe("AgentContinuationScheduler", () => {
         reason: "budget",
       },
     });
+    expect(scheduler.activeRunIds()).toEqual(["run_1000_auto_1"]);
   });
 
   it("preserves the root Run and increments bounded continuation attempts", () => {

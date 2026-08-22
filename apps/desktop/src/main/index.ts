@@ -38,9 +38,9 @@ import {
   designGenerationPerformanceDiagnostic,
 } from "./agent/design-generation-performance";
 import { reportAgentDiagnostic } from "./agent/agent-diagnostic-reporter";
-import { AgentContinuationScheduler } from "./agent/agent-continuation-scheduler";
 import { prepareInitialDesignInspection } from "./agent/agent-initial-design-inspection";
 import { AgentIpcRouter } from "./agent/agent-ipc-router";
+import { AgentRunCoordinator } from "./agent/agent-run-coordinator";
 import { handleDesignPlanTool } from "./agent/design-plan-tool-handler";
 import { handleDesignFirstSliceTool } from "./agent/design-first-slice-tool-handler";
 import {
@@ -154,7 +154,6 @@ import {
 } from "./agent/component-tool-policy";
 
 const designGenerationPerformance = new DesignGenerationPerformanceTracker();
-const agentContinuationScheduler = new AgentContinuationScheduler();
 app.setName("OpenDesign");
 if (process.platform === "win32") app.setAppUserModelId("design.open.app");
 
@@ -239,16 +238,24 @@ const standaloneDesignFileIpcHost = new StandaloneDesignFileIpcHost({
   openDialog: (window, options) => dialog.showOpenDialog(window, options),
   saveDialog: (window, options) => dialog.showSaveDialog(window, options),
 });
-const agentIpcRouter = new AgentIpcRouter({
+const agentRunCoordinator = new AgentRunCoordinator({
   agentHost,
-  continuationScheduler: agentContinuationScheduler,
-  forgetRendererRun: (runId) => rendererDesignToolHost.forgetRun(runId),
+  forgetRun: (runId) => {
+    rendererDesignToolHost.forgetRun(runId);
+    designGenerationPerformance.forgetRun(runId);
+  },
   getServices: () => ({
     globalTaskCoordinator,
     modelProviderHost,
     projectHost,
     referenceHost: agentReferenceHost,
   }),
+  prepareInitialDesignInspection: prepareInitialInspectionForRun,
+  publish: (event) => desktopWindowHost.send(channels.agentEvent, event),
+});
+const agentIpcRouter = new AgentIpcRouter({
+  agentHost,
+  getCoordinator: () => globalTaskCoordinator,
   observeEvent: (event, context) => {
     reportAgentDiagnostic(event, diagnosticHost.publish, () => context);
     const performanceSummary =
@@ -262,8 +269,8 @@ const agentIpcRouter = new AgentIpcRouter({
       );
     }
   },
-  prepareInitialDesignInspection: prepareInitialInspectionForRun,
   publish: (event) => desktopWindowHost.send(channels.agentEvent, event),
+  runCoordinator: agentRunCoordinator,
 });
 const applicationLifecycle = new ApplicationLifecycle({
   exit: (code) => app.exit(code),
@@ -277,11 +284,13 @@ const applicationLifecycle = new ApplicationLifecycle({
   resources: {
     abortActiveWork: () => {
       mediaInputIpcHost.abortAll("OpenDesign is shutting down");
+      agentRunCoordinator.quiesceAndCancelAll();
     },
     stopAgent: () => agentHost.stop(),
     detachAgentHandlers: () => {
       agentHost.setModelRequestHandler(null);
       agentHost.setDesignToolRequestHandler(null);
+      agentRunCoordinator.dispose();
       agentIpcRouter.dispose();
     },
     rejectRendererTools: () =>
@@ -1665,10 +1674,7 @@ void app.whenReady().then(async () => {
     selectProjectDirectory,
     (rootPath) => shell.showItemInFolder(rootPath),
     (conversationId) =>
-      Boolean(
-        globalTaskCoordinator?.hasActiveConversationRun(conversationId) ||
-        agentContinuationScheduler.hasActiveConversationRun(conversationId),
-      ),
+      agentRunCoordinator.hasActiveConversationRun(conversationId),
   );
   globalTaskCoordinator.reconcileInterruptedTasks();
   try {

@@ -57,6 +57,15 @@ export class AgentContinuationScheduler {
     );
   }
 
+  activeRunIds(): string[] {
+    return [
+      ...new Set([
+        ...this.#requestsByRunId.keys(),
+        ...this.#pendingConversationIdByRunId.keys(),
+      ]),
+    ];
+  }
+
   supersedeAutomaticContinuations(conversationId: string): string[] {
     const runIds = new Set<string>();
     for (const [runId, request] of this.#requestsByRunId) {

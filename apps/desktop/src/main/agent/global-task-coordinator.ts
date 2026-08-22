@@ -154,12 +154,6 @@ export class GlobalTaskCoordinator {
     }
   }
 
-  hasActiveConversationRun(conversationId: string): boolean {
-    return [...this.#tasksByRunId.values()].some(
-      (task) => task.conversationId === conversationId,
-    );
-  }
-
   async registerRun(request: RunStartRequest): Promise<GlobalTaskProjection> {
     if (
       this.#tasksByRunId.has(request.runId) ||

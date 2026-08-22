@@ -10,13 +10,13 @@ import type { AgentReferenceHost } from "./agent-reference-host.js";
 import type { GlobalTaskCoordinator } from "./global-task-coordinator.js";
 
 type RunStartRequest = Extract<AgentRequest, { type: "run.start" }>;
-const initialInspectionControllers = new Map<string, AbortController>();
 
 export interface AgentRunStarterDependencies {
   agentHost: AgentHost;
   continuationScheduler: AgentContinuationScheduler;
   conversationIdByRunId: Map<string, string>;
   globalTaskCoordinator: GlobalTaskCoordinator;
+  initialInspectionControllers: Map<string, AbortController>;
   modelProviderHost: ModelProviderHost;
   prepareInitialDesignInspection?: (
     request: RunStartRequest,
@@ -42,7 +42,7 @@ export async function handleAgentRunControlRequest(
       for (const runId of dependencies.continuationScheduler.supersedeAutomaticContinuations(
         request.sessionId,
       )) {
-        initialInspectionControllers.get(runId)?.abort();
+        dependencies.initialInspectionControllers.get(runId)?.abort();
         dependencies.agentHost.send({ type: "run.cancel", runId });
       }
     }
@@ -55,7 +55,7 @@ export async function handleAgentRunControlRequest(
   const cancellationTarget =
     dependencies.continuationScheduler.requestCancellation(request.runId);
   const initialInspection = cancellationTarget
-    ? initialInspectionControllers.get(cancellationTarget)
+    ? dependencies.initialInspectionControllers.get(cancellationTarget)
     : undefined;
   if (initialInspection) {
     initialInspection.abort();
@@ -91,7 +91,7 @@ export async function startAgentRun(
     let initialDesignInspection: AgentInitialDesignInspection | undefined;
     if (dependencies.prepareInitialDesignInspection) {
       const controller = new AbortController();
-      initialInspectionControllers.set(request.runId, controller);
+      dependencies.initialInspectionControllers.set(request.runId, controller);
       try {
         if (continuationScheduler.isCancellationRequested(request.runId)) {
           controller.abort();
@@ -103,8 +103,11 @@ export async function startAgentRun(
             );
         }
       } finally {
-        if (initialInspectionControllers.get(request.runId) === controller) {
-          initialInspectionControllers.delete(request.runId);
+        if (
+          dependencies.initialInspectionControllers.get(request.runId) ===
+          controller
+        ) {
+          dependencies.initialInspectionControllers.delete(request.runId);
         }
       }
     }

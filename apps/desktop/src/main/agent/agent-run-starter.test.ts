@@ -51,6 +51,7 @@ describe("Agent Run starter", () => {
       agentHost: { send } as never,
       continuationScheduler: scheduler,
       conversationIdByRunId: new Map(),
+      initialInspectionControllers: new Map(),
       globalTaskCoordinator: {
         registerRun: vi.fn().mockResolvedValue({}),
       } as never,
@@ -92,6 +93,7 @@ describe("Agent Run starter", () => {
           agentHost: {} as never,
           continuationScheduler: {} as never,
           conversationIdByRunId: new Map(),
+          initialInspectionControllers: new Map(),
           globalTaskCoordinator: {} as never,
           modelProviderHost: {} as never,
           referenceHost: {} as never,
@@ -122,6 +124,7 @@ describe("Agent Run starter", () => {
         agentHost: { send } as never,
         continuationScheduler: scheduler,
         conversationIdByRunId: new Map(),
+        initialInspectionControllers: new Map(),
         globalTaskCoordinator: {
           registerRun: vi.fn().mockResolvedValue({}),
         } as never,
@@ -167,6 +170,7 @@ describe("Agent Run starter", () => {
       agentHost: { send } as never,
       continuationScheduler: scheduler,
       conversationIdByRunId: new Map<string, string>(),
+      initialInspectionControllers: new Map<string, AbortController>(),
       globalTaskCoordinator: {
         registerRun: vi.fn().mockResolvedValue({}),
         handleAgentEvent: vi.fn(),
@@ -227,6 +231,7 @@ describe("Agent Run starter", () => {
         agentHost: { send } as never,
         continuationScheduler: scheduler,
         conversationIdByRunId: new Map(),
+        initialInspectionControllers: new Map(),
         globalTaskCoordinator: {
           registerRun: vi.fn().mockResolvedValue({}),
           handleAgentEvent: (event: AgentEvent) => terminalEvents.push(event),
