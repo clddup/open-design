@@ -903,7 +903,8 @@ export class GlobalTaskCoordinator {
       !state ||
       !target ||
       !binding ||
-      binding.generationMode === "fast" ||
+      (binding.generationMode === "fast" &&
+        state.plan.deliverable !== "logo") ||
       target.delivery.status === "pending" ||
       target.delivery.status === "allocated" ||
       target.delivery.status === "verified"
@@ -1129,16 +1130,17 @@ export class GlobalTaskCoordinator {
     input: DesignApplyToolInput,
   ): DesignPlanApplyAuthorization | undefined {
     const state = this.#designPlansByRunId.get(context.runId);
+    const scopedInput = this.#bindApplyToRegisteredPage(context, input);
     if (!state) {
       assertApplyUsesNewNodeIdNamespace(
-        input,
+        scopedInput,
         this.#inspectionsByRunId.get(context.runId),
       );
-      if (!designApplyRequiresPlan(input)) return undefined;
+      if (!designApplyRequiresPlan(scopedInput)) return undefined;
       this.#requireDesignPlan(context);
       return undefined;
     }
-    const resolvedInput = resolvePlannedStructureGeometry(input, state);
+    const resolvedInput = resolvePlannedStructureGeometry(scopedInput, state);
     const targetIds = [...assertPlannedTargetWrites(resolvedInput, state)];
     if (designApplyRequiresPlan(resolvedInput) && targetIds.length === 0) {
       throw new Error(
@@ -1176,6 +1178,33 @@ export class GlobalTaskCoordinator {
         : {}),
       targetIds,
     };
+  }
+
+  #bindApplyToRegisteredPage(
+    context: TrustedToolContext,
+    input: DesignApplyToolInput,
+  ): DesignApplyToolInput {
+    const binding = this.#toolBindingsByRunId.get(context.runId);
+    if (
+      binding?.mutationTarget.kind !== "page" ||
+      this.hasPageStructureAccess(context.runId)
+    ) {
+      return input;
+    }
+    const pageId = binding.mutationTarget.pageId;
+    let changed = false;
+    const commands = input.commands.map((command) => {
+      if (
+        (command.type === "insert_element" ||
+          command.type === "move_element") &&
+        command.pageId !== pageId
+      ) {
+        changed = true;
+        return { ...command, pageId };
+      }
+      return command;
+    });
+    return changed ? { ...input, commands } : input;
   }
 
   assertDesignPlanForAllocatedApply(

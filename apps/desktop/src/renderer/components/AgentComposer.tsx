@@ -225,23 +225,6 @@ export function AgentComposer({
               : null
           }
         />
-        <DesktopSelect
-          ariaLabel={t("agent.generationMode")}
-          className={styles.generationModeSelect}
-          disabled={Boolean(activeRunId) || !controller.submissionAvailable}
-          onValueChange={(value) => {
-            if (value === "fast" || value === "thorough") {
-              controller.setGenerationMode(value);
-            }
-          }}
-          options={(["fast", "thorough"] as const).map((mode) => ({
-            label: t(`generationMode.${mode}`),
-            textValue: t(`generationMode.${mode}`),
-            value: mode,
-          }))}
-          size="compact"
-          value={controller.generationMode}
-        />
         {controller.selectedModelReasoningEfforts.length > 1 && (
           <DesktopSelect
             ariaLabel={t("agent.reasoning")}

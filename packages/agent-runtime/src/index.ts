@@ -192,6 +192,10 @@ export interface AgentRuntimeOptions {
   systemPromptForRequest?: (request: AgentRunRequest) => string;
   newDesignSystemPrompt?: string;
   newDesignSystemPromptForRequest?: (request: AgentRunRequest) => string;
+  thinkingLevelForRequest?: (
+    request: AgentRunRequest,
+    surface: ModelToolSurface,
+  ) => NonNullable<ModelSelection["reasoningEffort"]>;
   now?: () => Date;
 }
 

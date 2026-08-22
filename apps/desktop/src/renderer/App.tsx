@@ -1,6 +1,5 @@
 import type {
   AgentAttachment,
-  DesignGenerationMode,
   AgentEvent,
   AgentRequest,
   SelectionScope,
@@ -1952,7 +1951,6 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
     prompt: string,
     modelSelection: ModelSelection,
     attachments: readonly AgentAttachment[],
-    generationMode: DesignGenerationMode,
   ) => {
     if (
       !window.desktop ||
@@ -1982,7 +1980,7 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
       scope: selectionScope(current, activePageId),
       mutationTarget: { kind: "page", pageId: activePageId },
       modelSelection,
-      generationMode,
+      generationMode: "fast",
     };
     conversationIdByRunId.current.set(runId, conversationId);
     workspace.retainFileForRun(

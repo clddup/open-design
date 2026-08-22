@@ -279,6 +279,13 @@ export const DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA = {
               conceptId: { type: "string", minLength: 1, maxLength: 128 },
               principle: { enum: [...LOGO_CONCEPT_PRINCIPLES] },
               thesis: { type: "string", minLength: 16, maxLength: 1_000 },
+              constructionLogic: {
+                type: "string",
+                minLength: 24,
+                maxLength: 1_000,
+                description:
+                  "Name the visible geometric mechanism, ownable silhouette or counterform, and the recognition anchor that survives at 16 px. Do not retrofit a story to an arbitrary shape.",
+              },
               rootNodeId: ID_SCHEMA,
               evidenceNodeIds: {
                 type: "array",
@@ -294,6 +301,7 @@ export const DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA = {
               "conceptId",
               "principle",
               "thesis",
+              "constructionLogic",
               "rootNodeId",
               "evidenceNodeIds",
             ],

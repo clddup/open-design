@@ -75,7 +75,7 @@ Execution contract:
 - Supply every required Text field and use a known resolvable face with its exact style name.
 - Keep each composite under one meaningful Frame/Group with understandable parts. Declare components only for justified stable reuse; wrappers and decoration remain ordinary.
 - This compact surface cannot read/generate images, change Pages, or mutate existing content. For a required raster role, establish composition now and use generate_image/place_image after full tools appear; never fake realism with geometry.
-- Do not claim completion after the first slice. In fast mode, a clean exact-revision capture plus trusted deterministic layout and structure checks verifies the target without an independent Provider critic. In thorough mode, continue through the independent review and evidence-based refinement returned by reviewWorkflow. Only trusted tool results and revisions prove execution.
+- Do not claim completion after the first slice. In fast mode, a clean exact-revision capture plus trusted deterministic layout and structure checks may verify ordinary targets without an independent Provider critic. Logo and identity targets still receive one bounded independent visual review and one evidence-based refinement because structural checks cannot prove distinctiveness or craft. In thorough mode, continue through the independent review and evidence-based refinement returned by reviewWorkflow. Only trusted tool results and revisions prove execution.
 - On failure follow structured recovery, inspect once when requested, and materially correct IDs, hierarchy, geometry, or schema. Never repeat the same payload.
 - Stop immediately when the user cancels. A failed or cancelled combined call must not be described as allocated or drawn.
 
@@ -98,24 +98,69 @@ export function newDesignSystemPromptForRequest(request: {
         ? DESIGN_PLANNING_SKILL_BUNDLE
         : formatBuiltinDesignPlanningSkillBundleForDeliverable(deliverable),
     ),
+    designContentLanguageInstruction(request.prompt),
     generationModeInstruction(request.generationMode),
   ].join("\n\n");
 }
 
 export function agentSystemPromptForRequest(request: {
+  prompt: string;
   generationMode?: "fast" | "thorough";
 }): string {
   return [
     OPENDESIGN_AGENT_SYSTEM_PROMPT,
+    designContentLanguageInstruction(request.prompt),
     generationModeInstruction(request.generationMode),
   ].join("\n\n");
+}
+
+export function inferDesignContentLanguage(prompt: string): "zh-CN" | "en" {
+  const explicitChinese =
+    /(?:使用|改用|请用|文案(?:为|用)|内容(?:为|用)|输出(?:为|用))\s*(?:简体)?中文|(?:in|use)\s+(?:simplified\s+)?chinese/iu;
+  const explicitEnglish =
+    /(?:使用|改用|请用|文案(?:为|用)|内容(?:为|用)|输出(?:为|用))\s*英文|(?:in|use)\s+english/iu;
+  if (explicitChinese.test(prompt)) return "zh-CN";
+  if (explicitEnglish.test(prompt)) return "en";
+
+  const hanCharacters = prompt.match(/[\p{Script=Han}]/gu)?.length ?? 0;
+  const latinWords = prompt.match(/[A-Za-z]+(?:[-'][A-Za-z]+)*/g)?.length ?? 0;
+  return hanCharacters >= Math.max(2, latinWords * 2) ? "zh-CN" : "en";
+}
+
+export function designThinkingLevelForRequest(
+  request: {
+    generationMode?: "fast" | "thorough";
+    modelSelection: {
+      reasoningEffort?:
+        "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+    };
+  },
+  surface: "general" | "new-design",
+): "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" {
+  const selected = request.modelSelection.reasoningEffort ?? "off";
+  if (request.generationMode !== "fast") return selected;
+  if (surface !== "new-design" || selected === "off") return "off";
+  return selected === "minimal" ? "minimal" : "low";
+}
+
+function designContentLanguageInstruction(prompt: string): string {
+  if (inferDesignContentLanguage(prompt) === "zh-CN") {
+    return [
+      "OpenDesign trusted design-content language: Simplified Chinese.",
+      "Use Simplified Chinese for every user-visible canvas string, concept or direction title, explanatory caption, semantic step label, and human-facing Frame, Group, Layer, Component, and asset name. Preserve brand and product names such as OpenDesign, an explicitly requested English wordmark, and any text the user explicitly says must remain in another language. Stable technical IDs remain concise ASCII. Translate scaffold labels such as Concept Exploration or Monochrome Tests unless the user explicitly requires those exact English strings. Image-generation prompts should request Chinese visible copy and must not invent English UI or presentation text. Assistant replies remain in the user's language.",
+    ].join("\n");
+  }
+  return [
+    "OpenDesign trusted design-content language: English.",
+    "Use English for user-visible canvas copy, concept or direction titles, explanatory captions, semantic step labels, and human-facing layer names unless the user explicitly requires another language. Preserve exact brand names and requested text. Stable technical IDs remain concise ASCII.",
+  ].join("\n");
 }
 
 function generationModeInstruction(
   mode: "fast" | "thorough" | undefined,
 ): string {
   return mode === "fast"
-    ? "OpenDesign execution depth: FAST. Produce the first meaningful real revision immediately. Do not add alternatives, screens, brand-system specimens, or elective refinements the user did not request. A clean exact-revision capture may complete directly from trusted deterministic layout and structure verification; do not wait for an independent Provider critic or manufacture a refinement."
+    ? "OpenDesign execution policy: ADAPTIVE. Produce the first meaningful real revision immediately. Do not add alternatives, screens, brand-system specimens, or elective refinements the user did not request. A clean exact-revision capture may complete ordinary explicit edits directly from trusted deterministic layout and structure verification. Logo and identity targets still use the returned bounded independent critic once and make one evidence-based refinement; do not add extra concept rounds beyond the user's requested scope."
     : "OpenDesign execution depth: THOROUGH. Still produce the first meaningful real revision immediately. Use the user's requested scope exactly, allow deliberate alternatives only when requested, and complete one evidence-based refinement before delivery. Never delay the first visible result to narrate or prebuild a full suite.";
 }
 

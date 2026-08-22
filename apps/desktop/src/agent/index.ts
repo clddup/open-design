@@ -17,6 +17,7 @@ import {
 } from "../shared/design-agent-tools.js";
 import {
   agentSystemPromptForRequest,
+  designThinkingLevelForRequest,
   newDesignSystemPromptForRequest,
   OPENDESIGN_AGENT_SYSTEM_PROMPT,
   OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT,
@@ -58,6 +59,7 @@ const runtime = new OpenDesignPiRuntime({
   systemPromptForRequest: agentSystemPromptForRequest,
   newDesignSystemPrompt: OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT,
   newDesignSystemPromptForRequest,
+  thinkingLevelForRequest: designThinkingLevelForRequest,
 });
 
 port.on("message", (event) => {

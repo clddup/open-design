@@ -65,7 +65,7 @@ export function compileValidatedDesignFirstSliceToolInput(
                 label: direction.conceptId,
                 principle: direction.principle,
                 thesis: direction.thesis,
-                constructionLogic: `${direction.thesis} The editable construction uses the ${direction.principle} principle.`,
+                constructionLogic: direction.constructionLogic,
                 rootNodeId: direction.rootNodeId,
                 monochromeNodeId,
                 smallSizeNodeIds: [size32, size24, size16] as [

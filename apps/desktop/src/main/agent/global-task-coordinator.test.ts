@@ -1832,6 +1832,99 @@ describe("GlobalTaskCoordinator", () => {
     store.close();
   });
 
+  it("keeps a bounded visual critic for fast Logo work and binds repeated command Pages to the registered Run", async () => {
+    const { store, host, file, opened, pageId } = await setup();
+    const coordinator = new GlobalTaskCoordinator(host, store);
+    await coordinator.registerRun({
+      type: "run.start",
+      runId: "run_fast_logo_review",
+      sessionId: "conversation_mobile",
+      prompt: "为 OpenDesign 设计一个有独立识别度的 Logo",
+      documentId: file.documentId,
+      revision: opened.document.revision,
+      modelSelection,
+      generationMode: "fast",
+      scope: { kind: "page", pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page", pageId },
+    });
+    const context = {
+      runId: "run_fast_logo_review",
+      sessionId: "conversation_mobile",
+      documentId: file.documentId,
+      revision: opened.document.revision,
+      scope: { kind: "page" as const, pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page" as const, pageId },
+    };
+    coordinator.recordDocumentInspection(
+      context,
+      inspectionResult(opened.document, pageId),
+    );
+    const plan: DesignPlanToolInput = {
+      ...designPlanForPage(pageId),
+      deliverable: "logo",
+      rasterAssetRoles: [],
+      logoOutputs: ["symbol"],
+      skillRefs: BUILTIN_GRAPHIC_DESIGN_SKILL_REFS.map((reference) => ({
+        ...reference,
+      })),
+      targets: designPlanForPage(pageId).targets.map((target) => ({
+        ...target,
+        qualityProfile: { kind: "graphic" },
+      })),
+    };
+    coordinator.registerDesignPlan(context, plan);
+    const allocation = coordinator.createDesignPlanAllocation(context.runId);
+    coordinator.recordDesignPlanAllocated(
+      context.runId,
+      allocation?.targetIds ?? [],
+      1,
+    );
+    const draft = draftTargets(pageId, plan.targets);
+    draft.commands = draft.commands.map((command) =>
+      command.type === "insert_element"
+        ? { ...command, pageId: "page_create_from_run_timestamp_typo" }
+        : command,
+    );
+    const authorization = coordinator.assertDesignPlanForApply(context, draft);
+    expect(
+      authorization?.input.commands.every(
+        (command) =>
+          command.type !== "insert_element" || command.pageId === pageId,
+      ),
+    ).toBe(true);
+    coordinator.recordDesignApplyCompleted(
+      context.runId,
+      authorization?.input ?? draft,
+      authorization,
+      2,
+    );
+    const draftedDocument = withDraftedTargets(
+      opened.document,
+      pageId,
+      plan.targets,
+      2,
+    );
+    coordinator.recordDocumentInspection(
+      context,
+      inspectionResult(draftedDocument, pageId),
+    );
+
+    expect(
+      coordinator.resolveVisualCriticContext(context, 2, {
+        attachmentId: "capture_fast_logo",
+        byteSize: 12_000,
+        mimeType: "image/jpeg",
+        name: "fast-logo.jpg",
+      }),
+    ).toMatchObject({
+      generationMode: "fast",
+      plan: { deliverable: "logo" },
+      observedRevision: 2,
+      phase: "draft",
+    });
+    store.close();
+  });
+
   it("persists and enforces every user-requested delivery target", async () => {
     const { store, host, file, opened, pageId } = await setup();
     const coordinator = new GlobalTaskCoordinator(host, store);

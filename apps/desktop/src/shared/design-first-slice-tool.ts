@@ -164,6 +164,7 @@ export type DesignFirstSliceToolInput = {
       conceptId: string;
       principle: (typeof LOGO_CONCEPT_PRINCIPLES)[number];
       thesis: string;
+      constructionLogic: string;
       rootNodeId: string;
       evidenceNodeIds: [string, string, string, string];
     }>;
@@ -1176,6 +1177,7 @@ function isCompactLogoExploration(
         direction.principle as (typeof LOGO_CONCEPT_PRINCIPLES)[number],
       ) ||
       !text(direction.thesis, 16, 1_000) ||
+      !text(direction.constructionLogic, 24, 1_000) ||
       !safeId(direction.rootNodeId) ||
       !firstTargetRegionIds.has(direction.rootNodeId) ||
       !Array.isArray(direction.evidenceNodeIds) ||
@@ -1186,6 +1188,7 @@ function isCompactLogoExploration(
         "conceptId",
         "principle",
         "thesis",
+        "constructionLogic",
         "rootNodeId",
         "evidenceNodeIds",
       ])

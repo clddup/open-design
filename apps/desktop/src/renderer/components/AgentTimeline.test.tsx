@@ -1799,7 +1799,6 @@ describe("AgentTimeline", () => {
       "Keep this second draft",
       expect.objectContaining({ modelId: "vision-model" }),
       [],
-      "fast",
     );
     rerender(renderConversation("conversation_3", "Conversation 3"));
     await user.type(
@@ -2014,7 +2013,6 @@ describe("AgentTimeline", () => {
       "First line\nSecond line",
       expect.objectContaining({ modelId: "design-model" }),
       [],
-      "fast",
     );
     expect(
       screen.queryByText(/Requests include the current design/i),
@@ -2229,12 +2227,14 @@ describe("AgentTimeline", () => {
       await screen.findByRole("combobox", { name: "Model" }),
     ).toHaveTextContent("Primary/Design model");
     expect(
+      screen.queryByRole("combobox", { name: "Generation depth" }),
+    ).not.toBeInTheDocument();
+    expect(
       screen.getByRole("button", {
         name: "Add attachments",
       }),
     ).toBeEnabled();
     await chooseNextOption(user, "Reasoning");
-    await chooseNextOption(user, "Generation depth");
     await user.type(screen.getByLabelText("Continue the task"), "Refine it");
     await user.click(screen.getByRole("button", { name: "Send" }));
 
@@ -2246,7 +2246,6 @@ describe("AgentTimeline", () => {
         reasoningEffort: "high",
       },
       [],
-      "thorough",
     );
   });
 
@@ -2342,7 +2341,6 @@ describe("AgentTimeline", () => {
           byteSize: 1024,
         },
       ],
-      "fast",
     );
     expect(JSON.stringify(onSubmit.mock.calls)).not.toContain("base64");
   });
@@ -2437,7 +2435,6 @@ describe("AgentTimeline", () => {
           byteSize: 2048,
         },
       ],
-      "fast",
     );
   });
 
@@ -2531,7 +2528,6 @@ describe("AgentTimeline", () => {
           byteSize: 4096,
         },
       ],
-      "fast",
     );
   });
 
@@ -2687,7 +2683,6 @@ describe("AgentTimeline", () => {
           byteSize: droppedBytes.byteLength,
         },
       ],
-      "fast",
     );
     const submittedAttachments = (onSubmit.mock.calls[0]?.[2] ??
       []) as AgentAttachment[];

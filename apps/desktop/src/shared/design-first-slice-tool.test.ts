@@ -762,6 +762,7 @@ function logoDirection(
     conceptId,
     principle,
     thesis: `${prefix} construction creates a materially different brand silhouette.`,
+    constructionLogic: `${prefix} uses a deliberate contour and counterform whose asymmetric aperture remains recognizable at 16 px.`,
     rootNodeId: `${prefix}_root`,
     evidenceNodeIds: [
       `${prefix}_mono`,

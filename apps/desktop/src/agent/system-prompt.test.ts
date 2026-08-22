@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   agentSystemPromptForRequest,
+  designThinkingLevelForRequest,
+  inferDesignContentLanguage,
   inferNewDesignDeliverable,
   newDesignSystemPromptForRequest,
   OPENDESIGN_AGENT_SYSTEM_PROMPT,
@@ -84,16 +86,64 @@ describe("OpenDesign Agent system prompt", () => {
       generationMode: "fast",
     });
     const thorough = agentSystemPromptForRequest({
+      prompt: "继续精修当前设计",
       generationMode: "thorough",
     });
 
-    expect(fast).toContain("execution depth: FAST");
+    expect(fast).toContain("execution policy: ADAPTIVE");
     expect(fast).toContain("one requested Logo/Icon focused");
     expect(fast).not.toContain("logoOutputs is optional");
-    expect(fast).toContain("may complete directly");
-    expect(fast).toContain("do not wait for an independent Provider critic");
+    expect(fast).toContain("may complete ordinary explicit edits directly");
+    expect(fast).toContain("Logo and identity targets");
     expect(thorough).toContain("execution depth: THOROUGH");
     expect(thorough).toContain("first meaningful real revision immediately");
+  });
+
+  it("binds visible design content to the user's language without translating brands", () => {
+    expect(
+      inferDesignContentLanguage(
+        "为 OpenDesign 设计品牌 Logo，并提供 Concept Exploration 和说明。",
+      ),
+    ).toBe("zh-CN");
+    expect(inferDesignContentLanguage("Use Chinese for the canvas copy")).toBe(
+      "zh-CN",
+    );
+    expect(inferDesignContentLanguage("请用英文输出画布文案")).toBe("en");
+
+    const chinese = newDesignSystemPromptForRequest({
+      prompt:
+        "为 OpenDesign 设计品牌 Logo，配套英文 Wordmark，其他说明使用中文。",
+      generationMode: "fast",
+    });
+    expect(chinese).toContain(
+      "trusted design-content language: Simplified Chinese",
+    );
+    expect(chinese).toContain("Translate scaffold labels");
+    expect(chinese).toContain("explicitly requested English wordmark");
+
+    const english = agentSystemPromptForRequest({
+      prompt: "Refine the current desktop dashboard",
+      generationMode: "fast",
+    });
+    expect(english).toContain("trusted design-content language: English");
+  });
+
+  it("keeps bounded reasoning for the first usable design instead of revealing a thoughtless placeholder", () => {
+    const request = {
+      generationMode: "fast" as const,
+      modelSelection: { reasoningEffort: "high" as const },
+    };
+    expect(designThinkingLevelForRequest(request, "new-design")).toBe("low");
+    expect(designThinkingLevelForRequest(request, "general")).toBe("off");
+    expect(
+      designThinkingLevelForRequest(
+        {
+          generationMode: "thorough",
+          modelSelection: { reasoningEffort: "high" },
+        },
+        "new-design",
+      ),
+    ).toBe("high");
   });
 
   it("fixes the product role to visual design instead of coding or files", () => {

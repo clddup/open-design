@@ -1,7 +1,6 @@
 import {
   MAX_AGENT_ATTACHMENTS,
   type AgentAttachment,
-  type DesignGenerationMode,
   type SessionTimelineItem,
 } from "@opendesign/agent-contracts";
 import type { ModelSelection } from "@opendesign/model-gateway";
@@ -29,7 +28,6 @@ export interface AgentComposerControllerOptions {
     prompt: string,
     selection: ModelSelection,
     attachments: readonly AgentAttachment[],
-    generationMode: DesignGenerationMode,
   ) => Promise<boolean>;
   timeline: readonly SessionTimelineItem[];
   t: Translate;
@@ -42,7 +40,6 @@ export interface AgentComposerController {
   canSubmit: boolean;
   catalogError: string | null;
   creatingConversation: boolean;
-  generationMode: DesignGenerationMode;
   hasConversation: boolean;
   hasImageAttachments: boolean;
   importAttachmentFiles: (files: readonly File[]) => Promise<void>;
@@ -57,7 +54,6 @@ export interface AgentComposerController {
   >[];
   selectingAttachments: boolean;
   setAttachmentDropActive: (active: boolean) => void;
-  setGenerationMode: (mode: DesignGenerationMode) => void;
   setModelSelection: (selection: ModelSelection) => void;
   setPrompt: (prompt: string) => void;
   stop: () => Promise<void>;
@@ -98,8 +94,6 @@ export function useAgentComposerController({
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [modelSelection, setModelSelectionState] =
     useState<ModelSelection | null>(null);
-  const [generationMode, setGenerationMode] =
-    useState<DesignGenerationMode>("fast");
   const initializedConversation = useRef<string | null>(null);
   const conversationEpoch = useRef(0);
   const conversationIdRef = useRef(conversationId);
@@ -226,7 +220,6 @@ export function useAgentComposerController({
         value,
         selection,
         attachments.map(toAgentAttachment),
-        generationMode,
       );
       if (accepted && isCurrentConversation(epoch, targetConversationId)) {
         setPrompt("");
@@ -368,7 +361,6 @@ export function useAgentComposerController({
     catalogError,
     createConversation,
     creatingConversation,
-    generationMode,
     hasConversation,
     hasImageAttachments,
     importAttachmentFiles,
@@ -387,7 +379,6 @@ export function useAgentComposerController({
       selectedCatalogModel?.model.reasoningEfforts ?? [],
     selectingAttachments,
     setAttachmentDropActive,
-    setGenerationMode,
     setModelSelection: setModelSelectionState,
     setPrompt,
     stop,
