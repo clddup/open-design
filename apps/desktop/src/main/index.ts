@@ -1,9 +1,9 @@
-import type { AgentRequest } from "@opendesign/agent-contracts";
 import type {
+  AgentRequest,
   ToolCallRequest,
   TrustedToolContext,
   TrustedToolResult,
-} from "@opendesign/agent-runtime";
+} from "@opendesign/agent-contracts";
 import { JsonlSessionStore } from "@opendesign/session-store";
 import type {
   DesignAsset,

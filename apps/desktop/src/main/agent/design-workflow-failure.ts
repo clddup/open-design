@@ -1,4 +1,4 @@
-import type { TrustedToolFailure } from "@opendesign/agent-runtime";
+import type { TrustedToolFailure } from "@opendesign/agent-contracts";
 import { classifyDesignWorkflowFailure } from "../../shared/design-workflow-failure-classification.js";
 
 const INSPECT_AND_REVISE = {

@@ -1,7 +1,6 @@
 import {
   type AgentRunRequest,
   type AgentToolDefinition,
-  type ToolExecutionEvent,
 } from "@opendesign/agent-runtime";
 import {
   createOpenDesignPiAgent,
@@ -10,7 +9,10 @@ import {
   PiRunEventAdapter,
   prepareOpenDesignPiContext,
 } from "@opendesign/agent-runtime/pi-migration";
-import type { AgentEvent } from "@opendesign/agent-contracts";
+import type {
+  AgentEvent,
+  ToolExecutionEvent,
+} from "@opendesign/agent-contracts";
 import {
   MockModelGateway,
   type MockModelResponse,

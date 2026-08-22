@@ -6,11 +6,9 @@ import type {
   DesignGenerationMode,
   DesignMutationTarget,
   SelectionScope,
-} from "@opendesign/agent-contracts";
-import type {
   TrustedToolContext,
   TrustedToolResult,
-} from "@opendesign/agent-runtime";
+} from "@opendesign/agent-contracts";
 import type {
   DesignDocument,
   DesignOperation,

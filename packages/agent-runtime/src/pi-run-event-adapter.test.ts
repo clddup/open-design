@@ -1,4 +1,7 @@
-import type { AgentEvent } from "@opendesign/agent-contracts";
+import type {
+  AgentEvent,
+  ToolExecutionEvent,
+} from "@opendesign/agent-contracts";
 import {
   MockModelGateway,
   type CanonicalStreamEvent,
@@ -12,7 +15,7 @@ import {
   type SessionStore,
 } from "@opendesign/session-store";
 import { describe, expect, it } from "vitest";
-import { type AgentRunRequest, type ToolExecutionEvent } from "./index.js";
+import type { AgentRunRequest } from "./index.js";
 import { createOpenDesignPiAgent } from "./pi-core-adapter.js";
 import {
   createPiModelFailurePort,

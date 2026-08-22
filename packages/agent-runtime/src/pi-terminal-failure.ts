@@ -1,5 +1,7 @@
-import type { AgentRunFailure } from "@opendesign/agent-contracts";
-import type { TrustedToolFailure } from "./index.js";
+import type {
+  AgentRunFailure,
+  TrustedToolFailure,
+} from "@opendesign/agent-contracts";
 
 export function terminalRunFailure(
   modelFailure: AgentRunFailure | undefined,

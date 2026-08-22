@@ -1,4 +1,4 @@
-import type { ToolCallRequest } from "@opendesign/agent-runtime";
+import type { ToolCallRequest } from "@opendesign/agent-contracts";
 import { describe, expect, it, vi } from "vitest";
 import { BUILTIN_UI_DESIGN_SKILL_REFS } from "@opendesign/design-skills";
 import {

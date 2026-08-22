@@ -1,4 +1,4 @@
-import { isTrustedToolFailure } from "../../shared/design-tool-bridge";
+import { isTrustedToolFailure } from "@opendesign/agent-contracts";
 import { describe, expect, it } from "vitest";
 import { trustedDesignWorkflowFailure } from "./design-workflow-failure";
 

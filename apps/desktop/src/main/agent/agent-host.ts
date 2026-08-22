@@ -1,20 +1,24 @@
 import { app, utilityProcess } from "electron";
 import {
   agentEventValidationError,
+  designToolBridgeRequestId,
   isAgentEvent,
+  isDesignToolBridgeCancel,
+  isDesignToolBridgeRequest,
+  isTrustedToolFailure,
   type AgentEvent,
   type AgentRequest,
+  type DesignToolBridgeProgress,
+  type DesignToolBridgeResponse,
+  type ToolCallRequest,
+  type TrustedToolContext,
+  type TrustedToolFailure,
+  type TrustedToolResult,
 } from "@opendesign/agent-contracts";
 import type {
   CanonicalStreamEvent,
   ModelRequest,
 } from "@opendesign/model-gateway";
-import type {
-  ToolCallRequest,
-  TrustedToolContext,
-  TrustedToolFailure,
-  TrustedToolResult,
-} from "@opendesign/agent-runtime";
 import { join } from "node:path";
 import {
   isModelBridgeCancel,
@@ -23,14 +27,7 @@ import {
   modelBridgeRequestValidationError,
   type ModelBridgeResponse,
 } from "../../shared/model-bridge";
-import {
-  designToolBridgeRequestId,
-  isDesignToolBridgeCancel,
-  isDesignToolBridgeRequest,
-  isTrustedToolFailure,
-  type DesignToolBridgeProgress,
-  type DesignToolBridgeResponse,
-} from "../../shared/design-tool-bridge";
+import { validateDesignAgentToolInput } from "../../shared/design-agent-tools";
 import { trustedDesignWorkflowFailure } from "./design-workflow-failure";
 import { AgentSupervisor } from "./agent-supervisor";
 
@@ -216,7 +213,7 @@ export class AgentHost {
   }
 
   private onMessage(message: unknown, generation: number): void {
-    if (isDesignToolBridgeRequest(message)) {
+    if (isDesignToolBridgeRequest(message, validateDesignAgentToolInput)) {
       void this.handleDesignToolRequest(
         message.requestId,
         message.call,

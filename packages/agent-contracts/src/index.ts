@@ -280,6 +280,132 @@ export const DesignMutationTargetSchema = Type.Union([
   ),
 ]);
 
+export const ToolCallRequestSchema = Type.Object(
+  {
+    toolCallId: ToolCallIdSchema,
+    toolName: IdSchema,
+    input: Type.Unknown(),
+  },
+  { additionalProperties: false },
+);
+
+export const TrustedToolContextSchema = Type.Object(
+  {
+    runId: RunIdSchema,
+    sessionId: SessionIdSchema,
+    documentId: IdSchema,
+    revision: RevisionSchema,
+    scope: SelectionScopeSchema,
+    mutationTarget: DesignMutationTargetSchema,
+  },
+  { additionalProperties: false },
+);
+
+export const TrustedToolFailureSchema = Type.Object(
+  {
+    code: IdSchema,
+    message: Type.String({ minLength: 1, maxLength: 20_000 }),
+    retryable: Type.Boolean(),
+    recoverable: Type.Boolean(),
+    runTerminal: Type.Optional(Type.Literal(true)),
+    details: Type.Optional(AgentToolFailureDetailsSchema),
+  },
+  { additionalProperties: false },
+);
+
+export const TrustedToolResultSchema = Type.Object(
+  {
+    content: Type.Unknown(),
+    observedRevision: Type.Optional(RevisionSchema),
+    designRevision: Type.Optional(
+      Type.Object(
+        {
+          previousRevision: RevisionSchema,
+          rebasedFromRevision: Type.Optional(RevisionSchema),
+          revision: RevisionSchema,
+          transactionId: TransactionIdSchema,
+        },
+        { additionalProperties: false },
+      ),
+    ),
+  },
+  { additionalProperties: false },
+);
+
+export const ToolExecutionEventSchema = Type.Union([
+  Type.Object(
+    {
+      type: Type.Literal("progress"),
+      message: Type.String({ minLength: 1, maxLength: 2_000 }),
+      progress: ProgressSchema,
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      type: Type.Literal("failed"),
+      error: TrustedToolFailureSchema,
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      type: Type.Literal("completed"),
+      result: TrustedToolResultSchema,
+    },
+    { additionalProperties: false },
+  ),
+]);
+
+export const DesignToolBridgeRequestSchema = Type.Object(
+  {
+    type: Type.Literal("design-tool.request"),
+    requestId: IdSchema,
+    call: ToolCallRequestSchema,
+    context: TrustedToolContextSchema,
+  },
+  { additionalProperties: false },
+);
+
+export const DesignToolBridgeCancelSchema = Type.Object(
+  {
+    type: Type.Literal("design-tool.cancel"),
+    requestId: IdSchema,
+  },
+  { additionalProperties: false },
+);
+
+export const DesignToolBridgeProgressSchema = Type.Object(
+  {
+    type: Type.Literal("design-tool.progress"),
+    requestId: IdSchema,
+    message: Type.String({ minLength: 1, maxLength: 2_000 }),
+    progress: ProgressSchema,
+  },
+  { additionalProperties: false },
+);
+
+export const DesignToolBridgeResponseSchema = Type.Union([
+  Type.Object(
+    {
+      type: Type.Literal("design-tool.response"),
+      requestId: IdSchema,
+      ok: Type.Literal(true),
+      result: TrustedToolResultSchema,
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      type: Type.Literal("design-tool.response"),
+      requestId: IdSchema,
+      ok: Type.Literal(false),
+      error: TrustedToolFailureSchema,
+    },
+    { additionalProperties: false },
+  ),
+]);
+
 export const ApprovalDecisionSchema = Type.Union([
   Type.Literal("allow_once"),
   Type.Literal("allow_session"),
@@ -882,6 +1008,23 @@ export const AgentEventSchema = Type.Union([
 
 export type SelectionScope = Static<typeof SelectionScopeSchema>;
 export type DesignMutationTarget = Static<typeof DesignMutationTargetSchema>;
+export type ToolCallRequest = Static<typeof ToolCallRequestSchema>;
+export type TrustedToolContext = Static<typeof TrustedToolContextSchema>;
+export type TrustedToolFailure = Static<typeof TrustedToolFailureSchema>;
+export type TrustedToolResult = Static<typeof TrustedToolResultSchema>;
+export type ToolExecutionEvent = Static<typeof ToolExecutionEventSchema>;
+export type DesignToolBridgeRequest = Static<
+  typeof DesignToolBridgeRequestSchema
+>;
+export type DesignToolBridgeCancel = Static<
+  typeof DesignToolBridgeCancelSchema
+>;
+export type DesignToolBridgeProgress = Static<
+  typeof DesignToolBridgeProgressSchema
+>;
+export type DesignToolBridgeResponse = Static<
+  typeof DesignToolBridgeResponseSchema
+>;
 export type ApprovalDecision = Static<typeof ApprovalDecisionSchema>;
 export type ToolRisk = Static<typeof ToolRiskSchema>;
 export type RunStopReason = Static<typeof RunStopReasonSchema>;
@@ -931,6 +1074,108 @@ export function isDesignMutationTarget(
   value: unknown,
 ): value is DesignMutationTarget {
   return Value.Check(DesignMutationTargetSchema, value);
+}
+
+export function isToolCallRequest(
+  value: unknown,
+  validateInput: (toolName: string, input: unknown) => boolean,
+): value is ToolCallRequest {
+  return (
+    Value.Check(ToolCallRequestSchema, value) &&
+    validateInput(value.toolName, value.input)
+  );
+}
+
+export function isTrustedToolContext(
+  value: unknown,
+): value is TrustedToolContext {
+  return (
+    Value.Check(TrustedToolContextSchema, value) &&
+    isSelectionScope(value.scope) &&
+    isDesignMutationTarget(value.mutationTarget)
+  );
+}
+
+export function isTrustedToolFailure(
+  value: unknown,
+): value is TrustedToolFailure {
+  return (
+    Value.Check(TrustedToolFailureSchema, value) &&
+    (value.details === undefined || isAgentToolFailureDetails(value.details))
+  );
+}
+
+export function isTrustedToolResult(
+  value: unknown,
+): value is TrustedToolResult {
+  if (!Value.Check(TrustedToolResultSchema, value)) return false;
+  if (!jsonSizeWithin(value.content, 4_000_000)) return false;
+  const revision = value.designRevision;
+  return (
+    revision === undefined ||
+    (revision.revision > revision.previousRevision &&
+      (revision.rebasedFromRevision === undefined ||
+        revision.rebasedFromRevision < revision.previousRevision) &&
+      (value.observedRevision === undefined ||
+        value.observedRevision === revision.revision))
+  );
+}
+
+export function isToolExecutionEvent(
+  value: unknown,
+): value is ToolExecutionEvent {
+  if (!Value.Check(ToolExecutionEventSchema, value)) return false;
+  if (value.type === "failed") return isTrustedToolFailure(value.error);
+  if (value.type === "completed") return isTrustedToolResult(value.result);
+  return true;
+}
+
+export function isDesignToolBridgeRequest(
+  value: unknown,
+  validateInput: (toolName: string, input: unknown) => boolean,
+): value is DesignToolBridgeRequest {
+  return (
+    Value.Check(DesignToolBridgeRequestSchema, value) &&
+    isToolCallRequest(value.call, validateInput) &&
+    isTrustedToolContext(value.context)
+  );
+}
+
+export function designToolBridgeRequestId(value: unknown): string | null {
+  return record(value) &&
+    value.type === "design-tool.request" &&
+    Value.Check(IdSchema, value.requestId)
+    ? value.requestId
+    : null;
+}
+
+export function isDesignToolBridgeCancel(
+  value: unknown,
+): value is DesignToolBridgeCancel {
+  return Value.Check(DesignToolBridgeCancelSchema, value);
+}
+
+export function isDesignToolBridgeProgress(
+  value: unknown,
+): value is DesignToolBridgeProgress {
+  return Value.Check(DesignToolBridgeProgressSchema, value);
+}
+
+export function isDesignToolBridgeResponse(
+  value: unknown,
+): value is DesignToolBridgeResponse {
+  if (!Value.Check(DesignToolBridgeResponseSchema, value)) return false;
+  return value.ok
+    ? isTrustedToolResult(value.result)
+    : isTrustedToolFailure(value.error);
+}
+
+export function designToolBridgeResponseId(value: unknown): string | null {
+  return record(value) &&
+    value.type === "design-tool.response" &&
+    Value.Check(IdSchema, value.requestId)
+    ? value.requestId
+    : null;
 }
 
 export function isAgentToolFailureDetails(
@@ -1022,6 +1267,19 @@ function agentEventVariant(type: string): TSchema | undefined {
       discriminator.const === type
     );
   });
+}
+
+function jsonSizeWithin(value: unknown, maximum: number): boolean {
+  try {
+    const serialized = JSON.stringify(value);
+    return serialized !== undefined && serialized.length <= maximum;
+  } catch {
+    return false;
+  }
+}
+
+function record(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 export interface JsonRpcRequest<T = unknown> {

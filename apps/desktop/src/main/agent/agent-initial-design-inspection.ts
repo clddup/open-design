@@ -2,13 +2,11 @@ import {
   MAX_INITIAL_DESIGN_INSPECTION_CHARACTERS,
   type AgentInitialDesignInspection,
   type AgentRequest,
-} from "@opendesign/agent-contracts";
-import {
-  projectToolResultForModel,
   type ToolCallRequest,
   type TrustedToolContext,
   type TrustedToolResult,
-} from "@opendesign/agent-runtime";
+} from "@opendesign/agent-contracts";
+import { projectToolResultForModel } from "@opendesign/agent-runtime";
 import { DESIGN_INSPECT_TOOL_NAME } from "../../shared/design-agent-tools.js";
 
 type RunStartRequest = Extract<AgentRequest, { type: "run.start" }>;

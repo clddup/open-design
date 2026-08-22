@@ -5,11 +5,14 @@ import {
   type AgentModelContext,
   type DesignGenerationMode,
   type AgentRunContinuation,
-  type AgentToolFailureDetails,
   type ApprovalDecision,
   type DesignMutationTarget,
   type SelectionScope,
+  type ToolCallRequest,
+  type ToolExecutionEvent,
   type ToolRisk,
+  type TrustedToolContext,
+  type TrustedToolFailure,
 } from "@opendesign/agent-contracts";
 import {
   type CanonicalContentBlock,
@@ -101,50 +104,12 @@ export interface ToolCatalogPort {
   listTools():
     readonly AgentToolDefinition[] | Promise<readonly AgentToolDefinition[]>;
 }
-export interface ToolCallRequest {
-  toolCallId: string;
-  toolName: string;
-  input: unknown;
-}
-export interface TrustedToolContext {
-  runId: string;
-  sessionId: string;
-  documentId: string;
-  revision: number;
-  scope: SelectionScope;
-  mutationTarget: DesignMutationTarget;
-}
-
-export type ToolExecutionEvent =
-  | { type: "progress"; message: string; progress: number }
-  | { type: "failed"; error: TrustedToolFailure }
-  | { type: "completed"; result: TrustedToolResult };
-
-export interface TrustedToolFailure {
-  code: string;
-  message: string;
-  retryable: boolean;
-  recoverable: boolean;
-  runTerminal?: true;
-  details?: AgentToolFailureDetails;
-}
 
 export class TrustedToolExecutionError extends Error {
   constructor(readonly failure: TrustedToolFailure) {
     super(failure.message);
     this.name = "TrustedToolExecutionError";
   }
-}
-
-export interface TrustedToolResult {
-  content: unknown;
-  observedRevision?: number;
-  designRevision?: {
-    previousRevision: number;
-    rebasedFromRevision?: number;
-    revision: number;
-    transactionId: string;
-  };
 }
 
 export interface ToolExecutorPort {

@@ -1,4 +1,4 @@
-import type { TrustedToolResult } from "@opendesign/agent-runtime";
+import type { TrustedToolResult } from "@opendesign/agent-contracts";
 import type { DesignLayoutQualityReport } from "@opendesign/editor-runtime";
 import { describe, expect, it } from "vitest";
 import { requireCanvasCaptureLayoutQuality } from "./canvas-capture-quality.js";

@@ -1,4 +1,8 @@
-import type { AgentEvent } from "@opendesign/agent-contracts";
+import type {
+  AgentEvent,
+  ToolExecutionEvent,
+  TrustedToolContext,
+} from "@opendesign/agent-contracts";
 import {
   MockModelGateway,
   type ModelGateway,
@@ -11,12 +15,7 @@ import {
   type SessionStore,
 } from "@opendesign/session-store";
 import { describe, expect, it } from "vitest";
-import type {
-  AgentRunRequest,
-  AgentToolDefinition,
-  ToolExecutionEvent,
-  TrustedToolContext,
-} from "./index.js";
+import type { AgentRunRequest, AgentToolDefinition } from "./index.js";
 import { createOpenDesignPiAgent } from "./pi-core-adapter.js";
 import { createPiModelGatewayStreamFn } from "./pi-model-gateway-adapter.js";
 import { PiRunEventAdapter } from "./pi-run-event-adapter.js";

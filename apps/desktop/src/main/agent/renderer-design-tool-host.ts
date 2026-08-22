@@ -3,7 +3,7 @@ import type {
   TrustedToolContext,
   TrustedToolFailure,
   TrustedToolResult,
-} from "@opendesign/agent-runtime";
+} from "@opendesign/agent-contracts";
 import type {
   RendererDesignCaptureTarget,
   RendererDesignToolPerformance,

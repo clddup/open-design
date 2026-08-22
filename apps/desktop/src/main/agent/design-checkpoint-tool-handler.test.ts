@@ -1,7 +1,7 @@
 import type {
   ToolCallRequest,
   TrustedToolResult,
-} from "@opendesign/agent-runtime";
+} from "@opendesign/agent-contracts";
 import { describe, expect, it, vi } from "vitest";
 import {
   captureCommittedDesignCheckpoint,

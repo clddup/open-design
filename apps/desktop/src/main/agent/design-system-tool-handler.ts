@@ -2,7 +2,7 @@ import type {
   ToolCallRequest,
   TrustedToolContext,
   TrustedToolResult,
-} from "@opendesign/agent-runtime";
+} from "@opendesign/agent-contracts";
 import {
   DESIGN_STYLE_TOOL_NAME,
   DESIGN_VARIABLE_TOOL_NAME,

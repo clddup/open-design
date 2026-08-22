@@ -2,7 +2,7 @@ import type {
   ToolCallRequest,
   TrustedToolContext,
   TrustedToolResult,
-} from "@opendesign/agent-runtime";
+} from "@opendesign/agent-contracts";
 import {
   EXPORT_SVG_TOOL_NAME,
   isExportSvgToolInput,

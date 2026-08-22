@@ -2,7 +2,7 @@ import type {
   ToolCallRequest,
   TrustedToolContext,
   TrustedToolResult,
-} from "@opendesign/agent-runtime";
+} from "@opendesign/agent-contracts";
 import { describe, expect, it, vi } from "vitest";
 import { EXPORT_SVG_TOOL_NAME } from "../../shared/design-agent-tools";
 import { AgentSvgExportHost } from "./agent-svg-export-host";

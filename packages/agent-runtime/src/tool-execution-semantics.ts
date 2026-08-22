@@ -2,12 +2,10 @@ import {
   isAgentAttachment,
   type AgentAttachment,
   type SelectionScope,
+  type TrustedToolContext,
+  type TrustedToolResult,
 } from "@opendesign/agent-contracts";
-import type {
-  AgentRunRequest,
-  TrustedToolContext,
-  TrustedToolResult,
-} from "./index.js";
+import type { AgentRunRequest } from "./index.js";
 
 const MAX_MODEL_TOOL_RESULT_STRING_CHARACTERS = 16_000;
 const MAX_MODEL_TOOL_RESULT_CHARACTERS = 50_000;

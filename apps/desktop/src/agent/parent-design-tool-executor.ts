@@ -1,18 +1,18 @@
 import type {
   ToolCallRequest,
   ToolExecutionEvent,
-  ToolExecutorPort,
   TrustedToolContext,
-} from "@opendesign/agent-runtime";
-import { capabilityManifestForAgent } from "@opendesign/design-capabilities";
-import { DESIGN_CAPABILITIES_TOOL_NAME } from "../shared/design-agent-tools.js";
+  DesignToolBridgeRequest,
+  DesignToolBridgeResponse,
+} from "@opendesign/agent-contracts";
 import {
   designToolBridgeResponseId,
   isDesignToolBridgeProgress,
   isDesignToolBridgeResponse,
-  type DesignToolBridgeRequest,
-  type DesignToolBridgeResponse,
-} from "../shared/design-tool-bridge.js";
+} from "@opendesign/agent-contracts";
+import type { ToolExecutorPort } from "@opendesign/agent-runtime";
+import { capabilityManifestForAgent } from "@opendesign/design-capabilities";
+import { DESIGN_CAPABILITIES_TOOL_NAME } from "../shared/design-agent-tools.js";
 
 interface ParentPortLike {
   postMessage(message: unknown): void;

@@ -1,4 +1,7 @@
-import type { AgentEvent } from "@opendesign/agent-contracts";
+import type {
+  AgentEvent,
+  ToolExecutionEvent,
+} from "@opendesign/agent-contracts";
 import {
   MockModelGateway,
   type ModelGateway,
@@ -21,7 +24,6 @@ import { PiRunEventAdapter } from "./pi-run-event-adapter.js";
 import type {
   AgentRunRequest,
   AgentToolDefinition,
-  ToolExecutionEvent,
   ToolExecutorPort,
 } from "./index.js";
 

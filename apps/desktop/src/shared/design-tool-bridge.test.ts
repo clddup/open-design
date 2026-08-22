@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  isDesignToolBridgeProgress,
+  isTrustedToolFailure,
+} from "@opendesign/agent-contracts";
+import {
   DESIGN_CAPTURE_TOOL_NAME,
   EXPORT_RASTER_TOOL_NAME,
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
@@ -7,11 +11,9 @@ import {
   INTERNAL_UPDATE_IMAGE_TOOL_NAME,
 } from "./design-agent-tools";
 import {
-  isDesignToolBridgeProgress,
   isRendererDesignToolProgress,
   isRendererDesignToolRequest,
   isRendererDesignToolResponse,
-  isTrustedToolFailure,
 } from "./design-tool-bridge";
 
 const context = {

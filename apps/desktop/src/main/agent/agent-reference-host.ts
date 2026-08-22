@@ -4,11 +4,9 @@ import {
   type AgentImageAttachment,
   type AgentRequest,
   type AgentSvgAttachment,
+  type TrustedToolContext,
+  type TrustedToolResult,
 } from "@opendesign/agent-contracts";
-import type {
-  TrustedToolContext,
-  TrustedToolResult,
-} from "@opendesign/agent-runtime";
 import { basename, isAbsolute } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ReadImageToolInput } from "../../shared/design-agent-tools";

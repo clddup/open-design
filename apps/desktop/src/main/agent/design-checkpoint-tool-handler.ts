@@ -2,7 +2,8 @@ import type {
   ToolCallRequest,
   TrustedToolFailure,
   TrustedToolResult,
-} from "@opendesign/agent-runtime";
+} from "@opendesign/agent-contracts";
+import { isTrustedToolFailure } from "@opendesign/agent-contracts";
 import {
   DESIGN_APPLY_TOOL_NAME,
   DESIGN_CAPTURE_TOOL_NAME,
@@ -10,7 +11,6 @@ import {
   type DesignApplyToolInput,
   type DesignCheckpointToolInput,
 } from "../../shared/design-agent-tools.js";
-import { isTrustedToolFailure } from "../../shared/design-tool-bridge.js";
 
 type ReportProgress = (message: string, progress: number) => void;
 

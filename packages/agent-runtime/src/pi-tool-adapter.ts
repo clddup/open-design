@@ -8,6 +8,8 @@ import {
   type ApprovalDecision,
   type RunStopReason,
   type ToolRisk,
+  type TrustedToolFailure,
+  type TrustedToolResult,
 } from "@opendesign/agent-contracts";
 import { TrustedToolExecutionError } from "./index.js";
 import type {
@@ -18,8 +20,6 @@ import type {
   ApprovalPort,
   ApprovalRequest,
   ToolExecutorPort,
-  TrustedToolFailure,
-  TrustedToolResult,
 } from "./index.js";
 import { PiDesignFailureRecovery } from "./pi-design-failure-recovery.js";
 import { PiToolProgressCircuit } from "./pi-tool-progress-circuit.js";

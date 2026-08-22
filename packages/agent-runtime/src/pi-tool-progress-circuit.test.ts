@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { TrustedToolFailure } from "./index.js";
+import type { TrustedToolFailure } from "@opendesign/agent-contracts";
 import { PiToolProgressCircuit } from "./pi-tool-progress-circuit.js";
 
 const invalidInput: TrustedToolFailure = {

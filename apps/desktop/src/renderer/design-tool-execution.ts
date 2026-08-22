@@ -2,8 +2,8 @@ import type {
   AgentToolFailureIssue,
   DesignMutationTarget,
   SelectionScope,
+  TrustedToolFailure,
 } from "@opendesign/agent-contracts";
-import type { TrustedToolFailure } from "@opendesign/agent-runtime";
 import type {
   DesignDocument,
   DesignError,

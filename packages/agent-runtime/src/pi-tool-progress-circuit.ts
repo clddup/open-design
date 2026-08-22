@@ -1,4 +1,4 @@
-import type { TrustedToolFailure } from "./index.js";
+import type { TrustedToolFailure } from "@opendesign/agent-contracts";
 
 const MAX_CONSECUTIVE_INVALID_INPUTS_PER_TOOL = 2;
 const MAX_RECOVERABLE_FAILURES_WITHOUT_REVISION = 4;

@@ -1,7 +1,7 @@
 import type {
   TrustedToolContext,
   TrustedToolResult,
-} from "@opendesign/agent-runtime";
+} from "@opendesign/agent-contracts";
 import type { DesignLayoutQualityReport } from "@opendesign/editor-runtime";
 import { designTargetQualityProfilesEqual } from "@opendesign/design-contracts";
 import {

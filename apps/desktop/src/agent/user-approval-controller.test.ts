@@ -1,7 +1,5 @@
-import type {
-  ApprovalRequest,
-  TrustedToolContext,
-} from "@opendesign/agent-runtime";
+import type { TrustedToolContext } from "@opendesign/agent-contracts";
+import type { ApprovalRequest } from "@opendesign/agent-runtime";
 import { describe, expect, it } from "vitest";
 import { UserApprovalController } from "./user-approval-controller.js";
 

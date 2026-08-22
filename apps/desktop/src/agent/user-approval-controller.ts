@@ -1,9 +1,8 @@
-import type { ApprovalDecision } from "@opendesign/agent-contracts";
 import type {
-  ApprovalPort,
-  ApprovalRequest,
+  ApprovalDecision,
   TrustedToolContext,
-} from "@opendesign/agent-runtime";
+} from "@opendesign/agent-contracts";
+import type { ApprovalPort, ApprovalRequest } from "@opendesign/agent-runtime";
 
 type PendingApproval = {
   request: ApprovalRequest;

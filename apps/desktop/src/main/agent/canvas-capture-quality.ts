@@ -1,4 +1,4 @@
-import type { TrustedToolResult } from "@opendesign/agent-runtime";
+import type { TrustedToolResult } from "@opendesign/agent-contracts";
 import { designTargetQualityProfilesEqual } from "@opendesign/design-contracts";
 import {
   isDesignLayoutQualityReport,
