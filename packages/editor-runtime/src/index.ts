@@ -28,6 +28,7 @@ export {
   canGroupNodes,
   canUngroupNode,
   getMaskToggleAction,
+  isEffectivelyLocked,
   planCreateMaskGroup,
   planGroupNodes,
   planRemoveMask,

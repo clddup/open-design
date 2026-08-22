@@ -34,6 +34,7 @@ import {
 } from "node:fs/promises";
 import { basename, dirname, extname, join } from "node:path";
 import { homedir, tmpdir } from "node:os";
+import { createHash } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import { AgentHost, FatalAgentRunError } from "./agent/agent-host";
 import { AgentAttachmentHost } from "./agent/agent-attachment-host";
@@ -80,7 +81,12 @@ import { RasterFileService } from "./raster/raster-file-service";
 import { FontBinaryMainService } from "./font/font-binary-main";
 import type { RasterExportFormat } from "@opendesign/import-export-service/raster";
 import { ModelProviderHost } from "./model/model-provider-host";
-import { ImageGenerationHost } from "./model/image-generation-host";
+import {
+  ERASE_OBJECT_PROMPT,
+  ISOLATE_OBJECT_PROMPT,
+  ImageGenerationHost,
+} from "./model/image-generation-host";
+import { createImageEditMaskPng } from "./model/image-edit-mask";
 import { prepareGlobalWorkspaceDatabase } from "./global-data";
 import { DiagnosticLog } from "./diagnostics/diagnostic-log";
 import { resolveRendererUrl } from "./renderer-url";
@@ -105,6 +111,7 @@ import {
   isSaveDesignFileRequest,
   isThemePreference,
   isWindowAction,
+  type DesignImageAreaSelection,
   type ThemePreference,
 } from "../shared/desktop-api";
 import type {
@@ -1009,15 +1016,22 @@ function registerIpc(fontBinaryService: FontBinaryMainService) {
                 source: request.source,
                 importedBy: "inspector-image-edit",
               }
-            : {
-                action: request.action,
-                source: request.source,
-                prompt: request.prompt,
-                ...(request.reference === undefined
-                  ? {}
-                  : { references: [request.reference] }),
-                importedBy: "inspector-image-edit",
-              },
+            : request.action === "prompt-edit"
+              ? {
+                  action: request.action,
+                  source: request.source,
+                  prompt: request.prompt,
+                  ...(request.reference === undefined
+                    ? {}
+                    : { references: [request.reference] }),
+                  importedBy: "inspector-image-edit",
+                }
+              : {
+                  action: request.action,
+                  source: request.source,
+                  selection: request.selection,
+                  importedBy: "inspector-image-edit",
+                },
           controller.signal,
         );
         return {
@@ -2017,13 +2031,22 @@ void app.whenReady().then(async () => {
                 source,
                 importedBy: "agent-image-edit",
               }
-            : {
-                action: call.input.action,
-                source,
-                prompt: call.input.prompt,
-                ...(reference === undefined ? {} : { references: [reference] }),
-                importedBy: "agent-image-edit",
-              },
+            : call.input.action === "prompt-edit"
+              ? {
+                  action: call.input.action,
+                  source,
+                  prompt: call.input.prompt,
+                  ...(reference === undefined
+                    ? {}
+                    : { references: [reference] }),
+                  importedBy: "agent-image-edit",
+                }
+              : {
+                  action: call.input.action,
+                  source,
+                  selection: call.input.selection,
+                  importedBy: "agent-image-edit",
+                },
           signal,
         );
         const result = await executeRendererTool({
@@ -2031,13 +2054,22 @@ void app.whenReady().then(async () => {
           toolCallId: `${call.toolCallId}_commit_edit`.slice(0, 256),
           toolName: INTERNAL_UPDATE_IMAGE_TOOL_NAME,
           input: {
-            action: "derive-source",
+            action:
+              call.input.action === "isolate-object"
+                ? "derive-layer"
+                : "derive-source",
             label: call.input.label,
             pageId: call.input.pageId,
             nodeId: call.input.nodeId,
             expectedAssetId: call.input.expectedAssetId,
             asset: derived.asset,
             derivation: derived.derivation,
+            ...(call.input.action === "isolate-object"
+              ? {
+                  resultNodeId: call.input.resultNodeId,
+                  resultNodeName: "Isolated object",
+                }
+              : {}),
             ...(derived.supportingAssets === undefined
               ? {}
               : { supportingAssets: derived.supportingAssets }),
@@ -2047,6 +2079,9 @@ void app.whenReady().then(async () => {
           context.runId,
           targetIds,
           result.designRevision?.revision,
+          call.input.action === "isolate-object"
+            ? [call.input.resultNodeId]
+            : undefined,
         );
         return withDesignDelivery(result, context.runId);
       }
@@ -2404,6 +2439,12 @@ type DesignImageEditInput =
       prompt: string;
       references?: readonly DesignAsset[];
       importedBy: "agent-image-edit" | "inspector-image-edit";
+    }
+  | {
+      action: "erase-object" | "isolate-object";
+      source: DesignAsset;
+      selection: DesignImageAreaSelection;
+      importedBy: "agent-image-edit" | "inspector-image-edit";
     };
 
 async function editDesignImageAsset(
@@ -2425,35 +2466,103 @@ async function editDesignImageAsset(
       "Image editing supports at most one distinct reference image",
     );
   }
-  const edited =
-    input.action === "remove-background"
-      ? await requireImageGenerationHost().removeBackground(source, signal)
-      : await requireImageGenerationHost().editWithPrompt(
-          {
-            source,
-            prompt: input.prompt,
-            references: references.map(toImageEditSource),
-          },
-          signal,
-        );
+  let pendingMask:
+    | {
+        bytes: Uint8Array;
+        name: string;
+        size: { width: number; height: number };
+      }
+    | undefined;
+  const edited = await (async () => {
+    if (input.action === "remove-background") {
+      return requireImageGenerationHost().removeBackground(source, signal);
+    }
+    if (input.action === "prompt-edit") {
+      return requireImageGenerationHost().editWithPrompt(
+        {
+          source,
+          prompt: input.prompt,
+          references: references.map(toImageEditSource),
+        },
+        signal,
+      );
+    }
+    const decodedSource = nativeImage.createFromBuffer(
+      Buffer.from(source.bytes),
+    );
+    const intrinsic = decodedSource.getSize();
+    const maskBytes = createImageEditMaskPng({
+      width: intrinsic.width,
+      height: intrinsic.height,
+      points: input.selection.points,
+    });
+    const normalizedSourceBytes = decodedSource.toPNG();
+    const maskName = `${input.source.name.replace(/\.[^.]+$/, "")} — Area mask.png`;
+    pendingMask = {
+      bytes: maskBytes,
+      name: maskName,
+      size: intrinsic,
+    };
+    const maskedInput = {
+      source: {
+        bytes: normalizedSourceBytes,
+        mimeType: "image/png" as const,
+        name: `${input.source.name.replace(/\.[^.]+$/, "")}.png`,
+      },
+      mask: {
+        bytes: maskBytes,
+        mimeType: "image/png" as const,
+        name: maskName,
+      },
+    };
+    return input.action === "erase-object"
+      ? requireImageGenerationHost().eraseObject(maskedInput, signal)
+      : requireImageGenerationHost().isolateObject(maskedInput, signal);
+  })();
   const bytes = Buffer.from(edited.bytes);
   const editedNativeImage = nativeImage.createFromBuffer(bytes);
   const intrinsic = editedNativeImage.getSize();
   if (
     intrinsic.width <= 0 ||
     intrinsic.height <= 0 ||
-    (input.action === "remove-background" &&
+    ((input.action === "remove-background" ||
+      input.action === "isolate-object") &&
       !nativeImageHasTransparentPixels(editedNativeImage.toBitmap()))
   ) {
     throw new TypeError(
       input.action === "remove-background"
         ? "Background removal did not return a valid image with transparent pixels"
-        : "Image prompt editing did not return a valid image",
+        : input.action === "isolate-object"
+          ? "Object isolation did not return a valid image with transparent pixels"
+          : "Image editing did not return a valid image",
     );
   }
+  const supportingMaskAsset: DesignAsset | undefined = pendingMask
+    ? {
+        id: `asset_${createHash("sha256").update(pendingMask.bytes).digest("hex")}`,
+        kind: "image",
+        name: pendingMask.name,
+        mimeType: "image/png",
+        source: {
+          type: "data",
+          value: Buffer.from(pendingMask.bytes).toString("base64"),
+        },
+        size: pendingMask.size,
+        extensions: {
+          importedBy: input.importedBy,
+          role: "image-edit-mask",
+        },
+      }
+    : undefined;
   const attachment = await requireAgentAttachmentHost().importImageBytes(
     `${input.source.name.replace(/\.[^.]+$/, "")} — ${
-      input.action === "remove-background" ? "Background removed" : "Edited"
+      input.action === "remove-background"
+        ? "Background removed"
+        : input.action === "erase-object"
+          ? "Object erased"
+          : input.action === "isolate-object"
+            ? "Object isolated"
+            : "Edited"
     }.png`,
     edited.bytes,
   );
@@ -2476,7 +2585,12 @@ async function editDesignImageAsset(
       operation: input.action,
       ...(input.action === "prompt-edit"
         ? { prompt: input.prompt.trim() }
-        : {}),
+        : input.action === "erase-object"
+          ? { prompt: ERASE_OBJECT_PROMPT }
+          : input.action === "isolate-object"
+            ? { prompt: ISOLATE_OBJECT_PROMPT }
+            : {}),
+      ...(supportingMaskAsset ? { maskAssetId: supportingMaskAsset.id } : {}),
       referenceAssetIds: references.map((reference) => reference.id),
       extensions: {
         provider: edited.apiFormat,
@@ -2484,9 +2598,16 @@ async function editDesignImageAsset(
         ...(edited.providerRequestId
           ? { providerRequestId: edited.providerRequestId }
           : {}),
+        ...(input.action === "erase-object" || input.action === "isolate-object"
+          ? { selectionPointCount: input.selection.points.length }
+          : {}),
       },
     },
-    ...(references.length === 0 ? {} : { supportingAssets: [...references] }),
+    ...(supportingMaskAsset
+      ? { supportingAssets: [supportingMaskAsset] }
+      : references.length === 0
+        ? {}
+        : { supportingAssets: [...references] }),
   };
 }
 

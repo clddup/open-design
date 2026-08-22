@@ -1446,15 +1446,29 @@ async function executeDesignToolRequestUnsafe(
                           ? {}
                           : { supportingAssets: input.supportingAssets }),
                       }
-                    : {
-                        action: input.action,
-                        pageId: input.pageId,
-                        nodeId: input.nodeId,
-                        asset: input.asset,
-                        ...(input.placement === undefined
-                          ? {}
-                          : { placement: input.placement }),
-                      },
+                    : input.action === "derive-layer"
+                      ? {
+                          action: input.action,
+                          pageId: input.pageId,
+                          nodeId: input.nodeId,
+                          expectedAssetId: input.expectedAssetId,
+                          resultNodeId: input.resultNodeId,
+                          resultNodeName: input.resultNodeName,
+                          asset: input.asset,
+                          derivation: input.derivation,
+                          ...(input.supportingAssets === undefined
+                            ? {}
+                            : { supportingAssets: input.supportingAssets }),
+                        }
+                      : {
+                          action: input.action,
+                          pageId: input.pageId,
+                          nodeId: input.nodeId,
+                          asset: input.asset,
+                          ...(input.placement === undefined
+                            ? {}
+                            : { placement: input.placement }),
+                        },
             commandPrefix,
           );
     if (!plan.ok) {
@@ -1492,6 +1506,9 @@ async function executeDesignToolRequestUnsafe(
       throw designTransactionToolError(result.error, transaction.commands);
     }
     const applied = runtime.getSnapshot().document.nodesById[input.nodeId];
+    const created = plan.createdNodeId
+      ? runtime.getSnapshot().document.nodesById[plan.createdNodeId]
+      : undefined;
     const appliedPaint =
       input.action === "set-paint-filters" &&
       applied &&
@@ -1512,7 +1529,14 @@ async function executeDesignToolRequestUnsafe(
           pageId: input.pageId,
           nodeId: input.nodeId,
           assetId:
-            applied?.kind === "image" ? applied.properties.assetId : undefined,
+            created?.kind === "image"
+              ? created.properties.assetId
+              : applied?.kind === "image"
+                ? applied.properties.assetId
+                : undefined,
+          ...(plan.createdNodeId === undefined
+            ? {}
+            : { createdNodeId: plan.createdNodeId }),
           placement:
             applied?.kind === "image"
               ? applied.properties.placement

@@ -30,6 +30,7 @@
     "@opendesign/editor-runtime": "workspace:*",
     "@opendesign/geometry-service": "workspace:*",
     "@opendesign/import-export-service": "workspace:*",
+    "@opendesign/image-service": "workspace:*",
     "@opendesign/leafer-engine": "workspace:*",
     "@opendesign/library-service": "workspace:*",
     "@opendesign/model-gateway": "workspace:*",

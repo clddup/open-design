@@ -11,6 +11,7 @@ import type {
   LeaferTextStyleUpdate,
 } from "@opendesign/leafer-engine";
 import type { TextLayoutProvider } from "@opendesign/text-service";
+import type { ImageAreaSelection } from "@opendesign/image-service";
 import type {
   ComponentOverridePatch,
   DesignAsset,
@@ -42,6 +43,8 @@ import {
   type CSSProperties,
 } from "react";
 import type {
+  DesignImageEditAction,
+  DesignImageEditRequest,
   DiagnosticEvent,
   ProjectDesignFile,
   RecentProject,
@@ -279,7 +282,7 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
   const [imageEdit, setImageEdit] = useState<{
     requestId: string;
     nodeId: string;
-    action: "remove-background" | "prompt-edit";
+    action: DesignImageEditAction;
     status: "running" | "cancelling";
   } | null>(null);
   const cancelledImageEditRequestIds = useRef(new Set<string>());
@@ -293,6 +296,9 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
   const imageCropController = useRef<((nodeId: string) => boolean) | null>(
     null,
   );
+  const imageAreaSelectionController = useRef<
+    ((nodeId: string) => boolean) | null
+  >(null);
   const [textLayoutProviderEpoch, setTextLayoutProviderEpoch] = useState(0);
   const [diagnosticEvents, setDiagnosticEvents] = useState<DiagnosticEvent[]>(
     [],
@@ -356,6 +362,12 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
   const handleImageCropControllerChange = useCallback(
     (controller: ((nodeId: string) => boolean) | null) => {
       imageCropController.current = controller;
+    },
+    [],
+  );
+  const handleImageAreaSelectionControllerChange = useCallback(
+    (controller: ((nodeId: string) => boolean) | null) => {
+      imageAreaSelectionController.current = controller;
     },
     [],
   );
@@ -1056,24 +1068,25 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
     }
   }, [activePageId, applyCommands, runtime, t]);
 
-  const runSelectedImageEdit = useCallback(
+  const runImageEdit = useCallback(
     async (
+      nodeId: string,
       edit:
         | { action: "remove-background" }
         | {
             action: "prompt-edit";
             prompt: string;
             reference?: DesignAsset;
+          }
+        | {
+            action: "erase-object" | "isolate-object";
+            selection: ImageAreaSelection;
           },
     ) => {
       if (imageEdit) return;
       const snapshot = runtime.getSnapshot();
-      const nodeId =
-        snapshot.state.selection.nodeIds.length === 1
-          ? snapshot.state.selection.nodeIds[0]
-          : undefined;
-      const node = nodeId ? snapshot.document.nodesById[nodeId] : undefined;
-      if (!nodeId || !node || node.kind !== "image") return;
+      const node = snapshot.document.nodesById[nodeId];
+      if (!node || node.kind !== "image") return;
       const source = snapshot.document.assetsById[node.properties.assetId];
       if (
         !source ||
@@ -1087,6 +1100,10 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
         return;
       }
       const requestId = `image_edit_${crypto.randomUUID()}`;
+      const resultNodeId =
+        edit.action === "isolate-object"
+          ? `isolated_image_${crypto.randomUUID().replaceAll("-", "")}`
+          : undefined;
       const expectedAssetId = node.properties.assetId;
       setImageEdit({
         requestId,
@@ -1096,14 +1113,26 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
       });
       setEditorError(null);
       try {
-        const edited = await window.desktop?.editDesignImage({
+        const requestBase = {
           requestId,
-          ...edit,
           pageId: activePageId,
           nodeId,
           expectedAssetId,
           source,
-        });
+        };
+        const editRequest: DesignImageEditRequest =
+          edit.action === "erase-object" || edit.action === "isolate-object"
+            ? {
+                ...requestBase,
+                action: edit.action,
+                selection: {
+                  points: edit.selection.points.map((point) => ({ ...point })),
+                },
+              }
+            : edit.action === "prompt-edit"
+              ? { ...requestBase, ...edit }
+              : { ...requestBase, action: edit.action };
+        const edited = await window.desktop?.editDesignImage(editRequest);
         if (!edited) throw new Error("Image editing is unavailable");
         if (cancelledImageEditRequestIds.current.has(requestId)) {
           throw new DOMException("Image editing cancelled", "AbortError");
@@ -1125,17 +1154,31 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
         const current = runtime.getSnapshot().document;
         const plan = planImageNodeUpdate(
           current,
-          {
-            action: "derive-source",
-            pageId: activePageId,
-            nodeId,
-            expectedAssetId,
-            asset: edited.asset,
-            derivation: edited.derivation,
-            ...(edited.supportingAssets === undefined
-              ? {}
-              : { supportingAssets: edited.supportingAssets }),
-          },
+          edit.action === "isolate-object" && resultNodeId
+            ? {
+                action: "derive-layer",
+                pageId: activePageId,
+                nodeId,
+                expectedAssetId,
+                resultNodeId,
+                resultNodeName: t("canvas.imageAreaIsolatedLayer"),
+                asset: edited.asset,
+                derivation: edited.derivation,
+                ...(edited.supportingAssets === undefined
+                  ? {}
+                  : { supportingAssets: edited.supportingAssets }),
+              }
+            : {
+                action: "derive-source",
+                pageId: activePageId,
+                nodeId,
+                expectedAssetId,
+                asset: edited.asset,
+                derivation: edited.derivation,
+                ...(edited.supportingAssets === undefined
+                  ? {}
+                  : { supportingAssets: edited.supportingAssets }),
+              },
           `image_edit_${requestId}`,
         );
         if (!plan.ok) throw new Error(plan.message);
@@ -1144,12 +1187,24 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
             t(
               edit.action === "remove-background"
                 ? "history.removeImageBackground"
-                : "history.editImageWithPrompt",
+                : edit.action === "prompt-edit"
+                  ? "history.editImageWithPrompt"
+                  : edit.action === "erase-object"
+                    ? "history.eraseImageObject"
+                    : "history.isolateImageObject",
             ),
             plan.commands,
           )
         ) {
           throw new Error("Image edit transaction was rejected");
+        }
+        const latestSelection = runtime.getSnapshot().state.selection.nodeIds;
+        if (
+          resultNodeId &&
+          latestSelection.length === 1 &&
+          latestSelection[0] === nodeId
+        ) {
+          runtime.setSelection([resultNodeId], resultNodeId);
         }
       } catch (error) {
         if (
@@ -1168,6 +1223,22 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
       }
     },
     [activePageId, applyCommands, imageEdit, runtime, t],
+  );
+
+  const runSelectedImageEdit = useCallback(
+    (
+      edit:
+        | { action: "remove-background" }
+        | {
+            action: "prompt-edit";
+            prompt: string;
+            reference?: DesignAsset;
+          },
+    ) => {
+      const selected = runtime.getSnapshot().state.selection.nodeIds;
+      if (selected.length === 1) void runImageEdit(selected[0], edit);
+    },
+    [runImageEdit, runtime],
   );
 
   const selectImageEditReference = useCallback(async () => {
@@ -2690,8 +2761,26 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
               activePageId={activePageId}
               generationActivity={generationActivity}
               layerHoverTarget={layerHoverTarget ?? undefined}
+              imageEditActivity={
+                imageEdit
+                  ? {
+                      action: imageEdit.action,
+                      nodeName:
+                        designDocument.nodesById[imageEdit.nodeId]?.name ??
+                        t("node.image"),
+                      status: imageEdit.status,
+                      onCancel: cancelSelectedImageEdit,
+                    }
+                  : undefined
+              }
               onTransactionError={setEditorError}
               onAssetDrop={placeImageAssetAtPoint}
+              onImageAreaEdit={(nodeId, action, selection) =>
+                void runImageEdit(nodeId, { action, selection })
+              }
+              onImageAreaSelectionControllerChange={
+                handleImageAreaSelectionControllerChange
+              }
               onImageCropControllerChange={handleImageCropControllerChange}
               onTextLayoutProviderReady={handleTextLayoutProviderReady}
               onTextEditingStyleControllerChange={
@@ -2849,6 +2938,16 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
                   return (
                     imageCropController.current?.(selectedNode.id) ?? false
                   );
+                }}
+                onSelectImageArea={() => {
+                  if (selectedNode?.kind !== "image") return false;
+                  const started =
+                    imageAreaSelectionController.current?.(selectedNode.id) ??
+                    false;
+                  if (!started) {
+                    setEditorError(t("error.imageAreaSelectionUnavailable"));
+                  }
+                  return started;
                 }}
                 onReplaceImage={() => void replaceSelectedImage()}
                 imageEditStatus={

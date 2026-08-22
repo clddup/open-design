@@ -262,6 +262,13 @@ export type DesignImageSelection = {
   asset: DesignAsset;
 };
 
+export type DesignImageAreaSelection = {
+  points: Array<{ x: number; y: number }>;
+};
+
+export type DesignImageEditAction =
+  "remove-background" | "prompt-edit" | "erase-object" | "isolate-object";
+
 type DesignImageEditRequestBase = {
   requestId: string;
   pageId: string;
@@ -278,11 +285,15 @@ export type DesignImageEditRequest = DesignImageEditRequestBase &
         prompt: string;
         reference?: DesignAsset;
       }
+    | {
+        action: "erase-object" | "isolate-object";
+        selection: DesignImageAreaSelection;
+      }
   );
 
 export type DesignImageEditResult = {
   requestId: string;
-  action: "remove-background" | "prompt-edit";
+  action: DesignImageEditAction;
   sourceAssetId: string;
   asset: DesignAsset;
   derivation: ImageAssetDerivation;
@@ -674,6 +685,20 @@ export function isDesignImageEditRequest(
       "source",
     ]);
   }
+  if (value.action === "erase-object" || value.action === "isolate-object") {
+    return (
+      isDesignImageAreaSelection(value.selection) &&
+      hasExactKeys(value, [
+        "requestId",
+        "action",
+        "pageId",
+        "nodeId",
+        "expectedAssetId",
+        "source",
+        "selection",
+      ])
+    );
+  }
   return (
     value.action === "prompt-edit" &&
     typeof value.prompt === "string" &&
@@ -701,20 +726,26 @@ export function isDesignImageEditResult(
   if (
     !isRecord(value) ||
     !isStableId(value.requestId) ||
-    (value.action !== "remove-background" && value.action !== "prompt-edit") ||
+    (value.action !== "remove-background" &&
+      value.action !== "prompt-edit" &&
+      value.action !== "erase-object" &&
+      value.action !== "isolate-object") ||
     !isStableId(value.sourceAssetId) ||
     !isEmbeddedEditableImageAsset(value.asset) ||
     !isImageAssetDerivation(value.derivation) ||
     value.derivation.sourceAssetId !== value.sourceAssetId ||
     value.derivation.resultAssetId !== value.asset.id ||
-    value.derivation.operation !== value.action ||
-    value.derivation.maskAssetId !== undefined
+    value.derivation.operation !== value.action
   ) {
     return false;
   }
   const asset = value.asset;
   const derivation = value.derivation;
   const supportingAssets = value.supportingAssets ?? [];
+  const derivationInputIds = [
+    ...derivation.referenceAssetIds,
+    ...(derivation.maskAssetId ? [derivation.maskAssetId] : []),
+  ];
   if (
     !Array.isArray(supportingAssets) ||
     supportingAssets.length > 1 ||
@@ -724,24 +755,38 @@ export function isDesignImageEditResult(
         supportingAsset.id === value.sourceAssetId ||
         supportingAsset.id === asset.id,
     ) ||
-    supportingAssets.length !== derivation.referenceAssetIds.length ||
+    supportingAssets.length !== derivationInputIds.length ||
     supportingAssets.some(
       (supportingAsset, index) =>
-        supportingAsset.id !== derivation.referenceAssetIds[index],
+        supportingAsset.id !== derivationInputIds[index],
     )
   ) {
     return false;
   }
   if (
     value.action === "remove-background" &&
-    (supportingAssets.length !== 0 || derivation.prompt !== undefined)
+    (supportingAssets.length !== 0 ||
+      derivation.prompt !== undefined ||
+      derivation.maskAssetId !== undefined)
   ) {
     return false;
   }
   if (
     value.action === "prompt-edit" &&
     (typeof derivation.prompt !== "string" ||
-      derivation.prompt.trim().length === 0)
+      derivation.prompt.trim().length === 0 ||
+      derivation.maskAssetId !== undefined)
+  ) {
+    return false;
+  }
+  if (
+    (value.action === "erase-object" || value.action === "isolate-object") &&
+    (typeof derivation.prompt !== "string" ||
+      derivation.prompt.trim().length === 0 ||
+      derivation.referenceAssetIds.length !== 0 ||
+      supportingAssets.length !== 1 ||
+      supportingAssets[0]?.mimeType !== "image/png" ||
+      derivation.maskAssetId !== supportingAssets[0]?.id)
   ) {
     return false;
   }
@@ -753,6 +798,31 @@ export function isDesignImageEditResult(
     "derivation",
     ...(value.supportingAssets === undefined ? [] : ["supportingAssets"]),
   ]);
+}
+
+export function isDesignImageAreaSelection(
+  value: unknown,
+): value is DesignImageAreaSelection {
+  return (
+    isRecord(value) &&
+    Array.isArray(value.points) &&
+    value.points.length >= 3 &&
+    value.points.length <= 512 &&
+    value.points.every(
+      (point) =>
+        isRecord(point) &&
+        typeof point.x === "number" &&
+        Number.isFinite(point.x) &&
+        point.x >= 0 &&
+        point.x <= 1 &&
+        typeof point.y === "number" &&
+        Number.isFinite(point.y) &&
+        point.y >= 0 &&
+        point.y <= 1 &&
+        hasExactKeys(point, ["x", "y"]),
+    ) &&
+    hasExactKeys(value, ["points"])
+  );
 }
 
 export function isCancelDesignImageEditRequest(

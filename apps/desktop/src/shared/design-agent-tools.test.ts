@@ -2522,6 +2522,95 @@ describe("design Agent tool contract", () => {
         prompt: "   ",
       }),
     ).toBe(false);
+    const selection = {
+      points: [
+        { x: 0.2, y: 0.2 },
+        { x: 0.8, y: 0.2 },
+        { x: 0.5, y: 0.8 },
+      ],
+    };
+    expect(
+      validateDesignAgentToolInput(EDIT_IMAGE_TOOL_NAME, {
+        ...input,
+        action: "erase-object",
+        label: "Remove the selected lamp",
+        selection,
+      }),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(EDIT_IMAGE_TOOL_NAME, {
+        ...input,
+        action: "isolate-object",
+        label: "Isolate the selected lamp",
+        selection,
+        resultNodeId: "isolated_lamp",
+      }),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(EDIT_IMAGE_TOOL_NAME, {
+        ...input,
+        action: "erase-object",
+        selection: { points: [{ x: 0.2, y: 0.2 }] },
+        mask: "data:image/png;base64,aW1hZ2U=",
+      }),
+    ).toBe(false);
+  });
+
+  it("accepts only exact trusted mask provenance for isolated image layers", () => {
+    const sourceAssetId = `asset_${"a".repeat(64)}`;
+    const maskAsset = {
+      id: `asset_${"b".repeat(64)}`,
+      kind: "image",
+      name: "Selection mask.png",
+      mimeType: "image/png",
+      source: { type: "data", value: "bWFzaw==" },
+      size: { width: 800, height: 600 },
+      extensions: {},
+    } as const;
+    const resultAsset = {
+      ...maskAsset,
+      id: `asset_${"c".repeat(64)}`,
+      name: "Isolated object.png",
+      source: { type: "data", value: "cmVzdWx0" },
+    } as const;
+    const input = {
+      action: "derive-layer",
+      label: "Isolate selected object",
+      pageId: "page_1",
+      nodeId: "hero_image",
+      expectedAssetId: sourceAssetId,
+      resultNodeId: "isolated_object",
+      resultNodeName: "Isolated object",
+      asset: resultAsset,
+      supportingAssets: [maskAsset],
+      derivation: {
+        id: "image_derivation_isolate",
+        sourceAssetId,
+        resultAssetId: resultAsset.id,
+        operation: "isolate-object",
+        prompt: "Isolate the selected object",
+        maskAssetId: maskAsset.id,
+        referenceAssetIds: [],
+        extensions: { provider: "openai-images", modelId: "gpt-image-2" },
+      },
+    };
+    expect(
+      validateDesignAgentToolInput(INTERNAL_UPDATE_IMAGE_TOOL_NAME, input),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(INTERNAL_UPDATE_IMAGE_TOOL_NAME, {
+        ...input,
+        supportingAssets: [
+          { ...maskAsset, mimeType: "image/jpeg", name: "Forged mask.jpg" },
+        ],
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(INTERNAL_UPDATE_IMAGE_TOOL_NAME, {
+        ...input,
+        resultNodeId: undefined,
+      }),
+    ).toBe(false);
   });
 
   it("exposes strict semantic group and ungroup inputs without selection-derived targets", () => {

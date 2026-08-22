@@ -55,6 +55,17 @@ export type ImageUpdateOperation =
       asset: DesignAsset;
       derivation: ImageAssetDerivation;
       supportingAssets?: readonly DesignAsset[];
+    }
+  | {
+      action: "derive-layer";
+      pageId: string;
+      nodeId: string;
+      expectedAssetId: string;
+      resultNodeId: string;
+      resultNodeName: string;
+      asset: DesignAsset;
+      derivation: ImageAssetDerivation;
+      supportingAssets?: readonly DesignAsset[];
     };
 
 export type ImageUpdateFailureCode =
@@ -75,6 +86,7 @@ export type ImageUpdatePlan =
       previousAssetId: string;
       nextAssetId: string;
       derivationId?: string;
+      createdNodeId?: string;
     }
   | {
       ok: false;
@@ -266,7 +278,7 @@ export function planImageNodeUpdate(
   }
 
   const sourceUpdate =
-    operation.action === "derive-source"
+    operation.action === "derive-source" || operation.action === "derive-layer"
       ? operation
       : {
           ...operation,
@@ -307,7 +319,8 @@ export function planImageNodeUpdate(
   if (
     requestedDerivation.sourceAssetId !== previousAssetId ||
     requestedDerivation.resultAssetId !== sourceUpdate.asset.id ||
-    (operation.action === "derive-source" &&
+    ((operation.action === "derive-source" ||
+      operation.action === "derive-layer") &&
       requestedDerivation.operation === "replacement")
   ) {
     return {
@@ -318,7 +331,7 @@ export function planImageNodeUpdate(
   }
 
   const supportingAssets =
-    operation.action === "derive-source"
+    operation.action === "derive-source" || operation.action === "derive-layer"
       ? (operation.supportingAssets ?? [])
       : [];
   const supportingAssetIds = new Set(supportingAssets.map((asset) => asset.id));
@@ -436,18 +449,62 @@ export function planImageNodeUpdate(
       derivation: requestedDerivation,
     });
   }
-  commands.push({
-    commandId: `${commandPrefix}_node`,
-    type: "update_properties",
-    nodeId: operation.nodeId,
-    properties: {
-      assetId: sourceUpdate.asset.id,
-      ...(operation.action !== "replace-source" ||
-      operation.placement === undefined
-        ? {}
-        : { placement: operation.placement }),
-    },
-  });
+  let createdNodeId: string | undefined;
+  if (operation.action === "derive-layer") {
+    if (
+      !safeResourceId(operation.resultNodeId) ||
+      operation.resultNodeName.trim().length === 0 ||
+      operation.resultNodeName.length > 256 ||
+      document.nodesById[operation.resultNodeId]
+    ) {
+      return {
+        ok: false,
+        code: "invalid-asset",
+        message: "Derived image layer identity is invalid or already exists",
+      };
+    }
+    const siblings = node.parentId
+      ? document.nodesById[node.parentId]?.childIds
+      : page.rootNodeIds;
+    const sourceIndex = siblings?.indexOf(node.id) ?? -1;
+    if (sourceIndex < 0) {
+      return {
+        ok: false,
+        code: "out-of-scope",
+        message: `Image node ${node.id} is missing from its parent order`,
+      };
+    }
+    commands.push({
+      commandId: `${commandPrefix}_node`,
+      type: "insert_element",
+      pageId: operation.pageId,
+      parentId: node.parentId,
+      index: sourceIndex + 1,
+      node: {
+        ...structuredClone(node),
+        id: operation.resultNodeId,
+        name: operation.resultNodeName.trim(),
+        properties: {
+          ...structuredClone(node.properties),
+          assetId: sourceUpdate.asset.id,
+        },
+      },
+    });
+    createdNodeId = operation.resultNodeId;
+  } else {
+    commands.push({
+      commandId: `${commandPrefix}_node`,
+      type: "update_properties",
+      nodeId: operation.nodeId,
+      properties: {
+        assetId: sourceUpdate.asset.id,
+        ...(operation.action !== "replace-source" ||
+        operation.placement === undefined
+          ? {}
+          : { placement: operation.placement }),
+      },
+    });
+  }
 
   if (commands.length > MAX_TRANSACTION_COMMANDS) {
     return {
@@ -464,6 +521,7 @@ export function planImageNodeUpdate(
     previousAssetId,
     nextAssetId: sourceUpdate.asset.id,
     derivationId,
+    ...(createdNodeId ? { createdNodeId } : {}),
   };
 }
 
@@ -971,6 +1029,18 @@ function findImageAssetDerivation(
 
 function samePlacement(left: ImagePlacement, right: ImagePlacement): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function safeResourceId(value: string): boolean {
+  return (
+    value.length > 0 &&
+    value.length <= 256 &&
+    value.trim() === value &&
+    ![...value].some((character) => {
+      const codePoint = character.codePointAt(0) ?? 0;
+      return codePoint <= 0x1f || codePoint === 0x7f;
+    })
+  );
 }
 
 function styleReferenceId(

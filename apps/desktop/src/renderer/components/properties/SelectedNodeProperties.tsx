@@ -123,6 +123,7 @@ export function SelectedNodeProperties({
   onDuplicate,
   onGoToComponentMain,
   onCropImage,
+  onSelectImageArea,
   onReplaceImage,
   imageEditStatus,
   imageEditAction,
@@ -192,9 +193,15 @@ export function SelectedNodeProperties({
   onDuplicate: () => void;
   onGoToComponentMain: () => void;
   onCropImage: () => boolean;
+  onSelectImageArea: () => boolean;
   onReplaceImage: () => void;
   imageEditStatus: "running" | "cancelling" | null;
-  imageEditAction: "remove-background" | "prompt-edit" | null;
+  imageEditAction:
+    | "remove-background"
+    | "prompt-edit"
+    | "erase-object"
+    | "isolate-object"
+    | null;
   onRemoveImageBackground: () => void;
   onEditImageWithPrompt: (prompt: string, reference?: DesignAsset) => void;
   onSelectImageEditReference: () => Promise<DesignAsset | null>;
@@ -959,6 +966,7 @@ export function SelectedNodeProperties({
           onChange={onUpdateImagePlacement}
           onFiltersChange={onUpdateImageFilters}
           onCrop={onCropImage}
+          onSelectArea={onSelectImageArea}
           onReplace={onReplaceImage}
           editStatus={imageEditStatus}
           editAction={imageEditAction}

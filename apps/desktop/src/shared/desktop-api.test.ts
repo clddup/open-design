@@ -433,6 +433,73 @@ describe("Design image desktop API guards", () => {
       false,
     );
   });
+
+  it("accepts bounded source-normalized area edits and exact mask provenance", () => {
+    const request = {
+      requestId: "image_area_edit_request",
+      action: "erase-object",
+      pageId: "page_welcome",
+      nodeId: "hero",
+      expectedAssetId: sourceAsset.id,
+      source: sourceAsset,
+      selection: {
+        points: [
+          { x: 0.2, y: 0.2 },
+          { x: 0.8, y: 0.2 },
+          { x: 0.8, y: 0.8 },
+          { x: 0.2, y: 0.8 },
+        ],
+      },
+    };
+    expect(isDesignImageEditRequest(request)).toBe(true);
+    expect(
+      isDesignImageEditRequest({
+        ...request,
+        selection: { points: [{ x: 2, y: 0 }] },
+      }),
+    ).toBe(false);
+
+    const maskAsset = {
+      ...referenceAsset,
+      id: `asset_${"d".repeat(64)}`,
+      name: "Selection mask.png",
+    };
+    const resultAsset = {
+      ...referenceAsset,
+      id: `asset_${"e".repeat(64)}`,
+      name: "Hero — Object erased.png",
+    };
+    const result = {
+      requestId: request.requestId,
+      action: "erase-object",
+      sourceAssetId: sourceAsset.id,
+      asset: resultAsset,
+      supportingAssets: [maskAsset],
+      derivation: {
+        id: "image_derivation_erase",
+        sourceAssetId: sourceAsset.id,
+        resultAssetId: resultAsset.id,
+        operation: "erase-object",
+        prompt: "Remove the selected object",
+        maskAssetId: maskAsset.id,
+        referenceAssetIds: [],
+        extensions: { provider: "openai-images", modelId: "gpt-image-2" },
+      },
+    };
+    expect(isDesignImageEditResult(result)).toBe(true);
+    expect(
+      isDesignImageEditResult({
+        ...result,
+        derivation: { ...result.derivation, maskAssetId: referenceAsset.id },
+      }),
+    ).toBe(false);
+    expect(
+      isDesignImageEditResult({
+        ...result,
+        supportingAssets: [{ ...maskAsset, mimeType: "image/jpeg" }],
+      }),
+    ).toBe(false);
+  });
 });
 
 describe("Font binary desktop API guards", () => {

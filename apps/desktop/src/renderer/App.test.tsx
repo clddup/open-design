@@ -3361,6 +3361,175 @@ describe("App", () => {
       runtime().getSnapshot().document.assetsById[promptResultAssetId],
     ).toBeUndefined();
 
+    const maskAssetId = `asset_${"5".repeat(64)}`;
+    const isolatedAssetId = `asset_${"6".repeat(64)}`;
+    vi.mocked(window.desktop!.editDesignImage).mockImplementationOnce(
+      (request) => {
+        if (request.action !== "isolate-object") {
+          throw new Error("Expected an isolated area image edit request");
+        }
+        expect(request.selection.points.length).toBeGreaterThanOrEqual(3);
+        return Promise.resolve({
+          requestId: request.requestId,
+          action: request.action,
+          sourceAssetId,
+          asset: {
+            id: isolatedAssetId,
+            kind: "image",
+            name: "Portrait — Object isolated.png",
+            mimeType: "image/png",
+            source: { type: "data", value: "aXNvbGF0ZWQ=" },
+            size: { width: 800, height: 600 },
+            extensions: { importedBy: "inspector-image-edit" },
+          },
+          supportingAssets: [
+            {
+              id: maskAssetId,
+              kind: "image",
+              name: "Portrait — Area mask.png",
+              mimeType: "image/png",
+              source: { type: "data", value: "bWFzaw==" },
+              size: { width: 800, height: 600 },
+              extensions: { role: "image-edit-mask" },
+            },
+          ],
+          derivation: {
+            id: "isolate_object_result",
+            sourceAssetId,
+            resultAssetId: isolatedAssetId,
+            operation: "isolate-object",
+            prompt: "Isolate the selected object",
+            maskAssetId,
+            referenceAssetIds: [],
+            extensions: { modelId: "gpt-image-2" },
+          },
+        });
+      },
+    );
+    expect(
+      screen.getByRole("toolbar", { name: "Canvas selection actions" }),
+    ).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Select area…" }));
+    expect(
+      screen.queryByRole("toolbar", { name: "Canvas selection actions" }),
+    ).toBeNull();
+    const areaOverlay = screen.getByRole("application", {
+      name: "Select image area",
+    });
+    let capturedPointer: number | null = null;
+    vi.spyOn(areaOverlay, "setPointerCapture").mockImplementation(
+      (pointerId) => {
+        capturedPointer = pointerId;
+      },
+    );
+    vi.spyOn(areaOverlay, "hasPointerCapture").mockImplementation(
+      (pointerId) => capturedPointer === pointerId,
+    );
+    vi.spyOn(areaOverlay, "releasePointerCapture").mockImplementation(() => {
+      capturedPointer = null;
+    });
+    const areaSource = runtime().getSnapshot();
+    const imageWorld = getWorldTransform(
+      areaSource.document,
+      "background_image",
+    );
+    if (!imageWorld) throw new Error("Missing image transform");
+    const areaPoints = [
+      { x: 80, y: 70 },
+      { x: 260, y: 70 },
+      { x: 260, y: 210 },
+      { x: 80, y: 210 },
+    ].map((point) =>
+      documentToScreen(
+        transformPoint(point, imageWorld),
+        areaSource.state.viewport,
+      ),
+    );
+    fireEvent.pointerDown(areaOverlay, {
+      button: 0,
+      clientX: areaPoints[0].x,
+      clientY: areaPoints[0].y,
+      pointerId: 7,
+    });
+    for (const point of areaPoints.slice(1)) {
+      fireEvent.pointerMove(areaOverlay, {
+        clientX: point.x,
+        clientY: point.y,
+        pointerId: 7,
+      });
+    }
+    fireEvent.pointerUp(areaOverlay, {
+      clientX: areaPoints.at(-1)!.x,
+      clientY: areaPoints.at(-1)!.y,
+      pointerId: 7,
+    });
+    await user.click(await screen.findByRole("button", { name: "Isolate" }));
+    await waitFor(() =>
+      expect(
+        Object.values(runtime().getSnapshot().document.nodesById).find(
+          (node) => node.properties && node.name === "Isolated object",
+        ),
+      ).toMatchObject({
+        kind: "image",
+        properties: {
+          assetId: isolatedAssetId,
+          placement: { mode: "fill", focalPoint: { x: 0.5, y: 0.5 } },
+          filters: { contrast: 0.2 },
+          cornerRadius: 12,
+        },
+      }),
+    );
+    expect(
+      runtime().getSnapshot().document.nodesById.background_image,
+    ).toMatchObject({ properties: { assetId: sourceAssetId } });
+    await user.click(screen.getByRole("button", { name: "Undo" }));
+    expect(
+      runtime().getSnapshot().document.assetsById[isolatedAssetId],
+    ).toBeUndefined();
+    expect(
+      runtime().getSnapshot().document.assetsById[maskAssetId],
+    ).toBeUndefined();
+    act(() => runtime().setSelection(["background_image"], "background_image"));
+    await user.click(screen.getByRole("button", { name: "Select area…" }));
+    fireEvent.keyDown(
+      screen.getByRole("application", { name: "Select image area" }),
+      { key: "Escape" },
+    );
+    expect(
+      screen.queryByRole("application", { name: "Select image area" }),
+    ).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Select area…" }));
+    expect(
+      screen.getByRole("application", { name: "Select image area" }),
+    ).toBeVisible();
+    act(() => {
+      const current = runtime().getSnapshot().document;
+      const result = runtime().apply({
+        transactionId: "stale_image_area_selection",
+        documentId: current.documentId,
+        baseRevision: current.revision,
+        actor: { type: "user", id: "test" },
+        commands: [
+          {
+            commandId: "update_unrelated_node",
+            type: "update_properties",
+            nodeId: "feature_one",
+            properties: { cornerRadius: 15 },
+          },
+        ],
+      });
+      if (!result.ok) throw new Error(result.error.message);
+    });
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("application", { name: "Select image area" }),
+      ).toBeNull(),
+    );
+    act(() => {
+      expect(runtime().undo().ok).toBe(true);
+      runtime().setSelection(["background_image"], "background_image");
+    });
+
     let rejectEdit: ((reason: Error) => void) | undefined;
     vi.mocked(window.desktop!.editDesignImage).mockImplementationOnce(
       () =>
@@ -3370,12 +3539,16 @@ describe("App", () => {
     );
     const beforeCancelledEdit = runtime().getSnapshot().document.revision;
     await user.click(screen.getByRole("button", { name: "Remove background" }));
-    await user.click(await screen.findByRole("button", { name: "Cancel" }));
+    expect(await screen.findByText("Editing Portrait")).toBeVisible();
+    act(() => runtime().setSelection(["feature_one"], "feature_one"));
+    expect(screen.getByText("Editing Portrait")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
     expect(
       vi.mocked(window.desktop!.cancelDesignImageEdit).mock.calls[0]?.[0]
         .requestId,
     ).toMatch(/^image_edit_/);
     act(() => rejectEdit?.(new Error("Image editing cancelled")));
+    act(() => runtime().setSelection(["background_image"], "background_image"));
     await waitFor(() =>
       expect(
         screen.getByRole("button", { name: "Remove background" }),

@@ -115,7 +115,20 @@ export type EditImageToolInput = EditImageToolBase &
         prompt: string;
         referenceAttachmentId?: string;
       }
+    | {
+        action: "erase-object";
+        selection: ImageAreaSelection;
+      }
+    | {
+        action: "isolate-object";
+        selection: ImageAreaSelection;
+        resultNodeId: string;
+      }
   );
+
+export type ImageAreaSelection = {
+  points: Array<{ x: number; y: number }>;
+};
 
 export type InternalReadImageSourceToolInput = {
   pageId: string;
@@ -147,6 +160,18 @@ export type InternalUpdateImageToolInput =
       pageId: string;
       nodeId: string;
       expectedAssetId: string;
+      asset: DesignAsset;
+      derivation: ImageAssetDerivation;
+      supportingAssets?: DesignAsset[];
+    }
+  | {
+      action: "derive-layer";
+      label: string;
+      pageId: string;
+      nodeId: string;
+      expectedAssetId: string;
+      resultNodeId: string;
+      resultNodeName: string;
       asset: DesignAsset;
       derivation: ImageAssetDerivation;
       supportingAssets?: DesignAsset[];
@@ -350,7 +375,14 @@ export const UPDATE_IMAGE_TOOL_INPUT_SCHEMA = {
 export const EDIT_IMAGE_TOOL_INPUT_SCHEMA = {
   type: "object",
   properties: {
-    action: { enum: ["remove-background", "prompt-edit"] },
+    action: {
+      enum: [
+        "remove-background",
+        "prompt-edit",
+        "erase-object",
+        "isolate-object",
+      ],
+    },
     label: { type: "string", minLength: 1, maxLength: 256 },
     pageId: { type: "string", minLength: 1, maxLength: 256 },
     nodeId: { type: "string", minLength: 1, maxLength: 256 },
@@ -359,6 +391,27 @@ export const EDIT_IMAGE_TOOL_INPUT_SCHEMA = {
     referenceAttachmentId: {
       type: "string",
       pattern: "^image_[a-f0-9]{64}$",
+    },
+    selection: {
+      type: "object",
+      properties: {
+        points: {
+          type: "array",
+          minItems: 3,
+          maxItems: 512,
+          items: NORMALIZED_POINT_SCHEMA,
+        },
+      },
+      required: ["points"],
+      additionalProperties: false,
+      description:
+        "Closed lasso polygon in normalized source-image coordinates from current visual inspection.",
+    },
+    resultNodeId: {
+      type: "string",
+      minLength: 1,
+      maxLength: 256,
+      description: "Stable new Image layer ID required only by isolate-object.",
     },
   },
   required: ["action", "label", "pageId", "nodeId", "expectedAssetId"],
@@ -369,12 +422,38 @@ export const EDIT_IMAGE_TOOL_INPUT_SCHEMA = {
         anyOf: [
           { required: ["prompt"] },
           { required: ["referenceAttachmentId"] },
+          { required: ["selection"] },
+          { required: ["resultNodeId"] },
         ],
       },
     },
     {
       properties: { action: { const: "prompt-edit" } },
       required: ["prompt"],
+      not: {
+        anyOf: [{ required: ["selection"] }, { required: ["resultNodeId"] }],
+      },
+    },
+    {
+      properties: { action: { const: "erase-object" } },
+      required: ["selection"],
+      not: {
+        anyOf: [
+          { required: ["prompt"] },
+          { required: ["referenceAttachmentId"] },
+          { required: ["resultNodeId"] },
+        ],
+      },
+    },
+    {
+      properties: { action: { const: "isolate-object" } },
+      required: ["selection", "resultNodeId"],
+      not: {
+        anyOf: [
+          { required: ["prompt"] },
+          { required: ["referenceAttachmentId"] },
+        ],
+      },
     },
   ],
   additionalProperties: false,
@@ -552,6 +631,21 @@ export function isEditImageToolInput(
       "expectedAssetId",
     ]);
   }
+  if (input.action === "erase-object" || input.action === "isolate-object") {
+    return (
+      isImageAreaSelection(input.selection) &&
+      (input.action !== "isolate-object" || safeId(input.resultNodeId)) &&
+      exactKeys(input, [
+        "action",
+        "label",
+        "pageId",
+        "nodeId",
+        "expectedAssetId",
+        "selection",
+        ...(input.action === "isolate-object" ? ["resultNodeId"] : []),
+      ])
+    );
+  }
   return (
     input.action === "prompt-edit" &&
     typeof input.prompt === "string" &&
@@ -605,7 +699,7 @@ export function isInternalUpdateImageToolInput(
   input: unknown,
 ): input is InternalUpdateImageToolInput {
   if (!isRecord(input) || !hasCommonUpdateFields(input)) return false;
-  if (input.action === "derive-source") {
+  if (input.action === "derive-source" || input.action === "derive-layer") {
     if (
       !safeId(input.expectedAssetId) ||
       !isBoundedEmbeddedImageAsset(input.asset) ||
@@ -613,7 +707,14 @@ export function isInternalUpdateImageToolInput(
       input.derivation.sourceAssetId !== input.expectedAssetId ||
       input.derivation.resultAssetId !== input.asset.id ||
       input.derivation.operation === "replacement" ||
-      input.derivation.maskAssetId !== undefined
+      (input.action === "derive-layer" &&
+        (!safeId(input.resultNodeId) ||
+          typeof input.resultNodeName !== "string" ||
+          input.resultNodeName.trim().length === 0 ||
+          input.resultNodeName.length > 256 ||
+          input.derivation.operation !== "isolate-object")) ||
+      (input.action === "derive-source" &&
+        input.derivation.operation === "isolate-object")
     ) {
       return false;
     }
@@ -630,10 +731,16 @@ export function isInternalUpdateImageToolInput(
           supportingAsset.mimeType !== "image/jpeg" &&
           supportingAsset.mimeType !== "image/webp",
       ) ||
-      supportingAssets.length !== derivation.referenceAssetIds.length ||
+      supportingAssets.length !==
+        derivation.referenceAssetIds.length +
+          (derivation.maskAssetId === undefined ? 0 : 1) ||
       supportingAssets.some(
         (supportingAsset, index) =>
-          supportingAsset.id !== derivation.referenceAssetIds[index] ||
+          supportingAsset.id !==
+            [
+              ...derivation.referenceAssetIds,
+              ...(derivation.maskAssetId ? [derivation.maskAssetId] : []),
+            ][index] ||
           supportingAsset.id === input.expectedAssetId ||
           supportingAsset.id === asset.id,
       )
@@ -642,10 +749,25 @@ export function isInternalUpdateImageToolInput(
     }
     if (
       (derivation.operation === "remove-background" &&
-        (derivation.prompt !== undefined || supportingAssets.length !== 0)) ||
+        (derivation.prompt !== undefined ||
+          derivation.maskAssetId !== undefined ||
+          supportingAssets.length !== 0)) ||
       (derivation.operation === "prompt-edit" &&
         (typeof derivation.prompt !== "string" ||
-          derivation.prompt.trim().length === 0))
+          derivation.prompt.trim().length === 0 ||
+          derivation.maskAssetId !== undefined)) ||
+      ((derivation.operation === "erase-object" ||
+        derivation.operation === "isolate-object") &&
+        (typeof derivation.prompt !== "string" ||
+          derivation.prompt.trim().length === 0 ||
+          derivation.referenceAssetIds.length !== 0 ||
+          derivation.maskAssetId === undefined ||
+          supportingAssets.length !== 1 ||
+          supportingAssets[0]?.mimeType !== "image/png")) ||
+      (derivation.operation !== "remove-background" &&
+        derivation.operation !== "prompt-edit" &&
+        derivation.operation !== "erase-object" &&
+        derivation.operation !== "isolate-object")
     ) {
       return false;
     }
@@ -657,6 +779,9 @@ export function isInternalUpdateImageToolInput(
       "expectedAssetId",
       "asset",
       "derivation",
+      ...(input.action === "derive-layer"
+        ? ["resultNodeId", "resultNodeName"]
+        : []),
       ...(input.supportingAssets === undefined ? [] : ["supportingAssets"]),
     ]);
   }
@@ -718,6 +843,27 @@ export function isInternalUpdateImageToolInput(
       "asset",
       ...(input.placement === undefined ? [] : ["placement"]),
     ])
+  );
+}
+
+function isImageAreaSelection(value: unknown): value is ImageAreaSelection {
+  return (
+    isRecord(value) &&
+    Array.isArray(value.points) &&
+    value.points.length >= 3 &&
+    value.points.length <= 512 &&
+    value.points.every(
+      (point) =>
+        isRecord(point) &&
+        finite(point.x) &&
+        point.x >= 0 &&
+        point.x <= 1 &&
+        finite(point.y) &&
+        point.y >= 0 &&
+        point.y <= 1 &&
+        exactKeys(point, ["x", "y"]),
+    ) &&
+    exactKeys(value, ["points"])
   );
 }
 

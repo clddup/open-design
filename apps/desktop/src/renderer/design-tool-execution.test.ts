@@ -3375,6 +3375,98 @@ describe("Renderer design tool scope", () => {
     expect(
       runtime.getSnapshot().document.assetsById[referenceAssetId],
     ).toBeDefined();
+    const sourceBeforeIsolation = structuredClone(
+      runtime.getSnapshot().document.nodesById.hero_image,
+    );
+    if (sourceBeforeIsolation?.kind !== "image") {
+      throw new Error("Missing source Image before isolation");
+    }
+
+    const maskAssetId = `asset_${"f".repeat(64)}`;
+    const isolatedAssetId = `asset_${"1".repeat(64)}`;
+    const isolated = await executeDesignToolRequest(
+      {
+        requestId: "commit_isolated_image_edit",
+        call: {
+          toolCallId: "tool_commit_isolated_image_edit",
+          toolName: INTERNAL_UPDATE_IMAGE_TOOL_NAME,
+          input: {
+            action: "derive-layer",
+            label: "Isolate selected object",
+            pageId: "page_welcome",
+            nodeId: "hero_image",
+            expectedAssetId: promptResultAssetId,
+            resultNodeId: "isolated_object",
+            resultNodeName: "Isolated object",
+            asset: {
+              id: isolatedAssetId,
+              kind: "image",
+              name: "Isolated object.png",
+              mimeType: "image/png",
+              source: { type: "data", value: "aXNvbGF0ZWQ=" },
+              size: { width: 800, height: 600 },
+              extensions: {},
+            },
+            supportingAssets: [
+              {
+                id: maskAssetId,
+                kind: "image",
+                name: "Selection mask.png",
+                mimeType: "image/png",
+                source: { type: "data", value: "bWFzaw==" },
+                size: { width: 800, height: 600 },
+                extensions: {},
+              },
+            ],
+            derivation: {
+              id: "isolate_object_derivation",
+              sourceAssetId: promptResultAssetId,
+              resultAssetId: isolatedAssetId,
+              operation: "isolate-object",
+              prompt: "Isolate the selected object",
+              maskAssetId,
+              referenceAssetIds: [],
+              extensions: { modelId: "gpt-image-2" },
+            },
+          },
+        },
+        context: { ...selectionContext, revision: 7 },
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(isolated).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "derive-layer",
+          assetId: isolatedAssetId,
+          createdNodeId: "isolated_object",
+          revision: 8,
+        },
+      },
+    });
+    const afterIsolation = runtime.getSnapshot().document;
+    expect(afterIsolation.nodesById.hero_image).toMatchObject({
+      properties: { assetId: promptResultAssetId },
+    });
+    expect(afterIsolation.nodesById.isolated_object).toEqual({
+      ...sourceBeforeIsolation,
+      id: "isolated_object",
+      name: "Isolated object",
+      properties: {
+        ...sourceBeforeIsolation.properties,
+        assetId: isolatedAssetId,
+      },
+    });
+    expect(runtime.undo().ok).toBe(true);
+    const afterUndo = runtime.getSnapshot().document;
+    expect(afterUndo.nodesById.isolated_object).toBeUndefined();
+    expect(afterUndo.assetsById[isolatedAssetId]).toBeUndefined();
+    expect(afterUndo.assetsById[maskAssetId]).toBeUndefined();
+    expect(
+      afterUndo.imageAssetDerivationsById.isolate_object_derivation,
+    ).toBeUndefined();
   });
 
   it("updates one inspected image paint and blocks generic filter rewrites", async () => {

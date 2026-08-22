@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   applyImageFiltersToRgba,
+  createImageAreaSelection,
   createImageCropSession,
   imageFiltersAreNeutral,
   imageCropSourceTransform,
+  imageSourceToTargetTransform,
   moveImageCrop,
   normalizeImageFilters,
   resetImageCrop,
@@ -146,6 +148,87 @@ describe("image placement geometry", () => {
         targetSize: { width: 400, height: 200 },
       }),
     ).toThrow("sourceSize must have positive finite dimensions");
+  });
+
+  it("maps lasso geometry through stretch, fit, crop rotation, and flips", () => {
+    expect(
+      imageSourceToTargetTransform({
+        placement: { mode: "fit" },
+        sourceSize: { width: 400, height: 200 },
+        targetSize: { width: 100, height: 100 },
+      }),
+    ).toEqual([0.25, 0, 0, 0.25, 0, 25]);
+    expect(
+      createImageAreaSelection({
+        placement: { mode: "stretch" },
+        sourceSize: { width: 800, height: 400 },
+        targetSize: { width: 400, height: 200 },
+        targetPoints: [
+          { x: 100, y: 50 },
+          { x: 300, y: 50 },
+          { x: 300, y: 150 },
+          { x: 100, y: 150 },
+        ],
+      }),
+    ).toEqual({
+      points: [
+        { x: 0.25, y: 0.25 },
+        { x: 0.75, y: 0.25 },
+        { x: 0.75, y: 0.75 },
+        { x: 0.25, y: 0.75 },
+      ],
+    });
+    const transformed = createImageAreaSelection({
+      placement: {
+        mode: "crop",
+        focalPoint: { x: 0.5, y: 0.5 },
+        zoom: 1.25,
+        rotation: 90,
+        flipHorizontal: true,
+        flipVertical: false,
+      },
+      sourceSize: { width: 200, height: 100 },
+      targetSize: { width: 300, height: 200 },
+      targetPoints: [
+        { x: 75, y: 50 },
+        { x: 225, y: 50 },
+        { x: 225, y: 150 },
+        { x: 75, y: 150 },
+      ],
+    });
+    expect(transformed.points).toHaveLength(4);
+    expect(
+      transformed.points.every(
+        (point) => point.x >= 0 && point.x <= 1 && point.y >= 0 && point.y <= 1,
+      ),
+    ).toBe(true);
+  });
+
+  it("bounds and validates freeform lasso selections", () => {
+    const manyPoints = Array.from({ length: 1_000 }, (_, index) => ({
+      x: 50 + Math.cos((index / 1_000) * Math.PI * 2) * 40,
+      y: 50 + Math.sin((index / 1_000) * Math.PI * 2) * 40,
+    }));
+    expect(
+      createImageAreaSelection({
+        placement: { mode: "fit" },
+        sourceSize: { width: 100, height: 100 },
+        targetSize: { width: 100, height: 100 },
+        targetPoints: manyPoints,
+      }).points,
+    ).toHaveLength(512);
+    expect(() =>
+      createImageAreaSelection({
+        placement: { mode: "fit" },
+        sourceSize: { width: 100, height: 100 },
+        targetSize: { width: 100, height: 100 },
+        targetPoints: [
+          { x: 1, y: 1 },
+          { x: 1.000_01, y: 1 },
+          { x: 1, y: 1.000_01 },
+        ],
+      }),
+    ).toThrow("too small");
   });
 });
 

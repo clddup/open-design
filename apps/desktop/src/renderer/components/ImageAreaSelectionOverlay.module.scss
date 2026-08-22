@@ -1,0 +1,104 @@
+.root {
+  position: absolute;
+  z-index: 6;
+  inset: 0;
+  overflow: hidden;
+  outline: none;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.imageOutline,
+.selection {
+  vector-effect: non-scaling-stroke;
+}
+
+.imageOutline {
+  fill: color-mix(in srgb, var(--ui-accent) 5%, transparent);
+  stroke: color-mix(in srgb, var(--ui-accent) 72%, transparent);
+  stroke-dasharray: 4 3;
+  stroke-width: 1;
+}
+
+.selection {
+  fill: color-mix(in srgb, var(--ui-accent) 18%, transparent);
+  stroke: var(--ui-accent);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.5;
+}
+
+.instruction,
+.toolbar {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--ui-border-strong);
+  border-radius: 6px;
+  color: var(--ui-text);
+  background: var(--ui-surface-raised);
+  box-shadow: var(--ui-shadow-sm);
+  cursor: default;
+}
+
+.instruction {
+  top: 10px;
+  left: 50%;
+  max-width: min(520px, calc(100% - 24px));
+  gap: 8px;
+  padding: 6px 7px 6px 9px;
+  translate: -50% 0;
+
+  > svg {
+    color: var(--ui-accent);
+  }
+
+  > span {
+    display: grid;
+    min-width: 0;
+    flex: 1;
+    gap: 1px;
+  }
+
+  strong,
+  small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  strong {
+    font-size: 10px;
+    font-weight: 620;
+  }
+
+  small {
+    color: var(--ui-text-muted);
+    font-size: 9px;
+  }
+}
+
+.toolbar {
+  gap: 3px;
+  padding: 3px;
+
+  :global(.ui-button) {
+    min-height: 24px;
+    padding: 0 7px;
+    font-size: 9px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .root * {
+    scroll-behavior: auto;
+  }
+}

@@ -479,6 +479,87 @@ describe("image update planner", () => {
     ).toMatchObject({ ok: false, code: "invalid-asset" });
   });
 
+  it("isolates a masked result as a new sibling Image layer without changing the source", () => {
+    const maskAsset: DesignAsset = {
+      ...newAsset,
+      id: "asset_isolate_mask",
+      mimeType: "image/png",
+      name: "Selection mask",
+    };
+    const isolatedAsset: DesignAsset = {
+      ...newAsset,
+      id: "asset_isolated_object",
+      mimeType: "image/png",
+      name: "Isolated object",
+    };
+    const runtime = new EditorRuntime(documentWithImage());
+    const plan = planImageNodeUpdate(runtime.getSnapshot().document, {
+      action: "derive-layer",
+      pageId: "page_welcome",
+      nodeId: "hero",
+      expectedAssetId: oldAsset.id,
+      resultNodeId: "hero_isolated",
+      resultNodeName: "Hero — Isolated object",
+      asset: isolatedAsset,
+      supportingAssets: [maskAsset],
+      derivation: {
+        id: "isolate_object_derivation",
+        sourceAssetId: oldAsset.id,
+        resultAssetId: isolatedAsset.id,
+        operation: "isolate-object",
+        prompt: "Isolate the selected object",
+        maskAssetId: maskAsset.id,
+        referenceAssetIds: [],
+        extensions: {},
+      },
+    });
+    expect(plan).toMatchObject({
+      ok: true,
+      createdNodeId: "hero_isolated",
+    });
+    if (!plan.ok) return;
+    const before = runtime.getSnapshot().document;
+    expect(
+      runtime.apply({
+        transactionId: "isolate_object",
+        documentId: before.documentId,
+        baseRevision: before.revision,
+        actor: { type: "user", id: "test" },
+        commands: plan.commands,
+      }).ok,
+    ).toBe(true);
+    expect(runtime.getSnapshot().document.nodesById.hero).toMatchObject({
+      properties: { assetId: oldAsset.id, placement: { mode: "fit" } },
+    });
+    expect(
+      runtime.getSnapshot().document.nodesById.hero_isolated,
+    ).toMatchObject({
+      parentId: "frame_welcome",
+      transform: [1, 0, 0, 1, 32, 32],
+      size: { width: 320, height: 240 },
+      properties: { assetId: isolatedAsset.id, placement: { mode: "fit" } },
+    });
+    expect(
+      runtime.getSnapshot().document.nodesById.frame_welcome?.childIds,
+    ).toEqual(expect.arrayContaining(["hero", "hero_isolated"]));
+    const reopened = new EditorRuntime(
+      JSON.parse(JSON.stringify(runtime.getSnapshot().document)),
+    );
+    expect(
+      reopened.getSnapshot().document.nodesById.hero_isolated,
+    ).toBeDefined();
+    expect(runtime.undo().ok).toBe(true);
+    expect(
+      runtime.getSnapshot().document.nodesById.hero_isolated,
+    ).toBeUndefined();
+    expect(
+      runtime.getSnapshot().document.assetsById[maskAsset.id],
+    ).toBeUndefined();
+    expect(
+      runtime.getSnapshot().document.assetsById[isolatedAsset.id],
+    ).toBeUndefined();
+  });
+
   it("preserves an old asset referenced by another Image or Path paint", () => {
     const document = documentWithImage();
     document.nodesById.secondary = imageNode("secondary");

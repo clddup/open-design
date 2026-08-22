@@ -33,6 +33,7 @@ export function ImageSection({
   onChange,
   onFiltersChange,
   onCrop,
+  onSelectArea,
   onReplace,
   editStatus,
   editAction,
@@ -47,9 +48,15 @@ export function ImageSection({
   onChange: (placement: ImagePlacement) => void;
   onFiltersChange: (filters: ImageFilters) => void;
   onCrop: () => boolean;
+  onSelectArea: () => boolean;
   onReplace: () => void;
   editStatus: "running" | "cancelling" | null;
-  editAction: "remove-background" | "prompt-edit" | null;
+  editAction:
+    | "remove-background"
+    | "prompt-edit"
+    | "erase-object"
+    | "isolate-object"
+    | null;
   onRemoveBackground: () => void;
   onEditWithPrompt: (prompt: string, reference?: DesignAsset) => void;
   onSelectEditReference: () => Promise<DesignAsset | null>;
@@ -268,6 +275,15 @@ export function ImageSection({
         </button>
         <button
           className={cx(styles.addPaint, styles.imageReplaceButton)}
+          disabled={editStatus !== null}
+          onClick={onSelectArea}
+          type="button"
+        >
+          <Icon name="lucide:lasso-select" size={13} />
+          {t("properties.imageSelectArea")}
+        </button>
+        <button
+          className={cx(styles.addPaint, styles.imageReplaceButton)}
           onClick={onReplace}
           type="button"
         >
@@ -388,7 +404,11 @@ export function ImageSection({
             <span>
               {editAction === "prompt-edit"
                 ? t("properties.imageEditingWithPrompt")
-                : t("properties.imageRemovingBackground")}
+                : editAction === "erase-object"
+                  ? t("canvas.imageAreaErasing")
+                  : editAction === "isolate-object"
+                    ? t("canvas.imageAreaIsolating")
+                    : t("properties.imageRemovingBackground")}
             </span>
             <Button
               disabled={editStatus === "cancelling"}

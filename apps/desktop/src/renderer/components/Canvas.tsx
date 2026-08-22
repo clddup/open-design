@@ -25,7 +25,9 @@ import {
   resolveBooleanEditScope,
   resolveVectorEditCollectionScope,
   screenToDocument,
+  isEffectivelyLocked,
 } from "@opendesign/editor-runtime";
+import type { ImageAreaSelection } from "@opendesign/image-service";
 import { navigateComponentSelection } from "@opendesign/component-service";
 import { Icon } from "@opendesign/ui";
 import {
@@ -80,6 +82,10 @@ import { isTool } from "../state/editor";
 import { DESIGN_ASSET_DRAG_MIME } from "../design-assets";
 import { composeTextRunLayoutProviders } from "../text-run-provider-fallback";
 import styles from "./Canvas.module.scss";
+import {
+  ImageAreaSelectionOverlay,
+  type ImageAreaSelectionAction,
+} from "./ImageAreaSelectionOverlay";
 
 export function Canvas({
   activeAgentRunId,
@@ -92,6 +98,9 @@ export function Canvas({
   snapshot,
   onTransactionError,
   onAssetDrop,
+  imageEditActivity,
+  onImageAreaEdit,
+  onImageAreaSelectionControllerChange,
   onImageCropControllerChange,
   onTextLayoutProviderReady,
   onTextEditingStyleControllerChange,
@@ -114,6 +123,21 @@ export function Canvas({
     assetId: string,
     documentPoint: { x: number; y: number },
   ) => { ok: boolean };
+  imageEditActivity?: {
+    action:
+      "remove-background" | "prompt-edit" | "erase-object" | "isolate-object";
+    nodeName: string;
+    status: "running" | "cancelling";
+    onCancel: () => void;
+  };
+  onImageAreaEdit: (
+    nodeId: string,
+    action: ImageAreaSelectionAction,
+    selection: ImageAreaSelection,
+  ) => void;
+  onImageAreaSelectionControllerChange: (
+    controller: ((nodeId: string) => boolean) | null,
+  ) => void;
   onImageCropControllerChange: (
     controller: ((nodeId: string) => boolean) | null,
   ) => void;
@@ -146,6 +170,12 @@ export function Canvas({
   const [assetDropActive, setAssetDropActive] = useState(false);
   const [imageCropState, setImageCropState] =
     useState<LeaferImageCropState | null>(null);
+  const [imageAreaSelection, setImageAreaSelection] = useState<{
+    assetId: string;
+    nodeId: string;
+    pageId: string;
+    revision: number;
+  } | null>(null);
   const reducedMotion = useReducedMotion();
   const [fidelityWarnings, setFidelityWarnings] = useState<
     readonly LeaferFidelityWarning[]
@@ -231,6 +261,65 @@ export function Canvas({
       adapter.current?.finishGenerationPresentation();
     }
   }, [activeAgentRunId]);
+
+  const startImageAreaSelection = useCallback(
+    (nodeId: string) => {
+      const current = runtime.getSnapshot();
+      const node = current.document.nodesById[nodeId];
+      const asset =
+        node?.kind === "image"
+          ? current.document.assetsById[node.properties.assetId]
+          : undefined;
+      if (
+        imageEditActivity !== undefined ||
+        tool !== "select" ||
+        imageCropState !== null ||
+        vectorEditStateRef.current !== null ||
+        current.state.selection.nodeIds.length !== 1 ||
+        current.state.selection.nodeIds[0] !== nodeId ||
+        node?.kind !== "image" ||
+        isEffectivelyLocked(current.document, nodeId) ||
+        !asset?.size ||
+        asset.kind !== "image" ||
+        asset.source.type !== "data" ||
+        (asset.mimeType !== "image/png" &&
+          asset.mimeType !== "image/jpeg" &&
+          asset.mimeType !== "image/webp")
+      ) {
+        return false;
+      }
+      setImageAreaSelection({
+        assetId: node.properties.assetId,
+        nodeId,
+        pageId: activePageId,
+        revision: current.document.revision,
+      });
+      return true;
+    },
+    [activePageId, imageCropState, imageEditActivity, runtime, tool],
+  );
+
+  useEffect(() => {
+    onImageAreaSelectionControllerChange(startImageAreaSelection);
+    return () => onImageAreaSelectionControllerChange(null);
+  }, [onImageAreaSelectionControllerChange, startImageAreaSelection]);
+
+  useEffect(() => {
+    if (!imageAreaSelection) return;
+    const current = snapshot;
+    const node = current.document.nodesById[imageAreaSelection.nodeId];
+    if (
+      activePageId !== imageAreaSelection.pageId ||
+      current.document.revision !== imageAreaSelection.revision ||
+      tool !== "select" ||
+      current.state.selection.nodeIds.length !== 1 ||
+      current.state.selection.nodeIds[0] !== imageAreaSelection.nodeId ||
+      node?.kind !== "image" ||
+      node.properties.assetId !== imageAreaSelection.assetId
+    ) {
+      setImageAreaSelection(null);
+    }
+  }, [activePageId, imageAreaSelection, snapshot, tool]);
 
   const enterVectorEdit = useCallback(
     (nodeIds: readonly string[]) => {
@@ -1167,6 +1256,26 @@ export function Canvas({
           {t("canvas.dropImageAsset")}
         </div>
       )}
+      {imageAreaSelection &&
+        (() => {
+          const node = snapshot.document.nodesById[imageAreaSelection.nodeId];
+          const asset =
+            snapshot.document.assetsById[imageAreaSelection.assetId];
+          if (node?.kind !== "image" || !asset?.size) return null;
+          return (
+            <ImageAreaSelectionOverlay
+              document={snapshot.document}
+              node={node}
+              onCancel={() => setImageAreaSelection(null)}
+              onSubmit={(action, selection) => {
+                setImageAreaSelection(null);
+                onImageAreaEdit(node.id, action, selection);
+              }}
+              sourceSize={asset.size}
+              viewport={snapshot.state.viewport}
+            />
+          );
+        })()}
       {generationActivity && (
         <span aria-live="polite" className="visually-hidden" role="status">
           {generationActivity.label}
@@ -1195,6 +1304,7 @@ export function Canvas({
       {selectionActions &&
         tool === "select" &&
         !imageCropState &&
+        !imageAreaSelection &&
         !vectorEditScope &&
         !booleanEditScope && (
           <div className={styles.selectionQuickActions}>{selectionActions}</div>
@@ -1206,12 +1316,45 @@ export function Canvas({
           <small>{renderError}</small>
         </div>
       )}
-      {(imageCropState ||
+      {(imageEditActivity ||
+        imageCropState ||
         vectorEditScope ||
         booleanEditScope ||
         activeWarning ||
         selectedRichTextWarning) && (
         <div className={styles.contextStack}>
+          {imageEditActivity && (
+            <div className={styles.editScope} role="status">
+              <span className={styles.contextMark} />
+              <span>
+                <strong>
+                  {t("canvas.imageEditRunning", {
+                    name: imageEditActivity.nodeName,
+                  })}
+                </strong>
+                <small>
+                  {t(
+                    imageEditActivity.action === "erase-object"
+                      ? "canvas.imageAreaErasing"
+                      : imageEditActivity.action === "isolate-object"
+                        ? "canvas.imageAreaIsolating"
+                        : imageEditActivity.action === "remove-background"
+                          ? "properties.imageRemovingBackground"
+                          : "properties.imageEditingWithPrompt",
+                  )}
+                </small>
+              </span>
+              <button
+                disabled={imageEditActivity.status === "cancelling"}
+                onClick={imageEditActivity.onCancel}
+                type="button"
+              >
+                {imageEditActivity.status === "cancelling"
+                  ? t("properties.imageCancellingEdit")
+                  : t("common.cancel")}
+              </button>
+            </div>
+          )}
           {imageCropState && (
             <div className={styles.editScope} role="status">
               <span className={styles.contextMark} />

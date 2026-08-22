@@ -8,7 +8,7 @@ import type {
 } from "@opendesign/design-contracts";
 import { IMAGE_FILTER_KEYS } from "@opendesign/design-contracts";
 
-export const IMAGE_SERVICE_CONTRACT_VERSION = 3 as const;
+export const IMAGE_SERVICE_CONTRACT_VERSION = 4 as const;
 
 const FILTER_EPSILON = 0.000_001;
 
@@ -137,6 +137,119 @@ export interface ResolveImagePlacementInput {
   placement: ImagePlacement;
   sourceSize: Size;
   targetSize: Size;
+}
+
+export interface ImageAreaSelection {
+  points: readonly NormalizedPoint[];
+}
+
+export interface CreateImageAreaSelectionInput {
+  placement: ImagePlacement;
+  sourceSize: Size;
+  targetPoints: readonly Point[];
+  targetSize: Size;
+}
+
+const MAX_IMAGE_AREA_SELECTION_POINTS = 512;
+const MIN_IMAGE_AREA_SELECTION_AREA = 0.000_001;
+
+/**
+ * Converts a freeform lasso from Image-node local coordinates into normalized
+ * source-image coordinates. The result remains stable across node transforms,
+ * crop, rotation, and flips, so Main can rasterize an exact-size provider mask
+ * without receiving viewport or engine state.
+ */
+export function createImageAreaSelection({
+  placement,
+  sourceSize,
+  targetPoints,
+  targetSize,
+}: CreateImageAreaSelectionInput): ImageAreaSelection {
+  assertPositiveSize(sourceSize, "sourceSize");
+  assertPositiveSize(targetSize, "targetSize");
+  if (targetPoints.length < 3) {
+    throw new RangeError("Image area selection requires at least three points");
+  }
+  if (
+    targetPoints.some(
+      (point) => !Number.isFinite(point.x) || !Number.isFinite(point.y),
+    )
+  ) {
+    throw new RangeError("Image area selection points must be finite");
+  }
+  const sourceToTarget = imageSourceToTargetTransform({
+    placement,
+    sourceSize,
+    targetSize,
+  });
+  const targetToSource = invertAffineTransform(sourceToTarget);
+  const bounded = downsamplePolygon(
+    targetPoints,
+    MAX_IMAGE_AREA_SELECTION_POINTS,
+  )
+    .map((point) => transformAffinePoint(targetToSource, point))
+    .map((point) => ({
+      x: clamp(point.x / sourceSize.width, 0, 1),
+      y: clamp(point.y / sourceSize.height, 0, 1),
+    }));
+  const points = deduplicateAdjacentPoints(bounded);
+  if (
+    points.length < 3 ||
+    polygonArea(points) < MIN_IMAGE_AREA_SELECTION_AREA
+  ) {
+    throw new RangeError("Image area selection is too small");
+  }
+  return { points };
+}
+
+export function imageSourceToTargetTransform({
+  placement,
+  sourceSize,
+  targetSize,
+}: ResolveImagePlacementInput): Transform {
+  assertPositiveSize(sourceSize, "sourceSize");
+  assertPositiveSize(targetSize, "targetSize");
+  if (placement.mode === "stretch") {
+    return [
+      targetSize.width / sourceSize.width,
+      0,
+      0,
+      targetSize.height / sourceSize.height,
+      0,
+      0,
+    ];
+  }
+  if (placement.mode === "fit") {
+    const scale = Math.min(
+      targetSize.width / sourceSize.width,
+      targetSize.height / sourceSize.height,
+    );
+    return [
+      scale,
+      0,
+      0,
+      scale,
+      (targetSize.width - sourceSize.width * scale) / 2,
+      (targetSize.height - sourceSize.height * scale) / 2,
+    ];
+  }
+  const resolved = resolveImagePlacement({ placement, sourceSize, targetSize });
+  if (resolved.mode !== "clip") {
+    throw new TypeError(
+      "Image placement did not resolve to a source transform",
+    );
+  }
+  const radians = (resolved.rotation * Math.PI) / 180;
+  const cosine = Math.cos(radians);
+  const sine = Math.sin(radians);
+  return [
+    cosine * resolved.scale.x,
+    sine * resolved.scale.x,
+    -sine * resolved.scale.y,
+    cosine * resolved.scale.y,
+    resolved.offset.x,
+    resolved.offset.y,
+  ];
 }
 
 export function resolveImagePlacement({
@@ -409,6 +522,82 @@ function assertPositiveSize(size: Size, name: string): void {
 function normalizeRotation(value: number): number {
   const normalized = ((((value + 180) % 360) + 360) % 360) - 180;
   return Object.is(normalized, -0) ? 0 : normalized;
+}
+
+function invertAffineTransform(transform: Transform): Transform {
+  const [a, b, c, d, e, f] = transform;
+  const determinant = a * d - b * c;
+  if (!Number.isFinite(determinant) || Math.abs(determinant) < 0.000_000_001) {
+    throw new RangeError("Image source transform is not invertible");
+  }
+  return [
+    d / determinant,
+    -b / determinant,
+    -c / determinant,
+    a / determinant,
+    (c * f - d * e) / determinant,
+    (b * e - a * f) / determinant,
+  ];
+}
+
+function transformAffinePoint(transform: Transform, point: Point): Point {
+  return {
+    x: transform[0] * point.x + transform[2] * point.y + transform[4],
+    y: transform[1] * point.x + transform[3] * point.y + transform[5],
+  };
+}
+
+function downsamplePolygon(
+  points: readonly Point[],
+  maximum: number,
+): readonly Point[] {
+  if (points.length <= maximum) return points;
+  return Array.from({ length: maximum }, (_, index) => {
+    const sourceIndex = Math.min(
+      points.length - 1,
+      Math.floor((index * points.length) / maximum),
+    );
+    return points[sourceIndex]!;
+  });
+}
+
+function deduplicateAdjacentPoints(
+  points: readonly NormalizedPoint[],
+): NormalizedPoint[] {
+  const result: NormalizedPoint[] = [];
+  for (const point of points) {
+    const previous = result.at(-1);
+    if (
+      previous &&
+      Math.abs(previous.x - point.x) < 0.000_001 &&
+      Math.abs(previous.y - point.y) < 0.000_001
+    ) {
+      continue;
+    }
+    result.push(point);
+  }
+  const first = result[0];
+  const last = result.at(-1);
+  if (
+    first &&
+    last &&
+    result.length > 3 &&
+    Math.abs(first.x - last.x) < 0.000_001 &&
+    Math.abs(first.y - last.y) < 0.000_001
+  ) {
+    result.pop();
+  }
+  return result;
+}
+
+function polygonArea(points: readonly NormalizedPoint[]): number {
+  let signed = 0;
+  for (let index = 0; index < points.length; index += 1) {
+    const current = points[index]!;
+    const next = points[(index + 1) % points.length]!;
+    signed += current.x * next.y - next.x * current.y;
+  }
+  return Math.abs(signed) / 2;
 }
 
 function clamp(value: number, minimum: number, maximum: number): number {

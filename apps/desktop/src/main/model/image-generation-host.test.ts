@@ -276,6 +276,91 @@ describe("ImageGenerationHost", () => {
     store.close();
   });
 
+  it("submits exact-size alpha masks for erase and isolate operations", async () => {
+    const store = new WorkspaceStore(":memory:");
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: [{ b64_json: opaquePngFixture().toString("base64") }],
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: [{ b64_json: alphaPngFixture().toString("base64") }],
+          }),
+          { status: 200 },
+        ),
+      );
+    const host = new ImageGenerationHost(store, cipher, fetch);
+    host.saveSettings({
+      enabled: true,
+      apiFormat: "openai-images",
+      authMode: "none",
+      baseUrl: "https://images.example/v1",
+      modelId: "gpt-image-2",
+    });
+    const source = {
+      bytes: opaquePngFixture(),
+      mimeType: "image/png" as const,
+      name: "Source.png",
+    };
+    const mask = {
+      bytes: alphaPngFixture(),
+      mimeType: "image/png" as const,
+      name: "Selection mask.png",
+    };
+
+    expect(
+      await host.eraseObject({ source, mask }, new AbortController().signal),
+    ).toMatchObject({ operation: "erase-object" });
+    expect(
+      await host.isolateObject({ source, mask }, new AbortController().signal),
+    ).toMatchObject({ operation: "isolate-object" });
+    const eraseForm = fetch.mock.calls[0]?.[1]?.body;
+    const isolateForm = fetch.mock.calls[1]?.[1]?.body;
+    if (
+      !(eraseForm instanceof FormData) ||
+      !(isolateForm instanceof FormData)
+    ) {
+      throw new Error("Expected masked FormData requests");
+    }
+    expect(eraseForm.get("mask")).toBeInstanceOf(Blob);
+    expect(eraseForm.getAll("image[]")).toHaveLength(1);
+    expect(eraseForm.get("background")).toBe("auto");
+    expect(isolateForm.get("background")).toBe("transparent");
+    store.close();
+  });
+
+  it("rejects a mask with mismatched dimensions before network I/O", async () => {
+    const store = new WorkspaceStore(":memory:");
+    const fetch = vi.fn<typeof globalThis.fetch>();
+    const host = new ImageGenerationHost(store, cipher, fetch);
+    await expect(
+      host.eraseObject(
+        {
+          source: {
+            bytes: opaquePngFixture(),
+            mimeType: "image/png",
+            name: "Source.png",
+          },
+          mask: {
+            bytes: pngFixture(6, 2, 1),
+            mimeType: "image/png",
+            name: "Mask.png",
+          },
+        },
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow("matching the source dimensions");
+    expect(fetch).not.toHaveBeenCalled();
+    store.close();
+  });
+
   it("migrates the old v2 selection and copies its credential before catalog cleanup", () => {
     const store = new WorkspaceStore(":memory:");
     store.setPreference(
@@ -414,15 +499,15 @@ function opaquePngFixture(): Buffer {
   return pngFixture(2);
 }
 
-function pngFixture(colorType: number): Buffer {
+function pngFixture(colorType: number, width = 1, height = 1): Buffer {
   const signature = Buffer.from([
     0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
   ]);
   const ihdr = Buffer.alloc(25);
   ihdr.writeUInt32BE(13, 0);
   ihdr.write("IHDR", 4, "ascii");
-  ihdr.writeUInt32BE(1, 8);
-  ihdr.writeUInt32BE(1, 12);
+  ihdr.writeUInt32BE(width, 8);
+  ihdr.writeUInt32BE(height, 12);
   ihdr[16] = 8;
   ihdr[17] = colorType;
   const iend = Buffer.alloc(12);

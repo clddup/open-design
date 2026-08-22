@@ -26,6 +26,7 @@ const legacyCatalogKey = "model.provider.catalog.v2";
 const IMAGE_GENERATION_TIMEOUT_MS = 10 * 60_000;
 const MAX_IMAGE_GENERATION_RESPONSE_BYTES = 24 * 1024 * 1024;
 const MAX_GENERATED_IMAGE_BYTES = 16 * 1024 * 1024;
+const MAX_IMAGE_EDIT_INPUT_BYTES = 50 * 1024 * 1024;
 
 const defaultSettings: GlobalImageGenerationSettings = {
   version: GLOBAL_IMAGE_GENERATION_SETTINGS_VERSION,
@@ -62,13 +63,25 @@ export type PromptImageEditInput = {
   references?: readonly ImageEditSource[];
 };
 
+export type MaskedImageEditInput = {
+  source: ImageEditSource & { mimeType: "image/png" };
+  mask: ImageEditSource & { mimeType: "image/png" };
+};
+
+export const ERASE_OBJECT_PROMPT =
+  "Remove only the object or area inside the transparent mask and reconstruct the background naturally. Preserve the composition, geometry, lighting, texture, and every unmasked part of the source image. Do not crop, resize, restyle, or add unrelated content.";
+
+export const ISOLATE_OBJECT_PROMPT =
+  "Preserve the complete object indicated by the transparent mask, including fine edge detail, and isolate it on a fully transparent background. Remove everything else. Do not crop, resize, restyle, relight, or invent missing object content.";
+
 export type EditedImage = {
   bytes: Uint8Array;
   apiFormat: GlobalImageGenerationSettings["apiFormat"];
   modelId: string;
   providerRequestId?: string;
   outputFormat: "png";
-  operation: "remove-background" | "prompt-edit";
+  operation:
+    "remove-background" | "prompt-edit" | "erase-object" | "isolate-object";
 };
 
 export class ImageGenerationHost {
@@ -258,11 +271,70 @@ export class ImageGenerationHost {
     );
   }
 
+  async eraseObject(
+    input: MaskedImageEditInput,
+    signal: AbortSignal,
+  ): Promise<EditedImage> {
+    return this.editMaskedImage(
+      input,
+      "erase-object",
+      ERASE_OBJECT_PROMPT,
+      "auto",
+      signal,
+    );
+  }
+
+  async isolateObject(
+    input: MaskedImageEditInput,
+    signal: AbortSignal,
+  ): Promise<EditedImage> {
+    return this.editMaskedImage(
+      input,
+      "isolate-object",
+      ISOLATE_OBJECT_PROMPT,
+      "transparent",
+      signal,
+    );
+  }
+
+  private async editMaskedImage(
+    input: MaskedImageEditInput,
+    operation: "erase-object" | "isolate-object",
+    prompt: string,
+    background: "auto" | "transparent",
+    signal: AbortSignal,
+  ): Promise<EditedImage> {
+    assertImageEditSource(input.source);
+    assertImageEditSource(input.mask);
+    const source = pngMetadata(input.source.bytes);
+    const mask = pngMetadata(input.mask.bytes);
+    if (
+      source.width !== mask.width ||
+      source.height !== mask.height ||
+      !mask.alphaCapable
+    ) {
+      throw new TypeError(
+        "Image edit mask must be an alpha PNG matching the source dimensions",
+      );
+    }
+    return this.editImage(
+      {
+        operation,
+        prompt,
+        sources: [input.source],
+        mask: input.mask,
+        background,
+      },
+      signal,
+    );
+  }
+
   private async editImage(
     input: {
       operation: EditedImage["operation"];
       prompt: string;
       sources: readonly ImageEditSource[];
+      mask?: ImageEditSource & { mimeType: "image/png" };
       background: "auto" | "transparent";
     },
     signal: AbortSignal,
@@ -284,6 +356,15 @@ export class ImageGenerationHost {
         "image[]",
         new Blob([uploadBytes.buffer], { type: source.mimeType }),
         safeUploadName(source.name, source.mimeType),
+      );
+    }
+    if (input.mask) {
+      const uploadBytes = new Uint8Array(input.mask.bytes.byteLength);
+      uploadBytes.set(input.mask.bytes);
+      form.set(
+        "mask",
+        new Blob([uploadBytes.buffer], { type: "image/png" }),
+        safeUploadName(input.mask.name, "image/png"),
       );
     }
     form.set("n", "1");
@@ -654,14 +735,14 @@ function safeUploadName(
 function assertImageEditSource(source: ImageEditSource): void {
   if (
     source.bytes.byteLength === 0 ||
-    source.bytes.byteLength > 16 * 1024 * 1024
+    source.bytes.byteLength > MAX_IMAGE_EDIT_INPUT_BYTES
   ) {
-    throw new RangeError("Image edit inputs must be between 1 byte and 16 MB");
+    throw new RangeError("Image edit inputs must be between 1 byte and 50 MB");
   }
 }
 
 function assertPngWithTransparency(value: Uint8Array): void {
-  if (!pngHasAlphaChannel(value)) {
+  if (!pngMetadata(value).alphaCapable) {
     throw new TypeError(
       "Image-editing provider returned a PNG without transparency",
     );
@@ -669,10 +750,14 @@ function assertPngWithTransparency(value: Uint8Array): void {
 }
 
 function assertPng(value: Uint8Array): void {
-  pngHasAlphaChannel(value);
+  pngMetadata(value);
 }
 
-function pngHasAlphaChannel(value: Uint8Array): boolean {
+function pngMetadata(value: Uint8Array): {
+  alphaCapable: boolean;
+  height: number;
+  width: number;
+} {
   const bytes = Buffer.from(value);
   const signature = Buffer.from([
     0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
@@ -684,6 +769,8 @@ function pngHasAlphaChannel(value: Uint8Array): boolean {
   let alphaCapable = false;
   let sawHeader = false;
   let sawEnd = false;
+  let width = 0;
+  let height = 0;
   while (offset + 12 <= bytes.byteLength) {
     const length = bytes.readUInt32BE(offset);
     const dataOffset = offset + 8;
@@ -697,6 +784,11 @@ function pngHasAlphaChannel(value: Uint8Array): boolean {
         throw new TypeError("Image-editing provider returned a malformed PNG");
       }
       sawHeader = true;
+      width = bytes.readUInt32BE(dataOffset);
+      height = bytes.readUInt32BE(dataOffset + 4);
+      if (width <= 0 || height <= 0) {
+        throw new TypeError("Image-editing provider returned a malformed PNG");
+      }
       const colorType = bytes[dataOffset + 9];
       alphaCapable = colorType === 4 || colorType === 6;
     } else if (type === "tRNS") {
@@ -710,7 +802,7 @@ function pngHasAlphaChannel(value: Uint8Array): boolean {
   if (!sawHeader || !sawEnd) {
     throw new TypeError("Image-editing provider returned a malformed PNG");
   }
-  return alphaCapable;
+  return { alphaCapable, width, height };
 }
 
 function record(value: unknown): value is Record<string, unknown> {
