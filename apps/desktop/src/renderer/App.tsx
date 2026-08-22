@@ -13,22 +13,15 @@ import {
   getSelectionBounds,
   screenToDocument,
 } from "@opendesign/editor-runtime";
-import type { ProjectManifest } from "@opendesign/workspace-contracts";
 import { MessageProvider, ResizeHandle, useMessage } from "@opendesign/ui";
 import {
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
   type CSSProperties,
 } from "react";
-import type {
-  DiagnosticEvent,
-  ProjectDesignFile,
-  RecentProject,
-  ThemePreference,
-} from "../shared/desktop-api";
+import type { DiagnosticEvent, ThemePreference } from "../shared/desktop-api";
 import { AgentTimeline } from "./components/AgentTimeline";
 import { ConversationDeleteDialog } from "./components/ConversationDeleteDialog";
 import { ConversationHome } from "./components/ConversationHome";
@@ -49,21 +42,13 @@ import { Titlebar } from "./components/Titlebar";
 import { Toolbar } from "./components/Toolbar";
 import { UtilityDock } from "./components/UtilityDock";
 import { WorkspaceHome } from "./components/WorkspaceHome";
-import {
-  LOCAL_PROJECT_ID,
-  useEditorRuntime,
-  useEditorSnapshot,
-} from "./editor-runtime";
+import { useEditorRuntime, useEditorSnapshot } from "./editor-runtime";
 import { useI18n } from "./i18n";
 import type { LayerHoverTarget } from "./layer-hover-target";
 import {
   canAddSelectionToVariantSet,
   createComponentInspectorContext,
 } from "./component-inspector-context";
-import {
-  ProjectAutosaveCoordinator,
-  type ProjectAutosaveTarget,
-} from "./project-autosave";
 import { isTool, type Tool } from "./state/editor";
 import { useDesignAssetActions } from "./use-design-asset-actions";
 import { useComponentActions } from "./use-component-actions";
@@ -74,11 +59,12 @@ import { useWorkbenchLayoutController } from "./features/workbench/use-workbench
 import { useAgentConversationRuntime } from "./features/agent-conversation/use-agent-conversation-runtime";
 import { useConversationLifecycleState } from "./features/agent-conversation/use-conversation-lifecycle-state";
 import { useConversationNavigationController } from "./features/agent-conversation/use-conversation-navigation-controller";
+import { useProjectNavigationController } from "./features/project/use-project-navigation-controller";
+import { useProjectWorkspaceState } from "./features/project/use-project-workspace-state";
 import { layoutInspectorMode } from "./features/editor/auto-layout-shortcut";
 import { useDocumentCommandControllers } from "./use-document-command-controllers";
 import { useLayerCommandController } from "./features/editor/use-layer-command-controller";
 import { useLayerRenameWorkflow } from "./features/editor/use-layer-rename-workflow";
-import { reportRendererError } from "./diagnostics";
 import { useRendererDesignToolHost } from "./use-renderer-design-tool-host";
 import { useProfessionalFixtureSmoke } from "./use-professional-fixture-smoke";
 import { useFontInspectorContext } from "./use-font-inspector-context";
@@ -121,16 +107,23 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
   const [theme, setTheme] = useState<ThemePreference>("dark");
   const [platform, setPlatform] = useState<NodeJS.Platform>("darwin");
   const [view, setView] = useState<AppView>(initialView ?? "workspace");
-  const [recentProjects, setRecentProjects] = useState<RecentProject[]>([]);
-  const [activeProject, setActiveProject] = useState<ProjectManifest | null>(
-    null,
-  );
-  const [projectsById, setProjectsById] = useState<
-    Readonly<Record<string, ProjectManifest>>
-  >({});
-  const [workspaceBusy, setWorkspaceBusy] = useState(false);
-  const [workspaceError, setWorkspaceError] = useState<string | null>(null);
-  const [fileName, setFileName] = useState(() => t("file.untitled"));
+  const [editorError, setEditorError] = useState<string | null>(null);
+  const {
+    activeProject,
+    applySavedProjectFile,
+    fileName,
+    projectAutosave,
+    projectsById,
+    recentProjects,
+    setActiveProject,
+    setFileName,
+    setProjectsById,
+    setRecentProjects,
+    setWorkspaceBusy,
+    setWorkspaceError,
+    workspaceBusy,
+    workspaceError,
+  } = useProjectWorkspaceState({ setEditorError, t, workspace });
   const {
     leftPanelVisible,
     leftWidth,
@@ -164,7 +157,6 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
     setConversations,
     setPendingConversationDeletionId,
   } = useConversationLifecycleState({ setWorkspaceError, t });
-  const [editorError, setEditorError] = useState<string | null>(null);
   const [layerHoverTarget, setLayerHoverTarget] =
     useState<LayerHoverTarget | null>(null);
   const [textRangeSelection, setTextRangeSelection] =
@@ -187,29 +179,6 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
   );
   const settingsReturnView = useRef<Exclude<AppView, "settings">>("workspace");
   const transactionCounter = useRef(0);
-  const autosaveCallbacks = useRef<{
-    onError: (target: ProjectAutosaveTarget, error: unknown) => void;
-    onSaved: (target: ProjectAutosaveTarget, saved: ProjectDesignFile) => void;
-  }>({ onError: () => undefined, onSaved: () => undefined });
-  const projectAutosave = useMemo(
-    () =>
-      new ProjectAutosaveCoordinator({
-        save: async (projectId, designFileId, document) => {
-          const desktop = window.desktop;
-          if (!desktop) throw new Error("Desktop autosave is unavailable");
-          return await desktop.saveProjectDesignFile({
-            projectId,
-            designFileId,
-            document,
-          });
-        },
-        onError: (target, error) =>
-          autosaveCallbacks.current.onError(target, error),
-        onSaved: (target, saved) =>
-          autosaveCallbacks.current.onSaved(target, saved),
-      }),
-    [],
-  );
   const handleTextLayoutProviderReady = useCallback(
     (provider: TextLayoutProvider) => {
       workspace.setTextLayoutProvider(provider);
@@ -260,51 +229,6 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
     fontBinaryRuntime.provider,
   );
   const { document: designDocument, state } = snapshot;
-  autosaveCallbacks.current = {
-    onError: (target, error) => {
-      setEditorError(
-        reportRendererError(
-          "design_autosave_failed",
-          error,
-          t("error.autosaveDesignFile"),
-          {
-            projectId: target.projectId,
-            designFileId: target.designFileId,
-          },
-        ),
-      );
-    },
-    onSaved: (target, saved) => {
-      const updateManifest = (project: ProjectManifest): ProjectManifest => ({
-        ...project,
-        updatedAt: saved.descriptor.updatedAt,
-        designFiles: project.designFiles.map((file) =>
-          file.designFileId === saved.descriptor.designFileId
-            ? saved.descriptor
-            : file,
-        ),
-      });
-      setProjectsById((projects) => {
-        const project = projects[target.projectId];
-        return project
-          ? { ...projects, [target.projectId]: updateManifest(project) }
-          : projects;
-      });
-      setActiveProject((project) =>
-        project?.projectId === target.projectId
-          ? updateManifest(project)
-          : project,
-      );
-      workspace.renameFile(
-        target.projectId,
-        target.designFileId,
-        saved.descriptor.name,
-      );
-      if (designDocument.documentId === target.documentId) {
-        setFileName(saved.descriptor.name);
-      }
-    },
-  };
   const tool: Tool = isTool(state.tool) ? state.tool : "select";
   const selectedNode =
     state.selection.nodeIds.length === 1
@@ -374,19 +298,7 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
     void window.desktop
       ?.getPlatformInfo()
       .then((info) => setPlatform(info.platform));
-    void window.desktop
-      ?.listRecentProjects()
-      .then(setRecentProjects)
-      .catch((error: unknown) => {
-        setWorkspaceError(
-          reportRendererError(
-            "recent_projects_load_failed",
-            error,
-            t("error.loadRecentProjects"),
-          ),
-        );
-      });
-  }, [t]);
+  }, []);
 
   useEffect(() => {
     const desktop = window.desktop;
@@ -419,33 +331,6 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
       unsubscribe();
     };
   }, []);
-
-  useEffect(() => {
-    return () => projectAutosave.dispose();
-  }, [projectAutosave]);
-
-  useEffect(() => {
-    let closeAfterFlush = false;
-    let flushing = false;
-    const beforeUnload = (event: BeforeUnloadEvent) => {
-      if (closeAfterFlush || !projectAutosave.hasPendingWork()) return;
-      event.preventDefault();
-      event.returnValue = false;
-      if (flushing) return;
-      flushing = true;
-      void projectAutosave.flushAll().then(
-        () => {
-          closeAfterFlush = true;
-          window.close();
-        },
-        () => {
-          flushing = false;
-        },
-      );
-    };
-    window.addEventListener("beforeunload", beforeUnload);
-    return () => window.removeEventListener("beforeunload", beforeUnload);
-  }, [projectAutosave]);
 
   useEffect(() => {
     return window.desktop?.onNativeThemeChange((isDark) => {
@@ -929,231 +814,46 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
 
   useEffect(() => window.desktop?.onOpenSettings(openSettings), [openSettings]);
 
-  const activateDesignFile = useCallback(
-    (projectId: string, designFileId: string) => {
-      activateFile(projectId, designFileId);
-      setActiveProject(projectsById[projectId] ?? null);
-    },
-    [activateFile, projectsById],
-  );
-
-  const refreshRecentProjects = useCallback(async () => {
-    const projects = await window.desktop?.listRecentProjects();
-    if (projects) setRecentProjects(projects);
-  }, []);
-
-  const showProject = useCallback(
-    (manifest: ProjectManifest, preferredConversationId?: string) => {
-      setProjectsById((projects) => ({
-        ...projects,
-        [manifest.projectId]: manifest,
-      }));
-      setActiveProject(manifest);
-      setWorkspaceError(null);
-      setView("project");
-      const conversationId =
-        preferredConversationId ??
-        conversations.find(
-          (conversation) =>
-            conversation.lifecycle === "active" &&
-            conversation.filedProjectId === manifest.projectId,
-        )?.conversationId;
-      if (conversationId) {
-        selectConversation(conversationId);
-        void requestConversationHistory(conversationId);
-      }
-    },
-    [conversations, requestConversationHistory, selectConversation],
-  );
-
-  const createProject = useCallback(
-    async (name: string) => {
-      if (!window.desktop) return false;
-      setWorkspaceBusy(true);
-      setWorkspaceError(null);
-      try {
-        const manifest = await window.desktop.createProject({
-          projectId: createProjectId(),
-          name: name.trim(),
-        });
-        if (!manifest) return false;
-        showProject(manifest);
-        await refreshRecentProjects();
-        return true;
-      } catch (error) {
-        setWorkspaceError(
-          reportRendererError(
-            "project_create_failed",
-            error,
-            t("error.createProject"),
-          ),
-        );
-        return false;
-      } finally {
-        setWorkspaceBusy(false);
-      }
-    },
-    [refreshRecentProjects, showProject, t],
-  );
-
-  const openProject = useCallback(async () => {
-    if (!window.desktop) return;
-    setWorkspaceBusy(true);
-    setWorkspaceError(null);
-    try {
-      const manifest = await window.desktop.openProject();
-      if (!manifest) return;
-      showProject(manifest);
-      await refreshRecentProjects();
-    } catch (error) {
-      setWorkspaceError(
-        reportRendererError(
-          "project_open_failed",
-          error,
-          t("error.openProject"),
-        ),
-      );
-    } finally {
-      setWorkspaceBusy(false);
-    }
-  }, [refreshRecentProjects, showProject, t]);
-
-  const openRecentProject = useCallback(
-    async (projectId: string) => {
-      if (!window.desktop) return;
-      setWorkspaceBusy(true);
-      setWorkspaceError(null);
-      try {
-        const manifest = await window.desktop.openRecentProject({ projectId });
-        showProject(manifest);
-        await refreshRecentProjects();
-      } catch (error) {
-        setWorkspaceError(
-          reportRendererError(
-            "recent_project_open_failed",
-            error,
-            t("error.reopenProject"),
-            { projectId },
-          ),
-        );
-      } finally {
-        setWorkspaceBusy(false);
-      }
-    },
-    [refreshRecentProjects, showProject, t],
-  );
-
-  const removeRecentProject = useCallback(
-    async (projectId: string) => {
-      if (!window.desktop) return false;
-      setWorkspaceBusy(true);
-      setWorkspaceError(null);
-      try {
-        const projects = await window.desktop.removeRecentProject({
-          projectId,
-        });
-        setRecentProjects(projects);
-        return true;
-      } catch (error) {
-        setWorkspaceError(
-          reportRendererError(
-            "recent_project_remove_failed",
-            error,
-            t("error.removeProject"),
-            { projectId },
-          ),
-        );
-        return false;
-      } finally {
-        setWorkspaceBusy(false);
-      }
-    },
-    [t],
-  );
-
-  const revealRecentProject = useCallback(
-    (projectId: string) => {
-      setWorkspaceError(null);
-      void window.desktop
-        ?.revealRecentProject({ projectId })
-        .catch((error: unknown) => {
-          setWorkspaceError(
-            reportRendererError(
-              "recent_project_reveal_failed",
-              error,
-              t("error.revealProject"),
-              { projectId },
-            ),
-          );
-        });
-    },
-    [t],
-  );
-
-  const openProjectTarget = useCallback(
-    async (target: {
-      projectId: string;
-      designFileId: string;
-      pageId?: string;
-    }) => {
-      const desktop = window.desktop;
-      if (!desktop) throw new Error("Desktop Project services are unavailable");
-      const manifest =
-        projectsById[target.projectId] ??
-        (activeProject?.projectId === target.projectId
-          ? activeProject
-          : await desktop.openRecentProject({ projectId: target.projectId }));
-      const file = await desktop.readProjectDesignFile({
-        projectId: target.projectId,
-        designFileId: target.designFileId,
-      });
-      const identity = {
-        projectId: target.projectId,
-        designFileId: file.descriptor.designFileId,
-        name: file.descriptor.name,
-      };
-      let openedRuntime;
-      if (
-        workspaceSnapshot.openFileKeys.length === 1 &&
-        workspaceSnapshot.activeProjectId === LOCAL_PROJECT_ID &&
-        !runtime.getSnapshot().state.dirty
-      ) {
-        openedRuntime = workspace.replaceActiveFile(identity, file.document);
-      } else {
-        openedRuntime = openFile(identity, file.document);
-      }
-      projectAutosave.track({
-        projectId: identity.projectId,
-        designFileId: identity.designFileId,
-        documentId: file.document.documentId,
-        runtime: openedRuntime,
-      });
-      setProjectsById((projects) => ({
-        ...projects,
-        [manifest.projectId]: manifest,
-      }));
-      setActiveProject(manifest);
-      setFileName(file.descriptor.name);
-      if (target.pageId && file.document.pagesById[target.pageId]) {
-        activatePage(target.pageId);
-      }
-      showUtilityTab("agent");
-      setConversationOpenIssue(null);
-      setView("editor");
-    },
-    [
-      activatePage,
-      activeProject,
-      openFile,
-      projectAutosave,
-      projectsById,
-      runtime,
-      showUtilityTab,
-      workspace,
-      workspaceSnapshot.activeProjectId,
-      workspaceSnapshot.openFileKeys.length,
-    ],
-  );
+  const {
+    activateDesignFile,
+    createProject,
+    openDocument,
+    openProject,
+    openProjectDesignFile,
+    openProjectTarget,
+    openRecentProject,
+    refreshRecentProjects,
+    removeRecentProject,
+    renameProjectDesignFile,
+    revealRecentProject,
+    saveDocument,
+  } = useProjectNavigationController({
+    activateFile,
+    activatePage,
+    activeProject,
+    applySavedProjectFile,
+    conversations,
+    fileName,
+    openFile,
+    projectAutosave,
+    projectsById,
+    replaceDocument,
+    requestConversationHistory,
+    runtime,
+    selectConversation,
+    setActiveProject,
+    setEditorError,
+    setFileName,
+    setProjectsById,
+    setRecentProjects,
+    setWorkspaceBusy,
+    setWorkspaceError,
+    showUtilityTab,
+    showView: setView,
+    t,
+    workspace,
+    workspaceSnapshot,
+  });
 
   const {
     createConversation,
@@ -1180,182 +880,6 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
     t,
     view,
   });
-
-  const renameProjectDesignFile = useCallback(
-    async (projectId: string, designFileId: string, nextName: string) => {
-      const desktop = window.desktop;
-      const targetProject = projectsById[projectId];
-      const targetFile = Object.values(workspaceSnapshot.files).find(
-        (file) =>
-          file.projectId === projectId && file.designFileId === designFileId,
-      );
-      if (!desktop || !targetProject || !targetFile) return false;
-      const name = nextName.trim();
-      if (name.length === 0 || name.length > 256) return false;
-      setEditorError(null);
-      try {
-        const descriptor = await desktop.renameProjectDesignFile({
-          projectId,
-          designFileId,
-          name,
-        });
-        if (
-          descriptor.designFileId !== designFileId ||
-          descriptor.documentId !== targetFile.documentId ||
-          descriptor.name !== name
-        ) {
-          throw new Error(
-            "Design file rename response identity does not match",
-          );
-        }
-        const updateManifest = (project: ProjectManifest): ProjectManifest => ({
-          ...project,
-          updatedAt: descriptor.updatedAt,
-          designFiles: project.designFiles.map((file) =>
-            file.designFileId === designFileId ? descriptor : file,
-          ),
-        });
-        setProjectsById((projects) => {
-          const project = projects[projectId];
-          return project
-            ? { ...projects, [projectId]: updateManifest(project) }
-            : projects;
-        });
-        setActiveProject((project) =>
-          project?.projectId === projectId ? updateManifest(project) : project,
-        );
-        workspace.renameFile(projectId, designFileId, descriptor.name);
-        if (
-          workspaceSnapshot.activeProjectId === projectId &&
-          workspaceSnapshot.activeDesignFileId === designFileId
-        ) {
-          setFileName(descriptor.name);
-        }
-        return true;
-      } catch (error) {
-        setEditorError(
-          reportRendererError(
-            "design_file_rename_failed",
-            error,
-            t("error.renameDesignFile"),
-            { projectId, designFileId },
-          ),
-        );
-        return false;
-      }
-    },
-    [projectsById, t, workspace, workspaceSnapshot],
-  );
-
-  const openProjectDesignFile = useCallback(
-    async (designFileId: string) => {
-      if (!activeProject) return;
-      setWorkspaceBusy(true);
-      setWorkspaceError(null);
-      try {
-        await openProjectTarget({
-          projectId: activeProject.projectId,
-          designFileId,
-        });
-      } catch (error) {
-        setWorkspaceError(
-          reportRendererError(
-            "design_file_open_failed",
-            error,
-            t("error.openDesignFile"),
-            { projectId: activeProject.projectId, designFileId },
-          ),
-        );
-      } finally {
-        setWorkspaceBusy(false);
-      }
-    },
-    [activeProject, openProjectTarget, t],
-  );
-
-  const openDocument = async () => {
-    setEditorError(null);
-    try {
-      const file = await window.desktop?.openDesignFile();
-      if (!file) return;
-      const value: unknown = JSON.parse(file.contents);
-      replaceDocument(value, file.name);
-      setActiveProject(null);
-      setFileName(file.name);
-      setView("editor");
-    } catch (error) {
-      setEditorError(
-        reportRendererError(
-          "design_document_open_failed",
-          error,
-          t("error.openDesignDocument"),
-        ),
-      );
-    }
-  };
-
-  const saveDocument = async (saveAs: boolean) => {
-    setEditorError(null);
-    try {
-      const current = runtime.getSnapshot();
-      const targetProject =
-        projectsById[workspaceSnapshot.activeProjectId] ?? null;
-      if (targetProject) {
-        const saved = await window.desktop?.saveProjectDesignFile({
-          projectId: workspaceSnapshot.activeProjectId,
-          designFileId: workspaceSnapshot.activeDesignFileId,
-          document: current.document,
-        });
-        if (!saved) return;
-        const updatedProject = {
-          ...targetProject,
-          updatedAt: saved.descriptor.updatedAt,
-          designFiles: targetProject.designFiles.map((file) =>
-            file.designFileId === saved.descriptor.designFileId
-              ? saved.descriptor
-              : file,
-          ),
-        };
-        setProjectsById((projects) => ({
-          ...projects,
-          [updatedProject.projectId]: updatedProject,
-        }));
-        setActiveProject((project) =>
-          project?.projectId === updatedProject.projectId
-            ? updatedProject
-            : project,
-        );
-        runtime.checkpoint(t("history.saved", { name: saved.descriptor.name }));
-        return;
-      }
-
-      const result = await window.desktop?.saveDesignFile({
-        suggestedName: fileName,
-        contents: JSON.stringify(current.document, null, 2),
-        ...(saveAs ? { saveAs: true } : {}),
-      });
-      if (!result) return;
-      setFileName(result.name);
-      workspace.renameFile(
-        workspaceSnapshot.activeProjectId,
-        workspaceSnapshot.activeDesignFileId,
-        result.name,
-      );
-      runtime.checkpoint(t("history.saved", { name: result.name }));
-    } catch (error) {
-      setEditorError(
-        reportRendererError(
-          "design_document_save_failed",
-          error,
-          t("error.saveDesignDocument"),
-          {
-            projectId: workspaceSnapshot.activeProjectId,
-            designFileId: workspaceSnapshot.activeDesignFileId,
-          },
-        ),
-      );
-    }
-  };
 
   const dismissDiagnostic = useCallback((eventId: string) => {
     setDiagnosticEvents((current) =>
@@ -2006,8 +1530,4 @@ function isEditableTarget(target: EventTarget | null) {
           '[role="combobox"], [role="listbox"], [role="option"]',
         ) !== null))
   );
-}
-
-function createProjectId() {
-  return `project_${crypto.randomUUID().replaceAll("-", "")}`;
 }

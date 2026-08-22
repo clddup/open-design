@@ -43,12 +43,13 @@ controller 可以组合纯 helper 和子 controller，但必须拥有完整业�
 
 本决策首个切片抽出 Image workflow 与 Workbench layout controller，并建立分语言 catalog 和 Image feature 文案。第二个切片将 Agent Conversation runtime 抽为独立 controller：该 controller 独占 history request 去重与 debounce、live/durable 单调合并、Run→Design File retention、Agent event 订阅、乐观用户消息、提交/停止/审批和 Global Task 刷新；无副作用的消息追加、历史裁剪、Conversation activity 排序与 selection scope 进入同 feature 的纯 state 模块。第三个切片进一步建立唯一 Conversation lifecycle state，并将初始加载、活动身份、删除确认状态、create/open/delete、只读 target fallback 和 Global Task 导航迁入 feature controller。App 只提供 Project target 打开能力、活动 Project 和 Workspace shell view 出口，不再直接拥有 Conversation 异步生命周期。
 
+第四个切片将 Project/Design File workspace state 与 navigation 迁入 Project feature：该 feature 现在独占最近项目加载、Project/File 活动身份、Project CRUD、复合 `projectId + designFileId` 打开、文件重命名、显式保存、autosave coordinator、manifest 归并与关闭前 flush。手动保存和 autosave 复用同一可信保存结果归并，Main 返回的 File/Document/revision 身份不匹配时保持 dirty 并失败关闭；切换文件不缓存 `DesignDocument`，仍在操作时读取唯一 `WorkspaceRuntime` / `EditorRuntime` snapshot。App 只负责把 Project target 打开能力接给 Workspace 级 Conversation controller。
+
 后续按以下顺序继续：
 
-1. Project target 恢复与 Project/Design File navigation、autosave；
-2. Canvas viewport/session/shortcut；
-3. Diagnostics；
-4. 将剩余 core catalog 按上述 feature 所有权迁移。
+1. Canvas viewport/session/shortcut；
+2. Diagnostics；
+3. 将剩余 core catalog 按上述 feature 所有权迁移。
 
 每个切片保持产品行为，补定向 controller 测试和少量 App 接线测试。需要改变产品契约时单独记录 ADR，不借架构迁移静默改变行为。
 
@@ -66,3 +67,4 @@ controller 可以组合纯 helper 和子 controller，但必须拥有完整业�
 - Image workflow 定向测试与 App/PropertiesPanel relight 集成测试。
 - Workbench 面板持久化、窄窗口与快捷键集成测试。
 - i18n 中英文 key 完整性、插值和现有 Timeline/Main 翻译测试。
+- Project controller 定向测试覆盖复合 Project/File 身份、clean local placeholder 替换门禁、跨 Project 保存、重命名响应身份校验，以及 autosave 成功/失败归并；完整 App 测试继续覆盖 Workspace/Project/Editor 视图接线和关闭前 flush。
