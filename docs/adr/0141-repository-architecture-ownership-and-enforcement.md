@@ -91,6 +91,8 @@ MCP 只能依赖 Main 提供的稳定 resource handle、revision、`DesignReadPo
 
 当前步骤 1—5 已落地：`AgentIpcRouter`、原子 `AppNavigator`、活动 Project/Design File 身份单 owner 与完整 `EditorWorkbenchFeature` 均已有定向测试。Workbench controller、selection projection、Image edit、人工 Import/Export 和画布 session 只随 Editor destination 建立；Settings 与 Workspace 会释放这些订阅，返回 Editor 复用同一权威 `EditorRuntime`。`AgentSupervisor` 持有单一 utility-process generation、ready/handshake watchdog、协议失败、异常退出和有界停止；`AgentRunCoordinator` 持有 Run→Conversation、preflight AbortController、continuation、Reference 与 Renderer/performance lease。进程级错误会中断 Global Task 并释放全部 Run lease，shutdown 按 `quiesce/cancelAll → Supervisor stop → detach/dispose` 执行。`DesktopApplication.start()` 使用显式 commit 和逆序 disposer 栈；`IpcRegistrationScope` 记录本次成功注册的 channel；Renderer load 失败会销毁未发布窗口，startup 错误在 rollback 后非零退出。Agent 握手不阻塞窗口首屏。步骤 6—8 和全仓治理仍保持进行中。
 
+步骤 6 的基础 runtime 加固已开始但生产迁移未完成：`@opendesign/tool-runtime` 现在接受调用方 AbortSignal，并用 Promise race 保证工具忽略 signal 时硬超时仍会返回；相同 call identity 或 capability concurrency key 不能并行执行，progress、definition、request 与 JSON output 均受边界校验。当前 Main design-tool policy gateway 仍未注册到该 runtime，desktop shared wire contract 也尚未迁入 contracts；因此本段只证明前置契约可承载生产接入，不改变步骤 6 的未完成状态。
+
 ## 后果
 
 - `App.tsx` 和 Main `index.ts` 会继续收缩，但是否完成由状态和生命周期所有权决定，而不是目标行数。
