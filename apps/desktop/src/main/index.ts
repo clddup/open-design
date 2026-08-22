@@ -654,11 +654,11 @@ void app.whenReady().then(async () => {
       if (event.type === "run.completed") {
         clearTimeout(timeout);
         console.log(`Agent smoke passed: ${event.runId} ${event.stopReason}`);
-        agentHost.stop();
+        void agentHost.stop();
         app.exit(event.stopReason === "complete" ? 0 : 1);
       }
     });
-    agentHost.start();
+    void agentHost.start().catch(() => undefined);
     return;
   }
 
@@ -1703,7 +1703,9 @@ void app.whenReady().then(async () => {
     });
   }
   registerIpc(fontBinaryService);
-  if (!fixtureSmoke.active) agentHost.start();
+  if (!fixtureSmoke.active) {
+    void agentHost.start().catch(() => undefined);
+  }
   desktopWindowHost.create();
   app.on("activate", () => desktopWindowHost.activate());
 });

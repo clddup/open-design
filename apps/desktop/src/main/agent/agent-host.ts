@@ -1,6 +1,5 @@
-import { app, utilityProcess, type UtilityProcess } from "electron";
+import { app, utilityProcess } from "electron";
 import {
-  AGENT_PROTOCOL_VERSION,
   agentEventValidationError,
   isAgentEvent,
   type AgentEvent,
@@ -33,6 +32,7 @@ import {
   type DesignToolBridgeResponse,
 } from "../../shared/design-tool-bridge";
 import { trustedDesignWorkflowFailure } from "./design-workflow-failure";
+import { AgentSupervisor } from "./agent-supervisor";
 
 export interface AgentHostListener {
   (event: AgentEvent): void;
@@ -101,10 +101,8 @@ export function createAgentEnvironment(
 }
 
 export class AgentHost {
-  #process: UtilityProcess | null = null;
+  readonly #supervisor: AgentSupervisor;
   readonly #listeners = new Set<AgentHostListener>();
-  #ready = false;
-  #stopping = false;
   #modelRequestHandler: ModelRequestHandler | null = null;
   readonly #modelRequests = new Map<string, AbortController>();
   #designToolRequestHandler: DesignToolRequestHandler | null = null;
@@ -123,6 +121,40 @@ export class AgentHost {
     PendingAgentApproval & { resolutionSent: boolean }
   >();
 
+  constructor() {
+    this.#supervisor = new AgentSupervisor({
+      clientVersion: app.getVersion(),
+      fork: () => {
+        const child = utilityProcess.fork(
+          join(__dirname, "../agent/index.cjs"),
+          [],
+          {
+            serviceName: "OpenDesign Agent",
+            stdio: "pipe",
+            env: createAgentEnvironment(
+              process.env,
+              app.isPackaged ? "production" : "development",
+            ),
+          },
+        );
+        child.stderr?.on("data", (chunk: Buffer) => {
+          console.error(`[agent] ${chunk.toString().trimEnd()}`);
+        });
+        return child;
+      },
+      forceKill: (pid) => process.kill(pid, "SIGKILL"),
+      onFailure: (failure) => {
+        this.emit({
+          type: "agent.error",
+          code: failure.code,
+          message: failure.message,
+        });
+      },
+      onMessage: (message, generation) => this.onMessage(message, generation),
+      onProcessTerminated: () => this.resetProcessState(),
+    });
+  }
+
   setModelRequestHandler(handler: ModelRequestHandler | null): void {
     this.#modelRequestHandler = handler;
   }
@@ -131,65 +163,18 @@ export class AgentHost {
     this.#designToolRequestHandler = handler;
   }
 
-  start(): void {
-    if (this.#process) return;
-    this.#stopping = false;
-    const child = utilityProcess.fork(
-      join(__dirname, "../agent/index.cjs"),
-      [],
-      {
-        serviceName: "OpenDesign Agent",
-        stdio: "pipe",
-        env: createAgentEnvironment(
-          process.env,
-          app.isPackaged ? "production" : "development",
-        ),
-      },
-    );
-    this.#process = child;
-    child.on("message", (message: unknown) => this.onMessage(message));
-    child.on("exit", (code) => {
-      const wasRunning = this.#process === child;
-      const expected = this.#stopping;
-      this.#ready = false;
-      this.abortModelRequests();
-      this.abortDesignToolRequests();
-      this.#toolRequests.clear();
-      this.#pendingApprovals.clear();
-      this.#process = null;
-      this.#stopping = false;
-      if (wasRunning && !expected) {
-        this.emit({
-          type: "agent.error",
-          code: "process_exited",
-          message: `Agent process exited with code ${code}`,
-        });
-      }
-    });
-    child.on("error", (type, location) => {
-      this.emit({
-        type: "agent.error",
-        code: "process_error",
-        message: `${type} at ${location}`,
-      });
-    });
-    child.stderr?.on("data", (chunk: Buffer) => {
-      console.error(`[agent] ${chunk.toString().trimEnd()}`);
-    });
+  start(): Promise<void> {
+    return this.#supervisor.start();
   }
 
   send(request: AgentRequest): void {
-    if (!this.#process) throw new Error("Agent process is not running");
-    if (!this.#ready && request.type !== "handshake") {
-      throw new Error("Agent process is not ready");
-    }
     if (
       request.type === "approval.resolve" &&
       !this.#pendingApprovals.get(request.approvalId)?.resolutionSent
     ) {
       throw new Error("Approval resolution was not authorized by Main");
     }
-    this.#process.postMessage(request);
+    this.#supervisor.send(request);
   }
 
   prepareApprovalResolution(
@@ -225,31 +210,25 @@ export class AgentHost {
     return () => this.#listeners.delete(listener);
   }
 
-  stop(): void {
-    const child = this.#process;
-    if (!child) return;
-    this.#stopping = true;
-    this.#ready = false;
-    this.abortModelRequests();
-    this.abortDesignToolRequests();
-    this.#toolRequests.clear();
-    this.#pendingApprovals.clear();
-    child.kill();
+  stop(): Promise<void> {
+    this.resetProcessState();
+    return this.#supervisor.stop();
   }
 
-  private onMessage(message: unknown): void {
+  private onMessage(message: unknown, generation: number): void {
     if (isDesignToolBridgeRequest(message)) {
       void this.handleDesignToolRequest(
         message.requestId,
         message.call,
         message.context,
+        generation,
       );
       return;
     }
     const rejectedDesignToolRequestId = designToolBridgeRequestId(message);
     if (rejectedDesignToolRequestId) {
       console.error("Rejected invalid design tool request");
-      this.#process?.postMessage({
+      this.#supervisor.postMessageForGeneration(generation, {
         type: "design-tool.response",
         requestId: rejectedDesignToolRequestId,
         ok: false,
@@ -271,14 +250,18 @@ export class AgentHost {
       return;
     }
     if (isModelBridgeRequest(message)) {
-      void this.handleModelRequest(message.requestId, message.request);
+      void this.handleModelRequest(
+        message.requestId,
+        message.request,
+        generation,
+      );
       return;
     }
     const rejectedModelRequestId = modelBridgeRequestId(message);
     if (rejectedModelRequestId) {
       const error = modelBridgeRequestValidationError(message);
       console.error(`Rejected invalid model request: ${error}`);
-      this.#process?.postMessage({
+      this.#supervisor.postMessageForGeneration(generation, {
         type: "model.response",
         requestId: rejectedModelRequestId,
         ok: false,
@@ -300,7 +283,7 @@ export class AgentHost {
       console.error(`Rejected invalid Agent event: ${validationError}`);
       const run = candidateRunId(message);
       if (run.runId) {
-        this.#process?.postMessage({
+        this.#supervisor.postMessageForGeneration(generation, {
           type: "run.cancel",
           runId: run.runId,
         } satisfies AgentRequest);
@@ -331,7 +314,7 @@ export class AgentHost {
           message: "Agent requested approval for an unknown tool call",
           runId: event.runId,
         });
-        this.#process?.postMessage({
+        this.#supervisor.postMessageForGeneration(generation, {
           type: "run.cancel",
           runId: event.runId,
         } satisfies AgentRequest);
@@ -363,34 +346,6 @@ export class AgentHost {
         }
       }
     }
-    if (event.type === "agent.ready") {
-      if (event.protocolVersion !== AGENT_PROTOCOL_VERSION) {
-        this.emit({
-          type: "agent.error",
-          code: "protocol_mismatch",
-          message: `Agent protocol mismatch: ${event.protocolVersion} != ${AGENT_PROTOCOL_VERSION}`,
-        });
-        this.stop();
-        return;
-      }
-      this.#process?.postMessage({
-        type: "handshake",
-        protocolVersion: AGENT_PROTOCOL_VERSION,
-        clientVersion: app.getVersion(),
-      } satisfies AgentRequest);
-    }
-    if (event.type === "agent.connected") {
-      if (event.protocolVersion !== AGENT_PROTOCOL_VERSION) {
-        this.emit({
-          type: "agent.error",
-          code: "protocol_mismatch",
-          message: `Agent protocol mismatch: ${event.protocolVersion} != ${AGENT_PROTOCOL_VERSION}`,
-        });
-        this.stop();
-        return;
-      }
-      this.#ready = true;
-    }
     this.emit(event);
   }
 
@@ -401,12 +356,11 @@ export class AgentHost {
   private async handleModelRequest(
     requestId: string,
     request: Omit<ModelRequest, "signal">,
+    generation: number,
   ): Promise<void> {
-    const child = this.#process;
     const handler = this.#modelRequestHandler;
-    if (!child) return;
     if (!handler) {
-      child.postMessage({
+      this.#supervisor.postMessageForGeneration(generation, {
         type: "model.response",
         requestId,
         ok: false,
@@ -422,22 +376,25 @@ export class AgentHost {
     this.#modelRequests.set(requestId, controller);
     try {
       for await (const event of handler(request, controller.signal)) {
-        if (this.#process !== child || controller.signal.aborted) return;
-        child.postMessage({
-          type: "model.event",
-          requestId,
-          event,
-        } satisfies ModelBridgeResponse);
+        if (controller.signal.aborted) return;
+        if (
+          !this.#supervisor.postMessageForGeneration(generation, {
+            type: "model.event",
+            requestId,
+            event,
+          } satisfies ModelBridgeResponse)
+        )
+          return;
       }
-      if (this.#process !== child || controller.signal.aborted) return;
-      child.postMessage({
+      if (controller.signal.aborted) return;
+      this.#supervisor.postMessageForGeneration(generation, {
         type: "model.response",
         requestId,
         ok: true,
       } satisfies ModelBridgeResponse);
     } catch (error) {
-      if (this.#process !== child || controller.signal.aborted) return;
-      child.postMessage({
+      if (controller.signal.aborted) return;
+      this.#supervisor.postMessageForGeneration(generation, {
         type: "model.response",
         requestId,
         ok: false,
@@ -459,12 +416,11 @@ export class AgentHost {
     requestId: string,
     call: ToolCallRequest,
     context: TrustedToolContext,
+    generation: number,
   ): Promise<void> {
-    const child = this.#process;
     const handler = this.#designToolRequestHandler;
-    if (!child) return;
     if (!handler) {
-      child.postMessage({
+      this.#supervisor.postMessageForGeneration(generation, {
         type: "design-tool.response",
         requestId,
         ok: false,
@@ -489,8 +445,8 @@ export class AgentHost {
         context,
         controller.signal,
         (message, progress) => {
-          if (this.#process !== child || controller.signal.aborted) return;
-          child.postMessage({
+          if (controller.signal.aborted) return;
+          this.#supervisor.postMessageForGeneration(generation, {
             type: "design-tool.progress",
             requestId,
             message,
@@ -498,23 +454,23 @@ export class AgentHost {
           } satisfies DesignToolBridgeProgress);
         },
       );
-      if (this.#process !== child || controller.signal.aborted) return;
-      child.postMessage({
+      if (controller.signal.aborted) return;
+      this.#supervisor.postMessageForGeneration(generation, {
         type: "design-tool.response",
         requestId,
         ok: true,
         result,
       } satisfies DesignToolBridgeResponse);
     } catch (error) {
-      if (this.#process !== child || controller.signal.aborted) return;
-      child.postMessage({
+      if (controller.signal.aborted) return;
+      this.#supervisor.postMessageForGeneration(generation, {
         type: "design-tool.response",
         requestId,
         ok: false,
         error: trustedToolFailureFromError(error),
       } satisfies DesignToolBridgeResponse);
       if (error instanceof FatalAgentRunError) {
-        child.postMessage({
+        this.#supervisor.postMessageForGeneration(generation, {
           type: "run.cancel",
           runId: context.runId,
         } satisfies AgentRequest);
@@ -537,6 +493,13 @@ export class AgentHost {
       controller.abort();
     }
     this.#designToolRequests.clear();
+  }
+
+  private resetProcessState(): void {
+    this.abortModelRequests();
+    this.abortDesignToolRequests();
+    this.#toolRequests.clear();
+    this.#pendingApprovals.clear();
   }
 }
 

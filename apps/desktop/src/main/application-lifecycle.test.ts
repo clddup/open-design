@@ -115,6 +115,42 @@ describe("ApplicationLifecycle", () => {
     expect(fixture.exit).toHaveBeenCalledOnce();
   });
 
+  it("waits for the Agent supervisor before detaching Agent handlers", async () => {
+    const order: string[] = [];
+    let finishAgentStop!: () => void;
+    const agentStopped = new Promise<void>((resolve) => {
+      finishAgentStop = resolve;
+    });
+    const fixture = setup("win32", {
+      abortActiveWork: () => {
+        order.push("abort");
+      },
+      stopAgent: async () => {
+        order.push("stop-agent-start");
+        await agentStopped;
+        order.push("stop-agent-end");
+      },
+      detachAgentHandlers: () => {
+        order.push("detach-agent");
+      },
+    });
+
+    const shuttingDown = fixture.lifecycle.handleWillQuit({
+      preventDefault: vi.fn(),
+    });
+    await vi.waitFor(() => expect(order).toContain("stop-agent-start"));
+    expect(order).toEqual(["abort", "stop-agent-start"]);
+
+    finishAgentStop();
+    await shuttingDown;
+    expect(order).toEqual([
+      "abort",
+      "stop-agent-start",
+      "stop-agent-end",
+      "detach-agent",
+    ]);
+  });
+
   it("continues remaining teardown steps when one resource fails", async () => {
     const fixture = setup("win32", {
       stopAgent: () => {
