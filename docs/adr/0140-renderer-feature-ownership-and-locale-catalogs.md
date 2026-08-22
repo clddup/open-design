@@ -45,11 +45,12 @@ controller 可以组合纯 helper 和子 controller，但必须拥有完整业�
 
 第四个切片将 Project/Design File workspace state 与 navigation 迁入 Project feature：该 feature 现在独占最近项目加载、Project/File 活动身份、Project CRUD、复合 `projectId + designFileId` 打开、文件重命名、显式保存、autosave coordinator、manifest 归并与关闭前 flush。手动保存和 autosave 复用同一可信保存结果归并，Main 返回的 File/Document/revision 身份不匹配时保持 dirty 并失败关闭；切换文件不缓存 `DesignDocument`，仍在操作时读取唯一 `WorkspaceRuntime` / `EditorRuntime` snapshot。App 只负责把 Project target 打开能力接给 Workspace 级 Conversation controller。
 
+第五个切片将 Canvas workspace 生命周期迁入独立 controller：viewport zoom/fit 始终在操作时读取当前 `EditorRuntime`，以 viewport 中心为缩放锚点，并从当前 Page/selection 权威几何计算 fit；图层 hover、文字范围/编辑样式、图片 crop/area/expand 入口和 Leafer text provider epoch 都是可丢弃 session bridge，不进入文档或 history。Figma 风格工具、选择、层级、布尔、蒙版、图层状态、缩放与面板快捷键由同一最新 action context 路由；文件切换会解绑旧 Runtime，输入/组合事件与非 Editor 视图不会触发后台画布操作。Canvas 内部 Enter/Tab/Escape 编辑 session 继续在 Canvas host 上优先处理并阻止冒泡，不建立第二套 selection。
+
 后续按以下顺序继续：
 
-1. Canvas viewport/session/shortcut；
-2. Diagnostics；
-3. 将剩余 core catalog 按上述 feature 所有权迁移。
+1. Diagnostics；
+2. 将剩余 core catalog 按上述 feature 所有权迁移。
 
 每个切片保持产品行为，补定向 controller 测试和少量 App 接线测试。需要改变产品契约时单独记录 ADR，不借架构迁移静默改变行为。
 
@@ -68,3 +69,4 @@ controller 可以组合纯 helper 和子 controller，但必须拥有完整业�
 - Workbench 面板持久化、窄窗口与快捷键集成测试。
 - i18n 中英文 key 完整性、插值和现有 Timeline/Main 翻译测试。
 - Project controller 定向测试覆盖复合 Project/File 身份、clean local placeholder 替换门禁、跨 Project 保存、重命名响应身份校验，以及 autosave 成功/失败归并；完整 App 测试继续覆盖 Workspace/Project/Editor 视图接线和关闭前 flush。
+- Canvas workspace controller 定向测试覆盖中心锚点缩放、Page/selection fit、Editor/输入门禁、Design File Runtime 切换和 disposable session bridge；完整 App 测试继续覆盖 macOS/Windows Figma 风格快捷键、Canvas 内部编辑优先级、状态栏和面板接线。
