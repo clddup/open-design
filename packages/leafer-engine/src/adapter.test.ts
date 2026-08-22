@@ -4493,6 +4493,118 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
+  it("cancels Box Draw on Escape, tool switch, stale revision, and dispose", async () => {
+    const onCreate = vi.fn(() => true);
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onCreate,
+    });
+    const input = {
+      ...createInput(),
+      tool: "rectangle" as const,
+      selection: { nodeIds: [] },
+    };
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+
+    app.emit("drag.start", boxDragEvent(20, 20));
+    app.emit("drag.drag", boxDragEvent(80, 60));
+    const escape = emitWindowKey("Escape");
+    app.emit("drag.end", boxDragEvent(80, 60));
+    expect(escape.preventDefault).toHaveBeenCalledTimes(1);
+    expect(onCreate).not.toHaveBeenCalled();
+
+    app.emit("drag.start", boxDragEvent(30, 30));
+    app.emit("drag.drag", boxDragEvent(90, 70));
+    const ellipseInput = { ...input, tool: "ellipse" as const };
+    adapter.sync(ellipseInput);
+    app.emit("drag.end", boxDragEvent(90, 70));
+    expect(onCreate).not.toHaveBeenCalled();
+
+    app.emit("drag.start", boxDragEvent(40, 40));
+    app.emit("drag.drag", boxDragEvent(100, 80));
+    const staleDocument = structuredClone(input.document);
+    staleDocument.revision += 1;
+    adapter.sync({ ...ellipseInput, document: staleDocument });
+    app.emit("drag.end", boxDragEvent(100, 80));
+    expect(onCreate).not.toHaveBeenCalled();
+
+    app.emit("drag.start", boxDragEvent(50, 50));
+    app.emit("drag.drag", boxDragEvent(110, 90));
+    const preview = leaferHarness.elements.at(-1);
+    adapter.dispose();
+    expect(preview?.destroy).toHaveBeenCalledTimes(1);
+    app.emit("drag.end", boxDragEvent(110, 90));
+    expect(onCreate).not.toHaveBeenCalled();
+  });
+
+  it("cancels Box Draw when its stable parent changes during the gesture", async () => {
+    const onCreate = vi.fn(() => true);
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onCreate,
+    });
+    const input = {
+      ...createInput(),
+      tool: "rectangle" as const,
+      selection: { nodeIds: [] },
+    };
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+    const frame = findElement(app.tree, "frame_welcome");
+    if (!frame) throw new Error("Missing parent Frame");
+
+    app.emit("drag.start", { ...boxDragEvent(20, 20), target: frame });
+    app.emit("drag.drag", { ...boxDragEvent(80, 60), target: frame });
+    const changedDocument = structuredClone(input.document);
+    changedDocument.revision += 1;
+    const changedFrame = changedDocument.nodesById.frame_welcome;
+    if (!changedFrame) throw new Error("Missing changed parent Frame");
+    changedFrame.transform = [1, 0, 0, 1, 40, 30];
+    adapter.sync({
+      ...input,
+      changes: changedNodeSet(
+        input.document,
+        changedDocument,
+        "frame_welcome",
+        "transform",
+      ),
+      document: changedDocument,
+    });
+    app.emit("drag.end", { ...boxDragEvent(80, 60), target: frame });
+
+    expect(onCreate).not.toHaveBeenCalled();
+    adapter.dispose();
+  });
+
+  it("restores the authoritative projection when Box Draw creation is rejected", async () => {
+    const onCreate = vi.fn(() => false);
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onCreate,
+    });
+    adapter.sync({
+      ...createInput(),
+      tool: "rectangle",
+      selection: { nodeIds: [] },
+    });
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+    const projected = findElement(app.tree, "feature_one");
+    if (!projected) throw new Error("Missing projected fixture");
+    const setCalls = projected.setCalls;
+
+    app.emit("drag.start", boxDragEvent(20, 30));
+    app.emit("drag.drag", boxDragEvent(90, 80));
+    app.emit("drag.end", boxDragEvent(90, 80));
+
+    expect(onCreate).toHaveBeenCalledTimes(1);
+    expect(projected.setCalls).toBeGreaterThan(setCalls);
+    adapter.dispose();
+  });
+
   it("authors an open cubic Pen contour and submits one normalized vector request", async () => {
     const onCreateVector = vi.fn<
       (request: LeaferCreateVectorRequest) => boolean

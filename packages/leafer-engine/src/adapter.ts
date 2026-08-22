@@ -126,11 +126,9 @@ import {
   type VectorResizeHandle,
 } from "./vector-selection-transform.js";
 import type {
-  LeaferBoxCreateTool,
   LeaferCaptureResult,
   LeaferCaptureTarget,
   LeaferCanvasTool,
-  LeaferCreateRequest,
   LeaferCreateVectorRequest,
   LeaferEngineAdapter,
   LeaferEngineCallbacks,
@@ -145,6 +143,7 @@ import type {
   LeaferTextStyleUpdate,
   LeaferVectorEditTool,
 } from "./types.js";
+import { BoxDrawController } from "./box-draw-controller.js";
 import { ImageCropController } from "./image-crop-controller.js";
 import { asLeaferEvent, eventClientPoint } from "./pointer-event.js";
 
@@ -198,17 +197,6 @@ interface TransformSession {
   changed: boolean;
   kind: LeaferOperationKind;
   selectionNodeIds: string[];
-}
-
-interface DrawSession {
-  dragged: boolean;
-  parentId: string | null;
-  preview: LeaferElement;
-  lineStart?: { x: number; y: number };
-  lineEnd?: { x: number; y: number };
-  start: { x: number; y: number };
-  startClient: { x: number; y: number };
-  tool: LeaferBoxCreateTool;
 }
 
 interface PenSession {
@@ -371,6 +359,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   readonly #generationPresentationRoot: LeaferGroup;
   readonly #generationSkeletonLayer: LeaferGroup;
   readonly #editorOverlays: EditorOverlayController;
+  readonly #boxDrawController: BoxDrawController;
   readonly #imageCropController: ImageCropController;
   readonly #textRunEditor: TextRunEditController<LeaferElement>;
   readonly #elements = new Map<string, LeaferElement>();
@@ -384,7 +373,6 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   #geometryLoadPromise: Promise<void> | null = null;
   #disposed = false;
   #boxSelect: BoxSelectSession | null = null;
-  #draw: DrawSession | null = null;
   #input: LeaferEngineSyncInput | null = null;
   #pen: PenSession | null = null;
   #projection: LeaferSceneProjection | null = null;
@@ -582,6 +570,19 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       syncTool: (tool) => this.#syncTool(tool),
       viewportRoot: this.#app.tree as unknown as LeaferGroup,
     });
+    this.#boxDrawController = new BoxDrawController({
+      current: () => ({
+        disposed: this.#disposed,
+        input: this.#input,
+        projection: this.#projection,
+      }),
+      element: (nodeId) => this.#elements.get(nodeId),
+      leafer,
+      nodeId: (element) => this.#nodeId(element),
+      onCreate: (request) => this.#callbacks.onCreate(request),
+      restoreProjection: () => this.#restoreProjection(),
+      root: this.#app.tree as unknown as LeaferGroup,
+    });
     this.#generationActivityLayer = new leafer.Group({
       editable: false,
       hitChildren: false,
@@ -665,6 +666,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       !previous ||
       previous.document.documentId !== input.document.documentId ||
       previous.pageId !== input.pageId;
+    this.#boxDrawController.syncInput(input);
     this.#imageCropController.syncInput(input);
     if (
       !sameStringList(
@@ -775,6 +777,12 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
           changedNodeIds.has(nodeId) ||
           (projection.affectedNodeIds?.has(nodeId) === true &&
             isLockedSpec(projection.elementsById.get(nodeId)));
+        this.#boxDrawController.syncProjection({
+          changedNodeIds,
+          input,
+          projection,
+          projectionContinuityLost: textRunProjectionChanged,
+        });
         if (
           this.#vectorEdits.size > 0 &&
           (identityChanged ||
@@ -784,16 +792,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
           this.#cancelVectorEdit();
         }
         if (identityChanged) this.#editor.visible = false;
-        if (
-          identityChanged ||
-          !contiguousChanges ||
-          (this.#draw?.parentId !== undefined &&
-            this.#draw?.parentId !== null &&
-            invalidatesInteraction(this.#draw.parentId))
-        ) {
-          this.#boxSelect = null;
-          this.#cancelDraw();
-        }
+        if (identityChanged || !contiguousChanges) this.#boxSelect = null;
         if (
           identityChanged ||
           !contiguousChanges ||
@@ -870,6 +869,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         );
       }
     } catch (error) {
+      this.#boxDrawController.cancel();
       this.finishGenerationPresentation();
       this.#report(error);
     } finally {
@@ -956,7 +956,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     this.#detachTextEditDom(false);
     this.#textRunEditor.clear();
     this.#boxSelect = null;
-    this.#cancelDraw();
+    this.#boxDrawController.dispose();
     this.#cancelPen();
     this.#cancelVectorEdit();
     this.#imageCropController.dispose();
@@ -1183,12 +1183,14 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
 
     this.#app.on(DragEvent.START, (event: unknown) => {
       this.#startBoxSelect(event);
-      this.#startDraw(event);
+      this.#boxDrawController.start(event);
     });
-    this.#app.on(DragEvent.DRAG, (event: unknown) => this.#updateDraw(event));
+    this.#app.on(DragEvent.DRAG, (event: unknown) =>
+      this.#boxDrawController.update(event),
+    );
     this.#app.on(DragEvent.END, (event: unknown) => {
       this.#finishBoxSelect(event);
-      this.#finishDraw(event);
+      this.#boxDrawController.finish(event);
     });
     this.#app.on(PointerEvent.DOWN, (event: unknown) => {
       if (this.#editorOverlays.gridPointerDown(asLeaferEvent(event))) return;
@@ -3608,7 +3610,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       return;
     }
 
-    const parentId = this.#resolveDrawParent(pointer.target, "pen");
+    const parentId = this.#resolvePenParent(pointer.target);
     if (parentId === undefined) return;
     const parent = parentId
       ? (this.#elements.get(parentId) as LeaferGroup | undefined)
@@ -3812,161 +3814,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     session.previewGroup.destroy();
   }
 
-  #startDraw(event: unknown): void {
-    const input = this.#input;
-    if (
-      !input ||
-      input.tool === "select" ||
-      input.tool === "pen" ||
-      this.#draw ||
-      this.#disposed
-    )
-      return;
-    const drag = asLeaferEvent(event);
-    const parentId = this.#resolveDrawParent(drag.target, input.tool);
-    if (parentId === undefined) return;
-    const parent = parentId
-      ? (this.#elements.get(parentId) as LeaferGroup | undefined)
-      : (this.#app.tree as unknown as LeaferGroup);
-    if (!parent) return;
-    const start = drag.getInnerPoint(parent);
-    const client = eventClientPoint(drag);
-    const preview = this.#createDrawPreview(input.tool);
-    const lineTool = input.tool === "line" || input.tool === "arrow";
-    preview.set(
-      lineTool
-        ? { x: 0, y: 0, points: [start.x, start.y, start.x + 1, start.y] }
-        : { x: start.x, y: start.y, width: 1, height: 1 },
-    );
-    parent.add(preview);
-    this.#draw = {
-      dragged: false,
-      parentId,
-      preview,
-      ...(lineTool ? { lineStart: start, lineEnd: start } : {}),
-      start,
-      startClient: client,
-      tool: input.tool,
-    };
-  }
-
-  #updateDraw(event: unknown): void {
-    const session = this.#draw;
-    if (!session) return;
-    const drag = asLeaferEvent(event);
-    const client = eventClientPoint(drag);
-    const parent = session.parentId
-      ? (this.#elements.get(session.parentId) as LeaferGroup | undefined)
-      : (this.#app.tree as unknown as LeaferGroup);
-    if (!parent) return;
-    const point = drag.getInnerPoint(parent);
-    const lineTool = session.tool === "line" || session.tool === "arrow";
-    session.dragged =
-      Math.hypot(
-        client.x - session.startClient.x,
-        client.y - session.startClient.y,
-      ) >= MIN_DRAW_DISTANCE;
-    if (lineTool) {
-      const endpoints = lineEndpointsFromDrag(
-        session.start,
-        point,
-        drag.shiftKey,
-        drag.altKey,
-      );
-      session.lineStart = endpoints.start;
-      session.lineEnd = endpoints.end;
-      session.preview.set({
-        x: 0,
-        y: 0,
-        points: [
-          endpoints.start.x,
-          endpoints.start.y,
-          endpoints.end.x,
-          endpoints.end.y,
-        ],
-      });
-    } else {
-      session.preview.set(
-        rectFromPoints(session.start, point, drag.shiftKey, drag.altKey),
-      );
-    }
-  }
-
-  #finishDraw(event: unknown): void {
-    const session = this.#draw;
-    const input = this.#input;
-    if (!session || !input) return;
-    const drag = asLeaferEvent(event);
-    const lineTool = session.tool === "line" || session.tool === "arrow";
-    const rawLineStart = session.lineStart ?? session.start;
-    const rawLineEnd = session.dragged
-      ? (session.lineEnd ?? session.start)
-      : { x: session.start.x + 160, y: session.start.y };
-    const lineGeometry = lineTool
-      ? normalizeLineEndpoints(rawLineStart, rawLineEnd)
-      : undefined;
-    const rect = lineGeometry?.bounds ?? {
-      x: Number(session.preview.x) || session.start.x,
-      y: Number(session.preview.y) || session.start.y,
-      width: Number(session.preview.width) || 1,
-      height: Number(session.preview.height) || 1,
-    };
-    this.#cancelDraw();
-    if (drag.isCancel) return;
-    const request: LeaferCreateRequest = {
-      dragged: session.dragged,
-      height: rect.height,
-      pageId: input.pageId,
-      parentId: session.parentId,
-      ...(lineGeometry
-        ? { start: lineGeometry.start, end: lineGeometry.end }
-        : {}),
-      tool: session.tool,
-      width: rect.width,
-      x: rect.x,
-      y: rect.y,
-    };
-    const accepted = this.#callbacks.onCreate(request);
-    if (!accepted) this.#restoreProjection();
-  }
-
-  #createDrawPreview(tool: LeaferBoxCreateTool): LeaferElement {
-    if (tool === "line" || tool === "arrow") {
-      return new this.#leafer.Arrow({
-        editable: false,
-        hittable: false,
-        stroke: "#4f7fff",
-        strokeWidth: 2,
-        startArrow: "none",
-        endArrow: tool === "arrow" ? "angle" : "none",
-      });
-    }
-    const data = {
-      editable: false,
-      hittable: false,
-      fill: [{ type: "solid", color: "#4f7fff", opacity: 0.12 }],
-      stroke: "#4f7fff",
-      strokeWidth: 1,
-      ...(tool === "frame" || tool === "slice" ? { dashPattern: [5, 4] } : {}),
-    };
-    return tool === "ellipse"
-      ? new this.#leafer.Ellipse(data)
-      : tool === "polygon"
-        ? new this.#leafer.Polygon({ ...data, sides: 3 })
-        : tool === "star"
-          ? new this.#leafer.Star({
-              ...data,
-              corners: 5,
-              innerRadius: 0.382,
-            })
-          : new this.#leafer.Rect(data);
-  }
-
-  #resolveDrawParent(
-    target: unknown,
-    tool: Exclude<LeaferCanvasTool, "select">,
-  ): string | null | undefined {
-    if (tool === "frame") return null;
+  #resolvePenParent(target: unknown): string | null | undefined {
     let element = isElement(target) ? target : undefined;
     while (element) {
       const nodeId = this.#nodeId(element);
@@ -3983,13 +3831,6 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       element = isElement(element.parent) ? element.parent : undefined;
     }
     return null;
-  }
-
-  #cancelDraw(): void {
-    if (!this.#draw) return;
-    this.#draw.preview.remove();
-    this.#draw.preview.destroy();
-    this.#draw = null;
   }
 
   #syncGenerationActivity(
@@ -5032,12 +4873,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         return;
       }
     }
-    if (event.code === "Escape" && this.#draw) {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      this.#cancelDraw();
-      return;
-    }
+    if (this.#boxDrawController.handleKeyDown(event)) return;
     if (event.code === "Escape" && this.#editor.innerEditing) {
       this.#textRunEditor.cancel();
     }
@@ -5693,28 +5529,6 @@ function rectFromPoints(
     width: Math.max(1, Math.abs(width) * (fromCenter ? 2 : 1)),
     height: Math.max(1, Math.abs(height) * (fromCenter ? 2 : 1)),
   };
-}
-
-function lineEndpointsFromDrag(
-  origin: { x: number; y: number },
-  pointer: { x: number; y: number },
-  constrain: boolean,
-  fromCenter: boolean,
-): { start: { x: number; y: number }; end: { x: number; y: number } } {
-  let x = pointer.x - origin.x;
-  let y = pointer.y - origin.y;
-  if (constrain && (x !== 0 || y !== 0)) {
-    const distance = Math.hypot(x, y);
-    const angle = Math.round(Math.atan2(y, x) / (Math.PI / 4)) * (Math.PI / 4);
-    x = Math.cos(angle) * distance;
-    y = Math.sin(angle) * distance;
-  }
-  return fromCenter
-    ? {
-        start: { x: origin.x - x, y: origin.y - y },
-        end: { x: origin.x + x, y: origin.y + y },
-      }
-    : { start: origin, end: { x: origin.x + x, y: origin.y + y } };
 }
 
 function readLinePoints(

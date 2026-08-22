@@ -69,7 +69,7 @@ Phase 5 随 Figma-compatible Component Properties 垂直切片增加 `@opendesig
 
 Phase 7 已把 EditorRuntime 聚合模块收口为权威 transaction/revision/session coordinator：纯 `document-diff` 与 `EditorHistory` 分别拥有 change set 和 undo/redo/group state；Page、Asset/Image Derivation、Component/Library Source、Element 与 Text command family 通过唯一 `command-executor` 写入同一 draft。Text command context 独占字体检查、普通/富文本测量和 range/edit session，Element 只消费语义钩子；Auto Layout 仍由 Runtime 在整笔命令后统一收敛并通过同一 Text context 回测。公共 `EditorRuntime`/`diffDocuments` 行为保持不变，没有兼容 facade 或第二份文档状态。
 
-Phase 8 的首个 Leafer interaction owner 已落地：Image Crop 的 session、overlay、pointer/viewport、完成/取消、stale 恢复、状态发布和清理由 `ImageCropController` 单一持有；adapter 只提供 projection、element、tool、bounds refresh 和 transaction callback 端口。该切片不改变 DesignDocument 或公共 adapter 契约，也不把 crop 预览持久化。其余 Leafer owner 仍在后续切片中迁移，因此 Phase 8 保持进行中。
+Phase 8 已落地两个 Leafer interaction owner。Image Crop 的 session、overlay、pointer/viewport、完成/取消、stale 恢复、状态发布和清理由 `ImageCropController` 单一持有；Box Draw 的容器解析、screen/local 坐标、preview、drag/click 语义、Shift/Alt 约束、Line 默认几何、创建请求、Escape/tool switch/stale parent/revision、事务拒绝恢复与 dispose 由 `BoxDrawController` 单一持有。adapter 只路由 Leafer 事件并提供 projection、element、tool、bounds refresh 和 transaction callback 端口；Box Select 继续保持独立选择生命周期，没有被塞进创建 owner。两个切片都不改变 DesignDocument 或公共 adapter 契约，也不把交互 preview 持久化。其余 Leafer owner 仍在后续切片中迁移，因此 Phase 8 保持进行中。
 
 模块治理 Phase 5 已按 ADR-0100 完成：`design-agent-tools` 只保留稳定重导出、公开工具的有序聚合和统一 validator dispatcher。Plan/Review/Checkpoint、Image、Import/Export、Hierarchy/Vector、Page/Text/Font、Component 与共享节点事务 schema 各有明确 owner；既有 Arrange、Variable、Style family 不复制 schema。聚合测试直接锁定工具顺序和 schema 对象身份，禁止在聚合入口再次手写同一契约。
 
