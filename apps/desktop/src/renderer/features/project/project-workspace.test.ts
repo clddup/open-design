@@ -436,7 +436,6 @@ function navigationArgs(
     setRecentProjects: vi.fn(),
     setWorkspaceBusy: vi.fn(),
     setWorkspaceError: vi.fn(),
-    showUtilityTab: vi.fn(),
     t: (key) => key,
     workspace,
     workspaceSnapshot: workspace.getSnapshot(),

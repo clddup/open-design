@@ -89,6 +89,8 @@ MCP 只能依赖 Main 提供的稳定 resource handle、revision、`DesignReadPo
 
 每一步必须保持可运行，只做最小充分的定向测试、typecheck、lint、format 和 architecture check；不以本地原生安装包构建作为日常架构重构验证。
 
+当前步骤 1—4 已落地：`AgentIpcRouter`、原子 `AppNavigator`、活动 Project/Design File 身份单 owner 与完整 `EditorWorkbenchFeature` 均已有定向测试。Workbench controller、selection projection、Image edit、人工 Import/Export 和画布 session 只随 Editor destination 建立；Settings 与 Workspace 会释放这些订阅，返回 Editor 复用同一权威 `EditorRuntime`。这不代表步骤 5—8 或全仓治理完成。
+
 ## 后果
 
 - `App.tsx` 和 Main `index.ts` 会继续收缩，但是否完成由状态和生命周期所有权决定，而不是目标行数。

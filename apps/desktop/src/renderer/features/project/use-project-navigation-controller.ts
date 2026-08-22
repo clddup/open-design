@@ -48,7 +48,6 @@ export function useProjectNavigationController({
   setRecentProjects,
   setWorkspaceBusy,
   setWorkspaceError,
-  showUtilityTab,
   t,
   workspace,
   workspaceSnapshot,
@@ -79,7 +78,6 @@ export function useProjectNavigationController({
   setRecentProjects: Dispatch<SetStateAction<RecentProject[]>>;
   setWorkspaceBusy: (busy: boolean) => void;
   setWorkspaceError: (error: string | null) => void;
-  showUtilityTab: (tab: "agent" | "properties") => void;
   t: Translate;
   workspace: WorkspaceRuntime;
   workspaceSnapshot: WorkspaceSnapshot;
@@ -356,7 +354,6 @@ export function useProjectNavigationController({
       if (target.pageId && file.document.pagesById[target.pageId]) {
         activatePage(target.pageId);
       }
-      showUtilityTab("agent");
       navigator.commit(transition, {
         kind: "editor",
         fileKey: workspace.getSnapshot().activeFileKey,
@@ -370,7 +367,6 @@ export function useProjectNavigationController({
       projectsById,
       runtime,
       setProjectsById,
-      showUtilityTab,
       workspace,
       workspaceSnapshot.activeProjectId,
       workspaceSnapshot.openFileKeys.length,

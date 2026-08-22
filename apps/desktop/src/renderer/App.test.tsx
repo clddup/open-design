@@ -764,6 +764,52 @@ describe("App", () => {
     ).toBeVisible();
   });
 
+  it("mounts editor command subscriptions only for the Editor destination", async () => {
+    const unsubscribeImport = vi.fn();
+    const unsubscribeExport = vi.fn();
+    vi.mocked(window.desktop!.onImportSvgCommand).mockImplementation(
+      (listener) => {
+        requestImportSvg = listener;
+        return unsubscribeImport;
+      },
+    );
+    vi.mocked(window.desktop!.onExportSvgCommand).mockImplementation(
+      (listener) => {
+        requestExportSvg = listener;
+        return unsubscribeExport;
+      },
+    );
+    const { user } = await openProjectWithConversations([]);
+    expect(window.desktop!.onImportSvgCommand).not.toHaveBeenCalled();
+    expect(window.desktop!.onExportSvgCommand).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: /Mobile UI/ }));
+    await screen.findByRole("main", { name: "Design canvas" });
+    await waitFor(() => {
+      expect(window.desktop!.onImportSvgCommand).toHaveBeenCalledOnce();
+      expect(window.desktop!.onExportSvgCommand).toHaveBeenCalledOnce();
+    });
+
+    await user.click(screen.getByRole("button", { name: "Open Settings" }));
+    await screen.findByRole("heading", { name: "Language and appearance" });
+    expect(unsubscribeImport).toHaveBeenCalledOnce();
+    expect(unsubscribeExport).toHaveBeenCalledOnce();
+
+    await user.click(screen.getByRole("button", { name: "Close Settings" }));
+    await screen.findByRole("main", { name: "Design canvas" });
+    await waitFor(() => {
+      expect(window.desktop!.onImportSvgCommand).toHaveBeenCalledTimes(2);
+      expect(window.desktop!.onExportSvgCommand).toHaveBeenCalledTimes(2);
+    });
+
+    await user.click(
+      screen.getByRole("button", { name: "Open Workspace Home" }),
+    );
+    await screen.findByRole("heading", { name: "Projects and Agent work" });
+    expect(unsubscribeImport).toHaveBeenCalledTimes(2);
+    expect(unsubscribeExport).toHaveBeenCalledTimes(2);
+  });
+
   it("imports native SVG files as one editable, undoable document transaction", async () => {
     const user = userEvent.setup();
     vi.mocked(window.desktop!.openSvgFile).mockResolvedValueOnce({
