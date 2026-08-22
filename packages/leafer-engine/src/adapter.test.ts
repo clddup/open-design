@@ -1486,6 +1486,63 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
+  it("detaches stale edit roots and selection listeners across close, reopen, and dispose", async () => {
+    const onOperations = vi.fn<LeaferEngineCallbacks["onOperations"]>(
+      () => true,
+    );
+    const onTextRangeSelectionChange =
+      vi.fn<NonNullable<LeaferEngineCallbacks["onTextRangeSelectionChange"]>>();
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onOperations,
+      onTextRangeSelectionChange,
+    });
+    const input = createInput();
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+    const element = findElement(app.tree, "title_welcome") as
+      FakeText | undefined;
+    if (!element) throw new Error("Missing Text edit target");
+    const original = element.text;
+    app.editor.enableTextDom = true;
+    app.editor.openInnerEditor(element, true);
+    const firstRoot = app.editor.innerEditor?.editDom;
+    if (!firstRoot) throw new Error("Missing first Text edit DOM");
+    app.editor.closeInnerEditor();
+
+    const callsAfterClose = onTextRangeSelectionChange.mock.calls.length;
+    firstRoot.textContent = "Late stale input";
+    firstRoot.dispatchEvent(
+      new InputEvent("input", {
+        bubbles: true,
+        data: "t",
+        inputType: "insertText",
+      }),
+    );
+    document.dispatchEvent(new Event("selectionchange"));
+    expect(element.text).toBe(original);
+    expect(onOperations).not.toHaveBeenCalled();
+    expect(onTextRangeSelectionChange).toHaveBeenCalledTimes(callsAfterClose);
+
+    app.editor.openInnerEditor(element, true);
+    const secondRoot = app.editor.innerEditor?.editDom;
+    if (!secondRoot) throw new Error("Missing second Text edit DOM");
+    expect(secondRoot).not.toBe(firstRoot);
+    setDomCaret(secondRoot, 1);
+    document.dispatchEvent(new Event("selectionchange"));
+    expect(onTextRangeSelectionChange.mock.calls.at(-1)?.[0]).toMatchObject({
+      nodeId: "title_welcome",
+      start: 1,
+      end: 1,
+    });
+
+    adapter.dispose();
+    const callsAfterDispose = onTextRangeSelectionChange.mock.calls.length;
+    document.dispatchEvent(new Event("selectionchange"));
+    expect(onTextRangeSelectionChange).toHaveBeenCalledTimes(callsAfterDispose);
+  });
+
   it("restores mixed Text projection on Escape and blocks inherited-locked editing", async () => {
     const onOperations = vi.fn<LeaferEngineCallbacks["onOperations"]>(
       () => true,
