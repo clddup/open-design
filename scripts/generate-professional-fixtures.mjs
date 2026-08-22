@@ -9,7 +9,15 @@ const checkOnly = process.argv.includes("--check");
 const generatorPath = "scripts/generate-professional-fixtures.mjs";
 const fixtureRoot = "fixtures/professional";
 const fixtureVersion = 1;
-const documentSchemaVersion = "1.38.0";
+const designContractVersions = await readFile(
+  join(root, "packages/design-contracts/src/versions.ts"),
+  "utf8",
+);
+const documentSchemaVersion = capture(
+  designContractVersions,
+  /DESIGN_SCHEMA_VERSION\s*=\s*"([^"]+)"/,
+  "DesignDocument schema version",
+);
 
 const fixtureSources = [
   {
@@ -1378,6 +1386,8 @@ function document({
     stylesById: {},
     interactionsById: {},
     assetsById: Object.fromEntries(assets.map((asset) => [asset.id, asset])),
+    imageAssetDerivationOrder: [],
+    imageAssetDerivationsById: {},
     extensions,
   };
 }
@@ -1387,7 +1397,11 @@ function assertCurrentDocumentShape(value, fixtureId, stage) {
     value?.schemaVersion !== documentSchemaVersion ||
     !isPlainObject(value?.libraryComponentsById) ||
     !isPlainObject(value?.libraryVariantSetsById) ||
-    !isPlainObject(value?.libraryStylesById)
+    !isPlainObject(value?.libraryStylesById) ||
+    !isPlainObject(value?.libraryVariableCollectionsById) ||
+    !isPlainObject(value?.libraryVariablesById) ||
+    !Array.isArray(value?.imageAssetDerivationOrder) ||
+    !isPlainObject(value?.imageAssetDerivationsById)
   ) {
     throw new Error(
       `${fixtureId} ${stage} document does not match the current generated document shape`,
@@ -1397,6 +1411,12 @@ function assertCurrentDocumentShape(value, fixtureId, stage) {
 
 function isPlainObject(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function capture(value, pattern, label) {
+  const match = pattern.exec(value);
+  if (!match?.[1]) throw new Error(`Unable to resolve ${label}`);
+  return match[1];
 }
 
 function transaction({ transactionId, documentId, commands }) {

@@ -1,6 +1,6 @@
 {
   "format": "dev.opendesign.document",
-  "schemaVersion": "1.38.0",
+  "schemaVersion": "1.42.0",
   "documentId": "document_od_poster_01",
   "revision": 0,
   "pageOrder": ["page_poster_01"],
@@ -1358,6 +1358,8 @@
       "extensions": { "fixtureSource": "apps/desktop/build/icons/64x64.png" }
     }
   },
+  "imageAssetDerivationOrder": [],
+  "imageAssetDerivationsById": {},
   "extensions": {
     "fixture": {
       "id": "OD-POSTER-01",

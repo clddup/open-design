@@ -467,6 +467,12 @@ vi.mock("leafer-editor", () => ({
   },
   Leafer: FakeTree,
   MoveEvent: { MOVE: "viewport.move", END: "viewport.move-end" },
+  Creator: {
+    image: vi.fn(),
+  },
+  PaintImage: {
+    recycleImage: vi.fn(() => ({})),
+  },
   Path: FakePath,
   PointerEvent: {
     DOWN: "pointer.down",

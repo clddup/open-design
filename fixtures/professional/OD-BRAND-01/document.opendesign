@@ -1,6 +1,6 @@
 {
   "format": "dev.opendesign.document",
-  "schemaVersion": "1.38.0",
+  "schemaVersion": "1.42.0",
   "documentId": "document_od_brand_01",
   "revision": 1,
   "pageOrder": ["page_brand_01"],
@@ -420,6 +420,8 @@
   "stylesById": {},
   "interactionsById": {},
   "assetsById": {},
+  "imageAssetDerivationOrder": [],
+  "imageAssetDerivationsById": {},
   "extensions": {
     "fixture": {
       "id": "OD-BRAND-01",
