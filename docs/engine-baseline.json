@@ -157,9 +157,9 @@
       "productionStatus": "frame-constraints-linear-auto-layout-grid-v3-canvas-track-reorder-automatic-rows-sizing-wrap-min-max-auto-gap-absolute-child-and-layout-guides-available-native-gate-pending"
     },
     "imageService": {
-      "role": "versioned-nondestructive-image-placement-crop-and-adjustment-service",
+      "role": "versioned-image-placement-crop-adjustment-area-expansion-and-upscale-service",
       "contractPackage": "@opendesign/image-service",
-      "contractVersion": 3,
+      "contractVersion": 6,
       "renderAdapterPackage": "@opendesign/leafer-engine",
       "adjustmentFields": [
         "exposure",
@@ -170,7 +170,7 @@
         "highlights",
         "shadows"
       ],
-      "productionStatus": "placement-focal-crop-direct-manipulation-and-seven-field-image-node-and-image-paint-adjustments-shared-by-canvas-capture-and-raster-export-available-svg-color-management-and-native-gate-pending"
+      "productionStatus": "placement-focal-crop-direct-manipulation-seven-field-image-node-and-image-paint-adjustments-source-normalized-area-selection-handle-expansion-and-trusted-upscale-target-available-svg-color-management-and-native-gate-pending"
     },
     "svgInterchange": {
       "role": "structured-svg-import-export-service",

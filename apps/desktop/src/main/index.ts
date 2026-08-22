@@ -15,6 +15,7 @@ import type {
   ImagePlacement,
   Size,
 } from "@opendesign/design-contracts";
+import { resolveImageUpscaleSize } from "@opendesign/image-service";
 import {
   app,
   BrowserWindow,
@@ -1019,7 +1020,7 @@ function registerIpc(fontBinaryService: FontBinaryMainService) {
       designImageEditControllers.set(request.requestId, controller);
       try {
         const result = await editDesignImageAsset(
-          request.action === "remove-background"
+          request.action === "remove-background" || request.action === "upscale"
             ? {
                 action: request.action,
                 source: request.source,
@@ -2043,7 +2044,8 @@ void app.whenReady().then(async () => {
               )
             : undefined;
         const derived = await editDesignImageAsset(
-          call.input.action === "remove-background"
+          call.input.action === "remove-background" ||
+            call.input.action === "upscale"
             ? {
                 action: call.input.action,
                 source,
@@ -2086,7 +2088,9 @@ void app.whenReady().then(async () => {
                 ? "derive-layer"
                 : call.input.action === "expand"
                   ? "expand-source"
-                  : "derive-source",
+                  : call.input.action === "upscale"
+                    ? "upscale-source"
+                    : "derive-source",
             label: call.input.label,
             pageId: call.input.pageId,
             nodeId: call.input.nodeId,
@@ -2097,6 +2101,19 @@ void app.whenReady().then(async () => {
                   expectedTargetSize: prepared.content.targetSize,
                   expansion: call.input.expansion,
                 }
+              : {}),
+            ...(call.input.action === "upscale"
+              ? (() => {
+                  if (!source.size || !derived.asset.size) {
+                    throw new TypeError(
+                      "Image upscale requires exact source and target dimensions",
+                    );
+                  }
+                  return {
+                    expectedSourceSize: source.size,
+                    targetSize: derived.asset.size,
+                  };
+                })()
               : {}),
             asset: derived.asset,
             derivation: derived.derivation,
@@ -2489,6 +2506,11 @@ type DesignImageEditInput =
       placement: ImagePlacement;
       targetSize: Size;
       importedBy: "agent-image-edit" | "inspector-image-edit";
+    }
+  | {
+      action: "upscale";
+      source: DesignAsset;
+      importedBy: "agent-image-edit" | "inspector-image-edit";
     };
 
 async function editDesignImageAsset(
@@ -2518,6 +2540,9 @@ async function editDesignImageAsset(
       }
     | undefined;
   let pendingExpansion: PreparedImageExpansionRaster | undefined;
+  let pendingUpscale:
+    | { sourceSize: Size; targetSize: Size; preserveTransparency: boolean }
+    | undefined;
   const edited = await (async () => {
     if (input.action === "remove-background") {
       return requireImageGenerationHost().removeBackground(source, signal);
@@ -2538,6 +2563,38 @@ async function editDesignImageAsset(
     const intrinsic = decodedSource.getSize();
     if (intrinsic.width <= 0 || intrinsic.height <= 0) {
       throw new TypeError("Image editing source could not be decoded");
+    }
+    if (input.action === "upscale") {
+      if (
+        !input.source.size ||
+        input.source.size.width !== intrinsic.width ||
+        input.source.size.height !== intrinsic.height
+      ) {
+        throw new TypeError(
+          "Image upscale source dimensions do not match the embedded asset",
+        );
+      }
+      const targetSize = resolveImageUpscaleSize(intrinsic);
+      const preserveTransparency = nativeImageHasTransparentPixels(
+        decodedSource.toBitmap(),
+      );
+      pendingUpscale = {
+        sourceSize: intrinsic,
+        targetSize,
+        preserveTransparency,
+      };
+      return requireImageGenerationHost().boostResolution(
+        {
+          source: {
+            bytes: decodedSource.toPNG(),
+            mimeType: "image/png",
+            name: `${input.source.name.replace(/\.[^.]+$/, "")} — Upscale source.png`,
+          },
+          size: `${targetSize.width}x${targetSize.height}`,
+          preserveTransparency,
+        },
+        signal,
+      );
     }
     if (input.action === "expand") {
       pendingExpansion = createImageExpansionRaster({
@@ -2669,7 +2726,9 @@ async function editDesignImageAsset(
             ? "Object isolated"
             : input.action === "expand"
               ? "Expanded"
-              : "Edited"
+              : input.action === "upscale"
+                ? "Resolution boosted"
+                : "Edited"
     }.png`,
     bytes,
   );
@@ -2721,6 +2780,18 @@ async function editDesignImageAsset(
               providerSourceRect: {
                 ...pendingExpansion.geometry.sourceRect,
               },
+            }
+          : {}),
+        ...(input.action === "upscale" && pendingUpscale
+          ? {
+              sourceSize: { ...pendingUpscale.sourceSize },
+              targetSize: { ...pendingUpscale.targetSize },
+              preserveTransparency: pendingUpscale.preserveTransparency,
+              pixelGain:
+                (pendingUpscale.targetSize.width *
+                  pendingUpscale.targetSize.height) /
+                (pendingUpscale.sourceSize.width *
+                  pendingUpscale.sourceSize.height),
             }
           : {}),
       },

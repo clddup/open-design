@@ -659,6 +659,89 @@ describe("image update planner", () => {
     ).toMatchObject({ ok: false, code: "invalid-asset" });
   });
 
+  it("upscales only source pixels through the dedicated stale-safe workflow", () => {
+    const upscaledAsset: DesignAsset = {
+      ...newAsset,
+      id: "asset_upscaled",
+      mimeType: "image/png",
+      name: "Old — Resolution boosted",
+      size: { width: 1_600, height: 1_200 },
+    };
+    const input = {
+      action: "upscale-source" as const,
+      pageId: "page_welcome",
+      nodeId: "hero",
+      expectedAssetId: oldAsset.id,
+      expectedSourceSize: { width: 800, height: 600 },
+      targetSize: { width: 1_600, height: 1_200 },
+      asset: upscaledAsset,
+      derivation: {
+        id: "upscale_derivation",
+        sourceAssetId: oldAsset.id,
+        resultAssetId: upscaledAsset.id,
+        operation: "upscale" as const,
+        referenceAssetIds: [],
+        extensions: {},
+      },
+    };
+    const runtime = new EditorRuntime(documentWithImage());
+    const plan = planImageNodeUpdate(runtime.getSnapshot().document, input);
+    expect(plan).toMatchObject({ ok: true });
+    if (!plan.ok) return;
+    const before = runtime.getSnapshot().document;
+    expect(
+      runtime.apply({
+        transactionId: "upscale_image",
+        documentId: before.documentId,
+        baseRevision: before.revision,
+        actor: { type: "user", id: "test" },
+        commands: plan.commands,
+      }).ok,
+    ).toBe(true);
+    expect(runtime.getSnapshot().document.nodesById.hero).toMatchObject({
+      transform: [1, 0, 0, 1, 32, 32],
+      size: { width: 320, height: 240 },
+      properties: {
+        assetId: upscaledAsset.id,
+        placement: { mode: "fit" },
+      },
+    });
+    expect(runtime.undo().ok).toBe(true);
+    expect(runtime.getSnapshot().document.nodesById.hero).toMatchObject({
+      size: { width: 320, height: 240 },
+      properties: { assetId: oldAsset.id, placement: { mode: "fit" } },
+    });
+    expect(
+      runtime.getSnapshot().document.assetsById[upscaledAsset.id],
+    ).toBeUndefined();
+
+    expect(
+      planImageNodeUpdate(documentWithImage(), {
+        ...input,
+        asset: {
+          ...upscaledAsset,
+          size: { width: 1_536, height: 1_152 },
+        },
+      }),
+    ).toMatchObject({ ok: false, code: "invalid-asset" });
+    const stale = documentWithImage();
+    stale.assetsById[oldAsset.id]!.size = { width: 1_024, height: 768 };
+    expect(planImageNodeUpdate(stale, input)).toMatchObject({
+      ok: false,
+      code: "asset-stale",
+    });
+    expect(
+      planImageNodeUpdate(documentWithImage(), {
+        action: "derive-source",
+        pageId: input.pageId,
+        nodeId: input.nodeId,
+        expectedAssetId: input.expectedAssetId,
+        asset: input.asset,
+        derivation: input.derivation,
+      }),
+    ).toMatchObject({ ok: false, code: "invalid-asset" });
+  });
+
   it("preserves an old asset referenced by another Image or Path paint", () => {
     const document = documentWithImage();
     document.nodesById.secondary = imageNode("secondary");

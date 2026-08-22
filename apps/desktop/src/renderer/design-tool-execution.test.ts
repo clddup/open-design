@@ -3550,6 +3550,67 @@ describe("Renderer design tool scope", () => {
     expect(
       runtime.getSnapshot().document.assetsById[expandMaskAssetId],
     ).toBeUndefined();
+
+    const upscaledAssetId = `asset_${"4".repeat(64)}`;
+    const upscaleRevision = runtime.getSnapshot().document.revision;
+    const upscaled = await executeDesignToolRequest(
+      {
+        requestId: "commit_upscaled_image_edit",
+        call: {
+          toolCallId: "tool_commit_upscaled_image_edit",
+          toolName: INTERNAL_UPDATE_IMAGE_TOOL_NAME,
+          input: {
+            action: "upscale-source",
+            label: "Boost hero resolution",
+            pageId: "page_welcome",
+            nodeId: "hero_image",
+            expectedAssetId: promptResultAssetId,
+            expectedSourceSize: { width: 800, height: 600 },
+            targetSize: { width: 1_600, height: 1_200 },
+            asset: {
+              id: upscaledAssetId,
+              kind: "image",
+              name: "Hero — Resolution boosted.png",
+              mimeType: "image/png",
+              source: { type: "data", value: "dXBzY2FsZWQ=" },
+              size: { width: 1_600, height: 1_200 },
+              extensions: {},
+            },
+            derivation: {
+              id: "upscale_image_derivation",
+              sourceAssetId: promptResultAssetId,
+              resultAssetId: upscaledAssetId,
+              operation: "upscale",
+              referenceAssetIds: [],
+              extensions: { modelId: "gpt-image-2" },
+            },
+          },
+        },
+        context: { ...selectionContext, revision: upscaleRevision },
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(upscaled).toMatchObject({
+      ok: true,
+      result: {
+        content: { action: "upscale-source", assetId: upscaledAssetId },
+      },
+    });
+    expect(runtime.getSnapshot().document.nodesById.hero_image).toEqual({
+      ...sourceBeforeIsolation,
+      properties: {
+        ...sourceBeforeIsolation.properties,
+        assetId: upscaledAssetId,
+      },
+    });
+    expect(runtime.undo().ok).toBe(true);
+    expect(runtime.getSnapshot().document.nodesById.hero_image).toEqual(
+      sourceBeforeIsolation,
+    );
+    expect(
+      runtime.getSnapshot().document.assetsById[upscaledAssetId],
+    ).toBeUndefined();
   });
 
   it("updates one inspected image paint and blocks generic filter rewrites", async () => {

@@ -49,7 +49,7 @@ Runtime 的专用 `expand-source` planner 再检查当前 `expectedAssetId`、�
 - OpenDesign 获得与 Figma 公开交互一致的独立 Expand 工作流，同时以可信像素复合提供比纯 mask 提示更强的原图保护。
 - 扩图结果仍是普通 Image asset；画布、capture、导出、来源切换、保存与撤销不增加旁路。
 - 每边两倍和 3:1 是当前 Provider 约束下的显式产品边界，不被错误描述为通用文档限制；后续 adapter 可通过新契约扩展。
-- 带提示词的局部重绘、背景替换、Boost resolution、重打光、风格统一、Image Paint 编辑和多参考图仍待后续切片。
+- Boost resolution 随后由 ADR-0137 接入同一来源谱系；带提示词的局部重绘、背景替换、重打光、风格统一、Image Paint 编辑和多参考图仍待后续切片。
 
 ## 验证
 

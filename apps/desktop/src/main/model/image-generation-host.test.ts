@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { WorkspaceStore } from "../project/workspace-store";
 import {
+  BOOST_RESOLUTION_PROMPT,
   EXPAND_IMAGE_PROMPT,
   ImageGenerationHost,
 } from "./image-generation-host";
@@ -409,6 +410,62 @@ describe("ImageGenerationHost", () => {
         new AbortController().signal,
       ),
     ).rejects.toThrow("must match the prepared source canvas");
+    expect(fetch).toHaveBeenCalledTimes(1);
+    store.close();
+  });
+
+  it("boosts resolution to the trusted exact target without changing image intent", async () => {
+    const store = new WorkspaceStore(":memory:");
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          data: [{ b64_json: pngFixture(6, 1600, 1200).toString("base64") }],
+        }),
+        { status: 200 },
+      ),
+    );
+    const host = new ImageGenerationHost(store, cipher, fetch);
+    host.saveSettings({
+      enabled: true,
+      apiFormat: "openai-images",
+      authMode: "none",
+      baseUrl: "https://images.example/v1",
+      modelId: "gpt-image-2",
+    });
+    await expect(
+      host.boostResolution(
+        {
+          source: {
+            bytes: pngFixture(6, 800, 600),
+            mimeType: "image/png",
+            name: "Source.png",
+          },
+          size: "1600x1200",
+          preserveTransparency: true,
+        },
+        new AbortController().signal,
+      ),
+    ).resolves.toMatchObject({ operation: "upscale" });
+    const form = fetch.mock.calls[0]?.[1]?.body;
+    if (!(form instanceof FormData)) throw new Error("Expected FormData");
+    expect(form.get("prompt")).toBe(BOOST_RESOLUTION_PROMPT);
+    expect(form.get("size")).toBe("1600x1200");
+    expect(form.get("background")).toBe("transparent");
+
+    await expect(
+      host.boostResolution(
+        {
+          source: {
+            bytes: pngFixture(6, 800, 600),
+            mimeType: "image/png",
+            name: "Source.png",
+          },
+          size: "1536x1024",
+          preserveTransparency: true,
+        },
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow("trusted source target");
     expect(fetch).toHaveBeenCalledTimes(1);
     store.close();
   });

@@ -1463,29 +1463,40 @@ async function executeDesignToolRequestUnsafe(
                           derivation: input.derivation,
                           supportingAssets: input.supportingAssets,
                         }
-                      : input.action === "derive-layer"
+                      : input.action === "upscale-source"
                         ? {
                             action: input.action,
                             pageId: input.pageId,
                             nodeId: input.nodeId,
                             expectedAssetId: input.expectedAssetId,
-                            resultNodeId: input.resultNodeId,
-                            resultNodeName: input.resultNodeName,
+                            expectedSourceSize: input.expectedSourceSize,
+                            targetSize: input.targetSize,
                             asset: input.asset,
                             derivation: input.derivation,
-                            ...(input.supportingAssets === undefined
-                              ? {}
-                              : { supportingAssets: input.supportingAssets }),
                           }
-                        : {
-                            action: input.action,
-                            pageId: input.pageId,
-                            nodeId: input.nodeId,
-                            asset: input.asset,
-                            ...(input.placement === undefined
-                              ? {}
-                              : { placement: input.placement }),
-                          },
+                        : input.action === "derive-layer"
+                          ? {
+                              action: input.action,
+                              pageId: input.pageId,
+                              nodeId: input.nodeId,
+                              expectedAssetId: input.expectedAssetId,
+                              resultNodeId: input.resultNodeId,
+                              resultNodeName: input.resultNodeName,
+                              asset: input.asset,
+                              derivation: input.derivation,
+                              ...(input.supportingAssets === undefined
+                                ? {}
+                                : { supportingAssets: input.supportingAssets }),
+                            }
+                          : {
+                              action: input.action,
+                              pageId: input.pageId,
+                              nodeId: input.nodeId,
+                              asset: input.asset,
+                              ...(input.placement === undefined
+                                ? {}
+                                : { placement: input.placement }),
+                            },
             commandPrefix,
           );
     if (!plan.ok) {

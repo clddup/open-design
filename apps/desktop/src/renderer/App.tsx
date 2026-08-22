@@ -1097,7 +1097,8 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
         | {
             action: "expand";
             expansion: ImageExpansionInsets;
-          },
+          }
+        | { action: "upscale" },
     ) => {
       if (imageEdit) return;
       const snapshot = runtime.getSnapshot();
@@ -1123,6 +1124,13 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
       const expectedAssetId = node.properties.assetId;
       const expectedPlacement = structuredClone(node.properties.placement);
       const expectedTargetSize = structuredClone(node.size);
+      const expectedSourceSize = source.size
+        ? structuredClone(source.size)
+        : undefined;
+      if (edit.action === "upscale" && !expectedSourceSize) {
+        setEditorError(t("error.imageEditUnsupported"));
+        return;
+      }
       setImageEdit({
         requestId,
         nodeId,
@@ -1207,17 +1215,30 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
                   derivation: edited.derivation,
                   supportingAssets: edited.supportingAssets ?? [],
                 }
-              : {
-                  action: "derive-source",
-                  pageId: activePageId,
-                  nodeId,
-                  expectedAssetId,
-                  asset: edited.asset,
-                  derivation: edited.derivation,
-                  ...(edited.supportingAssets === undefined
-                    ? {}
-                    : { supportingAssets: edited.supportingAssets }),
-                },
+              : edit.action === "upscale" &&
+                  expectedSourceSize &&
+                  edited.asset.size
+                ? {
+                    action: "upscale-source",
+                    pageId: activePageId,
+                    nodeId,
+                    expectedAssetId,
+                    expectedSourceSize,
+                    targetSize: edited.asset.size,
+                    asset: edited.asset,
+                    derivation: edited.derivation,
+                  }
+                : {
+                    action: "derive-source",
+                    pageId: activePageId,
+                    nodeId,
+                    expectedAssetId,
+                    asset: edited.asset,
+                    derivation: edited.derivation,
+                    ...(edited.supportingAssets === undefined
+                      ? {}
+                      : { supportingAssets: edited.supportingAssets }),
+                  },
           `image_edit_${requestId}`,
         );
         if (!plan.ok) throw new Error(plan.message);
@@ -1232,7 +1253,9 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
                     ? "history.eraseImageObject"
                     : edit.action === "isolate-object"
                       ? "history.isolateImageObject"
-                      : "history.expandImage",
+                      : edit.action === "expand"
+                        ? "history.expandImage"
+                        : "history.boostImageResolution",
             ),
             plan.commands,
           )
@@ -1274,7 +1297,8 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
             action: "prompt-edit";
             prompt: string;
             reference?: DesignAsset;
-          },
+          }
+        | { action: "upscale" },
     ) => {
       const selected = runtime.getSnapshot().state.selection.nodeIds;
       if (selected.length === 1) void runImageEdit(selected[0], edit);
@@ -3016,6 +3040,9 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
                 }
                 onRemoveImageBackground={() =>
                   void runSelectedImageEdit({ action: "remove-background" })
+                }
+                onUpscaleImage={() =>
+                  void runSelectedImageEdit({ action: "upscale" })
                 }
                 onEditImageWithPrompt={(prompt, reference) =>
                   void runSelectedImageEdit({

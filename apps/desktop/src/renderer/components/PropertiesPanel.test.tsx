@@ -176,6 +176,7 @@ function renderPanel(
           onCropImage={vi.fn(() => true)}
           onSelectImageArea={vi.fn(() => true)}
           onExpandImage={vi.fn(() => true)}
+          onUpscaleImage={vi.fn()}
           onReplaceImage={vi.fn()}
           imageEditStatus={null}
           imageEditAction={null}

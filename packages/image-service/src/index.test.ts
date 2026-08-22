@@ -15,6 +15,7 @@ import {
   resizeImageExpand,
   resolveImagePlacement,
   resolveImageExpansionRaster,
+  resolveImageUpscaleSize,
   setImageExpandAspectRatio,
   setImageCropZoom,
 } from "./index.js";
@@ -310,6 +311,46 @@ describe("image expansion geometry", () => {
         expansion: { top: 0, right: 0, bottom: 0, left: 0 },
       }),
     ).toThrow("extend at least one edge");
+  });
+});
+
+describe("image upscale geometry", () => {
+  it("prefers a 2x target while respecting the embedded-result pixel budget", () => {
+    expect(resolveImageUpscaleSize({ width: 1_024, height: 1_024 })).toEqual({
+      width: 1_920,
+      height: 1_920,
+    });
+    expect(resolveImageUpscaleSize({ width: 1_920, height: 1_080 })).toEqual({
+      width: 2_560,
+      height: 1_440,
+    });
+  });
+
+  it("raises small sources to the provider pixel floor without changing canvas geometry", () => {
+    const target = resolveImageUpscaleSize({ width: 400, height: 300 });
+    expect(target).toEqual({ width: 944, height: 704 });
+    expect(target.width % 16).toBe(0);
+    expect(target.height % 16).toBe(0);
+    expect(target.width * target.height).toBeGreaterThanOrEqual(655_360);
+  });
+
+  it("uses the largest meaningful supported target for high-resolution sources", () => {
+    expect(resolveImageUpscaleSize({ width: 1_800, height: 1_800 })).toEqual({
+      width: 1_920,
+      height: 1_920,
+    });
+    expect(() =>
+      resolveImageUpscaleSize({ width: 2_000, height: 2_000 }),
+    ).toThrow("no larger supported");
+  });
+
+  it("rejects invalid pixels and unsupported source aspect ratios", () => {
+    expect(() =>
+      resolveImageUpscaleSize({ width: 1_000.5, height: 1_000 }),
+    ).toThrow("integer pixel");
+    expect(() =>
+      resolveImageUpscaleSize({ width: 1_600, height: 400 }),
+    ).toThrow("aspect ratio");
   });
 });
 

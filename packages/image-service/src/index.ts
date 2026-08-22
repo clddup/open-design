@@ -8,7 +8,7 @@ import type {
 } from "@opendesign/design-contracts";
 import { IMAGE_FILTER_KEYS } from "@opendesign/design-contracts";
 
-export const IMAGE_SERVICE_CONTRACT_VERSION = 5 as const;
+export const IMAGE_SERVICE_CONTRACT_VERSION = 6 as const;
 
 const FILTER_EPSILON = 0.000_001;
 
@@ -183,6 +183,11 @@ const MIN_IMAGE_AREA_SELECTION_AREA = 0.000_001;
 const MAX_IMAGE_EXPANSION_PER_EDGE = 2;
 const MAX_IMAGE_EXPANSION_ASPECT_RATIO = 3;
 const IMAGE_EXPANSION_SHORT_EDGE = 1_024;
+const IMAGE_PROVIDER_MAX_EDGE = 3_840;
+const IMAGE_PROVIDER_MIN_PIXELS = 655_360;
+const IMAGE_UPSCALE_MAX_PIXELS = 3_686_400;
+const IMAGE_UPSCALE_TARGET_FACTOR = 2;
+const IMAGE_UPSCALE_MINIMUM_PIXEL_GAIN = 1.05;
 
 /**
  * Converts a freeform lasso from Image-node local coordinates into normalized
@@ -425,6 +430,71 @@ export function imageExpansionIsEmpty(
     expansion.bottom <= 0.000_001 &&
     expansion.left <= 0.000_001
   );
+}
+
+/**
+ * Resolves one trusted super-resolution target for the current source bitmap.
+ * The preferred result is 2x on each axis. Very small sources grow enough to
+ * reach the provider floor, while large sources use the largest meaningful
+ * size that stays inside GPT Image 2 and the current embedded-result budget.
+ */
+export function resolveImageUpscaleSize(sourceSize: Size): Size {
+  assertPositivePixelSize(sourceSize, "sourceSize");
+  const sourceAspect = Math.max(
+    sourceSize.width / sourceSize.height,
+    sourceSize.height / sourceSize.width,
+  );
+  if (sourceAspect > MAX_IMAGE_EXPANSION_ASPECT_RATIO + 0.000_001) {
+    throw new RangeError("Image upscale source aspect ratio exceeds 3:1");
+  }
+  const sourcePixels = sourceSize.width * sourceSize.height;
+  const maximumScale = Math.min(
+    IMAGE_PROVIDER_MAX_EDGE / sourceSize.width,
+    IMAGE_PROVIDER_MAX_EDGE / sourceSize.height,
+    Math.sqrt(IMAGE_UPSCALE_MAX_PIXELS / sourcePixels),
+  );
+  const minimumScale = Math.sqrt(IMAGE_PROVIDER_MIN_PIXELS / sourcePixels);
+  if (
+    !Number.isFinite(maximumScale) ||
+    maximumScale <= 1 ||
+    minimumScale > maximumScale + 0.000_001
+  ) {
+    throw new RangeError(
+      "Image source has no larger supported upscale resolution",
+    );
+  }
+  const scale = Math.min(
+    maximumScale,
+    Math.max(IMAGE_UPSCALE_TARGET_FACTOR, minimumScale),
+  );
+  let width = Math.min(
+    IMAGE_PROVIDER_MAX_EDGE,
+    roundUpTo16(sourceSize.width * scale),
+  );
+  let height = Math.min(
+    IMAGE_PROVIDER_MAX_EDGE,
+    roundUpTo16(sourceSize.height * scale),
+  );
+  while (width * height > IMAGE_UPSCALE_MAX_PIXELS) {
+    if (width / sourceSize.width >= height / sourceSize.height) width -= 16;
+    else height -= 16;
+  }
+  const targetPixels = width * height;
+  if (
+    width <= 0 ||
+    height <= 0 ||
+    targetPixels < IMAGE_PROVIDER_MIN_PIXELS ||
+    targetPixels < sourcePixels * IMAGE_UPSCALE_MINIMUM_PIXEL_GAIN
+  ) {
+    throw new RangeError(
+      "Image source has no meaningful supported upscale resolution",
+    );
+  }
+  const targetAspect = Math.max(width / height, height / width);
+  if (targetAspect > MAX_IMAGE_EXPANSION_ASPECT_RATIO + 0.000_001) {
+    throw new RangeError("Image upscale target aspect ratio exceeds 3:1");
+  }
+  return { width, height };
 }
 
 export function resolveImagePlacement({
@@ -691,6 +761,13 @@ function assertPositiveSize(size: Size, name: string): void {
     size.height <= 0
   ) {
     throw new RangeError(`${name} must have positive finite dimensions`);
+  }
+}
+
+function assertPositivePixelSize(size: Size, name: string): void {
+  assertPositiveSize(size, name);
+  if (!Number.isInteger(size.width) || !Number.isInteger(size.height)) {
+    throw new RangeError(`${name} must have integer pixel dimensions`);
   }
 }
 

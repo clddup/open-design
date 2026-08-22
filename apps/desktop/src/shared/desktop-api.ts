@@ -281,7 +281,8 @@ export type DesignImageEditAction =
   | "prompt-edit"
   | "erase-object"
   | "isolate-object"
-  | "expand";
+  | "expand"
+  | "upscale";
 
 type DesignImageEditRequestBase = {
   requestId: string;
@@ -294,6 +295,7 @@ type DesignImageEditRequestBase = {
 export type DesignImageEditRequest = DesignImageEditRequestBase &
   (
     | { action: "remove-background" }
+    | { action: "upscale" }
     | {
         action: "prompt-edit";
         prompt: string;
@@ -695,7 +697,7 @@ export function isDesignImageEditRequest(
   )) {
     return false;
   }
-  if (value.action === "remove-background") {
+  if (value.action === "remove-background" || value.action === "upscale") {
     return hasExactKeys(value, [
       "requestId",
       "action",
@@ -768,7 +770,8 @@ export function isDesignImageEditResult(
       value.action !== "prompt-edit" &&
       value.action !== "erase-object" &&
       value.action !== "isolate-object" &&
-      value.action !== "expand") ||
+      value.action !== "expand" &&
+      value.action !== "upscale") ||
     !isStableId(value.sourceAssetId) ||
     !isEmbeddedEditableImageAsset(value.asset) ||
     !isImageAssetDerivation(value.derivation) ||
@@ -807,6 +810,16 @@ export function isDesignImageEditResult(
     (supportingAssets.length !== 0 ||
       derivation.prompt !== undefined ||
       derivation.maskAssetId !== undefined)
+  ) {
+    return false;
+  }
+  if (
+    value.action === "upscale" &&
+    (supportingAssets.length !== 0 ||
+      derivation.prompt !== undefined ||
+      derivation.maskAssetId !== undefined ||
+      derivation.referenceAssetIds.length !== 0 ||
+      value.asset.mimeType !== "image/png")
   ) {
     return false;
   }

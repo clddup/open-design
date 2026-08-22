@@ -8,11 +8,15 @@ import {
   type ImagePlacement,
 } from "@opendesign/design-contracts";
 import { getImageAssetFamily } from "@opendesign/editor-runtime";
-import { Button, Icon } from "@opendesign/ui";
+import { Button, DropdownMenu, DropdownMenuItem, Icon } from "@opendesign/ui";
 import { useEffect, useId, useState, type KeyboardEvent } from "react";
+import type { DesignImageEditAction } from "../../../shared/desktop-api";
 import type { MessageKey } from "../../../shared/i18n/messages";
 import { useI18n } from "../../i18n";
-import { IMAGE_DERIVATION_OPERATION_LABEL_KEYS } from "../../design-assets";
+import {
+  IMAGE_DERIVATION_OPERATION_LABEL_KEYS,
+  IMAGE_EDIT_PROGRESS_LABEL_KEYS,
+} from "../../design-assets";
 import styles from "../PropertiesPanel.module.scss";
 import imageStyles from "./ImageSection.module.scss";
 import { Field, Section, commitNumber, cx, formatNumber } from "./controls";
@@ -35,6 +39,7 @@ export function ImageSection({
   onCrop,
   onSelectArea,
   onExpand,
+  onUpscale,
   onReplace,
   editStatus,
   editAction,
@@ -51,15 +56,10 @@ export function ImageSection({
   onCrop: () => boolean;
   onSelectArea: () => boolean;
   onExpand: () => boolean;
+  onUpscale: () => void;
   onReplace: () => void;
   editStatus: "running" | "cancelling" | null;
-  editAction:
-    | "remove-background"
-    | "prompt-edit"
-    | "erase-object"
-    | "isolate-object"
-    | "expand"
-    | null;
+  editAction: DesignImageEditAction | null;
   onRemoveBackground: () => void;
   onEditWithPrompt: (prompt: string, reference?: DesignAsset) => void;
   onSelectEditReference: () => Promise<DesignAsset | null>;
@@ -318,22 +318,30 @@ export function ImageSection({
               ? t("properties.imageEditingWithPrompt")
               : t("properties.imageEditWithPrompt")}
           </Button>
-          <Button
-            aria-busy={
-              editAction === "remove-background" && editStatus !== null
-            }
+          <DropdownMenu
             disabled={editStatus !== null}
-            icon={
-              editAction === "remove-background" && editStatus
-                ? "lucide:loader-circle"
-                : "lucide:scan-line"
-            }
-            onClick={onRemoveBackground}
+            icon={<Icon name="lucide:ellipsis" />}
+            label={t("properties.imageMoreActions")}
           >
-            {editAction === "remove-background" && editStatus
-              ? t("properties.imageRemovingBackground")
-              : t("properties.imageRemoveBackground")}
-          </Button>
+            <DropdownMenuItem
+              icon={<Icon name="lucide:scan-line" />}
+              onSelect={() => {
+                setPromptEditorOpen(false);
+                onRemoveBackground();
+              }}
+            >
+              {t("properties.imageRemoveBackground")}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              icon={<Icon name="lucide:maximize-2" />}
+              onSelect={() => {
+                setPromptEditorOpen(false);
+                onUpscale();
+              }}
+            >
+              {t("properties.imageBoostResolution")}
+            </DropdownMenuItem>
+          </DropdownMenu>
         </div>
         {promptEditorOpen && (
           <div className={imageStyles.promptEditor}>
@@ -414,13 +422,9 @@ export function ImageSection({
         {editStatus && !promptEditorOpen && (
           <div className={imageStyles.editProgress}>
             <span>
-              {editAction === "prompt-edit"
-                ? t("properties.imageEditingWithPrompt")
-                : editAction === "erase-object"
-                  ? t("canvas.imageAreaErasing")
-                  : editAction === "isolate-object"
-                    ? t("canvas.imageAreaIsolating")
-                    : t("properties.imageRemovingBackground")}
+              {editAction
+                ? t(IMAGE_EDIT_PROGRESS_LABEL_KEYS[editAction])
+                : t("properties.imageEditingWithPrompt")}
             </span>
             <Button
               disabled={editStatus === "cancelling"}

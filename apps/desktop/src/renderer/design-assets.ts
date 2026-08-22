@@ -9,6 +9,7 @@ import {
   nodeReferencesAsset,
 } from "@opendesign/editor-runtime";
 import type { MessageKey } from "../shared/i18n/messages";
+import type { DesignImageEditAction } from "../shared/desktop-api";
 
 export const DESIGN_ASSET_DRAG_MIME =
   "application/x-opendesign-image-asset-id" as const;
@@ -26,6 +27,18 @@ export const IMAGE_DERIVATION_OPERATION_LABEL_KEYS: Record<
   "prompt-edit": "properties.imageSourceOperation.prompt-edit",
   relight: "properties.imageSourceOperation.relight",
   "style-harmonize": "properties.imageSourceOperation.style-harmonize",
+};
+
+export const IMAGE_EDIT_PROGRESS_LABEL_KEYS: Record<
+  DesignImageEditAction,
+  MessageKey
+> = {
+  "remove-background": "properties.imageRemovingBackground",
+  "prompt-edit": "properties.imageEditingWithPrompt",
+  "erase-object": "canvas.imageAreaErasing",
+  "isolate-object": "canvas.imageAreaIsolating",
+  expand: "canvas.imageExpanding",
+  upscale: "properties.imageBoostingResolution",
 };
 
 export type AssetActionResult =

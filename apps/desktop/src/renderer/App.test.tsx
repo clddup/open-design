@@ -3243,7 +3243,12 @@ describe("App", () => {
     );
 
     await user.click(screen.getByRole("tab", { name: "Properties" }));
-    await user.click(screen.getByRole("button", { name: "Remove background" }));
+    await user.click(
+      screen.getByRole("button", { name: "More image actions" }),
+    );
+    await user.click(
+      screen.getByRole("menuitem", { name: "Remove background" }),
+    );
     await waitFor(() =>
       expect(
         runtime().getSnapshot().document.nodesById.background_image,
@@ -3657,6 +3662,68 @@ describe("App", () => {
       runtime().setSelection(["background_image"], "background_image");
     });
 
+    const upscaledAssetId = `asset_${"9".repeat(64)}`;
+    vi.mocked(window.desktop!.editDesignImage).mockImplementationOnce(
+      (request) => {
+        if (request.action !== "upscale") {
+          throw new Error("Expected a resolution boost request");
+        }
+        expect(request).not.toHaveProperty("scale");
+        return Promise.resolve({
+          requestId: request.requestId,
+          action: "upscale",
+          sourceAssetId,
+          asset: {
+            id: upscaledAssetId,
+            kind: "image",
+            name: "Portrait — Resolution boosted.png",
+            mimeType: "image/png",
+            source: { type: "data", value: "dXBzY2FsZWQ=" },
+            size: { width: 1_600, height: 1_200 },
+            extensions: { importedBy: "inspector-image-edit" },
+          },
+          derivation: {
+            id: "upscale_image_result",
+            sourceAssetId,
+            resultAssetId: upscaledAssetId,
+            operation: "upscale",
+            referenceAssetIds: [],
+            extensions: { modelId: "gpt-image-2" },
+          },
+        });
+      },
+    );
+    await user.click(
+      screen.getByRole("button", { name: "More image actions" }),
+    );
+    await user.click(
+      screen.getByRole("menuitem", { name: "Boost resolution" }),
+    );
+    await waitFor(() =>
+      expect(
+        runtime().getSnapshot().document.nodesById.background_image,
+      ).toMatchObject({
+        transform: [1, 0, 0, 1, 100, 120],
+        size: { width: 400, height: 300 },
+        properties: {
+          assetId: upscaledAssetId,
+          placement: { mode: "fill" },
+          filters: { contrast: 0.2 },
+          cornerRadius: 12,
+        },
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: "Undo" }));
+    expect(
+      runtime().getSnapshot().document.nodesById.background_image,
+    ).toMatchObject({
+      size: { width: 400, height: 300 },
+      properties: { assetId: sourceAssetId, placement: { mode: "fill" } },
+    });
+    expect(
+      runtime().getSnapshot().document.assetsById[upscaledAssetId],
+    ).toBeUndefined();
+
     let rejectEdit: ((reason: Error) => void) | undefined;
     vi.mocked(window.desktop!.editDesignImage).mockImplementationOnce(
       () =>
@@ -3665,7 +3732,12 @@ describe("App", () => {
         }),
     );
     const beforeCancelledEdit = runtime().getSnapshot().document.revision;
-    await user.click(screen.getByRole("button", { name: "Remove background" }));
+    await user.click(
+      screen.getByRole("button", { name: "More image actions" }),
+    );
+    await user.click(
+      screen.getByRole("menuitem", { name: "Remove background" }),
+    );
     expect(await screen.findByText("Editing Portrait")).toBeVisible();
     act(() => runtime().setSelection(["feature_one"], "feature_one"));
     expect(screen.getByText("Editing Portrait")).toBeVisible();
@@ -3678,7 +3750,7 @@ describe("App", () => {
     act(() => runtime().setSelection(["background_image"], "background_image"));
     await waitFor(() =>
       expect(
-        screen.getByRole("button", { name: "Remove background" }),
+        screen.getByRole("button", { name: "More image actions" }),
       ).toBeEnabled(),
     );
     expect(runtime().getSnapshot().document.revision).toBe(beforeCancelledEdit);

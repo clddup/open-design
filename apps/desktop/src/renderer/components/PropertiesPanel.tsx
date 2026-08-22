@@ -23,6 +23,7 @@ import {
   type ArrangementSelectionMetrics,
 } from "@opendesign/editor-runtime";
 import { Icon } from "@opendesign/ui";
+import type { DesignImageEditAction } from "../../shared/desktop-api";
 import { useI18n } from "../i18n";
 import type { UpdatePropertiesPatch } from "../features/editor/types";
 import type { StyleActions } from "../use-style-actions";
@@ -85,6 +86,7 @@ export function PropertiesPanel({
   onCropImage,
   onSelectImageArea,
   onExpandImage,
+  onUpscaleImage,
   onReplaceImage,
   imageEditStatus,
   imageEditAction,
@@ -170,15 +172,10 @@ export function PropertiesPanel({
   onCropImage: () => boolean;
   onSelectImageArea: () => boolean;
   onExpandImage: () => boolean;
+  onUpscaleImage: () => void;
   onReplaceImage: () => void;
   imageEditStatus: "running" | "cancelling" | null;
-  imageEditAction:
-    | "remove-background"
-    | "prompt-edit"
-    | "erase-object"
-    | "isolate-object"
-    | "expand"
-    | null;
+  imageEditAction: DesignImageEditAction | null;
   onRemoveImageBackground: () => void;
   onEditImageWithPrompt: (prompt: string, reference?: DesignAsset) => void;
   onSelectImageEditReference: () => Promise<DesignAsset | null>;
@@ -346,6 +343,7 @@ export function PropertiesPanel({
             onCropImage={onCropImage}
             onSelectImageArea={onSelectImageArea}
             onExpandImage={onExpandImage}
+            onUpscaleImage={onUpscaleImage}
             onReplaceImage={onReplaceImage}
             imageEditStatus={imageEditStatus}
             imageEditAction={imageEditAction}

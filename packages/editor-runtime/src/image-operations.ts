@@ -15,6 +15,7 @@ import { MAX_TRANSACTION_COMMANDS } from "@opendesign/design-contracts";
 import {
   normalizeImageFilters,
   resolveImageExpansionRaster,
+  resolveImageUpscaleSize,
   type ImageExpansionInsets,
 } from "@opendesign/image-service";
 import { canonicalJsonStringify } from "./document-fingerprint.js";
@@ -82,6 +83,16 @@ export type ImageUpdateOperation =
       asset: DesignAsset;
       derivation: ImageAssetDerivation;
       supportingAssets: readonly DesignAsset[];
+    }
+  | {
+      action: "upscale-source";
+      pageId: string;
+      nodeId: string;
+      expectedAssetId: string;
+      expectedSourceSize: { width: number; height: number };
+      targetSize: { width: number; height: number };
+      asset: DesignAsset;
+      derivation: ImageAssetDerivation;
     };
 
 export type ImageUpdateFailureCode =
@@ -296,7 +307,8 @@ export function planImageNodeUpdate(
   const sourceUpdate =
     operation.action === "derive-source" ||
     operation.action === "derive-layer" ||
-    operation.action === "expand-source"
+    operation.action === "expand-source" ||
+    operation.action === "upscale-source"
       ? operation
       : {
           ...operation,
@@ -379,6 +391,48 @@ export function planImageNodeUpdate(
       };
     }
   }
+  if (operation.action === "upscale-source") {
+    const sourceAsset = document.assetsById[previousAssetId];
+    if (
+      !sourceAsset ||
+      sourceAsset.kind !== "image" ||
+      !sourceAsset.size ||
+      !sameSize(sourceAsset.size, operation.expectedSourceSize)
+    ) {
+      return {
+        ok: false,
+        code: "asset-stale",
+        message: `Image asset ${previousAssetId} dimensions changed after upscale started`,
+      };
+    }
+    let expectedTarget: { width: number; height: number };
+    try {
+      expectedTarget = resolveImageUpscaleSize(operation.expectedSourceSize);
+    } catch (error) {
+      return {
+        ok: false,
+        code: "invalid-asset",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Image upscale geometry is invalid",
+      };
+    }
+    if (
+      operation.derivation.operation !== "upscale" ||
+      !sameSize(operation.targetSize, expectedTarget) ||
+      sourceUpdate.asset.mimeType !== "image/png" ||
+      !sourceUpdate.asset.size ||
+      !sameSize(sourceUpdate.asset.size, expectedTarget)
+    ) {
+      return {
+        ok: false,
+        code: "invalid-asset",
+        message:
+          "Upscaled image asset dimensions do not match the trusted target",
+      };
+    }
+  }
   const placementChanged =
     operation.action === "replace-source" &&
     operation.placement !== undefined &&
@@ -397,7 +451,8 @@ export function planImageNodeUpdate(
     requestedDerivation.resultAssetId !== sourceUpdate.asset.id ||
     ((operation.action === "derive-source" ||
       operation.action === "derive-layer" ||
-      operation.action === "expand-source") &&
+      operation.action === "expand-source" ||
+      operation.action === "upscale-source") &&
       requestedDerivation.operation === "replacement")
   ) {
     return {
@@ -416,8 +471,18 @@ export function planImageNodeUpdate(
       message: "Image expansion must use the dedicated geometry-bound workflow",
     };
   }
+  if (
+    requestedDerivation.operation === "upscale" &&
+    operation.action !== "upscale-source"
+  ) {
+    return {
+      ok: false,
+      code: "invalid-asset",
+      message: "Image upscale must use the dedicated pixel-bound workflow",
+    };
+  }
 
-  const supportingAssets =
+  const supportingAssets: readonly DesignAsset[] =
     operation.action === "derive-source" ||
     operation.action === "derive-layer" ||
     operation.action === "expand-source"
@@ -484,6 +549,19 @@ export function planImageNodeUpdate(
           "Masked image derivation requires one exact PNG mask and prompt",
       };
     }
+  }
+  if (
+    requestedDerivation.operation === "upscale" &&
+    (requestedDerivation.prompt !== undefined ||
+      requestedDerivation.maskAssetId !== undefined ||
+      requestedDerivation.referenceAssetIds.length !== 0 ||
+      supportingAssets.length !== 0)
+  ) {
+    return {
+      ok: false,
+      code: "invalid-asset",
+      message: "Image upscale cannot carry a prompt, mask, or reference asset",
+    };
   }
 
   const commands: DesignOperation[] = [];

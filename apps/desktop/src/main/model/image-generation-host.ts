@@ -14,6 +14,7 @@ import type {
   ImageGenerationQuality,
   ImageGenerationSize,
 } from "../../shared/design-agent-tools";
+import { resolveImageUpscaleSize } from "@opendesign/image-service";
 import type { WorkspaceStore } from "../project/workspace-store";
 import {
   modelProviderCredentialKey,
@@ -72,6 +73,12 @@ export type ExpandImageInput = MaskedImageEditInput & {
   size: `${number}x${number}`;
 };
 
+export type UpscaleImageInput = {
+  source: ImageEditSource & { mimeType: "image/png" };
+  size: `${number}x${number}`;
+  preserveTransparency: boolean;
+};
+
 export const ERASE_OBJECT_PROMPT =
   "Remove only the object or area inside the transparent mask and reconstruct the background naturally. Preserve the composition, geometry, lighting, texture, and every unmasked part of the source image. Do not crop, resize, restyle, or add unrelated content.";
 
@@ -80,6 +87,9 @@ export const ISOLATE_OBJECT_PROMPT =
 
 export const EXPAND_IMAGE_PROMPT =
   "Extend the source image naturally into every transparent masked border. Continue the existing scene, composition, perspective, geometry, lighting, texture, depth, and color treatment. Preserve the complete unmasked source exactly, add no unrelated focal subject, and fill the full output canvas without seams or blank borders.";
+
+export const BOOST_RESOLUTION_PROMPT =
+  "Increase only the source image resolution and recover natural high-frequency detail. Preserve the exact composition, crop, geometry, subject identity, text, colors, lighting, transparency, and every visible element. Do not add, remove, move, restyle, relight, sharpen excessively, or invent unrelated content. Fill the exact requested output dimensions.";
 
 export type EditedImage = {
   bytes: Uint8Array;
@@ -92,7 +102,8 @@ export type EditedImage = {
     | "prompt-edit"
     | "erase-object"
     | "isolate-object"
-    | "expand";
+    | "expand"
+    | "upscale";
 };
 
 export class ImageGenerationHost {
@@ -320,6 +331,40 @@ export class ImageGenerationHost {
       signal,
       input.size,
     );
+  }
+
+  async boostResolution(
+    input: UpscaleImageInput,
+    signal: AbortSignal,
+  ): Promise<EditedImage> {
+    assertImageEditSource(input.source);
+    const source = pngMetadata(input.source.bytes);
+    const target = resolveImageUpscaleSize({
+      width: source.width,
+      height: source.height,
+    });
+    if (input.size !== `${target.width}x${target.height}`) {
+      throw new TypeError(
+        "Image upscale request size must match the trusted source target",
+      );
+    }
+    const edited = await this.editImage(
+      {
+        operation: "upscale",
+        prompt: BOOST_RESOLUTION_PROMPT,
+        sources: [input.source],
+        background: input.preserveTransparency ? "transparent" : "auto",
+        size: input.size,
+      },
+      signal,
+    );
+    const result = pngMetadata(edited.bytes);
+    if (result.width !== target.width || result.height !== target.height) {
+      throw new TypeError(
+        "Upscaled image output dimensions must match the trusted target",
+      );
+    }
+    return edited;
   }
 
   private async editMaskedImage(

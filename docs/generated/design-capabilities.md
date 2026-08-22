@@ -164,26 +164,27 @@
 非破坏性裁剪与调整，保留来源历史、恢复图片变体，并在不覆盖原图的情况下替换来源。
 
 - ID：`image.crop-adjustments`
-- 实现方：DesignDocument 1.42.0 + OpenDesign Image Service contract 3 + recoverable image derivation DAG + Leafer per-image-paint adjustment projection
+- 实现方：DesignDocument 1.42.0 + OpenDesign Image Service contract 6 + recoverable image derivation DAG + Leafer per-image-paint adjustment projection
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=degraded
 - 证据：自动化 12 项；实机 0 项
-- 限制：Image 节点及每项图片 Fill/Stroke 已通过同一确定性 RGBA 投影支持 Figma-compatible 调整；来源替换会记录由 Inspector、Assets、Agent、undo 与持久化共用的可恢复 typed derivation family。远端 AI 图片编辑 provider、大图按需存储、standalone 跨文件 Image Paint Style asset bundle、SVG 位图嵌入、完整 Figma imageHash/transform 文件 adapter、P3/ICC 色彩管理及 macOS/Windows 原生交互证据仍未完成。
+- 限制：Image 节点及每项图片 Fill/Stroke 已通过同一确定性 RGBA 投影支持 Figma-compatible 调整；来源替换会记录由 Inspector、Assets、Agent、undo 与持久化共用的可恢复 typed derivation family，远端操作的当前事实由独立 AI 图片编辑能力记录。大图按需存储、standalone 跨文件 Image Paint Style asset bundle、SVG 位图嵌入、完整 Figma imageHash/transform 文件 adapter、P3/ICC 色彩管理及 macOS/Windows 原生交互证据仍未完成。
 - 专业参照：[官方说明](docs/adr/0089-direct-image-crop-session.md)
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360040675194-Crop-an-image)
 
 ### AI 图片编辑 — 降级可用
 
-基于一张或多张源图，通过蒙版、局部重绘、扩图、背景替换、重打光或风格统一生成可追溯变体。
+基于一张或多张源图，通过蒙版、局部重绘、扩图、分辨率提升、背景替换、重打光或风格统一生成可追溯变体。
 
 - ID：`image.ai-editing`
-- 实现方：OpenDesign Image Service contract 5 + Main-owned RGBA mask/expansion raster + ImageGenerationHost openai-images edit adapter + EditorRuntime recoverable derivation planner
+- 实现方：OpenDesign Image Service contract 6 + Main-owned RGBA mask/expansion raster and upscale target + ImageGenerationHost openai-images edit adapter + EditorRuntime recoverable derivation planner
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=available
-- 证据：自动化 8 项；实机 0 项
-- 限制：内嵌 PNG、JPEG 与 WebP Image 节点已可通过全局 openai-images 服务去背景、用提示词和一张可选参考图编辑整图、通过画布 lasso 执行 Erase/Isolate，并使用手柄扩图；带提示词的局部重绘、背景替换、清晰度增强、重打光、风格统一、Image Paint 编辑与多参考图仍未完成。
+- 证据：自动化 10 项；实机 0 项
+- 限制：内嵌 PNG、JPEG 与 WebP Image 节点已可通过全局 openai-images 服务去背景、用提示词和一张可选参考图编辑整图、通过画布 lasso 执行 Erase/Isolate、使用手柄扩图，并一键提升分辨率；Upscale 使用宿主计算的约 2× 精确目标且不改变节点几何。带提示词的局部重绘、背景替换、重打光、风格统一、Image Paint 编辑、多参考图、超过 3:1 或已达到当前内嵌结果像素预算的源图，以及 macOS/Windows 产品实机证据仍未完成。
 - 专业参照：[官方说明](docs/adr/0133-trusted-remove-background-image-editing.md)
 - 专业参照：[官方说明](docs/adr/0134-trusted-prompt-image-editing.md)
 - 专业参照：[官方说明](docs/adr/0135-trusted-area-image-editing.md)
 - 专业参照：[官方说明](docs/adr/0136-trusted-image-expansion.md)
+- 专业参照：[官方说明](docs/adr/0137-trusted-image-resolution-boost.md)
 - 专业参照：[官方说明](https://developers.openai.com/api/docs/guides/image-generation)
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/24004542669463-Make-or-edit-an-image-with-AI)
 

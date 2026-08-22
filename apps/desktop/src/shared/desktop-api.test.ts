@@ -564,6 +564,54 @@ describe("Design image desktop API guards", () => {
       }),
     ).toBe(false);
   });
+
+  it("accepts a parameter-free resolution boost and exact upscale provenance", () => {
+    const request = {
+      requestId: "image_upscale_request",
+      action: "upscale",
+      pageId: "page_welcome",
+      nodeId: "hero",
+      expectedAssetId: sourceAsset.id,
+      source: sourceAsset,
+    };
+    expect(isDesignImageEditRequest(request)).toBe(true);
+    expect(isDesignImageEditRequest({ ...request, scale: 4 })).toBe(false);
+
+    const resultAsset = {
+      ...sourceAsset,
+      id: `asset_${"3".repeat(64)}`,
+      name: "Hero — Resolution boosted.png",
+      mimeType: "image/png",
+      size: { width: 2_560, height: 1_440 },
+    };
+    const result = {
+      requestId: request.requestId,
+      action: "upscale",
+      sourceAssetId: sourceAsset.id,
+      asset: resultAsset,
+      derivation: {
+        id: "image_derivation_upscale",
+        sourceAssetId: sourceAsset.id,
+        resultAssetId: resultAsset.id,
+        operation: "upscale",
+        referenceAssetIds: [],
+        extensions: { provider: "openai-images", modelId: "gpt-image-2" },
+      },
+    };
+    expect(isDesignImageEditResult(result)).toBe(true);
+    expect(
+      isDesignImageEditResult({
+        ...result,
+        derivation: { ...result.derivation, prompt: "Upscale" },
+      }),
+    ).toBe(false);
+    expect(
+      isDesignImageEditResult({
+        ...result,
+        asset: { ...resultAsset, mimeType: "image/jpeg" },
+      }),
+    ).toBe(false);
+  });
 });
 
 describe("Font binary desktop API guards", () => {

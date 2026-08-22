@@ -20,6 +20,7 @@ import type {
   VariableBindingTarget,
 } from "@opendesign/design-contracts";
 import { Button, Icon, IconButton, type IconName } from "@opendesign/ui";
+import type { DesignImageEditAction } from "../../../shared/desktop-api";
 import type { MessageKey } from "../../../shared/i18n/messages";
 import { useI18n } from "../../i18n";
 import type { UpdatePropertiesPatch } from "../../features/editor/types";
@@ -125,6 +126,7 @@ export function SelectedNodeProperties({
   onCropImage,
   onSelectImageArea,
   onExpandImage,
+  onUpscaleImage,
   onReplaceImage,
   imageEditStatus,
   imageEditAction,
@@ -196,15 +198,10 @@ export function SelectedNodeProperties({
   onCropImage: () => boolean;
   onSelectImageArea: () => boolean;
   onExpandImage: () => boolean;
+  onUpscaleImage: () => void;
   onReplaceImage: () => void;
   imageEditStatus: "running" | "cancelling" | null;
-  imageEditAction:
-    | "remove-background"
-    | "prompt-edit"
-    | "erase-object"
-    | "isolate-object"
-    | "expand"
-    | null;
+  imageEditAction: DesignImageEditAction | null;
   onRemoveImageBackground: () => void;
   onEditImageWithPrompt: (prompt: string, reference?: DesignAsset) => void;
   onSelectImageEditReference: () => Promise<DesignAsset | null>;
@@ -971,6 +968,7 @@ export function SelectedNodeProperties({
           onCrop={onCropImage}
           onSelectArea={onSelectImageArea}
           onExpand={onExpandImage}
+          onUpscale={onUpscaleImage}
           onReplace={onReplaceImage}
           editStatus={imageEditStatus}
           editAction={imageEditAction}

@@ -2479,6 +2479,7 @@ describe("design Agent tool contract", () => {
     expect(tool).toMatchObject({ risk: "external", approval: "never" });
     expect(tool?.description).toContain("transparent PNG");
     expect(tool?.description).toContain("prompt-edit");
+    expect(tool?.description).toContain("upscale");
     expect(validateDesignAgentToolInput(EDIT_IMAGE_TOOL_NAME, input)).toBe(
       true,
     );
@@ -2567,6 +2568,21 @@ describe("design Agent tool contract", () => {
         ...input,
         action: "expand",
         expansion: { top: 0, right: 0, bottom: 0, left: 0 },
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(EDIT_IMAGE_TOOL_NAME, {
+        ...input,
+        action: "upscale",
+        label: "Boost hero resolution",
+      }),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(EDIT_IMAGE_TOOL_NAME, {
+        ...input,
+        action: "upscale",
+        label: "Boost hero resolution",
+        scale: 4,
       }),
     ).toBe(false);
   });
@@ -2674,6 +2690,46 @@ describe("design Agent tool contract", () => {
       validateDesignAgentToolInput(INTERNAL_UPDATE_IMAGE_TOOL_NAME, {
         ...input,
         expectedTargetSize: { width: 0, height: 240 },
+      }),
+    ).toBe(false);
+  });
+
+  it("accepts only pixel-bound trusted image upscale commits", () => {
+    const sourceAssetId = `asset_${"6".repeat(64)}`;
+    const resultAsset = {
+      id: `asset_${"7".repeat(64)}`,
+      kind: "image",
+      name: "Resolution boosted.png",
+      mimeType: "image/png",
+      source: { type: "data", value: "cmVzdWx0" },
+      size: { width: 1_600, height: 1_200 },
+      extensions: {},
+    } as const;
+    const input = {
+      action: "upscale-source",
+      label: "Boost hero resolution",
+      pageId: "page_1",
+      nodeId: "hero_image",
+      expectedAssetId: sourceAssetId,
+      expectedSourceSize: { width: 800, height: 600 },
+      targetSize: { width: 1_600, height: 1_200 },
+      asset: resultAsset,
+      derivation: {
+        id: "image_derivation_upscale",
+        sourceAssetId,
+        resultAssetId: resultAsset.id,
+        operation: "upscale",
+        referenceAssetIds: [],
+        extensions: { provider: "openai-images", modelId: "gpt-image-2" },
+      },
+    };
+    expect(
+      validateDesignAgentToolInput(INTERNAL_UPDATE_IMAGE_TOOL_NAME, input),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(INTERNAL_UPDATE_IMAGE_TOOL_NAME, {
+        ...input,
+        derivation: { ...input.derivation, prompt: "Upscale" },
       }),
     ).toBe(false);
   });

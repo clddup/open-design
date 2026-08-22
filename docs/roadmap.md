@@ -190,7 +190,7 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 ## P1：专业能力契约
 
 - 把 P0-C 的初始 capability manifest 提升为版本化公共契约，并为 Renderer、Agent、MCP 和发布说明提供同一只读查询入口。未知能力必须拒绝，降级能力必须返回结构化限制和 fidelity warning。
-- 继续按垂直切片迁移专业基础文档协议；`DesignDocument 1.42.0` 已在 imported Component/Variant/Style/Variable source、Image 节点与每项 Image Fill/Stroke 七项非破坏调整之上加入可恢复的图片来源 DAG。Component、Style 与 Variable Service 分别统一解析 local/imported source，Library Service 统一发布和更新规划；Image Service contract 3 统一画布、capture 与位图导出调整。Workspace 聚合、分支网络、更多 Text/Font rich typography、批量目录/PDF/P3 与更多 style/variable binding 仍待完成。
+- 继续按垂直切片迁移专业基础文档协议；`DesignDocument 1.42.0` 已在 imported Component/Variant/Style/Variable source、Image 节点与每项 Image Fill/Stroke 七项非破坏调整之上加入可恢复的图片来源 DAG。Component、Style 与 Variable Service 分别统一解析 local/imported source，Library Service 统一发布和更新规划；Image Service contract 6 统一画布裁剪/区域/扩图 session、capture/位图导出调整和可信分辨率目标。Workspace 聚合、分支网络、更多 Text/Font rich typography、批量目录/PDF/P3 与更多 style/variable binding 仍待完成。
 - 为 Geometry、Layout、Text/Font、Image 和 Import/Export service 建立窄、版本化的输入输出接口。服务只能返回纯结果、诊断或候选 `DesignOperation[]`，不能保存第二份文档或直接修改 Leafer 场景。
 - 提供确定性迁移、未知版本拒绝、保存重开、preview、undo/redo、Agent schema、provider 映射和 fidelity warning 测试；不得把长期语义藏进 `extensions`。
 
@@ -282,7 +282,8 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 - [x] 完成可信整图提示词编辑与单参考图垂直切片：Inspector 与 `opendesign_edit_image` 复用 `/images/edits`，源图固定为首个 multipart 输入，可选一张人工选择或当前 Run 已授权的参考图；Main 验证 PNG 结果后，Runtime 才将结果 asset、supporting reference asset、prompt/reference provenance 和节点引用作为一笔 stale-safe revision 提交。取消、失败和并发变化零写入，一次 Undo 与保存重开保持完整来源语义。见 ADR-0134。
 - [x] 完成可信区域图片编辑垂直切片：Image Service contract 4 将 Image node-local lasso 按 Stretch/Fit/Fill/Crop、rotation 与 flip 转为归一化源图坐标；Main 生成同源尺寸 PNG mask 并复用 `/images/edits`。人工 `Select area…` 与 Agent 共用 Erase/Isolate：Erase 更新当前来源，Isolate 插入保留属性的新 sibling Image；mask、结果和 derivation 仅在输出通过验证后以一次 stale-safe revision 提交，Escape/取消/Provider 失败/无效输出/并发变化零写入。见 ADR-0135。
 - [x] 完成可信画布扩图垂直切片：Image Service contract 5 提供四边/四角 outward handle、常用比例与 16px 对齐的受控 Provider canvas；Main 按当前 placement 投影原图、生成透明扩展区 mask，并在 Provider 成功后逐像素覆盖回原图保护矩形。人工 Expand overlay 与 Agent 共用专用 `expand-source`，一笔 stale-safe transaction 提交结果/mask/derivation、节点新尺寸、原点 transform 与 Stretch placement；Escape/取消/输出漂移/size/placement/asset 并发变化零 revision，普通 derive 不能旁路。见 ADR-0136。
-- 扩展已建立的 Image service：继续支持带提示词的局部重绘、背景替换、Boost resolution、重打光和风格统一，并复用已完成的来源谱系；继续补齐大图按需加载、去重与资源生命周期。任何编辑都不得覆盖原始 asset。
+- [x] 完成可信图片分辨率提升垂直切片：Image Service contract 6 从真实 source pixels 计算约 2×、16px 对齐且满足最长边/比例/像素预算的唯一有意义目标；Main 将源图规范化为 PNG，按真实透明像素选择 background，并拒绝 Provider 输出尺寸漂移。Inspector 的 Figma 式 More 菜单与 Agent `upscale` 共用专用 `upscale-source`；单笔事务只替换更高像素密度 asset 并写入 derivation，节点 size/transform/placement/filters/圆角/布局保持不变，取消、失败、无提升空间或 stale 零 revision。见 ADR-0137。
+- 扩展已建立的 Image service：继续支持带提示词的局部重绘、背景替换、重打光和风格统一，并复用已完成的来源谱系；继续补齐大图按需加载、去重与资源生命周期。任何编辑都不得覆盖原始 asset。
 - 扩展 P0-B 已建立的专业位图导出，补海报交付所需的高级颜色、资源和格式保真；导出继续读取 DesignDocument 和受控资源，不能把当前画布截图当作交付产物。
 - 为人工属性面板和 Agent 增加文字、裁剪、替换、调整和导出的语义命令；长任务必须展示进度、支持取消并返回稳定产物或明确失败。
 

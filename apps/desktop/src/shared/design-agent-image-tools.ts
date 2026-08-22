@@ -110,6 +110,7 @@ type EditImageToolBase = {
 export type EditImageToolInput = EditImageToolBase &
   (
     | { action: "remove-background" }
+    | { action: "upscale" }
     | {
         action: "prompt-edit";
         prompt: string;
@@ -201,6 +202,17 @@ export type InternalUpdateImageToolInput =
       asset: DesignAsset;
       derivation: ImageAssetDerivation;
       supportingAssets: DesignAsset[];
+    }
+  | {
+      action: "upscale-source";
+      label: string;
+      pageId: string;
+      nodeId: string;
+      expectedAssetId: string;
+      expectedSourceSize: { width: number; height: number };
+      targetSize: { width: number; height: number };
+      asset: DesignAsset;
+      derivation: ImageAssetDerivation;
     };
 
 const NORMALIZED_POINT_SCHEMA = {
@@ -408,6 +420,7 @@ export const EDIT_IMAGE_TOOL_INPUT_SCHEMA = {
         "erase-object",
         "isolate-object",
         "expand",
+        "upscale",
       ],
     },
     label: { type: "string", minLength: 1, maxLength: 256 },
@@ -464,6 +477,7 @@ export const EDIT_IMAGE_TOOL_INPUT_SCHEMA = {
           { required: ["referenceAttachmentId"] },
           { required: ["selection"] },
           { required: ["resultNodeId"] },
+          { required: ["expansion"] },
         ],
       },
     },
@@ -471,7 +485,11 @@ export const EDIT_IMAGE_TOOL_INPUT_SCHEMA = {
       properties: { action: { const: "prompt-edit" } },
       required: ["prompt"],
       not: {
-        anyOf: [{ required: ["selection"] }, { required: ["resultNodeId"] }],
+        anyOf: [
+          { required: ["selection"] },
+          { required: ["resultNodeId"] },
+          { required: ["expansion"] },
+        ],
       },
     },
     {
@@ -482,6 +500,7 @@ export const EDIT_IMAGE_TOOL_INPUT_SCHEMA = {
           { required: ["prompt"] },
           { required: ["referenceAttachmentId"] },
           { required: ["resultNodeId"] },
+          { required: ["expansion"] },
         ],
       },
     },
@@ -492,6 +511,7 @@ export const EDIT_IMAGE_TOOL_INPUT_SCHEMA = {
         anyOf: [
           { required: ["prompt"] },
           { required: ["referenceAttachmentId"] },
+          { required: ["expansion"] },
         ],
       },
     },
@@ -504,6 +524,18 @@ export const EDIT_IMAGE_TOOL_INPUT_SCHEMA = {
           { required: ["referenceAttachmentId"] },
           { required: ["selection"] },
           { required: ["resultNodeId"] },
+        ],
+      },
+    },
+    {
+      properties: { action: { const: "upscale" } },
+      not: {
+        anyOf: [
+          { required: ["prompt"] },
+          { required: ["referenceAttachmentId"] },
+          { required: ["selection"] },
+          { required: ["resultNodeId"] },
+          { required: ["expansion"] },
         ],
       },
     },
@@ -674,7 +706,7 @@ export function isEditImageToolInput(
   ) {
     return false;
   }
-  if (input.action === "remove-background") {
+  if (input.action === "remove-background" || input.action === "upscale") {
     return exactKeys(input, [
       "action",
       "label",
@@ -774,6 +806,33 @@ export function isInternalUpdateImageToolInput(
   input: unknown,
 ): input is InternalUpdateImageToolInput {
   if (!isRecord(input) || !hasCommonUpdateFields(input)) return false;
+  if (input.action === "upscale-source") {
+    return (
+      safeId(input.expectedAssetId) &&
+      isPositiveSize(input.expectedSourceSize) &&
+      isPositiveSize(input.targetSize) &&
+      isBoundedEmbeddedImageAsset(input.asset) &&
+      input.asset.mimeType === "image/png" &&
+      isImageAssetDerivation(input.derivation) &&
+      input.derivation.operation === "upscale" &&
+      input.derivation.sourceAssetId === input.expectedAssetId &&
+      input.derivation.resultAssetId === input.asset.id &&
+      input.derivation.prompt === undefined &&
+      input.derivation.maskAssetId === undefined &&
+      input.derivation.referenceAssetIds.length === 0 &&
+      exactKeys(input, [
+        "action",
+        "label",
+        "pageId",
+        "nodeId",
+        "expectedAssetId",
+        "expectedSourceSize",
+        "targetSize",
+        "asset",
+        "derivation",
+      ])
+    );
+  }
   if (input.action === "expand-source") {
     return (
       safeId(input.expectedAssetId) &&

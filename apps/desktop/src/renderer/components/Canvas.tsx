@@ -34,6 +34,8 @@ import {
 } from "@opendesign/image-service";
 import { navigateComponentSelection } from "@opendesign/component-service";
 import { Icon } from "@opendesign/ui";
+import type { DesignImageEditAction } from "../../shared/desktop-api";
+import { IMAGE_EDIT_PROGRESS_LABEL_KEYS } from "../design-assets";
 import {
   createLeaferEngineAdapter,
   resolveDesignTextRuns,
@@ -131,12 +133,7 @@ export function Canvas({
     documentPoint: { x: number; y: number },
   ) => { ok: boolean };
   imageEditActivity?: {
-    action:
-      | "remove-background"
-      | "prompt-edit"
-      | "erase-object"
-      | "isolate-object"
-      | "expand";
+    action: DesignImageEditAction;
     nodeName: string;
     status: "running" | "cancelling";
     onCancel: () => void;
@@ -1453,17 +1450,7 @@ export function Canvas({
                   })}
                 </strong>
                 <small>
-                  {t(
-                    imageEditActivity.action === "erase-object"
-                      ? "canvas.imageAreaErasing"
-                      : imageEditActivity.action === "isolate-object"
-                        ? "canvas.imageAreaIsolating"
-                        : imageEditActivity.action === "expand"
-                          ? "canvas.imageExpanding"
-                          : imageEditActivity.action === "remove-background"
-                            ? "properties.imageRemovingBackground"
-                            : "properties.imageEditingWithPrompt",
-                  )}
+                  {t(IMAGE_EDIT_PROGRESS_LABEL_KEYS[imageEditActivity.action])}
                 </small>
               </span>
               <button
