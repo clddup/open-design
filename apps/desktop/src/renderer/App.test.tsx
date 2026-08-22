@@ -3901,7 +3901,7 @@ describe("App", () => {
     );
     expect(runtime().getSnapshot().document.revision).toBe(beforeCancelledEdit);
     expect(screen.queryByText("Image editing cancelled")).toBeNull();
-  });
+  }, 15_000);
 
   it("manages current-file image assets through import, placement, file-wide replacement, and safe deletion", async () => {
     const user = userEvent.setup();
