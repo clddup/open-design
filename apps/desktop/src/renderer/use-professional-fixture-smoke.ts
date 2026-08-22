@@ -12,7 +12,6 @@ export function useProfessionalFixtureSmoke(input: {
   desktop: DesktopApi | undefined;
   activatePage: (pageId: string) => void;
   replaceDocument: (document: unknown, name?: string) => EditorRuntime;
-  setFileName: (name: string) => void;
   setView: () => void;
 }): void {
   const started = useRef(false);
@@ -21,7 +20,6 @@ export function useProfessionalFixtureSmoke(input: {
     started.current = true;
     const desktop = input.desktop;
     const present: FixtureSmokePresentation = (bootstrap) => {
-      input.setFileName(`${bootstrap.fixtureId}-smoke.opendesign`);
       input.setView();
       input.activatePage(bootstrap.pageId);
     };

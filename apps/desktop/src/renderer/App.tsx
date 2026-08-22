@@ -110,14 +110,10 @@ function AppContent({ initialView }: { initialView?: AppInitialView } = {}) {
   const { destination } = navigation;
   const [editorError, setEditorError] = useState<string | null>(null);
   const {
-    activeProject,
     applySavedProjectFile,
-    fileName,
     projectAutosave,
     projectsById,
     recentProjects,
-    setActiveProject,
-    setFileName,
     setProjectsById,
     setRecentProjects,
     setWorkspaceBusy,
@@ -125,6 +121,11 @@ function AppContent({ initialView }: { initialView?: AppInitialView } = {}) {
     workspaceBusy,
     workspaceError,
   } = useProjectWorkspaceState({ setEditorError, t, workspace });
+  const activeWorkspaceFile =
+    workspaceSnapshot.files[workspaceSnapshot.activeFileKey];
+  const fileName = activeWorkspaceFile?.name ?? t("file.untitled");
+  const workspaceProject =
+    projectsById[workspaceSnapshot.activeProjectId] ?? null;
   const {
     leftPanelVisible,
     leftWidth,
@@ -164,7 +165,6 @@ function AppContent({ initialView }: { initialView?: AppInitialView } = {}) {
     activatePage,
     desktop: window.desktop,
     replaceDocument,
-    setFileName,
     setView: () =>
       navigator.navigate({
         kind: "editor",
@@ -217,7 +217,8 @@ function AppContent({ initialView }: { initialView?: AppInitialView } = {}) {
             conversation.conversationId === destination.conversationId,
         ) ?? null)
       : null;
-  const conversationProject = destinationProject ?? activeProject;
+  const activeProject = destinationProject ?? workspaceProject;
+  const conversationProject = activeProject;
   const projectConversations = conversationProject
     ? conversations.filter(
         (conversation) =>
@@ -562,21 +563,21 @@ function AppContent({ initialView }: { initialView?: AppInitialView } = {}) {
   } = useProjectNavigationController({
     activateFile,
     activatePage,
-    activeProject,
     applySavedProjectFile,
     conversations,
-    fileName,
     openFile,
     navigator,
     projectAutosave,
+    projectContextId:
+      destination.kind === "project"
+        ? destination.projectId
+        : workspaceSnapshot.activeProjectId,
     projectsById,
     replaceDocument,
     requestConversationHistory,
     runtime,
     selectConversation,
-    setActiveProject,
     setEditorError,
-    setFileName,
     setProjectsById,
     setRecentProjects,
     setWorkspaceBusy,
@@ -770,9 +771,7 @@ function AppContent({ initialView }: { initialView?: AppInitialView } = {}) {
     );
   }
 
-  const activeWorkspaceFile =
-    workspaceSnapshot.files[workspaceSnapshot.activeFileKey];
-  const documentName = activeWorkspaceFile?.name ?? fileName;
+  const documentName = fileName;
   const pageName = designDocument.pagesById[activePageId]?.name;
 
   return (

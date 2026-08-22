@@ -32,21 +32,18 @@ type Translate = (key: MessageKey, parameters?: MessageParameters) => string;
 export function useProjectNavigationController({
   activateFile,
   activatePage,
-  activeProject,
   applySavedProjectFile,
   conversations,
-  fileName,
   openFile,
   navigator,
   projectAutosave,
+  projectContextId,
   projectsById,
   replaceDocument,
   requestConversationHistory,
   runtime,
   selectConversation,
-  setActiveProject,
   setEditorError,
-  setFileName,
   setProjectsById,
   setRecentProjects,
   setWorkspaceBusy,
@@ -58,27 +55,24 @@ export function useProjectNavigationController({
 }: {
   activateFile: (projectId: string, designFileId: string) => void;
   activatePage: (pageId: string) => void;
-  activeProject: ProjectManifest | null;
   applySavedProjectFile: (
     target: ProjectFileTarget,
     saved: ProjectDesignFile,
   ) => void;
   conversations: ConversationDescriptor[];
-  fileName: string;
   openFile: (
     identity: WorkspaceFileIdentity,
     document: DesignDocument,
   ) => EditorRuntime;
   navigator: AppNavigator;
   projectAutosave: ProjectAutosaveCoordinator;
+  projectContextId: string;
   projectsById: Readonly<Record<string, ProjectManifest>>;
   replaceDocument: (document: unknown, name?: string) => EditorRuntime;
   requestConversationHistory: (conversationId: string) => Promise<void>;
   runtime: EditorRuntime;
   selectConversation: (conversationId: string | null) => void;
-  setActiveProject: Dispatch<SetStateAction<ProjectManifest | null>>;
   setEditorError: (error: string | null) => void;
-  setFileName: (name: string) => void;
   setProjectsById: Dispatch<
     SetStateAction<Readonly<Record<string, ProjectManifest>>>
   >;
@@ -90,6 +84,10 @@ export function useProjectNavigationController({
   workspace: WorkspaceRuntime;
   workspaceSnapshot: WorkspaceSnapshot;
 }) {
+  const activeProject = projectsById[projectContextId] ?? null;
+  const activeFileName =
+    workspaceSnapshot.files[workspaceSnapshot.activeFileKey]?.name ??
+    t("file.untitled");
   const refreshRecentProjects = useCallback(async () => {
     const projects = await window.desktop?.listRecentProjects();
     if (projects) setRecentProjects(projects);
@@ -106,7 +104,6 @@ export function useProjectNavigationController({
         ...projects,
         [manifest.projectId]: manifest,
       }));
-      setActiveProject(manifest);
       setWorkspaceError(null);
       if (
         !navigator.commit(transition, {
@@ -133,7 +130,6 @@ export function useProjectNavigationController({
       conversations,
       requestConversationHistory,
       selectConversation,
-      setActiveProject,
       setProjectsById,
       setWorkspaceError,
       navigator,
@@ -320,9 +316,7 @@ export function useProjectNavigationController({
       if (!desktop) throw new Error("Desktop Project services are unavailable");
       const manifest =
         projectsById[target.projectId] ??
-        (activeProject?.projectId === target.projectId
-          ? activeProject
-          : await desktop.openRecentProject({ projectId: target.projectId }));
+        (await desktop.openRecentProject({ projectId: target.projectId }));
       if (!navigator.isCurrent(transition)) return;
       const file = await desktop.readProjectDesignFile({
         projectId: target.projectId,
@@ -359,8 +353,6 @@ export function useProjectNavigationController({
         ...projects,
         [manifest.projectId]: manifest,
       }));
-      setActiveProject(manifest);
-      setFileName(file.descriptor.name);
       if (target.pageId && file.document.pagesById[target.pageId]) {
         activatePage(target.pageId);
       }
@@ -372,14 +364,11 @@ export function useProjectNavigationController({
     },
     [
       activatePage,
-      activeProject,
       navigator,
       openFile,
       projectAutosave,
       projectsById,
       runtime,
-      setActiveProject,
-      setFileName,
       setProjectsById,
       showUtilityTab,
       workspace,
@@ -390,28 +379,13 @@ export function useProjectNavigationController({
 
   const activateDesignFile = useCallback(
     (projectId: string, designFileId: string) => {
-      const file = Object.values(workspaceSnapshot.files).find(
-        (candidate) =>
-          candidate.projectId === projectId &&
-          candidate.designFileId === designFileId,
-      );
       activateFile(projectId, designFileId);
-      setActiveProject(projectsById[projectId] ?? null);
-      if (file) setFileName(file.name);
       navigator.navigate({
         kind: "editor",
         fileKey: workspace.getSnapshot().activeFileKey,
       });
     },
-    [
-      activateFile,
-      navigator,
-      projectsById,
-      setActiveProject,
-      setFileName,
-      workspaceSnapshot.files,
-      workspace,
-    ],
+    [activateFile, navigator, workspace],
   );
 
   const renameProjectDesignFile = useCallback(
@@ -454,16 +428,7 @@ export function useProjectNavigationController({
             ? { ...projects, [projectId]: updateManifest(project) }
             : projects;
         });
-        setActiveProject((project) =>
-          project?.projectId === projectId ? updateManifest(project) : project,
-        );
         workspace.renameFile(projectId, designFileId, descriptor.name);
-        if (
-          workspaceSnapshot.activeProjectId === projectId &&
-          workspaceSnapshot.activeDesignFileId === designFileId
-        ) {
-          setFileName(descriptor.name);
-        }
         return true;
       } catch (error) {
         setEditorError(
@@ -479,9 +444,7 @@ export function useProjectNavigationController({
     },
     [
       projectsById,
-      setActiveProject,
       setEditorError,
-      setFileName,
       setProjectsById,
       t,
       workspace,
@@ -543,8 +506,6 @@ export function useProjectNavigationController({
       if (!navigator.isCurrent(transition)) return;
       const value: unknown = JSON.parse(file.contents);
       replaceDocument(value, file.name);
-      setActiveProject(null);
-      setFileName(file.name);
       navigator.commit(transition, {
         kind: "editor",
         fileKey: workspace.getSnapshot().activeFileKey,
@@ -560,15 +521,7 @@ export function useProjectNavigationController({
         ),
       );
     }
-  }, [
-    replaceDocument,
-    navigator,
-    setActiveProject,
-    setEditorError,
-    setFileName,
-    t,
-    workspace,
-  ]);
+  }, [replaceDocument, navigator, setEditorError, t, workspace]);
 
   const saveDocument = useCallback(
     async (saveAs: boolean) => {
@@ -610,12 +563,11 @@ export function useProjectNavigationController({
         }
 
         const result = await window.desktop?.saveDesignFile({
-          suggestedName: fileName,
+          suggestedName: activeFileName,
           contents: JSON.stringify(current.document, null, 2),
           ...(saveAs ? { saveAs: true } : {}),
         });
         if (!result) return;
-        setFileName(result.name);
         workspace.renameFile(
           workspaceSnapshot.activeProjectId,
           workspaceSnapshot.activeDesignFileId,
@@ -638,11 +590,10 @@ export function useProjectNavigationController({
     },
     [
       applySavedProjectFile,
-      fileName,
+      activeFileName,
       projectsById,
       runtime,
       setEditorError,
-      setFileName,
       t,
       workspace,
       workspaceSnapshot.activeDesignFileId,

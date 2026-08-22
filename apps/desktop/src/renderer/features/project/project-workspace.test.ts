@@ -45,10 +45,10 @@ describe("Project workspace", () => {
       ),
     } as unknown as DesktopApi;
     const navigator = new AppNavigator({ kind: "workspace" });
-    const setActiveProject = vi.fn();
+    const setProjectsById = vi.fn();
     const args = navigationArgs(workspace, {
       navigator,
-      setActiveProject,
+      setProjectsById,
     });
     const { result, unmount } = renderHook(() =>
       useProjectNavigationController({
@@ -77,8 +77,7 @@ describe("Project workspace", () => {
       kind: "project",
       projectId: fastProject.projectId,
     });
-    expect(setActiveProject).toHaveBeenCalledOnce();
-    expect(setActiveProject).toHaveBeenCalledWith(fastProject);
+    expect(setProjectsById).toHaveBeenCalledOnce();
     unmount();
   });
 
@@ -195,7 +194,6 @@ describe("Project workspace", () => {
     window.desktop = { saveProjectDesignFile } as unknown as DesktopApi;
     const applySavedProjectFile = vi.fn();
     const args = navigationArgs(workspace, {
-      activeProject: manifest("project_beta", [beta.descriptor]),
       applySavedProjectFile,
       projectsById: {
         project_alpha: manifest("project_alpha", [alpha.descriptor]),
@@ -283,7 +281,6 @@ describe("Project workspace", () => {
     } as unknown as DesktopApi;
     const setEditorError = vi.fn();
     const args = navigationArgs(workspace, {
-      activeProject: project,
       projectsById: { [project.projectId]: project },
       setEditorError,
     });
@@ -343,7 +340,6 @@ describe("Project workspace", () => {
       useProjectWorkspaceState({ setEditorError, t: (key) => key, workspace }),
     );
     act(() => {
-      result.current.setActiveProject(project);
       result.current.setProjectsById({ [project.projectId]: project });
       result.current.projectAutosave.track({
         projectId: project.projectId,
@@ -358,10 +354,15 @@ describe("Project workspace", () => {
       result.current.projectAutosave.flushDocument(file.document.documentId),
     );
 
-    await waitFor(() => expect(result.current.fileName).toBe("After save"));
-    expect(result.current.activeProject?.designFiles[0]?.name).toBe(
-      "After save",
+    await waitFor(() =>
+      expect(
+        workspace.getSnapshot().files[workspace.getSnapshot().activeFileKey]
+          ?.name,
+      ).toBe("After save"),
     );
+    expect(
+      result.current.projectsById[project.projectId]?.designFiles[0]?.name,
+    ).toBe("After save");
     expect(workspace.getActiveRuntime().getSnapshot().state.dirty).toBe(false);
     expect(setEditorError).not.toHaveBeenCalled();
     unmount();
@@ -417,23 +418,20 @@ function navigationArgs(
     activateFile: (projectId, designFileId) =>
       workspace.activateFile(projectId, designFileId),
     activatePage: (pageId) => workspace.activatePage(pageId),
-    activeProject: null,
     applySavedProjectFile: vi.fn(),
     conversations: [],
-    fileName: "Untitled.opendesign",
     navigator: new AppNavigator({ kind: "workspace" }),
     openFile: (identity, document) => workspace.openFile(identity, document),
     projectAutosave: {
       track: vi.fn(),
     } as unknown as ProjectAutosaveCoordinator,
+    projectContextId: workspace.getSnapshot().activeProjectId,
     projectsById: {},
     replaceDocument: vi.fn(),
     requestConversationHistory: vi.fn().mockResolvedValue(undefined),
     runtime: workspace.getActiveRuntime(),
     selectConversation: vi.fn(),
-    setActiveProject: vi.fn(),
     setEditorError: vi.fn(),
-    setFileName: vi.fn(),
     setProjectsById: vi.fn(),
     setRecentProjects: vi.fn(),
     setWorkspaceBusy: vi.fn(),

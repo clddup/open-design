@@ -31,15 +31,11 @@ export function useProjectWorkspaceState({
   workspace: WorkspaceRuntime;
 }) {
   const [recentProjects, setRecentProjects] = useState<RecentProject[]>([]);
-  const [activeProject, setActiveProject] = useState<ProjectManifest | null>(
-    null,
-  );
   const [projectsById, setProjectsById] = useState<
     Readonly<Record<string, ProjectManifest>>
   >({});
   const [workspaceBusy, setWorkspaceBusy] = useState(false);
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
-  const [fileName, setFileName] = useState(() => t("file.untitled"));
   const autosaveCallbacks = useRef<{
     onError: (target: ProjectAutosaveTarget, error: unknown) => void;
     onSaved: (target: ProjectAutosaveTarget, saved: ProjectDesignFile) => void;
@@ -81,22 +77,11 @@ export function useProjectWorkspaceState({
           ? { ...projects, [target.projectId]: updateManifest(project) }
           : projects;
       });
-      setActiveProject((project) =>
-        project?.projectId === target.projectId
-          ? updateManifest(project)
-          : project,
-      );
       workspace.renameFile(
         target.projectId,
         target.designFileId,
         saved.descriptor.name,
       );
-      if (
-        workspace.getActiveRuntime().getSnapshot().document.documentId ===
-        target.documentId
-      ) {
-        setFileName(saved.descriptor.name);
-      }
     },
     [workspace],
   );
@@ -166,14 +151,10 @@ export function useProjectWorkspaceState({
   }, [projectAutosave]);
 
   return {
-    activeProject,
     applySavedProjectFile,
-    fileName,
     projectAutosave,
     projectsById,
     recentProjects,
-    setActiveProject,
-    setFileName,
     setProjectsById,
     setRecentProjects,
     setWorkspaceBusy,
