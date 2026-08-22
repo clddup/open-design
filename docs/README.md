@@ -34,7 +34,7 @@
 | ------------------------------------------------------------------------ | ---------- | ------------------------------------------------------------------ |
 | [0001](adr/0001-electron-web-canvas.md)                                  | 已接受     | Electron 桌面外壳与 Web 工作台                                     |
 | [0002](adr/0002-agent-utility-process.md)                                | 已接受     | Agent 运行于受 Main 监督的 TypeScript `utilityProcess`             |
-| [0003](adr/0003-design-engine-adapter.md)                                | 部分被取代 | 版本化 Design Contracts；旧“统一引擎 adapter”范围由 0005/0009 收窄 |
+| [0003](adr/0003-design-engine-adapter.md)                                | 被取代     | 保留 Design Contracts；独立引擎门面已删除                          |
 | [0004](adr/0004-agent-open-source-boundaries.md)                         | 已接受     | Agent、MCP、skills 和第三方代码边界                                |
 | [0005](adr/0005-opendesign-owned-editor-runtime.md)                      | 部分被取代 | OpenDesign 拥有文档与事务；旧 Canvas2D 决定由 0009 取代            |
 | [0006](adr/0006-project-conversation-agent-scope.md)                     | 已接受     | Project、Conversation、Working Set、Mutation Targets 与 Capability |

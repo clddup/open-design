@@ -325,6 +325,8 @@ Project 可以保存零个或多个经用户或受管策略批准的 attached ro
 
 MCP 是内置设计 Agent 的互操作和生态边界，优先级低于应用内完整设计闭环。MCP Server 不替代内置模型接入，外部客户端也不能获得比内置 Agent 更宽的设计权限或绕过同一事务历史。
 
+当前仓库没有占位的 MCP host/server 或独立 `DesignEngineAdapter` package：早期无生产调用者的门面已经删除，不能把空包或第二套 `open/save/apply/undo/redo` 生命周期误写成已实现 MCP。以下两种方向仍是目标架构；开始实现时必须由 Main 组合稳定 `DesignReadPort`、`ToolInvocationPort`、resource handle 与 revision，并复用唯一 Tool Runtime、Capability、Approval、审计、取消和 Design Transaction 入口。
+
 ### 10.1 OpenDesign 作为 MCP 客户端
 
 Agent 可以连接用户配置的 MCP Server，以读取设计素材、代码上下文、品牌数据或业务系统。每个连接独立声明 transport、身份、可用工具、资源和提示词，Tool Runtime 在调用前执行 schema 校验、Capability 检查、Approval、Sandbox、超时和输出大小限制。外部 Server 返回的路径或资源标识不自动成为 attached root、per-run reference 或 Mutation Target。

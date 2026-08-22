@@ -116,11 +116,6 @@
       "@opendesign/figma-interop",
       "@opendesign/leafer-engine"
     ],
-    "hosts": [
-      "@opendesign/design-engine",
-      "@opendesign/mcp-host",
-      "@opendesign/mcp-server"
-    ],
     "application": ["@opendesign/desktop"]
   },
   "workspaceAllowedLayerDependencies": {
@@ -128,8 +123,7 @@
     "foundation": ["contracts", "foundation"],
     "services": ["contracts", "foundation", "services"],
     "runtimes": ["contracts", "foundation", "services", "runtimes"],
-    "hosts": ["contracts", "foundation", "services", "runtimes", "hosts"],
-    "application": ["contracts", "foundation", "services", "runtimes", "hosts"]
+    "application": ["contracts", "foundation", "services", "runtimes"]
   },
   "virtualModules": ["virtual:offline-iconify"],
   "ignoredUnusedDependencies": {}
