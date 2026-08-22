@@ -1,12 +1,4 @@
 import type {
-  AgentAttachment,
-  AgentEvent,
-  AgentRequest,
-  SelectionScope,
-  SessionTimelineItem,
-} from "@opendesign/agent-contracts";
-import type { ModelSelection } from "@opendesign/model-gateway";
-import type {
   LeaferTextRangeSelection,
   LeaferTextStyleUpdate,
 } from "@opendesign/leafer-engine";
@@ -76,13 +68,6 @@ import {
   ProjectAutosaveCoordinator,
   type ProjectAutosaveTarget,
 } from "./project-autosave";
-import {
-  EMPTY_GENERATION_PLAN_PRESENTATION_STATE,
-  clearGenerationPlanPresentationRun,
-  generationActivityFromAcceptedPlan,
-  generationActivityMessageKey,
-  projectGenerationPlanPresentationEvent,
-} from "./generation-presentation";
 import { isTool, type Tool } from "./state/editor";
 import { useDesignAssetActions } from "./use-design-asset-actions";
 import { useComponentActions } from "./use-component-actions";
@@ -90,36 +75,17 @@ import { useProjectLibraryActions } from "./use-project-library-actions";
 import { useImportExportWorkflow } from "./features/import-export/use-import-export-workflow";
 import { useImageEditWorkflow } from "./features/image/use-image-edit-workflow";
 import { useWorkbenchLayoutController } from "./features/workbench/use-workbench-layout-controller";
+import { useAgentConversationRuntime } from "./features/agent-conversation/use-agent-conversation-runtime";
 import { layoutInspectorMode } from "./features/editor/auto-layout-shortcut";
 import { useDocumentCommandControllers } from "./use-document-command-controllers";
 import { useLayerCommandController } from "./features/editor/use-layer-command-controller";
 import { useLayerRenameWorkflow } from "./features/editor/use-layer-rename-workflow";
-import {
-  projectAgentActiveRunId,
-  projectAgentRunFileBinding,
-} from "./features/agent-conversation/continuation-binding";
-import { projectAgentRunExperience } from "./features/agent-conversation/agent-run-experience";
 import { reportRendererError } from "./diagnostics";
 import { useRendererDesignToolHost } from "./use-renderer-design-tool-host";
 import { useProfessionalFixtureSmoke } from "./use-professional-fixture-smoke";
 import { useFontInspectorContext } from "./use-font-inspector-context";
 import { useFontBinaryRuntime } from "./use-font-binary-runtime";
-const HISTORY_SYNC_DEBOUNCE_MS = 80;
 type AppView = "workspace" | "project" | "conversation" | "editor" | "settings";
-
-type ConversationAgentState = {
-  timeline: SessionTimelineItem[];
-  events: AgentEvent[];
-  activeRunId: string | null;
-  error: string | null;
-};
-
-const EMPTY_AGENT_STATE: ConversationAgentState = {
-  timeline: [],
-  events: [],
-  activeRunId: null,
-  error: null,
-};
 
 function resolveTheme(preference: ThemePreference) {
   if (preference !== "system") return preference;
@@ -202,16 +168,6 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
   const [conversationDeletionError, setConversationDeletionError] = useState<
     string | null
   >(null);
-  const [agentByConversationId, setAgentByConversationId] = useState<
-    Readonly<Record<string, ConversationAgentState>>
-  >({});
-  const [generationPlanPresentation, setGenerationPlanPresentation] = useState(
-    EMPTY_GENERATION_PLAN_PRESENTATION_STATE,
-  );
-  const [globalTasks, setGlobalTasks] = useState<GlobalTaskProjection[]>([]);
-  const [agentRuntimeError, setAgentRuntimeError] = useState<string | null>(
-    null,
-  );
   const [editorError, setEditorError] = useState<string | null>(null);
   const [layerHoverTarget, setLayerHoverTarget] =
     useState<LayerHoverTarget | null>(null);
@@ -233,21 +189,8 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
   const [diagnosticEvents, setDiagnosticEvents] = useState<DiagnosticEvent[]>(
     [],
   );
-  const runCounter = useRef(0);
   const settingsReturnView = useRef<Exclude<AppView, "settings">>("workspace");
   const transactionCounter = useRef(0);
-  const conversationIdByRunId = useRef(new Map<string, string>());
-  const designFileByRunId = useRef(
-    new Map<
-      string,
-      { projectId: string; designFileId: string; documentId: string }
-    >(),
-  );
-  const conversationIdByHistoryRequestId = useRef(new Map<string, string>());
-  const latestHistoryRequestId = useRef(new Map<string, string>());
-  const historySyncTimers = useRef(
-    new Map<string, ReturnType<typeof setTimeout>>(),
-  );
   const autosaveCallbacks = useRef<{
     onError: (target: ProjectAutosaveTarget, error: unknown) => void;
     onSaved: (target: ProjectAutosaveTarget, saved: ProjectDesignFile) => void;
@@ -405,142 +348,34 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
           conversation.lifecycle === "active",
       )
     : [];
-  const conversationDeleteBlockedIds = globalTasks
-    .filter((task) =>
-      ["queued", "running", "waiting_approval"].includes(task.lifecycle),
-    )
-    .map((task) => task.conversationId);
   const activeConversation =
     conversations.find(
       (conversation) => conversation.conversationId === activeConversationId,
     ) ?? null;
-  const activeAgentState = activeConversation
-    ? (agentByConversationId[activeConversation.conversationId] ??
-      EMPTY_AGENT_STATE)
-    : EMPTY_AGENT_STATE;
-  const activeCanvasAgentRunId = (() => {
-    const runId = activeAgentState.activeRunId;
-    if (!runId) return null;
-    return designFileByRunId.current.get(runId)?.documentId ===
-      designDocument.documentId
-      ? runId
-      : null;
-  })();
-  const generationActivity = useMemo(() => {
-    const runId = activeCanvasAgentRunId;
-    if (!runId) return undefined;
-    const projected = generationActivityFromAcceptedPlan(
-      generationPlanPresentation.acceptedByRunId[runId],
-      generationPlanPresentation.activityByRunId[runId],
-      designDocument,
-      activePageId,
-    );
-    if (!projected) return undefined;
-    const stage = t(generationActivityMessageKey(projected.phase));
-    return {
-      ...projected,
-      label:
-        projected.progress === undefined
-          ? `AI · ${stage}`
-          : `AI · ${stage} · ${Math.round(projected.progress * 100)}%`,
-    };
-  }, [
+  const {
+    activeAgentState,
     activeCanvasAgentRunId,
+    activeCanvasRunExperience,
+    agentRuntimeError,
+    conversationDeleteBlockedIds,
+    forgetConversation,
+    generationActivity,
+    globalTasks,
+    requestConversationHistory,
+    resolveAgentApproval,
+    stopAgentTask,
+    submitAgentTask,
+  } = useAgentConversationRuntime({
+    activeConversation,
     activePageId,
     designDocument,
-    generationPlanPresentation.acceptedByRunId,
-    generationPlanPresentation.activityByRunId,
+    runtime,
+    setConversations,
+    setWorkspaceError,
     t,
-  ]);
-  const activeCanvasRunExperience = useMemo(
-    () =>
-      activeCanvasAgentRunId
-        ? projectAgentRunExperience({
-            activeRunId: activeCanvasAgentRunId,
-            events: activeAgentState.events,
-            timeline: activeAgentState.timeline,
-            error: activeAgentState.error,
-          })
-        : null,
-    [
-      activeAgentState.error,
-      activeAgentState.events,
-      activeAgentState.timeline,
-      activeCanvasAgentRunId,
-    ],
-  );
-
-  const requestConversationHistory = useCallback(
-    async (conversationId: string) => {
-      if (!window.desktop) return;
-      const pendingSync = historySyncTimers.current.get(conversationId);
-      if (pendingSync !== undefined) {
-        clearTimeout(pendingSync);
-        historySyncTimers.current.delete(conversationId);
-      }
-      const requestId = `history_${Date.now()}_${crypto.randomUUID().replaceAll("-", "")}`;
-      const previousRequestId =
-        latestHistoryRequestId.current.get(conversationId);
-      if (previousRequestId) {
-        conversationIdByHistoryRequestId.current.delete(previousRequestId);
-      }
-      latestHistoryRequestId.current.set(conversationId, requestId);
-      conversationIdByHistoryRequestId.current.set(requestId, conversationId);
-      setAgentByConversationId((current) =>
-        updateConversationAgentState(current, conversationId, (previous) => ({
-          ...previous,
-          error: null,
-        })),
-      );
-      try {
-        await window.desktop.sendAgentRequest({
-          type: "session.history",
-          requestId,
-          sessionId: conversationId,
-        });
-      } catch (error) {
-        conversationIdByHistoryRequestId.current.delete(requestId);
-        if (latestHistoryRequestId.current.get(conversationId) !== requestId)
-          return;
-        latestHistoryRequestId.current.delete(conversationId);
-        setAgentByConversationId((current) =>
-          updateConversationAgentState(current, conversationId, (previous) => ({
-            ...previous,
-            error: reportRendererError(
-              "conversation_history_load_failed",
-              error,
-              t("error.loadConversationHistory"),
-              { conversationId, requestId },
-            ),
-          })),
-        );
-      }
-    },
-    [t],
-  );
-
-  const scheduleConversationHistory = useCallback(
-    (conversationId: string) => {
-      const current = historySyncTimers.current.get(conversationId);
-      if (current !== undefined) clearTimeout(current);
-      historySyncTimers.current.set(
-        conversationId,
-        setTimeout(() => {
-          historySyncTimers.current.delete(conversationId);
-          void requestConversationHistory(conversationId);
-        }, HISTORY_SYNC_DEBOUNCE_MS),
-      );
-    },
-    [requestConversationHistory],
-  );
-
-  useEffect(
-    () => () => {
-      historySyncTimers.current.forEach((timer) => clearTimeout(timer));
-      historySyncTimers.current.clear();
-    },
-    [],
-  );
+    workspace,
+    workspaceSnapshot,
+  });
 
   useEffect(() => {
     void window.desktop?.getTheme().then(setTheme);
@@ -568,18 +403,6 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
             "conversations_load_failed",
             error,
             t("error.loadConversations"),
-          ),
-        );
-      });
-    void window.desktop
-      ?.listGlobalTasks()
-      .then(setGlobalTasks)
-      .catch((error: unknown) => {
-        setWorkspaceError(
-          reportRendererError(
-            "global_tasks_load_failed",
-            error,
-            t("error.loadGlobalTasks"),
           ),
         );
       });
@@ -655,129 +478,6 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
   useEffect(() => {
     document.documentElement.dataset.theme = resolveTheme(theme);
   }, [theme]);
-
-  useEffect(() => {
-    return window.desktop?.onAgentEvent((event) => {
-      if (event.type === "agent.ready" || event.type === "agent.connected") {
-        setAgentRuntimeError(null);
-        return;
-      }
-      if (event.type === "session.history") {
-        if (
-          latestHistoryRequestId.current.get(event.sessionId) !==
-          event.requestId
-        ) {
-          conversationIdByHistoryRequestId.current.delete(event.requestId);
-          return;
-        }
-        latestHistoryRequestId.current.delete(event.sessionId);
-        conversationIdByHistoryRequestId.current.delete(event.requestId);
-        setAgentByConversationId((current) =>
-          updateConversationAgentState(current, event.sessionId, (previous) => {
-            const activeRunId = previous.activeRunId;
-            return {
-              ...previous,
-              timeline: event.timeline,
-              events: pruneLiveEventsCoveredByTimeline(
-                previous.events,
-                event.timeline,
-                activeRunId,
-              ),
-              error: null,
-            };
-          }),
-        );
-        return;
-      }
-
-      setGenerationPlanPresentation((current) =>
-        projectGenerationPlanPresentationEvent(current, event),
-      );
-
-      const runId = projectAgentRunFileBinding(
-        event,
-        conversationIdByRunId.current,
-        designFileByRunId.current,
-        workspace,
-      );
-      const conversationId = runId
-        ? conversationIdByRunId.current.get(runId)
-        : event.type === "agent.error" && event.requestId
-          ? conversationIdByHistoryRequestId.current.get(event.requestId)
-          : undefined;
-      if (!conversationId) {
-        if (event.type === "agent.error") {
-          setAgentRuntimeError(event.message);
-          if (event.runId === undefined && event.requestId === undefined) {
-            setAgentByConversationId((current) =>
-              Object.fromEntries(
-                Object.entries(current).map(([id, state]) => [
-                  id,
-                  state.activeRunId
-                    ? { ...state, activeRunId: null, error: event.message }
-                    : state,
-                ]),
-              ),
-            );
-          }
-        }
-        return;
-      }
-
-      const activityAt = agentEventActivityAt(event);
-      if (activityAt) {
-        setConversations((current) =>
-          touchConversationList(current, conversationId, activityAt),
-        );
-      }
-
-      if (
-        event.type === "run.started" ||
-        event.type === "run.completed" ||
-        event.type === "run.continuation" ||
-        event.type === "approval.requested" ||
-        event.type === "approval.resolved" ||
-        event.type === "tool.failed"
-      ) {
-        void window.desktop
-          ?.listGlobalTasks()
-          .then(setGlobalTasks)
-          .catch(() => undefined);
-      }
-
-      setAgentByConversationId((current) =>
-        updateConversationAgentState(current, conversationId, (previous) => ({
-          ...previous,
-          events: appendLiveAgentEvent(previous.events, event),
-          activeRunId: projectAgentActiveRunId(
-            previous.activeRunId,
-            event,
-            runId,
-          ),
-          error:
-            event.type === "agent.error"
-              ? event.message
-              : event.type === "run.started" ||
-                  (event.type === "run.continuation" &&
-                    event.status === "scheduled")
-                ? null
-                : previous.error,
-        })),
-      );
-      if (isDurableAgentCheckpoint(event)) {
-        scheduleConversationHistory(conversationId);
-      }
-      if (event.type === "run.completed" || event.type === "agent.error") {
-        if (event.type === "run.completed") {
-          void requestConversationHistory(conversationId);
-          conversationIdByRunId.current.delete(event.runId);
-        }
-        if (event.type === "agent.error" && event.requestId) {
-          conversationIdByHistoryRequestId.current.delete(event.requestId);
-        }
-      }
-    });
-  }, [requestConversationHistory, scheduleConversationHistory, workspace]);
 
   const { editorCommands, pageActions, styleActions, variableActions } =
     useDocumentCommandControllers({
@@ -1262,11 +962,6 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
     if (projects) setRecentProjects(projects);
   }, []);
 
-  const refreshGlobalTasks = useCallback(async () => {
-    const tasks = await window.desktop?.listGlobalTasks();
-    if (tasks) setGlobalTasks(tasks);
-  }, []);
-
   const showProject = useCallback(
     (manifest: ProjectManifest, preferredConversationId?: string) => {
       setProjectsById((projects) => ({
@@ -1588,11 +1283,7 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
             (conversation) => conversation.conversationId !== conversationId,
           ),
         );
-        setAgentByConversationId((current) => {
-          const remaining = { ...current };
-          delete remaining[conversationId];
-          return remaining;
-        });
+        forgetConversation(conversationId);
         setActiveConversationId((current) =>
           current === conversationId
             ? (replacement?.conversationId ?? null)
@@ -1604,23 +1295,6 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
         ) {
           setConversationOpenIssue(null);
           setView("workspace");
-        }
-        const pendingSync = historySyncTimers.current.get(conversationId);
-        if (pendingSync !== undefined) clearTimeout(pendingSync);
-        historySyncTimers.current.delete(conversationId);
-        const historyRequestId =
-          latestHistoryRequestId.current.get(conversationId);
-        if (historyRequestId) {
-          conversationIdByHistoryRequestId.current.delete(historyRequestId);
-        }
-        latestHistoryRequestId.current.delete(conversationId);
-        for (const [
-          runId,
-          mappedConversationId,
-        ] of conversationIdByRunId.current) {
-          if (mappedConversationId === conversationId) {
-            conversationIdByRunId.current.delete(runId);
-          }
         }
         if (replacement) {
           void requestConversationHistory(replacement.conversationId);
@@ -1641,7 +1315,14 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
         setConversationDeletionBusy(false);
       }
     },
-    [activeConversationId, conversations, requestConversationHistory, t, view],
+    [
+      activeConversationId,
+      conversations,
+      forgetConversation,
+      requestConversationHistory,
+      t,
+      view,
+    ],
   );
 
   const openGlobalTask = useCallback(
@@ -1847,190 +1528,6 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
           },
         ),
       );
-    }
-  };
-
-  const submitAgentTask = async (
-    prompt: string,
-    modelSelection: ModelSelection,
-    attachments: readonly AgentAttachment[],
-  ) => {
-    if (
-      !window.desktop ||
-      !activeConversation ||
-      activeAgentState.activeRunId
-    ) {
-      return false;
-    }
-    const current = runtime.getSnapshot();
-    const runId = `run_${Date.now()}_${++runCounter.current}`;
-    const conversationId = activeConversation.conversationId;
-    const activeFile = workspaceSnapshot.files[workspaceSnapshot.activeFileKey];
-    if (!activeFile) return false;
-    const createdAt = new Date().toISOString();
-    const request: AgentRequest = {
-      type: "run.start",
-      runId,
-      sessionId: conversationId,
-      prompt,
-      ...(attachments.length === 0
-        ? {}
-        : {
-            attachments: attachments.map((attachment) => ({ ...attachment })),
-          }),
-      documentId: current.document.documentId,
-      revision: current.document.revision,
-      scope: selectionScope(current, activePageId),
-      mutationTarget: { kind: "page", pageId: activePageId },
-      modelSelection,
-      generationMode: "fast",
-    };
-    conversationIdByRunId.current.set(runId, conversationId);
-    workspace.retainFileForRun(
-      activeFile.projectId,
-      activeFile.designFileId,
-      runId,
-    );
-    designFileByRunId.current.set(runId, {
-      projectId: activeFile.projectId,
-      designFileId: activeFile.designFileId,
-      documentId: current.document.documentId,
-    });
-    setAgentByConversationId((currentState) =>
-      updateConversationAgentState(currentState, conversationId, (previous) => {
-        const maximumSequence = previous.timeline.reduce(
-          (maximum, item) => Math.max(maximum, item.sequence),
-          0,
-        );
-        const optimisticMessage: SessionTimelineItem = {
-          itemId: `message:${runId}_user`,
-          sessionId: conversationId,
-          runId,
-          sequence: maximumSequence + 1,
-          createdAt,
-          updatedAt: createdAt,
-          type: "user.message",
-          messageId: `${runId}_user`,
-          content: prompt,
-          ...(attachments.length === 0
-            ? {}
-            : {
-                attachments: attachments.map((attachment) => ({
-                  ...attachment,
-                })),
-              }),
-          documentId: current.document.documentId,
-          revision: current.document.revision,
-          scope: request.scope,
-          mutationTarget: request.mutationTarget,
-        };
-        return {
-          ...previous,
-          timeline: [
-            ...previous.timeline.filter(
-              (item) => item.itemId !== optimisticMessage.itemId,
-            ),
-            optimisticMessage,
-          ],
-          activeRunId: runId,
-          error: null,
-        };
-      }),
-    );
-    try {
-      await window.desktop.sendAgentRequest(request);
-      setConversations((current) =>
-        touchConversationList(current, conversationId, createdAt),
-      );
-      void refreshGlobalTasks();
-      return true;
-    } catch (error) {
-      conversationIdByRunId.current.delete(runId);
-      workspace.releaseFileForRun(
-        activeFile.projectId,
-        activeFile.designFileId,
-        runId,
-      );
-      designFileByRunId.current.delete(runId);
-      setAgentByConversationId((currentState) =>
-        updateConversationAgentState(
-          currentState,
-          conversationId,
-          (previous) => ({
-            ...previous,
-            activeRunId:
-              previous.activeRunId === runId ? null : previous.activeRunId,
-            error: reportRendererError(
-              "agent_request_failed",
-              error,
-              t("error.agentRuntime"),
-              { conversationId, runId },
-            ),
-          }),
-        ),
-      );
-      return false;
-    }
-  };
-
-  const stopAgentTask = async () => {
-    const runId = activeAgentState.activeRunId;
-    if (!runId || !activeConversation || !window.desktop) return false;
-    const conversationId = activeConversation.conversationId;
-    try {
-      await window.desktop.sendAgentRequest({ type: "run.cancel", runId });
-      setGenerationPlanPresentation((current) =>
-        clearGenerationPlanPresentationRun(current, runId),
-      );
-      return true;
-    } catch (error) {
-      setAgentByConversationId((current) =>
-        updateConversationAgentState(current, conversationId, (previous) => ({
-          ...previous,
-          error: reportRendererError(
-            "agent_cancel_failed",
-            error,
-            t("error.stopAgent"),
-            { conversationId, runId },
-          ),
-        })),
-      );
-      return false;
-    }
-  };
-
-  const resolveAgentApproval = async (resolution: {
-    runId: string;
-    toolCallId: string;
-    approvalId: string;
-    decision: "allow_once" | "deny";
-  }) => {
-    if (!window.desktop) return false;
-    const conversationId = conversationIdByRunId.current.get(resolution.runId);
-    if (!conversationId) return false;
-    try {
-      await window.desktop.sendAgentRequest({
-        type: "approval.resolve",
-        ...resolution,
-      });
-      return true;
-    } catch (error) {
-      setAgentByConversationId((current) =>
-        updateConversationAgentState(current, conversationId, (previous) => ({
-          ...previous,
-          error: reportRendererError(
-            "agent_approval_failed",
-            error,
-            t("error.resolveAgentApproval"),
-            {
-              conversationId,
-              runId: resolution.runId,
-              toolCallId: resolution.toolCallId,
-            },
-          ),
-        })),
-      );
-      return false;
     }
   };
 
@@ -2677,27 +2174,6 @@ function pageBounds(document: DesignDocument, pageId: string) {
   return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
 }
 
-function selectionScope(
-  snapshot: ReturnType<typeof useEditorSnapshot>,
-  pageId: string,
-): SelectionScope {
-  const { selection } = snapshot.state;
-  if (selection.nodeIds.length > 0) {
-    return {
-      kind: "selection",
-      selectedNodeIds: [...selection.nodeIds],
-      ...(selection.anchorNodeId
-        ? { primaryNodeId: selection.anchorNodeId }
-        : {}),
-      ...(pageId ? { pageId } : {}),
-    };
-  }
-  if (pageId) {
-    return { kind: "page", pageId, selectedNodeIds: [] };
-  }
-  return { kind: "document", selectedNodeIds: [] };
-}
-
 function isEditableTarget(target: EventTarget | null) {
   return (
     target instanceof HTMLInputElement ||
@@ -2717,177 +2193,4 @@ function createProjectId() {
 
 function createConversationId() {
   return `conversation_${crypto.randomUUID().replaceAll("-", "")}`;
-}
-
-function updateConversationAgentState(
-  current: Readonly<Record<string, ConversationAgentState>>,
-  conversationId: string,
-  update: (state: ConversationAgentState) => ConversationAgentState,
-): Readonly<Record<string, ConversationAgentState>> {
-  return {
-    ...current,
-    [conversationId]: update(current[conversationId] ?? EMPTY_AGENT_STATE),
-  };
-}
-
-function touchConversationList(
-  current: ConversationDescriptor[],
-  conversationId: string,
-  updatedAt: string,
-): ConversationDescriptor[] {
-  const conversation = current.find(
-    (candidate) => candidate.conversationId === conversationId,
-  );
-  if (!conversation || conversation.updatedAt >= updatedAt) return current;
-  return current
-    .map((candidate) =>
-      candidate.conversationId === conversationId
-        ? { ...candidate, updatedAt }
-        : candidate,
-    )
-    .sort(
-      (left, right) =>
-        right.updatedAt.localeCompare(left.updatedAt) ||
-        left.conversationId.localeCompare(right.conversationId),
-    );
-}
-
-function appendLiveAgentEvent(
-  events: readonly AgentEvent[],
-  event: AgentEvent,
-): AgentEvent[] {
-  if (event.type === "message.delta") {
-    const index = events.findIndex(
-      (candidate) =>
-        candidate.type === "message.delta" &&
-        candidate.runId === event.runId &&
-        candidate.messageId === event.messageId &&
-        candidate.blockId === event.blockId,
-    );
-    if (index >= 0) {
-      return events.map((candidate, candidateIndex) =>
-        candidateIndex === index && candidate.type === "message.delta"
-          ? { ...candidate, delta: `${candidate.delta}${event.delta}` }
-          : candidate,
-      );
-    }
-  }
-  if (event.type === "tool.progress") {
-    return [
-      ...events.filter(
-        (candidate) =>
-          candidate.type !== "tool.progress" ||
-          candidate.toolCallId !== event.toolCallId,
-      ),
-      event,
-    ];
-  }
-  if (event.type === "message.completed") {
-    return [
-      ...events.filter(
-        (candidate) =>
-          !(
-            candidate.type === "message.delta" &&
-            candidate.runId === event.runId &&
-            candidate.messageId === event.messageId
-          ),
-      ),
-      event,
-    ];
-  }
-  if (event.type === "tool.completed" || event.type === "tool.failed") {
-    return [
-      ...events.filter(
-        (candidate) =>
-          candidate.type !== "tool.progress" ||
-          candidate.toolCallId !== event.toolCallId,
-      ),
-      event,
-    ];
-  }
-  return [...events, event];
-}
-
-function pruneLiveEventsCoveredByTimeline(
-  events: readonly AgentEvent[],
-  timeline: readonly SessionTimelineItem[],
-  activeRunId: string | null,
-): AgentEvent[] {
-  const durableMessages = new Set(
-    timeline.flatMap((item) =>
-      item.type === "assistant.message" ? [item.messageId] : [],
-    ),
-  );
-  const durableTools = new Map(
-    timeline.flatMap((item) =>
-      item.type === "tool" ? [[item.toolCallId, item.status] as const] : [],
-    ),
-  );
-  const durableApprovals = new Map(
-    timeline.flatMap((item) =>
-      item.type === "approval" ? [[item.approvalId, item.status] as const] : [],
-    ),
-  );
-  const durableRuns = new Map(
-    timeline.flatMap((item) =>
-      item.type === "run" ? [[item.runId, item.status] as const] : [],
-    ),
-  );
-  return events.filter((event) => {
-    if ("runId" in event && event.runId !== activeRunId) return false;
-    if (
-      (event.type === "message.delta" || event.type === "message.completed") &&
-      durableMessages.has(event.messageId)
-    ) {
-      return false;
-    }
-    if (
-      event.type === "tool.requested" ||
-      event.type === "tool.progress" ||
-      event.type === "tool.completed" ||
-      event.type === "tool.failed"
-    ) {
-      const status = durableTools.get(event.toolCallId);
-      if (status === "completed" || status === "failed") return false;
-    }
-    if (event.type === "approval.requested") {
-      return !durableApprovals.has(event.approvalId);
-    }
-    if (event.type === "approval.resolved") {
-      return durableApprovals.get(event.approvalId) !== "resolved";
-    }
-    if (event.type === "run.started") {
-      return !durableRuns.has(event.runId);
-    }
-    if (event.type === "run.completed") {
-      const status = durableRuns.get(event.runId);
-      return status === undefined || status === "started";
-    }
-    return true;
-  });
-}
-
-function isDurableAgentCheckpoint(event: AgentEvent): boolean {
-  return (
-    event.type === "run.started" ||
-    event.type === "message.completed" ||
-    event.type === "tool.completed" ||
-    event.type === "tool.failed" ||
-    event.type === "approval.requested" ||
-    event.type === "approval.resolved"
-  );
-}
-
-function agentEventActivityAt(event: AgentEvent): string | null {
-  if (event.type === "run.started") return event.startedAt;
-  if (event.type === "run.completed") return event.finishedAt;
-  if (
-    event.type === "message.completed" ||
-    event.type === "tool.completed" ||
-    event.type === "tool.failed" ||
-    event.type === "agent.error"
-  ) {
-    return new Date().toISOString();
-  }
-  return null;
 }
