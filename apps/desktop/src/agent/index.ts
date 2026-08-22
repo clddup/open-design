@@ -5,9 +5,6 @@ import {
   type AgentEvent,
 } from "@opendesign/agent-contracts";
 import { MockModelGateway } from "@opendesign/model-gateway";
-import { JsonlSessionStore } from "@opendesign/session-store";
-import { join } from "node:path";
-import { homedir } from "node:os";
 import { dispatchAgentRequest } from "./request-handler.js";
 import { ParentModelGateway } from "./parent-model-gateway.js";
 import { ParentDesignToolExecutor } from "./parent-design-tool-executor.js";
@@ -24,6 +21,7 @@ import {
 } from "./system-prompt.js";
 import { DESIGN_VISUAL_COMPLETION_GUARD } from "./design-completion-guard.js";
 import { UserApprovalController } from "./user-approval-controller.js";
+import { ParentSessionStore } from "./parent-session-store.js";
 
 if (!process.parentPort) {
   throw new Error("OpenDesign Agent must run as an Electron utility process");
@@ -32,6 +30,7 @@ const port = process.parentPort;
 
 const parentModelGateway = new ParentModelGateway(port);
 const parentDesignToolExecutor = new ParentDesignToolExecutor(port);
+const parentSessionStore = new ParentSessionStore(port);
 const userApprovalController = new UserApprovalController();
 const runtime = new OpenDesignPiRuntime({
   modelGateway:
@@ -40,9 +39,7 @@ const runtime = new OpenDesignPiRuntime({
           "I have inspected the current design and prepared a structured edit plan.",
         )
       : parentModelGateway,
-  sessionStore: new JsonlSessionStore(
-    join(homedir(), ".opendesign", "sessions", "events.jsonl"),
-  ),
+  sessionStore: parentSessionStore,
   toolCatalog: {
     listTools: () =>
       DESIGN_AGENT_TOOL_SPECS.map((tool) => ({
@@ -66,6 +63,7 @@ port.on("message", (event) => {
   const request: unknown = event.data;
   if (parentModelGateway.handleMessage(request)) return;
   if (parentDesignToolExecutor.handleMessage(request)) return;
+  if (parentSessionStore.handleMessage(request)) return;
   if (!isAgentRequest(request)) {
     console.error("Rejected invalid Agent request");
     return;

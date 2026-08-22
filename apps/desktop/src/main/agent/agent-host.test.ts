@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AGENT_PROTOCOL_VERSION } from "@opendesign/agent-contracts";
+import type { SessionStoreBridgeRequest } from "../../shared/session-store-bridge";
 import {
   AgentHost,
   createAgentEnvironment,
@@ -104,7 +105,7 @@ describe("AgentHost model bridge", () => {
     });
     const host = new AgentHost();
     host.setModelRequestHandler(handler);
-    host.start();
+    void host.start();
 
     const error = vi
       .spyOn(console, "error")
@@ -140,7 +141,7 @@ describe("AgentHost model bridge", () => {
     });
     const host = new AgentHost();
     host.setModelRequestHandler(handler);
-    host.start();
+    void host.start();
     const error = vi
       .spyOn(console, "error")
       .mockImplementation(() => undefined);
@@ -176,7 +177,7 @@ describe("AgentHost model bridge", () => {
 
   it("returns a terminal bridge error instead of dropping an invalid design tool request", () => {
     const host = new AgentHost();
-    host.start();
+    void host.start();
     const error = vi
       .spyOn(console, "error")
       .mockImplementation(() => undefined);
@@ -213,11 +214,42 @@ describe("AgentHost model bridge", () => {
     });
   });
 
+  it("routes Session Store operations through the Main handler", async () => {
+    const host = new AgentHost();
+    const handler = vi.fn((request: SessionStoreBridgeRequest) =>
+      Promise.resolve({
+        type: "session-store.response" as const,
+        requestId: request.requestId,
+        operation: "read" as const,
+        ok: true as const,
+        result: [],
+      }),
+    );
+    host.setSessionStoreRequestHandler(handler);
+    void host.start();
+
+    postToHost({
+      type: "session-store.request",
+      requestId: "session_request_1",
+      operation: "read",
+      sessionId: "conversation_1",
+    });
+
+    await vi.waitFor(() => expect(handler).toHaveBeenCalledOnce());
+    expect(electron.child.postMessage).toHaveBeenCalledWith({
+      type: "session-store.response",
+      requestId: "session_request_1",
+      operation: "read",
+      ok: true,
+      result: [],
+    });
+  });
+
   it("turns an invalid run event into a visible correlated Agent error", () => {
     const host = new AgentHost();
     const events: unknown[] = [];
     host.on((event) => events.push(event));
-    host.start();
+    void host.start();
     vi.spyOn(console, "error").mockImplementation(() => undefined);
 
     postToHost({
@@ -250,7 +282,7 @@ describe("AgentHost model bridge", () => {
         "Design tool requires an active registered Run",
       );
     });
-    host.start();
+    void host.start();
 
     postToHost({
       type: "design-tool.request",
@@ -305,7 +337,7 @@ describe("AgentHost model bridge", () => {
     });
     const host = new AgentHost();
     host.setModelRequestHandler(handler);
-    host.start();
+    void host.start();
 
     postToHost(modelRequest);
     postToHost({ type: "model.cancel", requestId: modelRequest.requestId });
@@ -322,7 +354,7 @@ describe("AgentHost model bridge", () => {
 
   it("accepts an approval decision only for the exact pending tool call", () => {
     const host = new AgentHost();
-    host.start();
+    void host.start();
     postToHost({
       type: "agent.ready",
       protocolVersion: AGENT_PROTOCOL_VERSION,

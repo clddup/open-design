@@ -28,6 +28,13 @@ import {
   type ModelBridgeResponse,
 } from "../../shared/model-bridge";
 import { validateDesignAgentToolInput } from "../../shared/design-agent-tools";
+import {
+  isSessionStoreBridgeRequest,
+  sessionStoreBridgeRequestId,
+  sessionStoreBridgeRequestOperation,
+  type SessionStoreBridgeRequest,
+  type SessionStoreBridgeResponse,
+} from "../../shared/session-store-bridge";
 import { trustedDesignWorkflowFailure } from "./design-workflow-failure";
 import { AgentSupervisor } from "./agent-supervisor";
 
@@ -49,6 +56,13 @@ export interface DesignToolRequestHandler {
     signal: AbortSignal,
     reportProgress: (message: string, progress: number) => void,
   ): Promise<TrustedToolResult>;
+}
+
+export interface SessionStoreRequestHandler {
+  (
+    request: SessionStoreBridgeRequest,
+    signal: AbortSignal,
+  ): Promise<SessionStoreBridgeResponse>;
 }
 
 export type PendingAgentApproval = {
@@ -104,6 +118,8 @@ export class AgentHost {
   readonly #modelRequests = new Map<string, AbortController>();
   #designToolRequestHandler: DesignToolRequestHandler | null = null;
   readonly #designToolRequests = new Map<string, AbortController>();
+  #sessionStoreRequestHandler: SessionStoreRequestHandler | null = null;
+  readonly #sessionStoreRequests = new Map<string, AbortController>();
   readonly #toolRequests = new Map<
     string,
     {
@@ -160,6 +176,12 @@ export class AgentHost {
     this.#designToolRequestHandler = handler;
   }
 
+  setSessionStoreRequestHandler(
+    handler: SessionStoreRequestHandler | null,
+  ): void {
+    this.#sessionStoreRequestHandler = handler;
+  }
+
   start(): Promise<void> {
     return this.#supervisor.start();
   }
@@ -213,6 +235,23 @@ export class AgentHost {
   }
 
   private onMessage(message: unknown, generation: number): void {
+    if (isSessionStoreBridgeRequest(message)) {
+      void this.handleSessionStoreRequest(message, generation);
+      return;
+    }
+    const rejectedSessionRequestId = sessionStoreBridgeRequestId(message);
+    const rejectedSessionOperation =
+      sessionStoreBridgeRequestOperation(message);
+    if (rejectedSessionRequestId && rejectedSessionOperation) {
+      this.#supervisor.postMessageForGeneration(generation, {
+        type: "session-store.response",
+        requestId: rejectedSessionRequestId,
+        operation: rejectedSessionOperation,
+        ok: false,
+        error: "Session Store request rejected by Main",
+      } satisfies SessionStoreBridgeResponse);
+      return;
+    }
     if (isDesignToolBridgeRequest(message, validateDesignAgentToolInput)) {
       void this.handleDesignToolRequest(
         message.requestId,
@@ -485,6 +524,64 @@ export class AgentHost {
     }
   }
 
+  private async handleSessionStoreRequest(
+    request: SessionStoreBridgeRequest,
+    generation: number,
+  ): Promise<void> {
+    const handler = this.#sessionStoreRequestHandler;
+    if (!handler) {
+      this.#supervisor.postMessageForGeneration(generation, {
+        type: "session-store.response",
+        requestId: request.requestId,
+        operation: request.operation,
+        ok: false,
+        error: "Session Store host is not initialized",
+      } satisfies SessionStoreBridgeResponse);
+      return;
+    }
+    if (this.#sessionStoreRequests.has(request.requestId)) {
+      this.#supervisor.postMessageForGeneration(generation, {
+        type: "session-store.response",
+        requestId: request.requestId,
+        operation: request.operation,
+        ok: false,
+        error: "Duplicate Session Store request",
+      } satisfies SessionStoreBridgeResponse);
+      return;
+    }
+    const controller = new AbortController();
+    this.#sessionStoreRequests.set(request.requestId, controller);
+    try {
+      const response = await handler(request, controller.signal);
+      if (controller.signal.aborted) return;
+      if (
+        response.requestId !== request.requestId ||
+        response.operation !== request.operation
+      ) {
+        throw new TypeError(
+          "Session Store handler returned the wrong response",
+        );
+      }
+      this.#supervisor.postMessageForGeneration(generation, response);
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      this.#supervisor.postMessageForGeneration(generation, {
+        type: "session-store.response",
+        requestId: request.requestId,
+        operation: request.operation,
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Session Store request failed",
+      } satisfies SessionStoreBridgeResponse);
+    } finally {
+      if (this.#sessionStoreRequests.get(request.requestId) === controller) {
+        this.#sessionStoreRequests.delete(request.requestId);
+      }
+    }
+  }
+
   private abortDesignToolRequests(): void {
     for (const controller of this.#designToolRequests.values()) {
       controller.abort();
@@ -495,6 +592,10 @@ export class AgentHost {
   private resetProcessState(): void {
     this.abortModelRequests();
     this.abortDesignToolRequests();
+    for (const controller of this.#sessionStoreRequests.values()) {
+      controller.abort();
+    }
+    this.#sessionStoreRequests.clear();
     this.#toolRequests.clear();
     this.#pendingApprovals.clear();
   }

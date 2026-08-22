@@ -32,6 +32,7 @@ import { AgentReferenceHost } from "./agent/agent-reference-host";
 import { AgentSvgExportHost } from "./agent/agent-svg-export-host";
 import { AgentSvgImportHost } from "./agent/agent-svg-import-host";
 import { AgentRasterExportHost } from "./agent/agent-raster-export-host";
+import { AgentSessionStoreHost } from "./agent/agent-session-store-host";
 import { RendererDesignToolHost } from "./agent/renderer-design-tool-host";
 import {
   DesignGenerationPerformanceTracker,
@@ -786,6 +787,10 @@ async function startDesktopApplication(
     fixtureSmoke.path(".opendesign", "fonts"),
   );
   agentReferenceHost = new AgentReferenceHost(agentAttachmentHost);
+  const agentSessionStore = new JsonlSessionStore(
+    fixtureSmoke.path(".opendesign", "sessions", "events.jsonl"),
+  );
+  const agentSessionStoreHost = new AgentSessionStoreHost(agentSessionStore);
   const persistedLocale = workspaceStore.getPreference("locale");
   applicationPreferences.restoreLocale(persistedLocale);
   const previousMenu = Menu.getApplicationMenu();
@@ -822,7 +827,11 @@ async function startDesktopApplication(
   startup.defer("Agent handlers", () => {
     agentHost.setModelRequestHandler(null);
     agentHost.setDesignToolRequestHandler(null);
+    agentHost.setSessionStoreRequestHandler(null);
   });
+  agentHost.setSessionStoreRequestHandler((request, signal) =>
+    agentSessionStoreHost.execute(request, signal),
+  );
   const mainDesignToolRuntime = new MainDesignToolRuntime({
     dispatch: async (call, context, signal, reportProgress) => {
       if (!globalTaskCoordinator) {
@@ -1804,9 +1813,7 @@ async function startDesktopApplication(
   );
   globalTaskCoordinator.reconcileInterruptedTasks();
   try {
-    const recovered = await new JsonlSessionStore(
-      fixtureSmoke.path(".opendesign", "sessions", "events.jsonl"),
-    ).reconcileInterruptedRuns();
+    const recovered = await agentSessionStore.reconcileInterruptedRuns();
     if (recovered.recoveredRuns > 0) {
       console.info(
         `Recovered ${recovered.recoveredRuns} interrupted Agent run(s) and ${recovered.recoveredTools} tool call(s)`,
