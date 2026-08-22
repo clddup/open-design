@@ -5315,6 +5315,59 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
+  it("cancels stale Vector previews before rebuilding scope and disposes every overlay", async () => {
+    const onVectorEdit = vi.fn<(request: LeaferVectorEditRequest) => boolean>(
+      () => true,
+    );
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onVectorEdit,
+    });
+    const input = withVectorEditFixture(createInput(), ["vertex_a"]);
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    const path = app && findElement(app.tree, "editable_curve");
+    if (!app || !(path instanceof FakePath) || !path.parent) {
+      throw new Error("Missing editable Vector fixture");
+    }
+    const authoritativePath = path.path;
+    const firstOverlay = path.parent.children.at(-1);
+    if (!(firstOverlay instanceof FakeGroup)) {
+      throw new Error("Missing first Vector overlay");
+    }
+    const firstAnchor = firstOverlay.children.find(
+      (child): child is FakeEllipse => child instanceof FakeEllipse,
+    );
+    if (!firstAnchor) throw new Error("Missing first Vector anchor");
+
+    app.emit("pointer.down", pointerEvent(0, 0, firstAnchor));
+    app.emit("pointer.move", pointerEvent(30, 20, firstAnchor));
+    expect(path.path).not.toBe(authoritativePath);
+
+    const noncontiguous = structuredClone(input);
+    noncontiguous.document.revision += 2;
+    delete noncontiguous.changes;
+    adapter.sync(noncontiguous);
+    expect(onVectorEdit).not.toHaveBeenCalled();
+    expect(path.path).toBe(authoritativePath);
+    expect(firstOverlay.destroy).toHaveBeenCalledTimes(1);
+
+    const rebuiltOverlay = path.parent.children.at(-1);
+    if (!(rebuiltOverlay instanceof FakeGroup)) {
+      throw new Error("Missing rebuilt Vector overlay");
+    }
+    expect(rebuiltOverlay).not.toBe(firstOverlay);
+    app.emit("pointer.up", pointerEvent(30, 20, firstAnchor));
+    expect(onVectorEdit).not.toHaveBeenCalled();
+
+    adapter.dispose();
+    expect(rebuiltOverlay.destroy).toHaveBeenCalledTimes(1);
+    app.emit("pointer.down", pointerEvent(0, 0, firstAnchor));
+    app.emit("pointer.move", pointerEvent(20, 10, firstAnchor));
+    app.emit("pointer.up", pointerEvent(20, 10, firstAnchor));
+    expect(onVectorEdit).not.toHaveBeenCalled();
+  });
+
   it("lassos vector points and paths as session-only selection across one edit scope", async () => {
     const onVectorEdit = vi.fn<(request: LeaferVectorEditRequest) => boolean>(
       () => true,
