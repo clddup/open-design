@@ -1,0 +1,267 @@
+import type {
+  BrowserWindow,
+  BrowserWindowConstructorOptions,
+  IpcMainInvokeEvent,
+  WebContents,
+} from "electron";
+import { describe, expect, it, vi } from "vitest";
+import {
+  DesktopWindowHost,
+  type DesktopWindowIpcRegistrar,
+  resolveApplicationIconPath,
+} from "./desktop-window-host.js";
+import { channels } from "../shared/desktop-api.js";
+
+describe("DesktopWindowHost", () => {
+  it("creates one secure desktop workbench and loads the development renderer", () => {
+    const fixture = setup({
+      environment: { VITE_DEV_SERVER_URL: "http://127.0.0.1:5173/editor" },
+      isPackaged: false,
+    });
+
+    const window = fixture.host.create();
+
+    expect(fixture.createWindow).toHaveBeenCalledOnce();
+    expect(fixture.createWindow).toHaveBeenCalledWith(
+      expect.objectContaining({
+        width: 1440,
+        height: 920,
+        minWidth: 920,
+        minHeight: 620,
+        show: false,
+        title: "OpenDesign",
+        icon: "/application/icon.png",
+        titleBarStyle: "hidden",
+        backgroundColor: "#191a1b",
+      }),
+    );
+    const createOptions = fixture.createWindow.mock.calls[0]?.[0];
+    expect(createOptions?.webPreferences).toMatchObject({
+      preload: "/application/preload.cjs",
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true,
+      backgroundThrottling: false,
+      devTools: true,
+    });
+    expect(fixture.window.loadURL).toHaveBeenCalledWith(
+      "http://127.0.0.1:5173/editor",
+    );
+    expect(fixture.window.loadFile).not.toHaveBeenCalled();
+    expect(fixture.host.create()).toBe(window);
+    expect(fixture.createWindow).toHaveBeenCalledOnce();
+  });
+
+  it("loads the packaged renderer and enforces navigation and external-link policy", () => {
+    const fixture = setup({ isPackaged: true });
+    fixture.host.create();
+
+    expect(fixture.window.loadFile).toHaveBeenCalledWith(
+      "/application/renderer/index.html",
+    );
+    const open = fixture.handlers.openWindow;
+    const navigate = fixture.handlers.navigate;
+    if (!open || !navigate)
+      throw new Error("Window policy handlers are missing");
+
+    expect(open({ url: "https://example.com/docs" })).toEqual({
+      action: "deny",
+    });
+    expect(fixture.openExternal).toHaveBeenCalledWith(
+      "https://example.com/docs",
+    );
+    expect(open({ url: "file:///tmp/untrusted.html" })).toEqual({
+      action: "deny",
+    });
+    expect(fixture.openExternal).toHaveBeenCalledOnce();
+
+    const allowed = { preventDefault: vi.fn() };
+    navigate(allowed, "file:///application/renderer/index.html");
+    expect(allowed.preventDefault).not.toHaveBeenCalled();
+    const denied = { preventDefault: vi.fn() };
+    navigate(denied, "file:///application/renderer/other.html");
+    expect(denied.preventDefault).toHaveBeenCalledOnce();
+  });
+
+  it("shows and clears only the current window and recreates it on activation", () => {
+    const fixture = setup();
+    fixture.host.create();
+    fixture.handlers.ready?.();
+    expect(fixture.showWindow).toHaveBeenCalledWith(fixture.browserWindow);
+
+    fixture.handlers.closed?.();
+    expect(fixture.host.current()).toBeNull();
+
+    fixture.getAllWindows.mockReturnValueOnce([fixture.browserWindow]);
+    fixture.host.activate();
+    expect(fixture.createWindow).toHaveBeenCalledOnce();
+    fixture.getAllWindows.mockReturnValueOnce([]);
+    fixture.host.activate();
+    expect(fixture.createWindow).toHaveBeenCalledTimes(2);
+  });
+
+  it("ignores late lifecycle events from a replaced destroyed window", () => {
+    const first = setup();
+    first.host.create();
+    first.window.isDestroyed.mockReturnValue(true);
+    const replacement = setup();
+    first.createWindow.mockReturnValueOnce(replacement.browserWindow);
+
+    expect(first.host.create()).toBe(replacement.browserWindow);
+    first.handlers.ready?.();
+    first.handlers.closed?.();
+    expect(first.showWindow).not.toHaveBeenCalled();
+    expect(first.host.current()).toBe(replacement.browserWindow);
+
+    replacement.handlers.ready?.();
+    expect(first.showWindow).toHaveBeenCalledWith(replacement.browserWindow);
+  });
+
+  it("owns renderer identity, outbound events and native window actions", () => {
+    const fixture = setup();
+    fixture.host.create();
+    const sender = fixture.browserWindow.webContents;
+    const otherSender = {} as WebContents;
+
+    expect(() => fixture.host.assertRenderer({ sender })).not.toThrow();
+    expect(() => fixture.host.assertRenderer({ sender: otherSender })).toThrow(
+      "Request from unknown renderer",
+    );
+    expect(fixture.host.send("design:event", { revision: 4 })).toBe(true);
+    expect(fixture.webContents.send).toHaveBeenCalledWith("design:event", {
+      revision: 4,
+    });
+
+    fixture.host.handleAction(otherSender, "minimize");
+    expect(fixture.window.minimize).not.toHaveBeenCalled();
+    fixture.host.handleAction(sender, "minimize");
+    expect(fixture.window.minimize).toHaveBeenCalledOnce();
+    fixture.host.handleAction(sender, "toggle-maximize");
+    expect(fixture.window.maximize).toHaveBeenCalledOnce();
+    fixture.window.isMaximized.mockReturnValueOnce(true);
+    fixture.host.handleAction(sender, "toggle-maximize");
+    expect(fixture.window.unmaximize).toHaveBeenCalledOnce();
+    fixture.host.handleAction(sender, "close");
+    expect(fixture.window.close).toHaveBeenCalledOnce();
+
+    fixture.window.isDestroyed.mockReturnValueOnce(true);
+    expect(fixture.host.send("ignored")).toBe(false);
+  });
+
+  it("registers and validates the native window action boundary", () => {
+    const fixture = setup();
+    fixture.host.create();
+    const handlers = new Map<
+      string,
+      Parameters<DesktopWindowIpcRegistrar["handle"]>[1]
+    >();
+    fixture.host.registerIpc({
+      handle(channel, listener) {
+        handlers.set(channel, listener);
+      },
+    });
+    const handler = handlers.get(channels.windowAction);
+    if (!handler) throw new Error("Window action handler is missing");
+    const event = {
+      sender: fixture.browserWindow.webContents,
+    } as IpcMainInvokeEvent;
+
+    expect(() => handler(event)).toThrow("Unexpected IPC arguments");
+    expect(() => handler(event, "unsupported")).toThrow(
+      "Invalid window action",
+    );
+    handler(event, "minimize");
+    expect(fixture.window.minimize).toHaveBeenCalledOnce();
+  });
+});
+
+describe("resolveApplicationIconPath", () => {
+  it("uses the packaged resource and development build locations", () => {
+    expect(
+      resolveApplicationIconPath({
+        appPath: "/repo/apps/desktop",
+        isPackaged: true,
+        resourcesPath: "/bundle/resources",
+      }),
+    ).toBe("/bundle/resources/icon.png");
+    expect(
+      resolveApplicationIconPath({
+        appPath: "/repo/apps/desktop",
+        isPackaged: false,
+        resourcesPath: "/bundle/resources",
+      }),
+    ).toBe("/repo/apps/desktop/build/icon.png");
+  });
+});
+
+function setup(
+  overrides: {
+    environment?: Readonly<Record<string, string | undefined>>;
+    isPackaged?: boolean;
+  } = {},
+) {
+  const handlers: {
+    closed?: () => void;
+    navigate?: (event: { preventDefault(): void }, url: string) => void;
+    openWindow?: (details: { url: string }) => { action: "deny" };
+    ready?: () => void;
+  } = {};
+  const webContents = {
+    on: vi.fn((event: string, handler: typeof handlers.navigate) => {
+      if (event === "will-navigate") handlers.navigate = handler;
+    }),
+    send: vi.fn(),
+    setWindowOpenHandler: vi.fn((handler: typeof handlers.openWindow) => {
+      handlers.openWindow = handler;
+    }),
+  };
+  const window = {
+    close: vi.fn(),
+    isDestroyed: vi.fn(() => false),
+    isMaximized: vi.fn(() => false),
+    loadFile: vi.fn(() => Promise.resolve()),
+    loadURL: vi.fn(() => Promise.resolve()),
+    maximize: vi.fn(),
+    minimize: vi.fn(),
+    on: vi.fn((event: string, handler: () => void) => {
+      if (event === "closed") handlers.closed = handler;
+    }),
+    once: vi.fn((event: string, handler: () => void) => {
+      if (event === "ready-to-show") handlers.ready = handler;
+    }),
+    unmaximize: vi.fn(),
+    webContents,
+  };
+  const browserWindow = window as unknown as BrowserWindow;
+  const createWindow = vi.fn((options: BrowserWindowConstructorOptions) => {
+    void options;
+    return browserWindow;
+  });
+  const getAllWindows = vi.fn<() => readonly BrowserWindow[]>(() => []);
+  const openExternal = vi.fn(() => Promise.resolve());
+  const showWindow = vi.fn();
+  const host = new DesktopWindowHost({
+    createWindow,
+    environment: overrides.environment ?? {},
+    getAllWindows,
+    getBackgroundColor: () => "#191a1b",
+    getIconPath: () => "/application/icon.png",
+    isPackaged: overrides.isPackaged ?? false,
+    openExternal,
+    packagedRendererPath: "/application/renderer/index.html",
+    preloadPath: "/application/preload.cjs",
+    showWindow,
+  });
+  return {
+    browserWindow,
+    createWindow,
+    getAllWindows,
+    handlers,
+    host,
+    openExternal,
+    showWindow,
+    webContents,
+    window,
+  };
+}

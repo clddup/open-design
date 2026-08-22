@@ -39,7 +39,6 @@ import {
 import { basename, dirname, extname, join } from "node:path";
 import { homedir, tmpdir } from "node:os";
 import { createHash } from "node:crypto";
-import { pathToFileURL } from "node:url";
 import { AgentHost, FatalAgentRunError } from "./agent/agent-host";
 import { AgentAttachmentHost } from "./agent/agent-attachment-host";
 import { AgentReferenceHost } from "./agent/agent-reference-host";
@@ -70,11 +69,11 @@ import {
 } from "./agent/design-visual-critic";
 import { createApplicationMenuTemplate } from "./application-menu";
 import { ApplicationLifecycle } from "./application-lifecycle";
-import { GlobalTaskCoordinator } from "./agent/global-task-coordinator";
 import {
-  isAllowedRendererNavigation,
-  isExternalHttpUrl,
-} from "./navigation-policy";
+  DesktopWindowHost,
+  resolveApplicationIconPath,
+} from "./desktop-window-host";
+import { GlobalTaskCoordinator } from "./agent/global-task-coordinator";
 import { ProjectHost } from "./project/project-host";
 import { ProjectIpcService } from "./project/project-ipc";
 import { registerProjectIpc } from "./project/project-ipc-registration";
@@ -100,7 +99,6 @@ import {
 } from "./model/image-expand-raster";
 import { prepareGlobalWorkspaceDatabase } from "./global-data";
 import { DiagnosticLog } from "./diagnostics/diagnostic-log";
-import { resolveRendererUrl } from "./renderer-url";
 import { configureFixtureSmoke } from "./professional-fixture-smoke";
 import type { RendererDesignCaptureTarget } from "../shared/design-tool-bridge";
 import { registerRendererDesignToolIpc } from "./agent/renderer-design-tool-ipc";
@@ -118,7 +116,6 @@ import {
   isTestModelProviderConnectionRequest,
   isSaveDesignFileRequest,
   isThemePreference,
-  isWindowAction,
   type DesignImageAreaSelection,
   type DesignImageExpansion,
   type ThemePreference,
@@ -193,21 +190,35 @@ app.setName("OpenDesign");
 if (process.platform === "win32") app.setAppUserModelId("design.open.app");
 
 const fixtureSmoke = configureFixtureSmoke(app, process.env, homedir());
+const getApplicationIconPath = () =>
+  resolveApplicationIconPath({
+    appPath: app.getAppPath(),
+    isPackaged: app.isPackaged,
+    resourcesPath: process.resourcesPath,
+  });
+const desktopWindowHost = new DesktopWindowHost({
+  createWindow: (options) => new BrowserWindow(options),
+  environment: process.env,
+  getAllWindows: () => BrowserWindow.getAllWindows(),
+  getBackgroundColor: () =>
+    nativeTheme.shouldUseDarkColors ? "#191a1b" : "#f4f4f2",
+  getIconPath: getApplicationIconPath,
+  isPackaged: app.isPackaged,
+  openExternal: (url) => shell.openExternal(url),
+  packagedRendererPath: join(__dirname, "../renderer/index.html"),
+  preloadPath: join(__dirname, "../preload/index.cjs"),
+  showWindow: (window) => fixtureSmoke.show(window),
+});
 
-let mainWindow: BrowserWindow | null = null;
 const agentHost = new AgentHost();
 const rendererDesignToolHost = new RendererDesignToolHost(
   (request) => {
-    const window = mainWindow;
-    if (!window || window.isDestroyed()) {
+    if (!desktopWindowHost.send(channels.designToolRequest, request)) {
       throw new Error("Renderer is unavailable for design tool execution");
     }
-    window.webContents.send(channels.designToolRequest, request);
   },
   (request) => {
-    const window = mainWindow;
-    if (!window || window.isDestroyed()) return;
-    window.webContents.send(channels.designToolCancel, request);
+    desktopWindowHost.send(channels.designToolCancel, request);
   },
 );
 rendererDesignToolHost.setPerformanceObserver((sample) =>
@@ -243,11 +254,7 @@ function publishDiagnostic(input: DiagnosticInput): void {
     console.error(`[${input.source}:${input.code}] ${input.message}`);
     return;
   }
-  const window = mainWindow;
-  if (window && !window.isDestroyed()) {
-    window.webContents.send(channels.diagnosticEvent, event);
-    return;
-  }
+  if (desktopWindowHost.send(channels.diagnosticEvent, event)) return;
   if (event.presentation === "toast") {
     pendingDiagnosticEvents.push(event);
     if (pendingDiagnosticEvents.length > 20) pendingDiagnosticEvents.shift();
@@ -282,9 +289,7 @@ function diagnosticContextForAgentEvent(
 }
 
 function assertMainRenderer(event: Electron.IpcMainInvokeEvent) {
-  if (event.sender !== mainWindow?.webContents) {
-    throw new Error("Request from unknown renderer");
-  }
+  desktopWindowHost.assertRenderer(event);
 }
 
 function requireAgentAttachmentHost(): AgentAttachmentHost {
@@ -372,7 +377,7 @@ async function writeDesignFile(path: string, contents: string) {
 async function selectProjectDirectory(
   purpose: "create" | "open",
 ): Promise<string | null> {
-  const window = mainWindow;
+  const window = desktopWindowHost.current();
   if (!window) return null;
   const result = await dialog.showOpenDialog(window, {
     title:
@@ -390,7 +395,7 @@ async function selectProjectDirectory(
 }
 
 async function selectSvgOpenFile(): Promise<string | null> {
-  const window = mainWindow;
+  const window = desktopWindowHost.current();
   if (!window) return null;
   const result = await dialog.showOpenDialog(window, {
     title: translate(localePreference, "main.openSvgTitle"),
@@ -410,7 +415,7 @@ async function selectSvgOpenFile(): Promise<string | null> {
 async function selectSvgSaveFile(
   suggestedName: string,
 ): Promise<string | null> {
-  const window = mainWindow;
+  const window = desktopWindowHost.current();
   if (!window) return null;
   const result = await dialog.showSaveDialog(window, {
     title: translate(localePreference, "main.saveSvgTitle"),
@@ -431,7 +436,7 @@ async function selectRasterSaveFile(
   suggestedName: string,
   format: RasterExportFormat,
 ): Promise<string | null> {
-  const window = mainWindow;
+  const window = desktopWindowHost.current();
   if (!window) return null;
   const extensions = format === "jpeg" ? ["jpg", "jpeg"] : [format];
   const result = await dialog.showSaveDialog(window, {
@@ -451,25 +456,19 @@ async function selectRasterSaveFile(
   return result.filePath;
 }
 
-function resolveApplicationIconPath() {
-  return app.isPackaged
-    ? join(process.resourcesPath, "icon.png")
-    : join(app.getAppPath(), "build/icon.png");
-}
-
 function installApplicationMenu() {
   const template = createApplicationMenuTemplate(
     "OpenDesign",
     process.platform,
     {
       onOpenSettings: () => {
-        mainWindow?.webContents.send(channels.openSettings);
+        desktopWindowHost.send(channels.openSettings);
       },
       onImportSvg: () => {
-        mainWindow?.webContents.send(channels.importSvgCommand);
+        desktopWindowHost.send(channels.importSvgCommand);
       },
       onExportSvg: () => {
-        mainWindow?.webContents.send(channels.exportSvgCommand);
+        desktopWindowHost.send(channels.exportSvgCommand);
       },
       settingsLabel: translate(localePreference, "settings.menuItem"),
       fileLabel: translate(localePreference, "main.fileMenu"),
@@ -478,55 +477,6 @@ function installApplicationMenu() {
     },
   );
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
-}
-
-function createWindow() {
-  mainWindow = new BrowserWindow({
-    width: 1440,
-    height: 920,
-    minWidth: 920,
-    minHeight: 620,
-    show: false,
-    title: "OpenDesign",
-    icon: resolveApplicationIconPath(),
-    titleBarStyle: "hidden",
-    trafficLightPosition: { x: 14, y: 15 },
-    backgroundColor: nativeTheme.shouldUseDarkColors ? "#191a1b" : "#f4f4f2",
-    webPreferences: {
-      preload: join(__dirname, "../preload/index.cjs"),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-      webSecurity: true,
-      // Agent design commits, cancellation and autosave must keep advancing
-      // while a native dialog is open or the workbench is temporarily
-      // occluded. Canvas reveal loops are bounded and clear on Run terminal.
-      backgroundThrottling: false,
-      devTools: !app.isPackaged,
-    },
-  });
-
-  const rendererUrl = resolveRendererUrl(process.env);
-  const packagedRendererPath = join(__dirname, "../renderer/index.html");
-  const packagedRendererUrl = pathToFileURL(packagedRendererPath).toString();
-
-  mainWindow.once("ready-to-show", () => fixtureSmoke.show(mainWindow));
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (isExternalHttpUrl(url)) void shell.openExternal(url);
-    return { action: "deny" };
-  });
-  mainWindow.webContents.on("will-navigate", (event, url) => {
-    if (!isAllowedRendererNavigation(url, rendererUrl, packagedRendererUrl)) {
-      event.preventDefault();
-    }
-  });
-
-  if (rendererUrl) void mainWindow.loadURL(rendererUrl);
-  else void mainWindow.loadFile(packagedRendererPath);
-
-  mainWindow.on("closed", () => {
-    mainWindow = null;
-  });
 }
 
 function requireProjectIpc(): ProjectIpcService {
@@ -580,6 +530,7 @@ function registerIpc(fontBinaryService: FontBinaryMainService) {
     assertRenderer: assertMainRenderer,
     host: rendererDesignToolHost,
   });
+  desktopWindowHost.registerIpc(ipcMain);
   registerSvgFileIpc({
     ipc: ipcMain,
     assertRenderer: assertMainRenderer,
@@ -590,12 +541,16 @@ function registerIpc(fontBinaryService: FontBinaryMainService) {
     assertRenderer: assertMainRenderer,
     service: rasterFileService,
   });
-  fontBinaryService.register(ipcMain, assertMainRenderer, () => mainWindow);
+  fontBinaryService.register(ipcMain, assertMainRenderer, () =>
+    desktopWindowHost.current(),
+  );
   ipcMain.handle(channels.platformInfo, () => ({
     platform: process.platform,
     version: app.getVersion(),
   }));
-  fixtureSmoke.register(ipcMain, assertMainRenderer, () => mainWindow);
+  fixtureSmoke.register(ipcMain, assertMainRenderer, () =>
+    desktopWindowHost.current(),
+  );
   ipcMain.handle(
     channels.getPendingDiagnostics,
     (event, ...args: unknown[]) => {
@@ -628,7 +583,7 @@ function registerIpc(fontBinaryService: FontBinaryMainService) {
     localePreference = locale;
     workspaceStore?.setPreference("locale", locale);
     installApplicationMenu();
-    mainWindow?.webContents.send(channels.localeChanged, locale);
+    desktopWindowHost.send(channels.localeChanged, locale);
     return localePreference;
   });
   ipcMain.handle(channels.getTheme, () => themePreference);
@@ -677,10 +632,7 @@ function registerIpc(fontBinaryService: FontBinaryMainService) {
         throw new TypeError("Invalid model provider profile");
       }
       const catalog = requireModelProviderHost().saveProfile(request);
-      mainWindow?.webContents.send(
-        channels.modelProviderCatalogChanged,
-        catalog,
-      );
+      desktopWindowHost.send(channels.modelProviderCatalogChanged, catalog);
       return catalog;
     },
   );
@@ -694,10 +646,7 @@ function registerIpc(fontBinaryService: FontBinaryMainService) {
         throw new TypeError("Invalid model provider delete request");
       }
       const catalog = requireModelProviderHost().deleteProfile(request);
-      mainWindow?.webContents.send(
-        channels.modelProviderCatalogChanged,
-        catalog,
-      );
+      desktopWindowHost.send(channels.modelProviderCatalogChanged, catalog);
       return catalog;
     },
   );
@@ -716,7 +665,7 @@ function registerIpc(fontBinaryService: FontBinaryMainService) {
   ipcMain.handle(channels.selectAgentAttachments, async (event, ...args) => {
     assertMainRenderer(event);
     assertArgumentCount(args, 0);
-    const window = mainWindow;
+    const window = desktopWindowHost.current();
     if (!window) return [];
     const result = await dialog.showOpenDialog(window, {
       title: translate(localePreference, "main.selectAttachmentsTitle"),
@@ -800,7 +749,7 @@ function registerIpc(fontBinaryService: FontBinaryMainService) {
   ipcMain.handle(channels.selectDesignImage, async (event, ...args) => {
     assertMainRenderer(event);
     assertArgumentCount(args, 0);
-    const window = mainWindow;
+    const window = desktopWindowHost.current();
     if (!window) return null;
     const result = await dialog.showOpenDialog(window, {
       title: translate(localePreference, "main.selectDesignImageTitle"),
@@ -939,7 +888,7 @@ function registerIpc(fontBinaryService: FontBinaryMainService) {
   );
   ipcMain.handle(channels.openDesignFile, async (event) => {
     assertMainRenderer(event);
-    const window = mainWindow;
+    const window = desktopWindowHost.current();
     if (!window) return null;
     const result = await dialog.showOpenDialog(window, {
       title: translate(localePreference, "main.openDocumentTitle"),
@@ -974,7 +923,7 @@ function registerIpc(fontBinaryService: FontBinaryMainService) {
     }
     let path = request.saveAs ? null : activeDesignFilePath;
     if (!path) {
-      const window = mainWindow;
+      const window = desktopWindowHost.current();
       if (!window) return null;
       const suggestedName = request.suggestedName.endsWith(designFileExtension)
         ? request.suggestedName
@@ -999,9 +948,10 @@ function registerIpc(fontBinaryService: FontBinaryMainService) {
     return { name: basename(path) };
   });
   ipcMain.handle(channels.agentRequest, async (event, ...args: unknown[]) => {
-    if (event.sender !== mainWindow?.webContents) {
-      throw new Error("Agent request from unknown renderer");
-    }
+    desktopWindowHost.assertRenderer(
+      event,
+      "Agent request from unknown renderer",
+    );
     assertArgumentCount(args, 1);
     const request = args[0];
     if (!isAgentRequest(request)) throw new TypeError("Invalid Agent request");
@@ -1031,7 +981,7 @@ function registerIpc(fontBinaryService: FontBinaryMainService) {
         prepareInitialDesignInspection: prepareInitialInspectionForRun,
         referenceHost: requireAgentReferenceHost(),
         publish: (agentEvent) =>
-          mainWindow?.webContents.send(channels.agentEvent, agentEvent),
+          desktopWindowHost.send(channels.agentEvent, agentEvent),
       });
       return;
     }
@@ -1050,7 +1000,7 @@ function registerIpc(fontBinaryService: FontBinaryMainService) {
         modelProviderHost: requireModelProviderHost(),
         referenceHost: requireAgentReferenceHost(),
         publish: (agentEvent) =>
-          mainWindow?.webContents.send(channels.agentEvent, agentEvent),
+          desktopWindowHost.send(channels.agentEvent, agentEvent),
       });
       if (handled) return;
     }
@@ -1088,7 +1038,7 @@ function registerIpc(fontBinaryService: FontBinaryMainService) {
     prepareAgentContinuation(event, {
       continuationScheduler: agentContinuationScheduler,
       publish: (continuationEvent) =>
-        mainWindow?.webContents.send(channels.agentEvent, continuationEvent),
+        desktopWindowHost.send(channels.agentEvent, continuationEvent),
       projectHost,
       starter:
         globalTaskCoordinator && modelProviderHost && agentReferenceHost
@@ -1108,21 +1058,10 @@ function registerIpc(fontBinaryService: FontBinaryMainService) {
       conversationIdByRunId.delete(event.runId);
     }
     globalTaskCoordinator?.handleAgentEvent(event);
-    mainWindow?.webContents.send(channels.agentEvent, event);
-  });
-  ipcMain.handle(channels.windowAction, (event, value: unknown) => {
-    if (!isWindowAction(value)) throw new TypeError("Invalid window action");
-    const window = BrowserWindow.fromWebContents(event.sender);
-    if (!window || window !== mainWindow) return;
-    if (value === "minimize") window.minimize();
-    if (value === "toggle-maximize") {
-      if (window.isMaximized()) window.unmaximize();
-      else window.maximize();
-    }
-    if (value === "close") window.close();
+    desktopWindowHost.send(channels.agentEvent, event);
   });
   nativeTheme.on("updated", () => {
-    mainWindow?.webContents.send(
+    desktopWindowHost.send(
       channels.themeChanged,
       nativeTheme.shouldUseDarkColors,
     );
@@ -1135,7 +1074,7 @@ void app.whenReady().then(async () => {
     process.env.OPENDESIGN_AGENT_SMOKE !== "1" &&
     !fixtureSmoke.active
   ) {
-    app.dock?.setIcon(resolveApplicationIconPath());
+    app.dock?.setIcon(getApplicationIconPath());
   }
 
   if (process.env.OPENDESIGN_AGENT_SMOKE === "1") {
@@ -2231,10 +2170,8 @@ void app.whenReady().then(async () => {
   }
   registerIpc(fontBinaryService);
   if (!fixtureSmoke.active) agentHost.start();
-  createWindow();
-  app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
-  });
+  desktopWindowHost.create();
+  app.on("activate", () => desktopWindowHost.activate());
 });
 
 async function verifyPackagedAttachmentPipeline(): Promise<void> {

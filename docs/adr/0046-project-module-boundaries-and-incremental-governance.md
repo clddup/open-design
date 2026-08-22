@@ -69,7 +69,9 @@ Phase 5 随 Figma-compatible Component Properties 垂直切片增加 `@opendesig
 
 模块治理 Phase 5 已按 ADR-0100 完成：`design-agent-tools` 只保留稳定重导出、公开工具的有序聚合和统一 validator dispatcher。Plan/Review/Checkpoint、Image、Import/Export、Hierarchy/Vector、Page/Text/Font、Component 与共享节点事务 schema 各有明确 owner；既有 Arrange、Variable、Style family 不复制 schema。聚合测试直接锁定工具顺序和 schema 对象身份，禁止在聚合入口再次手写同一契约。
 
-Phase 6 的首个切片把 Project、Conversation 与 Project Library 的 22 个 IPC channel 迁入 `project-ipc-registration`，并把 Renderer design-tool progress/resolve 的 2 个 channel 迁入 Agent host 邻近的 registration owner。Main 入口只注入 `ipcMain`、sender validator、动态 `ProjectIpcService` resolver 和唯一 `RendererDesignToolHost`；新 owner 不缓存 service 或 host 状态。sender 校验继续先于参数与 payload 校验，Project service 在每次 invoke 时解析，退出后的旧 service 不能继续使用，stale design response 继续失败关闭。该切片没有改变 shared/preload 契约、IPC 名称、参数数量、返回值或 macOS/Windows 行为；BrowserWindow、application quit/flush 与剩余 IPC family 仍属于未完成的 Phase 6。
+Phase 6 的首个切片把 Project、Conversation 与 Project Library 的 22 个 IPC channel 迁入 `project-ipc-registration`，并把 Renderer design-tool progress/resolve 的 2 个 channel 迁入 Agent host 邻近的 registration owner。Main 入口只注入 `ipcMain`、sender validator、动态 `ProjectIpcService` resolver 和唯一 `RendererDesignToolHost`；新 owner 不缓存 service 或 host 状态。sender 校验继续先于参数与 payload 校验，Project service 在每次 invoke 时解析，退出后的旧 service 不能继续使用，stale design response 继续失败关闭。该切片没有改变 shared/preload 契约、IPC 名称、参数数量、返回值或 macOS/Windows 行为。
+
+Phase 6 的第二个切片用唯一 `DesktopWindowHost` 接管 BrowserWindow 实例、创建参数、安全 webPreferences、开发/打包 Renderer 加载、同源导航、外链拒绝、ready-to-show、关闭清理、Renderer sender identity、Main→Renderer 发送、原生窗口动作及 macOS activate 重建。Main 入口只注入 Electron factory、路径、主题、外链和 fixture adapter；字体、原生对话框、Agent、Diagnostics 与 fixture smoke 都从同一 host 解析当前活动窗口，不保存第二个窗口引用。旧窗口迟到的 ready/closed 事件不能显示或清除替代窗口，destroyed window 不再接收发送。application quit/flush、Main service bootstrap 与剩余 IPC family 仍属于未完成的 Phase 6。
 
 ### 自动边界门禁与职责治理
 
@@ -99,7 +101,7 @@ ADR-0086 已退休默认 800 行和历史逐文件行数预算：连续切片证
 
 - 聚合入口会按真实业务所有权逐步收缩，而不是一次性重写。
 - 新代码不能建立跨进程后门、包循环或新的巨型模块。
-- 历史大模块仍然存在，Phase 1–5 和 Phase 6 首个 IPC 切片不能描述为全项目治理完成；后续阶段必须继续实际拆除职责。
+- 历史大模块仍然存在，Phase 1–5 和 Phase 6 已完成的 IPC/BrowserWindow 切片不能描述为全项目治理完成；后续阶段必须继续实际拆除职责。
 - 导入/导出现在具有独立取消和反馈生命周期，并继续从唯一 Runtime snapshot 生成事务或产物。
 - Page 与 Layer view 不再直接拥有 planner/transaction 编排；新增人工编辑命令应进入对应 controller 或新的完整业务 controller，不应重新堆回 `App.tsx`。
 - Inspector section 不拥有 Runtime 或文档副本；新增 property family 应进入对应 section，通过现有语义 callback 提交，不能重新堆回顶层 `PropertiesPanel.tsx`。
@@ -114,5 +116,6 @@ ADR-0086 已退休默认 800 行和历史逐文件行数预算：连续切片证
 - `AgentTimeline.test.tsx`：durable/live 单调投影、近底自动滚动、审批、取消、历史终态与 Conversation epoch 竞态
 - `editor-command-controllers.test.tsx`：唯一 Runtime 写入、Page 操作、Layer capability、复合事务、selection 与 undo
 - `project-ipc-registration.test.ts`、`project-ipc.test.ts`、`renderer-design-tool-ipc.test.ts` 与 `renderer-design-tool-host.test.ts`：完整 channel 映射、sender/argument/payload 校验顺序、动态 service 生命周期和 stale response
+- `desktop-window-host.test.ts`、`navigation-policy.test.ts`、`renderer-url.test.ts`、`application-lifecycle.test.ts` 与相邻字体/fixture smoke 测试：安全窗口配置、开发/打包加载、导航/外链、Renderer identity、窗口动作、关闭和双平台最后窗口策略
 - Agent Runtime/Main/Renderer 定向测试：Run-scoped approval、Renderer 活动租约、版本化 Plan amendment 与 Text content 规范化
 - 全仓 `pnpm verify`
