@@ -21,6 +21,8 @@ import {
   toFigmaGridAutoLayout,
   toFigmaGridChild,
   fromFigmaGridAutoLayout,
+  toFigmaImageFilters,
+  fromFigmaImageFilters,
   toFigmaSharedStyleMetadata,
   toFigmaSharedStylePayload,
   toFigmaVariable,
@@ -28,6 +30,26 @@ import {
   toFigmaVariantProperties,
   toFigmaVariantSetPropertyDefinitions,
 } from "./index.js";
+
+describe("Figma image adjustment compatibility", () => {
+  it("round-trips the public seven-field ImageFilters shape", () => {
+    const filters = {
+      exposure: 0.2,
+      contrast: -0.1,
+      saturation: 0.3,
+      temperature: -0.4,
+      tint: 0.15,
+      highlights: -0.25,
+      shadows: 0.5,
+    };
+    const figma = toFigmaImageFilters(filters);
+    expect(figma).toEqual(filters);
+    expect(fromFigmaImageFilters(figma)).toEqual({ ok: true, filters });
+    expect(fromFigmaImageFilters({ exposure: 1.5 })).toMatchObject({
+      ok: false,
+    });
+  });
+});
 
 describe("Figma Grid Auto Layout compatibility", () => {
   it("maps OpenDesign-owned tracks and cell semantics to public Plugin API shapes", () => {

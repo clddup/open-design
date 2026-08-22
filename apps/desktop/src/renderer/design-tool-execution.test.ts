@@ -3045,6 +3045,75 @@ describe("Renderer design tool scope", () => {
       "feature_one",
     ]);
 
+    const filterResponse = await executeDesignToolRequest(
+      {
+        requestId: "adjust_image",
+        call: {
+          toolCallId: "tool_adjust_image",
+          toolName: INTERNAL_UPDATE_IMAGE_TOOL_NAME,
+          input: {
+            action: "set-filters",
+            label: "Balance hero image",
+            pageId: "page_welcome",
+            nodeId: "hero_image",
+            filters: {
+              exposure: 0.15,
+              saturation: -0.2,
+              highlights: -0.3,
+            },
+          },
+        },
+        context: { ...selectionContext, revision: 2 },
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(filterResponse).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "set-filters",
+          nodeId: "hero_image",
+          revision: 3,
+          atomic: true,
+        },
+      },
+    });
+    expect(runtime.getSnapshot().document.nodesById.hero_image).toMatchObject({
+      properties: {
+        filters: {
+          exposure: 0.15,
+          saturation: -0.2,
+          highlights: -0.3,
+        },
+      },
+    });
+    await expect(
+      executeDesignToolRequest(
+        {
+          requestId: "bypass_image_adjustment",
+          call: {
+            toolCallId: "tool_bypass_image_adjustment",
+            toolName: INTERNAL_DESIGN_APPLY_TOOL_NAME,
+            input: {
+              label: "Bypass image workflow",
+              commands: [
+                {
+                  commandId: "bypass_image_filters",
+                  type: "update_properties",
+                  nodeId: "hero_image",
+                  properties: { filters: { contrast: 0.5 } },
+                },
+              ],
+            },
+          },
+          context: { ...selectionContext, revision: 3 },
+        },
+        runtime,
+        "page_welcome",
+      ),
+    ).rejects.toThrow("image_update_requires_image_tool");
+
     const newAssetId = `asset_${"b".repeat(64)}`;
     const replacementResponse = await executeDesignToolRequest(
       {
@@ -3068,7 +3137,7 @@ describe("Renderer design tool scope", () => {
             },
           },
         },
-        context: { ...selectionContext, revision: 2 },
+        context: { ...selectionContext, revision: 3 },
       },
       runtime,
       "page_welcome",
@@ -3081,7 +3150,7 @@ describe("Renderer design tool scope", () => {
           nodeId: "hero_image",
           assetId: newAssetId,
           deletedAssetId: oldAssetId,
-          revision: 3,
+          revision: 4,
           atomic: true,
         },
       },
@@ -3089,7 +3158,7 @@ describe("Renderer design tool scope", () => {
     expect(
       runtime.getSnapshot().document.assetsById[oldAssetId],
     ).toBeUndefined();
-    expect(runtime.getSnapshot().state.history.undo).toHaveLength(3);
+    expect(runtime.getSnapshot().state.history.undo).toHaveLength(4);
   });
 
   it("returns bounded image asset metadata without copying source bytes into model context", async () => {

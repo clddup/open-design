@@ -3,12 +3,14 @@ import type {
   DesignDocument,
   DesignNode,
   DesignOperation,
+  ImageFilters,
   ImagePlacement,
   ImageNode,
   JsonObject,
   Point,
 } from "@opendesign/design-contracts";
 import { MAX_TRANSACTION_COMMANDS } from "@opendesign/design-contracts";
+import { normalizeImageFilters } from "@opendesign/image-service";
 import {
   getWorldTransform,
   invertTransform,
@@ -21,6 +23,12 @@ export type ImageUpdateOperation =
       pageId: string;
       nodeId: string;
       placement: ImagePlacement;
+    }
+  | {
+      action: "set-filters";
+      pageId: string;
+      nodeId: string;
+      filters: ImageFilters;
     }
   | {
       action: "replace-source";
@@ -134,6 +142,32 @@ export function planImageNodeUpdate(
           type: "update_properties",
           nodeId: operation.nodeId,
           properties: { placement: operation.placement },
+        },
+      ],
+      nodeId: operation.nodeId,
+      previousAssetId,
+      nextAssetId: previousAssetId,
+    };
+  }
+
+  if (operation.action === "set-filters") {
+    const filters = normalizeImageFilters(operation.filters) ?? {};
+    const currentFilters = normalizeImageFilters(node.properties.filters) ?? {};
+    if (JSON.stringify(filters) === JSON.stringify(currentFilters)) {
+      return {
+        ok: false,
+        code: "no-op",
+        message: `Image node ${operation.nodeId} already uses those filters`,
+      };
+    }
+    return {
+      ok: true,
+      commands: [
+        {
+          commandId: `${commandPrefix}_node`,
+          type: "update_properties",
+          nodeId: operation.nodeId,
+          properties: { filters },
         },
       ],
       nodeId: operation.nodeId,

@@ -672,6 +672,11 @@ describe("Leafer scene projection", () => {
           flipHorizontal: false,
           flipVertical: false,
         },
+        filters: {
+          exposure: 0.2,
+          saturation: -0.35,
+          shadows: 0.4,
+        },
         altText: "Hero",
         cornerRadius: 8,
       },
@@ -686,6 +691,12 @@ describe("Leafer scene projection", () => {
       scale: { x: 0.5, y: 0.5 },
       offset: { x: -50, y: 0 },
       rotation: 0,
+    });
+    expect(projection.elementsById.get("image")?.data.filter).toEqual({
+      type: "opendesign-image-adjustments",
+      exposure: 0.2,
+      saturation: -0.35,
+      shadows: 0.4,
     });
   });
 

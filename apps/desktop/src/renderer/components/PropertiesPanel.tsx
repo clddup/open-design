@@ -6,6 +6,8 @@ import type {
   DesignDocument,
   DesignNode,
   ExportSetting,
+  ImageFilters,
+  ImagePlacement,
   InstanceSwapPreferredValue,
   LayoutConstraints,
   LayoutGuide,
@@ -80,6 +82,8 @@ export function PropertiesPanel({
   onExportFormatChange,
   onCropImage,
   onReplaceImage,
+  onUpdateImageFilters,
+  onUpdateImagePlacement,
   onRemoveComponent,
   onRemoveVariant,
   onAddComponentProperty,
@@ -153,6 +157,8 @@ export function PropertiesPanel({
   onExportFormatChange: (format: ExportFormat) => void;
   onCropImage: () => boolean;
   onReplaceImage: () => void;
+  onUpdateImageFilters: (filters: ImageFilters) => void;
+  onUpdateImagePlacement: (placement: ImagePlacement) => void;
   onRemoveComponent: () => void;
   onRemoveVariant: () => void;
   onAddComponentProperty: (input: {
@@ -301,6 +307,8 @@ export function PropertiesPanel({
             onGoToComponentMain={onGoToComponentMain}
             onCropImage={onCropImage}
             onReplaceImage={onReplaceImage}
+            onUpdateImageFilters={onUpdateImageFilters}
+            onUpdateImagePlacement={onUpdateImagePlacement}
             onRemoveComponent={onRemoveComponent}
             onRemoveVariant={onRemoveVariant}
             onAddComponentProperty={onAddComponentProperty}

@@ -1,5 +1,6 @@
 import { resolveComponentInstance } from "@opendesign/component-service";
 import { textParagraphRanges } from "@opendesign/text-service";
+import { isImageFilters } from "@opendesign/design-contracts";
 import type {
   ComponentDefinition,
   ComponentPropertyReferences as OpenDesignComponentPropertyReferences,
@@ -7,6 +8,7 @@ import type {
   DesignNode,
   GridAutoLayout,
   GridTrack as OpenDesignGridTrack,
+  ImageFilters as OpenDesignImageFilters,
   Paint as OpenDesignPaint,
   SharedStyleDefinition,
   TextParagraphRun,
@@ -18,6 +20,10 @@ import type {
   VariableDefinition,
   VariantSetDefinition,
 } from "@opendesign/design-contracts";
+
+export type OpenDesignImageFiltersResult =
+  | { ok: true; filters: OpenDesignImageFilters }
+  | { ok: false; issues: readonly string[] };
 
 export type FigmaSharedStyleMetadata = Pick<
   BaseStyle,
@@ -131,6 +137,26 @@ export type OpenDesignTextRangeResult =
 export const FIGMA_PLUGIN_TYPINGS_VERSION = "1.133.0" as const;
 export const FIGMA_PLUGIN_TYPINGS_COMMIT =
   "83bfe81d9616ab759702f657eb18ef153f83e8ae" as const;
+
+export function toFigmaImageFilters(
+  filters: OpenDesignImageFilters | undefined,
+): ImageFilters {
+  return filters ? structuredClone(filters) : {};
+}
+
+export function fromFigmaImageFilters(
+  filters: ImageFilters,
+): OpenDesignImageFiltersResult {
+  if (!isImageFilters(filters)) {
+    return {
+      ok: false,
+      issues: [
+        "Figma ImageFilters must contain only finite exposure, contrast, saturation, temperature, tint, highlights, and shadows values in the -1..1 range",
+      ],
+    };
+  }
+  return { ok: true, filters: structuredClone(filters) };
+}
 
 export function toFigmaSharedStyleMetadata(
   style: SharedStyleDefinition,

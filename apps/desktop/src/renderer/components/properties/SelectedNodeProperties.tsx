@@ -5,6 +5,8 @@ import type {
   ComponentOverridePatch,
   DesignDocument,
   DesignNode,
+  ImageFilters,
+  ImagePlacement,
   InstanceSwapPreferredValue,
   LayoutConstraints,
   LayoutGuide,
@@ -120,6 +122,8 @@ export function SelectedNodeProperties({
   onGoToComponentMain,
   onCropImage,
   onReplaceImage,
+  onUpdateImageFilters,
+  onUpdateImagePlacement,
   onRemoveComponent,
   onRemoveVariant,
   onAddComponentProperty,
@@ -179,6 +183,8 @@ export function SelectedNodeProperties({
   onGoToComponentMain: () => void;
   onCropImage: () => boolean;
   onReplaceImage: () => void;
+  onUpdateImageFilters: (filters: ImageFilters) => void;
+  onUpdateImagePlacement: (placement: ImagePlacement) => void;
   onRemoveComponent: () => void;
   onRemoveVariant: () => void;
   onAddComponentProperty: (input: {
@@ -921,7 +927,8 @@ export function SelectedNodeProperties({
       {node.kind === "image" && (
         <ImageSection
           node={node}
-          onChange={(placement) => onUpdate({ properties: { placement } })}
+          onChange={onUpdateImagePlacement}
+          onFiltersChange={onUpdateImageFilters}
           onCrop={onCropImage}
           onReplace={onReplaceImage}
         />

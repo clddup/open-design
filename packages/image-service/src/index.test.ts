@@ -1,12 +1,67 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyImageFiltersToRgba,
   createImageCropSession,
+  imageFiltersAreNeutral,
   imageCropSourceTransform,
   moveImageCrop,
+  normalizeImageFilters,
   resetImageCrop,
   resolveImagePlacement,
   setImageCropZoom,
 } from "./index.js";
+
+describe("image adjustments", () => {
+  it("normalizes sparse Figma-compatible fields and clamps their range", () => {
+    expect(
+      normalizeImageFilters({ exposure: 2, contrast: 0, tint: -2 }),
+    ).toEqual({ exposure: 1, tint: -1 });
+    expect(normalizeImageFilters({ shadows: 0 })).toBeUndefined();
+    expect(imageFiltersAreNeutral(undefined)).toBe(true);
+    expect(imageFiltersAreNeutral({ saturation: 0.25 })).toBe(false);
+    expect(() => normalizeImageFilters({ exposure: Number.NaN })).toThrow(
+      "finite",
+    );
+  });
+
+  it("keeps alpha stable and turns full negative saturation into grayscale", () => {
+    const pixels = new Uint8ClampedArray([230, 80, 20, 77]);
+    applyImageFiltersToRgba(pixels, { saturation: -1 });
+    expect(pixels[0]).toBe(pixels[1]);
+    expect(pixels[1]).toBe(pixels[2]);
+    expect(pixels[3]).toBe(77);
+  });
+
+  it("applies exposure, temperature, tint, highlights, and shadows deterministically", () => {
+    const original = new Uint8ClampedArray([
+      32, 48, 64, 255, 192, 176, 160, 128,
+    ]);
+    const first = new Uint8ClampedArray(original);
+    const second = new Uint8ClampedArray(original);
+    const filters = {
+      exposure: 0.2,
+      contrast: 0.1,
+      temperature: 0.35,
+      tint: -0.2,
+      highlights: -0.25,
+      shadows: 0.4,
+    };
+    applyImageFiltersToRgba(first, filters);
+    applyImageFiltersToRgba(second, filters);
+    expect(first).toEqual(second);
+    expect(first).not.toEqual(original);
+    expect(first[3]).toBe(255);
+    expect(first[7]).toBe(128);
+  });
+
+  it("rejects malformed RGBA buffers", () => {
+    expect(() =>
+      applyImageFiltersToRgba(new Uint8ClampedArray([1, 2, 3]), {
+        contrast: 0.5,
+      }),
+    ).toThrow("divisible by four");
+  });
+});
 
 describe("image placement geometry", () => {
   it("preserves direct stretch and fit modes", () => {

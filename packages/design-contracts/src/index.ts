@@ -39,6 +39,7 @@ import {
 import * as variables from "./variables.js";
 import * as styles from "./styles.js";
 import * as exportSettings from "./export-settings.js";
+import { ImageFiltersSchema, type ImageFilters } from "./image-filters.js";
 import { BlendModeSchema, EffectSchema, PaintSchema } from "./appearance.js";
 import type {
   AngularGradientPaintSchema,
@@ -56,6 +57,7 @@ export * from "./variables.js";
 export * from "./styles.js";
 export * from "./appearance.js";
 export * from "./export-settings.js";
+export * from "./image-filters.js";
 export {
   normalizeLineEndpoints,
   resolveLineEndpointPoint,
@@ -455,6 +457,7 @@ export const ImagePropertiesSchema = Type.Object(
   {
     assetId: Type.String({ minLength: 1 }),
     placement: ImagePlacementSchema,
+    filters: Type.Optional(ImageFiltersSchema),
     altText: Type.String(),
     cornerRadius: Type.Number({ minimum: 0 }),
   },
@@ -2666,6 +2669,9 @@ export function migrateLibraryReleaseSnapshot(
 
 export function isImagePlacement(value: unknown): value is ImagePlacement {
   return checkSchema(ImagePlacementSchema, value);
+}
+export function isImageFilters(value: unknown): value is ImageFilters {
+  return checkSchema(ImageFiltersSchema, value);
 }
 export function migrateDesignDocument(value: unknown): DesignDocument | null {
   if (checkSchema(DesignDocumentSchema, value)) {

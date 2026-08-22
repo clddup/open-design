@@ -1,12 +1,118 @@
 import type {
+  ImageFilters,
   ImagePlacement,
   NormalizedPoint,
   Point,
   Size,
   Transform,
 } from "@opendesign/design-contracts";
+import { IMAGE_FILTER_KEYS } from "@opendesign/design-contracts";
 
-export const IMAGE_SERVICE_CONTRACT_VERSION = 2 as const;
+export const IMAGE_SERVICE_CONTRACT_VERSION = 3 as const;
+
+const FILTER_EPSILON = 0.000_001;
+
+export function normalizeImageFilters(
+  filters: ImageFilters | undefined,
+): ImageFilters | undefined {
+  if (!filters) return undefined;
+  const normalized: ImageFilters = {};
+  for (const key of IMAGE_FILTER_KEYS) {
+    const value = filters[key];
+    if (value === undefined) continue;
+    if (!Number.isFinite(value)) {
+      throw new RangeError(`Image filter ${key} must be finite`);
+    }
+    const bounded = clamp(value, -1, 1);
+    if (Math.abs(bounded) > FILTER_EPSILON) normalized[key] = bounded;
+  }
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
+}
+
+export function imageFiltersAreNeutral(
+  filters: ImageFilters | undefined,
+): boolean {
+  return normalizeImageFilters(filters) === undefined;
+}
+
+/**
+ * Applies OpenDesign's deterministic sRGB image-adjustment projection in
+ * place. Alpha is never changed. The public fields and ranges follow Figma's
+ * ImageFilters shape; this implementation remains OpenDesign-owned so canvas,
+ * capture, and raster export can share one backend-independent transform.
+ */
+export function applyImageFiltersToRgba(
+  rgba: Uint8ClampedArray,
+  filters: ImageFilters | undefined,
+): void {
+  if (rgba.length % 4 !== 0) {
+    throw new RangeError("RGBA input length must be divisible by four");
+  }
+  const normalized = normalizeImageFilters(filters);
+  if (!normalized) return;
+
+  const exposure = normalized.exposure ?? 0;
+  const contrast = normalized.contrast ?? 0;
+  const saturation = normalized.saturation ?? 0;
+  const temperature = normalized.temperature ?? 0;
+  const tint = normalized.tint ?? 0;
+  const highlights = normalized.highlights ?? 0;
+  const shadows = normalized.shadows ?? 0;
+  const exposureFactor = 2 ** exposure;
+  const contrastFactor = 1 + contrast;
+
+  for (let index = 0; index < rgba.length; index += 4) {
+    let red = (rgba[index] ?? 0) / 255;
+    let green = (rgba[index + 1] ?? 0) / 255;
+    let blue = (rgba[index + 2] ?? 0) / 255;
+
+    red = (red * exposureFactor - 0.5) * contrastFactor + 0.5;
+    green = (green * exposureFactor - 0.5) * contrastFactor + 0.5;
+    blue = (blue * exposureFactor - 0.5) * contrastFactor + 0.5;
+
+    red += temperature * 0.12 + tint * 0.06;
+    green -= tint * 0.12;
+    blue += -temperature * 0.12 + tint * 0.06;
+
+    const luminance = clamp(
+      red * 0.2126 + green * 0.7152 + blue * 0.0722,
+      0,
+      1,
+    );
+    const saturationFactor = 1 + saturation;
+    red = luminance + (red - luminance) * saturationFactor;
+    green = luminance + (green - luminance) * saturationFactor;
+    blue = luminance + (blue - luminance) * saturationFactor;
+
+    const shadowWeight = (1 - luminance) ** 2;
+    const highlightWeight = luminance ** 2;
+    red = adjustTone(
+      adjustTone(red, shadows, shadowWeight),
+      highlights,
+      highlightWeight,
+    );
+    green = adjustTone(
+      adjustTone(green, shadows, shadowWeight),
+      highlights,
+      highlightWeight,
+    );
+    blue = adjustTone(
+      adjustTone(blue, shadows, shadowWeight),
+      highlights,
+      highlightWeight,
+    );
+
+    rgba[index] = Math.round(clamp(red, 0, 1) * 255);
+    rgba[index + 1] = Math.round(clamp(green, 0, 1) * 255);
+    rgba[index + 2] = Math.round(clamp(blue, 0, 1) * 255);
+  }
+}
+
+function adjustTone(channel: number, amount: number, weight: number): number {
+  return amount >= 0
+    ? channel + (1 - channel) * amount * weight
+    : channel + channel * amount * weight;
+}
 
 export type ImageCropPlacement = Extract<ImagePlacement, { mode: "crop" }>;
 

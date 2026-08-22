@@ -1,7 +1,9 @@
 import {
   isDesignAsset,
+  isImageFilters,
   isImagePlacement,
   type DesignAsset,
+  type ImageFilters,
   type ImagePlacement,
 } from "@opendesign/design-contracts";
 import {
@@ -60,6 +62,13 @@ export type UpdateImageToolInput =
       placement: ImagePlacement;
     }
   | {
+      action: "set-filters";
+      label: string;
+      pageId: string;
+      nodeId: string;
+      filters: ImageFilters;
+    }
+  | {
       action: "replace-source";
       label: string;
       pageId: string;
@@ -69,7 +78,7 @@ export type UpdateImageToolInput =
     };
 
 export type InternalUpdateImageToolInput =
-  | Extract<UpdateImageToolInput, { action: "set-placement" }>
+  | Exclude<UpdateImageToolInput, { action: "replace-source" }>
   | {
       action: "replace-source";
       label: string;
@@ -214,9 +223,9 @@ export const UPDATE_IMAGE_TOOL_INPUT_SCHEMA = {
   type: "object",
   properties: {
     action: {
-      enum: ["set-placement", "replace-source"],
+      enum: ["set-placement", "set-filters", "replace-source"],
       description:
-        "set-placement requires placement; replace-source requires attachmentId and may also provide placement.",
+        "set-placement requires placement; set-filters requires non-destructive Figma-compatible filters in the -1..1 range; replace-source requires attachmentId and may also provide placement.",
     },
     label: { type: "string", minLength: 1, maxLength: 256 },
     pageId: { type: "string", minLength: 1, maxLength: 256 },
@@ -230,6 +239,23 @@ export const UPDATE_IMAGE_TOOL_INPUT_SCHEMA = {
       ...DESIGN_IMAGE_PLACEMENT_SCHEMA,
       description:
         "Required for set-placement and optional for replace-source.",
+    },
+    filters: {
+      type: "object",
+      properties: Object.fromEntries(
+        [
+          "exposure",
+          "contrast",
+          "saturation",
+          "temperature",
+          "tint",
+          "highlights",
+          "shadows",
+        ].map((key) => [key, { type: "number", minimum: -1, maximum: 1 }]),
+      ),
+      additionalProperties: false,
+      description:
+        "Sparse non-destructive image adjustments. Missing fields are neutral; pass an empty object to reset all adjustments.",
     },
   },
   required: ["action", "label", "pageId", "nodeId"],
@@ -333,6 +359,12 @@ export function isUpdateImageToolInput(
       exactKeys(input, ["action", "label", "pageId", "nodeId", "placement"])
     );
   }
+  if (input.action === "set-filters") {
+    return (
+      isImageFilters(input.filters) &&
+      exactKeys(input, ["action", "label", "pageId", "nodeId", "filters"])
+    );
+  }
   return (
     input.action === "replace-source" &&
     typeof input.attachmentId === "string" &&
@@ -357,6 +389,12 @@ export function isInternalUpdateImageToolInput(
     return (
       isImagePlacement(input.placement) &&
       exactKeys(input, ["action", "label", "pageId", "nodeId", "placement"])
+    );
+  }
+  if (input.action === "set-filters") {
+    return (
+      isImageFilters(input.filters) &&
+      exactKeys(input, ["action", "label", "pageId", "nodeId", "filters"])
     );
   }
   return (

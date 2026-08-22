@@ -279,6 +279,9 @@ importers:
       '@opendesign/geometry-service':
         specifier: workspace:*
         version: link:../geometry-service
+      '@opendesign/image-service':
+        specifier: workspace:*
+        version: link:../image-service
       '@opendesign/import-export-service':
         specifier: workspace:*
         version: link:../import-export-service
@@ -395,6 +398,12 @@ importers:
 
   packages/leafer-engine:
     dependencies:
+      '@leafer-in/filter':
+        specifier: 2.2.9
+        version: 2.2.9(@leafer-in/interface@2.2.9(@leafer-ui/interface@2.2.9)(@leafer/interface@2.2.9))(@leafer-ui/draw@2.2.9)(@leafer-ui/interface@2.2.9)
+      '@leafer-ui/draw':
+        specifier: 2.2.9
+        version: 2.2.9
       '@opendesign/component-service':
         specifier: workspace:*
         version: link:../component-service
@@ -1146,6 +1155,13 @@ packages:
 
   '@leafer-in/export@2.2.9':
     resolution: {integrity: sha512-18kOtU7vqfTjBAENc20TcB9aAYOpEzcvuaMTZPpMQS3PvX/1HddPijU/2vmzZhj+SvWwKtPnPUDOzsD2goePAw==}
+    peerDependencies:
+      '@leafer-in/interface': ^2.2.9
+      '@leafer-ui/draw': ^2.2.9
+      '@leafer-ui/interface': ^2.2.9
+
+  '@leafer-in/filter@2.2.9':
+    resolution: {integrity: sha512-JWosYrLk7muzBPi1lZlsgCajIl18Sj8pSZ45Fv6B6WVDEyMH6KhIswrECHP19N8ry6gLLKPn8Nvpo0TstJnVmg==}
     peerDependencies:
       '@leafer-in/interface': ^2.2.9
       '@leafer-ui/draw': ^2.2.9
@@ -4647,6 +4663,12 @@ snapshots:
       '@leafer-ui/interface': 2.2.9
 
   '@leafer-in/export@2.2.9(@leafer-in/interface@2.2.9(@leafer-ui/interface@2.2.9)(@leafer/interface@2.2.9))(@leafer-ui/draw@2.2.9)(@leafer-ui/interface@2.2.9)':
+    dependencies:
+      '@leafer-in/interface': 2.2.9(@leafer-ui/interface@2.2.9)(@leafer/interface@2.2.9)
+      '@leafer-ui/draw': 2.2.9
+      '@leafer-ui/interface': 2.2.9
+
+  '@leafer-in/filter@2.2.9(@leafer-in/interface@2.2.9(@leafer-ui/interface@2.2.9)(@leafer/interface@2.2.9))(@leafer-ui/draw@2.2.9)(@leafer-ui/interface@2.2.9)':
     dependencies:
       '@leafer-in/interface': 2.2.9(@leafer-ui/interface@2.2.9)(@leafer/interface@2.2.9)
       '@leafer-ui/draw': 2.2.9

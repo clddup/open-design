@@ -2332,6 +2332,17 @@ describe("design Agent tool contract", () => {
       nodeId: "hero_image",
       attachmentId: `image_${"b".repeat(64)}`,
     };
+    const setFilters = {
+      action: "set-filters",
+      label: "Balance the hero photo",
+      pageId: "page_1",
+      nodeId: "hero_image",
+      filters: {
+        exposure: 0.15,
+        temperature: -0.2,
+        highlights: -0.35,
+      },
+    };
     const update = DESIGN_AGENT_TOOL_SPECS.find(
       (tool) => tool.name === UPDATE_IMAGE_TOOL_NAME,
     );
@@ -2344,6 +2355,21 @@ describe("design Agent tool contract", () => {
     expect(
       validateDesignAgentToolInput(UPDATE_IMAGE_TOOL_NAME, replaceSource),
     ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(UPDATE_IMAGE_TOOL_NAME, setFilters),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(UPDATE_IMAGE_TOOL_NAME, {
+        ...setFilters,
+        filters: { exposure: 1.1 },
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(UPDATE_IMAGE_TOOL_NAME, {
+        ...setFilters,
+        filters: { contrast: 0.2, preset: "cinematic" },
+      }),
+    ).toBe(false);
     expect(
       validateDesignAgentToolInput(UPDATE_IMAGE_TOOL_NAME, {
         ...setPlacement,

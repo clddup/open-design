@@ -5,7 +5,7 @@
 <!-- verification-facts:baseline:start -->
 
 - 环境基线：Node.js 24.14.0、pnpm 10.32.1、Electron 43.3.0、Vite 8.2.1
-- 文档协议：`DesignDocument 1.39.0`
+- 文档协议：`DesignDocument 1.40.0`
 - Agent 协议：`3.11.0`
 - Geometry Service：`contract v13`
 - Text Layout Service：`contract v4`
@@ -15,6 +15,7 @@
 - Text Editing Session Service：`contract v2`（自动列表、光标输入样式、范围暂存与单事务提交已接入）
 - Text Run Layout Service：`contract v4`（native/HarfBuzz 列表生产投影已接入）
 - Layout Service：`contract v8`
+- Image Service：`contract v3`（七项非破坏调整已接入画布、capture 与位图导出）
 - Agent Core：`@earendil-works/pi-agent-core 0.84.1`（production-entry-native-gate-pending）
 - 生产画布：`leafer-editor 2.2.9`
 
@@ -60,6 +61,7 @@ pnpm build          passed
 
 测试覆盖的关键路径包括：
 
+- Image Service contract 3 专项验证覆盖 `DesignDocument 1.39 → 1.40` 迁移、七项 `-1..1` Figma-compatible fields、稀疏归一化、确定性 RGBA 与 alpha 保持、专用 Runtime planner/no-op/undo/JSON 保存重开、来源替换保留、通用 Agent apply 旁路拒绝、Figma Plugin API shape、Leafer filter 注册/有界像素区域、画布 projection、SVG 明确拒绝，以及 Inspector/Agent/App/capture/raster 主链。定向执行共通过 core 154 项与 desktop 259 项测试；Image Paint、SVG 位图嵌入、P3/ICC 和双平台打包产品视觉仍未验证。
 - 固定 UI/Logo live-Agent 评测工具验证场景 prompt 可读取、模型上下文预算与首轮工具面有界、真实 evidence 结构和产物字节完整性。匿名 packet 只暴露 prompt、rubric 与随机排序后的最终 captures，不暴露 Run、Provider、model、app 或 Critic 身份；评分按每项 1–5 分执行 critical/ordinary 非补偿阈值。该自动化只证明评测工具可重放，不证明当前模型设计质量已经通过；真实 macOS/Windows 打包产品 Run 与人工评分仍待执行。命令为 `pnpm evaluation:check`，见 ADR-0120。
 
 - DesignDocument 1.10 schema/migration、Fixed/Auto Width/Auto Height 文字与具体权威尺寸、文字换行/溢出、正式 Path/Vector 外观与持久 Bézier point mode、非破坏 Image placement 与 Boolean Group、事务、revision、preview、history、undo/redo、asset 引用安全和 Agent 渐进事务回滚。
@@ -130,15 +132,15 @@ Node.js 在涉及 `node:sqlite` 的测试中输出 experimental warning；测试
 
 ## 专业设计就绪度审计
 
-当前 `DesignCapabilityManifest v1` 记录 0 项完整可用、21 项降级可用和 1 项不可用能力；没有实机证据的能力不会标记为完整可用。`DesignDocument 1.39.0`、EditorRuntime、Geometry/Image/Text/Layout/Component/Variable/Style/Library service、Leafer adapter、Inspector 和 Agent tools 已打通正式矢量、文字、外观、图片、响应式布局、Component/Variant/Slot、Variables、Shared Styles、视觉复核和单目标 PNG/JPEG/WebP 导出基础路径。同 Project Library 专项证据覆盖 Component/Variant、Style-only 与 Variable-only 发布、hidden Style/Variable/alias dependency、显式启用、Local/Library 搜索、单事务 imported source/reference、更新接受、禁用保留、身份冲突、引用删除保护和 Agent 只读 inspection。Typography、Component 派生选择和其他专项证据继续由对应测试与 ADR 记录。真实字体跨平台栅格、连接/分支 network、custom list markers、高级 decoration、OpenType、variable axes、字体打包与授权迁移、更多 Variable/Style binding、Workspace/远端 Library、DTCG/REST/Plugin adapter、原生 IME/undo smoke、像素基线和双平台 GUI 仍未验收，因此相关能力保持 `degraded`。
+当前 `DesignCapabilityManifest v1` 记录 0 项完整可用、21 项降级可用和 1 项不可用能力；没有实机证据的能力不会标记为完整可用。`DesignDocument 1.40.0`、EditorRuntime、Geometry/Image/Text/Layout/Component/Variable/Style/Library service、Leafer adapter、Inspector 和 Agent tools 已打通正式矢量、文字、外观、图片、响应式布局、Component/Variant/Slot、Variables、Shared Styles、视觉复核和单目标 PNG/JPEG/WebP 导出基础路径。Image Service contract 3 专项证据覆盖七项 Figma-compatible 非破坏调整、单事务 Inspector/Agent、保存重开/undo、来源替换保留、Figma Plugin API 形状，以及画布/capture/位图导出的同一分块 RGBA 投影。同 Project Library 专项证据覆盖 Component/Variant、Style-only 与 Variable-only 发布、hidden Style/Variable/alias dependency、显式启用、Local/Library 搜索、单事务 imported source/reference、更新接受、禁用保留、身份冲突、引用删除保护和 Agent 只读 inspection。真实字体跨平台栅格、连接/分支 network、Image Paint 调整、SVG 位图嵌入、P3/ICC、custom list markers、高级 decoration、OpenType、variable axes、字体打包与授权迁移、更多 Variable/Style binding、Workspace/远端 Library、DTCG/REST/Plugin adapter、原生 IME/undo smoke、像素基线和双平台 GUI 仍未验收，因此相关能力保持 `degraded`。
 
 仓库当前由唯一 EditorRuntime 统一持有正式 Vector Network、Boolean、Text character/paragraph/list runs、Auto Size、Typography、Component Set/VARIANT/Slot、Variables、Shared Styles 与 imported Library sources。Geometry/Text/Layout/Component/Variable/Style/Library service 只提供窄契约、解析或事务计划，不保存第二份文档；Leafer/HarfBuzz exact-revision projection、人工 Inspector、Agent typed transaction、SVG 和位图继续复用同一权威事实。Slot-in-Slot 按 Figma 公开模型永久失败封闭；更多 Variable binding、Workspace/远端 Library、DTCG/REST/Plugin adapter、AI 图片编辑和双平台原生证据仍在后续路线图。
 
-Agent Runtime 与 Main 当前强制执行“Main exact-revision inspection（失败则公开 inspect）→ typed Plan (`targets: 1..N`) → 原子分配真实 Frame roots → 第一 target 实质初稿 → `capture_canvas`”。快速模式随后以 exact-revision layout、inspection、structure 与 component 检查 verified；精细模式继续 independent visual review → evidence-based refinement → final capture → verified。单个设计只建立一个 target；明确的一套页面、方案或物料逐项建立。`DesignDeliveryLedger v3` 保留 allocated/drafted/captured/reviewed/refined/verified 状态；allocated 只有真实 Frame/revision evidence，空 Frame 不能 capture/review/verified 或计入完成度。Plan 分配全部 create roots 只产生一个 revision/undo 且立即 autosave，不预建 Region/Group；失败不推进 ledger。`activeTargetId` 只决定默认 capture、恢复和 UI 焦点，首个真实 revision 后一笔 apply 可以用完整 semantic steps 覆盖多个已声明 artboard；单条 move/reparent 仍不能跨 artboard。计划 Region 必须按稳定 ID 建为直属 `Group/Frame` 并在同一事务带真实内容。每个成功步骤产生真实 revision 后才进入 progress/Timeline，终态可持久重建；无 steps 时整笔一次提交。仅平移 Frame 可从最新 inspection 继续，resize/rotate/reparent/delete/undo 要求 inspect/amend；纯 insert 仍经过 planned rebase guard。completion guard、确定性 layout quality、跨文件 runtime 路由、离屏截图和超大结果边界保持不变。真实 Provider 提速、审美或跨平台产品 smoke 仍需固定样张与人工验收。见 ADR-0050、ADR-0075、ADR-0121 与 ADR-0123。
+Agent Runtime 与 Main 当前强制执行“Main exact-revision inspection（失败则公开 inspect）→ typed Plan (`targets: 1..N`) → 原子分配真实 Frame roots → 第一 target 视觉成立的实质初稿 → `capture_canvas`”。用户只看到一个自适应执行路径：所有 target 都通过 exact-revision layout、inspection、structure 与 component 检查；Logo/品牌等主观质量不能由确定性规则证明的交付在首屏出现后继续 independent visual review → evidence-based refinement → final capture → verified。单个设计只建立一个 target；明确的一套页面、方案或物料逐项建立。`DesignDeliveryLedger v3` 保留 allocated/drafted/captured/reviewed/refined/verified 状态；allocated 只有真实 Frame/revision evidence，空 Frame 不能 capture/review/verified 或计入完成度。Plan 分配全部 create roots 只产生一个 revision/undo 且立即 autosave，不预建 Region/Group；失败不推进 ledger。`activeTargetId` 只决定默认 capture、恢复和 UI 焦点，首个真实 revision 后一笔 apply 可以用完整 semantic steps 覆盖多个已声明 artboard；单条 move/reparent 仍不能跨 artboard。计划 Region 必须按稳定 ID 建为直属 `Group/Frame` 并在同一事务带真实内容。每个成功步骤产生真实 revision 后才进入 progress/Timeline，终态可持久重建；无 steps 时整笔一次提交。仅平移 Frame 可从最新 inspection 继续，resize/rotate/reparent/delete/undo 要求 inspect/amend；纯 insert 仍经过 planned rebase guard。completion guard、确定性 layout quality、跨文件 runtime 路由、离屏截图和超大结果边界保持不变。真实 Provider 提速、审美或跨平台产品 smoke 仍需固定样张与人工验收。见 ADR-0050、ADR-0075 与 ADR-0127。
 
 `DesignLayoutQualityReport v6` 现在从 exact-revision Component Service 投影检查完整 Instance subtree、稳定 `instanceId + sourcePath` provenance、内部 clipping ancestor chain 和派生 Text production-provider evidence。确定性 error capture 不进入 Visual Review；Coordinator 返回 `repair-layout-overflow`，`opendesign_arrange_layers` 以一次事务扩展安全 trailing-edge artboard/持久 clipping Frame，unsafe 结构失败封闭并要求 inspect 后显式修复。专项自动化覆盖派生 root/child 裁切、严格 report schema、artboard 与内部 Frame 扩容、单 revision/undo 和清洁 recapture 后恢复 verified；审美独立 critic 与生成 rubric 不由该几何切片冒充完成。见 ADR-0116。
 
-精细模式的生产 Frame capture 使用无作者上下文的 stateless critic：Main 复用 Run provider/model 身份与内容寻址 JPEG，但不继承作者 reasoning effort；请求只含 latest brief、active target contract 和 deliverable review skills，不含作者消息、reasoning 或工具历史。严格内部 tool schema 返回每项 1..5 分和像素证据，宿主计算 critical/ordinary threshold、failed criteria 与 refinement；Logo exploration 的每个 concept 在同一请求中独立非补偿。快速模式不创建该请求，只保留 exact-revision 确定性验证。自动化覆盖 Critic 请求隔离、响应唯一性、逐方向阈值、revision binding，以及快速无 Critic/精细 draft-final ledger；固定样张人工盲评、独立 critic model 配置、高阶 Pattern 和持久 Brand Context 仍未完成。见 ADR-0117、ADR-0121、ADR-0123。
+需要独立审美复核的生产 Frame capture 使用无作者上下文的 stateless critic：Main 复用 Run provider/model 身份与内容寻址 JPEG，但不继承作者 reasoning effort；请求只含 latest brief、active target contract 和 deliverable review skills，不含作者消息、reasoning 或工具历史。严格内部 tool schema 返回每项 1..5 分和像素证据，宿主计算 critical/ordinary threshold、failed criteria 与 refinement；Logo exploration 的每个 concept 在同一请求中独立非补偿。普通确定性可验收修改不创建该请求，Logo/品牌仍必须执行一次有界 Critic。自动化覆盖 Critic 请求隔离、响应唯一性、逐方向阈值、revision binding 和自适应 ledger；固定样张人工盲评、独立 critic model 配置、高阶 Pattern 和持久 Brand Context 仍未完成。见 ADR-0117 与 ADR-0127。
 
 Design Reference Strategy 现把 Run raster 附件明确分为 style/composition/brand reference、content asset 或 ignore；有图 Run 缺少分类、漏图、跨 Run ID、重复 ID 或超过两张 active visual reference 均在 Plan 注册前失败封闭。compact first-slice 编译保留同一策略。Critic 多模态顺序固定为 exact-revision delivery JPEG 在前、最多两张授权 reference 在后，并新增 critical、非补偿 `reference-adherence`；content asset/ignore 不重复进入 Critic。专项自动化覆盖 schema、compact compile、Main 授权绑定、图片顺序和低分阻断。该证据不冒充跨文件 Pattern catalog、持久 Brand Context 或模板/Library。见 ADR-0118。
 

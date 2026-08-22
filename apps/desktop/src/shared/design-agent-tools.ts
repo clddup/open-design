@@ -426,7 +426,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
       role: "material-write" as const,
     },
     description:
-      "Update one existing Image node through OpenDesign's non-destructive image workflow. set-placement switches Stretch/Fit/Fill/Crop or changes normalized focal point, crop zoom, rotation, and flips without modifying the source asset. replace-source consumes an image attachment already authorized for this run, creates a new durable content-addressed asset, preserves the existing placement unless a replacement placement is supplied, and atomically updates the node. Targets are explicit Page and node IDs returned by inspection, never the live selection. This tool does not perform pixel generation, inpainting, background removal, or destructive file edits.",
+      "Update one existing Image node through OpenDesign's non-destructive image workflow. set-placement switches Stretch/Fit/Fill/Crop or changes normalized focal point, crop zoom, rotation, and flips. set-filters applies sparse exposure, contrast, saturation, temperature, tint, highlights, and shadows values in the -1..1 range; missing fields are neutral and an empty object resets all adjustments. replace-source consumes an image attachment already authorized for this run, creates a new durable content-addressed asset, preserves placement and filters unless replacements are supplied, and atomically updates the node. Targets are explicit Page and node IDs returned by inspection, never the live selection. This tool does not perform pixel generation, inpainting, background removal, or destructive file edits.",
     inputSchema: UPDATE_IMAGE_TOOL_INPUT_SCHEMA,
     risk: "design_write" as const,
     approval: "never" as const,

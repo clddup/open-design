@@ -31,6 +31,7 @@ import {
   materializeDesignSystems,
   pageUsesDesignSystems,
 } from "./design-system-projection.js";
+import { toLeaferImageAdjustmentFilter } from "./image-adjustment-filter.js";
 
 export type {
   BooleanEditProjectionOptions,
@@ -537,12 +538,16 @@ function toElementSpec(
         });
       }
       const placement = mapImageNodePlacement(document, node);
+      const imageFilter = toLeaferImageAdjustmentFilter(
+        node.properties.filters,
+      );
       data = {
         ...base,
         width: node.size.width,
         height: node.size.height,
         cornerRadius: node.properties.cornerRadius,
         url: null,
+        ...(imageFilter ? { filter: imageFilter } : {}),
         fill: url
           ? {
               type: "image",

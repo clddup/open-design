@@ -10,6 +10,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@leafer-in/filter": "2.2.9",
+    "@leafer-ui/draw": "2.2.9",
     "@opendesign/component-service": "workspace:*",
     "@opendesign/design-contracts": "workspace:*",
     "@opendesign/geometry-service": "workspace:*",

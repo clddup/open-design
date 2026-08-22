@@ -4,6 +4,7 @@ import type {
   ImageNode,
   PathNode,
 } from "@opendesign/design-contracts";
+import { migrateDesignDocument } from "@opendesign/design-contracts";
 import { describe, expect, it } from "vitest";
 import {
   EditorRuntime,
@@ -70,6 +71,53 @@ function documentWithImage(): DesignDocument {
 }
 
 describe("image update planner", () => {
+  it("applies sparse non-destructive filters as one undoable image update", () => {
+    const runtime = new EditorRuntime(documentWithImage());
+    const plan = planImageNodeUpdate(runtime.getSnapshot().document, {
+      action: "set-filters",
+      pageId: "page_welcome",
+      nodeId: "hero",
+      filters: { exposure: 0.25, contrast: 0, shadows: -0.4 },
+    });
+    expect(plan).toMatchObject({ ok: true });
+    if (!plan.ok) return;
+    const before = runtime.getSnapshot().document;
+    expect(
+      runtime.apply({
+        transactionId: "adjust_image",
+        documentId: before.documentId,
+        baseRevision: before.revision,
+        actor: { type: "user", id: "test" },
+        commands: plan.commands,
+      }).ok,
+    ).toBe(true);
+    expect(runtime.getSnapshot().document.nodesById.hero).toMatchObject({
+      properties: { filters: { exposure: 0.25, shadows: -0.4 } },
+    });
+    const reopened = migrateDesignDocument(
+      JSON.parse(JSON.stringify(runtime.getSnapshot().document)),
+    );
+    expect(reopened?.nodesById.hero).toMatchObject({
+      properties: { filters: { exposure: 0.25, shadows: -0.4 } },
+    });
+    expect(runtime.undo().ok).toBe(true);
+    expect(runtime.getSnapshot().document.nodesById.hero).not.toHaveProperty(
+      "properties.filters",
+    );
+  });
+
+  it("treats omitted, empty, and explicit neutral filters as the same state", () => {
+    const document = documentWithImage();
+    expect(
+      planImageNodeUpdate(document, {
+        action: "set-filters",
+        pageId: "page_welcome",
+        nodeId: "hero",
+        filters: { exposure: 0, contrast: 0 },
+      }),
+    ).toMatchObject({ ok: false, code: "no-op" });
+  });
+
   it("replaces a source and removes the detached asset in one undoable transaction", () => {
     const runtime = new EditorRuntime(documentWithImage());
     const plan = planImageNodeUpdate(runtime.getSnapshot().document, {

@@ -1275,8 +1275,7 @@ async function executeDesignToolRequestUnsafe(
     );
     const commandPrefix =
       `image_${input.action}_${request.call.toolCallId}`.slice(0, 200);
-    const plan = planImageNodeUpdate(
-      document,
+    const operation =
       input.action === "set-placement"
         ? {
             action: input.action,
@@ -1284,17 +1283,23 @@ async function executeDesignToolRequestUnsafe(
             nodeId: input.nodeId,
             placement: input.placement,
           }
-        : {
-            action: input.action,
-            pageId: input.pageId,
-            nodeId: input.nodeId,
-            asset: input.asset,
-            ...(input.placement === undefined
-              ? {}
-              : { placement: input.placement }),
-          },
-      commandPrefix,
-    );
+        : input.action === "set-filters"
+          ? {
+              action: input.action,
+              pageId: input.pageId,
+              nodeId: input.nodeId,
+              filters: input.filters,
+            }
+          : {
+              action: input.action,
+              pageId: input.pageId,
+              nodeId: input.nodeId,
+              asset: input.asset,
+              ...(input.placement === undefined
+                ? {}
+                : { placement: input.placement }),
+            };
+    const plan = planImageNodeUpdate(document, operation, commandPrefix);
     if (!plan.ok) {
       throw new Error(`image-update.${plan.code}: ${plan.message}`);
     }
@@ -1347,6 +1352,10 @@ async function executeDesignToolRequestUnsafe(
             applied?.kind === "image"
               ? applied.properties.placement
               : undefined,
+          filters:
+            applied?.kind === "image"
+              ? (applied.properties.filters ?? {})
+              : undefined,
           ...(plan.deletedAssetId === undefined
             ? {}
             : { deletedAssetId: plan.deletedAssetId }),
@@ -1377,6 +1386,7 @@ async function executeDesignToolRequestUnsafe(
   );
   assertAgentDoesNotBypassFrameConstraints(document, commands);
   assertAgentDoesNotBypassAutoLayout(document, commands);
+  assertAgentDoesNotBypassImageWorkflow(document, commands);
   assertCommandsWithinMutationTarget(
     document,
     commands,
@@ -1541,6 +1551,26 @@ function assertAgentDoesNotBypassFrameConstraints(
     throw new Error(
       `design_workflow.frame_resize_requires_layout_tool: Frame ${node.id} has children; resize it with opendesign_arrange_layers action resize-frame so constraints are resolved in one atomic transaction`,
     );
+  }
+}
+
+function assertAgentDoesNotBypassImageWorkflow(
+  document: DesignDocument,
+  commands: readonly DesignOperation[],
+): void {
+  for (const command of commands) {
+    if (command.type !== "update_properties" || !command.properties) continue;
+    const node = document.nodesById[command.nodeId];
+    if (node?.kind !== "image") continue;
+    if (
+      command.properties.assetId !== undefined ||
+      command.properties.placement !== undefined ||
+      command.properties.filters !== undefined
+    ) {
+      throw new Error(
+        `design_workflow.image_update_requires_image_tool: Update Image node ${node.id} with opendesign_update_image so source, placement, and filters remain non-destructive and atomic`,
+      );
+    }
   }
 }
 

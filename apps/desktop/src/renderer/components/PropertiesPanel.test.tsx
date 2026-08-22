@@ -10,6 +10,8 @@ import userEvent from "@testing-library/user-event";
 import type {
   ComponentOverridePatch,
   DesignNode,
+  ImageFilters,
+  ImagePlacement,
   InstanceSwapPreferredValue,
   LayoutConstraints,
   LayoutGuide,
@@ -106,6 +108,8 @@ function renderPanel(
       insertionIndex: number,
     ) => void;
     onUpdate?: (updates: UpdatePropertiesPatch) => void;
+    onUpdateImageFilters?: (filters: ImageFilters) => void;
+    onUpdateImagePlacement?: (placement: ImagePlacement) => void;
     onUpdateComponentOverride?: (
       sourcePath: readonly string[],
       patch: ComponentOverridePatch,
@@ -120,6 +124,8 @@ function renderPanel(
   const onSvgExportSettingsChange = vi.fn();
   const onRasterExportSettingsChange = vi.fn();
   const onUpdate = options.onUpdate ?? vi.fn();
+  const onUpdateImageFilters = options.onUpdateImageFilters ?? vi.fn();
+  const onUpdateImagePlacement = options.onUpdateImagePlacement ?? vi.fn();
   const onArrange =
     options.onArrange ?? vi.fn<(operation: ArrangeOperation) => void>();
   render(
@@ -159,6 +165,8 @@ function renderPanel(
           onExportSvg={onExportSvg}
           onCropImage={vi.fn(() => true)}
           onReplaceImage={vi.fn()}
+          onUpdateImageFilters={onUpdateImageFilters}
+          onUpdateImagePlacement={onUpdateImagePlacement}
           onRemoveComponent={options.onRemoveComponent ?? vi.fn()}
           onRemoveVariant={options.onRemoveVariant ?? vi.fn()}
           onRemoveComponentProperty={vi.fn()}
@@ -227,6 +235,7 @@ function renderPanel(
     onRasterExportSettingsChange,
     onSvgExportSettingsChange,
     onUpdate,
+    onUpdateImageFilters,
   };
 }
 
@@ -256,6 +265,28 @@ const lineNode: DesignNode = {
     startEndpoint: "circle",
     endEndpoint: "line-arrow",
   },
+};
+
+const imageNode: Extract<DesignNode, { kind: "image" }> = {
+  id: "image_1",
+  name: "Campaign hero",
+  kind: "image",
+  parentId: null,
+  childIds: [],
+  visible: true,
+  locked: false,
+  transform: [1, 0, 0, 1, 0, 0],
+  size: { width: 640, height: 420 },
+  exportSettings: [],
+  opacity: 1,
+  properties: {
+    assetId: "asset_hero",
+    placement: { mode: "fit" },
+    filters: { contrast: -0.1 },
+    altText: "Campaign hero",
+    cornerRadius: 0,
+  },
+  extensions: {},
 };
 
 const starNode: DesignNode = {
@@ -422,6 +453,25 @@ describe("PropertiesPanel information architecture", () => {
     expect(onUpdateComponentOverride).toHaveBeenCalledWith([textNode.id], {
       visible: false,
     });
+  });
+});
+
+describe("PropertiesPanel image adjustments", () => {
+  it("commits one standard filter update after slider interaction and can reset", () => {
+    const onUpdateImageFilters = vi.fn();
+    renderPanel({ node: imageNode, onUpdateImageFilters });
+
+    const exposure = screen.getByRole("slider", { name: "Exposure" });
+    fireEvent.change(exposure, { target: { value: "25" } });
+    expect(onUpdateImageFilters).not.toHaveBeenCalled();
+    fireEvent.pointerUp(exposure, { target: { value: "25" } });
+    expect(onUpdateImageFilters).toHaveBeenCalledWith({
+      contrast: -0.1,
+      exposure: 0.25,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Reset adjustments" }));
+    expect(onUpdateImageFilters).toHaveBeenLastCalledWith({});
   });
 });
 

@@ -2,6 +2,7 @@ import {
   DESIGN_FORMAT,
   DESIGN_SCHEMA_VERSION,
   isDesignDocument,
+  migrateDesignDocument,
   type DesignDocument,
   type DesignNode,
   type Paint,
@@ -44,6 +45,45 @@ beforeAll(async () => {
 });
 
 describe("versioned SVG interchange", () => {
+  it("fails explicitly instead of dropping non-destructive Image adjustments", () => {
+    const image: Extract<DesignNode, { kind: "image" }> = {
+      id: "adjusted_image",
+      kind: "image",
+      name: "Adjusted image",
+      parentId: null,
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 0, 0],
+      size: { width: 320, height: 180 },
+      exportSettings: [],
+      opacity: 1,
+      properties: {
+        assetId: "asset_image",
+        placement: { mode: "fit" },
+        filters: { exposure: 0.25, highlights: -0.4 },
+        altText: "Adjusted image",
+        cornerRadius: 0,
+      },
+      extensions: {},
+    };
+    const exported = exportSvg({
+      document: documentFromNodes("svg_adjusted_image", [image], [image.id]),
+      rootNodeIds: [image.id],
+      viewport: { x: 0, y: 0, width: 320, height: 180 },
+    });
+    expect(exported).toMatchObject({
+      ok: false,
+      issues: [
+        expect.objectContaining({
+          code: "unsupported-element",
+          severity: "error",
+          nodeId: image.id,
+        }),
+      ],
+    });
+  });
+
   it("validates structured fidelity issues at process boundaries", () => {
     const issue = {
       code: "effect-omitted",
@@ -1109,6 +1149,8 @@ describe("versioned SVG interchange", () => {
       libraryComponentsById: {},
       libraryVariantSetsById: {},
       libraryStylesById: {},
+      libraryVariableCollectionsById: {},
+      libraryVariablesById: {},
       variableCollectionOrder: [],
       variableCollectionsById: {},
       variablesById: {},
@@ -2777,10 +2819,11 @@ function readBrandFixture(): DesignDocument {
       "utf8",
     ),
   );
-  if (!isDesignDocument(value)) {
+  const migrated = migrateDesignDocument(value);
+  if (!migrated) {
     throw new Error("OD-BRAND-01 fixture is invalid");
   }
-  return value;
+  return migrated;
 }
 
 function isPathLike(
@@ -3118,6 +3161,8 @@ function documentFromNodes(
     libraryComponentsById: {},
     libraryVariantSetsById: {},
     libraryStylesById: {},
+    libraryVariableCollectionsById: {},
+    libraryVariablesById: {},
     variableCollectionOrder: [],
     variableCollectionsById: {},
     variablesById: {},
@@ -3442,6 +3487,8 @@ function shapeDocument(): DesignDocument {
     libraryComponentsById: {},
     libraryVariantSetsById: {},
     libraryStylesById: {},
+    libraryVariableCollectionsById: {},
+    libraryVariablesById: {},
     variableCollectionOrder: [],
     variableCollectionsById: {},
     variablesById: {},

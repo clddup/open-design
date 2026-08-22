@@ -2982,6 +2982,13 @@ describe("App", () => {
     await user.tab();
     await user.click(screen.getByRole("button", { name: "Flip H" }));
 
+    const exposure = screen.getByRole("slider", { name: "Exposure" });
+    fireEvent.change(exposure, { target: { value: "20" } });
+    fireEvent.pointerUp(exposure, { target: { value: "20" } });
+    expect(runtime().getSnapshot().document.nodesById.hero_image).toMatchObject(
+      { properties: { filters: { exposure: 0.2 } } },
+    );
+
     vi.mocked(window.desktop!.selectDesignImage).mockResolvedValueOnce({
       asset: {
         id: newAssetId,
@@ -3005,6 +3012,7 @@ describe("App", () => {
             zoom: 1.4,
             flipHorizontal: true,
           },
+          filters: { exposure: 0.2 },
         },
       }),
     );

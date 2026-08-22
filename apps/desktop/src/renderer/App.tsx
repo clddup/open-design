@@ -14,6 +14,8 @@ import type { TextLayoutProvider } from "@opendesign/text-service";
 import type {
   ComponentOverridePatch,
   DesignDocument,
+  ImageFilters,
+  ImagePlacement,
   UpdatePropertiesCommand,
 } from "@opendesign/design-contracts";
 import {
@@ -1040,6 +1042,48 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
       setEditorError(t("error.replaceImage"));
     }
   }, [activePageId, applyCommands, runtime, t]);
+
+  const updateSelectedImageFilters = useCallback(
+    (filters: ImageFilters) => {
+      const current = runtime.getSnapshot();
+      const selected = current.state.selection.nodeIds;
+      const nodeId = selected.length === 1 ? selected[0] : undefined;
+      if (!nodeId) return;
+      const plan = planImageNodeUpdate(current.document, {
+        action: "set-filters",
+        pageId: activePageId,
+        nodeId,
+        filters,
+      });
+      if (!plan.ok) {
+        if (plan.code !== "no-op") setEditorError(plan.message);
+        return;
+      }
+      applyCommands(t("history.adjustImage"), plan.commands);
+    },
+    [activePageId, applyCommands, runtime, setEditorError, t],
+  );
+
+  const updateSelectedImagePlacement = useCallback(
+    (placement: ImagePlacement) => {
+      const current = runtime.getSnapshot();
+      const selected = current.state.selection.nodeIds;
+      const nodeId = selected.length === 1 ? selected[0] : undefined;
+      if (!nodeId) return;
+      const plan = planImageNodeUpdate(current.document, {
+        action: "set-placement",
+        pageId: activePageId,
+        nodeId,
+        placement,
+      });
+      if (!plan.ok) {
+        if (plan.code !== "no-op") setEditorError(plan.message);
+        return;
+      }
+      applyCommands(t("history.updateImagePlacement"), plan.commands);
+    },
+    [activePageId, applyCommands, runtime, setEditorError, t],
+  );
 
   const {
     deleteImageAsset,
@@ -2601,6 +2645,8 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
                   );
                 }}
                 onReplaceImage={() => void replaceSelectedImage()}
+                onUpdateImageFilters={updateSelectedImageFilters}
+                onUpdateImagePlacement={updateSelectedImagePlacement}
                 onRemoveComponent={removeSelectedComponent}
                 onRemoveVariant={removeSelectedVariantFromSet}
                 onAddComponentProperty={addSelectedComponentProperty}

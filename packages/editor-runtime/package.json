@@ -14,6 +14,7 @@
     "@opendesign/design-contracts": "workspace:*",
     "@opendesign/geometry-service": "workspace:*",
     "@opendesign/import-export-service": "workspace:*",
+    "@opendesign/image-service": "workspace:*",
     "@opendesign/layout-service": "workspace:*",
     "@opendesign/library-service": "workspace:*",
     "@opendesign/style-service": "workspace:*",

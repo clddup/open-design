@@ -15,6 +15,7 @@ import {
   LIBRARY_COMPONENT_SOURCE_DESIGN_SCHEMA_VERSION,
   LIBRARY_STYLE_SOURCE_DESIGN_SCHEMA_VERSION,
   LIBRARY_VARIABLE_SOURCE_DESIGN_SCHEMA_VERSION,
+  IMAGE_ADJUSTMENTS_DESIGN_SCHEMA_VERSION,
   FONT_FACE_IDENTITY_DESIGN_SCHEMA_VERSION,
   FIGMA_TEXT_LISTS_DESIGN_SCHEMA_VERSION,
   AUTO_LAYOUT_GRID_DESIGN_SCHEMA_VERSION,
@@ -95,9 +96,16 @@ it("keeps Auto Layout and Layout Guide schema milestones distinct", () => {
   expect(LIBRARY_COMPONENT_SOURCE_DESIGN_SCHEMA_VERSION).toBe("1.37.0");
   expect(LIBRARY_STYLE_SOURCE_DESIGN_SCHEMA_VERSION).toBe("1.38.0");
   expect(LIBRARY_VARIABLE_SOURCE_DESIGN_SCHEMA_VERSION).toBe("1.39.0");
-  expect(DESIGN_SCHEMA_VERSION).toBe(
-    LIBRARY_VARIABLE_SOURCE_DESIGN_SCHEMA_VERSION,
-  );
+  expect(IMAGE_ADJUSTMENTS_DESIGN_SCHEMA_VERSION).toBe("1.40.0");
+  expect(DESIGN_SCHEMA_VERSION).toBe(IMAGE_ADJUSTMENTS_DESIGN_SCHEMA_VERSION);
+});
+
+it("migrates the previous Variable Library document without inventing image adjustments", () => {
+  const source = textDocumentFixture() as unknown as Record<string, unknown>;
+  source.schemaVersion = LIBRARY_VARIABLE_SOURCE_DESIGN_SCHEMA_VERSION;
+  const migrated = migrateDesignDocument(source);
+  expect(migrated?.schemaVersion).toBe(DESIGN_SCHEMA_VERSION);
+  expect(migrated?.nodesById.text_1).not.toHaveProperty("properties.filters");
 });
 
 it("migrates a Library release without Variables to the current release contract", () => {
@@ -925,9 +933,28 @@ describe("design contract schemas", () => {
             flipHorizontal: false,
             flipVertical: true,
           },
+          filters: {
+            exposure: 0.25,
+            contrast: -0.5,
+            saturation: 1,
+            temperature: -1,
+            tint: 0.4,
+            highlights: -0.2,
+            shadows: 0.35,
+          },
         },
       }),
     ).toBe(true);
+    expect(
+      Value.Check(DesignNodeSchema, {
+        ...base,
+        properties: {
+          ...base.properties,
+          placement: { mode: "fit" },
+          filters: { exposure: 1.01 },
+        },
+      }),
+    ).toBe(false);
     expect(
       Value.Check(DesignNodeSchema, {
         ...base,

@@ -2,7 +2,7 @@
 
 # OpenDesign 专业设计能力
 
-能力清单版本：`1` · 更新日期：2026-08-22 · 文档协议：`1.39.0` · 画布基线：`leafer-editor@2.2.9`
+能力清单版本：`1` · 更新日期：2026-08-22 · 文档协议：`1.40.0` · 画布基线：`leafer-editor@2.2.9`
 
 当前状态：可用 0 项，降级可用 21 项，不可用 1 项。只有必需表面全部可用，并同时具备自动化与实机证据时，能力才允许标记为“可用”。
 
@@ -162,10 +162,10 @@
 非破坏性裁剪、选择焦点位置、替换来源并应用图片调整或滤镜。
 
 - ID：`image.crop-adjustments`
-- 实现方：DesignDocument 1.10.0 + OpenDesign Image Service v2 + Leafer projection
-- 表面：contract=degraded；runtime=degraded；human=degraded；agent=degraded；render=degraded；export=unavailable
-- 证据：自动化 8 项；实机 0 项
-- 限制：检查器与专用 Agent 工具共用非破坏 placement 和来源替换语义。画布直接裁剪已支持拖动、缩放、重置、Enter 提交、Escape 取消和 stale session 恢复；调整滤镜、完整导出保真及 macOS/Windows 原生交互证据仍未完成。
+- 实现方：DesignDocument 1.40.0 + OpenDesign Image Service contract 3 + Leafer image-adjustment projection
+- 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=degraded
+- 证据：自动化 10 项；实机 0 项
+- 限制：Image 节点已支持 Figma-compatible 曝光、对比度、饱和度、色温、色调、高光与阴影字段，并由画布、capture 和 PNG/JPEG/WebP 导出共用同一确定性 RGBA 投影。Image Paint 调整、SVG 位图嵌入、P3/ICC 色彩管理及 macOS/Windows 原生交互证据仍未完成。
 - 专业参照：[官方说明](docs/adr/0089-direct-image-crop-session.md)
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360040675194-Crop-an-image)
 

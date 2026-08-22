@@ -1,7 +1,7 @@
 {
   "version": 1,
   "updatedAt": "2026-08-22",
-  "documentSchemaVersion": "1.39.0",
+  "documentSchemaVersion": "1.40.0",
   "engineBaseline": "leafer-editor@2.2.9",
   "categories": [
     {
@@ -613,20 +613,20 @@
         "en": "Crop non-destructively, choose focal placement, replace sources, and apply image adjustments or filters.",
         "zh-CN": "非破坏性裁剪、选择焦点位置、替换来源并应用图片调整或滤镜。"
       },
-      "provider": "DesignDocument 1.10.0 + OpenDesign Image Service v2 + Leafer projection",
+      "provider": "DesignDocument 1.40.0 + OpenDesign Image Service contract 3 + Leafer image-adjustment projection",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
       "surfaces": {
-        "contract": "degraded",
-        "runtime": "degraded",
-        "human": "degraded",
-        "agent": "degraded",
-        "render": "degraded",
-        "export": "unavailable"
+        "contract": "available",
+        "runtime": "available",
+        "human": "available",
+        "agent": "available",
+        "render": "available",
+        "export": "degraded"
       },
       "limitations": [
         {
-          "en": "The inspector and dedicated Agent tool share non-destructive placement and source replacement semantics. Direct canvas crop supports drag, zoom, reset, Enter commit, Escape cancel, and stale-session recovery; adjustment filters, complete export fidelity, and native macOS/Windows interaction evidence remain incomplete.",
-          "zh-CN": "检查器与专用 Agent 工具共用非破坏 placement 和来源替换语义。画布直接裁剪已支持拖动、缩放、重置、Enter 提交、Escape 取消和 stale session 恢复；调整滤镜、完整导出保真及 macOS/Windows 原生交互证据仍未完成。"
+          "en": "Image nodes support Figma-compatible exposure, contrast, saturation, temperature, tint, highlights, and shadows fields through one deterministic RGBA projection shared by canvas, capture, and PNG/JPEG/WebP export. Image-paint adjustments, SVG raster embedding, color-managed P3/ICC output, and native macOS/Windows interaction evidence remain incomplete.",
+          "zh-CN": "Image 节点已支持 Figma-compatible 曝光、对比度、饱和度、色温、色调、高光与阴影字段，并由画布、capture 和 PNG/JPEG/WebP 导出共用同一确定性 RGBA 投影。Image Paint 调整、SVG 位图嵌入、P3/ICC 色彩管理及 macOS/Windows 原生交互证据仍未完成。"
         }
       ],
       "evidence": {
@@ -634,6 +634,8 @@
           "packages/design-contracts/src/index.test.ts",
           "packages/image-service/src/index.test.ts",
           "packages/editor-runtime/src/image-operations.test.ts",
+          "packages/figma-interop/src/index.test.ts",
+          "packages/leafer-engine/src/image-adjustment-filter.test.ts",
           "packages/leafer-engine/src/mapping.test.ts",
           "packages/leafer-engine/src/adapter.test.ts",
           "apps/desktop/src/shared/design-agent-tools.test.ts",
