@@ -298,6 +298,47 @@ describe("ImageGenerationHost", () => {
     store.close();
   });
 
+  it("changes lighting from one semantic preset with a host-owned preservation instruction", async () => {
+    const store = new WorkspaceStore(":memory:");
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: [{ b64_json: opaquePngFixture().toString("base64") }],
+        }),
+        { status: 200 },
+      ),
+    );
+    const host = new ImageGenerationHost(store, cipher, fetch);
+    host.saveSettings({
+      enabled: true,
+      apiFormat: "openai-images",
+      authMode: "none",
+      baseUrl: "https://images.example/v1",
+      modelId: "gpt-image-2",
+    });
+
+    const result = await host.changeLighting(
+      {
+        source: {
+          bytes: opaquePngFixture(),
+          mimeType: "image/png",
+          name: "Product.png",
+        },
+        lightingPreset: "neon",
+      },
+      new AbortController().signal,
+    );
+
+    expect(result.operation).toBe("relight");
+    const form = fetch.mock.calls[0]?.[1]?.body;
+    if (!(form instanceof FormData)) throw new Error("Expected FormData body");
+    expect(form.get("prompt")).toContain("Preserve the exact subject identity");
+    expect(form.get("prompt")).toContain("magenta and cyan");
+    expect(form.get("background")).toBe("auto");
+    expect(form.getAll("image[]")).toHaveLength(1);
+    store.close();
+  });
+
   it("rejects empty prompts and more than one reference before network I/O", async () => {
     const store = new WorkspaceStore(":memory:");
     const fetch = vi.fn<typeof globalThis.fetch>();

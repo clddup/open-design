@@ -938,6 +938,14 @@ export const ImageAssetDerivationOperationSchema = Type.Union([
   Type.Literal("style-harmonize"),
 ]);
 
+export const ImageLightingPresetSchema = Type.Union([
+  Type.Literal("natural-soft"),
+  Type.Literal("studio-softbox"),
+  Type.Literal("golden-hour"),
+  Type.Literal("moonlight"),
+  Type.Literal("neon"),
+]);
+
 export const ImageAssetDerivationSchema = Type.Object(
   {
     id: Type.String({ minLength: 1, maxLength: 256 }),
@@ -945,6 +953,7 @@ export const ImageAssetDerivationSchema = Type.Object(
     resultAssetId: Type.String({ minLength: 1 }),
     operation: ImageAssetDerivationOperationSchema,
     prompt: Type.Optional(Type.String({ minLength: 1, maxLength: 32_000 })),
+    lightingPreset: Type.Optional(ImageLightingPresetSchema),
     maskAssetId: Type.Optional(Type.String({ minLength: 1 })),
     referenceAssetIds: Type.Array(Type.String({ minLength: 1 }), {
       maxItems: 16,
@@ -2398,6 +2407,7 @@ export type DesignAsset = Static<typeof DesignAssetSchema>;
 export type ImageAssetDerivationOperation = Static<
   typeof ImageAssetDerivationOperationSchema
 >;
+export type ImageLightingPreset = Static<typeof ImageLightingPresetSchema>;
 export type ImageAssetDerivation = Static<typeof ImageAssetDerivationSchema>;
 export type DesignDocument = Static<typeof DesignDocumentSchema>;
 export type InsertElementCommand = Static<typeof InsertElementCommandSchema>;
@@ -2660,6 +2670,12 @@ export function isImageAssetDerivation(
   value: unknown,
 ): value is ImageAssetDerivation {
   return checkSchema(ImageAssetDerivationSchema, value);
+}
+
+export function isImageLightingPreset(
+  value: unknown,
+): value is ImageLightingPreset {
+  return checkSchema(ImageLightingPresetSchema, value);
 }
 
 export function isLibraryReleaseSnapshot(

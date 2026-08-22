@@ -5,9 +5,11 @@ import {
   isImageFilters,
   isImagePaint,
   isImagePlacement,
+  isImageLightingPreset,
   type DesignAsset,
   type ImageFilters,
   type ImagePlacement,
+  type ImageLightingPreset,
   type ImagePaint,
   type ImageAssetDerivation,
 } from "@opendesign/design-contracts";
@@ -114,6 +116,10 @@ export type EditImageToolInput = EditImageToolBase &
     | {
         action: "replace-background";
         prompt: string;
+      }
+    | {
+        action: "relight";
+        lightingPreset: ImageLightingPreset;
       }
     | {
         action: "prompt-edit";
@@ -421,6 +427,7 @@ export const EDIT_IMAGE_TOOL_INPUT_SCHEMA = {
       enum: [
         "remove-background",
         "replace-background",
+        "relight",
         "prompt-edit",
         "erase-object",
         "isolate-object",
@@ -433,6 +440,17 @@ export const EDIT_IMAGE_TOOL_INPUT_SCHEMA = {
     nodeId: { type: "string", minLength: 1, maxLength: 256 },
     expectedAssetId: { type: "string", minLength: 1, maxLength: 256 },
     prompt: { type: "string", minLength: 1, maxLength: 32_000 },
+    lightingPreset: {
+      enum: [
+        "natural-soft",
+        "studio-softbox",
+        "golden-hour",
+        "moonlight",
+        "neon",
+      ],
+      description:
+        "Provider-independent lighting direction. The host adds the exact preservation prompt.",
+    },
     referenceAttachmentId: {
       type: "string",
       pattern: "^image_[a-f0-9]{64}$",
@@ -479,6 +497,7 @@ export const EDIT_IMAGE_TOOL_INPUT_SCHEMA = {
       not: {
         anyOf: [
           { required: ["prompt"] },
+          { required: ["lightingPreset"] },
           { required: ["referenceAttachmentId"] },
           { required: ["selection"] },
           { required: ["resultNodeId"] },
@@ -491,6 +510,20 @@ export const EDIT_IMAGE_TOOL_INPUT_SCHEMA = {
       required: ["prompt"],
       not: {
         anyOf: [
+          { required: ["lightingPreset"] },
+          { required: ["referenceAttachmentId"] },
+          { required: ["selection"] },
+          { required: ["resultNodeId"] },
+          { required: ["expansion"] },
+        ],
+      },
+    },
+    {
+      properties: { action: { const: "relight" } },
+      required: ["lightingPreset"],
+      not: {
+        anyOf: [
+          { required: ["prompt"] },
           { required: ["referenceAttachmentId"] },
           { required: ["selection"] },
           { required: ["resultNodeId"] },
@@ -503,6 +536,7 @@ export const EDIT_IMAGE_TOOL_INPUT_SCHEMA = {
       required: ["prompt"],
       not: {
         anyOf: [
+          { required: ["lightingPreset"] },
           { required: ["selection"] },
           { required: ["resultNodeId"] },
           { required: ["expansion"] },
@@ -515,6 +549,7 @@ export const EDIT_IMAGE_TOOL_INPUT_SCHEMA = {
       not: {
         anyOf: [
           { required: ["prompt"] },
+          { required: ["lightingPreset"] },
           { required: ["referenceAttachmentId"] },
           { required: ["resultNodeId"] },
           { required: ["expansion"] },
@@ -527,6 +562,7 @@ export const EDIT_IMAGE_TOOL_INPUT_SCHEMA = {
       not: {
         anyOf: [
           { required: ["prompt"] },
+          { required: ["lightingPreset"] },
           { required: ["referenceAttachmentId"] },
           { required: ["expansion"] },
         ],
@@ -538,6 +574,7 @@ export const EDIT_IMAGE_TOOL_INPUT_SCHEMA = {
       not: {
         anyOf: [
           { required: ["prompt"] },
+          { required: ["lightingPreset"] },
           { required: ["referenceAttachmentId"] },
           { required: ["selection"] },
           { required: ["resultNodeId"] },
@@ -549,6 +586,7 @@ export const EDIT_IMAGE_TOOL_INPUT_SCHEMA = {
       not: {
         anyOf: [
           { required: ["prompt"] },
+          { required: ["lightingPreset"] },
           { required: ["referenceAttachmentId"] },
           { required: ["selection"] },
           { required: ["resultNodeId"] },
@@ -744,6 +782,19 @@ export function isEditImageToolInput(
         "nodeId",
         "expectedAssetId",
         "prompt",
+      ])
+    );
+  }
+  if (input.action === "relight") {
+    return (
+      isImageLightingPreset(input.lightingPreset) &&
+      exactKeys(input, [
+        "action",
+        "label",
+        "pageId",
+        "nodeId",
+        "expectedAssetId",
+        "lightingPreset",
       ])
     );
   }
@@ -947,6 +998,8 @@ export function isInternalUpdateImageToolInput(
       return false;
     }
     if (
+      (derivation.operation !== "relight" &&
+        derivation.lightingPreset !== undefined) ||
       (derivation.operation === "remove-background" &&
         (derivation.prompt !== undefined ||
           derivation.maskAssetId !== undefined ||
@@ -961,6 +1014,12 @@ export function isInternalUpdateImageToolInput(
           derivation.maskAssetId !== undefined ||
           derivation.referenceAssetIds.length !== 0 ||
           supportingAssets.length !== 0)) ||
+      (derivation.operation === "relight" &&
+        (!isImageLightingPreset(derivation.lightingPreset) ||
+          derivation.prompt !== undefined ||
+          derivation.maskAssetId !== undefined ||
+          derivation.referenceAssetIds.length !== 0 ||
+          supportingAssets.length !== 0)) ||
       ((derivation.operation === "erase-object" ||
         derivation.operation === "isolate-object") &&
         (typeof derivation.prompt !== "string" ||
@@ -971,6 +1030,7 @@ export function isInternalUpdateImageToolInput(
           supportingAssets[0]?.mimeType !== "image/png")) ||
       (derivation.operation !== "remove-background" &&
         derivation.operation !== "replace-background" &&
+        derivation.operation !== "relight" &&
         derivation.operation !== "prompt-edit" &&
         derivation.operation !== "erase-object" &&
         derivation.operation !== "isolate-object")

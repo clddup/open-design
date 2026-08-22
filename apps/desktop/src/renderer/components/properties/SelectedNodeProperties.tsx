@@ -7,6 +7,7 @@ import type {
   DesignDocument,
   DesignNode,
   ImageFilters,
+  ImageLightingPreset,
   ImagePaint,
   ImagePlacement,
   InstanceSwapPreferredValue,
@@ -132,6 +133,7 @@ export function SelectedNodeProperties({
   imageEditAction,
   onRemoveImageBackground,
   onReplaceImageBackground,
+  onRelightImage,
   onEditImageWithPrompt,
   onSelectImageEditReference,
   onCancelImageEdit,
@@ -205,6 +207,7 @@ export function SelectedNodeProperties({
   imageEditAction: DesignImageEditAction | null;
   onRemoveImageBackground: () => void;
   onReplaceImageBackground: (prompt: string) => void;
+  onRelightImage: (lightingPreset: ImageLightingPreset) => void;
   onEditImageWithPrompt: (prompt: string, reference?: DesignAsset) => void;
   onSelectImageEditReference: () => Promise<DesignAsset | null>;
   onCancelImageEdit: () => void;
@@ -976,6 +979,7 @@ export function SelectedNodeProperties({
           editAction={imageEditAction}
           onRemoveBackground={onRemoveImageBackground}
           onReplaceBackground={onReplaceImageBackground}
+          onRelight={onRelightImage}
           onEditWithPrompt={onEditImageWithPrompt}
           onSelectEditReference={onSelectImageEditReference}
           onCancelEdit={onCancelImageEdit}

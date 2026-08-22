@@ -2490,6 +2490,27 @@ describe("design Agent tool contract", () => {
         source: "data:image/png;base64,aW1hZ2U=",
       }),
     ).toBe(false);
+    const relight = {
+      ...input,
+      action: "relight",
+      label: "Relight the hero for dark mode",
+      lightingPreset: "neon",
+    };
+    expect(validateDesignAgentToolInput(EDIT_IMAGE_TOOL_NAME, relight)).toBe(
+      true,
+    );
+    expect(
+      validateDesignAgentToolInput(EDIT_IMAGE_TOOL_NAME, {
+        ...relight,
+        lightingPreset: "custom-party-light",
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(EDIT_IMAGE_TOOL_NAME, {
+        ...relight,
+        prompt: "Make it neon",
+      }),
+    ).toBe(false);
     const replaceBackground = {
       ...input,
       action: "replace-background",
@@ -2656,6 +2677,45 @@ describe("design Agent tool contract", () => {
       validateDesignAgentToolInput(INTERNAL_UPDATE_IMAGE_TOOL_NAME, {
         ...input,
         resultNodeId: undefined,
+      }),
+    ).toBe(false);
+  });
+
+  it("accepts only semantic relighting provenance for internal image commits", () => {
+    const sourceAssetId = `asset_${"d".repeat(64)}`;
+    const resultAsset = {
+      id: `asset_${"e".repeat(64)}`,
+      kind: "image",
+      name: "Relit.png",
+      mimeType: "image/png",
+      source: { type: "data", value: "cmVsaWdodA==" },
+      size: { width: 800, height: 600 },
+      extensions: {},
+    } as const;
+    const input = {
+      action: "derive-source",
+      label: "Relight hero",
+      pageId: "page_1",
+      nodeId: "hero_image",
+      expectedAssetId: sourceAssetId,
+      asset: resultAsset,
+      derivation: {
+        id: "image_derivation_relight",
+        sourceAssetId,
+        resultAssetId: resultAsset.id,
+        operation: "relight",
+        lightingPreset: "golden-hour",
+        referenceAssetIds: [],
+        extensions: { provider: "openai-images", modelId: "gpt-image-2" },
+      },
+    };
+    expect(
+      validateDesignAgentToolInput(INTERNAL_UPDATE_IMAGE_TOOL_NAME, input),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(INTERNAL_UPDATE_IMAGE_TOOL_NAME, {
+        ...input,
+        derivation: { ...input.derivation, prompt: "Golden hour" },
       }),
     ).toBe(false);
   });

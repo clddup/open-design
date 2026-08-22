@@ -3,6 +3,10 @@ import type {
   SaveGlobalImageGenerationSettingsRequest,
 } from "../../shared/desktop-api";
 import {
+  isImageLightingPreset,
+  type ImageLightingPreset,
+} from "@opendesign/design-contracts";
+import {
   GLOBAL_IMAGE_GENERATION_SETTINGS_VERSION,
   isGlobalImageGenerationSettings,
   isSaveGlobalImageGenerationSettingsRequest,
@@ -63,6 +67,11 @@ export type ReplaceImageBackgroundInput = {
   prompt: string;
 };
 
+export type RelightImageInput = {
+  source: ImageEditSource;
+  lightingPreset: ImageLightingPreset;
+};
+
 export type PromptImageEditInput = {
   source: ImageEditSource;
   prompt: string;
@@ -99,6 +108,24 @@ export const BOOST_RESOLUTION_PROMPT =
 export const REPLACE_BACKGROUND_PROMPT_PREFIX =
   "Replace only the background of the source image with the background described below. Preserve every foreground subject exactly, including identity, pose, silhouette, proportions, product geometry, logos, text, material, edge detail, lighting on the subject, placement, crop, and composition. Do not add, remove, move, resize, restyle, or relight foreground content. Make the new background spatially coherent with the existing subject and fill the complete image without borders. New background:";
 
+export const RELIGHT_IMAGE_PROMPT_PREFIX =
+  "Change only the lighting of the source image according to the lighting direction below. Preserve the exact subject identity, pose, silhouette, proportions, product geometry, logos, text, materials, scene geometry, camera angle, crop, composition, background objects, and visual style. Recompute illumination, highlights, shadows, reflections, and ambient color coherently across the existing scene. Do not add, remove, move, resize, or redesign content. Lighting direction:";
+
+export const IMAGE_LIGHTING_PRESET_DIRECTIONS: Record<
+  ImageLightingPreset,
+  string
+> = {
+  "natural-soft":
+    "Soft diffused natural daylight with gentle directional modeling, neutral color, controlled highlights, and open soft-edged shadows.",
+  "studio-softbox":
+    "Professional studio softbox lighting with a clear key light, restrained fill, dimensional subject separation, clean highlights, and polished controlled shadows.",
+  "golden-hour":
+    "Warm low-angle golden-hour sunlight with long soft shadows, amber highlights, subtle atmospheric warmth, and natural cinematic depth.",
+  moonlight:
+    "Cool low-key moonlight with deep but readable shadows, restrained blue ambient light, delicate rim highlights, and realistic nighttime contrast.",
+  neon: "Cinematic colored neon lighting with coherent magenta and cyan light sources, colored reflections, defined rim light, rich dark contrast, and preserved material response.",
+};
+
 export type EditedImage = {
   bytes: Uint8Array;
   apiFormat: GlobalImageGenerationSettings["apiFormat"];
@@ -108,6 +135,7 @@ export type EditedImage = {
   operation:
     | "remove-background"
     | "replace-background"
+    | "relight"
     | "prompt-edit"
     | "erase-object"
     | "isolate-object"
@@ -316,6 +344,24 @@ export class ImageGenerationHost {
       {
         operation: "replace-background",
         prompt: `${REPLACE_BACKGROUND_PROMPT_PREFIX}\n${prompt}`,
+        sources: [input.source],
+        background: "auto",
+      },
+      signal,
+    );
+  }
+
+  async changeLighting(
+    input: RelightImageInput,
+    signal: AbortSignal,
+  ): Promise<EditedImage> {
+    if (!isImageLightingPreset(input.lightingPreset)) {
+      throw new TypeError("Image lighting preset is unsupported");
+    }
+    return this.editImage(
+      {
+        operation: "relight",
+        prompt: `${RELIGHT_IMAGE_PROMPT_PREFIX}\n${IMAGE_LIGHTING_PRESET_DIRECTIONS[input.lightingPreset]}`,
         sources: [input.source],
         background: "auto",
       },

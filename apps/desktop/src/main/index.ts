@@ -12,6 +12,7 @@ import { JsonlSessionStore } from "@opendesign/session-store";
 import type {
   DesignAsset,
   ImageAssetDerivation,
+  ImageLightingPreset,
   ImagePlacement,
   Size,
 } from "@opendesign/design-contracts";
@@ -1033,31 +1034,38 @@ function registerIpc(fontBinaryService: FontBinaryMainService) {
                   prompt: request.prompt,
                   importedBy: "inspector-image-edit",
                 }
-              : request.action === "prompt-edit"
+              : request.action === "relight"
                 ? {
                     action: request.action,
                     source: request.source,
-                    prompt: request.prompt,
-                    ...(request.reference === undefined
-                      ? {}
-                      : { references: [request.reference] }),
+                    lightingPreset: request.lightingPreset,
                     importedBy: "inspector-image-edit",
                   }
-                : request.action === "expand"
+                : request.action === "prompt-edit"
                   ? {
                       action: request.action,
                       source: request.source,
-                      expansion: request.expansion,
-                      placement: request.placement,
-                      targetSize: request.targetSize,
+                      prompt: request.prompt,
+                      ...(request.reference === undefined
+                        ? {}
+                        : { references: [request.reference] }),
                       importedBy: "inspector-image-edit",
                     }
-                  : {
-                      action: request.action,
-                      source: request.source,
-                      selection: request.selection,
-                      importedBy: "inspector-image-edit",
-                    },
+                  : request.action === "expand"
+                    ? {
+                        action: request.action,
+                        source: request.source,
+                        expansion: request.expansion,
+                        placement: request.placement,
+                        targetSize: request.targetSize,
+                        importedBy: "inspector-image-edit",
+                      }
+                    : {
+                        action: request.action,
+                        source: request.source,
+                        selection: request.selection,
+                        importedBy: "inspector-image-edit",
+                      },
           controller.signal,
         );
         return {
@@ -2069,21 +2077,28 @@ void app.whenReady().then(async () => {
                     : { references: [reference] }),
                   importedBy: "agent-image-edit",
                 }
-              : call.input.action === "expand"
+              : call.input.action === "relight"
                 ? {
                     action: call.input.action,
                     source,
-                    expansion: call.input.expansion,
-                    placement: prepared.content.placement,
-                    targetSize: prepared.content.targetSize,
+                    lightingPreset: call.input.lightingPreset,
                     importedBy: "agent-image-edit",
                   }
-                : {
-                    action: call.input.action,
-                    source,
-                    selection: call.input.selection,
-                    importedBy: "agent-image-edit",
-                  },
+                : call.input.action === "expand"
+                  ? {
+                      action: call.input.action,
+                      source,
+                      expansion: call.input.expansion,
+                      placement: prepared.content.placement,
+                      targetSize: prepared.content.targetSize,
+                      importedBy: "agent-image-edit",
+                    }
+                  : {
+                      action: call.input.action,
+                      source,
+                      selection: call.input.selection,
+                      importedBy: "agent-image-edit",
+                    },
           signal,
         );
         const result = await executeRendererTool({
@@ -2501,6 +2516,12 @@ type DesignImageEditInput =
       importedBy: "agent-image-edit" | "inspector-image-edit";
     }
   | {
+      action: "relight";
+      source: DesignAsset;
+      lightingPreset: ImageLightingPreset;
+      importedBy: "agent-image-edit" | "inspector-image-edit";
+    }
+  | {
       action: "prompt-edit";
       source: DesignAsset;
       prompt: string;
@@ -2574,6 +2595,12 @@ async function editDesignImageAsset(
     if (input.action === "replace-background") {
       return requireImageGenerationHost().replaceBackground(
         { source, prompt: input.prompt },
+        signal,
+      );
+    }
+    if (input.action === "relight") {
+      return requireImageGenerationHost().changeLighting(
+        { source, lightingPreset: input.lightingPreset },
         signal,
       );
     }
@@ -2742,15 +2769,17 @@ async function editDesignImageAsset(
         ? "Background removed"
         : input.action === "replace-background"
           ? "Background replaced"
-          : input.action === "erase-object"
-            ? "Object erased"
-            : input.action === "isolate-object"
-              ? "Object isolated"
-              : input.action === "expand"
-                ? "Expanded"
-                : input.action === "upscale"
-                  ? "Resolution boosted"
-                  : "Edited"
+          : input.action === "relight"
+            ? "Lighting changed"
+            : input.action === "erase-object"
+              ? "Object erased"
+              : input.action === "isolate-object"
+                ? "Object isolated"
+                : input.action === "expand"
+                  ? "Expanded"
+                  : input.action === "upscale"
+                    ? "Resolution boosted"
+                    : "Edited"
     }.png`,
     bytes,
   );
@@ -2775,13 +2804,15 @@ async function editDesignImageAsset(
         ? { prompt: input.prompt.trim() }
         : input.action === "replace-background"
           ? { prompt: input.prompt.trim() }
-          : input.action === "erase-object"
-            ? { prompt: ERASE_OBJECT_PROMPT }
-            : input.action === "isolate-object"
-              ? { prompt: ISOLATE_OBJECT_PROMPT }
-              : input.action === "expand"
-                ? { prompt: EXPAND_IMAGE_PROMPT }
-                : {}),
+          : input.action === "relight"
+            ? { lightingPreset: input.lightingPreset }
+            : input.action === "erase-object"
+              ? { prompt: ERASE_OBJECT_PROMPT }
+              : input.action === "isolate-object"
+                ? { prompt: ISOLATE_OBJECT_PROMPT }
+                : input.action === "expand"
+                  ? { prompt: EXPAND_IMAGE_PROMPT }
+                  : {}),
       ...(supportingMaskAsset ? { maskAssetId: supportingMaskAsset.id } : {}),
       referenceAssetIds: references.map((reference) => reference.id),
       extensions: {

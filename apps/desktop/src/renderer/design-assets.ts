@@ -36,6 +36,7 @@ export const IMAGE_EDIT_PROGRESS_LABEL_KEYS: Record<
 > = {
   "remove-background": "properties.imageRemovingBackground",
   "replace-background": "properties.imageReplacingBackground",
+  relight: "properties.imageChangingLighting",
   "prompt-edit": "properties.imageEditingWithPrompt",
   "erase-object": "canvas.imageAreaErasing",
   "isolate-object": "canvas.imageAreaIsolating",

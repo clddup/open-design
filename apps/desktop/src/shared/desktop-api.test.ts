@@ -484,6 +484,54 @@ describe("Design image desktop API guards", () => {
     ).toBe(false);
   });
 
+  it("binds relighting to one trusted lighting preset", () => {
+    const request = {
+      requestId: "image_relight_request",
+      action: "relight",
+      pageId: "page_welcome",
+      nodeId: "hero",
+      expectedAssetId: sourceAsset.id,
+      source: sourceAsset,
+      lightingPreset: "neon",
+    };
+    expect(isDesignImageEditRequest(request)).toBe(true);
+    expect(
+      isDesignImageEditRequest({ ...request, lightingPreset: "party-mode" }),
+    ).toBe(false);
+    expect(
+      isDesignImageEditRequest({ ...request, prompt: "Make it neon" }),
+    ).toBe(false);
+
+    const resultAsset = {
+      ...sourceAsset,
+      id: `asset_${"8".repeat(64)}`,
+      name: "Hero — Lighting changed.png",
+      mimeType: "image/png",
+    };
+    const result = {
+      requestId: request.requestId,
+      action: request.action,
+      sourceAssetId: sourceAsset.id,
+      asset: resultAsset,
+      derivation: {
+        id: "image_derivation_relight",
+        sourceAssetId: sourceAsset.id,
+        resultAssetId: resultAsset.id,
+        operation: request.action,
+        lightingPreset: request.lightingPreset,
+        referenceAssetIds: [],
+        extensions: { provider: "openai-images", modelId: "gpt-image-2" },
+      },
+    };
+    expect(isDesignImageEditResult(result)).toBe(true);
+    expect(
+      isDesignImageEditResult({
+        ...result,
+        derivation: { ...result.derivation, prompt: "Make it neon" },
+      }),
+    ).toBe(false);
+  });
+
   it("accepts bounded source-normalized area edits and exact mask provenance", () => {
     const request = {
       requestId: "image_area_edit_request",

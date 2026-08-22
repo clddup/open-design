@@ -4,6 +4,7 @@ import {
   type DesignDocument,
   type ImageFilterKey,
   type ImageFilters,
+  type ImageLightingPreset,
   type ImageNode,
   type ImagePlacement,
 } from "@opendesign/design-contracts";
@@ -45,6 +46,7 @@ export function ImageSection({
   editAction,
   onRemoveBackground,
   onReplaceBackground,
+  onRelight,
   onEditWithPrompt,
   onSelectEditReference,
   onCancelEdit,
@@ -63,6 +65,7 @@ export function ImageSection({
   editAction: DesignImageEditAction | null;
   onRemoveBackground: () => void;
   onReplaceBackground: (prompt: string) => void;
+  onRelight: (lightingPreset: ImageLightingPreset) => void;
   onEditWithPrompt: (prompt: string, reference?: DesignAsset) => void;
   onSelectEditReference: () => Promise<DesignAsset | null>;
   onCancelEdit: () => void;
@@ -74,19 +77,22 @@ export function ImageSection({
 }) {
   const { t } = useI18n();
   const promptId = useId();
-  const [promptEditorMode, setPromptEditorMode] = useState<
-    "prompt-edit" | "replace-background" | null
+  const [aiEditorMode, setAiEditorMode] = useState<
+    "prompt-edit" | "replace-background" | "relight" | null
   >(null);
   const [prompt, setPrompt] = useState("");
   const [reference, setReference] = useState<DesignAsset | undefined>();
   const [selectingReference, setSelectingReference] = useState(false);
+  const [lightingPreset, setLightingPreset] =
+    useState<ImageLightingPreset>("natural-soft");
   useEffect(() => {
-    setPromptEditorMode(null);
+    setAiEditorMode(null);
     setPrompt("");
     setReference(undefined);
     setSelectingReference(false);
+    setLightingPreset("natural-soft");
   }, [node.id]);
-  const promptEditorOpen = promptEditorMode !== null;
+  const aiEditorOpen = aiEditorMode !== null;
   const placement = node.properties.placement;
   const filters = node.properties.filters ?? {};
   const sourceFamily = getImageAssetFamily(document, node.properties.assetId);
@@ -310,7 +316,7 @@ export function ImageSection({
         <div className={imageStyles.aiEditActions}>
           <Button
             aria-busy={editAction === "prompt-edit" && editStatus !== null}
-            aria-expanded={promptEditorOpen}
+            aria-expanded={aiEditorOpen}
             disabled={editStatus !== null}
             icon={
               editAction === "prompt-edit" && editStatus
@@ -318,7 +324,7 @@ export function ImageSection({
                 : "lucide:wand-sparkles"
             }
             onClick={() =>
-              setPromptEditorMode((mode) =>
+              setAiEditorMode((mode) =>
                 mode === "prompt-edit" ? null : "prompt-edit",
               )
             }
@@ -335,7 +341,7 @@ export function ImageSection({
             <DropdownMenuItem
               icon={<Icon name="lucide:scan-line" />}
               onSelect={() => {
-                setPromptEditorMode(null);
+                setAiEditorMode(null);
                 onRemoveBackground();
               }}
             >
@@ -346,15 +352,25 @@ export function ImageSection({
               onSelect={() => {
                 setPrompt("");
                 setReference(undefined);
-                setPromptEditorMode("replace-background");
+                setAiEditorMode("replace-background");
               }}
             >
               {t("properties.imageReplaceBackground")}
             </DropdownMenuItem>
             <DropdownMenuItem
+              icon={<Icon name="lucide:sun-medium" />}
+              onSelect={() => {
+                setPrompt("");
+                setReference(undefined);
+                setAiEditorMode("relight");
+              }}
+            >
+              {t("properties.imageChangeLighting")}
+            </DropdownMenuItem>
+            <DropdownMenuItem
               icon={<Icon name="lucide:maximize-2" />}
               onSelect={() => {
-                setPromptEditorMode(null);
+                setAiEditorMode(null);
                 onUpscale();
               }}
             >
@@ -362,35 +378,74 @@ export function ImageSection({
             </DropdownMenuItem>
           </DropdownMenu>
         </div>
-        {promptEditorOpen && (
-          <div className={imageStyles.promptEditor}>
-            <label htmlFor={promptId}>
-              {t(
-                promptEditorMode === "replace-background"
-                  ? "properties.imageBackgroundPrompt"
-                  : "properties.imageEditPrompt",
-              )}
-            </label>
-            <textarea
-              disabled={editStatus !== null}
-              id={promptId}
-              maxLength={32_000}
-              onChange={(event) => setPrompt(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Escape" && editStatus === null) {
-                  event.preventDefault();
-                  setPromptEditorMode(null);
-                }
-              }}
-              placeholder={t(
-                promptEditorMode === "replace-background"
-                  ? "properties.imageBackgroundPromptPlaceholder"
-                  : "properties.imageEditPromptPlaceholder",
-              )}
-              rows={3}
-              value={prompt}
-            />
-            {promptEditorMode === "prompt-edit" && (
+        {aiEditorOpen && (
+          <div
+            className={imageStyles.promptEditor}
+            onKeyDown={(event) => {
+              if (event.key === "Escape" && editStatus === null) {
+                event.preventDefault();
+                setAiEditorMode(null);
+              }
+            }}
+          >
+            {aiEditorMode === "relight" ? (
+              <label className={styles.select}>
+                <span>{t("properties.imageLightingPreset")}</span>
+                <select
+                  disabled={editStatus !== null}
+                  onChange={(event) =>
+                    setLightingPreset(event.target.value as ImageLightingPreset)
+                  }
+                  value={lightingPreset}
+                >
+                  <option value="natural-soft">
+                    {t("properties.imageLightingNaturalSoft")}
+                  </option>
+                  <option value="studio-softbox">
+                    {t("properties.imageLightingStudioSoftbox")}
+                  </option>
+                  <option value="golden-hour">
+                    {t("properties.imageLightingGoldenHour")}
+                  </option>
+                  <option value="moonlight">
+                    {t("properties.imageLightingMoonlight")}
+                  </option>
+                  <option value="neon">
+                    {t("properties.imageLightingNeon")}
+                  </option>
+                </select>
+              </label>
+            ) : (
+              <>
+                <label htmlFor={promptId}>
+                  {t(
+                    aiEditorMode === "replace-background"
+                      ? "properties.imageBackgroundPrompt"
+                      : "properties.imageEditPrompt",
+                  )}
+                </label>
+                <textarea
+                  disabled={editStatus !== null}
+                  id={promptId}
+                  maxLength={32_000}
+                  onChange={(event) => setPrompt(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape" && editStatus === null) {
+                      event.preventDefault();
+                      setAiEditorMode(null);
+                    }
+                  }}
+                  placeholder={t(
+                    aiEditorMode === "replace-background"
+                      ? "properties.imageBackgroundPromptPlaceholder"
+                      : "properties.imageEditPromptPlaceholder",
+                  )}
+                  rows={3}
+                  value={prompt}
+                />
+              </>
+            )}
+            {aiEditorMode === "prompt-edit" && (
               <div className={imageStyles.referenceRow}>
                 <span title={reference?.name}>
                   {reference?.name ?? t("properties.imageEditNoReference")}
@@ -424,6 +479,15 @@ export function ImageSection({
                 )}
               </div>
             )}
+            {editStatus && editAction && (
+              <div
+                aria-live="polite"
+                className={imageStyles.editProgress}
+                role="status"
+              >
+                <span>{t(IMAGE_EDIT_PROGRESS_LABEL_KEYS[editAction])}</span>
+              </div>
+            )}
             <div className={imageStyles.promptActions}>
               {editStatus ? (
                 <Button
@@ -436,14 +500,21 @@ export function ImageSection({
                     : t("common.cancel")}
                 </Button>
               ) : (
-                <Button onClick={() => setPromptEditorMode(null)} tone="quiet">
+                <Button onClick={() => setAiEditorMode(null)} tone="quiet">
                   {t("common.cancel")}
                 </Button>
               )}
               <Button
-                disabled={editStatus !== null || prompt.trim().length === 0}
+                disabled={
+                  editStatus !== null ||
+                  (aiEditorMode !== "relight" && prompt.trim().length === 0)
+                }
                 onClick={() => {
-                  if (promptEditorMode === "replace-background") {
+                  if (aiEditorMode === "relight") {
+                    onRelight(lightingPreset);
+                    return;
+                  }
+                  if (aiEditorMode === "replace-background") {
                     onReplaceBackground(prompt.trim());
                     return;
                   }
@@ -452,15 +523,17 @@ export function ImageSection({
                 tone="primary"
               >
                 {t(
-                  promptEditorMode === "replace-background"
+                  aiEditorMode === "replace-background"
                     ? "properties.imageApplyBackgroundReplacement"
-                    : "properties.imageApplyPromptEdit",
+                    : aiEditorMode === "relight"
+                      ? "properties.imageApplyLighting"
+                      : "properties.imageApplyPromptEdit",
                 )}
               </Button>
             </div>
           </div>
         )}
-        {editStatus && !promptEditorOpen && (
+        {editStatus && !aiEditorOpen && (
           <div className={imageStyles.editProgress}>
             <span>
               {editAction

@@ -20,10 +20,12 @@ import {
 import {
   isDesignAsset,
   isImageAssetDerivation,
+  isImageLightingPreset,
   isImagePlacement,
   isDesignDocument,
   type DesignAsset,
   type ImageAssetDerivation,
+  type ImageLightingPreset,
   type ImagePlacement,
   type Size,
   type DesignDocument,
@@ -279,6 +281,7 @@ export type DesignImageExpansion = {
 export type DesignImageEditAction =
   | "remove-background"
   | "replace-background"
+  | "relight"
   | "prompt-edit"
   | "erase-object"
   | "isolate-object"
@@ -300,6 +303,10 @@ export type DesignImageEditRequest = DesignImageEditRequestBase &
     | {
         action: "replace-background";
         prompt: string;
+      }
+    | {
+        action: "relight";
+        lightingPreset: ImageLightingPreset;
       }
     | {
         action: "prompt-edit";
@@ -760,6 +767,20 @@ export function isDesignImageEditRequest(
       ])
     );
   }
+  if (value.action === "relight") {
+    return (
+      isImageLightingPreset(value.lightingPreset) &&
+      hasExactKeys(value, [
+        "requestId",
+        "action",
+        "pageId",
+        "nodeId",
+        "expectedAssetId",
+        "source",
+        "lightingPreset",
+      ])
+    );
+  }
   return (
     value.action === "prompt-edit" &&
     typeof value.prompt === "string" &&
@@ -789,6 +810,7 @@ export function isDesignImageEditResult(
     !isStableId(value.requestId) ||
     (value.action !== "remove-background" &&
       value.action !== "replace-background" &&
+      value.action !== "relight" &&
       value.action !== "prompt-edit" &&
       value.action !== "erase-object" &&
       value.action !== "isolate-object" &&
@@ -805,6 +827,9 @@ export function isDesignImageEditResult(
   }
   const asset = value.asset;
   const derivation = value.derivation;
+  if (value.action !== "relight" && derivation.lightingPreset !== undefined) {
+    return false;
+  }
   const supportingAssets = value.supportingAssets ?? [];
   const derivationInputIds = [
     ...derivation.referenceAssetIds,
@@ -849,6 +874,16 @@ export function isDesignImageEditResult(
     value.action === "replace-background" &&
     (typeof derivation.prompt !== "string" ||
       derivation.prompt.trim().length === 0 ||
+      derivation.maskAssetId !== undefined ||
+      derivation.referenceAssetIds.length !== 0 ||
+      supportingAssets.length !== 0)
+  ) {
+    return false;
+  }
+  if (
+    value.action === "relight" &&
+    (!isImageLightingPreset(derivation.lightingPreset) ||
+      derivation.prompt !== undefined ||
       derivation.maskAssetId !== undefined ||
       derivation.referenceAssetIds.length !== 0 ||
       supportingAssets.length !== 0)

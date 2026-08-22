@@ -12,6 +12,7 @@ import type {
   Point,
 } from "@opendesign/design-contracts";
 import { MAX_TRANSACTION_COMMANDS } from "@opendesign/design-contracts";
+import { isImageLightingPreset } from "@opendesign/design-contracts";
 import {
   normalizeImageFilters,
   resolveImageExpansionRaster,
@@ -489,6 +490,16 @@ export function planImageNodeUpdate(
       ? (operation.supportingAssets ?? [])
       : [];
   if (
+    requestedDerivation.operation !== "relight" &&
+    requestedDerivation.lightingPreset !== undefined
+  ) {
+    return {
+      ok: false,
+      code: "invalid-asset",
+      message: "Only image relighting may carry a lighting preset",
+    };
+  }
+  if (
     requestedDerivation.operation === "replace-background" &&
     (typeof requestedDerivation.prompt !== "string" ||
       requestedDerivation.prompt.trim().length === 0 ||
@@ -501,6 +512,21 @@ export function planImageNodeUpdate(
       code: "invalid-asset",
       message:
         "Image background replacement requires one prompt and no mask or reference asset",
+    };
+  }
+  if (
+    requestedDerivation.operation === "relight" &&
+    (!isImageLightingPreset(requestedDerivation.lightingPreset) ||
+      requestedDerivation.prompt !== undefined ||
+      requestedDerivation.maskAssetId !== undefined ||
+      requestedDerivation.referenceAssetIds.length !== 0 ||
+      supportingAssets.length !== 0)
+  ) {
+    return {
+      ok: false,
+      code: "invalid-asset",
+      message:
+        "Image relighting requires one lighting preset and no prompt, mask, or reference asset",
     };
   }
   const supportingAssetIds = new Set(supportingAssets.map((asset) => asset.id));

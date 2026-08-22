@@ -3443,6 +3443,75 @@ describe("App", () => {
       runtime().getSnapshot().document.assetsById[backgroundResultAssetId],
     ).toBeUndefined();
 
+    const relightResultAssetId = `asset_${"7".repeat(64)}`;
+    vi.mocked(window.desktop!.editDesignImage).mockImplementationOnce(
+      (request) => {
+        if (request.action !== "relight") {
+          throw new Error("Expected a relighting request");
+        }
+        expect(request).toMatchObject({
+          action: "relight",
+          lightingPreset: "neon",
+        });
+        expect(request).not.toHaveProperty("prompt");
+        return Promise.resolve({
+          requestId: request.requestId,
+          action: request.action,
+          sourceAssetId,
+          asset: {
+            id: relightResultAssetId,
+            kind: "image",
+            name: "Portrait — Lighting changed.png",
+            mimeType: "image/png",
+            source: { type: "data", value: "cmVsaWdodA==" },
+            size: { width: 800, height: 600 },
+            extensions: { importedBy: "inspector-image-edit" },
+          },
+          derivation: {
+            id: "relight_result",
+            sourceAssetId,
+            resultAssetId: relightResultAssetId,
+            operation: "relight",
+            lightingPreset: request.lightingPreset,
+            referenceAssetIds: [],
+            extensions: { modelId: "gpt-image-2" },
+          },
+        });
+      },
+    );
+    await user.click(
+      screen.getByRole("button", { name: "More image actions" }),
+    );
+    await user.click(
+      screen.getByRole("menuitem", { name: "Change lighting…" }),
+    );
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Lighting" }),
+      "neon",
+    );
+    await user.click(screen.getByRole("button", { name: "Change lighting" }));
+    await waitFor(() =>
+      expect(
+        runtime().getSnapshot().document.nodesById.background_image,
+      ).toMatchObject({
+        transform: [1, 0, 0, 1, 100, 120],
+        size: { width: 400, height: 300 },
+        properties: {
+          assetId: relightResultAssetId,
+          placement: { mode: "fill", focalPoint: { x: 0.5, y: 0.5 } },
+          filters: { contrast: 0.2 },
+          cornerRadius: 12,
+        },
+      }),
+    );
+    expect(
+      runtime().getSnapshot().document.imageAssetDerivationsById.relight_result,
+    ).toMatchObject({ operation: "relight", lightingPreset: "neon" });
+    await user.click(screen.getByRole("button", { name: "Undo" }));
+    expect(
+      runtime().getSnapshot().document.assetsById[relightResultAssetId],
+    ).toBeUndefined();
+
     const maskAssetId = `asset_${"5".repeat(64)}`;
     const isolatedAssetId = `asset_${"6".repeat(64)}`;
     vi.mocked(window.desktop!.editDesignImage).mockImplementationOnce(

@@ -1,7 +1,7 @@
 {
   "version": 1,
   "updatedAt": "2026-08-22",
-  "documentSchemaVersion": "1.43.0",
+  "documentSchemaVersion": "1.44.0",
   "engineBaseline": "leafer-editor@2.2.9",
   "categories": [
     {
@@ -619,7 +619,7 @@
         "en": "Crop and adjust non-destructively, preserve source history, restore image variants, and replace sources without overwriting the original.",
         "zh-CN": "非破坏性裁剪与调整，保留来源历史、恢复图片变体，并在不覆盖原图的情况下替换来源。"
       },
-      "provider": "DesignDocument 1.43.0 + OpenDesign Image Service contract 7 + recoverable image derivation DAG + Leafer per-image-paint adjustment projection",
+      "provider": "DesignDocument 1.44.0 + OpenDesign Image Service contract 8 + recoverable image derivation DAG + Leafer per-image-paint adjustment projection",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
       "surfaces": {
         "contract": "available",
@@ -666,7 +666,7 @@
         "en": "Create traced variants from one or more source images using masks, inpainting, outpainting, resolution enhancement, background replacement, relighting, or style harmonization.",
         "zh-CN": "基于一张或多张源图，通过蒙版、局部重绘、扩图、分辨率提升、背景替换、重打光或风格统一生成可追溯变体。"
       },
-      "provider": "OpenDesign Image Service contract 7 + Main-owned RGBA mask/expansion raster, upscale target, and background-preservation prompt + ImageGenerationHost openai-images edit adapter + EditorRuntime recoverable derivation planner",
+      "provider": "OpenDesign Image Service contract 8 + Main-owned RGBA mask/expansion raster, upscale target, background-preservation prompt, and typed relighting presets + ImageGenerationHost openai-images edit adapter + EditorRuntime recoverable derivation planner",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
       "surfaces": {
         "contract": "available",
@@ -678,8 +678,8 @@
       },
       "limitations": [
         {
-          "en": "Embedded PNG, JPEG, and WebP Image nodes support background removal, dedicated background replacement from a new-environment description, full-image prompt editing with one optional reference, canvas-lasso Erase/Isolate, handle-based Expand, and one-click resolution boosting through the global openai-images service. Background replacement adds a host-owned foreground-preservation instruction and rejects reference or mask inputs; upscale uses a host-computed exact target near 2x and keeps node geometry unchanged. Prompted local repainting, relighting, style harmonization, Image Paint editing, multiple references, sources wider than 3:1 or already at the current embedded-result pixel budget, and native macOS/Windows product evidence remain unavailable.",
-          "zh-CN": "内嵌 PNG、JPEG 与 WebP Image 节点已可通过全局 openai-images 服务去背景、根据新环境描述独立替换背景、用提示词和一张可选参考图编辑整图、通过画布 lasso 执行 Erase/Isolate、使用手柄扩图，并一键提升分辨率。背景替换由宿主添加固定保主体指令并拒绝参考图或 mask；Upscale 使用宿主计算的约 2× 精确目标且不改变节点几何。带提示词的局部重绘、重打光、风格统一、Image Paint 编辑、多参考图、超过 3:1 或已达到当前内嵌结果像素预算的源图，以及 macOS/Windows 产品实机证据仍未完成。"
+          "en": "Embedded PNG, JPEG, and WebP Image nodes support background removal, dedicated background replacement from a new-environment description, typed relighting with five stable presets, full-image prompt editing with one optional reference, canvas-lasso Erase/Isolate, handle-based Expand, and one-click resolution boosting through the global openai-images service. Background replacement and relighting add host-owned preservation instructions and reject unsupported prompt, reference, or mask inputs; upscale uses a host-computed exact target near 2x and keeps node geometry unchanged. Prompted local repainting, style harmonization, Image Paint editing, multiple references, sources wider than 3:1 or already at the current embedded-result pixel budget, and native macOS/Windows product evidence remain unavailable.",
+          "zh-CN": "内嵌 PNG、JPEG 与 WebP Image 节点已可通过全局 openai-images 服务去背景、根据新环境描述独立替换背景、使用五个稳定 preset 重打光、用提示词和一张可选参考图编辑整图、通过画布 lasso 执行 Erase/Isolate、使用手柄扩图，并一键提升分辨率。背景替换和重打光由宿主添加固定保留指令并拒绝不受支持的 prompt、参考图或 mask；Upscale 使用宿主计算的约 2× 精确目标且不改变节点几何。带提示词的局部重绘、风格统一、Image Paint 编辑、多参考图、超过 3:1 或已达到当前内嵌结果像素预算的源图，以及 macOS/Windows 产品实机证据仍未完成。"
         }
       ],
       "evidence": {
@@ -704,6 +704,7 @@
         "docs/adr/0136-trusted-image-expansion.md",
         "docs/adr/0137-trusted-image-resolution-boost.md",
         "docs/adr/0138-trusted-image-background-replacement.md",
+        "docs/adr/0139-trusted-image-relighting.md",
         "https://developers.openai.com/api/docs/guides/image-generation",
         "https://help.figma.com/hc/en-us/articles/24004542669463-Make-or-edit-an-image-with-AI"
       ]

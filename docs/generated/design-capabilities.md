@@ -2,7 +2,7 @@
 
 # OpenDesign 专业设计能力
 
-能力清单版本：`1` · 更新日期：2026-08-22 · 文档协议：`1.43.0` · 画布基线：`leafer-editor@2.2.9`
+能力清单版本：`1` · 更新日期：2026-08-22 · 文档协议：`1.44.0` · 画布基线：`leafer-editor@2.2.9`
 
 当前状态：可用 0 项，降级可用 22 项，不可用 0 项。只有必需表面全部可用，并同时具备自动化与实机证据时，能力才允许标记为“可用”。
 
@@ -164,7 +164,7 @@
 非破坏性裁剪与调整，保留来源历史、恢复图片变体，并在不覆盖原图的情况下替换来源。
 
 - ID：`image.crop-adjustments`
-- 实现方：DesignDocument 1.43.0 + OpenDesign Image Service contract 7 + recoverable image derivation DAG + Leafer per-image-paint adjustment projection
+- 实现方：DesignDocument 1.44.0 + OpenDesign Image Service contract 8 + recoverable image derivation DAG + Leafer per-image-paint adjustment projection
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=degraded
 - 证据：自动化 12 项；实机 0 项
 - 限制：Image 节点及每项图片 Fill/Stroke 已通过同一确定性 RGBA 投影支持 Figma-compatible 调整；来源替换会记录由 Inspector、Assets、Agent、undo 与持久化共用的可恢复 typed derivation family，远端操作的当前事实由独立 AI 图片编辑能力记录。大图按需存储、standalone 跨文件 Image Paint Style asset bundle、SVG 位图嵌入、完整 Figma imageHash/transform 文件 adapter、P3/ICC 色彩管理及 macOS/Windows 原生交互证据仍未完成。
@@ -176,16 +176,17 @@
 基于一张或多张源图，通过蒙版、局部重绘、扩图、分辨率提升、背景替换、重打光或风格统一生成可追溯变体。
 
 - ID：`image.ai-editing`
-- 实现方：OpenDesign Image Service contract 7 + Main-owned RGBA mask/expansion raster, upscale target, and background-preservation prompt + ImageGenerationHost openai-images edit adapter + EditorRuntime recoverable derivation planner
+- 实现方：OpenDesign Image Service contract 8 + Main-owned RGBA mask/expansion raster, upscale target, background-preservation prompt, and typed relighting presets + ImageGenerationHost openai-images edit adapter + EditorRuntime recoverable derivation planner
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=available
 - 证据：自动化 10 项；实机 0 项
-- 限制：内嵌 PNG、JPEG 与 WebP Image 节点已可通过全局 openai-images 服务去背景、根据新环境描述独立替换背景、用提示词和一张可选参考图编辑整图、通过画布 lasso 执行 Erase/Isolate、使用手柄扩图，并一键提升分辨率。背景替换由宿主添加固定保主体指令并拒绝参考图或 mask；Upscale 使用宿主计算的约 2× 精确目标且不改变节点几何。带提示词的局部重绘、重打光、风格统一、Image Paint 编辑、多参考图、超过 3:1 或已达到当前内嵌结果像素预算的源图，以及 macOS/Windows 产品实机证据仍未完成。
+- 限制：内嵌 PNG、JPEG 与 WebP Image 节点已可通过全局 openai-images 服务去背景、根据新环境描述独立替换背景、使用五个稳定 preset 重打光、用提示词和一张可选参考图编辑整图、通过画布 lasso 执行 Erase/Isolate、使用手柄扩图，并一键提升分辨率。背景替换和重打光由宿主添加固定保留指令并拒绝不受支持的 prompt、参考图或 mask；Upscale 使用宿主计算的约 2× 精确目标且不改变节点几何。带提示词的局部重绘、风格统一、Image Paint 编辑、多参考图、超过 3:1 或已达到当前内嵌结果像素预算的源图，以及 macOS/Windows 产品实机证据仍未完成。
 - 专业参照：[官方说明](docs/adr/0133-trusted-remove-background-image-editing.md)
 - 专业参照：[官方说明](docs/adr/0134-trusted-prompt-image-editing.md)
 - 专业参照：[官方说明](docs/adr/0135-trusted-area-image-editing.md)
 - 专业参照：[官方说明](docs/adr/0136-trusted-image-expansion.md)
 - 专业参照：[官方说明](docs/adr/0137-trusted-image-resolution-boost.md)
 - 专业参照：[官方说明](docs/adr/0138-trusted-image-background-replacement.md)
+- 专业参照：[官方说明](docs/adr/0139-trusted-image-relighting.md)
 - 专业参照：[官方说明](https://developers.openai.com/api/docs/guides/image-generation)
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/24004542669463-Make-or-edit-an-image-with-AI)
 
