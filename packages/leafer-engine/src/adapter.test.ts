@@ -4768,6 +4768,164 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
+  it("does not commit a Pen draft across Page or document identity changes", async () => {
+    const onCreateVector = vi.fn<
+      (request: LeaferCreateVectorRequest) => boolean
+    >(() => true);
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onCreateVector,
+    });
+    const input = {
+      ...createInput(),
+      tool: "pen" as const,
+      selection: { nodeIds: [] },
+    };
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+    clickPenPoint(app, 10, 10);
+    clickPenPoint(app, 80, 40);
+
+    const secondPageDocument = structuredClone(input.document);
+    const sourcePage = secondPageDocument.pagesById.page_welcome;
+    if (!sourcePage) throw new Error("Missing source Page");
+    secondPageDocument.pagesById.page_second = {
+      ...structuredClone(sourcePage),
+      id: "page_second",
+      name: "Second Page",
+      rootNodeIds: [],
+    };
+    secondPageDocument.pageOrder.push("page_second");
+    const secondPageInput = {
+      ...input,
+      document: secondPageDocument,
+      pageId: "page_second",
+      tool: "select" as const,
+    };
+    adapter.sync(secondPageInput);
+    expect(onCreateVector).not.toHaveBeenCalled();
+
+    adapter.sync({ ...secondPageInput, tool: "pen" });
+    clickPenPoint(app, 20, 20);
+    clickPenPoint(app, 90, 50);
+    const replacementDocument = structuredClone(secondPageDocument);
+    replacementDocument.documentId = "document_replacement";
+    adapter.sync({
+      ...secondPageInput,
+      document: replacementDocument,
+      tool: "select",
+    });
+
+    expect(onCreateVector).not.toHaveBeenCalled();
+    adapter.dispose();
+  });
+
+  it("cancels a Pen draft when its stable parent changes", async () => {
+    const onCreateVector = vi.fn<
+      (request: LeaferCreateVectorRequest) => boolean
+    >(() => true);
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onCreateVector,
+    });
+    const input = {
+      ...createInput(),
+      tool: "pen" as const,
+      selection: { nodeIds: [] },
+    };
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+    const frame = findElement(app.tree, "frame_welcome");
+    if (!frame) throw new Error("Missing parent Frame");
+    for (const [x, y] of [
+      [10, 10],
+      [80, 40],
+    ] as const) {
+      const event = { ...boxDragEvent(x, y), target: frame };
+      app.emit("pointer.down", event);
+      app.emit("pointer.up", event);
+    }
+
+    const changedDocument = structuredClone(input.document);
+    changedDocument.revision += 1;
+    const changedFrame = changedDocument.nodesById.frame_welcome;
+    if (!changedFrame) throw new Error("Missing changed parent Frame");
+    changedFrame.transform = [1, 0, 0, 1, 40, 30];
+    adapter.sync({
+      ...input,
+      changes: changedNodeSet(
+        input.document,
+        changedDocument,
+        "frame_welcome",
+        "transform",
+      ),
+      document: changedDocument,
+    });
+    emitWindowKey("Escape");
+
+    expect(onCreateVector).not.toHaveBeenCalled();
+    adapter.dispose();
+  });
+
+  it("restores the authoritative projection when Pen creation is rejected", async () => {
+    const onCreateVector = vi.fn<
+      (request: LeaferCreateVectorRequest) => boolean
+    >(() => false);
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onCreateVector,
+    });
+    adapter.sync({
+      ...createInput(),
+      tool: "pen",
+      selection: { nodeIds: [] },
+    });
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+    const projected = findElement(app.tree, "feature_one");
+    if (!projected) throw new Error("Missing projected fixture");
+    const setCalls = projected.setCalls;
+    clickPenPoint(app, 10, 10);
+    clickPenPoint(app, 80, 40);
+
+    emitWindowKey("Escape");
+
+    expect(onCreateVector).toHaveBeenCalledTimes(1);
+    expect(projected.setCalls).toBeGreaterThan(setCalls);
+    adapter.dispose();
+  });
+
+  it("keeps Pen chrome screen-sized across zoom and cleans it on dispose", async () => {
+    const adapter = await createLeaferEngineAdapter(
+      createHost(),
+      createCallbacks(),
+    );
+    const input = {
+      ...createInput(),
+      tool: "pen" as const,
+      selection: { nodeIds: [] },
+    };
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+    const firstPreviewIndex = leaferHarness.elements.length;
+    clickPenPoint(app, 10, 10);
+    const previewGroup = leaferHarness.elements[firstPreviewIndex];
+    const anchor = leaferHarness.elements.at(-1);
+    expect(anchor?.width).toBe(7);
+
+    adapter.sync({
+      ...input,
+      viewport: { ...input.viewport, zoom: 2 },
+    });
+    expect(anchor?.width).toBe(3.5);
+
+    adapter.dispose();
+    expect(previewGroup?.destroy).toHaveBeenCalledTimes(1);
+  });
+
   it("enters vector edit with mutually exclusive chrome and commits a vertex drag once", async () => {
     const onVectorEdit = vi.fn<(request: LeaferVectorEditRequest) => boolean>(
       () => true,
