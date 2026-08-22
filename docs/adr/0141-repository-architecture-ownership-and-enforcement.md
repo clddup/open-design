@@ -97,6 +97,8 @@ MCP 只能依赖 Main 提供的稳定 resource handle、revision、`DesignReadPo
 
 步骤 8 的 EditorRuntime 阶段已完成，但整体步骤仍因后续阶段保持开放：`document-diff` 单一负责 transaction、undo/redo 和 grouped history 共用的完整 `DesignChangeSet`，`EditorHistory` 单一持有 undo/redo stack、active group、rollback 与 `HistoryState`。Page、Asset/Image Derivation、Component/Library Source、Element 与 Text mutation 各有完整 command family；Text family 独占字体可用性、普通/富文本测量、range/edit session 和 insert/update/replace 规范化，最终 `command-executor` 是 Runtime 唯一 mutation dispatcher。`EditorRuntime` 只保留权威 document、transaction/revision、provider 注入、Auto Layout 收敛、history、selection、viewport、checkpoint 与事件。Leafer、SVG 与 release inventory 仍保持开放。
 
+步骤 8 的 Leafer 阶段已开始但未完成：`ImageCropController` 现在完整持有 crop session、overlay、pointer/viewport、zoom/reset、键盘完成/取消、stale revision、commit/reject restore、状态发布与 dispose，adapter 只委托公共方法并注入当前 projection/tool。pointer event 归一化进入共享内部模块，未越过 `@opendesign/leafer-engine`。其余 interaction、reconcile、generation presentation、scheduler 和 geometry/resource lifecycle 仍留在 adapter，SVG 与 release inventory 也保持开放。
+
 ## 后果
 
 - `App.tsx` 和 Main `index.ts` 会继续收缩，但是否完成由状态和生命周期所有权决定，而不是目标行数。

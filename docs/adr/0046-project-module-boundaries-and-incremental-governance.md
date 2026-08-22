@@ -69,6 +69,8 @@ Phase 5 随 Figma-compatible Component Properties 垂直切片增加 `@opendesig
 
 Phase 7 已把 EditorRuntime 聚合模块收口为权威 transaction/revision/session coordinator：纯 `document-diff` 与 `EditorHistory` 分别拥有 change set 和 undo/redo/group state；Page、Asset/Image Derivation、Component/Library Source、Element 与 Text command family 通过唯一 `command-executor` 写入同一 draft。Text command context 独占字体检查、普通/富文本测量和 range/edit session，Element 只消费语义钩子；Auto Layout 仍由 Runtime 在整笔命令后统一收敛并通过同一 Text context 回测。公共 `EditorRuntime`/`diffDocuments` 行为保持不变，没有兼容 facade 或第二份文档状态。
 
+Phase 8 的首个 Leafer interaction owner 已落地：Image Crop 的 session、overlay、pointer/viewport、完成/取消、stale 恢复、状态发布和清理由 `ImageCropController` 单一持有；adapter 只提供 projection、element、tool、bounds refresh 和 transaction callback 端口。该切片不改变 DesignDocument 或公共 adapter 契约，也不把 crop 预览持久化。其余 Leafer owner 仍在后续切片中迁移，因此 Phase 8 保持进行中。
+
 模块治理 Phase 5 已按 ADR-0100 完成：`design-agent-tools` 只保留稳定重导出、公开工具的有序聚合和统一 validator dispatcher。Plan/Review/Checkpoint、Image、Import/Export、Hierarchy/Vector、Page/Text/Font、Component 与共享节点事务 schema 各有明确 owner；既有 Arrange、Variable、Style family 不复制 schema。聚合测试直接锁定工具顺序和 schema 对象身份，禁止在聚合入口再次手写同一契约。
 
 Phase 6 的首个切片把 Project、Conversation 与 Project Library 的 22 个 IPC channel 迁入 `project-ipc-registration`，并把 Renderer design-tool progress/resolve 的 2 个 channel 迁入 Agent host 邻近的 registration owner。Main 入口只注入 `ipcMain`、sender validator、动态 `ProjectIpcService` resolver 和唯一 `RendererDesignToolHost`；新 owner 不缓存 service 或 host 状态。sender 校验继续先于参数与 payload 校验，Project service 在每次 invoke 时解析，退出后的旧 service 不能继续使用，stale design response 继续失败关闭。该切片没有改变 shared/preload 契约、IPC 名称、参数数量、返回值或 macOS/Windows 行为。

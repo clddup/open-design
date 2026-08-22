@@ -38,15 +38,6 @@ import {
 } from "@opendesign/geometry-service/vector-edit";
 import type { VectorGeometryProvider } from "@opendesign/geometry-service/vector-path";
 import {
-  createImageCropSession,
-  imageCropSourceTransform,
-  moveImageCrop,
-  resetImageCrop,
-  resolveImagePlacement,
-  setImageCropZoom,
-  type ImageCropSession as ImageCropGeometrySession,
-} from "@opendesign/image-service";
-import {
   isRasterExportRequest,
   type RasterExportRequest,
 } from "@opendesign/import-export-service/raster";
@@ -122,7 +113,6 @@ import { EditorOverlayController } from "./editor-overlay-controller.js";
 import {
   documentTransformToLocal,
   getVisibleWorldTransform,
-  multiplyTransforms,
 } from "./scene-node-transform.js";
 import {
   pointInPolygon,
@@ -147,7 +137,6 @@ import type {
   LeaferGenerationActivity,
   LeaferGenerationReveal,
   LeaferGenerationSkeleton,
-  LeaferImageCropState,
   LeaferLayerHoverTarget,
   LeaferEngineOptions,
   LeaferEngineSyncInput,
@@ -156,6 +145,8 @@ import type {
   LeaferTextStyleUpdate,
   LeaferVectorEditTool,
 } from "./types.js";
+import { ImageCropController } from "./image-crop-controller.js";
+import { asLeaferEvent, eventClientPoint } from "./pointer-event.js";
 
 type LeaferModule = typeof LeaferEditorModule;
 type LeaferApp = InstanceType<LeaferModule["App"]>;
@@ -207,20 +198,6 @@ interface TransformSession {
   changed: boolean;
   kind: LeaferOperationKind;
   selectionNodeIds: string[];
-}
-
-interface ImageCropSession {
-  cropOutline: LeaferElement;
-  documentId: string;
-  drag: { before: ImageCropGeometrySession; startLocal: Point } | null;
-  geometry: ImageCropGeometrySession;
-  hitArea: LeaferElement;
-  imageElement: LeaferElement;
-  nodeId: string;
-  overlayGroup: LeaferGroup;
-  pageId: string;
-  revision: number;
-  sourceOutline: LeaferElement;
 }
 
 interface DrawSession {
@@ -357,8 +334,6 @@ const MAX_VIEWPORT_ZOOM = 8;
 const WHEEL_ZOOM_SPEED = 0.16;
 const VECTOR_CUT_GUIDE_COLOR = "#f248b5";
 const MAX_VECTOR_LASSO_POINTS = 4_096;
-const IMAGE_CROP_COLOR = "#4f7fff";
-const IMAGE_CROP_SOURCE_COLOR = "rgba(255, 255, 255, 0.88)";
 const LAYER_HOVER_COLOR = "#4f7fff";
 const GENERATION_REVEAL_COLOR = "#6574ff";
 const MAX_PROCESSED_GENERATION_REVEALS = 128;
@@ -396,6 +371,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   readonly #generationPresentationRoot: LeaferGroup;
   readonly #generationSkeletonLayer: LeaferGroup;
   readonly #editorOverlays: EditorOverlayController;
+  readonly #imageCropController: ImageCropController;
   readonly #textRunEditor: TextRunEditController<LeaferElement>;
   readonly #elements = new Map<string, LeaferElement>();
   readonly #loadVectorGeometryProvider: () => Promise<VectorGeometryProvider>;
@@ -410,7 +386,6 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   #boxSelect: BoxSelectSession | null = null;
   #draw: DrawSession | null = null;
   #input: LeaferEngineSyncInput | null = null;
-  #imageCrop: ImageCropSession | null = null;
   #pen: PenSession | null = null;
   #projection: LeaferSceneProjection | null = null;
   #synchronizing = false;
@@ -582,6 +557,31 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         (element as LeaferElement & { text: string }).text = content;
       },
     });
+    this.#imageCropController = new ImageCropController({
+      applySpecData: (element, spec) =>
+        this.#applyElementSpecData(element, spec),
+      current: () => ({
+        baseProjection: this.#baseProjection,
+        disposed: this.#disposed,
+        input: this.#input,
+        projection: this.#projection,
+      }),
+      element: (nodeId) => this.#elements.get(nodeId),
+      finishNodePresentation: (nodeId) => {
+        this.#finishGenerationRevealNode(nodeId);
+        this.#finishGenerationTweenNode(nodeId, true);
+      },
+      leafer,
+      onCommit: (request) =>
+        this.#callbacks.onImageCropCommit?.(request) === true,
+      onStateChange: (state) => this.#callbacks.onImageCropStateChange?.(state),
+      presentationRoot: this.#generationPresentationRoot,
+      report: (error) => this.#report(error),
+      scheduleBounds: (nodeId) =>
+        this.#scheduleEditorRefresh({ nodeBounds: new Set([nodeId]) }),
+      syncTool: (tool) => this.#syncTool(tool),
+      viewportRoot: this.#app.tree as unknown as LeaferGroup,
+    });
     this.#generationActivityLayer = new leafer.Group({
       editable: false,
       hitChildren: false,
@@ -665,18 +665,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       !previous ||
       previous.document.documentId !== input.document.documentId ||
       previous.pageId !== input.pageId;
-    const activeCrop = this.#imageCrop;
-    if (
-      activeCrop &&
-      (activeCrop.documentId !== input.document.documentId ||
-        activeCrop.pageId !== input.pageId ||
-        activeCrop.revision !== input.document.revision ||
-        input.tool !== "select" ||
-        input.selection.nodeIds.length !== 1 ||
-        input.selection.nodeIds[0] !== activeCrop.nodeId)
-    ) {
-      this.#clearImageCrop(true, true);
-    }
+    this.#imageCropController.syncInput(input);
     if (
       !sameStringList(
         previous?.vectorEditScope?.nodes.map((node) => node.nodeId) ?? [],
@@ -970,7 +959,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     this.#cancelDraw();
     this.#cancelPen();
     this.#cancelVectorEdit();
-    this.#clearImageCrop(false, false);
+    this.#imageCropController.dispose();
     this.finishGenerationPresentation();
     if (this.#viewportFrame !== null) cancelAnimationFrame(this.#viewportFrame);
     if (this.#editorFrame !== null) cancelAnimationFrame(this.#editorFrame);
@@ -1012,153 +1001,23 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   }
 
   startImageCrop(nodeId: string): boolean {
-    if (this.#disposed) return false;
-    if (this.#imageCrop?.nodeId === nodeId) return true;
-    if (this.#imageCrop) this.#clearImageCrop(true, true);
-    const input = this.#input;
-    const node = input?.document.nodesById[nodeId];
-    const asset =
-      node?.kind === "image"
-        ? input?.document.assetsById[node.properties.assetId]
-        : undefined;
-    const imageElement = this.#elements.get(nodeId);
-    const spec = this.#projection?.elementsById.get(nodeId);
-    if (
-      !input ||
-      input.tool !== "select" ||
-      input.selection.nodeIds.length !== 1 ||
-      input.selection.nodeIds[0] !== nodeId ||
-      !node ||
-      node.kind !== "image" ||
-      !asset ||
-      asset.kind !== "image" ||
-      !asset.size ||
-      !imageElement ||
-      !spec ||
-      spec.kind !== "image" ||
-      isLockedSpec(spec)
-    ) {
-      return false;
-    }
-    let geometry: ImageCropGeometrySession;
-    try {
-      geometry = createImageCropSession({
-        placement: node.properties.placement,
-        sourceSize: asset.size,
-        targetSize: node.size,
-      });
-    } catch (error) {
-      this.#report(error);
-      return false;
-    }
-    const overlayGroup = new this.#leafer.Group({
-      editable: false,
-      hittable: false,
-      visible: true,
-    }) as LeaferGroup;
-    const sourceOutline = new this.#leafer.Rect({
-      dashPattern: [6, 4],
-      editable: false,
-      fill: "rgba(0, 0, 0, 0)",
-      height: asset.size.height,
-      hittable: false,
-      stroke: IMAGE_CROP_SOURCE_COLOR,
-      strokeAlign: "inside",
-      width: asset.size.width,
-    }) as LeaferElement;
-    const cropOutline = new this.#leafer.Rect({
-      editable: false,
-      fill: "rgba(0, 0, 0, 0)",
-      height: node.size.height,
-      hittable: false,
-      stroke: IMAGE_CROP_COLOR,
-      strokeAlign: "inside",
-      width: node.size.width,
-    }) as LeaferElement;
-    const hitArea = new this.#leafer.Rect({
-      cursor: "move",
-      editable: false,
-      fill: "rgba(79, 127, 255, 0.001)",
-      height: node.size.height,
-      hittable: true,
-      id: imageCropHitAreaId(nodeId),
-      width: node.size.width,
-    }) as LeaferElement;
-    overlayGroup.add(sourceOutline);
-    overlayGroup.add(cropOutline);
-    overlayGroup.add(hitArea);
-    this.#generationPresentationRoot.add(overlayGroup);
-    this.#imageCrop = {
-      cropOutline,
-      documentId: input.document.documentId,
-      drag: null,
-      geometry,
-      hitArea,
-      imageElement,
-      nodeId,
-      overlayGroup,
-      pageId: input.pageId,
-      revision: input.document.revision,
-      sourceOutline,
-    };
-    this.#finishGenerationRevealNode(nodeId);
-    this.#finishGenerationTweenNode(nodeId, true);
-    this.#syncTool(input.tool);
-    this.#applyImageCropPreview();
-    this.#syncImageCropOverlayViewport();
-    this.#publishImageCropState();
-    return true;
+    return this.#imageCropController.start(nodeId);
   }
 
   updateImageCropZoom(zoom: number): boolean {
-    const session = this.#imageCrop;
-    if (!session || session.drag || this.#disposed) return false;
-    try {
-      session.geometry = setImageCropZoom(session.geometry, zoom);
-      this.#applyImageCropPreview();
-      this.#publishImageCropState();
-      return true;
-    } catch (error) {
-      this.#report(error);
-      return false;
-    }
+    return this.#imageCropController.updateZoom(zoom);
   }
 
   resetImageCrop(): boolean {
-    const session = this.#imageCrop;
-    if (!session || session.drag || this.#disposed) return false;
-    session.geometry = resetImageCrop(session.geometry);
-    this.#applyImageCropPreview();
-    this.#publishImageCropState();
-    return true;
+    return this.#imageCropController.reset();
   }
 
   finishImageCrop(): boolean {
-    const session = this.#imageCrop;
-    if (!session || this.#disposed) return false;
-    if (session.drag) {
-      session.geometry = session.drag.before;
-      session.drag = null;
-      this.#applyImageCropPreview();
-    }
-    const placement = structuredClone(session.geometry.current);
-    if (sameStructuredValue(placement, session.geometry.original)) {
-      this.#clearImageCrop(true, true);
-      return true;
-    }
-    const accepted =
-      this.#callbacks.onImageCropCommit?.({
-        nodeId: session.nodeId,
-        placement,
-      }) === true;
-    this.#clearImageCrop(!accepted, true);
-    return accepted;
+    return this.#imageCropController.finish();
   }
 
   cancelImageCrop(): boolean {
-    if (!this.#imageCrop) return false;
-    this.#clearImageCrop(true, true);
-    return true;
+    return this.#imageCropController.cancel();
   }
 
   #finishGenerationReveal(): void {
@@ -1262,158 +1121,6 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     return true;
   }
 
-  #publishImageCropState(): void {
-    const session = this.#imageCrop;
-    const state: LeaferImageCropState | null = session
-      ? {
-          nodeId: session.nodeId,
-          placement: structuredClone(session.geometry.current),
-        }
-      : null;
-    this.#callbacks.onImageCropStateChange?.(state);
-  }
-
-  #applyImageCropPreview(): void {
-    const session = this.#imageCrop;
-    const spec = session
-      ? this.#baseProjection?.elementsById.get(session.nodeId)
-      : undefined;
-    if (!session || !spec) return;
-    const resolved = resolveImagePlacement({
-      placement: session.geometry.current,
-      sourceSize: session.geometry.sourceSize,
-      targetSize: session.geometry.targetSize,
-    });
-    const fill = spec.data.fill;
-    if (
-      resolved.mode !== "clip" ||
-      typeof fill !== "object" ||
-      fill === null ||
-      (fill as { type?: unknown }).type !== "image"
-    ) {
-      return;
-    }
-    setLeaferElementData(session.imageElement, {
-      fill: {
-        ...(fill as Record<string, unknown>),
-        mode: "clip",
-        offset: resolved.offset,
-        rotation: resolved.rotation,
-        scale: resolved.scale,
-      },
-    });
-    session.sourceOutline.setTransform(
-      transformToAffine(imageCropSourceTransform(session.geometry)),
-    );
-  }
-
-  #syncImageCropOverlayViewport(): void {
-    const session = this.#imageCrop;
-    const input = this.#input;
-    if (!session || !input) return;
-    const world = getVisibleWorldTransform(
-      input.document.nodesById,
-      session.nodeId,
-    );
-    if (!world) {
-      session.overlayGroup.visible = false;
-      return;
-    }
-    const viewport = this.#app.tree.localTransform;
-    const desired = transformToAffine(
-      multiplyTransforms(
-        [
-          viewport.a,
-          viewport.b,
-          viewport.c,
-          viewport.d,
-          viewport.e,
-          viewport.f,
-        ],
-        world,
-      ),
-    );
-    const relative = matrixRelativeToParent(
-      this.#generationPresentationRoot.localTransform,
-      desired,
-      MATRIX_EPSILON,
-    );
-    if (!relative) {
-      session.overlayGroup.visible = false;
-      return;
-    }
-    session.overlayGroup.setTransform(relative);
-    session.overlayGroup.visible = true;
-    const zoom = Math.max(MATRIX_EPSILON, Math.abs(viewport.a || 1));
-    session.cropOutline.set({ strokeWidth: 1.5 / zoom });
-    session.sourceOutline.set({ strokeWidth: 1 / zoom });
-  }
-
-  #clearImageCrop(restore: boolean, publish: boolean): void {
-    const session = this.#imageCrop;
-    if (!session) return;
-    this.#imageCrop = null;
-    session.overlayGroup.remove();
-    session.overlayGroup.destroy();
-    if (restore) {
-      const spec = this.#baseProjection?.elementsById.get(session.nodeId);
-      if (spec) this.#applyElementSpecData(session.imageElement, spec);
-    }
-    this.#syncTool(this.#input?.tool ?? "select");
-    this.#scheduleEditorRefresh({ nodeBounds: new Set([session.nodeId]) });
-    if (publish) this.#callbacks.onImageCropStateChange?.(null);
-  }
-
-  #imageCropPointerDown(event: unknown): void {
-    const session = this.#imageCrop;
-    if (!session || session.drag || this.#disposed) return;
-    const pointer = asLeaferEvent(event);
-    if (pointer.isCancel || pointer.right || pointer.middle) return;
-    if (pointer.target !== session.hitArea) {
-      this.finishImageCrop();
-      return;
-    }
-    session.drag = {
-      before: structuredClone(session.geometry),
-      startLocal: pointer.getInnerPoint(session.overlayGroup),
-    };
-  }
-
-  #imageCropPointerMove(event: unknown): void {
-    const session = this.#imageCrop;
-    const drag = session?.drag;
-    if (!session || !drag || this.#disposed) return;
-    const pointer = asLeaferEvent(event);
-    if (pointer.isCancel) return;
-    const local = pointer.getInnerPoint(session.overlayGroup);
-    try {
-      session.geometry = moveImageCrop(drag.before, {
-        x: local.x - drag.startLocal.x,
-        y: local.y - drag.startLocal.y,
-      });
-      this.#applyImageCropPreview();
-      this.#publishImageCropState();
-    } catch (error) {
-      this.#report(error);
-    }
-  }
-
-  #imageCropPointerUp(event: unknown): void {
-    const session = this.#imageCrop;
-    const drag = session?.drag;
-    if (!session || !drag) return;
-    const pointer = asLeaferEvent(event);
-    if (pointer.isCancel) {
-      session.geometry = drag.before;
-      session.drag = null;
-      this.#applyImageCropPreview();
-      this.#publishImageCropState();
-      return;
-    }
-    this.#imageCropPointerMove(event);
-    session.drag = null;
-  }
-
   #listen(): void {
     const {
       DragEvent,
@@ -1485,19 +1192,19 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     });
     this.#app.on(PointerEvent.DOWN, (event: unknown) => {
       if (this.#editorOverlays.gridPointerDown(asLeaferEvent(event))) return;
-      this.#imageCropPointerDown(event);
+      this.#imageCropController.pointerDown(event);
       this.#penPointerDown(event);
       this.#vectorEditPointerDown(event);
     });
     this.#app.on(PointerEvent.MOVE, (event: unknown) => {
       if (this.#editorOverlays.gridPointerMove(asLeaferEvent(event))) return;
-      this.#imageCropPointerMove(event);
+      this.#imageCropController.pointerMove(event);
       this.#penPointerMove(event);
       this.#vectorEditPointerMove(event);
     });
     this.#app.on(PointerEvent.UP, (event: unknown) => {
       if (this.#editorOverlays.gridPointerUp(asLeaferEvent(event))) return;
-      this.#imageCropPointerUp(event);
+      this.#imageCropController.pointerUp(event);
       this.#penPointerUp(event);
       this.#vectorEditPointerUp(event);
     });
@@ -1507,7 +1214,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       this.#scheduleEditorRefresh();
       this.#renderVectorEditOverlays();
       this.#editorOverlays.syncViewport();
-      this.#syncImageCropOverlayViewport();
+      this.#imageCropController.syncViewport();
       this.#syncGenerationSkeletonViewport();
       this.#syncGenerationActivityViewport();
       this.#scheduleGenerationViewportSync();
@@ -1528,7 +1235,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     // expressed it relative to the sky's settled transform.
     this.#app.on(RenderEvent.CHILD_START, () => {
       this.#editorOverlays.syncViewport();
-      this.#syncImageCropOverlayViewport();
+      this.#imageCropController.syncViewport();
       this.#syncGenerationSkeletonViewport();
       this.#syncGenerationActivityViewport();
     });
@@ -1876,7 +1583,9 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     const mode = drawing ? "draw" : "normal";
     if (this.#app.mode !== mode) this.#app.mode = mode;
     const showEditor =
-      !drawing && !this.#input?.vectorEditScope && !this.#imageCrop;
+      !drawing &&
+      !this.#input?.vectorEditScope &&
+      !this.#imageCropController.active;
     if (this.#editor.visible !== showEditor) this.#editor.visible = showEditor;
     if (this.#editor.hittable !== showEditor)
       this.#editor.hittable = showEditor;
@@ -1942,7 +1651,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     const show =
       input?.tool === "select" &&
       !input.vectorEditScope &&
-      !this.#imageCrop &&
+      !this.#imageCropController.active &&
       element !== undefined &&
       visible &&
       !this.#editor.list.includes(element);
@@ -5150,8 +4859,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       this.#syncSelection(this.#input.selection);
       this.#textRunEditor.syncPresentation();
       this.#syncVectorEdit();
-      this.#applyImageCropPreview();
-      this.#syncImageCropOverlayViewport();
+      this.#imageCropController.restoreProjection();
     } finally {
       this.#synchronizing = false;
     }
@@ -5226,7 +4934,10 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       this.#editorOverlays.cancelGridDrag();
       return;
     }
-    if (this.#imageCrop && !isKeyboardInputTarget(event.target)) {
+    if (
+      this.#imageCropController.active &&
+      !isKeyboardInputTarget(event.target)
+    ) {
       if (event.code === "Escape" || event.code === "Enter") {
         event.preventDefault();
         event.stopImmediatePropagation();
@@ -6074,57 +5785,13 @@ function sameNumberList(
   );
 }
 
-interface LeaferEventLike {
-  altKey: boolean;
-  clientX: number;
-  clientY: number;
-  ctrlKey?: boolean;
-  getInnerPoint(relative: unknown): { x: number; y: number };
-  isCancel?: boolean;
-  middle?: boolean;
-  metaKey?: boolean;
-  right?: boolean;
-  shiftKey: boolean;
-  target: unknown;
-  x?: number;
-  y?: number;
-}
-
-function asLeaferEvent(value: unknown): LeaferEventLike {
-  return value as LeaferEventLike;
-}
-
-function eventClientPoint(event: LeaferEventLike): Point {
-  return {
-    x: Number.isFinite(event.clientX) ? event.clientX : (event.x ?? 0),
-    y: Number.isFinite(event.clientY) ? event.clientY : (event.y ?? 0),
-  };
-}
-
 function pointDistance(left: Point, right: Point): number {
   return Math.hypot(left.x - right.x, left.y - right.y);
-}
-
-function imageCropHitAreaId(nodeId: string): string {
-  return `__opendesign_image_crop_hit__:${nodeId}`;
-}
-
-function sameStructuredValue(left: unknown, right: unknown): boolean {
-  return JSON.stringify(left) === JSON.stringify(right);
 }
 
 function isStringArray(value: unknown): value is string[] {
   return (
     Array.isArray(value) && value.every((item) => typeof item === "string")
-  );
-}
-
-function setLeaferElementData(
-  element: LeaferElement,
-  data: Record<string, unknown>,
-): void {
-  (element as unknown as { set(value: Record<string, unknown>): void }).set(
-    data,
   );
 }
 
