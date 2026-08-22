@@ -1,23 +1,176 @@
-import { describe, expect, it } from "vitest";
-import { ApplicationLifecycle } from "./application-lifecycle";
+import { describe, expect, it, vi } from "vitest";
+import {
+  ApplicationLifecycle,
+  type ApplicationLifecycleOptions,
+  type ApplicationShutdownResources,
+} from "./application-lifecycle.js";
 
 describe("ApplicationLifecycle", () => {
   it("keeps macOS alive after an ordinary last-window close", () => {
-    const lifecycle = new ApplicationLifecycle();
+    const fixture = setup("darwin");
 
-    expect(lifecycle.shouldQuitAfterLastWindow("darwin")).toBe(false);
+    fixture.lifecycle.handleWindowAllClosed();
+
+    expect(fixture.quit).not.toHaveBeenCalled();
   });
 
   it("quits after the last window closes on Windows", () => {
-    const lifecycle = new ApplicationLifecycle();
+    const fixture = setup("win32");
 
-    expect(lifecycle.shouldQuitAfterLastWindow("win32")).toBe(true);
+    fixture.lifecycle.handleWindowAllClosed();
+
+    expect(fixture.quit).toHaveBeenCalledOnce();
   });
 
   it("resumes a requested macOS application quit after Renderer autosave", () => {
-    const lifecycle = new ApplicationLifecycle();
-    lifecycle.markQuitRequested();
+    const fixture = setup("darwin");
+    fixture.lifecycle.handleBeforeQuit();
 
-    expect(lifecycle.shouldQuitAfterLastWindow("darwin")).toBe(true);
+    fixture.lifecycle.handleWindowAllClosed();
+
+    expect(fixture.quit).toHaveBeenCalledOnce();
+  });
+
+  it("holds will-quit until ordered teardown and diagnostic flush complete", async () => {
+    const order: string[] = [];
+    let finishFlush!: () => void;
+    const flush = new Promise<void>((resolve) => {
+      finishFlush = resolve;
+    });
+    const fixture = setup("win32", {
+      abortActiveWork: () => {
+        order.push("abort");
+      },
+      stopAgent: () => {
+        order.push("stop-agent");
+      },
+      detachAgentHandlers: () => {
+        order.push("detach-agent");
+      },
+      rejectRendererTools: () => {
+        order.push("reject-tools");
+      },
+      closeWorkspace: () => {
+        order.push("close-workspace");
+      },
+      clearCorrelations: () => {
+        order.push("clear-correlations");
+      },
+      flushDiagnostics: async () => {
+        order.push("flush-start");
+        await flush;
+        order.push("flush-end");
+      },
+      clearServices: () => {
+        order.push("clear-services");
+      },
+    });
+    const event = { preventDefault: vi.fn() };
+
+    const shuttingDown = fixture.lifecycle.handleWillQuit(event);
+    await vi.waitFor(() => expect(order).toContain("flush-start"));
+    expect(event.preventDefault).toHaveBeenCalledOnce();
+    expect(fixture.exit).not.toHaveBeenCalled();
+    expect(order).toEqual([
+      "abort",
+      "stop-agent",
+      "detach-agent",
+      "reject-tools",
+      "close-workspace",
+      "clear-correlations",
+      "flush-start",
+    ]);
+
+    finishFlush();
+    await shuttingDown;
+    expect(order).toEqual([
+      "abort",
+      "stop-agent",
+      "detach-agent",
+      "reject-tools",
+      "close-workspace",
+      "clear-correlations",
+      "flush-start",
+      "flush-end",
+      "clear-services",
+    ]);
+    expect(fixture.exit).toHaveBeenCalledWith(0);
+  });
+
+  it("runs teardown and exits exactly once across repeated will-quit events", async () => {
+    const fixture = setup("darwin");
+    const first = { preventDefault: vi.fn() };
+    const second = { preventDefault: vi.fn() };
+
+    await Promise.all([
+      fixture.lifecycle.handleWillQuit(first),
+      fixture.lifecycle.handleWillQuit(second),
+    ]);
+
+    expect(first.preventDefault).toHaveBeenCalledOnce();
+    expect(second.preventDefault).toHaveBeenCalledOnce();
+    for (const step of Object.values(fixture.resources)) {
+      expect(step).toHaveBeenCalledOnce();
+    }
+    expect(fixture.exit).toHaveBeenCalledOnce();
+  });
+
+  it("continues remaining teardown steps when one resource fails", async () => {
+    const fixture = setup("win32", {
+      stopAgent: () => {
+        throw new Error("Agent stop failed");
+      },
+      flushDiagnostics: () => {
+        throw new Error("Diagnostic flush failed");
+      },
+    });
+
+    await fixture.lifecycle.handleWillQuit({ preventDefault: vi.fn() });
+
+    expect(fixture.resources.clearServices).toHaveBeenCalledOnce();
+    expect(fixture.reportShutdownError).toHaveBeenCalledOnce();
+    const error = fixture.reportShutdownError.mock.calls[0]?.[0];
+    expect(error).toBeInstanceOf(AggregateError);
+    expect((error as AggregateError).errors).toHaveLength(2);
+    expect(fixture.exit).toHaveBeenCalledWith(0);
   });
 });
+
+function setup(
+  platform: NodeJS.Platform,
+  overrides: Partial<ApplicationShutdownResources> = {},
+) {
+  const resources = {
+    abortActiveWork: vi.fn(overrides.abortActiveWork ?? (() => undefined)),
+    clearCorrelations: vi.fn(overrides.clearCorrelations ?? (() => undefined)),
+    clearServices: vi.fn(overrides.clearServices ?? (() => undefined)),
+    closeWorkspace: vi.fn(overrides.closeWorkspace ?? (() => undefined)),
+    detachAgentHandlers: vi.fn(
+      overrides.detachAgentHandlers ?? (() => undefined),
+    ),
+    flushDiagnostics: vi.fn(
+      overrides.flushDiagnostics ?? (() => Promise.resolve()),
+    ),
+    rejectRendererTools: vi.fn(
+      overrides.rejectRendererTools ?? (() => undefined),
+    ),
+    stopAgent: vi.fn(overrides.stopAgent ?? (() => undefined)),
+  } satisfies ApplicationShutdownResources;
+  const exit = vi.fn();
+  const quit = vi.fn();
+  const reportShutdownError = vi.fn<(error: unknown) => void>();
+  const options: ApplicationLifecycleOptions = {
+    exit,
+    platform,
+    quit,
+    reportShutdownError,
+    resources,
+  };
+  return {
+    exit,
+    lifecycle: new ApplicationLifecycle(options),
+    quit,
+    reportShutdownError,
+    resources,
+  };
+}

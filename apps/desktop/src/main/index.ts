@@ -183,7 +183,6 @@ import {
   materialTargetRefsForComponentTool,
 } from "./agent/component-tool-policy";
 
-const applicationLifecycle = new ApplicationLifecycle();
 const designGenerationPerformance = new DesignGenerationPerformanceTracker();
 const agentContinuationScheduler = new AgentContinuationScheduler();
 app.setName("OpenDesign");
@@ -247,6 +246,57 @@ let diagnosticLog: DiagnosticLog | null = null;
 const pendingDiagnosticEvents: DiagnosticEvent[] = [];
 const conversationIdByRunId = new Map<string, string>();
 const conversationIdByRequestId = new Map<string, string>();
+const applicationLifecycle = new ApplicationLifecycle({
+  exit: (code) => app.exit(code),
+  platform: process.platform,
+  quit: () => app.quit(),
+  reportShutdownError: (error) => {
+    console.error(
+      `Application shutdown failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  },
+  resources: {
+    abortActiveWork: () => {
+      for (const controller of designImageEditControllers.values()) {
+        controller.abort(
+          new DOMException("OpenDesign is shutting down", "AbortError"),
+        );
+      }
+      designImageEditControllers.clear();
+    },
+    stopAgent: () => agentHost.stop(),
+    detachAgentHandlers: () => {
+      agentHost.setModelRequestHandler(null);
+      agentHost.setDesignToolRequestHandler(null);
+    },
+    rejectRendererTools: () =>
+      rendererDesignToolHost.rejectAll("OpenDesign is shutting down"),
+    closeWorkspace: () => workspaceStore?.close(),
+    clearCorrelations: () => {
+      conversationIdByRunId.clear();
+      conversationIdByRequestId.clear();
+      pendingDiagnosticEvents.length = 0;
+    },
+    flushDiagnostics: () => diagnosticLog?.flush(),
+    clearServices: () => {
+      projectIpc = null;
+      globalTaskCoordinator = null;
+      projectHost = null;
+      modelProviderHost = null;
+      imageGenerationHost = null;
+      agentAttachmentHost = null;
+      agentReferenceHost = null;
+      agentSvgExportHost = null;
+      agentRasterExportHost = null;
+      agentSvgImportHost = null;
+      svgFileService = null;
+      rasterFileService = null;
+      workspaceStore = null;
+      diagnosticLog = null;
+      activeDesignFilePath = null;
+    },
+  },
+});
 
 function publishDiagnostic(input: DiagnosticInput): void {
   const event = diagnosticLog?.record(input);
@@ -2701,40 +2751,13 @@ function nativeImageHasTransparentPixels(bitmap: Buffer): boolean {
 }
 
 app.on("before-quit", () => {
-  applicationLifecycle.markQuitRequested();
+  applicationLifecycle.handleBeforeQuit();
 });
 
-app.on("will-quit", () => {
-  for (const controller of designImageEditControllers.values()) {
-    controller.abort(
-      new DOMException("OpenDesign is shutting down", "AbortError"),
-    );
-  }
-  designImageEditControllers.clear();
-  agentHost.stop();
-  projectIpc = null;
-  globalTaskCoordinator = null;
-  projectHost = null;
-  modelProviderHost = null;
-  imageGenerationHost = null;
-  agentAttachmentHost = null;
-  agentReferenceHost = null;
-  agentSvgExportHost = null;
-  agentRasterExportHost = null;
-  agentSvgImportHost = null;
-  svgFileService = null;
-  rasterFileService = null;
-  agentHost.setModelRequestHandler(null);
-  agentHost.setDesignToolRequestHandler(null);
-  rendererDesignToolHost.rejectAll("OpenDesign is shutting down");
-  workspaceStore?.close();
-  workspaceStore = null;
-  conversationIdByRunId.clear();
-  conversationIdByRequestId.clear();
+app.on("will-quit", (event) => {
+  void applicationLifecycle.handleWillQuit(event);
 });
 
 app.on("window-all-closed", () => {
-  if (applicationLifecycle.shouldQuitAfterLastWindow(process.platform)) {
-    app.quit();
-  }
+  applicationLifecycle.handleWindowAllClosed();
 });
