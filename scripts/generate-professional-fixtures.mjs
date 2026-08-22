@@ -5,7 +5,6 @@ import { fileURLToPath } from "node:url";
 import { format } from "prettier";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const checkOnly = process.argv.includes("--check");
 const generatorPath = "scripts/generate-professional-fixtures.mjs";
 const fixtureRoot = "fixtures/professional";
 const fixtureVersion = 1;
@@ -117,29 +116,13 @@ const manifest = {
 };
 outputs.set(`${fixtureRoot}/manifest.json`, await json(manifest));
 
-const drift = [];
 for (const [relativePath, expected] of outputs) {
   const absolutePath = join(root, relativePath);
-  if (checkOnly) {
-    const actual = await readFile(absolutePath, "utf8").catch(() => null);
-    if (actual !== expected) drift.push(relativePath);
-    continue;
-  }
   await mkdir(dirname(absolutePath), { recursive: true });
   await writeFile(absolutePath, expected, "utf8");
 }
 
-if (checkOnly && drift.length > 0) {
-  throw new Error(
-    `Professional fixture drift detected. Run pnpm fixtures:generate: ${drift.join(", ")}`,
-  );
-}
-
-console.log(
-  checkOnly
-    ? `Professional fixtures are current (${outputs.size} generated files).`
-    : `Generated ${outputs.size} professional fixture files.`,
-);
+console.log(`Generated ${outputs.size} professional fixture files.`);
 
 function buildPenguinFixture({ promptSha256 }) {
   const pageId = "page_penguin_01";

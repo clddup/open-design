@@ -171,7 +171,7 @@ Renderer 不直接接触 Node.js、Electron、模型密钥或引擎私有 API。
 
 生产代码采用有向无环依赖：版本化 Contracts 位于底层；Geometry、Text、Image、Component 和 Import/Export 等纯 service 依赖 Contracts；EditorRuntime 组合 Contracts/service 并保持唯一权威状态；Leafer adapter 只建立当前 revision 的投影；Main、Preload、Agent 和 Renderer 通过可校验 shared bridge 隔离；Renderer feature 最后组合 Runtime、adapter 和窄宿主能力。Renderer、Shared 与 Contracts 均不能反向取得 Electron/Node/Main 实现或渲染后端私有对象。
 
-当前 `pnpm architecture:check` 冻结 workspace 生产依赖 DAG、循环和 Electron 目录边界。默认/逐文件行数预算已按 ADR-0086 退休：它不能判断职责耦合，并曾在真实 lint/typecheck/test/package 前反复产生需要机械更新基线的噪声失败。模块治理单元继续是包含状态、异步生命周期、错误恢复和测试的业务垂直切片。首个切片已将 Renderer SVG/位图导入导出工作流与诊断工具从 `App.tsx` 提取；其他大模块仍在后续阶段，不能描述为治理完成。完整裁决和顺序见 [ADR-0046](adr/0046-project-module-boundaries-and-incremental-governance.md) 与 [ADR-0086](adr/0086-retire-source-line-budget-gate.md)。
+当前 `pnpm architecture:check` 冻结 workspace 生产依赖 DAG、循环和 Electron 目录边界。默认/逐文件行数预算已按 ADR-0086 退休：它不能判断职责耦合，并曾在真实 lint/typecheck/test/package 前反复产生需要机械更新基线的噪声失败。内容 hash、生成文档漂移和固定 fixture 文件对齐也已从普通 `verify` 退休；真实行为由类型、测试、build 和按需实机 smoke 分层验证。模块治理单元继续是包含状态、异步生命周期、错误恢复和测试的业务垂直切片。Renderer 现由唯一 `AppNavigator` 原子提交 destination 与稳定资源 ID，并以 transition epoch 拒绝迟到的 Project/Conversation 打开结果；资源缺失不再误入 Editor。活动资源 React 镜像、Editor destination 生命周期、Main Supervisor、Tool Runtime 和源码依赖门禁仍在后续阶段，不能描述为治理完成。完整裁决和顺序见 [ADR-0046](adr/0046-project-module-boundaries-and-incremental-governance.md)、[ADR-0086](adr/0086-retire-source-line-budget-gate.md) 与 [ADR-0141](adr/0141-repository-architecture-ownership-and-enforcement.md)。
 
 ## 7. Electron 进程模型
 
@@ -253,7 +253,7 @@ Agent composer 在每个 Conversation 中只选择 `Provider/Model` 与模型支
 
 Conversation 的原始 append-only journal 与模型上下文投影分离。Agent Runtime 在完整 run 边界把旧事件写成累计 `context.compacted` checkpoint，并在同一 Run 的每个 Provider turn 前重新预算；较早的 assistant/tool 段在超限时进入临时有界 checkpoint，当前用户原文和最近完整 tool call/result 段继续保留。checkpoint 只含有界消息摘录、附件元数据、工具统计和最新 design revision，原始 Timeline 与工具审计不删除。模型投影会同时限制超长单字段和大量短字段组成的超大结构化工具结果，原始 journal 仍保存完整审计。Main 注入所选 Model Profile 的 `contextWindow/maxOutputTokens`，Agent 对文字、图片、文档、工具 schema 和输出预留做保守 token 估算；有可信模型窗口时 token 预算是唯一硬门禁，本地字符限制只用于缺少模型窗口元数据的保底路径。固定协议装不下返回 `model_context_incompatible`，最小必要上下文仍过大才返回 `context_budget_exceeded`；两类错误按 system、tool schemas、Conversation/tool results 和请求 framing 提供估算分账。Run 级防失控限制另外使用 turn、tool-call 与实际 Provider output 预算；重复 input 只受每轮窗口约束，不会在工具往返时反复累计并把未完成 delivery 提前终止。模型可见设计工具使用紧凑跨 Provider Schema，所有工具输入仍由完整运行时 Schema 重新验证。服务端模型元数据探测、精确 tokenizer/image 预算、可替换语义 compactor 与上游超限单次恢复仍未完成，详见 [ADR-0016](adr/0016-durable-agent-context-compaction.md) 与 [ADR-0017](adr/0017-model-token-budget-authority.md)。
 
-专业设计回归使用 `fixtures/professional/manifest.json` 作为样张证据索引。每个样张分别保存固定 prompt、干净初稿、一个可校验 refinement 事务和预期最终 `.opendesign` 文档；生成器记录 SHA-256，并由 `fixtures:check` 阻止漂移。当前自动化只证明文档结构、Path/外观/图片语义、EditorRuntime 历史与 Leafer 场景投影，不把这些结构证据冒充像素视觉、真实 Agent 工具轨迹、专业导出或 macOS/Windows 实机验收。
+专业设计回归使用 `fixtures/professional/manifest.json` 作为手动样张证据索引。每个样张分别保存固定 prompt、干净初稿、一个可校验 refinement 事务和预期最终 `.opendesign` 文档；生成器记录 SHA-256，但生成内容或 hash 漂移不再阻塞普通 push。需要画布真实证据时显式执行专业 fixture smoke；当前结构自动化不冒充像素视觉、真实 Agent 工具轨迹、专业导出或 macOS/Windows 实机验收。
 
 用户请求停止后，Renderer 立即把对应 Run 显示为“正在停止”并去除流式活动光标，但在 `run.completed` 或失败终态到达前仍保持并发占用。终态会兜底结束该 Run 遗留的 partial message、tool 与 approval 活动态，避免对话中残留看似仍在运行的蓝色光标。
 

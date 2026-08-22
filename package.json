@@ -17,11 +17,9 @@
     "agent-core:check": "node scripts/verify-agent-core-boundary.mjs",
     "architecture:check": "node --test scripts/workspace-path.test.mjs && node scripts/verify-architecture-boundaries.mjs",
     "build": "pnpm -r --if-present build",
-    "capabilities:check": "node scripts/generate-capability-doc.mjs --check",
     "capabilities:generate": "node scripts/generate-capability-doc.mjs",
     "dev": "pnpm --filter @opendesign/desktop dev",
     "evaluation:check": "node --test scripts/design-evaluation.test.mjs && node scripts/design-evaluation.mjs check",
-    "fixtures:check": "node scripts/generate-professional-fixtures.mjs --check",
     "fixtures:generate": "node scripts/generate-professional-fixtures.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -30,9 +28,7 @@
     "test": "vitest run && pnpm --filter @opendesign/desktop test",
     "test:watch": "vitest",
     "typecheck": "pnpm -r --if-present typecheck",
-    "verification:check": "node scripts/verification-facts.mjs --check",
-    "verification:generate": "node scripts/verification-facts.mjs --write",
-    "verify": "pnpm format:check && pnpm architecture:check && pnpm agent-core:check && pnpm capabilities:check && pnpm fixtures:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm verification:check"
+    "verify": "pnpm format:check && pnpm architecture:check && pnpm agent-core:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",

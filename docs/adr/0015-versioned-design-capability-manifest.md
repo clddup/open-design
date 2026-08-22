@@ -1,6 +1,6 @@
 # ADR-0015：版本化专业设计能力事实清单
 
-- 状态：已接受
+- 状态：已接受（生成文档漂移门禁由 ADR-0141 退休）
 - 日期：2026-08-10
 - 关联：ADR-0003、ADR-0009、ADR-0010、ADR-0011、ADR-0012、ADR-0014
 - Capability Manifest：`1`
@@ -17,7 +17,7 @@ Figma 的专业能力并不是“能画一个相似结果”这一件事：Vecto
 
 `packages/design-capabilities/src/manifest.json` 是当前产品能力状态的唯一事实源。`@opendesign/design-capabilities` 在加载时校验版本、字段、稳定 ID、分类、所有表面、证据和派生状态，并导出不可变快照。未知字段、重复 ID、未知版本或状态与证据不一致都会使验证失败。
 
-Agent system context、只读 `opendesign_get_capabilities` tool、用户帮助文档与发布摘要读取同一 manifest。生成文档不得手改；`pnpm capabilities:check` 比较生成物并加入 `pnpm verify`。
+Agent system context 与只读 `opendesign_get_capabilities` tool 读取同一 manifest。用户帮助文档与发布摘要可以按需生成；ADR-0141 已退休生成文档内容漂移的普通提交门禁，真实 schema/行为继续由类型和测试验证。
 
 能力状态不是用户偏好，不能作为设置页顶级入口。设置只承载可配置项；将来若需要应用内查看能力，应进入帮助、关于或诊断信息架构，并继续读取同一 manifest。
 

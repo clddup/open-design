@@ -2,8 +2,6 @@
 
 - 日期：2026-08-22
 
-<!-- verification-facts:baseline:start -->
-
 - 环境基线：Node.js 24.14.0、pnpm 10.32.1、Electron 43.3.0、Vite 8.2.1
 - 文档协议：`DesignDocument 1.44.0`
 - Agent 协议：`3.11.0`
@@ -17,8 +15,6 @@
 - Layout Service：`contract v8`
 - Agent Core：`@earendil-works/pi-agent-core 0.84.1`（production-entry-native-gate-pending）
 - 生产画布：`leafer-editor 2.2.9`
-
-<!-- verification-facts:baseline:end -->
 
 本文只记录当前工作树实际执行的证据。计划命令、历史会话结果和第三方能力说明不算通过。
 
@@ -34,29 +30,17 @@ macOS 与 Windows 必须在同一待发布 commit 上分别完成原生验证。
 
 ## 自动化门禁
 
-当前工作树通过：
-
-<!-- verification-facts:tests:start -->
+常规合并门禁由以下命令组成；具体提交是否通过以对应 CI 日志为准，不在本文复制易漂移的“passed”状态：
 
 ```text
-pnpm format:check   passed
-pnpm architecture:check passed
-pnpm agent-core:check passed
-pnpm capabilities:check passed
-pnpm fixtures:check passed
-pnpm lint           passed
-pnpm typecheck      passed
-pnpm test           passed
-├── package tests   passed
-└── desktop tests   passed
-pnpm build          passed
-├── Renderer
-├── Electron Main
-├── Preload
-└── Agent utilityProcess
+pnpm format:check
+pnpm architecture:check
+pnpm agent-core:check
+pnpm lint
+pnpm typecheck
+pnpm test
+pnpm build
 ```
-
-<!-- verification-facts:tests:end -->
 
 测试覆盖的关键路径包括：
 
@@ -68,13 +52,13 @@ pnpm build          passed
 - Agent 画布生成过程测试覆盖：`opendesign_apply_transaction.steps` 按语义边界一次覆盖全部 command；每个成功步骤产生真实 revision，Boolean 等依赖完整 invariant 的命令自动合并到同一有效阶段；无 steps 时整笔一次提交，多个 revision 共享一个 undo，取消回滚整组。Renderer 只从已提交 Agent `ChangeSet` 派生父级优先的新增节点 reveal、视觉字段 changed-only tween 和 focus point，用户或 name/z-order 等非视觉更新不产生 Agent 动画。Leafer reveal 覆盖 pending/wireframe/fade/final、密集批次有界节奏、重复事件去重和最终 opacity；属性 tween 纯函数覆盖仿射最短角 transform、geometry、solid/gradient color、shadow/effect、文字度量、同 topology path、不兼容 dissolve、退化矩阵无 `NaN`，cadence 在慢帧/大批次下降低时长与节点预算。Adapter 测试覆盖 changed-only revision、中间值、同节点 retarget 不回跳、选区 bounds 同帧刷新、pan/zoom 保持、离屏最终态、capture/人工直接操作/Reduced Motion 收口；reveal 与 tween 共享单 RAF。`DesignPlanToolInput version: 3` 测试覆盖一个/多个 target、画板位置/尺寸、区域 bounds、跨 target 全局唯一稳定 ID、Main acceptance 匹配和 v2 历史兼容；Main 从 accepted plan 编译全部真实 Frame roots 的可信 Page/parent/局部 transform/size，并以单个 revision/undo 分配。accepted plan 紫色 skeleton 已从生产路径撤销；相关 skeleton 投影测试只保留历史行为证据。cursor 挂在内置 editor `sky` 的不可命中底层且只有真实 Frame 存在时出现；selection/EditBox 位于其上。连续 MoveEvent 中即使 sky 暂时落后于 document `tree`，固定屏幕 cursor 也通过 `sky⁻¹ × screen` 保持同一锚点，不会因 pan/zoom 累积错位。Renderer 证明已建立计划 Frame 内纯新增事务可安全跨过用户平移 revision，同时 resize 会拒绝复用旧布局条件。第三阶段测试覆盖本地 typed tool → semantic phase 映射、自由文本 progress 隔离、百分比终态清理、真实 revision cursor focus、180 ms 位移、pan/zoom、离屏边界、固定屏幕标签、Reduced Motion、`aria-live`、抑制和新 Run 恢复；Agent timeline 同时证明 live/durable 语义步骤按 revision 去重重建，completed tool 不再保留旧 progress detail，可自动恢复的 `design_workflow.*` 门禁反馈不堆叠为红色失败卡。Main coordinator 以 material/capture/review revision 拒绝 baseline、重复和过期截图，并从 Run/plan 选择 Page 或 Frame target；Leafer adapter 和 Renderer capture service 验证 captured revision 的独立 content-tree 导出、尺寸上限、清理与无活动 viewport 依赖。Agent 审查 JPEG 先等待当前离屏 App ready，再走 Leafer 同步 `UI.syncExport`/data URL，不进入 `@leafer-in/export 2.2.9` 的包级异步串行队列；测试证明一个永久挂起的 surface 不阻塞另一健康 surface，并拒绝 Promise/非法 JPEG 输出。App 端到端测试证明 A 的 Run 在用户切到 B 后仍写入并截图 A，B revision/overlay 不变，切回 A 读取最新 revision；手动停止和 Agent 终态继续清理对应文件的展示。该自动化不替代 macOS/Windows 实机运动、触控板缩放和帧时间验收。
 - Agent presentation viewport 的补充回归覆盖 editor sky 在最后一个 viewport event 后才追平的真实 render settle：App 在实际 child render 前重算 `sky⁻¹ × tree` 与 cursor 局部矩阵，第二次稳定 render 不重复写 transform，避免骨架/光标双重 pan/zoom 与常驻重绘。
 - `DesignLayoutQualityReport v1` 纯函数测试覆盖 clipping 开关、隐藏后代、1%–25% 部分越界、至少 25% 大面积越界、完全越界、无效/错 Page Frame、报告运行时守卫和超过 128 个 issue 时失败关闭。Renderer capture 测试证明报告与同一不可变 document revision 生成；Main 边界拒绝缺失、畸形及 document/revision/Page/Frame 不匹配报告；多 target coordinator 测试证明跨 target 报告不能冒充当前 Frame，最终 error 保持 `refined`、修正后可恢复 `verified`，warning-only 不阻塞。报告不读取活动 viewport、selection 或截图像素。
-- `DesignCapabilityManifest v1` 的严格字段、唯一 ID、六表面状态、证据派生与不可变快照；Agent system context、只读 `get_capabilities` tool、生成式帮助文档和发布摘要读取同一 JSON，`capabilities:check` 会拒绝文档漂移。
+- Design Capability manifest 的严格字段、唯一 ID、六表面状态、证据派生与不可变快照；Agent system context 与只读 `get_capabilities` tool 读取同一 JSON。生成式帮助文档和发布摘要按需生成，不作为普通 push 的内容漂移门禁。
 - `inspect_document` 不把 image asset 的 data URI 或外部 URI 放入模型上下文；Agent Runtime 会同时压缩当前轮和旧 journal 中意外出现的超长工具字段，避免图片文档在下一轮触发 `context_too_large`。
 - Agent Runtime 在完整 run 边界生成累计 `context.compacted` checkpoint，并在同一 Run 的每个 Provider turn 前重新预算；旧 assistant/tool 段超限时变成临时有界 checkpoint，当前用户原文和最近完整 tool call/result 段继续保留。测试覆盖原始 Timeline 不删除、checkpoint 范围单调增加、旧全文退出模型投影、第八轮自动恢复，以及单次当前输入或最小必要段仍超预算时才返回 `context_budget_exceeded`。模型投影同时限制超长单字段和超过 `50000` 字符的完整结构化工具结果，原始 journal 不丢失；预算错误按 system、tool schemas、Conversation/tool results 和 framing 分账。Main 从可信 Model Profile 注入窗口和输出预算；可信 token 预算存在时不会再被固定字符阈值误杀，缺少模型窗口时才使用字符保底；固定协议无法适配小窗口时返回独立的 `model_context_incompatible`。
 - Run 防失控预算现在分别限制 turn、tool call 和 Provider 实际 `usage.output`。重复发送的 input/context 由每轮 context window 与 compaction 约束，不再反复累计到生成预算；集成测试用连续两轮各 `180000` input token 证明 completion guard 仍可把未完成 delivery 继续到 complete，同时实际 output 超限仍返回 budget。Provider 返回的有界 `reasoning_summary` 会作为低权重“设计思路”进入 live/durable Timeline；省略或加密 reasoning 不会被推断为可见文本。
 - Renderer design-tool IPC 只序列化正式的 `requestId/call/context/captureTarget`，Main 内部 `reportProgress` 回调不得进入跨进程 payload；同一严格 request validator 已加入 host 回归测试。Preload 对带稳定 requestId 的非法请求立即返回 `renderer_request_invalid`，不再静默丢弃并等待 30 秒。一次 Renderer timeout 仍可恢复，同一 Run 连续两次 first-response/idle/total/capture timeout 会打开 run-scoped circuit 并以 terminal error 收口；成功 inspect 不清零 capture stall，模型不能再用 inspect 绕过熔断或包装为 `stopReason: complete`。离屏 capture 在 Leafer `waitViewCompleted` 永不返回时最多等待 2 秒，再由同步 export 直接计算并渲染目标树；独立 surface 与同步 JPEG 失败仍有回归覆盖。该修复对应本机 `run_1786622162070_1` 的 first-response timeout，以及 `run_1786695232930_1` 在 revision 425、609 节点文档上连续七次 `renderer_capture_timeout` 的实机证据。
 - `run_1786695232930_1` 还证明两条独立 Page 链路缺陷：r417 inspection 后 Page rename 成功提交 r418，下一笔 create 被重复 exact-inspection 门禁拒绝；以及宿主把含 `|` 的 Provider tool-call ID 拼入新 Page ID，导致该 Page 进入 plan delivery 后不符合 Global Task `StableId`。现在批准后的首次 inspection 仍为必需，随后连续 Page 生命周期由当前 Renderer revision/planner 保护，跨 Page plan/节点写入继续要求 exact-current inspection；新 Page ID 会先规范化，任务投影同时兼容已落盘的有界无控制字符文档实体 ID。`inspection_required/stale` 仍持久审计，但作为模型可自行恢复的内部门禁不再堆叠红色失败卡。
-- `OD-PENGUIN-01`、`OD-POSTER-01` 与 `OD-BRAND-01` 专业 fixture 从固定 prompt 生成初稿、refinement 事务、最终 `.opendesign` 和 SHA-256 manifest；`fixtures:check` 阻止生成物漂移。EditorRuntime 测试验证命名 Group、主体/翅膀/脚/围巾正式 Path、1440×1024 海报画板、可编辑 Boolean 品牌主件、复杂特性下限、零结构诊断、JSON 保存重开及 apply/undo/redo；Leafer 测试验证所有权威节点可达、Path/渐变/效果/mask/内嵌图片映射且没有 fidelity warning。品牌样张还通过固定 PathKit WASM 解析非破坏 Subtract，校验 result bounds 与 path checksum，再投影唯一 synthetic Leafer Path；该几何证据不替代真实像素 baseline。
+- `OD-PENGUIN-01`、`OD-POSTER-01` 与 `OD-BRAND-01` 专业 fixture 可从固定 prompt 生成初稿、refinement 事务、最终 `.opendesign` 和 SHA-256 manifest。EditorRuntime/Leafer 的行为测试继续验证结构、历史和投影；fixture 文件内容或 hash 漂移不作为普通 push 门禁，真实画布证据由显式 smoke 取得。
 - macOS 源码 Electron 的无弹窗 fixture smoke 已重放 `OD-PENGUIN-01` 与 `OD-POSTER-01`：固定 ID 由 Main 从仓库加载，隔离 `home`/`userData`，Renderer 使用唯一 Workspace `EditorRuntime` 和生产 Leafer 分别 capture revision 0/1，Main 核对权威最终文档并保存初稿、精修、窗口截图、最终文档与 SHA-256 report；内外双层超时保证无人值守退出。证据生成于忽略提交的 `output/professional-smoke/darwin/`，命令为 `pnpm --filter @opendesign/desktop smoke:fixture:mac -- OD-PENGUIN-01` 与 `OD-POSTER-01`。该结果不替代 live Agent Conversation/Run、打包应用或 Windows 原生验证。
 - Boolean resolver 使用真实 PathKit WASM 覆盖有序四类运算、圆角 Rectangle、Ellipse、Path/Vector 原始坐标、嵌套组、fill+stroke、stroke align、transform、dash、空结果和精确缓存；Leafer adapter 测试覆盖按需加载、稳定 synthetic ID、源层隐藏、命中映射、失败 warning、dispose 后迟到结果、无关 revision 复用和删除清理。人工工具栏菜单、Inspector operation 控件、解组和 macOS/Windows 快捷键与 `opendesign_edit_hierarchy` 的三类 Boolean typed actions 复用同一 planner；源 operand edit scope 测试覆盖 Enter/双击/图层树进入、Shift+Enter/Escape/Done 退出、Tab 导航、可丢弃轮廓、逐帧 synthetic preview、单次正式提交、受控外观字段、最小 operand 删除保护、锁定可选但只读、provider retry 和上下文 warning。Agent 测试继续覆盖显式稳定 ID、preview、单次 revision/undo、世界 transform 与实时选区隔离。
 - `@opendesign/import-export-service` SVG v1 使用固定 `@xmldom/xmldom 0.8.13`、`transformation-matrix 3.1.0` 与既有 PathKit provider；测试覆盖正式矢量节点、层级/transform、受控 paint/stroke/effects/mask 以及 Text 的标准 `<text>/<tspan>` 与有界 metadata。Text metadata v7 增加 UTF-16 paragraph runs、逐段 indent/spacing 与 character/paragraph 交集 tspan，并继续确定性读取 v6/v5/v4/v3/v2/v1；Fixed/Auto Width/Auto Height、具体 size、换行、溢出、大小写、装饰、ending truncation、max-lines 与完整 font face identity 继续保留。标准 SVG 输出 `font-style` 和段落定位证据，metadata 与标准属性冲突时稳定拒绝。`OD-BRAND-01` Boolean 只导出标准 result path，源 operand 不进入 SVG，re-import 得到可编辑 Vector 且 normalized geometry/bounds 一致。字体未嵌入和 consumer-dependent layout 返回明确 warning；普通第三方 Text、metadata/content/paint 篡改、DOCTYPE/ENTITY、script、stylesheet、external URL、未授权句柄、伪造结果与缺失 Boolean geometry 均稳定失败。EditorRuntime planner、Main 原生文件桥、Preload、人工 UI、Renderer worker 与 Agent handle 继续复用同一受控导入/导出链，覆盖显式 target/revision、原子事务、取消、undo、保存和有界 fidelity report。angular gradient、复杂 effects/combined masks、inside/outside stroke、SVG text outline 等未保真项返回明确 issue；打包实机与完整格式保真仍未完成。
@@ -151,8 +135,6 @@ Design File-local Component catalog 由 Renderer 从同一 inspection revision �
 
 Vite 生产构建完成四个环境。共享门禁从实际 `out/` 检查每个预期产物唯一、存在且非空，不要求 macOS 与 Windows 的输出和某次本机构建保持精确字节相等。包体治理应使用明确的大小预算或回归阈值，并按目标平台分别记录，不能拿单个平台的一次构建字节数阻断其他平台。
 
-<!-- verification-facts:build:start -->
-
 | 产物                       | 共享门禁   |
 | -------------------------- | ---------- |
 | Renderer 主 JS             | 存在且非空 |
@@ -162,8 +144,6 @@ Vite 生产构建完成四个环境。共享门禁从实际 `out/` 检查每个�
 | Electron Main              | 存在且非空 |
 | Preload                    | 存在且非空 |
 | Agent                      | 存在且非空 |
-
-<!-- verification-facts:build:end -->
 
 构建提示 Renderer/Main 存在超过 500 kB 的 chunk。当前不影响构建成功，但需要在性能阶段评估动态加载与 Rolldown code splitting，不能通过移除 sourcemap 或隐藏警告冒充优化。
 

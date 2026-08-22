@@ -17,33 +17,19 @@ const outputs = [
     render: renderReleaseSummary,
   },
 ];
-const check = process.argv.includes("--check");
 const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
 
 validateManifest(manifest);
 
-let drifted = false;
 for (const output of outputs) {
   const content = await format(output.render(manifest), {
     parser: "markdown",
     proseWrap: "preserve",
   });
-  if (check) {
-    const current = await readFile(output.path, "utf8").catch(() => null);
-    if (current !== content) {
-      console.error(
-        `${relative(output.path)} is stale; run pnpm capabilities:generate`,
-      );
-      drifted = true;
-    }
-    continue;
-  }
   await mkdir(resolve(output.path, ".."), { recursive: true });
   await writeFile(output.path, content, "utf8");
   console.log(`Updated ${relative(output.path)}`);
 }
-
-if (drifted) process.exitCode = 1;
 
 function renderHelp(source) {
   const counts = statusCounts(source.capabilities);
