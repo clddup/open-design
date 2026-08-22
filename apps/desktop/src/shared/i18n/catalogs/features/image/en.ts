@@ -9,4 +9,31 @@ export const imageMessages = {
   "properties.imageLightingMoonlight": "Moonlight",
   "properties.imageLightingNeon": "Neon color",
   "properties.imageApplyLighting": "Change lighting",
+  "history.replaceImage": "Replace image",
+  "history.removeImageBackground": "Remove image background",
+  "history.replaceImageBackground": "Replace image background",
+  "history.editImageWithPrompt": "Edit image with prompt",
+  "history.eraseImageObject": "Erase image object",
+  "history.isolateImageObject": "Isolate image object",
+  "history.expandImage": "Expand image",
+  "history.boostImageResolution": "Boost image resolution",
+  "history.switchImageSource": "Switch image source",
+  "history.adjustImage": "Adjust image",
+  "history.updateImagePlacement": "Adjust image placement",
+  "history.importImageAsset": "Import image asset",
+  "history.placeImageAsset": "Place image asset",
+  "history.replaceImageAsset": "Replace image asset",
+  "history.deleteImageAsset": "Delete image asset",
+  "error.replaceImage": "Could not replace the image",
+  "error.removeImageBackground": "Could not remove the image background",
+  "error.removeImageBackgroundUnsupported":
+    "Background removal requires an embedded PNG, JPEG, or WebP image",
+  "error.editImage": "Could not edit the image",
+  "error.imageEditUnsupported":
+    "Image editing requires an embedded PNG, JPEG, or WebP image",
+  "error.imageAreaSelectionUnavailable":
+    "Select one unlocked embedded image before selecting an area",
+  "error.imageExpandUnavailable":
+    "Select one unlocked embedded image before expanding it",
+  "error.selectImageEditReference": "Could not select a reference image",
 } as const;

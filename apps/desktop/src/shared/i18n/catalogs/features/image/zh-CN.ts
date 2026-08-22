@@ -1,4 +1,4 @@
-import type { imageMessages as enImageMessages } from "./en";
+import type { imageMessages as englishMessages } from "./en";
 
 export const imageMessages = {
   "history.relightImage": "更改图片光线",
@@ -11,4 +11,29 @@ export const imageMessages = {
   "properties.imageLightingMoonlight": "月光",
   "properties.imageLightingNeon": "霓虹彩光",
   "properties.imageApplyLighting": "更改光线",
-} satisfies Record<keyof typeof enImageMessages, string>;
+  "history.replaceImage": "替换图片",
+  "history.removeImageBackground": "移除图片背景",
+  "history.replaceImageBackground": "替换图片背景",
+  "history.editImageWithPrompt": "使用提示词编辑图片",
+  "history.eraseImageObject": "擦除图片对象",
+  "history.isolateImageObject": "提取图片对象",
+  "history.expandImage": "扩展图片",
+  "history.boostImageResolution": "提升图片分辨率",
+  "history.switchImageSource": "切换图片来源",
+  "history.adjustImage": "调整图片",
+  "history.updateImagePlacement": "调整图片适配",
+  "history.importImageAsset": "导入图片资源",
+  "history.placeImageAsset": "放置图片资源",
+  "history.replaceImageAsset": "替换图片资源",
+  "history.deleteImageAsset": "删除图片资源",
+  "error.replaceImage": "无法替换图片",
+  "error.removeImageBackground": "无法移除图片背景",
+  "error.removeImageBackgroundUnsupported":
+    "移除背景仅支持文档内嵌的 PNG、JPEG 或 WebP 图片",
+  "error.editImage": "无法编辑图片",
+  "error.imageEditUnsupported": "图片编辑需要内嵌的 PNG、JPEG 或 WebP 图片",
+  "error.imageAreaSelectionUnavailable":
+    "请先选择一个未锁定的内嵌图片，再圈选区域",
+  "error.imageExpandUnavailable": "请先选择一个未锁定的内嵌图片，再扩展图片",
+  "error.selectImageEditReference": "无法选择参考图片",
+} satisfies Record<keyof typeof englishMessages, string>;

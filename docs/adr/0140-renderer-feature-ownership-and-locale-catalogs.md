@@ -49,9 +49,9 @@ controller 可以组合纯 helper 和子 controller，但必须拥有完整业�
 
 第六个切片将全局 Diagnostic notification 生命周期迁入 Diagnostics feature。controller 先订阅 live event，再读取 pending，并以 `occurredAt + eventId` 单调归并不可变事件；相同 ID 去重，只保留最近四条。`silent` 与同时绑定 Conversation/Run 的任务诊断在唯一入口过滤：前者不展示，后者继续由 Agent Timeline 的结构化事件与恢复语义承载，不重复弹全局 toast。组件只渲染 controller 已投影的精确列表并提供 copy/dismiss；卸载后取消订阅并忽略迟到 pending，不复制 Main diagnostic journal 或伪造恢复动作。
 
-后续按以下顺序继续：
+第七个切片完成 locale catalog 的 feature ownership 迁移。App Shell、Settings、Workspace、Agent Conversation、Diagnostics、Canvas、Sidebar、Properties、Editor、Workbench、Native Dialog、Import/Export、Image、Layout、Component、Variable、Style 与 Typography 各自拥有独立英文和简体中文文件；原先把两种语言放在同一文件的五个 legacy `*-messages.ts` 已删除。每个中文 feature 通过英文 owner 的精确 key 集做编译期校验，顶层 `mergeCatalogs` 对跨 feature 重复 key 失败关闭，不再允许 spread 顺序静默覆盖；迁移由此发现并消除了历史重复 `properties.mixed`。`messages.ts` 继续只负责 locale registry、公共 key 类型和插值。
 
-1. 将剩余 core catalog 按上述 feature 所有权迁移。
+本决策定义的渐进迁移已经完成。后续新增或实质修改文案必须直接进入对应 feature/locale，不得重新向顶层语言聚合文件或双语混合模块写业务文案。
 
 每个切片保持产品行为，补定向 controller 测试和少量 App 接线测试。需要改变产品契约时单独记录 ADR，不借架构迁移静默改变行为。
 
@@ -61,7 +61,7 @@ controller 可以组合纯 helper 和子 controller，但必须拥有完整业�
 - feature 可以独立测试取消、异步竞态、stale、错误恢复和 shell 状态，不再完全依赖巨型 App fixture。
 - 新能力有明确落点，后续图片功能不会再次回填 App。
 - catalog 变更减少中英文无关冲突，并保持编译期翻译完整性。
-- 迁移期间 App 和 core catalog 仍然偏大，不能把首个切片描述为全仓架构治理完成。
+- App 入口和语言聚合文件不再拥有 feature 状态机或业务文案；Main bootstrap、EditorRuntime、Leafer 与其他大型模块仍按各自治理阶段推进，不能把本决策描述为全仓架构治理完成。
 
 ## 验证
 
@@ -72,3 +72,4 @@ controller 可以组合纯 helper 和子 controller，但必须拥有完整业�
 - Project controller 定向测试覆盖复合 Project/File 身份、clean local placeholder 替换门禁、跨 Project 保存、重命名响应身份校验，以及 autosave 成功/失败归并；完整 App 测试继续覆盖 Workspace/Project/Editor 视图接线和关闭前 flush。
 - Canvas workspace controller 定向测试覆盖中心锚点缩放、Page/selection fit、Editor/输入门禁、Design File Runtime 切换和 disposable session bridge；完整 App 测试继续覆盖 macOS/Windows Figma 风格快捷键、Canvas 内部编辑优先级、状态栏和面板接线。
 - Diagnostics controller 定向测试覆盖 silent/task scope 过滤、pending/live 顺序、Event ID 去重、有界队列、dismiss 与卸载竞态；Notification 组件测试只负责语义呈现、copy、自动/人工 dismiss 和 placement，App 测试继续覆盖工作台接线。
+- i18n registry 测试覆盖跨 locale 精确 key 集、feature catalog 选择、参数插值和重复 owner 失败关闭；Desktop typecheck 对每个中文 feature 执行英文 key 完整性校验。
