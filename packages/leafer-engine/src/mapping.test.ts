@@ -761,6 +761,50 @@ describe("Leafer scene projection", () => {
     });
   });
 
+  it("projects adjustments on each image paint without applying an element filter", () => {
+    const document = structuredClone(createWelcomeDocument());
+    document.assetsById.photo = {
+      id: "photo",
+      kind: "image",
+      name: "Photo",
+      mimeType: "image/png",
+      source: { type: "data", value: "aW1hZ2U=" },
+      size: { width: 400, height: 200 },
+      extensions: {},
+    };
+    const node = document.nodesById.feature_one;
+    if (!node || node.kind !== "rectangle") throw new Error("Missing fixture");
+    node.properties.fills = [
+      { type: "solid", color: "#ffffff", opacity: 0.5 },
+      {
+        type: "image",
+        assetId: "photo",
+        fit: "cover",
+        opacity: 1,
+        filters: { exposure: 0.2, shadows: -0.4 },
+      },
+    ];
+
+    const spec = projectDesignPage(document, "page_welcome").elementsById.get(
+      node.id,
+    );
+    expect(spec?.data.filter).toBeUndefined();
+    expect(spec?.data.fill).toEqual([
+      { type: "solid", color: "#ffffff", opacity: 0.5, visible: true },
+      {
+        type: "image",
+        url: "data:image/png;base64,aW1hZ2U=",
+        mode: "cover",
+        opacity: 1,
+        visible: true,
+        filter: [
+          { type: "exposure", value: 0.2 },
+          { type: "shadows", value: -0.4 },
+        ],
+      },
+    ]);
+  });
+
   it("projects portable path geometry with fills, strokes and winding rule", () => {
     const document = structuredClone(createWelcomeDocument());
     const frame = document.nodesById.frame_welcome;

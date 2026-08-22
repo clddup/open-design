@@ -7,6 +7,7 @@ import type {
   DesignNode,
   ExportSetting,
   ImageFilters,
+  ImagePaint,
   ImagePlacement,
   InstanceSwapPreferredValue,
   LayoutConstraints,
@@ -83,6 +84,7 @@ export function PropertiesPanel({
   onCropImage,
   onReplaceImage,
   onUpdateImageFilters,
+  onUpdateImagePaintFilters,
   onUpdateImagePlacement,
   onRemoveComponent,
   onRemoveVariant,
@@ -158,6 +160,13 @@ export function PropertiesPanel({
   onCropImage: () => boolean;
   onReplaceImage: () => void;
   onUpdateImageFilters: (filters: ImageFilters) => void;
+  onUpdateImagePaintFilters: (
+    nodeId: string,
+    paintField: "fills" | "strokes",
+    paintIndex: number,
+    expectedPaint: ImagePaint,
+    filters: ImageFilters,
+  ) => void;
   onUpdateImagePlacement: (placement: ImagePlacement) => void;
   onRemoveComponent: () => void;
   onRemoveVariant: () => void;
@@ -308,6 +317,7 @@ export function PropertiesPanel({
             onCropImage={onCropImage}
             onReplaceImage={onReplaceImage}
             onUpdateImageFilters={onUpdateImageFilters}
+            onUpdateImagePaintFilters={onUpdateImagePaintFilters}
             onUpdateImagePlacement={onUpdateImagePlacement}
             onRemoveComponent={onRemoveComponent}
             onRemoveVariant={onRemoveVariant}

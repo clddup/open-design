@@ -16,6 +16,7 @@ import {
   LIBRARY_STYLE_SOURCE_DESIGN_SCHEMA_VERSION,
   LIBRARY_VARIABLE_SOURCE_DESIGN_SCHEMA_VERSION,
   IMAGE_ADJUSTMENTS_DESIGN_SCHEMA_VERSION,
+  IMAGE_PAINT_ADJUSTMENTS_DESIGN_SCHEMA_VERSION,
   FONT_FACE_IDENTITY_DESIGN_SCHEMA_VERSION,
   FIGMA_TEXT_LISTS_DESIGN_SCHEMA_VERSION,
   AUTO_LAYOUT_GRID_DESIGN_SCHEMA_VERSION,
@@ -97,7 +98,10 @@ it("keeps Auto Layout and Layout Guide schema milestones distinct", () => {
   expect(LIBRARY_STYLE_SOURCE_DESIGN_SCHEMA_VERSION).toBe("1.38.0");
   expect(LIBRARY_VARIABLE_SOURCE_DESIGN_SCHEMA_VERSION).toBe("1.39.0");
   expect(IMAGE_ADJUSTMENTS_DESIGN_SCHEMA_VERSION).toBe("1.40.0");
-  expect(DESIGN_SCHEMA_VERSION).toBe(IMAGE_ADJUSTMENTS_DESIGN_SCHEMA_VERSION);
+  expect(IMAGE_PAINT_ADJUSTMENTS_DESIGN_SCHEMA_VERSION).toBe("1.41.0");
+  expect(DESIGN_SCHEMA_VERSION).toBe(
+    IMAGE_PAINT_ADJUSTMENTS_DESIGN_SCHEMA_VERSION,
+  );
 });
 
 it("migrates the previous Variable Library document without inventing image adjustments", () => {
@@ -106,6 +110,16 @@ it("migrates the previous Variable Library document without inventing image adju
   const migrated = migrateDesignDocument(source);
   expect(migrated?.schemaVersion).toBe(DESIGN_SCHEMA_VERSION);
   expect(migrated?.nodesById.text_1).not.toHaveProperty("properties.filters");
+});
+
+it("migrates the previous Image adjustments document without inventing Image Paint filters", () => {
+  const source = textDocumentFixture() as unknown as Record<string, unknown>;
+  source.schemaVersion = IMAGE_ADJUSTMENTS_DESIGN_SCHEMA_VERSION;
+  const migrated = migrateDesignDocument(source);
+  expect(migrated?.schemaVersion).toBe(DESIGN_SCHEMA_VERSION);
+  expect(migrated?.nodesById.text_1).not.toHaveProperty(
+    "properties.fills.0.filters",
+  );
 });
 
 it("migrates a Library release without Variables to the current release contract", () => {
@@ -986,6 +1000,24 @@ describe("design contract schemas", () => {
         ],
       }),
     ).toBe(true);
+    expect(
+      Value.Check(PaintSchema, {
+        type: "image",
+        assetId: "asset_photo",
+        fit: "cover",
+        opacity: 1,
+        filters: { exposure: 0.2, saturation: -0.35, shadows: 0.4 },
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(PaintSchema, {
+        type: "image",
+        assetId: "asset_photo",
+        fit: "cover",
+        opacity: 1,
+        filters: { tint: -1.1 },
+      }),
+    ).toBe(false);
     expect(
       Value.Check(EffectSchema, {
         type: "outer-glow",

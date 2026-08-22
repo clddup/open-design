@@ -2,7 +2,7 @@
 
 # OpenDesign 专业设计能力
 
-能力清单版本：`1` · 更新日期：2026-08-22 · 文档协议：`1.40.0` · 画布基线：`leafer-editor@2.2.9`
+能力清单版本：`1` · 更新日期：2026-08-22 · 文档协议：`1.41.0` · 画布基线：`leafer-editor@2.2.9`
 
 当前状态：可用 0 项，降级可用 21 项，不可用 1 项。只有必需表面全部可用，并同时具备自动化与实机证据时，能力才允许标记为“可用”。
 
@@ -154,7 +154,7 @@
 - ID：`image.import-generation-placement`
 - 实现方：AgentAttachmentHost + ImageGenerationHost + EditorRuntime
 - 表面：contract=available；runtime=available；human=degraded；agent=available；render=available；export=unavailable
-- 证据：自动化 9 项；实机 0 项
+- 证据：自动化 10 项；实机 0 项
 - 限制：图片生成需要独立全局配置；当前文件图片资源已支持预览、搜索、使用次数、定位、画布拖放、导入、全文件替换/relink 与安全删除，但字体、跨文件 Library、来源谱系、移除背景、大列表虚拟化及 macOS/Windows 原生交互证据仍未完成。
 
 ### 图片裁剪与调整 — 降级可用
@@ -162,10 +162,10 @@
 非破坏性裁剪、选择焦点位置、替换来源并应用图片调整或滤镜。
 
 - ID：`image.crop-adjustments`
-- 实现方：DesignDocument 1.40.0 + OpenDesign Image Service contract 3 + Leafer image-adjustment projection
+- 实现方：DesignDocument 1.41.0 + OpenDesign Image Service contract 3 + Leafer per-image-paint adjustment projection
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=degraded
-- 证据：自动化 10 项；实机 0 项
-- 限制：Image 节点已支持 Figma-compatible 曝光、对比度、饱和度、色温、色调、高光与阴影字段，并由画布、capture 和 PNG/JPEG/WebP 导出共用同一确定性 RGBA 投影。Image Paint 调整、SVG 位图嵌入、P3/ICC 色彩管理及 macOS/Windows 原生交互证据仍未完成。
+- 证据：自动化 12 项；实机 0 项
+- 限制：Image 节点及每项图片 Fill/Stroke 已支持 Figma-compatible 曝光、对比度、饱和度、色温、色调、高光与阴影，并由画布、capture 和 PNG/JPEG/WebP 导出共用同一确定性 RGBA 投影。standalone 跨文件 Image Paint Style asset bundle、SVG 位图嵌入、完整 Figma imageHash/transform 文件 adapter、P3/ICC 色彩管理及 macOS/Windows 原生交互证据仍未完成。
 - 专业参照：[官方说明](docs/adr/0089-direct-image-crop-session.md)
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360040675194-Crop-an-image)
 

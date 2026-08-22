@@ -62,6 +62,15 @@ export function createLibraryReleaseSnapshot(
       const assetIds = new Set(
         Object.values(nodesById).flatMap((node) => nodeAssetIds(node)),
       );
+      for (const styleId of Object.values(nodesById).flatMap((node) =>
+        nodeStyleIds(node),
+      )) {
+        const style = document.stylesById[styleId];
+        if (style?.styleType !== "PAINT") continue;
+        for (const paint of style.paints) {
+          if (paint.type === "image") assetIds.add(paint.assetId);
+        }
+      }
       const assetsById = Object.fromEntries(
         [...assetIds].flatMap((assetId) => {
           const asset = document.assetsById[assetId];
@@ -113,6 +122,21 @@ export function createLibraryReleaseSnapshot(
         return [style.id, source] as const;
       }),
   );
+  const releasedAssetIds = new Set(
+    Object.values(componentsById).flatMap((source) =>
+      Object.keys(source.assetsById),
+    ),
+  );
+  for (const source of Object.values(stylesById)) {
+    if (source.style.styleType !== "PAINT") continue;
+    for (const paint of source.style.paints) {
+      if (paint.type === "image" && !releasedAssetIds.has(paint.assetId)) {
+        throw new Error(
+          `Published Image Paint Style ${source.style.id} references asset ${paint.assetId}, but standalone Style asset dependencies are not available yet`,
+        );
+      }
+    }
+  }
   const publishedVariableIds = new Set<string>();
   const publishedCollectionIds = new Set<string>();
   for (const collection of Object.values(document.variableCollectionsById)) {

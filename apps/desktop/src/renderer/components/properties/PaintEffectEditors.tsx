@@ -2,6 +2,7 @@ import type {
   BlendMode,
   DesignNode,
   Effect,
+  ImageFilters,
   MaskMode,
   Paint,
 } from "@opendesign/design-contracts";
@@ -15,6 +16,7 @@ import {
   formatNumber,
   isHexColor,
 } from "./controls";
+import { ImageAdjustmentsEditor } from "./ImageSection";
 
 type FillNode = Extract<
   DesignNode,
@@ -139,11 +141,13 @@ export function PaintEditor({
   paint,
   onChange,
   onRemove,
+  onImageFiltersChange,
 }: {
   index: number;
   paint: Paint;
   onChange: (paint: Paint) => void;
   onRemove: () => void;
+  onImageFiltersChange?: (filters: ImageFilters) => void;
 }) {
   const { t } = useI18n();
   const gradient =
@@ -355,6 +359,14 @@ export function PaintEditor({
             {t("properties.imagePaintAsset", { assetId: paint.assetId })}
           </small>
           <PaintOpacity paint={paint} onChange={onChange} />
+          <ImageAdjustmentsEditor
+            filters={paint.filters ?? {}}
+            onFiltersChange={(filters) =>
+              onImageFiltersChange
+                ? onImageFiltersChange(filters)
+                : onChange({ ...paint, filters })
+            }
+          />
         </div>
       )}
     </div>

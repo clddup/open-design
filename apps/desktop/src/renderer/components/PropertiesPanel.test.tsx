@@ -11,6 +11,7 @@ import type {
   ComponentOverridePatch,
   DesignNode,
   ImageFilters,
+  ImagePaint,
   ImagePlacement,
   InstanceSwapPreferredValue,
   LayoutConstraints,
@@ -109,6 +110,13 @@ function renderPanel(
     ) => void;
     onUpdate?: (updates: UpdatePropertiesPatch) => void;
     onUpdateImageFilters?: (filters: ImageFilters) => void;
+    onUpdateImagePaintFilters?: (
+      nodeId: string,
+      paintField: "fills" | "strokes",
+      paintIndex: number,
+      expectedPaint: ImagePaint,
+      filters: ImageFilters,
+    ) => void;
     onUpdateImagePlacement?: (placement: ImagePlacement) => void;
     onUpdateComponentOverride?: (
       sourcePath: readonly string[],
@@ -125,6 +133,8 @@ function renderPanel(
   const onRasterExportSettingsChange = vi.fn();
   const onUpdate = options.onUpdate ?? vi.fn();
   const onUpdateImageFilters = options.onUpdateImageFilters ?? vi.fn();
+  const onUpdateImagePaintFilters =
+    options.onUpdateImagePaintFilters ?? vi.fn();
   const onUpdateImagePlacement = options.onUpdateImagePlacement ?? vi.fn();
   const onArrange =
     options.onArrange ?? vi.fn<(operation: ArrangeOperation) => void>();
@@ -166,6 +176,7 @@ function renderPanel(
           onCropImage={vi.fn(() => true)}
           onReplaceImage={vi.fn()}
           onUpdateImageFilters={onUpdateImageFilters}
+          onUpdateImagePaintFilters={onUpdateImagePaintFilters}
           onUpdateImagePlacement={onUpdateImagePlacement}
           onRemoveComponent={options.onRemoveComponent ?? vi.fn()}
           onRemoveVariant={options.onRemoveVariant ?? vi.fn()}
@@ -472,6 +483,59 @@ describe("PropertiesPanel image adjustments", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Reset adjustments" }));
     expect(onUpdateImageFilters).toHaveBeenLastCalledWith({});
+  });
+
+  it("commits adjustments inside the exact image Fill row", () => {
+    const onUpdateImagePaintFilters = vi.fn();
+    const paintNode: DesignNode = {
+      ...starNode,
+      id: "image_paint_shape",
+      properties: {
+        ...starNode.properties,
+        fills: [
+          {
+            type: "image",
+            assetId: "asset_photo",
+            fit: "cover",
+            opacity: 1,
+            filters: { contrast: -0.1 },
+          },
+        ],
+      },
+    };
+    renderPanel({ node: paintNode, onUpdateImagePaintFilters });
+
+    const exposure = screen.getByRole("slider", { name: "Exposure" });
+    fireEvent.change(exposure, { target: { value: "30" } });
+    expect(onUpdateImagePaintFilters).not.toHaveBeenCalled();
+    fireEvent.pointerUp(exposure, { target: { value: "30" } });
+    expect(onUpdateImagePaintFilters).toHaveBeenLastCalledWith(
+      "image_paint_shape",
+      "fills",
+      0,
+      {
+        type: "image",
+        assetId: "asset_photo",
+        fit: "cover",
+        opacity: 1,
+        filters: { contrast: -0.1 },
+      },
+      { contrast: -0.1, exposure: 0.3 },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Reset adjustments" }));
+    expect(onUpdateImagePaintFilters).toHaveBeenLastCalledWith(
+      "image_paint_shape",
+      "fills",
+      0,
+      {
+        type: "image",
+        assetId: "asset_photo",
+        fit: "cover",
+        opacity: 1,
+        filters: { contrast: -0.1 },
+      },
+      {},
+    );
   });
 });
 

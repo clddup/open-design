@@ -418,6 +418,9 @@ export function validateDocumentInvariants(
       for (const [paintIndex, paint] of [
         ...node.properties.fills,
         ...node.properties.strokes,
+        ...(node.kind === "text"
+          ? (node.properties.runs ?? []).flatMap((run) => run.style.fills)
+          : []),
       ].entries()) {
         if (paint.type !== "image") continue;
         const asset = ownValue(document.assetsById, paint.assetId);
@@ -427,6 +430,20 @@ export function validateDocumentInvariants(
             message: `image paint asset ${paint.assetId} does not exist`,
           });
         }
+      }
+    }
+  }
+
+  for (const [styleId, style] of Object.entries(document.stylesById)) {
+    if (style.styleType !== "PAINT") continue;
+    for (const [paintIndex, paint] of style.paints.entries()) {
+      if (paint.type !== "image") continue;
+      const asset = ownValue(document.assetsById, paint.assetId);
+      if (!asset || asset.kind !== "image") {
+        issues.push({
+          path: `/stylesById/${jsonPointerToken(styleId)}/paints/${paintIndex}/assetId`,
+          message: `image paint asset ${paint.assetId} does not exist`,
+        });
       }
     }
   }
@@ -807,6 +824,10 @@ function hasOwn(record: object, key: PropertyKey): boolean {
 
 function ownValue<T>(record: Record<string, T>, key: string): T | undefined {
   return hasOwn(record, key) ? record[key] : undefined;
+}
+
+function jsonPointerToken(value: string): string {
+  return value.replaceAll("~", "~0").replaceAll("/", "~1");
 }
 
 export type { ImageNode };

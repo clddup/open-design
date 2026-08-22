@@ -40,11 +40,15 @@ import * as variables from "./variables.js";
 import * as styles from "./styles.js";
 import * as exportSettings from "./export-settings.js";
 import { ImageFiltersSchema, type ImageFilters } from "./image-filters.js";
-import { BlendModeSchema, EffectSchema, PaintSchema } from "./appearance.js";
+import {
+  BlendModeSchema,
+  EffectSchema,
+  ImagePaintSchema,
+  PaintSchema,
+} from "./appearance.js";
 import type {
   AngularGradientPaintSchema,
   GradientStopSchema,
-  ImagePaintSchema,
   LinearGradientPaintSchema,
   RadialGradientPaintSchema,
   SolidPaintSchema,
@@ -2672,6 +2676,9 @@ export function isImagePlacement(value: unknown): value is ImagePlacement {
 }
 export function isImageFilters(value: unknown): value is ImageFilters {
   return checkSchema(ImageFiltersSchema, value);
+}
+export function isImagePaint(value: unknown): value is ImagePaint {
+  return checkSchema(ImagePaintSchema, value);
 }
 export function migrateDesignDocument(value: unknown): DesignDocument | null {
   if (checkSchema(DesignDocumentSchema, value)) {

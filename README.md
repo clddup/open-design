@@ -25,6 +25,7 @@ Agent utilityProcess ── Conversation / Provider / typed design tools
 - Agent、MCP 和人工操作都必须通过版本化设计契约进入同一 `EditorRuntime`。
 - Agent 新建设计优先尽快提交视觉成立、可编辑、可继续精修的真实首屏，并基于同一权威 brief 连续完成后续目标；产品不以低质量“快速模式”或展示骨架冒充真实设计进度。
 - 同一 Project 的 Design File 可以发布和启用 Component、Shared Style 与 Variable Library；跨文件 Instance、Style 和 Variable 引用继续通过唯一事务、revision 与撤销历史保持链接和更新。
+- 独立 Image 节点与 Shape/Frame/Text 的图片 Fill/Stroke 共用非破坏调整语义，人工与 Agent 修改都会进入同一事务、画布、capture 和位图导出链路。
 - OpenPencil、旧 Canvas2D 后端和旧通用手写选择框已经从运行时与发行路径移除，不存在 fallback 或双写入口。
 
 ## 项目状态

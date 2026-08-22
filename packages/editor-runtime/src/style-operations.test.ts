@@ -23,6 +23,119 @@ import {
 } from "./index.js";
 
 describe("Shared Styles EditorRuntime", () => {
+  it("preserves adjusted local Image Paint Styles and fails closed without a Library asset bundle", () => {
+    const document = structuredClone(createWelcomeDocument());
+    document.assetsById.photo = {
+      id: "photo",
+      kind: "image",
+      name: "Photo",
+      mimeType: "image/png",
+      source: { type: "data", value: "cGhvdG8=" },
+      size: { width: 640, height: 480 },
+      extensions: {},
+    };
+    document.stylesById["photo-style"] = {
+      id: "photo-style",
+      key: "photo-style-key",
+      name: "Media/Photo",
+      description: "",
+      hiddenFromPublishing: false,
+      styleType: "PAINT",
+      paints: [
+        {
+          type: "image",
+          assetId: "photo",
+          fit: "cover",
+          opacity: 1,
+          filters: { contrast: 0.2, shadows: -0.35 },
+        },
+      ],
+      extensions: {},
+    };
+    document.styleOrderByType.PAINT.push("photo-style");
+    const node = document.nodesById.feature_one;
+    if (!node || node.kind !== "rectangle") throw new Error("Missing fixture");
+    node.fillStyleId = "photo-style";
+
+    const materialized =
+      materializeSharedStyles(document).document.nodesById.feature_one;
+    expect(materialized).toMatchObject({
+      properties: {
+        fills: [
+          {
+            type: "image",
+            assetId: "photo",
+            filters: { contrast: 0.2, shadows: -0.35 },
+          },
+        ],
+      },
+    });
+    expect(() =>
+      createLibraryReleaseSnapshot(document, {
+        libraryId: "library_media",
+        releaseId: "release_media",
+        sourceProjectId: "project",
+        sourceDesignFileId: "design-system",
+        name: "Media",
+        publishedAt: "2026-08-22T08:00:00.000Z",
+      }),
+    ).toThrow("standalone Style asset dependencies are not available yet");
+
+    document.componentsById.card = {
+      id: "card",
+      name: "Card",
+      rootNodeId: "feature_group",
+      componentPropertyOrder: [],
+      componentPropertyDefinitions: {},
+      variantProperties: {},
+      extensions: {},
+    };
+    const release = createLibraryReleaseSnapshot(document, {
+      libraryId: "library_media",
+      releaseId: "release_media_component",
+      sourceProjectId: "project",
+      sourceDesignFileId: "design-system",
+      name: "Media",
+      publishedAt: "2026-08-22T08:00:00.000Z",
+    });
+    expect(release.componentsById.card?.assetsById.photo).toBeDefined();
+    expect(release.stylesById["photo-style"]).toMatchObject({
+      style: {
+        paints: [
+          {
+            type: "image",
+            assetId: "photo",
+            filters: { contrast: 0.2, shadows: -0.35 },
+          },
+        ],
+      },
+    });
+    const consumer = new EditorRuntime(createWelcomeDocument());
+    applyPlan(
+      consumer,
+      planApplyLibraryStyle(consumer.getSnapshot().document, release, {
+        styleId: "photo-style",
+        target: { nodeId: "feature_one", field: "fillStyleId" },
+        commandPrefix: "apply_photo_style",
+      }),
+    );
+    expect(consumer.getSnapshot().document.assetsById.photo).toBeDefined();
+    expect(
+      materializeSharedStyles(consumer.getSnapshot().document).document
+        .nodesById.feature_one,
+    ).toMatchObject({
+      properties: {
+        fills: [
+          {
+            type: "image",
+            assetId: "photo",
+            filters: { contrast: 0.2, shadows: -0.35 },
+          },
+        ],
+      },
+    });
+  });
+
   it("publishes visible Styles and only carries hidden Styles required by Component sources", () => {
     const source = structuredClone(createWelcomeDocument());
     source.stylesById.visible = paintStyle(

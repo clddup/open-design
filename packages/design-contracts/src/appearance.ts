@@ -1,4 +1,5 @@
 import { Type } from "@sinclair/typebox";
+import { ImageFiltersSchema } from "./image-filters.js";
 import { PointSchema } from "./primitives.js";
 import { PaintBoundVariablesSchema } from "./variables.js";
 
@@ -82,6 +83,7 @@ export const ImagePaintSchema = Type.Object(
     rotation: Type.Optional(Type.Number()),
     scale: Type.Optional(PointSchema),
     offset: Type.Optional(PointSchema),
+    filters: Type.Optional(ImageFiltersSchema),
   },
   { additionalProperties: false },
 );

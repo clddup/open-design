@@ -1,7 +1,7 @@
 {
   "version": 1,
   "updatedAt": "2026-08-22",
-  "documentSchemaVersion": "1.40.0",
+  "documentSchemaVersion": "1.41.0",
   "engineBaseline": "leafer-editor@2.2.9",
   "categories": [
     {
@@ -594,6 +594,7 @@
           "apps/desktop/src/renderer/components/LeftSidebar.test.tsx",
           "apps/desktop/src/renderer/App.test.tsx",
           "packages/editor-runtime/src/image-operations.test.ts",
+          "packages/editor-runtime/src/style-operations.test.ts",
           "packages/editor-runtime/src/diagnostics.test.ts",
           "packages/leafer-engine/src/professional-fixtures.test.ts"
         ],
@@ -613,7 +614,7 @@
         "en": "Crop non-destructively, choose focal placement, replace sources, and apply image adjustments or filters.",
         "zh-CN": "非破坏性裁剪、选择焦点位置、替换来源并应用图片调整或滤镜。"
       },
-      "provider": "DesignDocument 1.40.0 + OpenDesign Image Service contract 3 + Leafer image-adjustment projection",
+      "provider": "DesignDocument 1.41.0 + OpenDesign Image Service contract 3 + Leafer per-image-paint adjustment projection",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
       "surfaces": {
         "contract": "available",
@@ -625,17 +626,19 @@
       },
       "limitations": [
         {
-          "en": "Image nodes support Figma-compatible exposure, contrast, saturation, temperature, tint, highlights, and shadows fields through one deterministic RGBA projection shared by canvas, capture, and PNG/JPEG/WebP export. Image-paint adjustments, SVG raster embedding, color-managed P3/ICC output, and native macOS/Windows interaction evidence remain incomplete.",
-          "zh-CN": "Image 节点已支持 Figma-compatible 曝光、对比度、饱和度、色温、色调、高光与阴影字段，并由画布、capture 和 PNG/JPEG/WebP 导出共用同一确定性 RGBA 投影。Image Paint 调整、SVG 位图嵌入、P3/ICC 色彩管理及 macOS/Windows 原生交互证据仍未完成。"
+          "en": "Image nodes and each image Fill/Stroke support Figma-compatible exposure, contrast, saturation, temperature, tint, highlights, and shadows through one deterministic RGBA projection shared by canvas, capture, and PNG/JPEG/WebP export. Standalone cross-file Image Paint Style asset bundles, SVG raster embedding, complete Figma imageHash/transform file adapters, color-managed P3/ICC output, and native macOS/Windows interaction evidence remain incomplete.",
+          "zh-CN": "Image 节点及每项图片 Fill/Stroke 已支持 Figma-compatible 曝光、对比度、饱和度、色温、色调、高光与阴影，并由画布、capture 和 PNG/JPEG/WebP 导出共用同一确定性 RGBA 投影。standalone 跨文件 Image Paint Style asset bundle、SVG 位图嵌入、完整 Figma imageHash/transform 文件 adapter、P3/ICC 色彩管理及 macOS/Windows 原生交互证据仍未完成。"
         }
       ],
       "evidence": {
         "automated": [
           "packages/design-contracts/src/index.test.ts",
           "packages/image-service/src/index.test.ts",
+          "packages/library-service/src/index.test.ts",
           "packages/editor-runtime/src/image-operations.test.ts",
           "packages/figma-interop/src/index.test.ts",
           "packages/leafer-engine/src/image-adjustment-filter.test.ts",
+          "packages/leafer-engine/src/image-paint-adjustment-filter.test.ts",
           "packages/leafer-engine/src/mapping.test.ts",
           "packages/leafer-engine/src/adapter.test.ts",
           "apps/desktop/src/shared/design-agent-tools.test.ts",

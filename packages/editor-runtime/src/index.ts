@@ -209,6 +209,7 @@ export {
   nodeReferencesAsset,
   planDeleteImageAsset,
   planImageNodeUpdate,
+  planImagePaintFilterUpdate,
   planPlaceImageAsset,
   planReplaceImageAsset,
   type ImageAssetOperationFailureCode,
@@ -216,6 +217,7 @@ export {
   type ImageUpdateFailureCode,
   type ImageUpdateOperation,
   type ImageUpdatePlan,
+  type ImagePaintFilterUpdateOperation,
   type PlaceImageAssetOperation,
 } from "./image-operations.js";
 export {

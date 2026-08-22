@@ -107,6 +107,7 @@ import {
   type ProjectionExportRequest,
 } from "./projection-export-target.js";
 import { exportLeaferRaster } from "./raster-export.js";
+import { installLeaferImagePaintAdjustmentFilter } from "./image-paint-adjustment-filter.js";
 import {
   generationActivityBadgeWidth,
   generationSkeletonFill,
@@ -376,6 +377,7 @@ export async function createLeaferEngineAdapter(
   options: LeaferEngineOptions = {},
 ): Promise<LeaferEngineAdapter> {
   const leafer = await import("leafer-editor");
+  installLeaferImagePaintAdjustmentFilter(leafer);
   return new WebLeaferEngineAdapter(host, callbacks, leafer, options);
 }
 

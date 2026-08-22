@@ -6,6 +6,7 @@ import type {
   DesignDocument,
   DesignNode,
   ImageFilters,
+  ImagePaint,
   ImagePlacement,
   InstanceSwapPreferredValue,
   LayoutConstraints,
@@ -123,6 +124,7 @@ export function SelectedNodeProperties({
   onCropImage,
   onReplaceImage,
   onUpdateImageFilters,
+  onUpdateImagePaintFilters,
   onUpdateImagePlacement,
   onRemoveComponent,
   onRemoveVariant,
@@ -184,6 +186,13 @@ export function SelectedNodeProperties({
   onCropImage: () => boolean;
   onReplaceImage: () => void;
   onUpdateImageFilters: (filters: ImageFilters) => void;
+  onUpdateImagePaintFilters: (
+    nodeId: string,
+    paintField: "fills" | "strokes",
+    paintIndex: number,
+    expectedPaint: ImagePaint,
+    filters: ImageFilters,
+  ) => void;
   onUpdateImagePlacement: (placement: ImagePlacement) => void;
   onRemoveComponent: () => void;
   onRemoveVariant: () => void;
@@ -937,6 +946,9 @@ export function SelectedNodeProperties({
         appearanceControlled={booleanOperandParent !== undefined}
         node={node}
         onUpdate={onUpdate}
+        onUpdateImagePaintFilters={(...args) =>
+          onUpdateImagePaintFilters(node.id, ...args)
+        }
       />
       {styleActions && (
         <StyleReferencesSection

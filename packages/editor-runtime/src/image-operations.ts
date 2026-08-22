@@ -4,6 +4,7 @@ import type {
   DesignNode,
   DesignOperation,
   ImageFilters,
+  ImagePaint,
   ImagePlacement,
   ImageNode,
   JsonObject,
@@ -11,6 +12,7 @@ import type {
 } from "@opendesign/design-contracts";
 import { MAX_TRANSACTION_COMMANDS } from "@opendesign/design-contracts";
 import { normalizeImageFilters } from "@opendesign/image-service";
+import { canonicalJsonStringify } from "./document-fingerprint.js";
 import {
   getWorldTransform,
   invertTransform,
@@ -39,7 +41,13 @@ export type ImageUpdateOperation =
     };
 
 export type ImageUpdateFailureCode =
-  "invalid-asset" | "invalid-kind" | "no-op" | "not-found" | "out-of-scope";
+  | "invalid-asset"
+  | "invalid-kind"
+  | "invalid-paint"
+  | "no-op"
+  | "not-found"
+  | "out-of-scope"
+  | "paint-stale";
 
 export type ImageUpdatePlan =
   | {
@@ -55,6 +63,15 @@ export type ImageUpdatePlan =
       code: ImageUpdateFailureCode;
       message: string;
     };
+
+export type ImagePaintFilterUpdateOperation = {
+  pageId: string;
+  nodeId: string;
+  paintField: "fills" | "strokes";
+  paintIndex: number;
+  expectedPaint: ImagePaint;
+  filters: ImageFilters;
+};
 
 export type ImageAssetOperationFailureCode =
   | "invalid-asset"
@@ -221,7 +238,8 @@ export function planImageNodeUpdate(
   if (
     operation.asset.id !== previousAssetId &&
     document.assetsById[previousAssetId] !== undefined &&
-    !assetReferencedOutsideNode(document, previousAssetId, operation.nodeId)
+    !assetReferencedOutsideNode(document, previousAssetId, operation.nodeId) &&
+    !styleReferencesAsset(document, previousAssetId)
   ) {
     deletedAssetId = previousAssetId;
     commands.push({
@@ -238,6 +256,99 @@ export function planImageNodeUpdate(
     previousAssetId,
     nextAssetId: operation.asset.id,
     ...(deletedAssetId === undefined ? {} : { deletedAssetId }),
+  };
+}
+
+/**
+ * Updates one exact image Fill/Stroke without asking callers to replace the
+ * complete paint list. The asset identity closes the stale-index hole when a
+ * concurrent edit inserts, removes, or reorders paints before execution.
+ */
+export function planImagePaintFilterUpdate(
+  document: DesignDocument,
+  operation: ImagePaintFilterUpdateOperation,
+  commandPrefix = "update_image_paint",
+): ImageUpdatePlan {
+  if (!document.pagesById[operation.pageId]) {
+    return {
+      ok: false,
+      code: "not-found",
+      message: `Page ${operation.pageId} does not exist`,
+    };
+  }
+  const node = document.nodesById[operation.nodeId];
+  if (!node) {
+    return {
+      ok: false,
+      code: "not-found",
+      message: `Node ${operation.nodeId} does not exist`,
+    };
+  }
+  if (!nodeBelongsToPage(document, operation.pageId, operation.nodeId)) {
+    return {
+      ok: false,
+      code: "out-of-scope",
+      message: `Node ${operation.nodeId} is outside Page ${operation.pageId}`,
+    };
+  }
+  if (!hasPaints(node)) {
+    return {
+      ok: false,
+      code: "invalid-kind",
+      message: `Node ${operation.nodeId} does not support image paints`,
+    };
+  }
+  if (!Number.isInteger(operation.paintIndex) || operation.paintIndex < 0) {
+    return {
+      ok: false,
+      code: "invalid-paint",
+      message: `Paint index ${operation.paintIndex} is invalid`,
+    };
+  }
+  const paints = node.properties[operation.paintField];
+  const paint = paints[operation.paintIndex];
+  if (!paint || paint.type !== "image") {
+    return {
+      ok: false,
+      code: "invalid-paint",
+      message: `${operation.paintField}[${operation.paintIndex}] on node ${operation.nodeId} is not an Image paint`,
+    };
+  }
+  if (
+    canonicalJsonStringify(paint) !==
+    canonicalJsonStringify(operation.expectedPaint)
+  ) {
+    return {
+      ok: false,
+      code: "paint-stale",
+      message: `${operation.paintField}[${operation.paintIndex}] on node ${operation.nodeId} no longer matches the inspected Image paint`,
+    };
+  }
+  const filters = normalizeImageFilters(operation.filters) ?? {};
+  const currentFilters = normalizeImageFilters(paint.filters) ?? {};
+  if (JSON.stringify(filters) === JSON.stringify(currentFilters)) {
+    return {
+      ok: false,
+      code: "no-op",
+      message: `Image paint ${operation.paintField}[${operation.paintIndex}] on node ${operation.nodeId} already uses those filters`,
+    };
+  }
+  const nextPaints = paints.map((candidate, index) =>
+    index === operation.paintIndex ? { ...candidate, filters } : candidate,
+  );
+  return {
+    ok: true,
+    commands: [
+      {
+        commandId: `${commandPrefix}_paint`,
+        type: "update_properties",
+        nodeId: operation.nodeId,
+        properties: { [operation.paintField]: nextPaints },
+      },
+    ],
+    nodeId: operation.nodeId,
+    previousAssetId: paint.assetId,
+    nextAssetId: paint.assetId,
   };
 }
 
@@ -352,10 +463,18 @@ export function planReplaceImageAsset(
   if (replacement.id === assetId) {
     return failure("no-op", `Asset ${assetId} already uses that source`);
   }
+  const referencingStyleId = styleReferenceId(document, assetId);
+  if (references.length === 0 && referencingStyleId) {
+    return failure(
+      "out-of-scope",
+      `Asset ${assetId} is owned by Style ${referencingStyleId}; update that Paint Style through the Style workflow`,
+    );
+  }
+  const deletePrevious = previous && !referencingStyleId;
   const commandCount =
     references.length +
     (document.assetsById[replacement.id] ? 0 : 1) +
-    (previous ? 1 : 0);
+    (deletePrevious ? 1 : 0);
   if (commandCount > MAX_TRANSACTION_COMMANDS) {
     return failure(
       "too-many-references",
@@ -372,14 +491,16 @@ export function planReplaceImageAsset(
     });
   }
   for (const [index, node] of references.entries()) {
-    commands.push({
-      commandId: `${commandPrefix}_reference_${index}`,
-      type: "update_properties",
-      nodeId: node.id,
-      properties: replacementProperties(node, assetId, replacement.id),
-    });
+    commands.push(
+      replacementReferenceCommand(
+        node,
+        assetId,
+        replacement.id,
+        `${commandPrefix}_reference_${index}`,
+      ),
+    );
   }
-  if (previous) {
+  if (deletePrevious) {
     commands.push({
       commandId: `${commandPrefix}_cleanup`,
       type: "delete_asset",
@@ -412,6 +533,13 @@ export function planDeleteImageAsset(
       `Asset ${assetId} is still referenced by node ${reference.id}`,
     );
   }
+  const styleId = styleReferenceId(document, assetId);
+  if (styleId) {
+    return failure(
+      "out-of-scope",
+      `Asset ${assetId} is still referenced by Style ${styleId}`,
+    );
+  }
   return {
     ok: true,
     assetId,
@@ -439,6 +567,33 @@ function assetReferencedOutsideNode(
   );
 }
 
+function styleReferencesAsset(
+  document: DesignDocument,
+  assetId: string,
+): boolean {
+  return styleReferenceId(document, assetId) !== undefined;
+}
+
+function styleReferenceId(
+  document: DesignDocument,
+  assetId: string,
+): string | undefined {
+  for (const style of [
+    ...Object.values(document.stylesById),
+    ...Object.values(document.libraryStylesById).map((entry) => entry.style),
+  ]) {
+    if (
+      style.styleType === "PAINT" &&
+      style.paints.some(
+        (paint) => paint.type === "image" && paint.assetId === assetId,
+      )
+    ) {
+      return style.id;
+    }
+  }
+  return undefined;
+}
+
 export function nodeReferencesAsset(
   node: DesignNode,
   assetId: string,
@@ -459,9 +614,58 @@ export function nodeReferencesAsset(
   ) {
     return false;
   }
-  return [...node.properties.fills, ...node.properties.strokes].some(
-    (paint) => paint.type === "image" && paint.assetId === assetId,
+  return [
+    ...node.properties.fills,
+    ...node.properties.strokes,
+    ...(node.kind === "text"
+      ? (node.properties.runs ?? []).flatMap((run) => run.style.fills)
+      : []),
+  ].some((paint) => paint.type === "image" && paint.assetId === assetId);
+}
+
+function replacementReferenceCommand(
+  node: DesignNode,
+  previousAssetId: string,
+  nextAssetId: string,
+  commandId: string,
+): DesignOperation {
+  const textRunReference =
+    node.kind === "text" &&
+    (node.properties.runs ?? []).some((run) =>
+      run.style.fills.some(
+        (paint) => paint.type === "image" && paint.assetId === previousAssetId,
+      ),
+    );
+  if (!textRunReference) {
+    return {
+      commandId,
+      type: "update_properties",
+      nodeId: node.id,
+      properties: replacementProperties(node, previousAssetId, nextAssetId),
+    };
+  }
+  const replacement = structuredClone(node);
+  if (replacement.kind !== "text") {
+    throw new Error("Text run image replacement target changed kind");
+  }
+  const replace = (paint: (typeof replacement.properties.fills)[number]) =>
+    paint.type === "image" && paint.assetId === previousAssetId
+      ? { ...paint, assetId: nextAssetId }
+      : paint;
+  replacement.properties.fills = replacement.properties.fills.map(replace);
+  replacement.properties.strokes = replacement.properties.strokes.map(replace);
+  replacement.properties.runs = (replacement.properties.runs ?? []).map(
+    (run) => ({
+      ...run,
+      style: { ...run.style, fills: run.style.fills.map(replace) },
+    }),
   );
+  return {
+    commandId,
+    type: "replace_subtree",
+    rootNodeId: replacement.id,
+    nodes: [replacement],
+  };
 }
 
 function replacementProperties(

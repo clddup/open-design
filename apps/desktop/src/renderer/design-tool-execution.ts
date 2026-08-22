@@ -23,6 +23,7 @@ import {
   planDuplicatePage,
   planGroupNodes,
   planImageNodeUpdate,
+  planImagePaintFilterUpdate,
   planReparentNodes,
   planReorderNodes,
   planRenamePage,
@@ -1275,31 +1276,47 @@ async function executeDesignToolRequestUnsafe(
     );
     const commandPrefix =
       `image_${input.action}_${request.call.toolCallId}`.slice(0, 200);
-    const operation =
-      input.action === "set-placement"
-        ? {
-            action: input.action,
-            pageId: input.pageId,
-            nodeId: input.nodeId,
-            placement: input.placement,
-          }
-        : input.action === "set-filters"
-          ? {
-              action: input.action,
+    const plan =
+      input.action === "set-paint-filters"
+        ? planImagePaintFilterUpdate(
+            document,
+            {
               pageId: input.pageId,
               nodeId: input.nodeId,
+              paintField: input.paintField,
+              paintIndex: input.paintIndex,
+              expectedPaint: input.expectedPaint,
               filters: input.filters,
-            }
-          : {
-              action: input.action,
-              pageId: input.pageId,
-              nodeId: input.nodeId,
-              asset: input.asset,
-              ...(input.placement === undefined
-                ? {}
-                : { placement: input.placement }),
-            };
-    const plan = planImageNodeUpdate(document, operation, commandPrefix);
+            },
+            commandPrefix,
+          )
+        : planImageNodeUpdate(
+            document,
+            input.action === "set-placement"
+              ? {
+                  action: input.action,
+                  pageId: input.pageId,
+                  nodeId: input.nodeId,
+                  placement: input.placement,
+                }
+              : input.action === "set-filters"
+                ? {
+                    action: input.action,
+                    pageId: input.pageId,
+                    nodeId: input.nodeId,
+                    filters: input.filters,
+                  }
+                : {
+                    action: input.action,
+                    pageId: input.pageId,
+                    nodeId: input.nodeId,
+                    asset: input.asset,
+                    ...(input.placement === undefined
+                      ? {}
+                      : { placement: input.placement }),
+                  },
+            commandPrefix,
+          );
     if (!plan.ok) {
       throw new Error(`image-update.${plan.code}: ${plan.message}`);
     }
@@ -1336,6 +1353,15 @@ async function executeDesignToolRequestUnsafe(
       throw designTransactionToolError(result.error, transaction.commands);
     }
     const applied = runtime.getSnapshot().document.nodesById[input.nodeId];
+    const appliedPaint =
+      input.action === "set-paint-filters" &&
+      applied &&
+      applied.kind !== "group" &&
+      applied.kind !== "image" &&
+      applied.kind !== "instance" &&
+      applied.kind !== "slice"
+        ? applied.properties[input.paintField][input.paintIndex]
+        : undefined;
     return {
       requestId: request.requestId,
       ok: true,
@@ -1353,9 +1379,22 @@ async function executeDesignToolRequestUnsafe(
               ? applied.properties.placement
               : undefined,
           filters:
-            applied?.kind === "image"
-              ? (applied.properties.filters ?? {})
-              : undefined,
+            input.action === "set-paint-filters" &&
+            appliedPaint?.type === "image"
+              ? (appliedPaint.filters ?? {})
+              : applied?.kind === "image"
+                ? (applied.properties.filters ?? {})
+                : undefined,
+          ...(input.action === "set-paint-filters"
+            ? {
+                paintField: input.paintField,
+                paintIndex: input.paintIndex,
+                assetId:
+                  appliedPaint?.type === "image"
+                    ? appliedPaint.assetId
+                    : undefined,
+              }
+            : {}),
           ...(plan.deletedAssetId === undefined
             ? {}
             : { deletedAssetId: plan.deletedAssetId }),
@@ -1570,6 +1609,44 @@ function assertAgentDoesNotBypassImageWorkflow(
       throw new Error(
         `design_workflow.image_update_requires_image_tool: Update Image node ${node.id} with opendesign_update_image so source, placement, and filters remain non-destructive and atomic`,
       );
+    }
+  }
+  for (const command of commands) {
+    if (command.type !== "update_properties" || !command.properties) continue;
+    const node = document.nodesById[command.nodeId];
+    if (
+      !node ||
+      node.kind === "group" ||
+      node.kind === "image" ||
+      node.kind === "instance" ||
+      node.kind === "slice"
+    ) {
+      continue;
+    }
+    for (const field of ["fills", "strokes"] as const) {
+      const next = command.properties[field];
+      if (!Array.isArray(next)) continue;
+      const currentFilters = node.properties[field].map((paint) =>
+        paint.type === "image" ? (paint.filters ?? {}) : null,
+      );
+      const nextFilters = next.map((paint) => {
+        if (
+          typeof paint !== "object" ||
+          paint === null ||
+          Array.isArray(paint) ||
+          paint.type !== "image"
+        ) {
+          return null;
+        }
+        return typeof paint.filters === "object" && paint.filters !== null
+          ? paint.filters
+          : {};
+      });
+      if (JSON.stringify(currentFilters) !== JSON.stringify(nextFilters)) {
+        throw new Error(
+          `design_workflow.image_paint_update_requires_image_tool: Update an existing image ${field} on node ${node.id} with opendesign_update_image action set-paint-filters so the exact paint identity remains non-destructive and stale-safe`,
+        );
+      }
     }
   }
 }

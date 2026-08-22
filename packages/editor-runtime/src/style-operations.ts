@@ -15,6 +15,7 @@ import {
   styleTypeForReference,
   validateStyleDocument,
 } from "@opendesign/style-service";
+import { libraryReleaseAssets } from "@opendesign/library-service";
 
 export type StyleOperationFailureCode = "duplicate" | "invalid" | "not-found";
 
@@ -204,6 +205,36 @@ export function planApplyLibraryStyle(
   });
   if (!reference.ok) return reference;
   const commands: DesignOperation[] = [];
+  if (source.style.styleType === "PAINT") {
+    const releaseAssets = libraryReleaseAssets(release);
+    for (const assetId of new Set(
+      source.style.paints.flatMap((paint) =>
+        paint.type === "image" ? [paint.assetId] : [],
+      ),
+    )) {
+      const asset = releaseAssets[assetId];
+      if (!asset) {
+        return failure(
+          "invalid",
+          `Library Image Paint Style ${input.styleId} is missing asset ${assetId}`,
+        );
+      }
+      const existing = document.assetsById[assetId];
+      if (existing && JSON.stringify(existing) !== JSON.stringify(asset)) {
+        return failure(
+          "duplicate",
+          `Library image asset ${assetId} conflicts with the current Design File`,
+        );
+      }
+      if (!existing) {
+        commands.push({
+          commandId: `${input.commandPrefix}_put_asset_${commands.length}`,
+          type: "put_asset",
+          asset: structuredClone(asset),
+        });
+      }
+    }
+  }
   if (!imported || JSON.stringify(imported) !== JSON.stringify(source)) {
     commands.push({
       commandId: `${input.commandPrefix}_put_library_style`,

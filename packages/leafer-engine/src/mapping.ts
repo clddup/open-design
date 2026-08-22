@@ -10,9 +10,13 @@ import type {
 import { resolveLineEndpointPoint } from "@opendesign/design-contracts";
 import {
   COMPONENT_PROJECTION_PREFIX,
+  componentProjectionAssets,
   resolveComponentInstance,
 } from "@opendesign/component-service";
-import { resolveImagePlacement } from "@opendesign/image-service";
+import {
+  normalizeImageFilters,
+  resolveImagePlacement,
+} from "@opendesign/image-service";
 import type { BooleanGeometryResolution } from "@opendesign/geometry-service/boolean-resolver";
 import {
   resolvePathPropertiesData,
@@ -66,7 +70,10 @@ export function projectDesignPage(
       projectedNodesById[resolved.projectionId] = resolved.node;
     }
   }
-  const designSystems = materializeDesignSystems(document, projectedNodesById);
+  const designSystems = materializeDesignSystems(
+    { ...document, assetsById: componentProjectionAssets(document) },
+    projectedNodesById,
+  );
   const projectionDocument = designSystems.document;
   warnings.push(...designSystems.warnings);
 
@@ -962,6 +969,7 @@ function mapPaints(
         });
         continue;
       }
+      const filters = normalizeImageFilters(paint.filters);
       mapped.push({
         type: "image",
         url,
@@ -977,6 +985,14 @@ function mapPaints(
         ...(paint.rotation === undefined ? {} : { rotation: paint.rotation }),
         ...(paint.scale === undefined ? {} : { scale: paint.scale }),
         ...(paint.offset === undefined ? {} : { offset: paint.offset }),
+        ...(filters === undefined
+          ? {}
+          : {
+              filter: Object.entries(filters).map(([type, value]) => ({
+                type,
+                value,
+              })),
+            }),
       });
       continue;
     }

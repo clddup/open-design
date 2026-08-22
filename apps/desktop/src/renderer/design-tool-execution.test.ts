@@ -3161,6 +3161,108 @@ describe("Renderer design tool scope", () => {
     expect(runtime.getSnapshot().state.history.undo).toHaveLength(4);
   });
 
+  it("updates one inspected image paint and blocks generic filter rewrites", async () => {
+    const document = structuredClone(createWelcomeDocument());
+    document.assetsById.asset_photo = {
+      id: "asset_photo",
+      kind: "image",
+      name: "Photo",
+      mimeType: "image/png",
+      source: { type: "data", value: "cGhvdG8=" },
+      size: { width: 640, height: 480 },
+      extensions: {},
+    };
+    const node = document.nodesById.feature_one;
+    if (!node || node.kind !== "rectangle") throw new Error("Missing fixture");
+    node.properties.fills = [
+      { type: "solid", color: "#ffffff", opacity: 0.5 },
+      {
+        type: "image",
+        assetId: "asset_photo",
+        fit: "cover",
+        opacity: 1,
+      },
+    ];
+    const runtime = new EditorRuntime(document);
+    const response = await executeDesignToolRequest(
+      {
+        requestId: "adjust_image_paint",
+        call: {
+          toolCallId: "tool_adjust_image_paint",
+          toolName: INTERNAL_UPDATE_IMAGE_TOOL_NAME,
+          input: {
+            action: "set-paint-filters",
+            label: "Balance card photo",
+            pageId: "page_welcome",
+            nodeId: "feature_one",
+            paintField: "fills",
+            paintIndex: 1,
+            expectedPaint: {
+              type: "image",
+              assetId: "asset_photo",
+              fit: "cover",
+              opacity: 1,
+            },
+            filters: { contrast: 0.25, shadows: -0.3 },
+          },
+        },
+        context: selectionContext,
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(response).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "set-paint-filters",
+          paintField: "fills",
+          paintIndex: 1,
+          assetId: "asset_photo",
+          filters: { contrast: 0.25, shadows: -0.3 },
+          revision: 1,
+        },
+      },
+    });
+
+    await expect(
+      executeDesignToolRequest(
+        {
+          requestId: "bypass_image_paint",
+          call: {
+            toolCallId: "tool_bypass_image_paint",
+            toolName: INTERNAL_DESIGN_APPLY_TOOL_NAME,
+            input: {
+              label: "Bypass image paint workflow",
+              commands: [
+                {
+                  commandId: "bypass_image_paint",
+                  type: "update_properties",
+                  nodeId: "feature_one",
+                  properties: {
+                    fills: [
+                      { type: "solid", color: "#ffffff", opacity: 0.5 },
+                      {
+                        type: "image",
+                        assetId: "asset_photo",
+                        fit: "cover",
+                        opacity: 1,
+                        filters: { exposure: 0.5 },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+          context: { ...selectionContext, revision: 1 },
+        },
+        runtime,
+        "page_welcome",
+      ),
+    ).rejects.toThrow("image_paint_update_requires_image_tool");
+  });
+
   it("returns bounded image asset metadata without copying source bytes into model context", async () => {
     const sourceValue = `data:image/png;base64,${"A".repeat(1_000_000)}`;
     const runtime = new EditorRuntime(createWelcomeDocument());

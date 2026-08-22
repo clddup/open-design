@@ -2,6 +2,8 @@ import type {
   BlendMode,
   DesignNode,
   Effect,
+  ImageFilters,
+  ImagePaint,
   MaskMode,
 } from "@opendesign/design-contracts";
 import { Icon } from "@opendesign/ui";
@@ -110,10 +112,17 @@ export function PaintAndEffectsSections({
   appearanceControlled,
   node,
   onUpdate,
+  onUpdateImagePaintFilters,
 }: {
   appearanceControlled: boolean;
   node: DesignNode;
   onUpdate: (updates: UpdatePropertiesPatch) => void;
+  onUpdateImagePaintFilters: (
+    paintField: "fills" | "strokes",
+    paintIndex: number,
+    expectedPaint: ImagePaint,
+    filters: ImageFilters,
+  ) => void;
 }) {
   const { t } = useI18n();
   return (
@@ -142,6 +151,11 @@ export function PaintAndEffectsSections({
                   },
                 })
               }
+              onImageFiltersChange={(filters) => {
+                if (paint.type === "image") {
+                  onUpdateImagePaintFilters("fills", index, paint, filters);
+                }
+              }}
               paint={paint}
             />
           ))}
@@ -189,6 +203,11 @@ export function PaintAndEffectsSections({
                   },
                 })
               }
+              onImageFiltersChange={(filters) => {
+                if (paint.type === "image") {
+                  onUpdateImagePaintFilters("strokes", index, paint, filters);
+                }
+              }}
               paint={paint}
             />
           ))}

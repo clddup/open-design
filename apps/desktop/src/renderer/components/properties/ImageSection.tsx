@@ -234,34 +234,50 @@ export function ImageSection({
           <Icon name="lucide:image" size={13} />
           {t("properties.imageReplace")}
         </button>
-        <div className={imageStyles.adjustmentHeader}>
-          <strong>{t("properties.imageAdjustments")}</strong>
-          <button
-            disabled={IMAGE_FILTER_KEYS.every((key) => !filters[key])}
-            onClick={() => onFiltersChange({})}
-            type="button"
-          >
-            {t("properties.imageResetAdjustments")}
-          </button>
-        </div>
-        <div
-          aria-label={t("properties.imageAdjustments")}
-          className={imageStyles.adjustmentList}
-          role="group"
-        >
-          {IMAGE_FILTER_KEYS.map((key) => (
-            <ImageFilterControl
-              key={key}
-              label={t(FILTER_LABEL_KEYS[key])}
-              onCommit={(value) =>
-                onFiltersChange({ ...filters, [key]: value })
-              }
-              value={filters[key] ?? 0}
-            />
-          ))}
-        </div>
+        <ImageAdjustmentsEditor
+          filters={filters}
+          onFiltersChange={onFiltersChange}
+        />
       </div>
     </Section>
+  );
+}
+
+export function ImageAdjustmentsEditor({
+  filters,
+  onFiltersChange,
+}: {
+  filters: ImageFilters;
+  onFiltersChange: (filters: ImageFilters) => void;
+}) {
+  const { t } = useI18n();
+  return (
+    <>
+      <div className={imageStyles.adjustmentHeader}>
+        <strong>{t("properties.imageAdjustments")}</strong>
+        <button
+          disabled={IMAGE_FILTER_KEYS.every((key) => !filters[key])}
+          onClick={() => onFiltersChange({})}
+          type="button"
+        >
+          {t("properties.imageResetAdjustments")}
+        </button>
+      </div>
+      <div
+        aria-label={t("properties.imageAdjustments")}
+        className={imageStyles.adjustmentList}
+        role="group"
+      >
+        {IMAGE_FILTER_KEYS.map((key) => (
+          <ImageFilterControl
+            key={key}
+            label={t(FILTER_LABEL_KEYS[key])}
+            onCommit={(value) => onFiltersChange({ ...filters, [key]: value })}
+            value={filters[key] ?? 0}
+          />
+        ))}
+      </div>
+    </>
   );
 }
 

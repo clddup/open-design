@@ -2343,6 +2343,21 @@ describe("design Agent tool contract", () => {
         highlights: -0.35,
       },
     };
+    const setPaintFilters = {
+      action: "set-paint-filters",
+      label: "Balance the card image fill",
+      pageId: "page_1",
+      nodeId: "card",
+      paintField: "fills",
+      paintIndex: 1,
+      expectedPaint: {
+        type: "image",
+        assetId: "asset_photo",
+        fit: "cover",
+        opacity: 1,
+      },
+      filters: { contrast: 0.2 },
+    };
     const update = DESIGN_AGENT_TOOL_SPECS.find(
       (tool) => tool.name === UPDATE_IMAGE_TOOL_NAME,
     );
@@ -2358,6 +2373,15 @@ describe("design Agent tool contract", () => {
     expect(
       validateDesignAgentToolInput(UPDATE_IMAGE_TOOL_NAME, setFilters),
     ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(UPDATE_IMAGE_TOOL_NAME, setPaintFilters),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(UPDATE_IMAGE_TOOL_NAME, {
+        ...setPaintFilters,
+        paintIndex: -1,
+      }),
+    ).toBe(false);
     expect(
       validateDesignAgentToolInput(UPDATE_IMAGE_TOOL_NAME, {
         ...setFilters,

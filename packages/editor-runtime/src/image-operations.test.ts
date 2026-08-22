@@ -15,6 +15,7 @@ import {
 import {
   planDeleteImageAsset,
   planImageNodeUpdate,
+  planImagePaintFilterUpdate,
   planPlaceImageAsset,
   planReplaceImageAsset,
 } from "./image-operations.js";
@@ -71,6 +72,96 @@ function documentWithImage(): DesignDocument {
 }
 
 describe("image update planner", () => {
+  it("updates one exact image paint and fails closed after paint identity changes", () => {
+    const document = documentWithImage();
+    const path: PathNode = {
+      id: "paint_target",
+      kind: "path",
+      name: "Paint target",
+      parentId: "frame_welcome",
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 0, 0],
+      size: { width: 100, height: 100 },
+      exportSettings: [],
+      opacity: 1,
+      properties: {
+        path: "M0 0 H100 V100 H0 Z",
+        fills: [
+          { type: "solid", color: "#ffffff", opacity: 1 },
+          { type: "image", assetId: oldAsset.id, fit: "cover", opacity: 1 },
+        ],
+        strokes: [],
+        strokeWidth: 0,
+      },
+      extensions: {},
+    };
+    document.nodesById[path.id] = path;
+    document.nodesById.frame_welcome!.childIds.push(path.id);
+    const runtime = new EditorRuntime(document);
+    const plan = planImagePaintFilterUpdate(runtime.getSnapshot().document, {
+      pageId: "page_welcome",
+      nodeId: path.id,
+      paintField: "fills",
+      paintIndex: 1,
+      expectedPaint: {
+        type: "image",
+        assetId: oldAsset.id,
+        fit: "cover",
+        opacity: 1,
+      },
+      filters: { contrast: 0.25, highlights: -0.4 },
+    });
+    expect(plan).toMatchObject({ ok: true });
+    if (!plan.ok) return;
+    const before = runtime.getSnapshot().document;
+    expect(
+      runtime.apply({
+        transactionId: "adjust_image_paint",
+        documentId: before.documentId,
+        baseRevision: before.revision,
+        actor: { type: "user", id: "test" },
+        commands: plan.commands,
+      }).ok,
+    ).toBe(true);
+    const applied = runtime.getSnapshot().document.nodesById[path.id];
+    expect(
+      applied?.kind === "path" && applied.properties.fills[1],
+    ).toMatchObject({
+      type: "image",
+      assetId: oldAsset.id,
+      filters: { contrast: 0.25, highlights: -0.4 },
+    });
+    expect(runtime.undo().ok).toBe(true);
+    const staleDocument = structuredClone(document);
+    const staleNode = staleDocument.nodesById[path.id];
+    if (!staleNode || staleNode.kind !== "path") {
+      throw new Error("Missing stale paint target");
+    }
+    staleNode.properties.fills[1] = {
+      type: "image",
+      assetId: oldAsset.id,
+      fit: "contain",
+      opacity: 1,
+    };
+    expect(
+      planImagePaintFilterUpdate(staleDocument, {
+        pageId: "page_welcome",
+        nodeId: path.id,
+        paintField: "fills",
+        paintIndex: 1,
+        expectedPaint: {
+          type: "image",
+          assetId: oldAsset.id,
+          fit: "cover",
+          opacity: 1,
+        },
+        filters: { contrast: 0.25 },
+      }),
+    ).toMatchObject({ ok: false, code: "paint-stale" });
+  });
+
   it("applies sparse non-destructive filters as one undoable image update", () => {
     const runtime = new EditorRuntime(documentWithImage());
     const plan = planImageNodeUpdate(runtime.getSnapshot().document, {
@@ -334,7 +425,13 @@ describe("file image asset planners", () => {
       properties: {
         path: "M0 0 H100 V100 H0 Z",
         fills: [
-          { type: "image", assetId: oldAsset.id, fit: "cover", opacity: 1 },
+          {
+            type: "image",
+            assetId: oldAsset.id,
+            fit: "cover",
+            opacity: 1,
+            filters: { exposure: 0.2, shadows: -0.3 },
+          },
         ],
         strokes: [
           { type: "image", assetId: oldAsset.id, fit: "tile", opacity: 0.5 },
@@ -369,7 +466,12 @@ describe("file image asset planners", () => {
     });
     expect(nextPath).toMatchObject({
       properties: {
-        fills: [expect.objectContaining({ assetId: newAsset.id })],
+        fills: [
+          expect.objectContaining({
+            assetId: newAsset.id,
+            filters: { exposure: 0.2, shadows: -0.3 },
+          }),
+        ],
         strokes: [expect.objectContaining({ assetId: newAsset.id })],
       },
     });
@@ -452,5 +554,42 @@ describe("file image asset planners", () => {
       error: { code: "invalid" },
     });
     expect(racedRuntime.getSnapshot().document.assetsById.unused).toBeDefined();
+  });
+
+  it("keeps assets referenced by local Image Paint Styles", () => {
+    const document = documentWithImage();
+    delete document.nodesById.hero;
+    document.nodesById.frame_welcome!.childIds =
+      document.nodesById.frame_welcome!.childIds.filter(
+        (nodeId) => nodeId !== "hero",
+      );
+    document.stylesById.photo = {
+      id: "photo",
+      key: "photo-key",
+      name: "Media/Photo",
+      description: "",
+      hiddenFromPublishing: false,
+      styleType: "PAINT",
+      paints: [
+        {
+          type: "image",
+          assetId: oldAsset.id,
+          fit: "cover",
+          opacity: 1,
+          filters: { contrast: 0.2 },
+        },
+      ],
+      extensions: {},
+    };
+    document.styleOrderByType.PAINT.push("photo");
+
+    const deletion = planDeleteImageAsset(document, oldAsset.id);
+    expect(deletion).toMatchObject({ ok: false, code: "out-of-scope" });
+    if (deletion.ok) throw new Error("Expected Style reference guard");
+    expect(deletion.message).toContain("Style photo");
+    const replace = planReplaceImageAsset(document, oldAsset.id, newAsset);
+    expect(replace).toMatchObject({ ok: false, code: "out-of-scope" });
+    if (replace.ok) throw new Error("Expected Style replacement guard");
+    expect(replace.message).toContain("Style workflow");
   });
 });

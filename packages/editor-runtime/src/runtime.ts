@@ -1079,6 +1079,22 @@ function deleteAsset(
       `Asset ${command.assetId} is still referenced by node ${referencingNode.id}`,
     );
   }
+  const referencingStyle = [
+    ...Object.values(document.stylesById),
+    ...Object.values(document.libraryStylesById).map((entry) => entry.style),
+  ].find(
+    (style) =>
+      style.styleType === "PAINT" &&
+      style.paints.some(
+        (paint) => paint.type === "image" && paint.assetId === command.assetId,
+      ),
+  );
+  if (referencingStyle) {
+    throw new OperationError(
+      command.commandId,
+      `Asset ${command.assetId} is still referenced by Style ${referencingStyle.id}`,
+    );
+  }
   delete document.assetsById[command.assetId];
 }
 
@@ -2618,6 +2634,9 @@ function nodeAssetIds(node: DesignNode): string[] {
     for (const paint of [
       ...node.properties.fills,
       ...node.properties.strokes,
+      ...(node.kind === "text"
+        ? (node.properties.runs ?? []).flatMap((run) => run.style.fills)
+        : []),
     ]) {
       if (paint.type === "image") ids.push(paint.assetId);
     }

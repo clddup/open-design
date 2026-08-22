@@ -15,6 +15,7 @@ import type {
   ComponentOverridePatch,
   DesignDocument,
   ImageFilters,
+  ImagePaint,
   ImagePlacement,
   UpdatePropertiesCommand,
 } from "@opendesign/design-contracts";
@@ -22,6 +23,7 @@ import {
   getNodeBounds,
   getSelectionBounds,
   planImageNodeUpdate,
+  planImagePaintFilterUpdate,
   screenToDocument,
 } from "@opendesign/editor-runtime";
 import type {
@@ -1081,6 +1083,32 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
         return;
       }
       applyCommands(t("history.updateImagePlacement"), plan.commands);
+    },
+    [activePageId, applyCommands, runtime, setEditorError, t],
+  );
+
+  const updateImagePaintFilters = useCallback(
+    (
+      nodeId: string,
+      paintField: "fills" | "strokes",
+      paintIndex: number,
+      expectedPaint: ImagePaint,
+      filters: ImageFilters,
+    ) => {
+      const current = runtime.getSnapshot();
+      const plan = planImagePaintFilterUpdate(current.document, {
+        pageId: activePageId,
+        nodeId,
+        paintField,
+        paintIndex,
+        expectedPaint,
+        filters,
+      });
+      if (!plan.ok) {
+        if (plan.code !== "no-op") setEditorError(plan.message);
+        return;
+      }
+      applyCommands(t("history.adjustImage"), plan.commands);
     },
     [activePageId, applyCommands, runtime, setEditorError, t],
   );
@@ -2646,6 +2674,7 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
                 }}
                 onReplaceImage={() => void replaceSelectedImage()}
                 onUpdateImageFilters={updateSelectedImageFilters}
+                onUpdateImagePaintFilters={updateImagePaintFilters}
                 onUpdateImagePlacement={updateSelectedImagePlacement}
                 onRemoveComponent={removeSelectedComponent}
                 onRemoveVariant={removeSelectedVariantFromSet}

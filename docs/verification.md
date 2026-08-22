@@ -5,7 +5,7 @@
 <!-- verification-facts:baseline:start -->
 
 - 环境基线：Node.js 24.14.0、pnpm 10.32.1、Electron 43.3.0、Vite 8.2.1
-- 文档协议：`DesignDocument 1.40.0`
+- 文档协议：`DesignDocument 1.41.0`
 - Agent 协议：`3.11.0`
 - Geometry Service：`contract v13`
 - Text Layout Service：`contract v4`
@@ -15,7 +15,6 @@
 - Text Editing Session Service：`contract v2`（自动列表、光标输入样式、范围暂存与单事务提交已接入）
 - Text Run Layout Service：`contract v4`（native/HarfBuzz 列表生产投影已接入）
 - Layout Service：`contract v8`
-- Image Service：`contract v3`（七项非破坏调整已接入画布、capture 与位图导出）
 - Agent Core：`@earendil-works/pi-agent-core 0.84.1`（production-entry-native-gate-pending）
 - 生产画布：`leafer-editor 2.2.9`
 
@@ -61,7 +60,7 @@ pnpm build          passed
 
 测试覆盖的关键路径包括：
 
-- Image Service contract 3 专项验证覆盖 `DesignDocument 1.39 → 1.40` 迁移、七项 `-1..1` Figma-compatible fields、稀疏归一化、确定性 RGBA 与 alpha 保持、专用 Runtime planner/no-op/undo/JSON 保存重开、来源替换保留、通用 Agent apply 旁路拒绝、Figma Plugin API shape、Leafer filter 注册/有界像素区域、画布 projection、SVG 明确拒绝，以及 Inspector/Agent/App/capture/raster 主链。定向执行共通过 core 154 项与 desktop 259 项测试；Image Paint、SVG 位图嵌入、P3/ICC 和双平台打包产品视觉仍未验证。
+- Image Service contract 3 专项验证覆盖 `DesignDocument 1.39 → 1.40 → 1.41` 迁移、Image 节点与每项 Image Fill/Stroke 的七项 `-1..1` Figma-compatible fields、稀疏归一化、确定性 RGBA 与 alpha 保持、专用 Runtime planner/no-op/undo/JSON 保存重开、完整 Paint stale identity、来源替换保留、通用 Agent apply 旁路拒绝、Figma Plugin API shape、Leafer 节点 filter 与每 Paint 派生缓存、画布 projection、SVG 明确拒绝，以及 Inspector/Agent/App/capture/raster 主链。定向执行通过 core 144 项与 desktop 261 项测试；standalone 跨文件 Image Paint Style asset bundle、SVG 位图嵌入、P3/ICC 和双平台打包产品视觉仍未验证。
 - 固定 UI/Logo live-Agent 评测工具验证场景 prompt 可读取、模型上下文预算与首轮工具面有界、真实 evidence 结构和产物字节完整性。匿名 packet 只暴露 prompt、rubric 与随机排序后的最终 captures，不暴露 Run、Provider、model、app 或 Critic 身份；评分按每项 1–5 分执行 critical/ordinary 非补偿阈值。该自动化只证明评测工具可重放，不证明当前模型设计质量已经通过；真实 macOS/Windows 打包产品 Run 与人工评分仍待执行。命令为 `pnpm evaluation:check`，见 ADR-0120。
 
 - DesignDocument 1.10 schema/migration、Fixed/Auto Width/Auto Height 文字与具体权威尺寸、文字换行/溢出、正式 Path/Vector 外观与持久 Bézier point mode、非破坏 Image placement 与 Boolean Group、事务、revision、preview、history、undo/redo、asset 引用安全和 Agent 渐进事务回滚。
@@ -132,7 +131,7 @@ Node.js 在涉及 `node:sqlite` 的测试中输出 experimental warning；测试
 
 ## 专业设计就绪度审计
 
-当前 `DesignCapabilityManifest v1` 记录 0 项完整可用、21 项降级可用和 1 项不可用能力；没有实机证据的能力不会标记为完整可用。`DesignDocument 1.40.0`、EditorRuntime、Geometry/Image/Text/Layout/Component/Variable/Style/Library service、Leafer adapter、Inspector 和 Agent tools 已打通正式矢量、文字、外观、图片、响应式布局、Component/Variant/Slot、Variables、Shared Styles、视觉复核和单目标 PNG/JPEG/WebP 导出基础路径。Image Service contract 3 专项证据覆盖七项 Figma-compatible 非破坏调整、单事务 Inspector/Agent、保存重开/undo、来源替换保留、Figma Plugin API 形状，以及画布/capture/位图导出的同一分块 RGBA 投影。同 Project Library 专项证据覆盖 Component/Variant、Style-only 与 Variable-only 发布、hidden Style/Variable/alias dependency、显式启用、Local/Library 搜索、单事务 imported source/reference、更新接受、禁用保留、身份冲突、引用删除保护和 Agent 只读 inspection。真实字体跨平台栅格、连接/分支 network、Image Paint 调整、SVG 位图嵌入、P3/ICC、custom list markers、高级 decoration、OpenType、variable axes、字体打包与授权迁移、更多 Variable/Style binding、Workspace/远端 Library、DTCG/REST/Plugin adapter、原生 IME/undo smoke、像素基线和双平台 GUI 仍未验收，因此相关能力保持 `degraded`。
+当前 `DesignCapabilityManifest v1` 记录 0 项完整可用、21 项降级可用和 1 项不可用能力；没有实机证据的能力不会标记为完整可用。`DesignDocument 1.41.0`、EditorRuntime、Geometry/Image/Text/Layout/Component/Variable/Style/Library service、Leafer adapter、Inspector 和 Agent tools 已打通正式矢量、文字、外观、图片、响应式布局、Component/Variant/Slot、Variables、Shared Styles、视觉复核和单目标 PNG/JPEG/WebP 导出基础路径。Image Service contract 3 专项证据覆盖 Image 节点与每项 Image Fill/Stroke 的七项 Figma-compatible 非破坏调整、单事务 Inspector/Agent、paint stale identity、保存重开/undo、来源替换保留、Figma Plugin API 形状，以及画布/capture/位图导出的同一分块 RGBA 投影。同 Project Library 专项证据覆盖 Component/Variant、Style-only 与 Variable-only 发布、hidden Style/Variable/alias dependency、显式启用、Local/Library 搜索、单事务 imported source/reference、更新接受、禁用保留、身份冲突、引用删除保护和 Agent 只读 inspection；standalone Image Paint Style 在独立 asset bundle 完成前失败关闭。真实字体跨平台栅格、连接/分支 network、standalone 跨文件 Image Paint Style asset bundle、SVG 位图嵌入、完整 Figma imageHash/transform 文件 adapter、P3/ICC、custom list markers、高级 decoration、OpenType、variable axes、字体打包与授权迁移、更多 Variable/Style binding、Workspace/远端 Library、DTCG/REST/Plugin adapter、原生 IME/undo smoke、像素基线和双平台 GUI 仍未验收，因此相关能力保持 `degraded`。
 
 仓库当前由唯一 EditorRuntime 统一持有正式 Vector Network、Boolean、Text character/paragraph/list runs、Auto Size、Typography、Component Set/VARIANT/Slot、Variables、Shared Styles 与 imported Library sources。Geometry/Text/Layout/Component/Variable/Style/Library service 只提供窄契约、解析或事务计划，不保存第二份文档；Leafer/HarfBuzz exact-revision projection、人工 Inspector、Agent typed transaction、SVG 和位图继续复用同一权威事实。Slot-in-Slot 按 Figma 公开模型永久失败封闭；更多 Variable binding、Workspace/远端 Library、DTCG/REST/Plugin adapter、AI 图片编辑和双平台原生证据仍在后续路线图。
 

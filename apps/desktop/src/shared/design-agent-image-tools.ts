@@ -1,10 +1,13 @@
 import {
   isDesignAsset,
+  ImagePaintSchema,
   isImageFilters,
+  isImagePaint,
   isImagePlacement,
   type DesignAsset,
   type ImageFilters,
   type ImagePlacement,
+  type ImagePaint,
 } from "@opendesign/design-contracts";
 import {
   isPlaceableRasterAssetRole,
@@ -66,6 +69,16 @@ export type UpdateImageToolInput =
       label: string;
       pageId: string;
       nodeId: string;
+      filters: ImageFilters;
+    }
+  | {
+      action: "set-paint-filters";
+      label: string;
+      pageId: string;
+      nodeId: string;
+      paintField: "fills" | "strokes";
+      paintIndex: number;
+      expectedPaint: ImagePaint;
       filters: ImageFilters;
     }
   | {
@@ -223,9 +236,14 @@ export const UPDATE_IMAGE_TOOL_INPUT_SCHEMA = {
   type: "object",
   properties: {
     action: {
-      enum: ["set-placement", "set-filters", "replace-source"],
+      enum: [
+        "set-placement",
+        "set-filters",
+        "set-paint-filters",
+        "replace-source",
+      ],
       description:
-        "set-placement requires placement; set-filters requires non-destructive Figma-compatible filters in the -1..1 range; replace-source requires attachmentId and may also provide placement.",
+        "set-placement targets an Image node; set-filters targets an Image node; set-paint-filters targets one exact image Fill/Stroke; replace-source requires attachmentId and may also provide placement.",
     },
     label: { type: "string", minLength: 1, maxLength: 256 },
     pageId: { type: "string", minLength: 1, maxLength: 256 },
@@ -257,6 +275,9 @@ export const UPDATE_IMAGE_TOOL_INPUT_SCHEMA = {
       description:
         "Sparse non-destructive image adjustments. Missing fields are neutral; pass an empty object to reset all adjustments.",
     },
+    paintField: { enum: ["fills", "strokes"] },
+    paintIndex: { type: "integer", minimum: 0, maximum: 4_095 },
+    expectedPaint: ImagePaintSchema,
   },
   required: ["action", "label", "pageId", "nodeId"],
   additionalProperties: false,
@@ -365,6 +386,26 @@ export function isUpdateImageToolInput(
       exactKeys(input, ["action", "label", "pageId", "nodeId", "filters"])
     );
   }
+  if (input.action === "set-paint-filters") {
+    return (
+      (input.paintField === "fills" || input.paintField === "strokes") &&
+      Number.isInteger(input.paintIndex) &&
+      Number(input.paintIndex) >= 0 &&
+      Number(input.paintIndex) <= 4_095 &&
+      isImagePaint(input.expectedPaint) &&
+      isImageFilters(input.filters) &&
+      exactKeys(input, [
+        "action",
+        "label",
+        "pageId",
+        "nodeId",
+        "paintField",
+        "paintIndex",
+        "expectedPaint",
+        "filters",
+      ])
+    );
+  }
   return (
     input.action === "replace-source" &&
     typeof input.attachmentId === "string" &&
@@ -395,6 +436,26 @@ export function isInternalUpdateImageToolInput(
     return (
       isImageFilters(input.filters) &&
       exactKeys(input, ["action", "label", "pageId", "nodeId", "filters"])
+    );
+  }
+  if (input.action === "set-paint-filters") {
+    return (
+      (input.paintField === "fills" || input.paintField === "strokes") &&
+      Number.isInteger(input.paintIndex) &&
+      Number(input.paintIndex) >= 0 &&
+      Number(input.paintIndex) <= 4_095 &&
+      isImagePaint(input.expectedPaint) &&
+      isImageFilters(input.filters) &&
+      exactKeys(input, [
+        "action",
+        "label",
+        "pageId",
+        "nodeId",
+        "paintField",
+        "paintIndex",
+        "expectedPaint",
+        "filters",
+      ])
     );
   }
   return (
