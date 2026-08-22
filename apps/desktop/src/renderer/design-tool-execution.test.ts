@@ -3310,6 +3310,71 @@ describe("Renderer design tool scope", () => {
     expect(runtime.getSnapshot().document.nodesById.hero_image).toMatchObject({
       properties: { assetId: derivedAssetId },
     });
+
+    const referenceAssetId = `asset_${"d".repeat(64)}`;
+    const promptResultAssetId = `asset_${"e".repeat(64)}`;
+    const promptEdited = await executeDesignToolRequest(
+      {
+        requestId: "commit_prompt_image_edit",
+        call: {
+          toolCallId: "tool_commit_prompt_image_edit",
+          toolName: INTERNAL_UPDATE_IMAGE_TOOL_NAME,
+          input: {
+            action: "derive-source",
+            label: "Match reference lighting",
+            pageId: "page_welcome",
+            nodeId: "hero_image",
+            expectedAssetId: derivedAssetId,
+            asset: {
+              id: promptResultAssetId,
+              kind: "image",
+              name: "Hero — Edited.png",
+              mimeType: "image/png",
+              source: { type: "data", value: "cHJvbXB0LWVkaXQ=" },
+              size: { width: 800, height: 600 },
+              extensions: {},
+            },
+            supportingAssets: [
+              {
+                id: referenceAssetId,
+                kind: "image",
+                name: "Lighting reference.png",
+                mimeType: "image/png",
+                source: { type: "data", value: "cmVmZXJlbmNl" },
+                size: { width: 1024, height: 1024 },
+                extensions: {},
+              },
+            ],
+            derivation: {
+              id: "prompt_edit_derivation",
+              sourceAssetId: derivedAssetId,
+              resultAssetId: promptResultAssetId,
+              operation: "prompt-edit",
+              prompt: "Use the reference lighting",
+              referenceAssetIds: [referenceAssetId],
+              extensions: { modelId: "gpt-image-2" },
+            },
+          },
+        },
+        context: { ...selectionContext, revision: 6 },
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(promptEdited).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "derive-source",
+          assetId: promptResultAssetId,
+          derivationId: "prompt_edit_derivation",
+          revision: 7,
+        },
+      },
+    });
+    expect(
+      runtime.getSnapshot().document.assetsById[referenceAssetId],
+    ).toBeDefined();
   });
 
   it("updates one inspected image paint and blocks generic filter rewrites", async () => {

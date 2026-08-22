@@ -262,21 +262,31 @@ export type DesignImageSelection = {
   asset: DesignAsset;
 };
 
-export type DesignImageEditRequest = {
+type DesignImageEditRequestBase = {
   requestId: string;
-  action: "remove-background";
   pageId: string;
   nodeId: string;
   expectedAssetId: string;
   source: DesignAsset;
 };
 
+export type DesignImageEditRequest = DesignImageEditRequestBase &
+  (
+    | { action: "remove-background" }
+    | {
+        action: "prompt-edit";
+        prompt: string;
+        reference?: DesignAsset;
+      }
+  );
+
 export type DesignImageEditResult = {
   requestId: string;
-  action: "remove-background";
+  action: "remove-background" | "prompt-edit";
   sourceAssetId: string;
   asset: DesignAsset;
   derivation: ImageAssetDerivation;
+  supportingAssets?: DesignAsset[];
 };
 
 export type CancelDesignImageEditRequest = { requestId: string };
@@ -643,15 +653,35 @@ export function isDesignImageSelection(
 export function isDesignImageEditRequest(
   value: unknown,
 ): value is DesignImageEditRequest {
-  return (
+  if (!(
     isRecord(value) &&
     isStableId(value.requestId) &&
-    value.action === "remove-background" &&
     isStableId(value.pageId) &&
     isStableId(value.nodeId) &&
     isStableId(value.expectedAssetId) &&
     isEmbeddedEditableImageAsset(value.source) &&
-    value.source.id === value.expectedAssetId &&
+    value.source.id === value.expectedAssetId
+  )) {
+    return false;
+  }
+  if (value.action === "remove-background") {
+    return hasExactKeys(value, [
+      "requestId",
+      "action",
+      "pageId",
+      "nodeId",
+      "expectedAssetId",
+      "source",
+    ]);
+  }
+  return (
+    value.action === "prompt-edit" &&
+    typeof value.prompt === "string" &&
+    value.prompt.trim().length > 0 &&
+    value.prompt.length <= 32_000 &&
+    (value.reference === undefined ||
+      (isEmbeddedEditableImageAsset(value.reference) &&
+        value.reference.id !== value.source.id)) &&
     hasExactKeys(value, [
       "requestId",
       "action",
@@ -659,6 +689,8 @@ export function isDesignImageEditRequest(
       "nodeId",
       "expectedAssetId",
       "source",
+      "prompt",
+      ...(value.reference === undefined ? [] : ["reference"]),
     ])
   );
 }
@@ -666,24 +698,61 @@ export function isDesignImageEditRequest(
 export function isDesignImageEditResult(
   value: unknown,
 ): value is DesignImageEditResult {
-  return (
-    isRecord(value) &&
-    isStableId(value.requestId) &&
+  if (
+    !isRecord(value) ||
+    !isStableId(value.requestId) ||
+    (value.action !== "remove-background" && value.action !== "prompt-edit") ||
+    !isStableId(value.sourceAssetId) ||
+    !isEmbeddedEditableImageAsset(value.asset) ||
+    !isImageAssetDerivation(value.derivation) ||
+    value.derivation.sourceAssetId !== value.sourceAssetId ||
+    value.derivation.resultAssetId !== value.asset.id ||
+    value.derivation.operation !== value.action ||
+    value.derivation.maskAssetId !== undefined
+  ) {
+    return false;
+  }
+  const asset = value.asset;
+  const derivation = value.derivation;
+  const supportingAssets = value.supportingAssets ?? [];
+  if (
+    !Array.isArray(supportingAssets) ||
+    supportingAssets.length > 1 ||
+    !supportingAssets.every(isEmbeddedEditableImageAsset) ||
+    supportingAssets.some(
+      (supportingAsset) =>
+        supportingAsset.id === value.sourceAssetId ||
+        supportingAsset.id === asset.id,
+    ) ||
+    supportingAssets.length !== derivation.referenceAssetIds.length ||
+    supportingAssets.some(
+      (supportingAsset, index) =>
+        supportingAsset.id !== derivation.referenceAssetIds[index],
+    )
+  ) {
+    return false;
+  }
+  if (
     value.action === "remove-background" &&
-    isStableId(value.sourceAssetId) &&
-    isEmbeddedEditableImageAsset(value.asset) &&
-    isImageAssetDerivation(value.derivation) &&
-    value.derivation.sourceAssetId === value.sourceAssetId &&
-    value.derivation.resultAssetId === value.asset.id &&
-    value.derivation.operation === "remove-background" &&
-    hasExactKeys(value, [
-      "requestId",
-      "action",
-      "sourceAssetId",
-      "asset",
-      "derivation",
-    ])
-  );
+    (supportingAssets.length !== 0 || derivation.prompt !== undefined)
+  ) {
+    return false;
+  }
+  if (
+    value.action === "prompt-edit" &&
+    (typeof derivation.prompt !== "string" ||
+      derivation.prompt.trim().length === 0)
+  ) {
+    return false;
+  }
+  return hasExactKeys(value, [
+    "requestId",
+    "action",
+    "sourceAssetId",
+    "asset",
+    "derivation",
+    ...(value.supportingAssets === undefined ? [] : ["supportingAssets"]),
+  ]);
 }
 
 export function isCancelDesignImageEditRequest(

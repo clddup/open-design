@@ -197,6 +197,85 @@ describe("ImageGenerationHost", () => {
     store.close();
   });
 
+  it("edits with a bounded prompt and one ordered reference image", async () => {
+    const store = new WorkspaceStore(":memory:");
+    const editedBytes = opaquePngFixture();
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: [{ b64_json: editedBytes.toString("base64") }],
+        }),
+        { status: 200 },
+      ),
+    );
+    const host = new ImageGenerationHost(store, cipher, fetch);
+    host.saveSettings({
+      enabled: true,
+      apiFormat: "openai-images",
+      authMode: "none",
+      baseUrl: "https://images.example/v1",
+      modelId: "gpt-image-2",
+    });
+
+    const result = await host.editWithPrompt(
+      {
+        source: {
+          bytes: Uint8Array.from([0x89, 0x50]),
+          mimeType: "image/png",
+          name: "Product.png",
+        },
+        prompt: "Place the product in a quiet editorial studio scene.",
+        references: [
+          {
+            bytes: Uint8Array.from([0xff, 0xd8, 0xff]),
+            mimeType: "image/jpeg",
+            name: "Lighting reference.jpg",
+          },
+        ],
+      },
+      new AbortController().signal,
+    );
+
+    expect(result.operation).toBe("prompt-edit");
+    const request = fetch.mock.calls[0];
+    const form = request?.[1]?.body;
+    expect(form).toBeInstanceOf(FormData);
+    if (!(form instanceof FormData)) throw new Error("Expected FormData body");
+    expect(form.get("prompt")).toBe(
+      "Place the product in a quiet editorial studio scene.",
+    );
+    expect(form.get("background")).toBe("auto");
+    expect(form.getAll("image[]")).toHaveLength(2);
+    expect((form.getAll("image[]")[0] as Blob).type).toBe("image/png");
+    expect((form.getAll("image[]")[1] as Blob).type).toBe("image/jpeg");
+    store.close();
+  });
+
+  it("rejects empty prompts and more than one reference before network I/O", async () => {
+    const store = new WorkspaceStore(":memory:");
+    const fetch = vi.fn<typeof globalThis.fetch>();
+    const host = new ImageGenerationHost(store, cipher, fetch);
+    const source = {
+      bytes: Uint8Array.from([0x89]),
+      mimeType: "image/png" as const,
+      name: "Source.png",
+    };
+    await expect(
+      host.editWithPrompt(
+        { source, prompt: "   " },
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow("1 to 32,000");
+    await expect(
+      host.editWithPrompt(
+        { source, prompt: "Edit", references: [source, source] },
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow("at most one reference");
+    expect(fetch).not.toHaveBeenCalled();
+    store.close();
+  });
+
   it("migrates the old v2 selection and copies its credential before catalog cleanup", () => {
     const store = new WorkspaceStore(":memory:");
     store.setPreference(

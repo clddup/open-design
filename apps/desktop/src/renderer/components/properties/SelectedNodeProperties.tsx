@@ -3,6 +3,7 @@ import type {
   ComponentPropertyAssignment,
   ComponentPropertyType,
   ComponentOverridePatch,
+  DesignAsset,
   DesignDocument,
   DesignNode,
   ImageFilters,
@@ -124,7 +125,10 @@ export function SelectedNodeProperties({
   onCropImage,
   onReplaceImage,
   imageEditStatus,
+  imageEditAction,
   onRemoveImageBackground,
+  onEditImageWithPrompt,
+  onSelectImageEditReference,
   onCancelImageEdit,
   onSwitchImageSource,
   onUpdateImageFilters,
@@ -190,7 +194,10 @@ export function SelectedNodeProperties({
   onCropImage: () => boolean;
   onReplaceImage: () => void;
   imageEditStatus: "running" | "cancelling" | null;
+  imageEditAction: "remove-background" | "prompt-edit" | null;
   onRemoveImageBackground: () => void;
+  onEditImageWithPrompt: (prompt: string, reference?: DesignAsset) => void;
+  onSelectImageEditReference: () => Promise<DesignAsset | null>;
   onCancelImageEdit: () => void;
   onSwitchImageSource: (
     nodeId: string,
@@ -954,7 +961,10 @@ export function SelectedNodeProperties({
           onCrop={onCropImage}
           onReplace={onReplaceImage}
           editStatus={imageEditStatus}
+          editAction={imageEditAction}
           onRemoveBackground={onRemoveImageBackground}
+          onEditWithPrompt={onEditImageWithPrompt}
+          onSelectEditReference={onSelectImageEditReference}
           onCancelEdit={onCancelImageEdit}
           onSourceChange={onSwitchImageSource}
         />

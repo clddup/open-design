@@ -1442,6 +1442,9 @@ async function executeDesignToolRequestUnsafe(
                         expectedAssetId: input.expectedAssetId,
                         asset: input.asset,
                         derivation: input.derivation,
+                        ...(input.supportingAssets === undefined
+                          ? {}
+                          : { supportingAssets: input.supportingAssets }),
                       }
                     : {
                         action: input.action,

@@ -100,13 +100,22 @@ export type UpdateImageToolInput =
       assetId: string;
     };
 
-export type EditImageToolInput = {
-  action: "remove-background";
+type EditImageToolBase = {
   label: string;
   pageId: string;
   nodeId: string;
   expectedAssetId: string;
 };
+
+export type EditImageToolInput = EditImageToolBase &
+  (
+    | { action: "remove-background" }
+    | {
+        action: "prompt-edit";
+        prompt: string;
+        referenceAttachmentId?: string;
+      }
+  );
 
 export type InternalReadImageSourceToolInput = {
   pageId: string;
@@ -140,6 +149,7 @@ export type InternalUpdateImageToolInput =
       expectedAssetId: string;
       asset: DesignAsset;
       derivation: ImageAssetDerivation;
+      supportingAssets?: DesignAsset[];
     };
 
 const NORMALIZED_POINT_SCHEMA = {
@@ -340,13 +350,33 @@ export const UPDATE_IMAGE_TOOL_INPUT_SCHEMA = {
 export const EDIT_IMAGE_TOOL_INPUT_SCHEMA = {
   type: "object",
   properties: {
-    action: { const: "remove-background" },
+    action: { enum: ["remove-background", "prompt-edit"] },
     label: { type: "string", minLength: 1, maxLength: 256 },
     pageId: { type: "string", minLength: 1, maxLength: 256 },
     nodeId: { type: "string", minLength: 1, maxLength: 256 },
     expectedAssetId: { type: "string", minLength: 1, maxLength: 256 },
+    prompt: { type: "string", minLength: 1, maxLength: 32_000 },
+    referenceAttachmentId: {
+      type: "string",
+      pattern: "^image_[a-f0-9]{64}$",
+    },
   },
   required: ["action", "label", "pageId", "nodeId", "expectedAssetId"],
+  oneOf: [
+    {
+      properties: { action: { const: "remove-background" } },
+      not: {
+        anyOf: [
+          { required: ["prompt"] },
+          { required: ["referenceAttachmentId"] },
+        ],
+      },
+    },
+    {
+      properties: { action: { const: "prompt-edit" } },
+      required: ["prompt"],
+    },
+  ],
   additionalProperties: false,
 } as const;
 
@@ -506,12 +536,41 @@ export function isUpdateImageToolInput(
 export function isEditImageToolInput(
   input: unknown,
 ): input is EditImageToolInput {
+  if (
+    !isRecord(input) ||
+    !hasCommonUpdateFields(input) ||
+    !safeId(input.expectedAssetId)
+  ) {
+    return false;
+  }
+  if (input.action === "remove-background") {
+    return exactKeys(input, [
+      "action",
+      "label",
+      "pageId",
+      "nodeId",
+      "expectedAssetId",
+    ]);
+  }
   return (
-    isRecord(input) &&
-    input.action === "remove-background" &&
-    hasCommonUpdateFields(input) &&
-    safeId(input.expectedAssetId) &&
-    exactKeys(input, ["action", "label", "pageId", "nodeId", "expectedAssetId"])
+    input.action === "prompt-edit" &&
+    typeof input.prompt === "string" &&
+    input.prompt.trim().length > 0 &&
+    input.prompt.length <= 32_000 &&
+    (input.referenceAttachmentId === undefined ||
+      (typeof input.referenceAttachmentId === "string" &&
+        /^image_[a-f0-9]{64}$/.test(input.referenceAttachmentId))) &&
+    exactKeys(input, [
+      "action",
+      "label",
+      "pageId",
+      "nodeId",
+      "expectedAssetId",
+      "prompt",
+      ...(input.referenceAttachmentId === undefined
+        ? []
+        : ["referenceAttachmentId"]),
+    ])
   );
 }
 
@@ -547,23 +606,59 @@ export function isInternalUpdateImageToolInput(
 ): input is InternalUpdateImageToolInput {
   if (!isRecord(input) || !hasCommonUpdateFields(input)) return false;
   if (input.action === "derive-source") {
-    return (
-      safeId(input.expectedAssetId) &&
-      isBoundedEmbeddedImageAsset(input.asset) &&
-      isImageAssetDerivation(input.derivation) &&
-      input.derivation.sourceAssetId === input.expectedAssetId &&
-      input.derivation.resultAssetId === input.asset.id &&
-      input.derivation.operation !== "replacement" &&
-      exactKeys(input, [
-        "action",
-        "label",
-        "pageId",
-        "nodeId",
-        "expectedAssetId",
-        "asset",
-        "derivation",
-      ])
-    );
+    if (
+      !safeId(input.expectedAssetId) ||
+      !isBoundedEmbeddedImageAsset(input.asset) ||
+      !isImageAssetDerivation(input.derivation) ||
+      input.derivation.sourceAssetId !== input.expectedAssetId ||
+      input.derivation.resultAssetId !== input.asset.id ||
+      input.derivation.operation === "replacement" ||
+      input.derivation.maskAssetId !== undefined
+    ) {
+      return false;
+    }
+    const asset = input.asset;
+    const derivation = input.derivation;
+    const supportingAssets = input.supportingAssets ?? [];
+    if (
+      !Array.isArray(supportingAssets) ||
+      supportingAssets.length > 1 ||
+      !supportingAssets.every(isBoundedEmbeddedImageAsset) ||
+      supportingAssets.some(
+        (supportingAsset) =>
+          supportingAsset.mimeType !== "image/png" &&
+          supportingAsset.mimeType !== "image/jpeg" &&
+          supportingAsset.mimeType !== "image/webp",
+      ) ||
+      supportingAssets.length !== derivation.referenceAssetIds.length ||
+      supportingAssets.some(
+        (supportingAsset, index) =>
+          supportingAsset.id !== derivation.referenceAssetIds[index] ||
+          supportingAsset.id === input.expectedAssetId ||
+          supportingAsset.id === asset.id,
+      )
+    ) {
+      return false;
+    }
+    if (
+      (derivation.operation === "remove-background" &&
+        (derivation.prompt !== undefined || supportingAssets.length !== 0)) ||
+      (derivation.operation === "prompt-edit" &&
+        (typeof derivation.prompt !== "string" ||
+          derivation.prompt.trim().length === 0))
+    ) {
+      return false;
+    }
+    return exactKeys(input, [
+      "action",
+      "label",
+      "pageId",
+      "nodeId",
+      "expectedAssetId",
+      "asset",
+      "derivation",
+      ...(input.supportingAssets === undefined ? [] : ["supportingAssets"]),
+    ]);
   }
   if (input.action === "set-placement") {
     return (

@@ -3,6 +3,7 @@ import type {
   ComponentPropertyAssignment,
   ComponentPropertyType,
   ComponentOverridePatch,
+  DesignAsset,
   DesignDocument,
   DesignNode,
   ExportSetting,
@@ -84,7 +85,10 @@ export function PropertiesPanel({
   onCropImage,
   onReplaceImage,
   imageEditStatus,
+  imageEditAction,
   onRemoveImageBackground,
+  onEditImageWithPrompt,
+  onSelectImageEditReference,
   onCancelImageEdit,
   onSwitchImageSource,
   onUpdateImageFilters,
@@ -164,7 +168,10 @@ export function PropertiesPanel({
   onCropImage: () => boolean;
   onReplaceImage: () => void;
   imageEditStatus: "running" | "cancelling" | null;
+  imageEditAction: "remove-background" | "prompt-edit" | null;
   onRemoveImageBackground: () => void;
+  onEditImageWithPrompt: (prompt: string, reference?: DesignAsset) => void;
+  onSelectImageEditReference: () => Promise<DesignAsset | null>;
   onCancelImageEdit: () => void;
   onSwitchImageSource: (
     nodeId: string,
@@ -329,7 +336,10 @@ export function PropertiesPanel({
             onCropImage={onCropImage}
             onReplaceImage={onReplaceImage}
             imageEditStatus={imageEditStatus}
+            imageEditAction={imageEditAction}
             onRemoveImageBackground={onRemoveImageBackground}
+            onEditImageWithPrompt={onEditImageWithPrompt}
+            onSelectImageEditReference={onSelectImageEditReference}
             onCancelImageEdit={onCancelImageEdit}
             onSwitchImageSource={onSwitchImageSource}
             onUpdateImageFilters={onUpdateImageFilters}

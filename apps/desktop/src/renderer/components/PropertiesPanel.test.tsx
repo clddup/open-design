@@ -176,7 +176,10 @@ function renderPanel(
           onCropImage={vi.fn(() => true)}
           onReplaceImage={vi.fn()}
           imageEditStatus={null}
+          imageEditAction={null}
           onRemoveImageBackground={vi.fn()}
+          onEditImageWithPrompt={vi.fn()}
+          onSelectImageEditReference={vi.fn().mockResolvedValue(null)}
           onCancelImageEdit={vi.fn()}
           onSwitchImageSource={vi.fn()}
           onUpdateImageFilters={onUpdateImageFilters}

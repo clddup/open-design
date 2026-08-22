@@ -54,6 +54,7 @@ export type ImageUpdateOperation =
       expectedAssetId: string;
       asset: DesignAsset;
       derivation: ImageAssetDerivation;
+      supportingAssets?: readonly DesignAsset[];
     };
 
 export type ImageUpdateFailureCode =
@@ -316,7 +317,69 @@ export function planImageNodeUpdate(
     };
   }
 
+  const supportingAssets =
+    operation.action === "derive-source"
+      ? (operation.supportingAssets ?? [])
+      : [];
+  const supportingAssetIds = new Set(supportingAssets.map((asset) => asset.id));
+  const derivationInputAssetIds = new Set([
+    ...requestedDerivation.referenceAssetIds,
+    ...(requestedDerivation.maskAssetId
+      ? [requestedDerivation.maskAssetId]
+      : []),
+  ]);
+  if (
+    supportingAssets.length > 16 ||
+    supportingAssetIds.size !== supportingAssets.length ||
+    supportingAssets.some(
+      (asset) =>
+        asset.kind !== "image" ||
+        asset.id === previousAssetId ||
+        asset.id === sourceUpdate.asset.id ||
+        !derivationInputAssetIds.has(asset.id),
+    )
+  ) {
+    return {
+      ok: false,
+      code: "invalid-asset",
+      message: "Image derivation supporting assets are invalid or unrelated",
+    };
+  }
+  const unresolvedInputAssetId = [...derivationInputAssetIds].find(
+    (assetId) =>
+      document.assetsById[assetId] === undefined &&
+      !supportingAssetIds.has(assetId),
+  );
+  if (unresolvedInputAssetId) {
+    return {
+      ok: false,
+      code: "invalid-asset",
+      message: `Image derivation input asset ${unresolvedInputAssetId} does not exist`,
+    };
+  }
+
   const commands: DesignOperation[] = [];
+  for (const supportingAsset of supportingAssets) {
+    const existingSupportingAsset = document.assetsById[supportingAsset.id];
+    if (
+      existingSupportingAsset &&
+      canonicalJsonStringify(existingSupportingAsset) !==
+        canonicalJsonStringify(supportingAsset)
+    ) {
+      return {
+        ok: false,
+        code: "invalid-asset",
+        message: `Asset ${supportingAsset.id} already exists with different content`,
+      };
+    }
+    if (!existingSupportingAsset) {
+      commands.push({
+        commandId: `${commandPrefix}_support_${commands.length}`,
+        type: "put_asset",
+        asset: supportingAsset,
+      });
+    }
+  }
   const existingAsset = document.assetsById[sourceUpdate.asset.id];
   if (
     existingAsset &&
@@ -385,6 +448,14 @@ export function planImageNodeUpdate(
         : { placement: operation.placement }),
     },
   });
+
+  if (commands.length > MAX_TRANSACTION_COMMANDS) {
+    return {
+      ok: false,
+      code: "invalid-asset",
+      message: "Image source update exceeds the transaction command limit",
+    };
+  }
 
   return {
     ok: true,

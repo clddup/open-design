@@ -12,6 +12,8 @@ import {
   isAgentAttachmentPreviewRequest,
   isAgentAttachmentPreviewResult,
   isAgentAttachmentSelection,
+  isDesignImageEditRequest,
+  isDesignImageEditResult,
   isDesignImageSelection,
   isFontBinaryDescriptor,
   isFontBinaryPayload,
@@ -344,18 +346,24 @@ describe("Agent attachment desktop API guards", () => {
 });
 
 describe("Design image desktop API guards", () => {
+  const sourceAsset = {
+    id: `asset_${"a".repeat(64)}`,
+    kind: "image",
+    name: "Hero.webp",
+    mimeType: "image/webp",
+    source: { type: "data", value: "aW1hZ2U=" },
+    size: { width: 1600, height: 900 },
+    extensions: { importedBy: "design-image-picker" },
+  } as const;
+  const referenceAsset = {
+    ...sourceAsset,
+    id: `asset_${"b".repeat(64)}`,
+    name: "Reference.png",
+    mimeType: "image/png",
+  } as const;
+
   it("accepts an embedded content-addressed image without exposing its path", () => {
-    const selection = {
-      asset: {
-        id: `asset_${"a".repeat(64)}`,
-        kind: "image",
-        name: "Hero.webp",
-        mimeType: "image/webp",
-        source: { type: "data", value: "aW1hZ2U=" },
-        size: { width: 1600, height: 900 },
-        extensions: { importedBy: "design-image-picker" },
-      },
-    };
+    const selection = { asset: sourceAsset };
     expect(isDesignImageSelection(selection)).toBe(true);
     expect(
       isDesignImageSelection({
@@ -366,6 +374,64 @@ describe("Design image desktop API guards", () => {
         },
       }),
     ).toBe(false);
+  });
+
+  it("accepts exact prompt edits with one distinct embedded reference", () => {
+    const request = {
+      requestId: "image_edit_request",
+      action: "prompt-edit",
+      pageId: "page_welcome",
+      nodeId: "hero",
+      expectedAssetId: sourceAsset.id,
+      source: sourceAsset,
+      prompt: "Use the reference lighting and preserve the subject",
+      reference: referenceAsset,
+    };
+    expect(isDesignImageEditRequest(request)).toBe(true);
+    expect(isDesignImageEditRequest({ ...request, prompt: "   " })).toBe(false);
+    expect(
+      isDesignImageEditRequest({ ...request, reference: sourceAsset }),
+    ).toBe(false);
+    expect(
+      isDesignImageEditRequest({ ...request, provider: "openai-images" }),
+    ).toBe(false);
+  });
+
+  it("binds prompt-edit results to exact supporting assets and provenance", () => {
+    const resultAsset = {
+      ...referenceAsset,
+      id: `asset_${"c".repeat(64)}`,
+      name: "Hero — Edited.png",
+    };
+    const result = {
+      requestId: "image_edit_request",
+      action: "prompt-edit",
+      sourceAssetId: sourceAsset.id,
+      asset: resultAsset,
+      supportingAssets: [referenceAsset],
+      derivation: {
+        id: "image_derivation_prompt_edit",
+        sourceAssetId: sourceAsset.id,
+        resultAssetId: resultAsset.id,
+        operation: "prompt-edit",
+        prompt: "Use the reference lighting and preserve the subject",
+        referenceAssetIds: [referenceAsset.id],
+        extensions: { provider: "openai-images", modelId: "gpt-image-2" },
+      },
+    };
+    expect(isDesignImageEditResult(result)).toBe(true);
+    expect(isDesignImageEditResult({ ...result, supportingAssets: [] })).toBe(
+      false,
+    );
+    expect(
+      isDesignImageEditResult({
+        ...result,
+        derivation: { ...result.derivation, prompt: undefined },
+      }),
+    ).toBe(false);
+    expect(isDesignImageEditResult({ ...result, bytes: "not allowed" })).toBe(
+      false,
+    );
   });
 });
 

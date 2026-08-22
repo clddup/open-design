@@ -678,8 +678,8 @@
       },
       "limitations": [
         {
-          "en": "Remove background is available for embedded PNG, JPEG, and WebP Image nodes through the global openai-images service. Inpainting, expansion, background replacement, relighting, style harmonization, Image Paint editing, and multi-image edits remain unavailable.",
-          "zh-CN": "内嵌 PNG、JPEG 与 WebP Image 节点已可通过全局 openai-images 服务去背景；局部重绘、扩图、背景替换、重打光、风格统一、Image Paint 编辑与多图编辑仍未完成。"
+          "en": "Remove background and full-image prompt editing with one optional reference are available for embedded PNG, JPEG, and WebP Image nodes through the global openai-images service. Masked local edits, expansion, relighting, style harmonization, Image Paint editing, and multiple references remain unavailable.",
+          "zh-CN": "内嵌 PNG、JPEG 与 WebP Image 节点已可通过全局 openai-images 服务去背景，并可用提示词和一张可选参考图编辑整图；蒙版局部编辑、扩图、重打光、风格统一、Image Paint 编辑与多参考图仍未完成。"
         }
       ],
       "evidence": {
@@ -695,6 +695,7 @@
       },
       "references": [
         "docs/adr/0133-trusted-remove-background-image-editing.md",
+        "docs/adr/0134-trusted-prompt-image-editing.md",
         "https://developers.openai.com/api/docs/guides/image-generation",
         "https://help.figma.com/hc/en-us/articles/24004542669463-Make-or-edit-an-image-with-AI"
       ]

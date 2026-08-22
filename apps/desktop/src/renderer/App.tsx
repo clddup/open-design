@@ -13,6 +13,7 @@ import type {
 import type { TextLayoutProvider } from "@opendesign/text-service";
 import type {
   ComponentOverridePatch,
+  DesignAsset,
   DesignDocument,
   ImageFilters,
   ImagePaint,
@@ -278,6 +279,7 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
   const [imageEdit, setImageEdit] = useState<{
     requestId: string;
     nodeId: string;
+    action: "remove-background" | "prompt-edit";
     status: "running" | "cancelling";
   } | null>(null);
   const cancelledImageEditRequestIds = useRef(new Set<string>());
@@ -1054,87 +1056,129 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
     }
   }, [activePageId, applyCommands, runtime, t]);
 
-  const removeSelectedImageBackground = useCallback(async () => {
-    if (imageEdit) return;
-    const snapshot = runtime.getSnapshot();
-    const nodeId =
-      snapshot.state.selection.nodeIds.length === 1
-        ? snapshot.state.selection.nodeIds[0]
-        : undefined;
-    const node = nodeId ? snapshot.document.nodesById[nodeId] : undefined;
-    if (!nodeId || !node || node.kind !== "image") return;
-    const source = snapshot.document.assetsById[node.properties.assetId];
-    if (
-      !source ||
-      source.kind !== "image" ||
-      source.source.type !== "data" ||
-      (source.mimeType !== "image/png" &&
-        source.mimeType !== "image/jpeg" &&
-        source.mimeType !== "image/webp")
-    ) {
-      setEditorError(t("error.removeImageBackgroundUnsupported"));
-      return;
-    }
-    const requestId = `image_edit_${crypto.randomUUID()}`;
-    const expectedAssetId = node.properties.assetId;
-    setImageEdit({ requestId, nodeId, status: "running" });
-    setEditorError(null);
-    try {
-      const edited = await window.desktop?.editDesignImage({
-        requestId,
-        action: "remove-background",
-        pageId: activePageId,
-        nodeId,
-        expectedAssetId,
-        source,
-      });
-      if (!edited) throw new Error("Image editing is unavailable");
-      if (cancelledImageEditRequestIds.current.has(requestId)) {
-        throw new DOMException("Image editing cancelled", "AbortError");
-      }
+  const runSelectedImageEdit = useCallback(
+    async (
+      edit:
+        | { action: "remove-background" }
+        | {
+            action: "prompt-edit";
+            prompt: string;
+            reference?: DesignAsset;
+          },
+    ) => {
+      if (imageEdit) return;
+      const snapshot = runtime.getSnapshot();
+      const nodeId =
+        snapshot.state.selection.nodeIds.length === 1
+          ? snapshot.state.selection.nodeIds[0]
+          : undefined;
+      const node = nodeId ? snapshot.document.nodesById[nodeId] : undefined;
+      if (!nodeId || !node || node.kind !== "image") return;
+      const source = snapshot.document.assetsById[node.properties.assetId];
       if (
-        edited.requestId !== requestId ||
-        edited.sourceAssetId !== expectedAssetId
+        !source ||
+        source.kind !== "image" ||
+        source.source.type !== "data" ||
+        (source.mimeType !== "image/png" &&
+          source.mimeType !== "image/jpeg" &&
+          source.mimeType !== "image/webp")
       ) {
-        throw new Error(
-          "Image edit response did not match the current request",
-        );
+        setEditorError(t("error.imageEditUnsupported"));
+        return;
       }
-      const current = runtime.getSnapshot().document;
-      const plan = planImageNodeUpdate(
-        current,
-        {
-          action: "derive-source",
+      const requestId = `image_edit_${crypto.randomUUID()}`;
+      const expectedAssetId = node.properties.assetId;
+      setImageEdit({
+        requestId,
+        nodeId,
+        action: edit.action,
+        status: "running",
+      });
+      setEditorError(null);
+      try {
+        const edited = await window.desktop?.editDesignImage({
+          requestId,
+          ...edit,
           pageId: activePageId,
           nodeId,
           expectedAssetId,
-          asset: edited.asset,
-          derivation: edited.derivation,
-        },
-        `remove_background_${requestId}`,
-      );
-      if (!plan.ok) throw new Error(plan.message);
-      if (!applyCommands(t("history.removeImageBackground"), plan.commands)) {
-        throw new Error("Image edit transaction was rejected");
-      }
-    } catch (error) {
-      if (
-        !cancelledImageEditRequestIds.current.has(requestId) &&
-        !(error instanceof DOMException && error.name === "AbortError")
-      ) {
-        setEditorError(
-          error instanceof Error
-            ? error.message
-            : t("error.removeImageBackground"),
+          source,
+        });
+        if (!edited) throw new Error("Image editing is unavailable");
+        if (cancelledImageEditRequestIds.current.has(requestId)) {
+          throw new DOMException("Image editing cancelled", "AbortError");
+        }
+        if (
+          edited.requestId !== requestId ||
+          edited.action !== edit.action ||
+          edited.sourceAssetId !== expectedAssetId ||
+          (edit.action === "prompt-edit" &&
+            (edited.derivation.prompt !== edit.prompt.trim() ||
+              edited.derivation.referenceAssetIds[0] !== edit.reference?.id ||
+              edited.derivation.referenceAssetIds.length !==
+                (edit.reference === undefined ? 0 : 1)))
+        ) {
+          throw new Error(
+            "Image edit response did not match the current request",
+          );
+        }
+        const current = runtime.getSnapshot().document;
+        const plan = planImageNodeUpdate(
+          current,
+          {
+            action: "derive-source",
+            pageId: activePageId,
+            nodeId,
+            expectedAssetId,
+            asset: edited.asset,
+            derivation: edited.derivation,
+            ...(edited.supportingAssets === undefined
+              ? {}
+              : { supportingAssets: edited.supportingAssets }),
+          },
+          `image_edit_${requestId}`,
+        );
+        if (!plan.ok) throw new Error(plan.message);
+        if (
+          !applyCommands(
+            t(
+              edit.action === "remove-background"
+                ? "history.removeImageBackground"
+                : "history.editImageWithPrompt",
+            ),
+            plan.commands,
+          )
+        ) {
+          throw new Error("Image edit transaction was rejected");
+        }
+      } catch (error) {
+        if (
+          !cancelledImageEditRequestIds.current.has(requestId) &&
+          !(error instanceof DOMException && error.name === "AbortError")
+        ) {
+          setEditorError(
+            error instanceof Error ? error.message : t("error.editImage"),
+          );
+        }
+      } finally {
+        cancelledImageEditRequestIds.current.delete(requestId);
+        setImageEdit((current) =>
+          current?.requestId === requestId ? null : current,
         );
       }
-    } finally {
-      cancelledImageEditRequestIds.current.delete(requestId);
-      setImageEdit((current) =>
-        current?.requestId === requestId ? null : current,
-      );
+    },
+    [activePageId, applyCommands, imageEdit, runtime, t],
+  );
+
+  const selectImageEditReference = useCallback(async () => {
+    try {
+      const selection = await window.desktop?.selectDesignImage();
+      return selection?.asset ?? null;
+    } catch {
+      setEditorError(t("error.selectImageEditReference"));
+      return null;
     }
-  }, [activePageId, applyCommands, imageEdit, runtime, t]);
+  }, [t]);
 
   const cancelSelectedImageEdit = useCallback(() => {
     if (!imageEdit || imageEdit.status === "cancelling") return;
@@ -2812,9 +2856,22 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
                     ? imageEdit.status
                     : null
                 }
-                onRemoveImageBackground={() =>
-                  void removeSelectedImageBackground()
+                imageEditAction={
+                  imageEdit && imageEdit.nodeId === selectedNode?.id
+                    ? imageEdit.action
+                    : null
                 }
+                onRemoveImageBackground={() =>
+                  void runSelectedImageEdit({ action: "remove-background" })
+                }
+                onEditImageWithPrompt={(prompt, reference) =>
+                  void runSelectedImageEdit({
+                    action: "prompt-edit",
+                    prompt,
+                    ...(reference === undefined ? {} : { reference }),
+                  })
+                }
+                onSelectImageEditReference={selectImageEditReference}
                 onCancelImageEdit={cancelSelectedImageEdit}
                 onSwitchImageSource={switchSelectedImageSource}
                 onUpdateImageFilters={updateSelectedImageFilters}

@@ -48,10 +48,18 @@ export type GeneratedImage = {
   outputFormat: ImageGenerationOutputFormat;
 };
 
-export type RemoveImageBackgroundInput = {
+export type ImageEditSource = {
   bytes: Uint8Array;
   mimeType: "image/png" | "image/jpeg" | "image/webp";
   name: string;
+};
+
+export type RemoveImageBackgroundInput = ImageEditSource;
+
+export type PromptImageEditInput = {
+  source: ImageEditSource;
+  prompt: string;
+  references?: readonly ImageEditSource[];
 };
 
 export type EditedImage = {
@@ -60,7 +68,7 @@ export type EditedImage = {
   modelId: string;
   providerRequestId?: string;
   outputFormat: "png";
-  operation: "remove-background";
+  operation: "remove-background" | "prompt-edit";
 };
 
 export class ImageGenerationHost {
@@ -211,30 +219,77 @@ export class ImageGenerationHost {
     input: RemoveImageBackgroundInput,
     signal: AbortSignal,
   ): Promise<EditedImage> {
-    if (
-      input.bytes.byteLength === 0 ||
-      input.bytes.byteLength > 16 * 1024 * 1024
-    ) {
-      throw new RangeError("Source image must be between 1 byte and 16 MB");
+    return this.editImage(
+      {
+        operation: "remove-background",
+        prompt:
+          "Preserve the complete foreground subject and its fine edge detail. Remove only the background and return the subject on a fully transparent background. Do not restyle, crop, resize, relight, add, or remove foreground content.",
+        sources: [input],
+        background: "transparent",
+      },
+      signal,
+    );
+  }
+
+  async editWithPrompt(
+    input: PromptImageEditInput,
+    signal: AbortSignal,
+  ): Promise<EditedImage> {
+    const prompt = input.prompt.trim();
+    if (prompt.length < 1 || prompt.length > 32_000) {
+      throw new RangeError(
+        "Image edit prompt must contain 1 to 32,000 characters",
+      );
     }
+    const references = input.references ?? [];
+    if (references.length > 1) {
+      throw new RangeError(
+        "Image prompt editing supports at most one reference image",
+      );
+    }
+    return this.editImage(
+      {
+        operation: "prompt-edit",
+        prompt,
+        sources: [input.source, ...references],
+        background: "auto",
+      },
+      signal,
+    );
+  }
+
+  private async editImage(
+    input: {
+      operation: EditedImage["operation"];
+      prompt: string;
+      sources: readonly ImageEditSource[];
+      background: "auto" | "transparent";
+    },
+    signal: AbortSignal,
+  ): Promise<EditedImage> {
+    if (input.sources.length < 1 || input.sources.length > 2) {
+      throw new RangeError(
+        "Image editing requires one source and at most one reference",
+      );
+    }
+    input.sources.forEach(assertImageEditSource);
     const settings = this.requireEnabledSettings();
     const form = new FormData();
     form.set("model", settings.modelId);
-    form.set(
-      "prompt",
-      "Preserve the complete foreground subject and its fine edge detail. Remove only the background and return the subject on a fully transparent background. Do not restyle, crop, resize, relight, add, or remove foreground content.",
-    );
-    const uploadBytes = new Uint8Array(input.bytes.byteLength);
-    uploadBytes.set(input.bytes);
-    form.append(
-      "image[]",
-      new Blob([uploadBytes.buffer], { type: input.mimeType }),
-      safeUploadName(input.name, input.mimeType),
-    );
+    form.set("prompt", input.prompt);
+    for (const source of input.sources) {
+      const uploadBytes = new Uint8Array(source.bytes.byteLength);
+      uploadBytes.set(source.bytes);
+      form.append(
+        "image[]",
+        new Blob([uploadBytes.buffer], { type: source.mimeType }),
+        safeUploadName(source.name, source.mimeType),
+      );
+    }
     form.set("n", "1");
     form.set("size", "auto");
     form.set("quality", "auto");
-    form.set("background", "transparent");
+    form.set("background", input.background);
     form.set("output_format", "png");
 
     const controller = this.createRequestController(
@@ -268,7 +323,11 @@ export class ImageGenerationHost {
         imageResponseBase64(payload),
         MAX_GENERATED_IMAGE_BYTES,
       );
-      assertPngWithTransparency(bytes);
+      if (input.background === "transparent") {
+        assertPngWithTransparency(bytes);
+      } else {
+        assertPng(bytes);
+      }
       const providerRequestId = response.headers.get("x-request-id")?.trim();
       return {
         bytes,
@@ -276,7 +335,7 @@ export class ImageGenerationHost {
         modelId: settings.modelId,
         ...(providerRequestId ? { providerRequestId } : {}),
         outputFormat: "png",
-        operation: "remove-background",
+        operation: input.operation,
       };
     } catch (error) {
       if (controller.signal.aborted) {
@@ -592,7 +651,28 @@ function safeUploadName(
   return `${stem || "source-image"}.${extension}`;
 }
 
+function assertImageEditSource(source: ImageEditSource): void {
+  if (
+    source.bytes.byteLength === 0 ||
+    source.bytes.byteLength > 16 * 1024 * 1024
+  ) {
+    throw new RangeError("Image edit inputs must be between 1 byte and 16 MB");
+  }
+}
+
 function assertPngWithTransparency(value: Uint8Array): void {
+  if (!pngHasAlphaChannel(value)) {
+    throw new TypeError(
+      "Image-editing provider returned a PNG without transparency",
+    );
+  }
+}
+
+function assertPng(value: Uint8Array): void {
+  pngHasAlphaChannel(value);
+}
+
+function pngHasAlphaChannel(value: Uint8Array): boolean {
   const bytes = Buffer.from(value);
   const signature = Buffer.from([
     0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
@@ -602,6 +682,8 @@ function assertPngWithTransparency(value: Uint8Array): void {
   }
   let offset = 8;
   let alphaCapable = false;
+  let sawHeader = false;
+  let sawEnd = false;
   while (offset + 12 <= bytes.byteLength) {
     const length = bytes.readUInt32BE(offset);
     const dataOffset = offset + 8;
@@ -611,23 +693,24 @@ function assertPngWithTransparency(value: Uint8Array): void {
     }
     const type = bytes.toString("ascii", offset + 4, offset + 8);
     if (type === "IHDR") {
-      if (length !== 13) {
+      if (sawHeader || offset !== 8 || length !== 13) {
         throw new TypeError("Image-editing provider returned a malformed PNG");
       }
+      sawHeader = true;
       const colorType = bytes[dataOffset + 9];
       alphaCapable = colorType === 4 || colorType === 6;
     } else if (type === "tRNS") {
       alphaCapable = true;
     } else if (type === "IEND") {
+      sawEnd = true;
       break;
     }
     offset = nextOffset;
   }
-  if (!alphaCapable) {
-    throw new TypeError(
-      "Image-editing provider returned a PNG without transparency",
-    );
+  if (!sawHeader || !sawEnd) {
+    throw new TypeError("Image-editing provider returned a malformed PNG");
   }
+  return alphaCapable;
 }
 
 function record(value: unknown): value is Record<string, unknown> {

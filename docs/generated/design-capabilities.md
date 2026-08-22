@@ -179,8 +179,9 @@
 - 实现方：ImageGenerationHost openai-images edit adapter + EditorRuntime recoverable derivation planner
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=available
 - 证据：自动化 6 项；实机 0 项
-- 限制：内嵌 PNG、JPEG 与 WebP Image 节点已可通过全局 openai-images 服务去背景；局部重绘、扩图、背景替换、重打光、风格统一、Image Paint 编辑与多图编辑仍未完成。
+- 限制：内嵌 PNG、JPEG 与 WebP Image 节点已可通过全局 openai-images 服务去背景，并可用提示词和一张可选参考图编辑整图；蒙版局部编辑、扩图、重打光、风格统一、Image Paint 编辑与多参考图仍未完成。
 - 专业参照：[官方说明](docs/adr/0133-trusted-remove-background-image-editing.md)
+- 专业参照：[官方说明](docs/adr/0134-trusted-prompt-image-editing.md)
 - 专业参照：[官方说明](https://developers.openai.com/api/docs/guides/image-generation)
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/24004542669463-Make-or-edit-an-image-with-AI)
 

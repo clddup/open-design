@@ -1,5 +1,6 @@
 import {
   IMAGE_FILTER_KEYS,
+  type DesignAsset,
   type DesignDocument,
   type ImageFilterKey,
   type ImageFilters,
@@ -34,7 +35,10 @@ export function ImageSection({
   onCrop,
   onReplace,
   editStatus,
+  editAction,
   onRemoveBackground,
+  onEditWithPrompt,
+  onSelectEditReference,
   onCancelEdit,
   onSourceChange,
 }: {
@@ -45,7 +49,10 @@ export function ImageSection({
   onCrop: () => boolean;
   onReplace: () => void;
   editStatus: "running" | "cancelling" | null;
+  editAction: "remove-background" | "prompt-edit" | null;
   onRemoveBackground: () => void;
+  onEditWithPrompt: (prompt: string, reference?: DesignAsset) => void;
+  onSelectEditReference: () => Promise<DesignAsset | null>;
   onCancelEdit: () => void;
   onSourceChange: (
     nodeId: string,
@@ -54,6 +61,17 @@ export function ImageSection({
   ) => void;
 }) {
   const { t } = useI18n();
+  const promptId = useId();
+  const [promptEditorOpen, setPromptEditorOpen] = useState(false);
+  const [prompt, setPrompt] = useState("");
+  const [reference, setReference] = useState<DesignAsset | undefined>();
+  const [selectingReference, setSelectingReference] = useState(false);
+  useEffect(() => {
+    setPromptEditorOpen(false);
+    setPrompt("");
+    setReference(undefined);
+    setSelectingReference(false);
+  }, [node.id]);
   const placement = node.properties.placement;
   const filters = node.properties.filters ?? {};
   const sourceFamily = getImageAssetFamily(document, node.properties.assetId);
@@ -258,16 +276,120 @@ export function ImageSection({
         </button>
         <div className={imageStyles.aiEditActions}>
           <Button
-            aria-busy={editStatus !== null}
+            aria-busy={editAction === "prompt-edit" && editStatus !== null}
+            aria-expanded={promptEditorOpen}
             disabled={editStatus !== null}
-            icon={editStatus ? "lucide:loader-circle" : "lucide:scan-line"}
+            icon={
+              editAction === "prompt-edit" && editStatus
+                ? "lucide:loader-circle"
+                : "lucide:wand-sparkles"
+            }
+            onClick={() => setPromptEditorOpen((open) => !open)}
+          >
+            {editAction === "prompt-edit" && editStatus
+              ? t("properties.imageEditingWithPrompt")
+              : t("properties.imageEditWithPrompt")}
+          </Button>
+          <Button
+            aria-busy={
+              editAction === "remove-background" && editStatus !== null
+            }
+            disabled={editStatus !== null}
+            icon={
+              editAction === "remove-background" && editStatus
+                ? "lucide:loader-circle"
+                : "lucide:scan-line"
+            }
             onClick={onRemoveBackground}
           >
-            {editStatus
+            {editAction === "remove-background" && editStatus
               ? t("properties.imageRemovingBackground")
               : t("properties.imageRemoveBackground")}
           </Button>
-          {editStatus && (
+        </div>
+        {promptEditorOpen && (
+          <div className={imageStyles.promptEditor}>
+            <label htmlFor={promptId}>{t("properties.imageEditPrompt")}</label>
+            <textarea
+              disabled={editStatus !== null}
+              id={promptId}
+              maxLength={32_000}
+              onChange={(event) => setPrompt(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape" && editStatus === null) {
+                  event.preventDefault();
+                  setPromptEditorOpen(false);
+                }
+              }}
+              placeholder={t("properties.imageEditPromptPlaceholder")}
+              rows={3}
+              value={prompt}
+            />
+            <div className={imageStyles.referenceRow}>
+              <span title={reference?.name}>
+                {reference?.name ?? t("properties.imageEditNoReference")}
+              </span>
+              {reference ? (
+                <Button
+                  disabled={editStatus !== null}
+                  onClick={() => setReference(undefined)}
+                  tone="quiet"
+                >
+                  {t("common.remove")}
+                </Button>
+              ) : (
+                <Button
+                  disabled={editStatus !== null || selectingReference}
+                  icon="lucide:image-plus"
+                  onClick={() => {
+                    setSelectingReference(true);
+                    void onSelectEditReference()
+                      .then((asset) => {
+                        if (asset) setReference(asset);
+                      })
+                      .finally(() => setSelectingReference(false));
+                  }}
+                  tone="quiet"
+                >
+                  {selectingReference
+                    ? t("properties.imageSelectingReference")
+                    : t("properties.imageAddReference")}
+                </Button>
+              )}
+            </div>
+            <div className={imageStyles.promptActions}>
+              {editStatus ? (
+                <Button
+                  disabled={editStatus === "cancelling"}
+                  onClick={onCancelEdit}
+                  tone="quiet"
+                >
+                  {editStatus === "cancelling"
+                    ? t("properties.imageCancellingEdit")
+                    : t("common.cancel")}
+                </Button>
+              ) : (
+                <Button onClick={() => setPromptEditorOpen(false)} tone="quiet">
+                  {t("common.cancel")}
+                </Button>
+              )}
+              <Button
+                disabled={editStatus !== null || prompt.trim().length === 0}
+                onClick={() => onEditWithPrompt(prompt.trim(), reference)}
+                tone="primary"
+              >
+                {t("properties.imageApplyPromptEdit")}
+              </Button>
+            </div>
+          </div>
+        )}
+        {editStatus && !promptEditorOpen && (
+          <div className={imageStyles.editProgress}>
+            <span>
+              {editAction === "prompt-edit"
+                ? t("properties.imageEditingWithPrompt")
+                : t("properties.imageRemovingBackground")}
+            </span>
             <Button
               disabled={editStatus === "cancelling"}
               onClick={onCancelEdit}
@@ -277,8 +399,8 @@ export function ImageSection({
                 ? t("properties.imageCancellingEdit")
                 : t("common.cancel")}
             </Button>
-          )}
-        </div>
+          </div>
+        )}
         {sourceFamily && sourceFamily.assetIds.length > 1 && (
           <div className={imageStyles.sourceVersions}>
             <div className={imageStyles.sourceVersionHeader}>

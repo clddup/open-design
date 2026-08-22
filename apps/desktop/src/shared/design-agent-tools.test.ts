@@ -2465,7 +2465,7 @@ describe("design Agent tool contract", () => {
     ).toBe(false);
   });
 
-  it("exposes stale-safe background removal without image bytes in model input", () => {
+  it("exposes stale-safe image edits without image bytes or provider controls", () => {
     const input = {
       action: "remove-background",
       label: "Remove the portrait background",
@@ -2478,6 +2478,7 @@ describe("design Agent tool contract", () => {
     );
     expect(tool).toMatchObject({ risk: "external", approval: "never" });
     expect(tool?.description).toContain("transparent PNG");
+    expect(tool?.description).toContain("prompt-edit");
     expect(validateDesignAgentToolInput(EDIT_IMAGE_TOOL_NAME, input)).toBe(
       true,
     );
@@ -2491,6 +2492,34 @@ describe("design Agent tool contract", () => {
       validateDesignAgentToolInput(EDIT_IMAGE_TOOL_NAME, {
         ...input,
         expectedAssetId: undefined,
+      }),
+    ).toBe(false);
+    const promptEdit = {
+      ...input,
+      action: "prompt-edit",
+      label: "Match the reference lighting",
+      prompt: "Preserve the subject and use the reference lighting",
+      referenceAttachmentId: `image_${"b".repeat(64)}`,
+    };
+    expect(validateDesignAgentToolInput(EDIT_IMAGE_TOOL_NAME, promptEdit)).toBe(
+      true,
+    );
+    expect(
+      validateDesignAgentToolInput(EDIT_IMAGE_TOOL_NAME, {
+        ...promptEdit,
+        referenceAttachmentId: "C:\\Users\\me\\reference.png",
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(EDIT_IMAGE_TOOL_NAME, {
+        ...promptEdit,
+        provider: "openai-images",
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(EDIT_IMAGE_TOOL_NAME, {
+        ...promptEdit,
+        prompt: "   ",
       }),
     ).toBe(false);
   });

@@ -3157,7 +3157,7 @@ describe("App", () => {
     ).toBeDefined();
   });
 
-  it("removes an image background as one recoverable source transaction", async () => {
+  it("applies trusted image edits as recoverable source transactions", async () => {
     const user = userEvent.setup();
     renderApp();
     const sourceAssetId = `asset_${"1".repeat(64)}`;
@@ -3272,6 +3272,93 @@ describe("App", () => {
     });
     expect(
       runtime().getSnapshot().document.assetsById[resultAssetId],
+    ).toBeUndefined();
+
+    const referenceAssetId = `asset_${"3".repeat(64)}`;
+    const promptResultAssetId = `asset_${"4".repeat(64)}`;
+    vi.mocked(window.desktop!.selectDesignImage).mockResolvedValueOnce({
+      asset: {
+        id: referenceAssetId,
+        kind: "image",
+        name: "Lighting reference.png",
+        mimeType: "image/png",
+        source: { type: "data", value: "cmVmZXJlbmNl" },
+        size: { width: 1024, height: 1024 },
+        extensions: { importedBy: "design-image-picker" },
+      },
+    });
+    vi.mocked(window.desktop!.editDesignImage).mockImplementationOnce(
+      (request) => {
+        if (request.action !== "prompt-edit") {
+          throw new Error("Expected a prompt image edit request");
+        }
+        expect(request).toMatchObject({
+          action: "prompt-edit",
+          prompt: "Use the reference lighting and preserve the portrait",
+          reference: { id: referenceAssetId },
+        });
+        return Promise.resolve({
+          requestId: request.requestId,
+          action: "prompt-edit",
+          sourceAssetId,
+          asset: {
+            id: promptResultAssetId,
+            kind: "image",
+            name: "Portrait — Edited.png",
+            mimeType: "image/png",
+            source: { type: "data", value: "ZWRpdGVkLXByb21wdA==" },
+            size: { width: 800, height: 600 },
+            extensions: { importedBy: "inspector-image-edit" },
+          },
+          supportingAssets: [request.reference!],
+          derivation: {
+            id: "prompt_edit_result",
+            sourceAssetId,
+            resultAssetId: promptResultAssetId,
+            operation: "prompt-edit",
+            prompt: request.prompt,
+            referenceAssetIds: [referenceAssetId],
+            extensions: { modelId: "gpt-image-2" },
+          },
+        });
+      },
+    );
+    await user.click(screen.getByRole("button", { name: "Edit with prompt…" }));
+    await user.type(
+      screen.getByRole("textbox", { name: "Edit prompt" }),
+      "Use the reference lighting and preserve the portrait",
+    );
+    await user.click(screen.getByRole("button", { name: "Add reference…" }));
+    await screen.findByText("Lighting reference.png");
+    await user.click(screen.getByRole("button", { name: "Edit image" }));
+    await waitFor(() =>
+      expect(
+        runtime().getSnapshot().document.nodesById.background_image,
+      ).toMatchObject({
+        properties: {
+          assetId: promptResultAssetId,
+          placement: { mode: "fill", focalPoint: { x: 0.5, y: 0.5 } },
+          filters: { contrast: 0.2 },
+          cornerRadius: 12,
+        },
+      }),
+    );
+    expect(
+      runtime().getSnapshot().document.assetsById[referenceAssetId],
+    ).toBeDefined();
+    expect(
+      runtime().getSnapshot().document.imageAssetDerivationsById
+        .prompt_edit_result,
+    ).toMatchObject({
+      operation: "prompt-edit",
+      referenceAssetIds: [referenceAssetId],
+    });
+    await user.click(screen.getByRole("button", { name: "Undo" }));
+    expect(
+      runtime().getSnapshot().document.assetsById[referenceAssetId],
+    ).toBeUndefined();
+    expect(
+      runtime().getSnapshot().document.assetsById[promptResultAssetId],
     ).toBeUndefined();
 
     let rejectEdit: ((reason: Error) => void) | undefined;

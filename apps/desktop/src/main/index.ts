@@ -5,6 +5,7 @@ import {
 } from "@opendesign/agent-contracts";
 import type {
   ToolCallRequest,
+  TrustedToolContext,
   TrustedToolResult,
 } from "@opendesign/agent-runtime";
 import { JsonlSessionStore } from "@opendesign/session-store";
@@ -1001,9 +1002,22 @@ function registerIpc(fontBinaryService: FontBinaryMainService) {
       const controller = new AbortController();
       designImageEditControllers.set(request.requestId, controller);
       try {
-        const result = await removeImageBackgroundAsset(
-          request.source,
-          "inspector-image-edit",
+        const result = await editDesignImageAsset(
+          request.action === "remove-background"
+            ? {
+                action: request.action,
+                source: request.source,
+                importedBy: "inspector-image-edit",
+              }
+            : {
+                action: request.action,
+                source: request.source,
+                prompt: request.prompt,
+                ...(request.reference === undefined
+                  ? {}
+                  : { references: [request.reference] }),
+                importedBy: "inspector-image-edit",
+              },
           controller.signal,
         );
         return {
@@ -1987,9 +2001,29 @@ void app.whenReady().then(async () => {
           );
         }
         const source = prepared.content.asset;
-        const derived = await removeImageBackgroundAsset(
-          source,
-          "agent-image-edit",
+        const reference =
+          call.input.action === "prompt-edit" &&
+          call.input.referenceAttachmentId
+            ? await materializeAgentImageAsset(
+                call.input.referenceAttachmentId,
+                context,
+                "agent-image-edit-reference",
+              )
+            : undefined;
+        const derived = await editDesignImageAsset(
+          call.input.action === "remove-background"
+            ? {
+                action: call.input.action,
+                source,
+                importedBy: "agent-image-edit",
+              }
+            : {
+                action: call.input.action,
+                source,
+                prompt: call.input.prompt,
+                ...(reference === undefined ? {} : { references: [reference] }),
+                importedBy: "agent-image-edit",
+              },
           signal,
         );
         const result = await executeRendererTool({
@@ -2004,6 +2038,9 @@ void app.whenReady().then(async () => {
             expectedAssetId: call.input.expectedAssetId,
             asset: derived.asset,
             derivation: derived.derivation,
+            ...(derived.supportingAssets === undefined
+              ? {}
+              : { supportingAssets: derived.supportingAssets }),
           },
         });
         globalTaskCoordinator.recordMaterialDesignWriteCompleted(
@@ -2355,50 +2392,69 @@ function withDesignDelivery(
   };
 }
 
-async function removeImageBackgroundAsset(
-  source: DesignAsset,
-  importedBy: "agent-image-edit" | "inspector-image-edit",
+type DesignImageEditInput =
+  | {
+      action: "remove-background";
+      source: DesignAsset;
+      importedBy: "agent-image-edit" | "inspector-image-edit";
+    }
+  | {
+      action: "prompt-edit";
+      source: DesignAsset;
+      prompt: string;
+      references?: readonly DesignAsset[];
+      importedBy: "agent-image-edit" | "inspector-image-edit";
+    };
+
+async function editDesignImageAsset(
+  input: DesignImageEditInput,
   signal: AbortSignal,
-): Promise<{ asset: DesignAsset; derivation: ImageAssetDerivation }> {
+): Promise<{
+  asset: DesignAsset;
+  derivation: ImageAssetDerivation;
+  supportingAssets?: DesignAsset[];
+}> {
+  const source = toImageEditSource(input.source);
+  const references =
+    input.action === "prompt-edit" ? (input.references ?? []) : [];
   if (
-    source.kind !== "image" ||
-    source.source.type !== "data" ||
-    (source.mimeType !== "image/png" &&
-      source.mimeType !== "image/jpeg" &&
-      source.mimeType !== "image/webp")
+    references.length > 1 ||
+    references.some((reference) => reference.id === input.source.id)
   ) {
-    throw new TypeError("Image edit source is not a supported embedded raster");
+    throw new TypeError(
+      "Image editing supports at most one distinct reference image",
+    );
   }
-  const sourceBytes = Buffer.from(source.source.value, "base64");
-  if (
-    sourceBytes.byteLength === 0 ||
-    sourceBytes.byteLength > 16 * 1024 * 1024 ||
-    sourceBytes.toString("base64") !== source.source.value
-  ) {
-    throw new TypeError("Image edit source has invalid image data");
-  }
-  const edited = await requireImageGenerationHost().removeBackground(
-    {
-      bytes: sourceBytes,
-      mimeType: source.mimeType,
-      name: source.name,
-    },
-    signal,
-  );
+  const edited =
+    input.action === "remove-background"
+      ? await requireImageGenerationHost().removeBackground(source, signal)
+      : await requireImageGenerationHost().editWithPrompt(
+          {
+            source,
+            prompt: input.prompt,
+            references: references.map(toImageEditSource),
+          },
+          signal,
+        );
   const bytes = Buffer.from(edited.bytes);
   const editedNativeImage = nativeImage.createFromBuffer(bytes);
   const intrinsic = editedNativeImage.getSize();
   if (
     intrinsic.width <= 0 ||
     intrinsic.height <= 0 ||
-    !nativeImageHasTransparentPixels(editedNativeImage.toBitmap())
+    (input.action === "remove-background" &&
+      !nativeImageHasTransparentPixels(editedNativeImage.toBitmap()))
   ) {
     throw new TypeError(
-      "Background removal did not return a valid image with transparent pixels",
+      input.action === "remove-background"
+        ? "Background removal did not return a valid image with transparent pixels"
+        : "Image prompt editing did not return a valid image",
     );
   }
   const attachment = await requireAgentAttachmentHost().importImageBytes(
-    `${source.name.replace(/\.[^.]+$/, "")} — Background removed.png`,
+    `${input.source.name.replace(/\.[^.]+$/, "")} — ${
+      input.action === "remove-background" ? "Background removed" : "Edited"
+    }.png`,
     edited.bytes,
   );
   const digest = attachment.attachmentId.slice("image_".length);
@@ -2409,16 +2465,19 @@ async function removeImageBackgroundAsset(
     mimeType: attachment.mimeType,
     source: { type: "data", value: bytes.toString("base64") },
     size: intrinsic,
-    extensions: { importedBy },
+    extensions: { importedBy: input.importedBy },
   };
   return {
     asset,
     derivation: {
       id: `image_derivation_${crypto.randomUUID()}`.slice(0, 256),
-      sourceAssetId: source.id,
+      sourceAssetId: input.source.id,
       resultAssetId: asset.id,
-      operation: "remove-background",
-      referenceAssetIds: [],
+      operation: input.action,
+      ...(input.action === "prompt-edit"
+        ? { prompt: input.prompt.trim() }
+        : {}),
+      referenceAssetIds: references.map((reference) => reference.id),
       extensions: {
         provider: edited.apiFormat,
         modelId: edited.modelId,
@@ -2427,6 +2486,62 @@ async function removeImageBackgroundAsset(
           : {}),
       },
     },
+    ...(references.length === 0 ? {} : { supportingAssets: [...references] }),
+  };
+}
+
+function toImageEditSource(source: DesignAsset): {
+  bytes: Uint8Array;
+  mimeType: "image/png" | "image/jpeg" | "image/webp";
+  name: string;
+} {
+  if (
+    source.kind !== "image" ||
+    source.source.type !== "data" ||
+    (source.mimeType !== "image/png" &&
+      source.mimeType !== "image/jpeg" &&
+      source.mimeType !== "image/webp")
+  ) {
+    throw new TypeError("Image edit source is not a supported embedded raster");
+  }
+  const bytes = Buffer.from(source.source.value, "base64");
+  if (
+    bytes.byteLength === 0 ||
+    bytes.byteLength > 16 * 1024 * 1024 ||
+    bytes.toString("base64") !== source.source.value
+  ) {
+    throw new TypeError("Image edit source has invalid image data");
+  }
+  const intrinsic = nativeImage.createFromBuffer(bytes).getSize();
+  if (intrinsic.width <= 0 || intrinsic.height <= 0) {
+    throw new TypeError("Image edit source has invalid dimensions");
+  }
+  return { bytes, mimeType: source.mimeType, name: source.name };
+}
+
+async function materializeAgentImageAsset(
+  attachmentId: string,
+  context: TrustedToolContext,
+  importedBy: string,
+): Promise<DesignAsset> {
+  const image = await requireAgentReferenceHost().materializeImage(
+    attachmentId,
+    context,
+  );
+  const bytes = Buffer.from(image.data, "base64");
+  const intrinsic = nativeImage.createFromBuffer(bytes).getSize();
+  if (intrinsic.width <= 0 || intrinsic.height <= 0) {
+    throw new TypeError("Image edit reference has invalid dimensions");
+  }
+  const digest = image.attachment.attachmentId.slice("image_".length);
+  return {
+    id: `asset_${digest}`,
+    kind: "image",
+    name: image.attachment.name,
+    mimeType: image.mimeType,
+    source: { type: "data", value: image.data },
+    size: intrinsic,
+    extensions: { attachmentId, importedBy },
   };
 }
 

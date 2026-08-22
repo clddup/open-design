@@ -348,6 +348,137 @@ describe("image update planner", () => {
     ).toMatchObject({ ok: false, code: "asset-stale" });
   });
 
+  it("commits a prompt edit and its reference asset atomically across undo and reopen", () => {
+    const referenceAsset: DesignAsset = {
+      ...newAsset,
+      id: "asset_reference",
+      name: "Reference",
+    };
+    const editedAsset: DesignAsset = {
+      ...newAsset,
+      id: "asset_prompt_edit",
+      mimeType: "image/png",
+      name: "Old — Edited",
+    };
+    const runtime = new EditorRuntime(documentWithImage());
+    const plan = planImageNodeUpdate(runtime.getSnapshot().document, {
+      action: "derive-source",
+      pageId: "page_welcome",
+      nodeId: "hero",
+      expectedAssetId: oldAsset.id,
+      asset: editedAsset,
+      supportingAssets: [referenceAsset],
+      derivation: {
+        id: "prompt_edit_derivation",
+        sourceAssetId: oldAsset.id,
+        resultAssetId: editedAsset.id,
+        operation: "prompt-edit",
+        prompt: "Use the reference image's lighting and preserve the subject",
+        referenceAssetIds: [referenceAsset.id],
+        extensions: { provider: "openai-images", modelId: "gpt-image-2" },
+      },
+    });
+    expect(plan).toMatchObject({ ok: true });
+    if (!plan.ok) return;
+    expect(plan.commands.map((command) => command.type)).toEqual([
+      "put_asset",
+      "put_asset",
+      "put_image_asset_derivation",
+      "update_properties",
+    ]);
+    const before = runtime.getSnapshot().document;
+    expect(
+      runtime.apply({
+        transactionId: "prompt_edit",
+        documentId: before.documentId,
+        baseRevision: before.revision,
+        actor: { type: "user", id: "test" },
+        commands: plan.commands,
+      }).ok,
+    ).toBe(true);
+    const reopened = new EditorRuntime(
+      JSON.parse(JSON.stringify(runtime.getSnapshot().document)),
+    );
+    expect(reopened.getSnapshot().document.assetsById).toMatchObject({
+      [referenceAsset.id]: { name: "Reference" },
+      [editedAsset.id]: { name: "Old — Edited" },
+    });
+    expect(
+      reopened.getSnapshot().document.imageAssetDerivationsById
+        .prompt_edit_derivation,
+    ).toMatchObject({
+      operation: "prompt-edit",
+      referenceAssetIds: [referenceAsset.id],
+    });
+    expect(runtime.undo().ok).toBe(true);
+    expect(
+      runtime.getSnapshot().document.assetsById[referenceAsset.id],
+    ).toBeUndefined();
+    expect(
+      runtime.getSnapshot().document.assetsById[editedAsset.id],
+    ).toBeUndefined();
+    expect(
+      runtime.getSnapshot().document.imageAssetDerivationsById
+        .prompt_edit_derivation,
+    ).toBeUndefined();
+  });
+
+  it("rejects missing, unrelated, duplicate, and conflicting prompt-edit references", () => {
+    const referenceAsset: DesignAsset = {
+      ...newAsset,
+      id: "asset_reference",
+      name: "Reference",
+    };
+    const editedAsset: DesignAsset = {
+      ...newAsset,
+      id: "asset_prompt_edit",
+    };
+    const derivation = {
+      id: "prompt_edit_derivation",
+      sourceAssetId: oldAsset.id,
+      resultAssetId: editedAsset.id,
+      operation: "prompt-edit" as const,
+      prompt: "Apply the reference style",
+      referenceAssetIds: [referenceAsset.id],
+      extensions: {},
+    };
+    const input = {
+      action: "derive-source" as const,
+      pageId: "page_welcome",
+      nodeId: "hero",
+      expectedAssetId: oldAsset.id,
+      asset: editedAsset,
+      derivation,
+    };
+    expect(planImageNodeUpdate(documentWithImage(), input)).toMatchObject({
+      ok: false,
+      code: "invalid-asset",
+    });
+    expect(
+      planImageNodeUpdate(documentWithImage(), {
+        ...input,
+        supportingAssets: [{ ...referenceAsset, id: "asset_unrelated" }],
+      }),
+    ).toMatchObject({ ok: false, code: "invalid-asset" });
+    expect(
+      planImageNodeUpdate(documentWithImage(), {
+        ...input,
+        supportingAssets: [referenceAsset, referenceAsset],
+      }),
+    ).toMatchObject({ ok: false, code: "invalid-asset" });
+    const conflicting = documentWithImage();
+    conflicting.assetsById[referenceAsset.id] = {
+      ...referenceAsset,
+      name: "Different reference",
+    };
+    expect(
+      planImageNodeUpdate(conflicting, {
+        ...input,
+        supportingAssets: [referenceAsset],
+      }),
+    ).toMatchObject({ ok: false, code: "invalid-asset" });
+  });
+
   it("preserves an old asset referenced by another Image or Path paint", () => {
     const document = documentWithImage();
     document.nodesById.secondary = imageNode("secondary");

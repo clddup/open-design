@@ -450,7 +450,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
       role: "material-write" as const,
     },
     description:
-      "Apply a trusted AI image edit to one inspected Image node. The first supported action is remove-background, which preserves the foreground subject and returns a transparent PNG. pageId, nodeId, and expectedAssetId must come from current inspection. The host reads the current source without exposing image bytes to the model, calls the independently configured global image service, then atomically commits the derived asset, typed source history, and node reference only if the node still uses expectedAssetId. Cancellation, provider failure, invalid transparency, or stale targets produce no design revision.",
+      "Apply a trusted AI image edit to one inspected Image node. remove-background preserves the foreground subject and returns a transparent PNG. prompt-edit applies a bounded edit prompt and may use one image attachment already authorized for the current Run as referenceAttachmentId. pageId, nodeId, and expectedAssetId must come from current inspection. Do not provide image bytes, paths, provider, or model settings. The host reads authorized image inputs without exposing bytes to the model, calls the independently configured global image service, then atomically commits the derived asset, prompt/reference provenance, typed source history, and node reference only if the node still uses expectedAssetId. Cancellation, provider failure, invalid output, or stale targets produce no design revision.",
     inputSchema: EDIT_IMAGE_TOOL_INPUT_SCHEMA,
     risk: "external" as const,
     approval: "never" as const,
