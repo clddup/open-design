@@ -1036,7 +1036,7 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
           nodeId,
           asset: selection.asset,
         },
-        `replace_image_${nodeId}`,
+        `replace_image_${crypto.randomUUID().replaceAll("-", "")}_${nodeId}`,
       );
       if (!plan.ok) {
         if (plan.code !== "no-op") setEditorError(t("error.replaceImage"));
@@ -1047,6 +1047,25 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
       setEditorError(t("error.replaceImage"));
     }
   }, [activePageId, applyCommands, runtime, t]);
+
+  const switchSelectedImageSource = useCallback(
+    (nodeId: string, assetId: string, expectedAssetId: string) => {
+      const current = runtime.getSnapshot();
+      const plan = planImageNodeUpdate(current.document, {
+        action: "switch-source",
+        pageId: activePageId,
+        nodeId,
+        expectedAssetId,
+        assetId,
+      });
+      if (!plan.ok) {
+        if (plan.code !== "no-op") setEditorError(plan.message);
+        return;
+      }
+      applyCommands(t("history.switchImageSource"), plan.commands);
+    },
+    [activePageId, applyCommands, runtime, setEditorError, t],
+  );
 
   const updateSelectedImageFilters = useCallback(
     (filters: ImageFilters) => {
@@ -2691,6 +2710,7 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
                   );
                 }}
                 onReplaceImage={() => void replaceSelectedImage()}
+                onSwitchImageSource={switchSelectedImageSource}
                 onUpdateImageFilters={updateSelectedImageFilters}
                 onUpdateImagePaintFilters={updateImagePaintFilters}
                 onUpdateImagePlacement={updateSelectedImagePlacement}

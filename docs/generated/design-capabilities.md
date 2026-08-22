@@ -2,7 +2,7 @@
 
 # OpenDesign 专业设计能力
 
-能力清单版本：`1` · 更新日期：2026-08-22 · 文档协议：`1.41.0` · 画布基线：`leafer-editor@2.2.9`
+能力清单版本：`1` · 更新日期：2026-08-22 · 文档协议：`1.42.0` · 画布基线：`leafer-editor@2.2.9`
 
 当前状态：可用 0 项，降级可用 21 项，不可用 1 项。只有必需表面全部可用，并同时具备自动化与实机证据时，能力才允许标记为“可用”。
 
@@ -161,13 +161,13 @@
 
 ### 图片裁剪与调整 — 降级可用
 
-非破坏性裁剪、选择焦点位置、替换来源并应用图片调整或滤镜。
+非破坏性裁剪与调整，保留来源历史、恢复图片变体，并在不覆盖原图的情况下替换来源。
 
 - ID：`image.crop-adjustments`
-- 实现方：DesignDocument 1.41.0 + OpenDesign Image Service contract 3 + Leafer per-image-paint adjustment projection
+- 实现方：DesignDocument 1.42.0 + OpenDesign Image Service contract 3 + recoverable image derivation DAG + Leafer per-image-paint adjustment projection
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=degraded
 - 证据：自动化 12 项；实机 0 项
-- 限制：Image 节点及每项图片 Fill/Stroke 已支持 Figma-compatible 曝光、对比度、饱和度、色温、色调、高光与阴影，并由画布、capture 和 PNG/JPEG/WebP 导出共用同一确定性 RGBA 投影。standalone 跨文件 Image Paint Style asset bundle、SVG 位图嵌入、完整 Figma imageHash/transform 文件 adapter、P3/ICC 色彩管理及 macOS/Windows 原生交互证据仍未完成。
+- 限制：Image 节点及每项图片 Fill/Stroke 已通过同一确定性 RGBA 投影支持 Figma-compatible 调整；来源替换会记录由 Inspector、Assets、Agent、undo 与持久化共用的可恢复 typed derivation family。远端 AI 图片编辑 provider、大图按需存储、standalone 跨文件 Image Paint Style asset bundle、SVG 位图嵌入、完整 Figma imageHash/transform 文件 adapter、P3/ICC 色彩管理及 macOS/Windows 原生交互证据仍未完成。
 - 专业参照：[官方说明](docs/adr/0089-direct-image-crop-session.md)
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360040675194-Crop-an-image)
 

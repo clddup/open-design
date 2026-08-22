@@ -88,6 +88,14 @@ export type UpdateImageToolInput =
       nodeId: string;
       attachmentId: string;
       placement?: ImagePlacement;
+    }
+  | {
+      action: "switch-source";
+      label: string;
+      pageId: string;
+      nodeId: string;
+      expectedAssetId: string;
+      assetId: string;
     };
 
 export type InternalUpdateImageToolInput =
@@ -241,9 +249,10 @@ export const UPDATE_IMAGE_TOOL_INPUT_SCHEMA = {
         "set-filters",
         "set-paint-filters",
         "replace-source",
+        "switch-source",
       ],
       description:
-        "set-placement targets an Image node; set-filters targets an Image node; set-paint-filters targets one exact image Fill/Stroke; replace-source requires attachmentId and may also provide placement.",
+        "set-placement targets an Image node; set-filters targets an Image node; set-paint-filters targets one exact image Fill/Stroke; replace-source requires attachmentId and may also provide placement; switch-source selects an existing inspected source-family asset and requires the expected current asset ID.",
     },
     label: { type: "string", minLength: 1, maxLength: 256 },
     pageId: { type: "string", minLength: 1, maxLength: 256 },
@@ -252,6 +261,18 @@ export const UPDATE_IMAGE_TOOL_INPUT_SCHEMA = {
       type: "string",
       pattern: "^image_[a-f0-9]{64}$",
       description: "Required only for replace-source.",
+    },
+    expectedAssetId: {
+      type: "string",
+      minLength: 1,
+      maxLength: 256,
+      description: "Required only for switch-source.",
+    },
+    assetId: {
+      type: "string",
+      minLength: 1,
+      maxLength: 256,
+      description: "Existing source-family asset required by switch-source.",
     },
     placement: {
       ...DESIGN_IMAGE_PLACEMENT_SCHEMA,
@@ -406,6 +427,20 @@ export function isUpdateImageToolInput(
       ])
     );
   }
+  if (input.action === "switch-source") {
+    return (
+      safeId(input.expectedAssetId) &&
+      safeId(input.assetId) &&
+      exactKeys(input, [
+        "action",
+        "label",
+        "pageId",
+        "nodeId",
+        "expectedAssetId",
+        "assetId",
+      ])
+    );
+  }
   return (
     input.action === "replace-source" &&
     typeof input.attachmentId === "string" &&
@@ -455,6 +490,20 @@ export function isInternalUpdateImageToolInput(
         "paintIndex",
         "expectedPaint",
         "filters",
+      ])
+    );
+  }
+  if (input.action === "switch-source") {
+    return (
+      safeId(input.expectedAssetId) &&
+      safeId(input.assetId) &&
+      exactKeys(input, [
+        "action",
+        "label",
+        "pageId",
+        "nodeId",
+        "expectedAssetId",
+        "assetId",
       ])
     );
   }

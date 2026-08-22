@@ -1158,6 +1158,8 @@ describe("versioned SVG interchange", () => {
       stylesById: {},
       interactionsById: {},
       assetsById: {},
+      imageAssetDerivationOrder: [],
+      imageAssetDerivationsById: {},
       extensions: {},
     };
     const exported = exportSvg({
@@ -2928,6 +2930,8 @@ function asDocument(
     stylesById: {},
     interactionsById: {},
     assetsById: {},
+    imageAssetDerivationOrder: [],
+    imageAssetDerivationsById: {},
     extensions: {},
   };
 }
@@ -3170,6 +3174,8 @@ function documentFromNodes(
     stylesById: {},
     interactionsById: {},
     assetsById: {},
+    imageAssetDerivationOrder: [],
+    imageAssetDerivationsById: {},
     extensions: {},
   };
 }
@@ -3496,6 +3502,8 @@ function shapeDocument(): DesignDocument {
     stylesById: {},
     interactionsById: {},
     assetsById: {},
+    imageAssetDerivationOrder: [],
+    imageAssetDerivationsById: {},
     extensions: {},
   };
 }

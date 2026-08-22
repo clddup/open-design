@@ -10,6 +10,7 @@ import { useMemo, useRef, useState } from "react";
 import { useI18n } from "../i18n";
 import {
   DESIGN_ASSET_DRAG_MIME,
+  IMAGE_DERIVATION_OPERATION_LABEL_KEYS,
   filterDesignImageAssets,
   indexDesignImageAssets,
   type AssetActionResult,
@@ -259,6 +260,16 @@ export function AssetsPanel({
             const dimensions = entry.asset?.size
               ? `${Math.round(entry.asset.size.width)} × ${Math.round(entry.asset.size.height)}`
               : null;
+            const sourceVersion =
+              entry.familySize <= 1
+                ? null
+                : entry.isFamilyRoot
+                  ? t("properties.imageSourceOriginal")
+                  : t(
+                      IMAGE_DERIVATION_OPERATION_LABEL_KEYS[
+                        entry.derivationOperation ?? "replacement"
+                      ],
+                    );
             return (
               <div
                 className={`${styles.item} ${
@@ -320,6 +331,9 @@ export function AssetsPanel({
                                 count: entry.referenceCount,
                               })}
                       {dimensions ? ` · ${dimensions}` : ""}
+                      {sourceVersion
+                        ? ` · ${sourceVersion} · ${t("sidebar.assetVersionCount", { count: entry.familySize })}`
+                        : ""}
                     </small>
                   </span>
                 </button>
@@ -359,14 +373,14 @@ export function AssetsPanel({
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
                     className={styles.delete}
-                    disabled={
-                      busy || entry.asset === null || entry.referenceCount > 0
-                    }
+                    disabled={busy || entry.asset === null || entry.familyInUse}
                     onSelect={() => report(onDelete(entry.assetId))}
                   >
-                    {entry.referenceCount > 0
+                    {entry.familyInUse
                       ? t("sidebar.assetInUse")
-                      : t("sidebar.deleteAsset")}
+                      : entry.familySize > 1
+                        ? t("sidebar.deleteAssetHistory")
+                        : t("sidebar.deleteAsset")}
                   </DropdownMenuItem>
                 </DropdownMenu>
               </div>

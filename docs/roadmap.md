@@ -190,7 +190,7 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 ## P1：专业能力契约
 
 - 把 P0-C 的初始 capability manifest 提升为版本化公共契约，并为 Renderer、Agent、MCP 和发布说明提供同一只读查询入口。未知能力必须拒绝，降级能力必须返回结构化限制和 fidelity warning。
-- 继续按垂直切片迁移专业基础文档协议；`DesignDocument 1.41.0` 已在 imported Component/Variant/Style/Variable source 基础上统一 Image 节点与每项 Image Fill/Stroke 的七项非破坏调整。Component、Style 与 Variable Service 分别统一解析 local/imported source，Library Service 统一发布和更新规划；Image Service contract 3 统一画布、capture 与位图导出调整。Workspace 聚合、分支网络、更多 Text/Font rich typography、批量目录/PDF/P3 与更多 style/variable binding 仍待完成。
+- 继续按垂直切片迁移专业基础文档协议；`DesignDocument 1.42.0` 已在 imported Component/Variant/Style/Variable source、Image 节点与每项 Image Fill/Stroke 七项非破坏调整之上加入可恢复的图片来源 DAG。Component、Style 与 Variable Service 分别统一解析 local/imported source，Library Service 统一发布和更新规划；Image Service contract 3 统一画布、capture 与位图导出调整。Workspace 聚合、分支网络、更多 Text/Font rich typography、批量目录/PDF/P3 与更多 style/variable binding 仍待完成。
 - 为 Geometry、Layout、Text/Font、Image 和 Import/Export service 建立窄、版本化的输入输出接口。服务只能返回纯结果、诊断或候选 `DesignOperation[]`，不能保存第二份文档或直接修改 Leafer 场景。
 - 提供确定性迁移、未知版本拒绝、保存重开、preview、undo/redo、Agent schema、provider 映射和 fidelity warning 测试；不得把长期语义藏进 `extensions`。
 
@@ -277,7 +277,8 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 - [x] 完成 Figma-compatible Image adjustments 垂直切片：`DesignDocument 1.40.0` 与 Image Service contract 3 定义 `-1..1` 的 exposure/contrast/saturation/temperature/tint/highlights/shadows；Inspector 与专用 Agent `set-filters` 共用一笔 planner 事务，通用 apply 不能旁路。Leafer 自定义 filter 以分块 RGBA 算法统一画布、capture 与 PNG/JPEG/WebP export；保存重开、undo、来源替换保留、Figma Plugin API 形状和迁移均有自动化证据。Image Paint 调整由紧接切片承接；SVG 位图嵌入、P3/ICC 与双平台产品 smoke 仍待后续。见 ADR-0129。
 - [x] 完成 Figma-compatible Image Paint adjustments 垂直切片：`DesignDocument 1.41.0` 让 Shape/Frame/Text run、local Paint Shared Style 与 Component 投影共用同一 Image Paint filters；Inspector 锁定具体 Fill/Stroke，Agent `set-paint-filters` 以 field/index/完整 expected Paint 防 stale，通用 apply 不能旁路。Leafer 每 Paint provider 通过有界派生缓存统一画布、capture 与 PNG/JPEG/WebP export，不把派生字节写入文档、asset 或 history。standalone 跨 Design File Image Paint Style asset bundle、SVG 位图嵌入、完整 Figma imageHash/transform 文件 adapter、P3/ICC 与双平台产品 smoke 仍待后续。见 ADR-0130。
 - [x] 完成 Figma-style 可组合蒙版作者工作流：任意受支持 Shape/Text/Image/容器可作为 ordered sibling source；多选一次原子事务创建限制传播范围的真实 Group，并以当前 sibling 最底层作为 Alpha/Vector/Luminance source；单层 direct toggle、解除后保留 Group、Inspector Figma 术语、图层树标识、macOS/Windows 快捷键和 Agent `create-mask/set-mask-type/remove-mask` 共用稳定 ID、revision 与唯一 Runtime。画布、capture、PNG/JPEG/WebP 继续共用 Leafer mask 投影；复杂 graph、Image/Text SVG mask source、mask outline view 和双平台像素基线仍待后续。见 ADR-0131。
-- 扩展已建立的 Image service：下一步补齐 AI 透明背景、资源变体、引用恢复和大图生命周期。增加独立 `edit_image` adapter/tool，支持局部重绘、扩图、背景替换、重打光和风格统一；参考图、原图和 AI 派生资源必须分离并可追溯，任何编辑都不得覆盖原始 asset。
+- [x] 完成可恢复图片来源谱系垂直切片：`DesignDocument 1.42.0` 将内容寻址 asset 与有序 typed derivation DAG 分离；替换不再清理原图，Inspector 可切换 family 版本/恢复原图，Assets 相邻展示并可原子删除无人引用的完整来源历史。Runtime 校验 Image inputs、order/store 与无环，diff/undo/save 共用同一事实；Agent `replace-source/switch-source` 使用 trusted ID、expected current asset 与有界 inspection 摘要，通用 apply 不能伪造 provenance。Library release 当前只携带渲染闭包，不复制文档级历史。见 ADR-0132。
+- 扩展已建立的 Image service：下一步接入 AI 透明背景与独立 `edit_image` adapter/tool，支持局部重绘、扩图、背景替换、重打光和风格统一，并复用已完成的来源谱系；继续补齐大图按需加载、去重与资源生命周期。任何编辑都不得覆盖原始 asset。
 - 扩展 P0-B 已建立的专业位图导出，补海报交付所需的高级颜色、资源和格式保真；导出继续读取 DesignDocument 和受控资源，不能把当前画布截图当作交付产物。
 - 为人工属性面板和 Agent 增加文字、裁剪、替换、调整和导出的语义命令；长任务必须展示进度、支持取消并返回稳定产物或明确失败。
 

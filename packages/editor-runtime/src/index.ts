@@ -214,6 +214,8 @@ export {
 } from "./variant-set-property-operations.js";
 export {
   nodeReferencesAsset,
+  getImageAssetFamily,
+  indexImageAssetFamilies,
   planDeleteImageAsset,
   planImageNodeUpdate,
   planImagePaintFilterUpdate,
@@ -221,6 +223,7 @@ export {
   planReplaceImageAsset,
   type ImageAssetOperationFailureCode,
   type ImageAssetOperationPlan,
+  type ImageAssetFamily,
   type ImageUpdateFailureCode,
   type ImageUpdateOperation,
   type ImageUpdatePlan,

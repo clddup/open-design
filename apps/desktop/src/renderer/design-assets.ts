@@ -2,11 +2,31 @@ import type {
   DesignAsset,
   DesignDocument,
   DesignNode,
+  ImageAssetDerivationOperation,
 } from "@opendesign/design-contracts";
-import { nodeReferencesAsset } from "@opendesign/editor-runtime";
+import {
+  indexImageAssetFamilies,
+  nodeReferencesAsset,
+} from "@opendesign/editor-runtime";
+import type { MessageKey } from "../shared/i18n/messages";
 
 export const DESIGN_ASSET_DRAG_MIME =
   "application/x-opendesign-image-asset-id" as const;
+
+export const IMAGE_DERIVATION_OPERATION_LABEL_KEYS: Record<
+  ImageAssetDerivationOperation,
+  MessageKey
+> = {
+  replacement: "properties.imageSourceOperation.replacement",
+  "remove-background": "properties.imageSourceOperation.remove-background",
+  "erase-object": "properties.imageSourceOperation.erase-object",
+  "isolate-object": "properties.imageSourceOperation.isolate-object",
+  expand: "properties.imageSourceOperation.expand",
+  upscale: "properties.imageSourceOperation.upscale",
+  "prompt-edit": "properties.imageSourceOperation.prompt-edit",
+  relight: "properties.imageSourceOperation.relight",
+  "style-harmonize": "properties.imageSourceOperation.style-harmonize",
+};
 
 export type AssetActionResult =
   { ok: true; message?: string } | { ok: false; error: string };
@@ -35,11 +55,19 @@ export type DesignAssetIndexEntry = {
   references: readonly DesignAssetReference[];
   referenceCount: number;
   status: DesignAssetStatus;
+  derivationOperation: ImageAssetDerivationOperation | null;
+  familyRootAssetId: string;
+  familySize: number;
+  familyPosition: number;
+  familyReferenceCount: number;
+  familyInUse: boolean;
+  isFamilyRoot: boolean;
 };
 
 export function indexDesignImageAssets(
   document: DesignDocument,
 ): DesignAssetIndexEntry[] {
+  const familiesByAssetId = indexImageAssetFamilies(document);
   const pageIdsByNodeId = pageIdsByNode(document);
   const referencedAssetIds = new Set<string>();
   for (const node of Object.values(document.nodesById)) {
@@ -70,6 +98,41 @@ export function indexDesignImageAssets(
         : previewDataUrl
           ? "ready"
           : "unavailable";
+      const family = familiesByAssetId.get(assetId);
+      const familyRootAssetId = family?.rootAssetIds[0] ?? assetId;
+      const familyPosition = family?.assetIds.indexOf(assetId) ?? 0;
+      const derivationOperation =
+        family?.derivationIds
+          .map(
+            (derivationId) => document.imageAssetDerivationsById[derivationId],
+          )
+          .find((derivation) => derivation?.resultAssetId === assetId)
+          ?.operation ?? null;
+      const familyReferenceCount = (family?.assetIds ?? [assetId]).reduce(
+        (count, candidateId) =>
+          count +
+          Object.values(document.nodesById).filter((node) =>
+            nodeReferencesAsset(node, candidateId),
+          ).length,
+        0,
+      );
+      const familyAssetIds = family?.assetIds ?? [assetId];
+      const familyInUse =
+        familyReferenceCount > 0 ||
+        [
+          ...Object.values(document.stylesById),
+          ...Object.values(document.libraryStylesById).map(
+            (entry) => entry.style,
+          ),
+        ].some(
+          (style) =>
+            style.styleType === "PAINT" &&
+            style.paints.some(
+              (paint) =>
+                paint.type === "image" &&
+                familyAssetIds.includes(paint.assetId),
+            ),
+        );
       return {
         assetId,
         asset,
@@ -78,14 +141,32 @@ export function indexDesignImageAssets(
         references,
         referenceCount: references.length,
         status,
+        derivationOperation,
+        familyRootAssetId,
+        familySize: family?.assetIds.length ?? 1,
+        familyPosition,
+        familyReferenceCount,
+        familyInUse,
+        isFamilyRoot: family?.rootAssetIds.includes(assetId) ?? true,
       };
     })
-    .sort((left, right) =>
-      left.name.localeCompare(right.name, undefined, {
-        numeric: true,
-        sensitivity: "base",
-      }),
-    );
+    .sort((left, right) => {
+      const leftRootName =
+        document.assetsById[left.familyRootAssetId]?.name ?? left.name;
+      const rightRootName =
+        document.assetsById[right.familyRootAssetId]?.name ?? right.name;
+      return (
+        leftRootName.localeCompare(rightRootName, undefined, {
+          numeric: true,
+          sensitivity: "base",
+        }) ||
+        left.familyPosition - right.familyPosition ||
+        left.name.localeCompare(right.name, undefined, {
+          numeric: true,
+          sensitivity: "base",
+        })
+      );
+    });
 }
 
 export function filterDesignImageAssets(

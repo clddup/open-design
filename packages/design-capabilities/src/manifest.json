@@ -1,7 +1,7 @@
 {
   "version": 1,
   "updatedAt": "2026-08-22",
-  "documentSchemaVersion": "1.41.0",
+  "documentSchemaVersion": "1.42.0",
   "engineBaseline": "leafer-editor@2.2.9",
   "categories": [
     {
@@ -616,10 +616,10 @@
         "zh-CN": "图片裁剪与调整"
       },
       "description": {
-        "en": "Crop non-destructively, choose focal placement, replace sources, and apply image adjustments or filters.",
-        "zh-CN": "非破坏性裁剪、选择焦点位置、替换来源并应用图片调整或滤镜。"
+        "en": "Crop and adjust non-destructively, preserve source history, restore image variants, and replace sources without overwriting the original.",
+        "zh-CN": "非破坏性裁剪与调整，保留来源历史、恢复图片变体，并在不覆盖原图的情况下替换来源。"
       },
-      "provider": "DesignDocument 1.41.0 + OpenDesign Image Service contract 3 + Leafer per-image-paint adjustment projection",
+      "provider": "DesignDocument 1.42.0 + OpenDesign Image Service contract 3 + recoverable image derivation DAG + Leafer per-image-paint adjustment projection",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
       "surfaces": {
         "contract": "available",
@@ -631,8 +631,8 @@
       },
       "limitations": [
         {
-          "en": "Image nodes and each image Fill/Stroke support Figma-compatible exposure, contrast, saturation, temperature, tint, highlights, and shadows through one deterministic RGBA projection shared by canvas, capture, and PNG/JPEG/WebP export. Standalone cross-file Image Paint Style asset bundles, SVG raster embedding, complete Figma imageHash/transform file adapters, color-managed P3/ICC output, and native macOS/Windows interaction evidence remain incomplete.",
-          "zh-CN": "Image 节点及每项图片 Fill/Stroke 已支持 Figma-compatible 曝光、对比度、饱和度、色温、色调、高光与阴影，并由画布、capture 和 PNG/JPEG/WebP 导出共用同一确定性 RGBA 投影。standalone 跨文件 Image Paint Style asset bundle、SVG 位图嵌入、完整 Figma imageHash/transform 文件 adapter、P3/ICC 色彩管理及 macOS/Windows 原生交互证据仍未完成。"
+          "en": "Image nodes and each image Fill/Stroke support Figma-compatible adjustments through one deterministic RGBA projection. Source replacement now records a recoverable typed derivation family shared by Inspector, Assets, Agent, undo, and persistence. Remote AI editing providers, large-image on-demand storage, standalone cross-file Image Paint Style asset bundles, SVG raster embedding, complete Figma imageHash/transform file adapters, color-managed P3/ICC output, and native macOS/Windows interaction evidence remain incomplete.",
+          "zh-CN": "Image 节点及每项图片 Fill/Stroke 已通过同一确定性 RGBA 投影支持 Figma-compatible 调整；来源替换会记录由 Inspector、Assets、Agent、undo 与持久化共用的可恢复 typed derivation family。远端 AI 图片编辑 provider、大图按需存储、standalone 跨文件 Image Paint Style asset bundle、SVG 位图嵌入、完整 Figma imageHash/transform 文件 adapter、P3/ICC 色彩管理及 macOS/Windows 原生交互证据仍未完成。"
         }
       ],
       "evidence": {

@@ -235,6 +235,8 @@ function fixture(): DesignDocument {
     },
     interactionsById: {},
     assetsById: {},
+    imageAssetDerivationOrder: [],
+    imageAssetDerivationsById: {},
     extensions: {},
   };
 }

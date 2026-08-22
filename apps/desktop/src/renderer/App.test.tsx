@@ -3018,10 +3018,30 @@ describe("App", () => {
     );
     expect(
       runtime().getSnapshot().document.assetsById[oldAssetId],
-    ).toBeUndefined();
+    ).toBeDefined();
     expect(
       runtime().getSnapshot().document.assetsById[newAssetId],
     ).toBeDefined();
+    expect(
+      Object.values(runtime().getSnapshot().document.imageAssetDerivationsById),
+    ).toEqual([
+      expect.objectContaining({
+        sourceAssetId: oldAssetId,
+        resultAssetId: newAssetId,
+        operation: "replacement",
+      }),
+    ]);
+
+    expect(screen.getByLabelText("Version")).toHaveValue(newAssetId);
+    await user.click(screen.getByRole("button", { name: "Restore original" }));
+    expect(runtime().getSnapshot().document.nodesById.hero_image).toMatchObject(
+      { properties: { assetId: oldAssetId } },
+    );
+
+    await user.click(screen.getByRole("button", { name: "Undo" }));
+    expect(runtime().getSnapshot().document.nodesById.hero_image).toMatchObject(
+      { properties: { assetId: newAssetId } },
+    );
 
     await user.click(screen.getByRole("button", { name: "Undo" }));
     expect(runtime().getSnapshot().document.nodesById.hero_image).toMatchObject(
@@ -3203,7 +3223,7 @@ describe("App", () => {
     );
     expect(
       runtime().getSnapshot().document.assetsById[importedId],
-    ).toBeUndefined();
+    ).toBeDefined();
     expect(
       runtime().getSnapshot().document.nodesById[placed!.id],
     ).toMatchObject({
@@ -3217,13 +3237,20 @@ describe("App", () => {
     expect(
       runtime().getSnapshot().document.nodesById[placed!.id],
     ).toBeUndefined();
-    expect(screen.getByText("Unused · 1600 × 900")).toBeInTheDocument();
+    expect(
+      screen.getByText("Unused · 1600 × 900 · Replacement · 2 versions"),
+    ).toBeInTheDocument();
     await user.click(
       screen.getByRole("button", { name: "Actions for Retouched hero" }),
     );
-    await user.click(screen.getByRole("menuitem", { name: "Delete asset" }));
+    await user.click(
+      screen.getByRole("menuitem", { name: "Delete source history" }),
+    );
     expect(
       runtime().getSnapshot().document.assetsById[replacementId],
+    ).toBeUndefined();
+    expect(
+      runtime().getSnapshot().document.assetsById[importedId],
     ).toBeUndefined();
     expect(screen.getByText("No image assets")).toBeInTheDocument();
     expect(runtime().getSnapshot().document.revision).toBe(5);

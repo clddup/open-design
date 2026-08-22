@@ -83,6 +83,7 @@ export function PropertiesPanel({
   onExportFormatChange,
   onCropImage,
   onReplaceImage,
+  onSwitchImageSource,
   onUpdateImageFilters,
   onUpdateImagePaintFilters,
   onUpdateImagePlacement,
@@ -159,6 +160,11 @@ export function PropertiesPanel({
   onExportFormatChange: (format: ExportFormat) => void;
   onCropImage: () => boolean;
   onReplaceImage: () => void;
+  onSwitchImageSource: (
+    nodeId: string,
+    assetId: string,
+    expectedAssetId: string,
+  ) => void;
   onUpdateImageFilters: (filters: ImageFilters) => void;
   onUpdateImagePaintFilters: (
     nodeId: string,
@@ -316,6 +322,7 @@ export function PropertiesPanel({
             onGoToComponentMain={onGoToComponentMain}
             onCropImage={onCropImage}
             onReplaceImage={onReplaceImage}
+            onSwitchImageSource={onSwitchImageSource}
             onUpdateImageFilters={onUpdateImageFilters}
             onUpdateImagePaintFilters={onUpdateImagePaintFilters}
             onUpdateImagePlacement={onUpdateImagePlacement}

@@ -837,6 +837,8 @@ function variantFixture(): DesignDocument {
     stylesById: {},
     interactionsById: {},
     assetsById: {},
+    imageAssetDerivationOrder: [],
+    imageAssetDerivationsById: {},
     extensions: {},
   };
 }

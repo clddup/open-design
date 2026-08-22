@@ -122,6 +122,7 @@ type ExecuteDesignToolOptions = {
 const MAX_INSPECTED_FONT_REQUESTS = 256;
 const MAX_INSPECTED_FONT_NODE_IDS = 1_000;
 const MAX_INSPECTED_STAGED_IMAGE_ASSETS = 64;
+const MAX_INSPECTED_IMAGE_DERIVATIONS = 64;
 
 export async function executeDesignToolRequest(
   request: RendererDesignToolRequest,
@@ -1372,15 +1373,23 @@ async function executeDesignToolRequestUnsafe(
                     nodeId: input.nodeId,
                     filters: input.filters,
                   }
-                : {
-                    action: input.action,
-                    pageId: input.pageId,
-                    nodeId: input.nodeId,
-                    asset: input.asset,
-                    ...(input.placement === undefined
-                      ? {}
-                      : { placement: input.placement }),
-                  },
+                : input.action === "switch-source"
+                  ? {
+                      action: input.action,
+                      pageId: input.pageId,
+                      nodeId: input.nodeId,
+                      expectedAssetId: input.expectedAssetId,
+                      assetId: input.assetId,
+                    }
+                  : {
+                      action: input.action,
+                      pageId: input.pageId,
+                      nodeId: input.nodeId,
+                      asset: input.asset,
+                      ...(input.placement === undefined
+                        ? {}
+                        : { placement: input.placement }),
+                    },
             commandPrefix,
           );
     if (!plan.ok) {
@@ -1390,7 +1399,6 @@ async function executeDesignToolRequestUnsafe(
       document,
       plan.commands,
       request.context.mutationTarget,
-      { allowedAssetDeletionId: plan.deletedAssetId },
     );
     const transaction = {
       transactionId:
@@ -1461,9 +1469,9 @@ async function executeDesignToolRequestUnsafe(
                     : undefined,
               }
             : {}),
-          ...(plan.deletedAssetId === undefined
+          ...(plan.derivationId === undefined
             ? {}
-            : { deletedAssetId: plan.deletedAssetId }),
+            : { derivationId: plan.derivationId }),
           revision: result.revision.revision,
           atomic: true,
           changes: result.changes,
@@ -2151,6 +2159,28 @@ function createScopedInspection(
     .slice(-MAX_INSPECTED_STAGED_IMAGE_ASSETS)
     .map((asset) => asset.id);
   stagedAssetIds.forEach((assetId) => assetIds.add(assetId));
+  let familyExpanded = true;
+  while (
+    familyExpanded &&
+    assetIds.size < MAX_INSPECTED_IMAGE_DERIVATIONS * 2
+  ) {
+    familyExpanded = false;
+    for (const derivationId of document.imageAssetDerivationOrder) {
+      const derivation = document.imageAssetDerivationsById[derivationId];
+      if (
+        !derivation ||
+        (!assetIds.has(derivation.sourceAssetId) &&
+          !assetIds.has(derivation.resultAssetId))
+      ) {
+        continue;
+      }
+      const previousSize = assetIds.size;
+      assetIds.add(derivation.sourceAssetId);
+      assetIds.add(derivation.resultAssetId);
+      familyExpanded ||= assetIds.size !== previousSize;
+      if (assetIds.size >= MAX_INSPECTED_IMAGE_DERIVATIONS * 2) break;
+    }
+  }
   const assetsById = Object.fromEntries(
     [...assetIds].flatMap((assetId) => {
       const asset = document.assetsById[assetId];
@@ -2187,6 +2217,31 @@ function createScopedInspection(
     }),
   );
   const diagnostics = diagnoseDesignPages(document, pageIds);
+  const imageAssetDerivations = document.imageAssetDerivationOrder
+    .flatMap((derivationId) => {
+      const derivation = document.imageAssetDerivationsById[derivationId];
+      if (
+        !derivation ||
+        (!assetIds.has(derivation.sourceAssetId) &&
+          !assetIds.has(derivation.resultAssetId))
+      ) {
+        return [];
+      }
+      return [
+        {
+          id: derivation.id,
+          sourceAssetId: derivation.sourceAssetId,
+          resultAssetId: derivation.resultAssetId,
+          operation: derivation.operation,
+          ...(derivation.maskAssetId === undefined
+            ? {}
+            : { maskAssetId: derivation.maskAssetId }),
+          referenceAssetIds: [...derivation.referenceAssetIds],
+          promptPresent: derivation.prompt !== undefined,
+        },
+      ];
+    })
+    .slice(0, MAX_INSPECTED_IMAGE_DERIVATIONS);
   const { componentCatalog, componentsById, instancesById, variantSetsById } =
     createScopedComponentInspection(document, nodeIds, nodesById);
   const { designSystemIds: variableDesignSystemIds, ...variableInspection } =
@@ -2203,6 +2258,17 @@ function createScopedInspection(
       pagesById,
       nodesById,
       assetsById,
+      imageAssetDerivations,
+      imageAssetDerivationsTruncated:
+        imageAssetDerivations.length <
+        document.imageAssetDerivationOrder.filter((derivationId) => {
+          const derivation = document.imageAssetDerivationsById[derivationId];
+          return Boolean(
+            derivation &&
+            (assetIds.has(derivation.sourceAssetId) ||
+              assetIds.has(derivation.resultAssetId)),
+          );
+        }).length,
       componentsById,
       componentCatalog,
       variantSetsById,
@@ -2390,7 +2456,6 @@ function assertCommandsWithinMutationTarget(
   commands: readonly DesignOperation[],
   mutationTarget: DesignMutationTarget,
   options: {
-    allowedAssetDeletionId?: string;
     allowComponentCommands?: boolean;
   } = {},
 ): void {
@@ -2433,9 +2498,14 @@ function assertCommandsWithinMutationTarget(
   };
 
   for (const command of commands) {
-    if (command.type === "put_asset") continue;
+    if (
+      command.type === "put_asset" ||
+      command.type === "put_image_asset_derivation" ||
+      command.type === "delete_image_asset_derivation"
+    ) {
+      continue;
+    }
     if (command.type === "delete_asset") {
-      if (options.allowedAssetDeletionId === command.assetId) continue;
       throw new Error("Agent asset deletion requires a dedicated scoped tool");
     }
     if (

@@ -5816,6 +5816,8 @@ function componentInput(): LeaferEngineSyncInput {
     stylesById: {},
     interactionsById: {},
     assetsById: {},
+    imageAssetDerivationOrder: [],
+    imageAssetDerivationsById: {},
     extensions: {},
   };
   return {

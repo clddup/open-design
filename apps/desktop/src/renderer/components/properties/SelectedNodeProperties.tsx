@@ -123,6 +123,7 @@ export function SelectedNodeProperties({
   onGoToComponentMain,
   onCropImage,
   onReplaceImage,
+  onSwitchImageSource,
   onUpdateImageFilters,
   onUpdateImagePaintFilters,
   onUpdateImagePlacement,
@@ -185,6 +186,11 @@ export function SelectedNodeProperties({
   onGoToComponentMain: () => void;
   onCropImage: () => boolean;
   onReplaceImage: () => void;
+  onSwitchImageSource: (
+    nodeId: string,
+    assetId: string,
+    expectedAssetId: string,
+  ) => void;
   onUpdateImageFilters: (filters: ImageFilters) => void;
   onUpdateImagePaintFilters: (
     nodeId: string,
@@ -935,11 +941,13 @@ export function SelectedNodeProperties({
       />
       {node.kind === "image" && (
         <ImageSection
+          document={document}
           node={node}
           onChange={onUpdateImagePlacement}
           onFiltersChange={onUpdateImageFilters}
           onCrop={onCropImage}
           onReplace={onReplaceImage}
+          onSourceChange={onSwitchImageSource}
         />
       )}
       <PaintAndEffectsSections

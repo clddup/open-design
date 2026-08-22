@@ -17,6 +17,7 @@ import {
   LIBRARY_VARIABLE_SOURCE_DESIGN_SCHEMA_VERSION,
   IMAGE_ADJUSTMENTS_DESIGN_SCHEMA_VERSION,
   IMAGE_PAINT_ADJUSTMENTS_DESIGN_SCHEMA_VERSION,
+  IMAGE_ASSET_DERIVATIONS_DESIGN_SCHEMA_VERSION,
   FONT_FACE_IDENTITY_DESIGN_SCHEMA_VERSION,
   FIGMA_TEXT_LISTS_DESIGN_SCHEMA_VERSION,
   AUTO_LAYOUT_GRID_DESIGN_SCHEMA_VERSION,
@@ -51,6 +52,39 @@ import {
 } from "./index.js";
 
 const actor = { type: "user" as const, id: "user_1" };
+
+it("validates typed image asset derivation commands", () => {
+  const derivation = {
+    id: "image_derivation_1",
+    sourceAssetId: "asset_original",
+    resultAssetId: "asset_retouch",
+    operation: "prompt-edit",
+    prompt: "Reduce background distraction",
+    referenceAssetIds: ["asset_reference"],
+    extensions: {},
+  };
+  expect(
+    Value.Check(DesignOperationSchema, {
+      commandId: "put_image_derivation",
+      type: "put_image_asset_derivation",
+      derivation,
+    }),
+  ).toBe(true);
+  expect(
+    Value.Check(DesignOperationSchema, {
+      commandId: "delete_image_derivation",
+      type: "delete_image_asset_derivation",
+      derivationId: derivation.id,
+    }),
+  ).toBe(true);
+  expect(
+    Value.Check(DesignOperationSchema, {
+      commandId: "invalid_image_derivation",
+      type: "put_image_asset_derivation",
+      derivation: { ...derivation, operation: "unknown-edit" },
+    }),
+  ).toBe(false);
+});
 
 it("validates bounded derived Component selection targets", () => {
   expect(
@@ -99,9 +133,23 @@ it("keeps Auto Layout and Layout Guide schema milestones distinct", () => {
   expect(LIBRARY_VARIABLE_SOURCE_DESIGN_SCHEMA_VERSION).toBe("1.39.0");
   expect(IMAGE_ADJUSTMENTS_DESIGN_SCHEMA_VERSION).toBe("1.40.0");
   expect(IMAGE_PAINT_ADJUSTMENTS_DESIGN_SCHEMA_VERSION).toBe("1.41.0");
+  expect(IMAGE_ASSET_DERIVATIONS_DESIGN_SCHEMA_VERSION).toBe("1.42.0");
   expect(DESIGN_SCHEMA_VERSION).toBe(
-    IMAGE_PAINT_ADJUSTMENTS_DESIGN_SCHEMA_VERSION,
+    IMAGE_ASSET_DERIVATIONS_DESIGN_SCHEMA_VERSION,
   );
+});
+
+it("migrates the previous image Paint document with empty image source history", () => {
+  const source = textDocumentFixture() as unknown as Record<string, unknown>;
+  source.schemaVersion = IMAGE_PAINT_ADJUSTMENTS_DESIGN_SCHEMA_VERSION;
+  delete source.imageAssetDerivationOrder;
+  delete source.imageAssetDerivationsById;
+  const migrated = migrateDesignDocument(source);
+  expect(migrated).toMatchObject({
+    schemaVersion: DESIGN_SCHEMA_VERSION,
+    imageAssetDerivationOrder: [],
+    imageAssetDerivationsById: {},
+  });
 });
 
 it("migrates the previous Variable Library document without inventing image adjustments", () => {
@@ -718,6 +766,8 @@ function textDocumentFixture() {
     stylesById: {},
     interactionsById: {},
     assetsById: {},
+    imageAssetDerivationOrder: [],
+    imageAssetDerivationsById: {},
     extensions: {},
   };
 }
@@ -1567,6 +1617,8 @@ describe("design contract schemas", () => {
       libraryStylesById: {},
       libraryVariableCollectionsById: {},
       libraryVariablesById: {},
+      imageAssetDerivationOrder: [],
+      imageAssetDerivationsById: {},
     });
   });
 
@@ -1606,6 +1658,8 @@ describe("design contract schemas", () => {
       libraryStylesById: {},
       libraryVariableCollectionsById: {},
       libraryVariablesById: {},
+      imageAssetDerivationOrder: [],
+      imageAssetDerivationsById: {},
     });
   });
 
@@ -1645,6 +1699,8 @@ describe("design contract schemas", () => {
       libraryStylesById: {},
       libraryVariableCollectionsById: {},
       libraryVariablesById: {},
+      imageAssetDerivationOrder: [],
+      imageAssetDerivationsById: {},
     });
   });
 
@@ -1706,6 +1762,8 @@ describe("design contract schemas", () => {
       libraryStylesById: {},
       libraryVariableCollectionsById: {},
       libraryVariablesById: {},
+      imageAssetDerivationOrder: [],
+      imageAssetDerivationsById: {},
     });
     const path = migrated?.nodesById.path_1;
     expect(path?.kind).toBe("path");

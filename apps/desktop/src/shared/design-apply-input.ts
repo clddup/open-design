@@ -400,6 +400,8 @@ function isPermittedApplyOperation(
     command.type !== "delete_page" &&
     command.type !== "put_component" &&
     command.type !== "delete_component" &&
+    command.type !== "put_image_asset_derivation" &&
+    command.type !== "delete_image_asset_derivation" &&
     command.type !== "put_variable_collection" &&
     command.type !== "delete_variable_collection" &&
     command.type !== "move_variable_collection" &&

@@ -18,6 +18,7 @@ import {
   planImagePaintFilterUpdate,
   planPlaceImageAsset,
   planReplaceImageAsset,
+  getImageAssetFamily,
 } from "./image-operations.js";
 
 const oldAsset: DesignAsset = {
@@ -209,7 +210,7 @@ describe("image update planner", () => {
     ).toMatchObject({ ok: false, code: "no-op" });
   });
 
-  it("replaces a source and removes the detached asset in one undoable transaction", () => {
+  it("replaces a source while preserving recoverable image history in one transaction", () => {
     const runtime = new EditorRuntime(documentWithImage());
     const plan = planImageNodeUpdate(runtime.getSnapshot().document, {
       action: "replace-source",
@@ -221,7 +222,7 @@ describe("image update planner", () => {
       ok: true,
       previousAssetId: "asset_old",
       nextAssetId: "asset_new",
-      deletedAssetId: "asset_old",
+      derivationId: "update_image_derivation",
     });
     if (!plan.ok) return;
     const before = runtime.getSnapshot().document;
@@ -233,16 +234,44 @@ describe("image update planner", () => {
       commands: plan.commands,
     });
     expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.changes.addedAssetIds).toEqual(["asset_new"]);
+      expect(result.changes.addedImageAssetDerivationIds).toEqual([
+        "update_image_derivation",
+      ]);
+    }
     expect(runtime.getSnapshot().document.nodesById.hero).toMatchObject({
       properties: { assetId: "asset_new", placement: { mode: "fit" } },
     });
-    expect(runtime.getSnapshot().document.assetsById.asset_old).toBeUndefined();
+    expect(runtime.getSnapshot().document.assetsById.asset_old).toBeDefined();
+    expect(
+      runtime.getSnapshot().document.imageAssetDerivationsById
+        .update_image_derivation,
+    ).toMatchObject({
+      sourceAssetId: "asset_old",
+      resultAssetId: "asset_new",
+      operation: "replacement",
+    });
+    const reopened = new EditorRuntime(
+      JSON.parse(JSON.stringify(runtime.getSnapshot().document)),
+    );
+    expect(
+      reopened.getSnapshot().document.imageAssetDerivationsById
+        .update_image_derivation,
+    ).toMatchObject({
+      sourceAssetId: oldAsset.id,
+      resultAssetId: newAsset.id,
+    });
     expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
     expect(runtime.undo().ok).toBe(true);
     expect(runtime.getSnapshot().document.nodesById.hero).toMatchObject({
       properties: { assetId: "asset_old" },
     });
     expect(runtime.getSnapshot().document.assetsById.asset_new).toBeUndefined();
+    expect(
+      runtime.getSnapshot().document.imageAssetDerivationsById
+        .update_image_derivation,
+    ).toBeUndefined();
   });
 
   it("preserves an old asset referenced by another Image or Path paint", () => {
@@ -287,10 +316,77 @@ describe("image update planner", () => {
     });
     expect(plan).toMatchObject({ ok: true });
     if (!plan.ok) return;
-    expect(plan.deletedAssetId).toBeUndefined();
     expect(plan.commands).not.toContainEqual(
       expect.objectContaining({ type: "delete_asset" }),
     );
+  });
+
+  it("rejects missing, self-referential, and cyclic image derivation graphs", () => {
+    const danglingOrder = documentWithImage();
+    danglingOrder.imageAssetDerivationOrder = ["dangling"];
+    expect(() => new EditorRuntime(danglingOrder)).toThrow(/does not exist/);
+
+    const unlisted = documentWithImage();
+    unlisted.imageAssetDerivationsById.unlisted = {
+      id: "unlisted",
+      sourceAssetId: oldAsset.id,
+      resultAssetId: "asset_result",
+      operation: "replacement",
+      referenceAssetIds: [],
+      extensions: {},
+    };
+    unlisted.assetsById.asset_result = {
+      ...newAsset,
+      id: "asset_result",
+    };
+    expect(() => new EditorRuntime(unlisted)).toThrow(/present in/);
+
+    const missing = documentWithImage();
+    missing.imageAssetDerivationOrder = ["missing_edge"];
+    missing.imageAssetDerivationsById.missing_edge = {
+      id: "missing_edge",
+      sourceAssetId: oldAsset.id,
+      resultAssetId: "asset_missing",
+      operation: "replacement",
+      referenceAssetIds: [],
+      extensions: {},
+    };
+    expect(() => new EditorRuntime(missing)).toThrow(/asset_missing/);
+
+    const self = documentWithImage();
+    self.imageAssetDerivationOrder = ["self"];
+    self.imageAssetDerivationsById.self = {
+      id: "self",
+      sourceAssetId: oldAsset.id,
+      resultAssetId: oldAsset.id,
+      operation: "replacement",
+      referenceAssetIds: [],
+      extensions: {},
+    };
+    expect(() => new EditorRuntime(self)).toThrow(/itself/);
+
+    const cyclic = documentWithImage();
+    cyclic.assetsById[newAsset.id] = structuredClone(newAsset);
+    cyclic.imageAssetDerivationOrder = ["forward", "back"];
+    cyclic.imageAssetDerivationsById = {
+      forward: {
+        id: "forward",
+        sourceAssetId: oldAsset.id,
+        resultAssetId: newAsset.id,
+        operation: "replacement",
+        referenceAssetIds: [],
+        extensions: {},
+      },
+      back: {
+        id: "back",
+        sourceAssetId: newAsset.id,
+        resultAssetId: oldAsset.id,
+        operation: "prompt-edit",
+        referenceAssetIds: [],
+        extensions: {},
+      },
+    };
+    expect(() => new EditorRuntime(cyclic)).toThrow(/acyclic/);
   });
 
   it("rejects selection-independent out-of-page, wrong-kind, and no-op requests", () => {
@@ -477,15 +573,151 @@ describe("file image asset planners", () => {
     });
     expect(
       runtime.getSnapshot().document.assetsById[oldAsset.id],
-    ).toBeUndefined();
+    ).toBeDefined();
     expect(
       runtime.getSnapshot().document.assetsById[newAsset.id],
     ).toBeDefined();
+    expect(
+      getImageAssetFamily(runtime.getSnapshot().document, newAsset.id),
+    ).toMatchObject({
+      assetIds: [oldAsset.id, newAsset.id],
+      rootAssetIds: [oldAsset.id],
+    });
     expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
     expect(runtime.undo().ok).toBe(true);
     expect(
       runtime.getSnapshot().document.assetsById[oldAsset.id],
     ).toBeDefined();
+  });
+
+  it("switches an Image node between existing family sources and rejects stale identity", () => {
+    const runtime = new EditorRuntime(documentWithImage());
+    const replacement = planImageNodeUpdate(runtime.getSnapshot().document, {
+      action: "replace-source",
+      pageId: "page_welcome",
+      nodeId: "hero",
+      asset: newAsset,
+    });
+    if (!replacement.ok) throw new Error(replacement.message);
+    const before = runtime.getSnapshot().document;
+    expect(
+      runtime.apply({
+        transactionId: "replace_for_switch",
+        documentId: before.documentId,
+        baseRevision: before.revision,
+        actor: { type: "user", id: "test" },
+        commands: replacement.commands,
+      }).ok,
+    ).toBe(true);
+    expect(
+      planImageNodeUpdate(runtime.getSnapshot().document, {
+        action: "switch-source",
+        pageId: "page_welcome",
+        nodeId: "hero",
+        expectedAssetId: oldAsset.id,
+        assetId: newAsset.id,
+      }),
+    ).toMatchObject({ ok: false, code: "asset-stale" });
+    const restore = planImageNodeUpdate(runtime.getSnapshot().document, {
+      action: "switch-source",
+      pageId: "page_welcome",
+      nodeId: "hero",
+      expectedAssetId: newAsset.id,
+      assetId: oldAsset.id,
+    });
+    expect(restore).toMatchObject({ ok: true });
+    if (!restore.ok) return;
+    const current = runtime.getSnapshot().document;
+    expect(
+      runtime.apply({
+        transactionId: "restore_source",
+        documentId: current.documentId,
+        baseRevision: current.revision,
+        actor: { type: "user", id: "test" },
+        commands: restore.commands,
+      }).ok,
+    ).toBe(true);
+    expect(runtime.getSnapshot().document.nodesById.hero).toMatchObject({
+      properties: { assetId: oldAsset.id },
+    });
+  });
+
+  it("deletes an unused image source family as one undoable transaction", () => {
+    const runtime = new EditorRuntime(documentWithImage());
+    const replacement = planImageNodeUpdate(runtime.getSnapshot().document, {
+      action: "replace-source",
+      pageId: "page_welcome",
+      nodeId: "hero",
+      asset: newAsset,
+    });
+    if (!replacement.ok) throw new Error(replacement.message);
+    let current = runtime.getSnapshot().document;
+    expect(
+      runtime.apply({
+        transactionId: "replace_before_family_delete",
+        documentId: current.documentId,
+        baseRevision: current.revision,
+        actor: { type: "user", id: "test" },
+        commands: replacement.commands,
+      }).ok,
+    ).toBe(true);
+    current = runtime.getSnapshot().document;
+    expect(
+      runtime.apply({
+        transactionId: "remove_family_use",
+        documentId: current.documentId,
+        baseRevision: current.revision,
+        actor: { type: "user", id: "test" },
+        commands: [
+          {
+            commandId: "delete_hero",
+            type: "delete_element",
+            nodeId: "hero",
+          },
+        ],
+      }).ok,
+    ).toBe(true);
+    const deletion = planDeleteImageAsset(
+      runtime.getSnapshot().document,
+      newAsset.id,
+      "delete_family",
+    );
+    expect(deletion).toMatchObject({ ok: true });
+    if (!deletion.ok) return;
+    current = runtime.getSnapshot().document;
+    const deleted = runtime.apply({
+      transactionId: "delete_source_family",
+      documentId: current.documentId,
+      baseRevision: current.revision,
+      actor: { type: "user", id: "test" },
+      commands: deletion.commands,
+    });
+    expect(deleted.ok).toBe(true);
+    if (deleted.ok) {
+      expect(deleted.changes.removedImageAssetDerivationIds).toEqual([
+        "update_image_derivation",
+      ]);
+      expect(deleted.changes.removedAssetIds).toEqual([
+        oldAsset.id,
+        newAsset.id,
+      ]);
+    }
+    expect(runtime.getSnapshot().document.assetsById).not.toHaveProperty(
+      oldAsset.id,
+    );
+    expect(runtime.getSnapshot().document.assetsById).not.toHaveProperty(
+      newAsset.id,
+    );
+    expect(runtime.getSnapshot().document.imageAssetDerivationOrder).toEqual(
+      [],
+    );
+    expect(runtime.undo().ok).toBe(true);
+    expect(runtime.getSnapshot().document.assetsById).toHaveProperty(
+      oldAsset.id,
+    );
+    expect(runtime.getSnapshot().document.assetsById).toHaveProperty(
+      newAsset.id,
+    );
   });
 
   it("deletes only unreferenced image assets and leaves Runtime as final race guard", () => {

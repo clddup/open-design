@@ -2358,6 +2358,14 @@ describe("design Agent tool contract", () => {
       },
       filters: { contrast: 0.2 },
     };
+    const switchSource = {
+      action: "switch-source",
+      label: "Restore the original hero",
+      pageId: "page_1",
+      nodeId: "hero_image",
+      expectedAssetId: "asset_retouch",
+      assetId: "asset_original",
+    };
     const update = DESIGN_AGENT_TOOL_SPECS.find(
       (tool) => tool.name === UPDATE_IMAGE_TOOL_NAME,
     );
@@ -2376,6 +2384,15 @@ describe("design Agent tool contract", () => {
     expect(
       validateDesignAgentToolInput(UPDATE_IMAGE_TOOL_NAME, setPaintFilters),
     ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(UPDATE_IMAGE_TOOL_NAME, switchSource),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(UPDATE_IMAGE_TOOL_NAME, {
+        ...switchSource,
+        expectedAssetId: undefined,
+      }),
+    ).toBe(false);
     expect(
       validateDesignAgentToolInput(UPDATE_IMAGE_TOOL_NAME, {
         ...setPaintFilters,

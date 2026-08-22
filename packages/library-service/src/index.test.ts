@@ -152,6 +152,8 @@ function emptyDocument(documentId: string): DesignDocument {
     stylesById: {},
     interactionsById: {},
     assetsById: {},
+    imageAssetDerivationOrder: [],
+    imageAssetDerivationsById: {},
     extensions: {},
   };
 }

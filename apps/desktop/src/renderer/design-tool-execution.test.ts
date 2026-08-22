@@ -3149,16 +3149,85 @@ describe("Renderer design tool scope", () => {
           action: "replace-source",
           nodeId: "hero_image",
           assetId: newAssetId,
-          deletedAssetId: oldAssetId,
+          derivationId:
+            "image_replace-source_tool_replace_image_source_derivation",
           revision: 4,
           atomic: true,
         },
       },
     });
-    expect(
-      runtime.getSnapshot().document.assetsById[oldAssetId],
-    ).toBeUndefined();
+    expect(runtime.getSnapshot().document.assetsById[oldAssetId]).toBeDefined();
     expect(runtime.getSnapshot().state.history.undo).toHaveLength(4);
+
+    const restoredResponse = await executeDesignToolRequest(
+      {
+        requestId: "restore_image_source",
+        call: {
+          toolCallId: "tool_restore_image_source",
+          toolName: INTERNAL_UPDATE_IMAGE_TOOL_NAME,
+          input: {
+            action: "switch-source",
+            label: "Restore original hero source",
+            pageId: "page_welcome",
+            nodeId: "hero_image",
+            expectedAssetId: newAssetId,
+            assetId: oldAssetId,
+          },
+        },
+        context: { ...selectionContext, revision: 4 },
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(restoredResponse).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "switch-source",
+          nodeId: "hero_image",
+          assetId: oldAssetId,
+          revision: 5,
+        },
+      },
+    });
+    expect(runtime.getSnapshot().document.nodesById.hero_image).toMatchObject({
+      properties: { assetId: oldAssetId },
+    });
+    const lineageInspection = await executeDesignToolRequest(
+      {
+        requestId: "inspect_image_lineage",
+        call: {
+          toolCallId: "tool_inspect_image_lineage",
+          toolName: DESIGN_INSPECT_TOOL_NAME,
+          input: {},
+        },
+        context: { ...selectionContext, revision: 5 },
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(lineageInspection).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          document: {
+            assetsById: {
+              [oldAssetId]: { id: oldAssetId },
+              [newAssetId]: { id: newAssetId },
+            },
+            imageAssetDerivations: [
+              {
+                sourceAssetId: oldAssetId,
+                resultAssetId: newAssetId,
+                operation: "replacement",
+                promptPresent: false,
+              },
+            ],
+            imageAssetDerivationsTruncated: false,
+          },
+        },
+      },
+    });
   });
 
   it("updates one inspected image paint and blocks generic filter rewrites", async () => {

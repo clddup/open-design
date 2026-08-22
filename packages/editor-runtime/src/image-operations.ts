@@ -7,6 +7,7 @@ import type {
   ImagePaint,
   ImagePlacement,
   ImageNode,
+  ImageAssetDerivation,
   JsonObject,
   Point,
 } from "@opendesign/design-contracts";
@@ -38,12 +39,20 @@ export type ImageUpdateOperation =
       nodeId: string;
       asset: DesignAsset;
       placement?: ImagePlacement;
+    }
+  | {
+      action: "switch-source";
+      pageId: string;
+      nodeId: string;
+      expectedAssetId: string;
+      assetId: string;
     };
 
 export type ImageUpdateFailureCode =
   | "invalid-asset"
   | "invalid-kind"
   | "invalid-paint"
+  | "asset-stale"
   | "no-op"
   | "not-found"
   | "out-of-scope"
@@ -56,7 +65,7 @@ export type ImageUpdatePlan =
       nodeId: string;
       previousAssetId: string;
       nextAssetId: string;
-      deletedAssetId?: string;
+      derivationId?: string;
     }
   | {
       ok: false;
@@ -88,6 +97,7 @@ export type ImageAssetOperationPlan =
       assetId: string;
       nodeId?: string;
       pageId?: string;
+      derivationId?: string;
     }
   | {
       ok: false;
@@ -100,6 +110,12 @@ export type PlaceImageAssetOperation = {
   assetId: string;
   nodeId: string;
   documentPoint: Point;
+};
+
+export type ImageAssetFamily = {
+  readonly assetIds: readonly string[];
+  readonly derivationIds: readonly string[];
+  readonly rootAssetIds: readonly string[];
 };
 
 /**
@@ -193,6 +209,53 @@ export function planImageNodeUpdate(
     };
   }
 
+  if (operation.action === "switch-source") {
+    if (previousAssetId !== operation.expectedAssetId) {
+      return {
+        ok: false,
+        code: "asset-stale",
+        message: `Image node ${operation.nodeId} no longer uses the inspected source ${operation.expectedAssetId}`,
+      };
+    }
+    if (operation.assetId === previousAssetId) {
+      return {
+        ok: false,
+        code: "no-op",
+        message: `Image node ${operation.nodeId} already uses asset ${operation.assetId}`,
+      };
+    }
+    const nextAsset = document.assetsById[operation.assetId];
+    if (!nextAsset || nextAsset.kind !== "image") {
+      return {
+        ok: false,
+        code: "invalid-asset",
+        message: `Asset ${operation.assetId} is not an image`,
+      };
+    }
+    const family = getImageAssetFamily(document, previousAssetId);
+    if (!family?.assetIds.includes(operation.assetId)) {
+      return {
+        ok: false,
+        code: "out-of-scope",
+        message: `Asset ${operation.assetId} is outside the current image source family`,
+      };
+    }
+    return {
+      ok: true,
+      commands: [
+        {
+          commandId: `${commandPrefix}_node`,
+          type: "update_properties",
+          nodeId: operation.nodeId,
+          properties: { assetId: operation.assetId },
+        },
+      ],
+      nodeId: operation.nodeId,
+      previousAssetId,
+      nextAssetId: operation.assetId,
+    };
+  }
+
   if (operation.asset.kind !== "image") {
     return {
       ok: false,
@@ -212,14 +275,62 @@ export function planImageNodeUpdate(
   }
 
   const commands: DesignOperation[] = [];
+  const existingAsset = document.assetsById[operation.asset.id];
   if (
-    operation.asset.id !== previousAssetId &&
-    document.assetsById[operation.asset.id] === undefined
+    existingAsset &&
+    canonicalJsonStringify(existingAsset) !==
+      canonicalJsonStringify(operation.asset)
   ) {
+    return {
+      ok: false,
+      code: "invalid-asset",
+      message: `Asset ${operation.asset.id} already exists with different content`,
+    };
+  }
+  if (operation.asset.id !== previousAssetId && existingAsset === undefined) {
     commands.push({
       commandId: `${commandPrefix}_asset`,
       type: "put_asset",
       asset: operation.asset,
+    });
+  }
+  const existingDerivation = findImageAssetDerivation(
+    document,
+    previousAssetId,
+    operation.asset.id,
+    "replacement",
+  );
+  if (
+    existingAsset &&
+    !existingDerivation &&
+    getImageAssetFamily(document, previousAssetId)?.assetIds.includes(
+      operation.asset.id,
+    )
+  ) {
+    return {
+      ok: false,
+      code: "out-of-scope",
+      message: `Asset ${operation.asset.id} already belongs to this image source family; switch to that existing source instead`,
+    };
+  }
+  const derivationId =
+    existingDerivation?.id ?? `${commandPrefix}_derivation`.slice(0, 256);
+  if (!existingDerivation && document.imageAssetDerivationsById[derivationId]) {
+    return {
+      ok: false,
+      code: "invalid-asset",
+      message: `Image derivation ${derivationId} already exists`,
+    };
+  }
+  if (!existingDerivation) {
+    commands.push({
+      commandId: `${commandPrefix}_lineage`,
+      type: "put_image_asset_derivation",
+      derivation: replacementDerivation(
+        derivationId,
+        previousAssetId,
+        operation.asset.id,
+      ),
     });
   }
   commands.push({
@@ -234,28 +345,13 @@ export function planImageNodeUpdate(
     },
   });
 
-  let deletedAssetId: string | undefined;
-  if (
-    operation.asset.id !== previousAssetId &&
-    document.assetsById[previousAssetId] !== undefined &&
-    !assetReferencedOutsideNode(document, previousAssetId, operation.nodeId) &&
-    !styleReferencesAsset(document, previousAssetId)
-  ) {
-    deletedAssetId = previousAssetId;
-    commands.push({
-      commandId: `${commandPrefix}_cleanup`,
-      type: "delete_asset",
-      assetId: previousAssetId,
-    });
-  }
-
   return {
     ok: true,
     commands,
     nodeId: operation.nodeId,
     previousAssetId,
     nextAssetId: operation.asset.id,
-    ...(deletedAssetId === undefined ? {} : { deletedAssetId }),
+    derivationId,
   };
 }
 
@@ -444,7 +540,7 @@ export function planReplaceImageAsset(
   const references = Object.values(document.nodesById).filter((node) =>
     nodeReferencesAsset(node, assetId),
   );
-  if (!previous && references.length === 0) {
+  if (!previous) {
     return failure("not-found", `Asset ${assetId} does not exist`);
   }
   if (previous && previous.kind !== "image") {
@@ -460,21 +556,54 @@ export function planReplaceImageAsset(
       `Existing asset ${replacement.id} is not an image`,
     );
   }
+  if (
+    existingReplacement &&
+    canonicalJsonStringify(existingReplacement) !==
+      canonicalJsonStringify(replacement)
+  ) {
+    return failure(
+      "invalid-asset",
+      `Asset ${replacement.id} already exists with different content`,
+    );
+  }
   if (replacement.id === assetId) {
     return failure("no-op", `Asset ${assetId} already uses that source`);
   }
   const referencingStyleId = styleReferenceId(document, assetId);
-  if (references.length === 0 && referencingStyleId) {
+  if (referencingStyleId) {
     return failure(
       "out-of-scope",
       `Asset ${assetId} is owned by Style ${referencingStyleId}; update that Paint Style through the Style workflow`,
     );
   }
-  const deletePrevious = previous && !referencingStyleId;
+  const existingDerivation = findImageAssetDerivation(
+    document,
+    assetId,
+    replacement.id,
+    "replacement",
+  );
+  if (
+    existingReplacement &&
+    !existingDerivation &&
+    getImageAssetFamily(document, assetId)?.assetIds.includes(replacement.id)
+  ) {
+    return failure(
+      "out-of-scope",
+      `Asset ${replacement.id} already belongs to this image source family; switch to that existing source instead`,
+    );
+  }
+  const derivationId =
+    existingDerivation?.id ?? `${commandPrefix}_derivation`.slice(0, 256);
+  if (!existingDerivation && document.imageAssetDerivationsById[derivationId]) {
+    return failure(
+      "invalid-asset",
+      `Image derivation ${derivationId} already exists`,
+    );
+  }
   const commandCount =
     references.length +
     (document.assetsById[replacement.id] ? 0 : 1) +
-    (deletePrevious ? 1 : 0);
+    (existingDerivation ? 0 : 1);
   if (commandCount > MAX_TRANSACTION_COMMANDS) {
     return failure(
       "too-many-references",
@@ -490,6 +619,13 @@ export function planReplaceImageAsset(
       asset: replacement,
     });
   }
+  if (!existingDerivation) {
+    commands.push({
+      commandId: `${commandPrefix}_lineage`,
+      type: "put_image_asset_derivation",
+      derivation: replacementDerivation(derivationId, assetId, replacement.id),
+    });
+  }
   for (const [index, node] of references.entries()) {
     commands.push(
       replacementReferenceCommand(
@@ -500,16 +636,10 @@ export function planReplaceImageAsset(
       ),
     );
   }
-  if (deletePrevious) {
-    commands.push({
-      commandId: `${commandPrefix}_cleanup`,
-      type: "delete_asset",
-      assetId,
-    });
-  }
   return {
     ok: true,
     assetId: replacement.id,
+    derivationId,
     commands,
   };
 }
@@ -524,54 +654,211 @@ export function planDeleteImageAsset(
   if (asset.kind !== "image") {
     return failure("invalid-asset", `Asset ${assetId} is not an image`);
   }
+  const family = getImageAssetFamily(document, assetId);
+  const familyAssetIds = family?.assetIds ?? [assetId];
+  const familyAssetIdSet = new Set(familyAssetIds);
   const reference = Object.values(document.nodesById).find((node) =>
-    nodeReferencesAsset(node, assetId),
+    familyAssetIds.some((candidateId) =>
+      nodeReferencesAsset(node, candidateId),
+    ),
   );
   if (reference) {
     return failure(
       "out-of-scope",
-      `Asset ${assetId} is still referenced by node ${reference.id}`,
+      `Image source history containing ${assetId} is still referenced by node ${reference.id}`,
     );
   }
-  const styleId = styleReferenceId(document, assetId);
+  const styleId = familyAssetIds
+    .map((candidateId) => styleReferenceId(document, candidateId))
+    .find((candidateId) => candidateId !== undefined);
   if (styleId) {
     return failure(
       "out-of-scope",
-      `Asset ${assetId} is still referenced by Style ${styleId}`,
+      `Image source history containing ${assetId} is still referenced by Style ${styleId}`,
+    );
+  }
+  const familyDerivationIds = new Set(family?.derivationIds ?? []);
+  const externalDerivation = Object.values(
+    document.imageAssetDerivationsById,
+  ).find(
+    (derivation) =>
+      !familyDerivationIds.has(derivation.id) &&
+      (familyAssetIdSet.has(derivation.maskAssetId ?? "") ||
+        derivation.referenceAssetIds.some((candidateId) =>
+          familyAssetIdSet.has(candidateId),
+        )),
+  );
+  if (externalDerivation) {
+    return failure(
+      "out-of-scope",
+      `Image source history containing ${assetId} is still used by derivation ${externalDerivation.id}`,
+    );
+  }
+  const commandCount = familyDerivationIds.size + familyAssetIds.length;
+  if (commandCount > MAX_TRANSACTION_COMMANDS) {
+    return failure(
+      "too-many-references",
+      `Image source history containing ${assetId} is too large for one transaction`,
     );
   }
   return {
     ok: true,
     assetId,
     commands: [
-      {
-        commandId: `${commandPrefix}_asset`,
+      ...[...familyDerivationIds].map(
+        (derivationId, index): DesignOperation => ({
+          commandId: `${commandPrefix}_derivation_${index}`,
+          type: "delete_image_asset_derivation",
+          derivationId,
+        }),
+      ),
+      ...familyAssetIds.map((candidateId, index): DesignOperation => ({
+        commandId: `${commandPrefix}_asset_${index}`,
         type: "delete_asset",
-        assetId,
-      },
+        assetId: candidateId,
+      })),
     ],
   };
 }
 
-function samePlacement(left: ImagePlacement, right: ImagePlacement): boolean {
-  return JSON.stringify(left) === JSON.stringify(right);
-}
-
-function assetReferencedOutsideNode(
+export function getImageAssetFamily(
   document: DesignDocument,
   assetId: string,
-  excludedNodeId: string,
-): boolean {
-  return Object.values(document.nodesById).some(
-    (node) => node.id !== excludedNodeId && nodeReferencesAsset(node, assetId),
+): ImageAssetFamily | null {
+  const asset = document.assetsById[assetId];
+  if (!asset || asset.kind !== "image") return null;
+  return imageAssetFamilyFromConnectedAssets(
+    document,
+    collectConnectedImageAssetIds(imageAssetAdjacency(document), assetId),
   );
 }
 
-function styleReferencesAsset(
+export function indexImageAssetFamilies(
   document: DesignDocument,
+): ReadonlyMap<string, ImageAssetFamily> {
+  const adjacency = imageAssetAdjacency(document);
+  const familiesByAssetId = new Map<string, ImageAssetFamily>();
+  for (const asset of Object.values(document.assetsById)) {
+    if (asset.kind !== "image" || familiesByAssetId.has(asset.id)) continue;
+    const connectedAssetIds = collectConnectedImageAssetIds(
+      adjacency,
+      asset.id,
+    );
+    const family = imageAssetFamilyFromConnectedAssets(
+      document,
+      connectedAssetIds,
+    );
+    connectedAssetIds.forEach((candidateId) =>
+      familiesByAssetId.set(candidateId, family),
+    );
+  }
+  return familiesByAssetId;
+}
+
+function imageAssetAdjacency(
+  document: DesignDocument,
+): ReadonlyMap<string, readonly string[]> {
+  const adjacentAssetIds = new Map<string, string[]>();
+  for (const derivation of Object.values(document.imageAssetDerivationsById)) {
+    const sourceAdjacent = adjacentAssetIds.get(derivation.sourceAssetId) ?? [];
+    sourceAdjacent.push(derivation.resultAssetId);
+    adjacentAssetIds.set(derivation.sourceAssetId, sourceAdjacent);
+    const resultAdjacent = adjacentAssetIds.get(derivation.resultAssetId) ?? [];
+    resultAdjacent.push(derivation.sourceAssetId);
+    adjacentAssetIds.set(derivation.resultAssetId, resultAdjacent);
+  }
+  return adjacentAssetIds;
+}
+
+function collectConnectedImageAssetIds(
+  adjacency: ReadonlyMap<string, readonly string[]>,
   assetId: string,
-): boolean {
-  return styleReferenceId(document, assetId) !== undefined;
+): Set<string> {
+  const connectedAssetIds = new Set<string>();
+  const pendingAssetIds = [assetId];
+  while (pendingAssetIds.length > 0) {
+    const candidateId = pendingAssetIds.pop();
+    if (!candidateId || connectedAssetIds.has(candidateId)) continue;
+    connectedAssetIds.add(candidateId);
+    pendingAssetIds.push(...(adjacency.get(candidateId) ?? []));
+  }
+  return connectedAssetIds;
+}
+
+function imageAssetFamilyFromConnectedAssets(
+  document: DesignDocument,
+  connectedAssetIds: ReadonlySet<string>,
+): ImageAssetFamily {
+  const derivationIds = document.imageAssetDerivationOrder.filter(
+    (derivationId) => {
+      const derivation = document.imageAssetDerivationsById[derivationId];
+      return Boolean(
+        derivation &&
+        connectedAssetIds.has(derivation.sourceAssetId) &&
+        connectedAssetIds.has(derivation.resultAssetId),
+      );
+    },
+  );
+  const resultAssetIds = new Set(
+    derivationIds.flatMap((derivationId) => {
+      const derivation = document.imageAssetDerivationsById[derivationId];
+      return derivation ? [derivation.resultAssetId] : [];
+    }),
+  );
+  const rootAssetIds = [...connectedAssetIds].filter(
+    (candidateId) => !resultAssetIds.has(candidateId),
+  );
+  const orderedAssetIds: string[] = [];
+  const append = (candidateId: string) => {
+    if (
+      connectedAssetIds.has(candidateId) &&
+      !orderedAssetIds.includes(candidateId)
+    ) {
+      orderedAssetIds.push(candidateId);
+    }
+  };
+  rootAssetIds.forEach(append);
+  for (const derivationId of derivationIds) {
+    const derivation = document.imageAssetDerivationsById[derivationId];
+    if (!derivation) continue;
+    append(derivation.sourceAssetId);
+    append(derivation.resultAssetId);
+  }
+  connectedAssetIds.forEach(append);
+  return { assetIds: orderedAssetIds, derivationIds, rootAssetIds };
+}
+
+function replacementDerivation(
+  id: string,
+  sourceAssetId: string,
+  resultAssetId: string,
+): ImageAssetDerivation {
+  return {
+    id,
+    sourceAssetId,
+    resultAssetId,
+    operation: "replacement",
+    referenceAssetIds: [],
+    extensions: {},
+  };
+}
+
+function findImageAssetDerivation(
+  document: DesignDocument,
+  sourceAssetId: string,
+  resultAssetId: string,
+  operation: ImageAssetDerivation["operation"],
+): ImageAssetDerivation | undefined {
+  return Object.values(document.imageAssetDerivationsById).find(
+    (derivation) =>
+      derivation.sourceAssetId === sourceAssetId &&
+      derivation.resultAssetId === resultAssetId &&
+      derivation.operation === operation,
+  );
+}
+
+function samePlacement(left: ImagePlacement, right: ImagePlacement): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
 }
 
 function styleReferenceId(

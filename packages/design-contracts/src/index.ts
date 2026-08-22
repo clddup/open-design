@@ -925,6 +925,35 @@ export const DesignAssetSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const ImageAssetDerivationOperationSchema = Type.Union([
+  Type.Literal("replacement"),
+  Type.Literal("remove-background"),
+  Type.Literal("erase-object"),
+  Type.Literal("isolate-object"),
+  Type.Literal("expand"),
+  Type.Literal("upscale"),
+  Type.Literal("prompt-edit"),
+  Type.Literal("relight"),
+  Type.Literal("style-harmonize"),
+]);
+
+export const ImageAssetDerivationSchema = Type.Object(
+  {
+    id: Type.String({ minLength: 1, maxLength: 256 }),
+    sourceAssetId: Type.String({ minLength: 1 }),
+    resultAssetId: Type.String({ minLength: 1 }),
+    operation: ImageAssetDerivationOperationSchema,
+    prompt: Type.Optional(Type.String({ minLength: 1, maxLength: 32_000 })),
+    maskAssetId: Type.Optional(Type.String({ minLength: 1 })),
+    referenceAssetIds: Type.Array(Type.String({ minLength: 1 }), {
+      maxItems: 16,
+      uniqueItems: true,
+    }),
+    extensions: JsonObjectSchema,
+  },
+  { additionalProperties: false },
+);
+
 const LibraryReleaseIdentityProperties = {
   libraryId: Type.String({ minLength: 1, maxLength: 256 }),
   releaseId: Type.String({ minLength: 1, maxLength: 256 }),
@@ -1085,6 +1114,14 @@ const DesignDocumentResourceProperties = {
   stylesById: Type.Record(Type.String(), SharedStyleDefinitionSchema),
   interactionsById: Type.Record(Type.String(), JsonValueSchema),
   assetsById: Type.Record(Type.String(), DesignAssetSchema),
+  imageAssetDerivationOrder: Type.Array(
+    Type.String({ minLength: 1, maxLength: 256 }),
+    { maxItems: 65_536, uniqueItems: true },
+  ),
+  imageAssetDerivationsById: Type.Record(
+    Type.String(),
+    ImageAssetDerivationSchema,
+  ),
   extensions: JsonObjectSchema,
 };
 
@@ -1346,6 +1383,24 @@ export const DeleteAssetCommandSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const PutImageAssetDerivationCommandSchema = Type.Object(
+  {
+    ...OperationBaseProperties,
+    type: Type.Literal("put_image_asset_derivation"),
+    derivation: ImageAssetDerivationSchema,
+  },
+  { additionalProperties: false },
+);
+
+export const DeleteImageAssetDerivationCommandSchema = Type.Object(
+  {
+    ...OperationBaseProperties,
+    type: Type.Literal("delete_image_asset_derivation"),
+    derivationId: Type.String({ minLength: 1, maxLength: 256 }),
+  },
+  { additionalProperties: false },
+);
+
 export const PutComponentCommandSchema = Type.Object(
   {
     ...OperationBaseProperties,
@@ -1507,6 +1562,8 @@ export const DesignOperationSchema: TUnion<
     typeof NodeDesignOperationSchema,
     typeof PutAssetCommandSchema,
     typeof DeleteAssetCommandSchema,
+    typeof PutImageAssetDerivationCommandSchema,
+    typeof DeleteImageAssetDerivationCommandSchema,
     typeof PutComponentCommandSchema,
     typeof DeleteComponentCommandSchema,
     typeof PutLibraryComponentSourceCommandSchema,
@@ -1541,6 +1598,8 @@ export const DesignOperationSchema: TUnion<
   NodeDesignOperationSchema,
   PutAssetCommandSchema,
   DeleteAssetCommandSchema,
+  PutImageAssetDerivationCommandSchema,
+  DeleteImageAssetDerivationCommandSchema,
   PutComponentCommandSchema,
   DeleteComponentCommandSchema,
   PutLibraryComponentSourceCommandSchema,
@@ -1845,6 +1904,15 @@ const DesignChangeSetCoreProperties = {
     Type.Array(Type.String(), { uniqueItems: true }),
   ),
   removedAssetIds: Type.Optional(
+    Type.Array(Type.String(), { uniqueItems: true }),
+  ),
+  addedImageAssetDerivationIds: Type.Optional(
+    Type.Array(Type.String(), { uniqueItems: true }),
+  ),
+  changedImageAssetDerivationIds: Type.Optional(
+    Type.Array(Type.String(), { uniqueItems: true }),
+  ),
+  removedImageAssetDerivationIds: Type.Optional(
     Type.Array(Type.String(), { uniqueItems: true }),
   ),
   addedPageIds: Type.Optional(Type.Array(Type.String(), { uniqueItems: true })),
@@ -2178,6 +2246,8 @@ export const DesignCapabilitiesSchema = Type.Object(
         Type.Literal("update_text_range_style"),
         Type.Literal("put_asset"),
         Type.Literal("delete_asset"),
+        Type.Literal("put_image_asset_derivation"),
+        Type.Literal("delete_image_asset_derivation"),
       ]),
       { uniqueItems: true },
     ),
@@ -2324,6 +2394,10 @@ export function isFrameLikeNode(
 }
 export type DesignPage = Static<typeof DesignPageSchema>;
 export type DesignAsset = Static<typeof DesignAssetSchema>;
+export type ImageAssetDerivationOperation = Static<
+  typeof ImageAssetDerivationOperationSchema
+>;
+export type ImageAssetDerivation = Static<typeof ImageAssetDerivationSchema>;
 export type DesignDocument = Static<typeof DesignDocumentSchema>;
 export type InsertElementCommand = Static<typeof InsertElementCommandSchema>;
 export type UpdatePropertiesCommand = Static<
@@ -2340,6 +2414,12 @@ export type CommitTextEditParagraphPatch = Static<
 export type CommitTextEditCommand = Static<typeof CommitTextEditCommandSchema>;
 export type PutAssetCommand = Static<typeof PutAssetCommandSchema>;
 export type DeleteAssetCommand = Static<typeof DeleteAssetCommandSchema>;
+export type PutImageAssetDerivationCommand = Static<
+  typeof PutImageAssetDerivationCommandSchema
+>;
+export type DeleteImageAssetDerivationCommand = Static<
+  typeof DeleteImageAssetDerivationCommandSchema
+>;
 export type PutComponentCommand = Static<typeof PutComponentCommandSchema>;
 export type DeleteComponentCommand = Static<
   typeof DeleteComponentCommandSchema
@@ -2708,6 +2788,8 @@ export function migrateDesignDocument(value: unknown): DesignDocument | null {
     normalized.libraryStylesById ??= {};
     normalized.libraryVariableCollectionsById ??= {};
     normalized.libraryVariablesById ??= {};
+    normalized.imageAssetDerivationOrder ??= [];
+    normalized.imageAssetDerivationsById ??= {};
     return isDesignDocument(normalized) ? normalized : null;
   }
   try {
@@ -2718,6 +2800,8 @@ export function migrateDesignDocument(value: unknown): DesignDocument | null {
     migrated.libraryStylesById ??= {};
     migrated.libraryVariableCollectionsById ??= {};
     migrated.libraryVariablesById ??= {};
+    migrated.imageAssetDerivationOrder ??= [];
+    migrated.imageAssetDerivationsById ??= {};
     if (
       schemaVersion === versions.ADVANCED_VECTOR_CUT_DESIGN_SCHEMA_VERSION &&
       hasLegacyInstanceNodes(migrated)

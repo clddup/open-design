@@ -769,6 +769,8 @@ describe("Figma component property compatibility", () => {
       stylesById: {},
       interactionsById: {},
       assetsById: {},
+      imageAssetDerivationOrder: [],
+      imageAssetDerivationsById: {},
       extensions: {},
     } satisfies DesignDocument;
 

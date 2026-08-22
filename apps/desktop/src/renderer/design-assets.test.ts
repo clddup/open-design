@@ -152,4 +152,55 @@ describe("design image asset index", () => {
       "application/x-opendesign-image-asset-id",
     );
   });
+
+  it("groups original and derived image assets as one ordered source family", () => {
+    const document = structuredClone(createWelcomeDocument());
+    const retouch: DesignAsset = {
+      ...photo,
+      id: "asset_retouch",
+      name: "Campaign hero retouch",
+      source: { type: "data", value: "cmV0b3VjaA==" },
+    };
+    document.assetsById[photo.id] = photo;
+    document.assetsById[retouch.id] = retouch;
+    document.imageAssetDerivationOrder = ["retouch_derivation"];
+    document.imageAssetDerivationsById.retouch_derivation = {
+      id: "retouch_derivation",
+      sourceAssetId: photo.id,
+      resultAssetId: retouch.id,
+      operation: "prompt-edit",
+      prompt: "Reduce visual noise",
+      referenceAssetIds: [],
+      extensions: {},
+    };
+    document.nodesById.hero_photo = imageNode(
+      "hero_photo",
+      retouch.id,
+      "frame_welcome",
+    );
+    document.nodesById.frame_welcome?.childIds.push("hero_photo");
+
+    expect(indexDesignImageAssets(document)).toMatchObject([
+      {
+        assetId: photo.id,
+        familyRootAssetId: photo.id,
+        familyPosition: 0,
+        familySize: 2,
+        familyReferenceCount: 1,
+        familyInUse: true,
+        isFamilyRoot: true,
+        derivationOperation: null,
+      },
+      {
+        assetId: retouch.id,
+        familyRootAssetId: photo.id,
+        familyPosition: 1,
+        familySize: 2,
+        familyReferenceCount: 1,
+        familyInUse: true,
+        isFamilyRoot: false,
+        derivationOperation: "prompt-edit",
+      },
+    ]);
+  });
 });

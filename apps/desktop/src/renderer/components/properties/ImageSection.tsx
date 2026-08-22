@@ -1,14 +1,17 @@
 import {
   IMAGE_FILTER_KEYS,
+  type DesignDocument,
   type ImageFilterKey,
   type ImageFilters,
   type ImageNode,
   type ImagePlacement,
 } from "@opendesign/design-contracts";
+import { getImageAssetFamily } from "@opendesign/editor-runtime";
 import { Icon } from "@opendesign/ui";
 import { useEffect, useId, useState, type KeyboardEvent } from "react";
 import type { MessageKey } from "../../../shared/i18n/messages";
 import { useI18n } from "../../i18n";
+import { IMAGE_DERIVATION_OPERATION_LABEL_KEYS } from "../../design-assets";
 import styles from "../PropertiesPanel.module.scss";
 import imageStyles from "./ImageSection.module.scss";
 import { Field, Section, commitNumber, cx, formatNumber } from "./controls";
@@ -25,20 +28,33 @@ const FILTER_LABEL_KEYS: Record<ImageFilterKey, MessageKey> = {
 
 export function ImageSection({
   node,
+  document,
   onChange,
   onFiltersChange,
   onCrop,
   onReplace,
+  onSourceChange,
 }: {
   node: ImageNode;
+  document: DesignDocument;
   onChange: (placement: ImagePlacement) => void;
   onFiltersChange: (filters: ImageFilters) => void;
   onCrop: () => boolean;
   onReplace: () => void;
+  onSourceChange: (
+    nodeId: string,
+    assetId: string,
+    expectedAssetId: string,
+  ) => void;
 }) {
   const { t } = useI18n();
   const placement = node.properties.placement;
   const filters = node.properties.filters ?? {};
+  const sourceFamily = getImageAssetFamily(document, node.properties.assetId);
+  const originalAssetId =
+    sourceFamily?.rootAssetIds.length === 1
+      ? sourceFamily.rootAssetIds[0]
+      : undefined;
   const focalPoint =
     placement.mode === "fill" || placement.mode === "crop"
       ? placement.focalPoint
@@ -234,6 +250,67 @@ export function ImageSection({
           <Icon name="lucide:image" size={13} />
           {t("properties.imageReplace")}
         </button>
+        {sourceFamily && sourceFamily.assetIds.length > 1 && (
+          <div className={imageStyles.sourceVersions}>
+            <div className={imageStyles.sourceVersionHeader}>
+              <strong>{t("properties.imageSourceHistory")}</strong>
+              {originalAssetId && (
+                <button
+                  disabled={originalAssetId === node.properties.assetId}
+                  onClick={() =>
+                    onSourceChange(
+                      node.id,
+                      originalAssetId,
+                      node.properties.assetId,
+                    )
+                  }
+                  type="button"
+                >
+                  <Icon name="lucide:rotate-ccw" size={11} />
+                  {t("properties.imageRestoreOriginal")}
+                </button>
+              )}
+            </div>
+            <label className={imageStyles.sourceVersionSelect}>
+              <span>{t("properties.imageSourceVersion")}</span>
+              <select
+                aria-label={t("properties.imageSourceVersion")}
+                onChange={(event) =>
+                  onSourceChange(
+                    node.id,
+                    event.target.value,
+                    node.properties.assetId,
+                  )
+                }
+                value={node.properties.assetId}
+              >
+                {sourceFamily.assetIds.map((assetId) => {
+                  const asset = document.assetsById[assetId];
+                  const incoming = sourceFamily.derivationIds
+                    .map(
+                      (derivationId) =>
+                        document.imageAssetDerivationsById[derivationId],
+                    )
+                    .find(
+                      (derivation) => derivation?.resultAssetId === assetId,
+                    );
+                  const role = sourceFamily.rootAssetIds.includes(assetId)
+                    ? t("properties.imageSourceOriginal")
+                    : t(
+                        IMAGE_DERIVATION_OPERATION_LABEL_KEYS[
+                          incoming?.operation ?? "replacement"
+                        ],
+                      );
+                  return (
+                    <option key={assetId} value={assetId}>
+                      {role} · {asset?.name ?? assetId}
+                    </option>
+                  );
+                })}
+              </select>
+            </label>
+          </div>
+        )}
         <ImageAdjustmentsEditor
           filters={filters}
           onFiltersChange={onFiltersChange}

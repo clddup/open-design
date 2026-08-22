@@ -379,6 +379,8 @@ function designDocument(
 ): DesignDocument {
   return {
     assetsById: {},
+    imageAssetDerivationOrder: [],
+    imageAssetDerivationsById: {},
     componentsById: {},
     documentId: "boolean_resolver_fixture",
     extensions: {},

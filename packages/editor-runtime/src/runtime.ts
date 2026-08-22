@@ -912,6 +912,12 @@ function applyOperation(
     case "delete_asset":
       deleteAsset(document, command);
       return;
+    case "put_image_asset_derivation":
+      putImageAssetDerivation(document, command);
+      return;
+    case "delete_image_asset_derivation":
+      deleteImageAssetDerivation(document, command);
+      return;
     case "put_component":
       putComponent(document, command);
       return;
@@ -1095,7 +1101,62 @@ function deleteAsset(
       `Asset ${command.assetId} is still referenced by Style ${referencingStyle.id}`,
     );
   }
+  const referencingDerivation = Object.values(
+    document.imageAssetDerivationsById,
+  ).find(
+    (derivation) =>
+      derivation.sourceAssetId === command.assetId ||
+      derivation.resultAssetId === command.assetId ||
+      derivation.maskAssetId === command.assetId ||
+      derivation.referenceAssetIds.includes(command.assetId),
+  );
+  if (referencingDerivation) {
+    throw new OperationError(
+      command.commandId,
+      `Asset ${command.assetId} is still referenced by image derivation ${referencingDerivation.id}`,
+    );
+  }
   delete document.assetsById[command.assetId];
+}
+
+function putImageAssetDerivation(
+  document: DesignDocument,
+  command: Extract<DesignOperation, { type: "put_image_asset_derivation" }>,
+): void {
+  const derivation = command.derivation;
+  for (const assetId of [
+    derivation.sourceAssetId,
+    derivation.resultAssetId,
+    ...(derivation.maskAssetId === undefined ? [] : [derivation.maskAssetId]),
+    ...derivation.referenceAssetIds,
+  ]) {
+    const asset = document.assetsById[assetId];
+    if (!asset || asset.kind !== "image") {
+      throw new OperationError(
+        command.commandId,
+        `Image derivation ${derivation.id} references missing image asset ${assetId}`,
+      );
+    }
+  }
+  if (!document.imageAssetDerivationsById[derivation.id]) {
+    document.imageAssetDerivationOrder.push(derivation.id);
+  }
+  document.imageAssetDerivationsById[derivation.id] =
+    structuredClone(derivation);
+}
+
+function deleteImageAssetDerivation(
+  document: DesignDocument,
+  command: Extract<DesignOperation, { type: "delete_image_asset_derivation" }>,
+): void {
+  if (!document.imageAssetDerivationsById[command.derivationId]) {
+    throw notFound(command.commandId, command.derivationId);
+  }
+  delete document.imageAssetDerivationsById[command.derivationId];
+  document.imageAssetDerivationOrder =
+    document.imageAssetDerivationOrder.filter(
+      (derivationId) => derivationId !== command.derivationId,
+    );
 }
 
 function putComponent(
@@ -2263,6 +2324,9 @@ function diffDocuments(
   const addedAssetIds: string[] = [];
   const changedAssetIds: string[] = [];
   const removedAssetIds: string[] = [];
+  const addedImageAssetDerivationIds: string[] = [];
+  const changedImageAssetDerivationIds: string[] = [];
+  const removedImageAssetDerivationIds: string[] = [];
   const addedPageIds: string[] = [];
   const changedPageIds: string[] = [];
   const removedPageIds: string[] = [];
@@ -2357,6 +2421,26 @@ function diffDocuments(
     else if (oldAsset && !newAsset) removedAssetIds.push(assetId);
     else if (JSON.stringify(oldAsset) !== JSON.stringify(newAsset)) {
       changedAssetIds.push(assetId);
+    }
+  }
+
+  const imageAssetDerivationIds = new Set([
+    ...Object.keys(before.imageAssetDerivationsById),
+    ...Object.keys(after.imageAssetDerivationsById),
+  ]);
+  for (const derivationId of imageAssetDerivationIds) {
+    const oldDerivation = before.imageAssetDerivationsById[derivationId];
+    const newDerivation = after.imageAssetDerivationsById[derivationId];
+    if (!oldDerivation && newDerivation) {
+      addedImageAssetDerivationIds.push(derivationId);
+    } else if (oldDerivation && !newDerivation) {
+      removedImageAssetDerivationIds.push(derivationId);
+    } else if (
+      JSON.stringify(oldDerivation) !== JSON.stringify(newDerivation) ||
+      before.imageAssetDerivationOrder.indexOf(derivationId) !==
+        after.imageAssetDerivationOrder.indexOf(derivationId)
+    ) {
+      changedImageAssetDerivationIds.push(derivationId);
     }
   }
 
@@ -2503,6 +2587,9 @@ function diffDocuments(
     addedAssetIds,
     changedAssetIds,
     removedAssetIds,
+    addedImageAssetDerivationIds,
+    changedImageAssetDerivationIds,
+    removedImageAssetDerivationIds,
     addedPageIds,
     changedPageIds,
     removedPageIds,

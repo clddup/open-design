@@ -5,7 +5,7 @@
 <!-- verification-facts:baseline:start -->
 
 - 环境基线：Node.js 24.14.0、pnpm 10.32.1、Electron 43.3.0、Vite 8.2.1
-- 文档协议：`DesignDocument 1.41.0`
+- 文档协议：`DesignDocument 1.42.0`
 - Agent 协议：`3.11.0`
 - Geometry Service：`contract v13`
 - Text Layout Service：`contract v4`
@@ -132,7 +132,7 @@ Composer 已取消用户可见的快速/精细模式，统一采用自适应执�
 
 ## 专业设计就绪度审计
 
-当前 `DesignCapabilityManifest v1` 记录 0 项完整可用、21 项降级可用和 1 项不可用能力；没有实机证据的能力不会标记为完整可用。`DesignDocument 1.41.0`、EditorRuntime、Geometry/Image/Text/Layout/Component/Variable/Style/Library service、Leafer adapter、Inspector 和 Agent tools 已打通正式矢量、文字、外观、图片、响应式布局、Component/Variant/Slot、Variables、Shared Styles、视觉复核和单目标 PNG/JPEG/WebP 导出基础路径。Image Service contract 3 专项证据覆盖 Image 节点与每项 Image Fill/Stroke 的七项 Figma-compatible 非破坏调整、单事务 Inspector/Agent、paint stale identity、保存重开/undo、来源替换保留、Figma Plugin API 形状，以及画布/capture/位图导出的同一分块 RGBA 投影。同 Project Library 专项证据覆盖 Component/Variant、Style-only 与 Variable-only 发布、hidden Style/Variable/alias dependency、显式启用、Local/Library 搜索、单事务 imported source/reference、更新接受、禁用保留、身份冲突、引用删除保护和 Agent 只读 inspection；standalone Image Paint Style 在独立 asset bundle 完成前失败关闭。真实字体跨平台栅格、连接/分支 network、standalone 跨文件 Image Paint Style asset bundle、SVG 位图嵌入、完整 Figma imageHash/transform 文件 adapter、P3/ICC、custom list markers、高级 decoration、OpenType、variable axes、字体打包与授权迁移、更多 Variable/Style binding、Workspace/远端 Library、DTCG/REST/Plugin adapter、原生 IME/undo smoke、像素基线和双平台 GUI 仍未验收，因此相关能力保持 `degraded`。
+当前 `DesignCapabilityManifest v1` 记录 0 项完整可用、21 项降级可用和 1 项不可用能力；没有实机证据的能力不会标记为完整可用。`DesignDocument 1.42.0`、EditorRuntime、Geometry/Image/Text/Layout/Component/Variable/Style/Library service、Leafer adapter、Inspector 和 Agent tools 已打通正式矢量、文字、外观、图片、响应式布局、Component/Variant/Slot、Variables、Shared Styles、视觉复核和单目标 PNG/JPEG/WebP 导出基础路径。Image Service contract 3 专项证据覆盖 Image 节点与每项 Image Fill/Stroke 的七项 Figma-compatible 非破坏调整、单事务 Inspector/Agent、paint stale identity、保存重开/undo、来源替换保留、typed image derivation DAG、来源 family 恢复/删除、有界 Agent inspection、Figma Plugin API 内容 hash 行为，以及画布/capture/位图导出的同一分块 RGBA 投影。同 Project Library 专项证据覆盖 Component/Variant、Style-only 与 Variable-only 发布、hidden Style/Variable/alias dependency、显式启用、Local/Library 搜索、单事务 imported source/reference、更新接受、禁用保留、身份冲突、引用删除保护和 Agent 只读 inspection；standalone Image Paint Style 在独立 asset bundle 完成前失败关闭。真实字体跨平台栅格、连接/分支 network、standalone 跨文件 Image Paint Style asset bundle、SVG 位图嵌入、完整 Figma imageHash/transform 文件 adapter、AI 图片编辑 provider、大图按需加载、P3/ICC、custom list markers、高级 decoration、OpenType、variable axes、字体打包与授权迁移、更多 Variable/Style binding、Workspace/远端 Library、DTCG/REST/Plugin adapter、原生 IME/undo smoke、像素基线和双平台 GUI 仍未验收，因此相关能力保持 `degraded`。
 
 仓库当前由唯一 EditorRuntime 统一持有正式 Vector Network、Boolean、Text character/paragraph/list runs、Auto Size、Typography、Component Set/VARIANT/Slot、Variables、Shared Styles 与 imported Library sources。Geometry/Text/Layout/Component/Variable/Style/Library service 只提供窄契约、解析或事务计划，不保存第二份文档；Leafer/HarfBuzz exact-revision projection、人工 Inspector、Agent typed transaction、SVG 和位图继续复用同一权威事实。Slot-in-Slot 按 Figma 公开模型永久失败封闭；更多 Variable binding、Workspace/远端 Library、DTCG/REST/Plugin adapter、AI 图片编辑和双平台原生证据仍在后续路线图。
 
