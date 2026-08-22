@@ -21,6 +21,10 @@ import type {
   WorkspaceRuntime,
   WorkspaceSnapshot,
 } from "../../workspace-runtime";
+import type {
+  AppNavigationTransition,
+  AppNavigator,
+} from "../app-navigation/app-navigator";
 import type { ProjectFileTarget } from "./use-project-workspace-state";
 
 type Translate = (key: MessageKey, parameters?: MessageParameters) => string;
@@ -33,6 +37,7 @@ export function useProjectNavigationController({
   conversations,
   fileName,
   openFile,
+  navigator,
   projectAutosave,
   projectsById,
   replaceDocument,
@@ -47,7 +52,6 @@ export function useProjectNavigationController({
   setWorkspaceBusy,
   setWorkspaceError,
   showUtilityTab,
-  showView,
   t,
   workspace,
   workspaceSnapshot,
@@ -65,6 +69,7 @@ export function useProjectNavigationController({
     identity: WorkspaceFileIdentity,
     document: DesignDocument,
   ) => EditorRuntime;
+  navigator: AppNavigator;
   projectAutosave: ProjectAutosaveCoordinator;
   projectsById: Readonly<Record<string, ProjectManifest>>;
   replaceDocument: (document: unknown, name?: string) => EditorRuntime;
@@ -81,7 +86,6 @@ export function useProjectNavigationController({
   setWorkspaceBusy: (busy: boolean) => void;
   setWorkspaceError: (error: string | null) => void;
   showUtilityTab: (tab: "agent" | "properties") => void;
-  showView: (view: "workspace" | "project" | "editor") => void;
   t: Translate;
   workspace: WorkspaceRuntime;
   workspaceSnapshot: WorkspaceSnapshot;
@@ -92,14 +96,26 @@ export function useProjectNavigationController({
   }, [setRecentProjects]);
 
   const showProject = useCallback(
-    (manifest: ProjectManifest, preferredConversationId?: string) => {
+    (
+      manifest: ProjectManifest,
+      transition: AppNavigationTransition,
+      preferredConversationId?: string,
+    ) => {
+      if (!navigator.isCurrent(transition)) return false;
       setProjectsById((projects) => ({
         ...projects,
         [manifest.projectId]: manifest,
       }));
       setActiveProject(manifest);
       setWorkspaceError(null);
-      showView("project");
+      if (
+        !navigator.commit(transition, {
+          kind: "project",
+          projectId: manifest.projectId,
+        })
+      ) {
+        return false;
+      }
       const conversationId =
         preferredConversationId ??
         conversations.find(
@@ -111,6 +127,7 @@ export function useProjectNavigationController({
         selectConversation(conversationId);
         void requestConversationHistory(conversationId);
       }
+      return true;
     },
     [
       conversations,
@@ -119,25 +136,32 @@ export function useProjectNavigationController({
       setActiveProject,
       setProjectsById,
       setWorkspaceError,
-      showView,
+      navigator,
     ],
   );
 
   const createProject = useCallback(
     async (name: string) => {
       if (!window.desktop) return false;
+      const projectId = createProjectId();
+      const transition = navigator.begin({ kind: "project", projectId });
       setWorkspaceBusy(true);
       setWorkspaceError(null);
       try {
         const manifest = await window.desktop.createProject({
-          projectId: createProjectId(),
+          projectId,
           name: name.trim(),
         });
-        if (!manifest) return false;
-        showProject(manifest);
+        if (!manifest) {
+          navigator.cancel(transition);
+          return false;
+        }
+        if (!showProject(manifest, transition)) return false;
         await refreshRecentProjects();
         return true;
       } catch (error) {
+        if (!navigator.isCurrent(transition)) return false;
+        navigator.fail(transition, t("error.createProject"));
         setWorkspaceError(
           reportRendererError(
             "project_create_failed",
@@ -147,11 +171,12 @@ export function useProjectNavigationController({
         );
         return false;
       } finally {
-        setWorkspaceBusy(false);
+        if (navigator.isCurrent(transition)) setWorkspaceBusy(false);
       }
     },
     [
       refreshRecentProjects,
+      navigator,
       setWorkspaceBusy,
       setWorkspaceError,
       showProject,
@@ -161,14 +186,20 @@ export function useProjectNavigationController({
 
   const openProject = useCallback(async () => {
     if (!window.desktop) return;
+    const transition = navigator.begin({ kind: "project" });
     setWorkspaceBusy(true);
     setWorkspaceError(null);
     try {
       const manifest = await window.desktop.openProject();
-      if (!manifest) return;
-      showProject(manifest);
+      if (!manifest) {
+        navigator.cancel(transition);
+        return;
+      }
+      if (!showProject(manifest, transition)) return;
       await refreshRecentProjects();
     } catch (error) {
+      if (!navigator.isCurrent(transition)) return;
+      navigator.fail(transition, t("error.openProject"));
       setWorkspaceError(
         reportRendererError(
           "project_open_failed",
@@ -177,10 +208,11 @@ export function useProjectNavigationController({
         ),
       );
     } finally {
-      setWorkspaceBusy(false);
+      if (navigator.isCurrent(transition)) setWorkspaceBusy(false);
     }
   }, [
     refreshRecentProjects,
+    navigator,
     setWorkspaceBusy,
     setWorkspaceError,
     showProject,
@@ -190,13 +222,16 @@ export function useProjectNavigationController({
   const openRecentProject = useCallback(
     async (projectId: string) => {
       if (!window.desktop) return;
+      const transition = navigator.begin({ kind: "project", projectId });
       setWorkspaceBusy(true);
       setWorkspaceError(null);
       try {
         const manifest = await window.desktop.openRecentProject({ projectId });
-        showProject(manifest);
+        if (!showProject(manifest, transition)) return;
         await refreshRecentProjects();
       } catch (error) {
+        if (!navigator.isCurrent(transition)) return;
+        navigator.fail(transition, t("error.reopenProject"));
         setWorkspaceError(
           reportRendererError(
             "recent_project_open_failed",
@@ -206,11 +241,12 @@ export function useProjectNavigationController({
           ),
         );
       } finally {
-        setWorkspaceBusy(false);
+        if (navigator.isCurrent(transition)) setWorkspaceBusy(false);
       }
     },
     [
       refreshRecentProjects,
+      navigator,
       setWorkspaceBusy,
       setWorkspaceError,
       showProject,
@@ -266,11 +302,20 @@ export function useProjectNavigationController({
   );
 
   const openProjectTarget = useCallback(
-    async (target: {
-      projectId: string;
-      designFileId: string;
-      pageId?: string;
-    }) => {
+    async (
+      target: {
+        projectId: string;
+        designFileId: string;
+        pageId?: string;
+      },
+      parentTransition?: AppNavigationTransition,
+    ) => {
+      const transition =
+        parentTransition ??
+        navigator.begin({
+          kind: "editor",
+          fileKey: `${target.projectId}:${target.designFileId}`,
+        });
       const desktop = window.desktop;
       if (!desktop) throw new Error("Desktop Project services are unavailable");
       const manifest =
@@ -278,6 +323,7 @@ export function useProjectNavigationController({
         (activeProject?.projectId === target.projectId
           ? activeProject
           : await desktop.openRecentProject({ projectId: target.projectId }));
+      if (!navigator.isCurrent(transition)) return;
       const file = await desktop.readProjectDesignFile({
         projectId: target.projectId,
         designFileId: target.designFileId,
@@ -291,6 +337,7 @@ export function useProjectNavigationController({
           "Project target response identity does not match the requested file",
         );
       }
+      if (!navigator.isCurrent(transition)) return;
       const identity = {
         projectId: target.projectId,
         designFileId: file.descriptor.designFileId,
@@ -318,11 +365,15 @@ export function useProjectNavigationController({
         activatePage(target.pageId);
       }
       showUtilityTab("agent");
-      showView("editor");
+      navigator.commit(transition, {
+        kind: "editor",
+        fileKey: workspace.getSnapshot().activeFileKey,
+      });
     },
     [
       activatePage,
       activeProject,
+      navigator,
       openFile,
       projectAutosave,
       projectsById,
@@ -331,7 +382,6 @@ export function useProjectNavigationController({
       setFileName,
       setProjectsById,
       showUtilityTab,
-      showView,
       workspace,
       workspaceSnapshot.activeProjectId,
       workspaceSnapshot.openFileKeys.length,
@@ -348,13 +398,19 @@ export function useProjectNavigationController({
       activateFile(projectId, designFileId);
       setActiveProject(projectsById[projectId] ?? null);
       if (file) setFileName(file.name);
+      navigator.navigate({
+        kind: "editor",
+        fileKey: workspace.getSnapshot().activeFileKey,
+      });
     },
     [
       activateFile,
+      navigator,
       projectsById,
       setActiveProject,
       setFileName,
       workspaceSnapshot.files,
+      workspace,
     ],
   );
 
@@ -436,14 +492,23 @@ export function useProjectNavigationController({
   const openProjectDesignFile = useCallback(
     async (designFileId: string) => {
       if (!activeProject) return;
+      const transition = navigator.begin({
+        kind: "editor",
+        fileKey: `${activeProject.projectId}:${designFileId}`,
+      });
       setWorkspaceBusy(true);
       setWorkspaceError(null);
       try {
-        await openProjectTarget({
-          projectId: activeProject.projectId,
-          designFileId,
-        });
+        await openProjectTarget(
+          {
+            projectId: activeProject.projectId,
+            designFileId,
+          },
+          transition,
+        );
       } catch (error) {
+        if (!navigator.isCurrent(transition)) return;
+        navigator.fail(transition, t("error.openDesignFile"));
         setWorkspaceError(
           reportRendererError(
             "design_file_open_failed",
@@ -453,23 +518,40 @@ export function useProjectNavigationController({
           ),
         );
       } finally {
-        setWorkspaceBusy(false);
+        if (navigator.isCurrent(transition)) setWorkspaceBusy(false);
       }
     },
-    [activeProject, openProjectTarget, setWorkspaceBusy, setWorkspaceError, t],
+    [
+      activeProject,
+      navigator,
+      openProjectTarget,
+      setWorkspaceBusy,
+      setWorkspaceError,
+      t,
+    ],
   );
 
   const openDocument = useCallback(async () => {
+    const transition = navigator.begin({ kind: "editor" });
     setEditorError(null);
     try {
       const file = await window.desktop?.openDesignFile();
-      if (!file) return;
+      if (!file) {
+        navigator.cancel(transition);
+        return;
+      }
+      if (!navigator.isCurrent(transition)) return;
       const value: unknown = JSON.parse(file.contents);
       replaceDocument(value, file.name);
       setActiveProject(null);
       setFileName(file.name);
-      showView("editor");
+      navigator.commit(transition, {
+        kind: "editor",
+        fileKey: workspace.getSnapshot().activeFileKey,
+      });
     } catch (error) {
+      if (!navigator.isCurrent(transition)) return;
+      navigator.cancel(transition);
       setEditorError(
         reportRendererError(
           "design_document_open_failed",
@@ -480,11 +562,12 @@ export function useProjectNavigationController({
     }
   }, [
     replaceDocument,
+    navigator,
     setActiveProject,
     setEditorError,
     setFileName,
-    showView,
     t,
+    workspace,
   ]);
 
   const saveDocument = useCallback(

@@ -9,6 +9,10 @@ import type {
   MessageParameters,
 } from "../../../shared/i18n/messages";
 import { reportRendererError } from "../../diagnostics";
+import type {
+  AppNavigationTransition,
+  AppNavigator,
+} from "../app-navigation/app-navigator";
 import type { ConversationOpenIssue } from "./use-conversation-lifecycle-state";
 
 type Translate = (key: MessageKey, parameters?: MessageParameters) => string;
@@ -18,6 +22,7 @@ export function useConversationNavigationController({
   activeProject,
   conversations,
   forgetConversation,
+  navigator,
   openProjectTarget,
   refreshRecentProjects,
   requestConversationHistory,
@@ -29,19 +34,21 @@ export function useConversationNavigationController({
   setPendingConversationDeletionId,
   setWorkspaceBusy,
   setWorkspaceError,
-  showView,
   t,
-  view,
 }: {
   activeConversationId: string | null;
   activeProject: ProjectManifest | null;
   conversations: ConversationDescriptor[];
   forgetConversation: (conversationId: string) => void;
-  openProjectTarget: (target: {
-    projectId: string;
-    designFileId: string;
-    pageId?: string;
-  }) => Promise<void>;
+  navigator: AppNavigator;
+  openProjectTarget: (
+    target: {
+      projectId: string;
+      designFileId: string;
+      pageId?: string;
+    },
+    transition?: AppNavigationTransition,
+  ) => Promise<void>;
   refreshRecentProjects: () => Promise<void>;
   requestConversationHistory: (conversationId: string) => Promise<void>;
   selectConversation: (conversationId: string | null) => void;
@@ -52,9 +59,7 @@ export function useConversationNavigationController({
   setPendingConversationDeletionId: (conversationId: string | null) => void;
   setWorkspaceBusy: (busy: boolean) => void;
   setWorkspaceError: (error: string | null) => void;
-  showView: (view: "workspace" | "conversation" | "editor") => void;
   t: Translate;
-  view: "workspace" | "project" | "conversation" | "editor" | "settings";
 }) {
   const createConversation = useCallback(
     async (title: string) => {
@@ -105,6 +110,11 @@ export function useConversationNavigationController({
   const openConversation = useCallback(
     async (conversation: ConversationDescriptor) => {
       if (!window.desktop || conversation.lifecycle !== "active") return;
+      const transition = navigator.begin({
+        kind: "conversation",
+        conversationId: conversation.conversationId,
+        issue: "no-target",
+      });
       selectConversation(conversation.conversationId);
       void requestConversationHistory(conversation.conversationId);
       setWorkspaceBusy(true);
@@ -113,18 +123,28 @@ export function useConversationNavigationController({
         const context = await window.desktop.resolveConversationOpenContext({
           conversationId: conversation.conversationId,
         });
+        if (!navigator.isCurrent(transition)) return;
         if (context.kind === "target-unavailable") {
           setConversationOpenIssue(context.reason);
-          showView("conversation");
+          navigator.commit(transition, {
+            kind: "conversation",
+            conversationId: conversation.conversationId,
+            issue: context.reason,
+          });
           return;
         }
-        await openProjectTarget(context.target);
+        await openProjectTarget(context.target, transition);
+        if (!navigator.isCurrent(transition)) return;
         setConversationOpenIssue(null);
-        showView("editor");
         await refreshRecentProjects();
       } catch (error) {
+        if (!navigator.isCurrent(transition)) return;
         setConversationOpenIssue("project-unavailable");
-        showView("conversation");
+        navigator.commit(transition, {
+          kind: "conversation",
+          conversationId: conversation.conversationId,
+          issue: "project-unavailable",
+        });
         setWorkspaceError(
           reportRendererError(
             "conversation_open_failed",
@@ -134,18 +154,18 @@ export function useConversationNavigationController({
           ),
         );
       } finally {
-        setWorkspaceBusy(false);
+        if (navigator.isCurrent(transition)) setWorkspaceBusy(false);
       }
     },
     [
       openProjectTarget,
+      navigator,
       refreshRecentProjects,
       requestConversationHistory,
       selectConversation,
       setConversationOpenIssue,
       setWorkspaceBusy,
       setWorkspaceError,
-      showView,
       t,
     ],
   );
@@ -175,12 +195,14 @@ export function useConversationNavigationController({
         if (activeConversationId === conversationId) {
           selectConversation(replacement?.conversationId ?? null);
         }
+        const destination = navigator.getSnapshot().destination;
         if (
           activeConversationId === conversationId &&
-          view === "conversation"
+          destination.kind === "conversation" &&
+          destination.conversationId === conversationId
         ) {
           setConversationOpenIssue(null);
-          showView("workspace");
+          navigator.navigate({ kind: "workspace" });
         }
         if (replacement) {
           void requestConversationHistory(replacement.conversationId);
@@ -206,31 +228,36 @@ export function useConversationNavigationController({
       conversations,
       forgetConversation,
       requestConversationHistory,
+      navigator,
       selectConversation,
       setConversationDeletionBusy,
       setConversationDeletionError,
       setConversationOpenIssue,
       setConversations,
       setPendingConversationDeletionId,
-      showView,
       t,
-      view,
     ],
   );
 
   const openGlobalTask = useCallback(
     async (task: GlobalTaskProjection) => {
       if (!window.desktop) return;
+      const transition = navigator.begin({
+        kind: "editor",
+        fileKey: `${task.targetSet.primaryTarget.projectId}:${task.targetSet.primaryTarget.designFileId}`,
+      });
       selectConversation(task.conversationId);
       void requestConversationHistory(task.conversationId);
       setWorkspaceBusy(true);
       setWorkspaceError(null);
       try {
-        await openProjectTarget(task.targetSet.primaryTarget);
+        await openProjectTarget(task.targetSet.primaryTarget, transition);
+        if (!navigator.isCurrent(transition)) return;
         setConversationOpenIssue(null);
-        showView("editor");
         await refreshRecentProjects();
       } catch (error) {
+        if (!navigator.isCurrent(transition)) return;
+        navigator.fail(transition, t("error.openAgentTask"));
         setWorkspaceError(
           reportRendererError(
             "agent_task_open_failed",
@@ -244,18 +271,18 @@ export function useConversationNavigationController({
           ),
         );
       } finally {
-        setWorkspaceBusy(false);
+        if (navigator.isCurrent(transition)) setWorkspaceBusy(false);
       }
     },
     [
       openProjectTarget,
+      navigator,
       refreshRecentProjects,
       requestConversationHistory,
       selectConversation,
       setConversationOpenIssue,
       setWorkspaceBusy,
       setWorkspaceError,
-      showView,
       t,
     ],
   );

@@ -2,6 +2,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ConversationDescriptor } from "@opendesign/workspace-contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DesktopApi } from "../../../shared/desktop-api";
+import { AppNavigator } from "../app-navigation/app-navigator";
 import { useConversationLifecycleState } from "./use-conversation-lifecycle-state";
 import { useConversationNavigationController } from "./use-conversation-navigation-controller";
 
@@ -50,7 +51,7 @@ describe("conversation lifecycle", () => {
     const requestConversationHistory = vi.fn().mockResolvedValue(undefined);
     const selectConversation = vi.fn();
     const setConversationOpenIssue = vi.fn();
-    const showView = vi.fn();
+    const navigator = new AppNavigator({ kind: "workspace" });
     const openProjectTarget = vi.fn().mockResolvedValue(undefined);
     const { result } = renderHook(() =>
       useConversationNavigationController({
@@ -58,6 +59,7 @@ describe("conversation lifecycle", () => {
         activeProject: null,
         conversations: [conversation],
         forgetConversation: vi.fn(),
+        navigator,
         openProjectTarget,
         refreshRecentProjects: vi.fn().mockResolvedValue(undefined),
         requestConversationHistory,
@@ -69,9 +71,7 @@ describe("conversation lifecycle", () => {
         setPendingConversationDeletionId: vi.fn(),
         setWorkspaceBusy: vi.fn(),
         setWorkspaceError: vi.fn(),
-        showView,
         t: (key) => key,
-        view: "workspace",
       }),
     );
 
@@ -86,7 +86,11 @@ describe("conversation lifecycle", () => {
     expect(setConversationOpenIssue).toHaveBeenCalledWith(
       "design-file-unavailable",
     );
-    expect(showView).toHaveBeenCalledWith("conversation");
+    expect(navigator.getSnapshot().destination).toEqual({
+      kind: "conversation",
+      conversationId: conversation.conversationId,
+      issue: "design-file-unavailable",
+    });
     expect(openProjectTarget).not.toHaveBeenCalled();
   });
 
@@ -104,6 +108,7 @@ describe("conversation lifecycle", () => {
         activeProject: null,
         conversations: [conversation],
         forgetConversation,
+        navigator: new AppNavigator({ kind: "workspace" }),
         openProjectTarget: vi.fn().mockResolvedValue(undefined),
         refreshRecentProjects: vi.fn().mockResolvedValue(undefined),
         requestConversationHistory: vi.fn().mockResolvedValue(undefined),
@@ -115,9 +120,7 @@ describe("conversation lifecycle", () => {
         setPendingConversationDeletionId,
         setWorkspaceBusy: vi.fn(),
         setWorkspaceError: vi.fn(),
-        showView: vi.fn(),
         t: (key) => key,
-        view: "workspace",
       }),
     );
 

@@ -8,6 +8,7 @@ import {
   useEffect,
   useRef,
   useState,
+  useSyncExternalStore,
   type CSSProperties,
 } from "react";
 import type { ThemePreference } from "../shared/desktop-api";
@@ -48,6 +49,7 @@ import { useProjectNavigationController } from "./features/project/use-project-n
 import { useProjectWorkspaceState } from "./features/project/use-project-workspace-state";
 import { useCanvasWorkspaceController } from "./features/canvas/use-canvas-workspace-controller";
 import { useDiagnosticNotificationsController } from "./features/diagnostics/use-diagnostic-notifications-controller";
+import { AppNavigator } from "./features/app-navigation/app-navigator";
 import { layoutInspectorMode } from "./features/editor/auto-layout-shortcut";
 import { useDocumentCommandControllers } from "./use-document-command-controllers";
 import { useLayerCommandController } from "./features/editor/use-layer-command-controller";
@@ -56,7 +58,7 @@ import { useRendererDesignToolHost } from "./use-renderer-design-tool-host";
 import { useProfessionalFixtureSmoke } from "./use-professional-fixture-smoke";
 import { useFontInspectorContext } from "./use-font-inspector-context";
 import { useFontBinaryRuntime } from "./use-font-binary-runtime";
-type AppView = "workspace" | "project" | "conversation" | "editor" | "settings";
+type AppInitialView = "workspace" | "editor";
 
 function resolveTheme(preference: ThemePreference) {
   if (preference !== "system") return preference;
@@ -65,7 +67,7 @@ function resolveTheme(preference: ThemePreference) {
     : "light";
 }
 
-export function App({ initialView }: { initialView?: AppView } = {}) {
+export function App({ initialView }: { initialView?: AppInitialView } = {}) {
   const { t } = useI18n();
   return (
     <MessageProvider
@@ -77,7 +79,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
   );
 }
 
-function AppContent({ initialView }: { initialView?: AppView } = {}) {
+function AppContent({ initialView }: { initialView?: AppInitialView } = {}) {
   const { t } = useI18n();
   const message = useMessage();
   const {
@@ -93,7 +95,19 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
   const snapshot = useEditorSnapshot();
   const [theme, setTheme] = useState<ThemePreference>("dark");
   const [platform, setPlatform] = useState<NodeJS.Platform>("darwin");
-  const [view, setView] = useState<AppView>(initialView ?? "workspace");
+  const [navigator] = useState(
+    () =>
+      new AppNavigator(
+        initialView === "editor"
+          ? { kind: "editor", fileKey: workspaceSnapshot.activeFileKey }
+          : { kind: "workspace" },
+      ),
+  );
+  const navigation = useSyncExternalStore(
+    navigator.subscribe,
+    navigator.getSnapshot,
+  );
+  const { destination } = navigation;
   const [editorError, setEditorError] = useState<string | null>(null);
   const {
     activeProject,
@@ -132,7 +146,6 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
     cancelDeleteConversation,
     conversationDeletionBusy,
     conversationDeletionError,
-    conversationOpenIssue,
     conversations,
     pendingConversationDeletion,
     pendingConversationDeletionId,
@@ -146,14 +159,17 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
   } = useConversationLifecycleState({ setWorkspaceError, t });
   const { dismiss: dismissDiagnostic, events: diagnosticEvents } =
     useDiagnosticNotificationsController();
-  const settingsReturnView = useRef<Exclude<AppView, "settings">>("workspace");
   const transactionCounter = useRef(0);
   useProfessionalFixtureSmoke({
     activatePage,
     desktop: window.desktop,
     replaceDocument,
     setFileName,
-    setView: () => setView("editor"),
+    setView: () =>
+      navigator.navigate({
+        kind: "editor",
+        fileKey: workspace.getSnapshot().activeFileKey,
+      }),
   });
   const fontBinaryRuntime = useFontBinaryRuntime();
   useRendererDesignToolHost(
@@ -190,10 +206,22 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
     designDocument,
     state.selection.nodeIds,
   );
-  const projectConversations = activeProject
+  const destinationProject =
+    destination.kind === "project"
+      ? (projectsById[destination.projectId] ?? null)
+      : null;
+  const destinationConversation =
+    destination.kind === "conversation"
+      ? (conversations.find(
+          (conversation) =>
+            conversation.conversationId === destination.conversationId,
+        ) ?? null)
+      : null;
+  const conversationProject = destinationProject ?? activeProject;
+  const projectConversations = conversationProject
     ? conversations.filter(
         (conversation) =>
-          conversation.filedProjectId === activeProject.projectId &&
+          conversation.filedProjectId === conversationProject.projectId &&
           conversation.lifecycle === "active",
       )
     : [];
@@ -307,7 +335,7 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
     activePageId,
     activeProjectId: workspaceSnapshot.activeProjectId,
     applyCommands,
-    editorActive: view === "editor",
+    editorActive: destination.kind === "editor",
     message,
     runtime,
     setEditorError,
@@ -461,7 +489,7 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
     deleteNodes,
     documentId: designDocument.documentId,
     duplicateSelection: duplicateSelectionAction,
-    editorActive: view === "editor",
+    editorActive: destination.kind === "editor",
     groupSelection,
     openRenameLayers,
     platform,
@@ -513,11 +541,8 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
   };
 
   const openSettings = useCallback(() => {
-    setView((current) => {
-      if (current !== "settings") settingsReturnView.current = current;
-      return "settings";
-    });
-  }, []);
+    navigator.openSettings();
+  }, [navigator]);
 
   useEffect(() => window.desktop?.onOpenSettings(openSettings), [openSettings]);
 
@@ -542,6 +567,7 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
     conversations,
     fileName,
     openFile,
+    navigator,
     projectAutosave,
     projectsById,
     replaceDocument,
@@ -556,7 +582,6 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
     setWorkspaceBusy,
     setWorkspaceError,
     showUtilityTab,
-    showView: setView,
     t,
     workspace,
     workspaceSnapshot,
@@ -572,6 +597,7 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
     activeProject,
     conversations,
     forgetConversation,
+    navigator,
     openProjectTarget,
     refreshRecentProjects,
     requestConversationHistory,
@@ -583,16 +609,14 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
     setPendingConversationDeletionId,
     setWorkspaceBusy,
     setWorkspaceError,
-    showView: setView,
     t,
-    view,
   });
 
   const notifications = (
     <DiagnosticNotifications
       events={diagnosticEvents}
       onDismiss={dismissDiagnostic}
-      placement={view === "editor" ? "editor" : "window"}
+      placement={destination.kind === "editor" ? "editor" : "window"}
     />
   );
   const conversationDeleteDialog = (
@@ -608,12 +632,18 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
       }}
     />
   );
+  const missingNavigationResource =
+    destination.kind === "project" && !destinationProject
+      ? t("error.openProject")
+      : destination.kind === "conversation" && !destinationConversation
+        ? t("error.openConversation")
+        : null;
 
-  if (view === "settings") {
+  if (destination.kind === "settings") {
     return (
       <>
         <SettingsPage
-          onClose={() => setView(settingsReturnView.current)}
+          onClose={() => navigator.closeSettings()}
           onThemeChange={changeTheme}
           platform={platform}
           theme={theme}
@@ -624,13 +654,21 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
     );
   }
 
-  if (view === "workspace") {
+  if (
+    destination.kind === "workspace" ||
+    destination.kind === "invalid" ||
+    missingNavigationResource
+  ) {
     return (
       <>
         <WorkspaceHome
           busy={workspaceBusy}
           conversations={conversations}
-          error={workspaceError}
+          error={
+            destination.kind === "invalid"
+              ? destination.reason
+              : (missingNavigationResource ?? workspaceError)
+          }
           globalTasks={globalTasks}
           onCreateProject={createProject}
           onRequestDeleteConversation={requestDeleteConversation}
@@ -655,7 +693,7 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
     );
   }
 
-  if (view === "project" && activeProject) {
+  if (destination.kind === "project" && destinationProject) {
     return (
       <>
         <ProjectHome
@@ -664,8 +702,8 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
           conversationDeleteBlockedIds={conversationDeleteBlockedIds}
           conversations={projectConversations}
           error={workspaceError}
-          manifest={activeProject}
-          onBack={() => setView("workspace")}
+          manifest={destinationProject}
+          onBack={() => navigator.navigate({ kind: "workspace" })}
           onCreateConversation={createConversation}
           onRequestDeleteConversation={requestDeleteConversation}
           onOpenDesignFile={(designFileId) =>
@@ -688,22 +726,22 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
     );
   }
 
-  if (view === "conversation" && activeConversation) {
+  if (destination.kind === "conversation" && destinationConversation) {
     return (
       <>
         <ConversationHome
-          issue={conversationOpenIssue ?? "no-target"}
-          onBack={() => setView("workspace")}
+          issue={destination.issue}
+          onBack={() => navigator.navigate({ kind: "workspace" })}
           onSettings={openSettings}
           onThemeChange={changeTheme}
           platform={platform}
           theme={theme}
-          title={activeConversation.title}
+          title={destinationConversation.title}
         >
           <AgentTimeline
             activeRunId={activeAgentState.activeRunId}
-            conversationId={activeConversation.conversationId}
-            conversationTitle={activeConversation.title}
+            conversationId={destinationConversation.conversationId}
+            conversationTitle={destinationConversation.title}
             conversations={conversations.filter(
               (conversation) => conversation.lifecycle === "active",
             )}
@@ -758,14 +796,22 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
           onExportSvg={() => void importExport.exportSelection()}
           onImportSvg={() => void importExport.importSvg()}
           onOpen={activeProject ? undefined : () => void openDocument()}
-          onProject={activeProject ? () => setView("project") : undefined}
+          onProject={
+            activeProject
+              ? () =>
+                  navigator.navigate({
+                    kind: "project",
+                    projectId: activeProject.projectId,
+                  })
+              : undefined
+          }
           onSave={() => void saveDocument(false)}
           onSaveAs={activeProject ? undefined : () => void saveDocument(true)}
           onSettings={openSettings}
           onToggleLeftPanel={toggleLeftPanel}
           onToggleUtilityPanel={toggleUtilityPanel}
           onThemeChange={changeTheme}
-          onWorkspace={() => setView("workspace")}
+          onWorkspace={() => navigator.navigate({ kind: "workspace" })}
           pageName={pageName}
           platform={platform}
           projectName={activeProject?.name}

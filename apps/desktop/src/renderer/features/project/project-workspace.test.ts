@@ -22,6 +22,7 @@ import {
   type WorkspaceFileIdentity,
 } from "../../workspace-runtime";
 import { useProjectNavigationController } from "./use-project-navigation-controller";
+import { AppNavigator } from "../app-navigation/app-navigator";
 import { useProjectWorkspaceState } from "./use-project-workspace-state";
 
 const now = "2026-08-23T00:00:00.000Z";
@@ -31,6 +32,56 @@ afterEach(() => {
 });
 
 describe("Project workspace", () => {
+  it("ignores a slower Project open after a newer navigation wins", async () => {
+    const workspace = localWorkspace();
+    const slowProject = manifest("project_slow", []);
+    const fastProject = manifest("project_fast", []);
+    const slow = deferred<ProjectManifest>();
+    const fast = deferred<ProjectManifest>();
+    window.desktop = {
+      listRecentProjects: vi.fn().mockResolvedValue([]),
+      openRecentProject: vi.fn(({ projectId }) =>
+        projectId === slowProject.projectId ? slow.promise : fast.promise,
+      ),
+    } as unknown as DesktopApi;
+    const navigator = new AppNavigator({ kind: "workspace" });
+    const setActiveProject = vi.fn();
+    const args = navigationArgs(workspace, {
+      navigator,
+      setActiveProject,
+    });
+    const { result, unmount } = renderHook(() =>
+      useProjectNavigationController({
+        ...args,
+        runtime: workspace.getActiveRuntime(),
+        workspaceSnapshot: workspace.getSnapshot(),
+      }),
+    );
+
+    let slowOpen!: Promise<void>;
+    let fastOpen!: Promise<void>;
+    act(() => {
+      slowOpen = result.current.openRecentProject(slowProject.projectId);
+      fastOpen = result.current.openRecentProject(fastProject.projectId);
+    });
+    await act(async () => {
+      fast.resolve(fastProject);
+      await fastOpen;
+    });
+    await act(async () => {
+      slow.resolve(slowProject);
+      await slowOpen;
+    });
+
+    expect(navigator.getSnapshot().destination).toEqual({
+      kind: "project",
+      projectId: fastProject.projectId,
+    });
+    expect(setActiveProject).toHaveBeenCalledOnce();
+    expect(setActiveProject).toHaveBeenCalledWith(fastProject);
+    unmount();
+  });
+
   it("replaces only the clean local placeholder when opening a composite Project target", async () => {
     const cleanWorkspace = localWorkspace();
     const cleanTarget = projectFile("project_alpha", "design_shared");
@@ -370,6 +421,7 @@ function navigationArgs(
     applySavedProjectFile: vi.fn(),
     conversations: [],
     fileName: "Untitled.opendesign",
+    navigator: new AppNavigator({ kind: "workspace" }),
     openFile: (identity, document) => workspace.openFile(identity, document),
     projectAutosave: {
       track: vi.fn(),
@@ -387,7 +439,6 @@ function navigationArgs(
     setWorkspaceBusy: vi.fn(),
     setWorkspaceError: vi.fn(),
     showUtilityTab: vi.fn(),
-    showView: vi.fn(),
     t: (key) => key,
     workspace,
     workspaceSnapshot: workspace.getSnapshot(),
@@ -428,6 +479,16 @@ function projectFile(
     },
     document,
   };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, reject, resolve };
 }
 
 function manifest(
