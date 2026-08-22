@@ -1,5 +1,6 @@
 import {
   isDesignAsset,
+  isImageAssetDerivation,
   ImagePaintSchema,
   isImageFilters,
   isImagePaint,
@@ -8,6 +9,7 @@ import {
   type ImageFilters,
   type ImagePlacement,
   type ImagePaint,
+  type ImageAssetDerivation,
 } from "@opendesign/design-contracts";
 import {
   isPlaceableRasterAssetRole,
@@ -98,6 +100,28 @@ export type UpdateImageToolInput =
       assetId: string;
     };
 
+export type EditImageToolInput = {
+  action: "remove-background";
+  label: string;
+  pageId: string;
+  nodeId: string;
+  expectedAssetId: string;
+};
+
+export type InternalReadImageSourceToolInput = {
+  pageId: string;
+  nodeId: string;
+  expectedAssetId: string;
+};
+
+export type PreparedImageEditSource = {
+  kind: "prepared-image-edit-source";
+  pageId: string;
+  nodeId: string;
+  expectedAssetId: string;
+  asset: DesignAsset;
+};
+
 export type InternalUpdateImageToolInput =
   | Exclude<UpdateImageToolInput, { action: "replace-source" }>
   | {
@@ -107,6 +131,15 @@ export type InternalUpdateImageToolInput =
       nodeId: string;
       asset: DesignAsset;
       placement?: ImagePlacement;
+    }
+  | {
+      action: "derive-source";
+      label: string;
+      pageId: string;
+      nodeId: string;
+      expectedAssetId: string;
+      asset: DesignAsset;
+      derivation: ImageAssetDerivation;
     };
 
 const NORMALIZED_POINT_SCHEMA = {
@@ -304,6 +337,19 @@ export const UPDATE_IMAGE_TOOL_INPUT_SCHEMA = {
   additionalProperties: false,
 } as const;
 
+export const EDIT_IMAGE_TOOL_INPUT_SCHEMA = {
+  type: "object",
+  properties: {
+    action: { const: "remove-background" },
+    label: { type: "string", minLength: 1, maxLength: 256 },
+    pageId: { type: "string", minLength: 1, maxLength: 256 },
+    nodeId: { type: "string", minLength: 1, maxLength: 256 },
+    expectedAssetId: { type: "string", minLength: 1, maxLength: 256 },
+  },
+  required: ["action", "label", "pageId", "nodeId", "expectedAssetId"],
+  additionalProperties: false,
+} as const;
+
 export function isReadImageToolInput(
   input: unknown,
 ): input is ReadImageToolInput {
@@ -457,10 +503,68 @@ export function isUpdateImageToolInput(
   );
 }
 
+export function isEditImageToolInput(
+  input: unknown,
+): input is EditImageToolInput {
+  return (
+    isRecord(input) &&
+    input.action === "remove-background" &&
+    hasCommonUpdateFields(input) &&
+    safeId(input.expectedAssetId) &&
+    exactKeys(input, ["action", "label", "pageId", "nodeId", "expectedAssetId"])
+  );
+}
+
+export function isInternalReadImageSourceToolInput(
+  input: unknown,
+): input is InternalReadImageSourceToolInput {
+  return (
+    isRecord(input) &&
+    safeId(input.pageId) &&
+    safeId(input.nodeId) &&
+    safeId(input.expectedAssetId) &&
+    exactKeys(input, ["pageId", "nodeId", "expectedAssetId"])
+  );
+}
+
+export function isPreparedImageEditSource(
+  input: unknown,
+): input is PreparedImageEditSource {
+  return (
+    isRecord(input) &&
+    input.kind === "prepared-image-edit-source" &&
+    safeId(input.pageId) &&
+    safeId(input.nodeId) &&
+    safeId(input.expectedAssetId) &&
+    isBoundedEmbeddedImageAsset(input.asset) &&
+    input.asset.id === input.expectedAssetId &&
+    exactKeys(input, ["kind", "pageId", "nodeId", "expectedAssetId", "asset"])
+  );
+}
+
 export function isInternalUpdateImageToolInput(
   input: unknown,
 ): input is InternalUpdateImageToolInput {
   if (!isRecord(input) || !hasCommonUpdateFields(input)) return false;
+  if (input.action === "derive-source") {
+    return (
+      safeId(input.expectedAssetId) &&
+      isBoundedEmbeddedImageAsset(input.asset) &&
+      isImageAssetDerivation(input.derivation) &&
+      input.derivation.sourceAssetId === input.expectedAssetId &&
+      input.derivation.resultAssetId === input.asset.id &&
+      input.derivation.operation !== "replacement" &&
+      exactKeys(input, [
+        "action",
+        "label",
+        "pageId",
+        "nodeId",
+        "expectedAssetId",
+        "asset",
+        "derivation",
+      ])
+    );
+  }
   if (input.action === "set-placement") {
     return (
       isImagePlacement(input.placement) &&

@@ -2655,6 +2655,12 @@ export function isDesignAsset(value: unknown): value is DesignAsset {
   return checkSchema(DesignAssetSchema, value);
 }
 
+export function isImageAssetDerivation(
+  value: unknown,
+): value is ImageAssetDerivation {
+  return checkSchema(ImageAssetDerivationSchema, value);
+}
+
 export function isLibraryReleaseSnapshot(
   value: unknown,
 ): value is LibraryReleaseSnapshot {

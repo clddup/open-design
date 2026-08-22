@@ -267,6 +267,34 @@ describe("Renderer design tool bridge", () => {
     ).toBe(false);
   });
 
+  it("accepts a bounded prepared image-edit source without applying the generic JSON limit", () => {
+    const assetId = `asset_${"a".repeat(64)}`;
+    expect(
+      isRendererDesignToolResponse({
+        requestId: "prepared_image_edit_1",
+        ok: true,
+        result: {
+          observedRevision: 4,
+          content: {
+            kind: "prepared-image-edit-source",
+            pageId: "page_1",
+            nodeId: "hero_image",
+            expectedAssetId: assetId,
+            asset: {
+              id: assetId,
+              kind: "image",
+              name: "Hero.png",
+              mimeType: "image/png",
+              source: { type: "data", value: "A".repeat(4_000_004) },
+              size: { width: 1600, height: 900 },
+              extensions: {},
+            },
+          },
+        },
+      }),
+    ).toBe(true);
+  });
+
   it("accepts SVG source only on the bounded Main-to-Renderer import call", () => {
     const request = {
       requestId: "renderer_svg_import",

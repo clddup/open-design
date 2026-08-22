@@ -148,7 +148,7 @@ describe("SettingsPage", () => {
     await user.click(screen.getByRole("tab", { name: "Models" }));
     const modelsPanel = screen.getByRole("tabpanel", { name: "Models" });
     expect(
-      within(modelsPanel).queryByLabelText("Image-generation API"),
+      within(modelsPanel).queryByLabelText("Image service API"),
     ).toBeNull();
     expect(
       within(modelsPanel).queryByRole("checkbox", {
@@ -156,14 +156,11 @@ describe("SettingsPage", () => {
       }),
     ).toBeNull();
 
-    await user.click(screen.getByRole("tab", { name: "Image generation" }));
+    await user.click(screen.getByRole("tab", { name: "Image service" }));
     await user.click(await screen.findByRole("checkbox", { name: "Enabled" }));
+    await user.type(screen.getByLabelText("Image model ID"), "gpt-image-2");
     await user.type(
-      screen.getByLabelText("Image-generation model ID"),
-      "gpt-image-2",
-    );
-    await user.type(
-      screen.getByLabelText("Image-generation API key"),
+      screen.getByLabelText("Image service API key"),
       "image-secret",
     );
     await user.click(screen.getByRole("button", { name: "Save settings" }));
@@ -180,7 +177,7 @@ describe("SettingsPage", () => {
     });
     expect(window.desktop!.saveModelProviderProfile).not.toHaveBeenCalled();
     expect(
-      await screen.findByText("Global image-generation settings saved"),
+      await screen.findByText("Global image service settings saved"),
     ).toBeVisible();
   });
 
@@ -200,7 +197,7 @@ describe("SettingsPage", () => {
     const user = userEvent.setup();
     renderSettings();
 
-    await user.click(screen.getByRole("tab", { name: "Image generation" }));
+    await user.click(screen.getByRole("tab", { name: "Image service" }));
     const checkbox = await screen.findByRole("checkbox", { name: "Enabled" });
     expect(checkbox).toBeChecked();
     await user.click(checkbox);

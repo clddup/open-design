@@ -20,7 +20,7 @@
 `design-agent-tools.ts` 继续作为现有 Main、Agent、Renderer 和测试的公共导入入口，但只负责：
 
 - 重导出稳定类型、schema、名称和 validator；
-- 按原顺序聚合 25 个公开 `DESIGN_AGENT_TOOL_SPECS`；
+- 按稳定顺序聚合公开 `DESIGN_AGENT_TOOL_SPECS`；
 - 按工具名把不可信输入分发给对应 family validator。
 
 聚合入口不得重新声明 family 类型或复制 schema。新增工具必须先确定 owner，再进入有序聚合。
@@ -44,7 +44,7 @@
 
 新增聚合契约测试必须同时锁定：
 
-- 25 个公开工具的精确数量、名称和顺序；
+- 公开工具的精确数量、名称和顺序；
 - 每个已拆 family 的 `inputSchema` 与其 owner 导出的对象身份一致；
 - 既有 validator 正反样例继续通过。
 

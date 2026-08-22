@@ -275,6 +275,12 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
     null,
   );
   const [editorError, setEditorError] = useState<string | null>(null);
+  const [imageEdit, setImageEdit] = useState<{
+    requestId: string;
+    nodeId: string;
+    status: "running" | "cancelling";
+  } | null>(null);
+  const cancelledImageEditRequestIds = useRef(new Set<string>());
   const [layerHoverTarget, setLayerHoverTarget] =
     useState<LayerHoverTarget | null>(null);
   const [textRangeSelection, setTextRangeSelection] =
@@ -1047,6 +1053,97 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
       setEditorError(t("error.replaceImage"));
     }
   }, [activePageId, applyCommands, runtime, t]);
+
+  const removeSelectedImageBackground = useCallback(async () => {
+    if (imageEdit) return;
+    const snapshot = runtime.getSnapshot();
+    const nodeId =
+      snapshot.state.selection.nodeIds.length === 1
+        ? snapshot.state.selection.nodeIds[0]
+        : undefined;
+    const node = nodeId ? snapshot.document.nodesById[nodeId] : undefined;
+    if (!nodeId || !node || node.kind !== "image") return;
+    const source = snapshot.document.assetsById[node.properties.assetId];
+    if (
+      !source ||
+      source.kind !== "image" ||
+      source.source.type !== "data" ||
+      (source.mimeType !== "image/png" &&
+        source.mimeType !== "image/jpeg" &&
+        source.mimeType !== "image/webp")
+    ) {
+      setEditorError(t("error.removeImageBackgroundUnsupported"));
+      return;
+    }
+    const requestId = `image_edit_${crypto.randomUUID()}`;
+    const expectedAssetId = node.properties.assetId;
+    setImageEdit({ requestId, nodeId, status: "running" });
+    setEditorError(null);
+    try {
+      const edited = await window.desktop?.editDesignImage({
+        requestId,
+        action: "remove-background",
+        pageId: activePageId,
+        nodeId,
+        expectedAssetId,
+        source,
+      });
+      if (!edited) throw new Error("Image editing is unavailable");
+      if (cancelledImageEditRequestIds.current.has(requestId)) {
+        throw new DOMException("Image editing cancelled", "AbortError");
+      }
+      if (
+        edited.requestId !== requestId ||
+        edited.sourceAssetId !== expectedAssetId
+      ) {
+        throw new Error(
+          "Image edit response did not match the current request",
+        );
+      }
+      const current = runtime.getSnapshot().document;
+      const plan = planImageNodeUpdate(
+        current,
+        {
+          action: "derive-source",
+          pageId: activePageId,
+          nodeId,
+          expectedAssetId,
+          asset: edited.asset,
+          derivation: edited.derivation,
+        },
+        `remove_background_${requestId}`,
+      );
+      if (!plan.ok) throw new Error(plan.message);
+      if (!applyCommands(t("history.removeImageBackground"), plan.commands)) {
+        throw new Error("Image edit transaction was rejected");
+      }
+    } catch (error) {
+      if (
+        !cancelledImageEditRequestIds.current.has(requestId) &&
+        !(error instanceof DOMException && error.name === "AbortError")
+      ) {
+        setEditorError(
+          error instanceof Error
+            ? error.message
+            : t("error.removeImageBackground"),
+        );
+      }
+    } finally {
+      cancelledImageEditRequestIds.current.delete(requestId);
+      setImageEdit((current) =>
+        current?.requestId === requestId ? null : current,
+      );
+    }
+  }, [activePageId, applyCommands, imageEdit, runtime, t]);
+
+  const cancelSelectedImageEdit = useCallback(() => {
+    if (!imageEdit || imageEdit.status === "cancelling") return;
+    cancelledImageEditRequestIds.current.add(imageEdit.requestId);
+    setImageEdit({ ...imageEdit, status: "cancelling" });
+    void window.desktop
+      ?.cancelDesignImageEdit({ requestId: imageEdit.requestId })
+      .catch(() => undefined);
+  }, [imageEdit]);
 
   const switchSelectedImageSource = useCallback(
     (nodeId: string, assetId: string, expectedAssetId: string) => {
@@ -2710,6 +2807,15 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
                   );
                 }}
                 onReplaceImage={() => void replaceSelectedImage()}
+                imageEditStatus={
+                  imageEdit && imageEdit.nodeId === selectedNode?.id
+                    ? imageEdit.status
+                    : null
+                }
+                onRemoveImageBackground={() =>
+                  void removeSelectedImageBackground()
+                }
+                onCancelImageEdit={cancelSelectedImageEdit}
                 onSwitchImageSource={switchSelectedImageSource}
                 onUpdateImageFilters={updateSelectedImageFilters}
                 onUpdateImagePaintFilters={updateImagePaintFilters}

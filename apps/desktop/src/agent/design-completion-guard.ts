@@ -20,6 +20,7 @@ import {
   DESIGN_PAGE_TOOL_NAME,
   DESIGN_PLAN_TOOL_NAME,
   DESIGN_REVIEW_TOOL_NAME,
+  EDIT_IMAGE_TOOL_NAME,
   GENERATE_IMAGE_TOOL_NAME,
   IMPORT_SVG_TOOL_NAME,
   PLACE_IMAGE_TOOL_NAME,
@@ -302,6 +303,7 @@ function isSuccessfulDesignWrite(call: AgentToolCallRecord): boolean {
     call.toolName === PLACE_IMAGE_TOOL_NAME ||
     call.toolName === IMPORT_SVG_TOOL_NAME ||
     call.toolName === UPDATE_IMAGE_TOOL_NAME ||
+    call.toolName === EDIT_IMAGE_TOOL_NAME ||
     call.toolName === DESIGN_ARRANGE_TOOL_NAME ||
     call.toolName === DESIGN_HIERARCHY_TOOL_NAME ||
     call.toolName === DESIGN_FIRST_SLICE_TOOL_NAME ||

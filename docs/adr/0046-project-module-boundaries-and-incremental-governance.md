@@ -67,7 +67,7 @@ Phase 4 把 Inspector 拆为 Appearance、Paint/Effect、Typography、Image、Co
 
 Phase 5 随 Figma-compatible Component Properties 垂直切片增加 `@opendesign/figma-interop`。该包最初只依赖 Component Service 与 Design Contracts，并只使用固定官方 typings 做编译期公共 API 形状验证；ADR-0083/0084 后为 styled text segments 增加对纯函数 Text Service 的单向依赖。EditorRuntime、Renderer、Leafer 和核心 Contracts 不反向依赖它。新增属性 schema/迁移、Runtime default 同步、Renderer context/plan 和 Main policy 分别进入明确职责模块，`design-agent-tools` 只保留聚合 schema。
 
-模块治理 Phase 5 已按 ADR-0100 完成：`design-agent-tools` 只保留稳定重导出、25 个公开工具的有序聚合和统一 validator dispatcher。Plan/Review/Checkpoint、Image、Import/Export、Hierarchy/Vector、Page/Text/Font、Component 与共享节点事务 schema 各有明确 owner；既有 Arrange、Variable、Style family 不复制 schema。聚合测试直接锁定工具顺序和 schema 对象身份，禁止在聚合入口再次手写同一契约。
+模块治理 Phase 5 已按 ADR-0100 完成：`design-agent-tools` 只保留稳定重导出、公开工具的有序聚合和统一 validator dispatcher。Plan/Review/Checkpoint、Image、Import/Export、Hierarchy/Vector、Page/Text/Font、Component 与共享节点事务 schema 各有明确 owner；既有 Arrange、Variable、Style family 不复制 schema。聚合测试直接锁定工具顺序和 schema 对象身份，禁止在聚合入口再次手写同一契约。
 
 ### 自动边界门禁与职责治理
 

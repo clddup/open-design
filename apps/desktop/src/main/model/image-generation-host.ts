@@ -48,6 +48,21 @@ export type GeneratedImage = {
   outputFormat: ImageGenerationOutputFormat;
 };
 
+export type RemoveImageBackgroundInput = {
+  bytes: Uint8Array;
+  mimeType: "image/png" | "image/jpeg" | "image/webp";
+  name: string;
+};
+
+export type EditedImage = {
+  bytes: Uint8Array;
+  apiFormat: GlobalImageGenerationSettings["apiFormat"];
+  modelId: string;
+  providerRequestId?: string;
+  outputFormat: "png";
+  operation: "remove-background";
+};
+
 export class ImageGenerationHost {
   constructor(
     private readonly store: WorkspaceStore,
@@ -192,11 +207,97 @@ export class ImageGenerationHost {
     }
   }
 
-  private headers(settings: GlobalImageGenerationSettings): Headers {
+  async removeBackground(
+    input: RemoveImageBackgroundInput,
+    signal: AbortSignal,
+  ): Promise<EditedImage> {
+    if (
+      input.bytes.byteLength === 0 ||
+      input.bytes.byteLength > 16 * 1024 * 1024
+    ) {
+      throw new RangeError("Source image must be between 1 byte and 16 MB");
+    }
+    const settings = this.requireEnabledSettings();
+    const form = new FormData();
+    form.set("model", settings.modelId);
+    form.set(
+      "prompt",
+      "Preserve the complete foreground subject and its fine edge detail. Remove only the background and return the subject on a fully transparent background. Do not restyle, crop, resize, relight, add, or remove foreground content.",
+    );
+    const uploadBytes = new Uint8Array(input.bytes.byteLength);
+    uploadBytes.set(input.bytes);
+    form.append(
+      "image[]",
+      new Blob([uploadBytes.buffer], { type: input.mimeType }),
+      safeUploadName(input.name, input.mimeType),
+    );
+    form.set("n", "1");
+    form.set("size", "auto");
+    form.set("quality", "auto");
+    form.set("background", "transparent");
+    form.set("output_format", "png");
+
+    const controller = this.createRequestController(
+      signal,
+      "Image editing timed out after 10 minutes",
+    );
+    try {
+      const response = await this.fetch(`${settings.baseUrl}/images/edits`, {
+        method: "POST",
+        headers: this.headers(settings, false),
+        signal: controller.signal,
+        body: form,
+      });
+      const payloadText = await readBoundedResponseText(
+        response,
+        MAX_IMAGE_GENERATION_RESPONSE_BYTES,
+        controller.signal,
+      );
+      let payload: unknown;
+      try {
+        payload = JSON.parse(payloadText);
+      } catch {
+        throw new Error("Image-editing provider returned invalid JSON");
+      }
+      if (!response.ok) {
+        throw new Error(
+          `Image editing failed with HTTP ${response.status}: ${providerErrorMessage(payload)}`,
+        );
+      }
+      const bytes = decodeBoundedBase64(
+        imageResponseBase64(payload),
+        MAX_GENERATED_IMAGE_BYTES,
+      );
+      assertPngWithTransparency(bytes);
+      const providerRequestId = response.headers.get("x-request-id")?.trim();
+      return {
+        bytes,
+        apiFormat: settings.apiFormat,
+        modelId: settings.modelId,
+        ...(providerRequestId ? { providerRequestId } : {}),
+        outputFormat: "png",
+        operation: "remove-background",
+      };
+    } catch (error) {
+      if (controller.signal.aborted) {
+        throw controller.signal.reason instanceof Error
+          ? controller.signal.reason
+          : new DOMException("Image editing cancelled", "AbortError");
+      }
+      throw error;
+    } finally {
+      controller.dispose();
+    }
+  }
+
+  private headers(
+    settings: GlobalImageGenerationSettings,
+    includeJsonContentType = true,
+  ): Headers {
     const headers = new Headers({
       accept: "application/json",
-      "content-type": "application/json",
     });
+    if (includeJsonContentType) headers.set("content-type", "application/json");
     const credential = this.credential();
     if (settings.authMode !== "none" && !credential) {
       throw new Error("Global image-generation API key is not configured");
@@ -207,6 +308,43 @@ export class ImageGenerationHost {
       headers.set("x-api-key", credential);
     }
     return headers;
+  }
+
+  private requireEnabledSettings(): GlobalImageGenerationSettings {
+    const settings = this.getSettings();
+    if (!settings.enabled) {
+      throw new Error("Global image generation is not enabled");
+    }
+    if (!settings.modelId) {
+      throw new Error("No global image-generation model is configured");
+    }
+    if (settings.apiFormat !== "openai-images") {
+      throw new Error(
+        "No supported global image-generation adapter is configured",
+      );
+    }
+    return settings;
+  }
+
+  private createRequestController(
+    signal: AbortSignal,
+    timeoutMessage: string,
+  ): AbortController & { dispose: () => void } {
+    const controller = new AbortController() as AbortController & {
+      dispose: () => void;
+    };
+    const abort = () => controller.abort(signal.reason);
+    if (signal.aborted) abort();
+    else signal.addEventListener("abort", abort, { once: true });
+    const timeout = setTimeout(
+      () => controller.abort(new DOMException(timeoutMessage, "TimeoutError")),
+      IMAGE_GENERATION_TIMEOUT_MS,
+    );
+    controller.dispose = () => {
+      clearTimeout(timeout);
+      signal.removeEventListener("abort", abort);
+    };
+    return controller;
   }
 
   private credential(): string | undefined {
@@ -437,6 +575,59 @@ function providerErrorMessage(value: unknown): string {
     return value.error.message.slice(0, 2_000);
   }
   return "Provider rejected the image-generation request";
+}
+
+function safeUploadName(
+  value: string,
+  mimeType: RemoveImageBackgroundInput["mimeType"],
+): string {
+  const extension =
+    mimeType === "image/jpeg" ? "jpg" : mimeType.replace("image/", "");
+  const stem = value
+    .trim()
+    .replace(/\.[^.]+$/, "")
+    .replace(/[^A-Za-z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 120);
+  return `${stem || "source-image"}.${extension}`;
+}
+
+function assertPngWithTransparency(value: Uint8Array): void {
+  const bytes = Buffer.from(value);
+  const signature = Buffer.from([
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+  ]);
+  if (bytes.byteLength < 33 || !bytes.subarray(0, 8).equals(signature)) {
+    throw new TypeError("Image-editing provider did not return a PNG image");
+  }
+  let offset = 8;
+  let alphaCapable = false;
+  while (offset + 12 <= bytes.byteLength) {
+    const length = bytes.readUInt32BE(offset);
+    const dataOffset = offset + 8;
+    const nextOffset = dataOffset + length + 4;
+    if (nextOffset > bytes.byteLength) {
+      throw new TypeError("Image-editing provider returned a malformed PNG");
+    }
+    const type = bytes.toString("ascii", offset + 4, offset + 8);
+    if (type === "IHDR") {
+      if (length !== 13) {
+        throw new TypeError("Image-editing provider returned a malformed PNG");
+      }
+      const colorType = bytes[dataOffset + 9];
+      alphaCapable = colorType === 4 || colorType === 6;
+    } else if (type === "tRNS") {
+      alphaCapable = true;
+    } else if (type === "IEND") {
+      break;
+    }
+    offset = nextOffset;
+  }
+  if (!alphaCapable) {
+    throw new TypeError(
+      "Image-editing provider returned a PNG without transparency",
+    );
+  }
 }
 
 function record(value: unknown): value is Record<string, unknown> {

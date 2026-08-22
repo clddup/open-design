@@ -104,6 +104,99 @@ describe("ImageGenerationHost", () => {
     store.close();
   });
 
+  it("edits an existing image through multipart and requires transparent PNG output", async () => {
+    const store = new WorkspaceStore(":memory:");
+    const editedBytes = alphaPngFixture();
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: [{ b64_json: editedBytes.toString("base64") }],
+        }),
+        {
+          status: 200,
+          headers: { "x-request-id": "image_edit_request_1" },
+        },
+      ),
+    );
+    const host = new ImageGenerationHost(store, cipher, fetch);
+    host.saveSettings({
+      enabled: true,
+      apiFormat: "openai-images",
+      authMode: "x-api-key",
+      baseUrl: "https://images.example/v1",
+      modelId: "gpt-image-2",
+      apiKey: "image-secret",
+    });
+
+    const result = await host.removeBackground(
+      {
+        bytes: Uint8Array.from([0xff, 0xd8, 0xff, 0xd9]),
+        mimeType: "image/jpeg",
+        name: "Portrait photo.jpeg",
+      },
+      new AbortController().signal,
+    );
+
+    expect(Buffer.from(result.bytes)).toEqual(editedBytes);
+    expect(result).toMatchObject({
+      modelId: "gpt-image-2",
+      operation: "remove-background",
+      outputFormat: "png",
+      providerRequestId: "image_edit_request_1",
+    });
+    const request = fetch.mock.calls[0];
+    expect(requestUrl(request?.[0])).toBe(
+      "https://images.example/v1/images/edits",
+    );
+    const headers = new Headers(request?.[1]?.headers);
+    expect(headers.get("x-api-key")).toBe("image-secret");
+    expect(headers.has("content-type")).toBe(false);
+    const form = request?.[1]?.body;
+    expect(form).toBeInstanceOf(FormData);
+    if (!(form instanceof FormData)) throw new Error("Expected FormData body");
+    expect(form.get("model")).toBe("gpt-image-2");
+    expect(form.get("background")).toBe("transparent");
+    expect(form.get("output_format")).toBe("png");
+    expect(form.get("size")).toBe("auto");
+    expect(form.get("quality")).toBe("auto");
+    const source = form.get("image[]");
+    expect(source).toBeInstanceOf(Blob);
+    expect((source as Blob).type).toBe("image/jpeg");
+    store.close();
+  });
+
+  it("rejects an opaque PNG returned for background removal", async () => {
+    const store = new WorkspaceStore(":memory:");
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: [{ b64_json: opaquePngFixture().toString("base64") }],
+        }),
+        { status: 200 },
+      ),
+    );
+    const host = new ImageGenerationHost(store, cipher, fetch);
+    host.saveSettings({
+      enabled: true,
+      apiFormat: "openai-images",
+      authMode: "none",
+      baseUrl: "https://images.example/v1",
+      modelId: "gpt-image-2",
+    });
+
+    await expect(
+      host.removeBackground(
+        {
+          bytes: Uint8Array.from([0x89]),
+          mimeType: "image/png",
+          name: "source.png",
+        },
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow("PNG without transparency");
+    store.close();
+  });
+
   it("migrates the old v2 selection and copies its credential before catalog cleanup", () => {
     const store = new WorkspaceStore(":memory:");
     store.setPreference(
@@ -232,4 +325,28 @@ function requestUrl(input: RequestInfo | URL | undefined): string {
   if (input instanceof URL) return input.toString();
   if (input instanceof Request) return input.url;
   throw new Error("Expected fetch request input");
+}
+
+function alphaPngFixture(): Buffer {
+  return pngFixture(6);
+}
+
+function opaquePngFixture(): Buffer {
+  return pngFixture(2);
+}
+
+function pngFixture(colorType: number): Buffer {
+  const signature = Buffer.from([
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+  ]);
+  const ihdr = Buffer.alloc(25);
+  ihdr.writeUInt32BE(13, 0);
+  ihdr.write("IHDR", 4, "ascii");
+  ihdr.writeUInt32BE(1, 8);
+  ihdr.writeUInt32BE(1, 12);
+  ihdr[16] = 8;
+  ihdr[17] = colorType;
+  const iend = Buffer.alloc(12);
+  iend.write("IEND", 4, "ascii");
+  return Buffer.concat([signature, ihdr, iend]);
 }

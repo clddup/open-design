@@ -19,6 +19,7 @@ import {
   DESIGN_REVIEW_TOOL_NAME,
   EXPORT_SVG_TOOL_NAME,
   EXPORT_RASTER_TOOL_NAME,
+  EDIT_IMAGE_TOOL_NAME,
   GENERATE_IMAGE_TOOL_NAME,
   IMPORT_SVG_TOOL_NAME,
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
@@ -2460,6 +2461,36 @@ describe("design Agent tool contract", () => {
           ...input.asset,
           source: { type: "external", value: "C:\\secret\\hero.webp" },
         },
+      }),
+    ).toBe(false);
+  });
+
+  it("exposes stale-safe background removal without image bytes in model input", () => {
+    const input = {
+      action: "remove-background",
+      label: "Remove the portrait background",
+      pageId: "page_1",
+      nodeId: "hero_image",
+      expectedAssetId: `asset_${"a".repeat(64)}`,
+    };
+    const tool = DESIGN_AGENT_TOOL_SPECS.find(
+      (candidate) => candidate.name === EDIT_IMAGE_TOOL_NAME,
+    );
+    expect(tool).toMatchObject({ risk: "external", approval: "never" });
+    expect(tool?.description).toContain("transparent PNG");
+    expect(validateDesignAgentToolInput(EDIT_IMAGE_TOOL_NAME, input)).toBe(
+      true,
+    );
+    expect(
+      validateDesignAgentToolInput(EDIT_IMAGE_TOOL_NAME, {
+        ...input,
+        source: "data:image/png;base64,aW1hZ2U=",
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(EDIT_IMAGE_TOOL_NAME, {
+        ...input,
+        expectedAssetId: undefined,
       }),
     ).toBe(false);
   });

@@ -57,6 +57,7 @@ import {
   DESIGN_VECTOR_TOOL_NAME,
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
   INTERNAL_IMPORT_SVG_TOOL_NAME,
+  INTERNAL_READ_IMAGE_SOURCE_TOOL_NAME,
   INTERNAL_UPDATE_IMAGE_TOOL_NAME,
   isDesignArrangeToolInput,
   isDesignApplyToolInput,
@@ -70,6 +71,7 @@ import {
   isExportRasterToolInput,
   isInternalDesignApplyToolInput,
   isInternalImportSvgToolInput,
+  isInternalReadImageSourceToolInput,
   isInternalUpdateImageToolInput,
   type DesignComponentToolInput,
   type DesignFontToolInput,
@@ -1332,6 +1334,57 @@ async function executeDesignToolRequestUnsafe(
   }
 
   if (
+    request.call.toolName === INTERNAL_READ_IMAGE_SOURCE_TOOL_NAME &&
+    isInternalReadImageSourceToolInput(request.call.input)
+  ) {
+    const input = request.call.input;
+    assertPageWithinMutationTarget(
+      input.pageId,
+      request.context.mutationTarget,
+      "Image edit source",
+    );
+    const validation = planImageNodeUpdate(document, {
+      action: "switch-source",
+      pageId: input.pageId,
+      nodeId: input.nodeId,
+      expectedAssetId: input.expectedAssetId,
+      assetId: input.expectedAssetId,
+    });
+    if (validation.ok || validation.code !== "no-op") {
+      throw new Error(
+        validation.ok
+          ? "Image source validation unexpectedly produced a write"
+          : `image-edit-source.${validation.code}: ${validation.message}`,
+      );
+    }
+    const asset = document.assetsById[input.expectedAssetId];
+    if (
+      !asset ||
+      asset.kind !== "image" ||
+      asset.source.type !== "data" ||
+      !["image/png", "image/jpeg", "image/webp"].includes(asset.mimeType ?? "")
+    ) {
+      throw new Error(
+        "image-edit-source.unsupported: The current source is not an embedded PNG, JPEG, or WebP image",
+      );
+    }
+    return {
+      requestId: request.requestId,
+      ok: true,
+      result: {
+        observedRevision: document.revision,
+        content: {
+          kind: "prepared-image-edit-source",
+          pageId: input.pageId,
+          nodeId: input.nodeId,
+          expectedAssetId: input.expectedAssetId,
+          asset,
+        },
+      },
+    };
+  }
+
+  if (
     request.call.toolName === INTERNAL_UPDATE_IMAGE_TOOL_NAME &&
     isInternalUpdateImageToolInput(request.call.input)
   ) {
@@ -1381,15 +1434,24 @@ async function executeDesignToolRequestUnsafe(
                       expectedAssetId: input.expectedAssetId,
                       assetId: input.assetId,
                     }
-                  : {
-                      action: input.action,
-                      pageId: input.pageId,
-                      nodeId: input.nodeId,
-                      asset: input.asset,
-                      ...(input.placement === undefined
-                        ? {}
-                        : { placement: input.placement }),
-                    },
+                  : input.action === "derive-source"
+                    ? {
+                        action: input.action,
+                        pageId: input.pageId,
+                        nodeId: input.nodeId,
+                        expectedAssetId: input.expectedAssetId,
+                        asset: input.asset,
+                        derivation: input.derivation,
+                      }
+                    : {
+                        action: input.action,
+                        pageId: input.pageId,
+                        nodeId: input.nodeId,
+                        asset: input.asset,
+                        ...(input.placement === undefined
+                          ? {}
+                          : { placement: input.placement }),
+                      },
             commandPrefix,
           );
     if (!plan.ok) {

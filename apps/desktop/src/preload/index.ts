@@ -20,6 +20,9 @@ import {
   isAgentAttachmentSelection,
   isAgentAttachmentImport,
   isDesignImageSelection,
+  isDesignImageEditRequest,
+  isDesignImageEditResult,
+  isCancelDesignImageEditRequest,
   isFontBinaryDescriptor,
   isFontBinaryPayload,
   isFontBinaryReadRequest,
@@ -69,6 +72,9 @@ import {
   type AgentAttachmentSelection,
   type AgentAttachmentImport,
   type DesignImageSelection,
+  type DesignImageEditRequest,
+  type DesignImageEditResult,
+  type CancelDesignImageEditRequest,
   type FontBinaryDescriptor,
   type FontBinaryPayload,
   type FontBinaryReadRequest,
@@ -390,6 +396,37 @@ const desktopApi: DesktopApi = Object.freeze({
       isDesignImageSelection,
       "Invalid design image selection response",
     );
+  },
+  editDesignImage: async (request: DesignImageEditRequest) => {
+    validate(
+      request,
+      isDesignImageEditRequest,
+      "Invalid design image edit request",
+    );
+    const result: unknown = await ipcRenderer.invoke(
+      channels.editDesignImage,
+      request,
+    );
+    return validate<DesignImageEditResult>(
+      result,
+      isDesignImageEditResult,
+      "Invalid design image edit response",
+    );
+  },
+  cancelDesignImageEdit: async (request: CancelDesignImageEditRequest) => {
+    validate(
+      request,
+      isCancelDesignImageEditRequest,
+      "Invalid design image edit cancellation request",
+    );
+    const result: unknown = await ipcRenderer.invoke(
+      channels.cancelDesignImageEdit,
+      request,
+    );
+    if (typeof result !== "boolean") {
+      throw new TypeError("Invalid design image edit cancellation response");
+    }
+    return result;
   },
   selectFontBinaries: async () => {
     const result: unknown = await ipcRenderer.invoke(

@@ -46,6 +46,14 @@ export type ImageUpdateOperation =
       nodeId: string;
       expectedAssetId: string;
       assetId: string;
+    }
+  | {
+      action: "derive-source";
+      pageId: string;
+      nodeId: string;
+      expectedAssetId: string;
+      asset: DesignAsset;
+      derivation: ImageAssetDerivation;
     };
 
 export type ImageUpdateFailureCode =
@@ -256,65 +264,101 @@ export function planImageNodeUpdate(
     };
   }
 
-  if (operation.asset.kind !== "image") {
+  const sourceUpdate =
+    operation.action === "derive-source"
+      ? operation
+      : {
+          ...operation,
+          expectedAssetId: previousAssetId,
+          derivation: replacementDerivation(
+            `${commandPrefix}_derivation`.slice(0, 256),
+            previousAssetId,
+            operation.asset.id,
+          ),
+        };
+  if (previousAssetId !== sourceUpdate.expectedAssetId) {
+    return {
+      ok: false,
+      code: "asset-stale",
+      message: `Image node ${operation.nodeId} no longer uses the inspected source ${sourceUpdate.expectedAssetId}`,
+    };
+  }
+  if (sourceUpdate.asset.kind !== "image") {
     return {
       ok: false,
       code: "invalid-asset",
-      message: `Asset ${operation.asset.id} is not an image`,
+      message: `Asset ${sourceUpdate.asset.id} is not an image`,
     };
   }
   const placementChanged =
+    operation.action === "replace-source" &&
     operation.placement !== undefined &&
     !samePlacement(node.properties.placement, operation.placement);
-  if (operation.asset.id === previousAssetId && !placementChanged) {
+  if (sourceUpdate.asset.id === previousAssetId && !placementChanged) {
     return {
       ok: false,
       code: "no-op",
-      message: `Image node ${operation.nodeId} already uses asset ${operation.asset.id}`,
+      message: `Image node ${operation.nodeId} already uses asset ${sourceUpdate.asset.id}`,
     };
   }
 
-  const commands: DesignOperation[] = [];
-  const existingAsset = document.assetsById[operation.asset.id];
+  const requestedDerivation = sourceUpdate.derivation;
   if (
-    existingAsset &&
-    canonicalJsonStringify(existingAsset) !==
-      canonicalJsonStringify(operation.asset)
+    requestedDerivation.sourceAssetId !== previousAssetId ||
+    requestedDerivation.resultAssetId !== sourceUpdate.asset.id ||
+    (operation.action === "derive-source" &&
+      requestedDerivation.operation === "replacement")
   ) {
     return {
       ok: false,
       code: "invalid-asset",
-      message: `Asset ${operation.asset.id} already exists with different content`,
+      message: "Image derivation does not match the requested source update",
     };
   }
-  if (operation.asset.id !== previousAssetId && existingAsset === undefined) {
+
+  const commands: DesignOperation[] = [];
+  const existingAsset = document.assetsById[sourceUpdate.asset.id];
+  if (
+    existingAsset &&
+    canonicalJsonStringify(existingAsset) !==
+      canonicalJsonStringify(sourceUpdate.asset)
+  ) {
+    return {
+      ok: false,
+      code: "invalid-asset",
+      message: `Asset ${sourceUpdate.asset.id} already exists with different content`,
+    };
+  }
+  if (
+    sourceUpdate.asset.id !== previousAssetId &&
+    existingAsset === undefined
+  ) {
     commands.push({
       commandId: `${commandPrefix}_asset`,
       type: "put_asset",
-      asset: operation.asset,
+      asset: sourceUpdate.asset,
     });
   }
   const existingDerivation = findImageAssetDerivation(
     document,
     previousAssetId,
-    operation.asset.id,
-    "replacement",
+    sourceUpdate.asset.id,
+    requestedDerivation.operation,
   );
   if (
     existingAsset &&
     !existingDerivation &&
     getImageAssetFamily(document, previousAssetId)?.assetIds.includes(
-      operation.asset.id,
+      sourceUpdate.asset.id,
     )
   ) {
     return {
       ok: false,
       code: "out-of-scope",
-      message: `Asset ${operation.asset.id} already belongs to this image source family; switch to that existing source instead`,
+      message: `Asset ${sourceUpdate.asset.id} already belongs to this image source family; switch to that existing source instead`,
     };
   }
-  const derivationId =
-    existingDerivation?.id ?? `${commandPrefix}_derivation`.slice(0, 256);
+  const derivationId = existingDerivation?.id ?? requestedDerivation.id;
   if (!existingDerivation && document.imageAssetDerivationsById[derivationId]) {
     return {
       ok: false,
@@ -326,11 +370,7 @@ export function planImageNodeUpdate(
     commands.push({
       commandId: `${commandPrefix}_lineage`,
       type: "put_image_asset_derivation",
-      derivation: replacementDerivation(
-        derivationId,
-        previousAssetId,
-        operation.asset.id,
-      ),
+      derivation: requestedDerivation,
     });
   }
   commands.push({
@@ -338,8 +378,9 @@ export function planImageNodeUpdate(
     type: "update_properties",
     nodeId: operation.nodeId,
     properties: {
-      assetId: operation.asset.id,
-      ...(operation.placement === undefined
+      assetId: sourceUpdate.asset.id,
+      ...(operation.action !== "replace-source" ||
+      operation.placement === undefined
         ? {}
         : { placement: operation.placement }),
     },
@@ -350,7 +391,7 @@ export function planImageNodeUpdate(
     commands,
     nodeId: operation.nodeId,
     previousAssetId,
-    nextAssetId: operation.asset.id,
+    nextAssetId: sourceUpdate.asset.id,
     derivationId,
   };
 }

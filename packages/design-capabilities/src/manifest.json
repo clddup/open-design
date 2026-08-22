@@ -660,31 +660,43 @@
     {
       "id": "image.ai-editing",
       "category": "image",
-      "status": "unavailable",
+      "status": "degraded",
       "label": { "en": "AI image editing", "zh-CN": "AI 图片编辑" },
       "description": {
         "en": "Create traced variants from one or more source images using masks, inpainting, outpainting, background replacement, relighting, or style harmonization.",
         "zh-CN": "基于一张或多张源图，通过蒙版、局部重绘、扩图、背景替换、重打光或风格统一生成可追溯变体。"
       },
-      "provider": "Not implemented",
+      "provider": "ImageGenerationHost openai-images edit adapter + EditorRuntime recoverable derivation planner",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
       "surfaces": {
-        "contract": "unavailable",
-        "runtime": "unavailable",
-        "human": "unavailable",
-        "agent": "unavailable",
-        "render": "unavailable",
-        "export": "unavailable"
+        "contract": "available",
+        "runtime": "available",
+        "human": "available",
+        "agent": "available",
+        "render": "available",
+        "export": "available"
       },
       "limitations": [
         {
-          "en": "The current global adapter only generates new images. Future edits must create derived assets with source provenance and must never overwrite the original asset.",
-          "zh-CN": "当前全局 adapter 只能生成新图；后续编辑必须创建带来源追踪的派生 asset，绝不能覆盖原始 asset。"
+          "en": "Remove background is available for embedded PNG, JPEG, and WebP Image nodes through the global openai-images service. Inpainting, expansion, background replacement, relighting, style harmonization, Image Paint editing, and multi-image edits remain unavailable.",
+          "zh-CN": "内嵌 PNG、JPEG 与 WebP Image 节点已可通过全局 openai-images 服务去背景；局部重绘、扩图、背景替换、重打光、风格统一、Image Paint 编辑与多图编辑仍未完成。"
         }
       ],
-      "evidence": { "automated": [], "manual": [] },
+      "evidence": {
+        "automated": [
+          "apps/desktop/src/main/model/image-generation-host.test.ts",
+          "apps/desktop/src/shared/design-agent-tools.test.ts",
+          "apps/desktop/src/shared/design-tool-bridge.test.ts",
+          "apps/desktop/src/renderer/design-tool-execution.test.ts",
+          "apps/desktop/src/renderer/App.test.tsx",
+          "packages/editor-runtime/src/image-operations.test.ts"
+        ],
+        "manual": []
+      },
       "references": [
-        "https://developers.openai.com/api/docs/guides/image-generation"
+        "docs/adr/0133-trusted-remove-background-image-editing.md",
+        "https://developers.openai.com/api/docs/guides/image-generation",
+        "https://help.figma.com/hc/en-us/articles/24004542669463-Make-or-edit-an-image-with-AI"
       ]
     },
     {

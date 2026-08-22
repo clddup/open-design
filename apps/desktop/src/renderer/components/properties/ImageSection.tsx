@@ -7,7 +7,7 @@ import {
   type ImagePlacement,
 } from "@opendesign/design-contracts";
 import { getImageAssetFamily } from "@opendesign/editor-runtime";
-import { Icon } from "@opendesign/ui";
+import { Button, Icon } from "@opendesign/ui";
 import { useEffect, useId, useState, type KeyboardEvent } from "react";
 import type { MessageKey } from "../../../shared/i18n/messages";
 import { useI18n } from "../../i18n";
@@ -33,6 +33,9 @@ export function ImageSection({
   onFiltersChange,
   onCrop,
   onReplace,
+  editStatus,
+  onRemoveBackground,
+  onCancelEdit,
   onSourceChange,
 }: {
   node: ImageNode;
@@ -41,6 +44,9 @@ export function ImageSection({
   onFiltersChange: (filters: ImageFilters) => void;
   onCrop: () => boolean;
   onReplace: () => void;
+  editStatus: "running" | "cancelling" | null;
+  onRemoveBackground: () => void;
+  onCancelEdit: () => void;
   onSourceChange: (
     nodeId: string,
     assetId: string,
@@ -250,6 +256,29 @@ export function ImageSection({
           <Icon name="lucide:image" size={13} />
           {t("properties.imageReplace")}
         </button>
+        <div className={imageStyles.aiEditActions}>
+          <Button
+            aria-busy={editStatus !== null}
+            disabled={editStatus !== null}
+            icon={editStatus ? "lucide:loader-circle" : "lucide:scan-line"}
+            onClick={onRemoveBackground}
+          >
+            {editStatus
+              ? t("properties.imageRemovingBackground")
+              : t("properties.imageRemoveBackground")}
+          </Button>
+          {editStatus && (
+            <Button
+              disabled={editStatus === "cancelling"}
+              onClick={onCancelEdit}
+              tone="quiet"
+            >
+              {editStatus === "cancelling"
+                ? t("properties.imageCancellingEdit")
+                : t("common.cancel")}
+            </Button>
+          )}
+        </div>
         {sourceFamily && sourceFamily.assetIds.length > 1 && (
           <div className={imageStyles.sourceVersions}>
             <div className={imageStyles.sourceVersionHeader}>

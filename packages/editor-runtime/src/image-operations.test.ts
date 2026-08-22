@@ -274,6 +274,80 @@ describe("image update planner", () => {
     ).toBeUndefined();
   });
 
+  it("commits a trusted AI-derived source and lineage atomically and fails closed when stale", () => {
+    const derivedAsset: DesignAsset = {
+      ...newAsset,
+      id: "asset_without_background",
+      mimeType: "image/png",
+      name: "Old — Background removed",
+    };
+    const runtime = new EditorRuntime(documentWithImage());
+    const plan = planImageNodeUpdate(runtime.getSnapshot().document, {
+      action: "derive-source",
+      pageId: "page_welcome",
+      nodeId: "hero",
+      expectedAssetId: oldAsset.id,
+      asset: derivedAsset,
+      derivation: {
+        id: "remove_background_derivation",
+        sourceAssetId: oldAsset.id,
+        resultAssetId: derivedAsset.id,
+        operation: "remove-background",
+        referenceAssetIds: [],
+        extensions: {
+          provider: "openai-images",
+          modelId: "gpt-image-2",
+        },
+      },
+    });
+    expect(plan).toMatchObject({
+      ok: true,
+      previousAssetId: oldAsset.id,
+      nextAssetId: derivedAsset.id,
+      derivationId: "remove_background_derivation",
+    });
+    if (!plan.ok) return;
+    const before = runtime.getSnapshot().document;
+    expect(
+      runtime.apply({
+        transactionId: "remove_background",
+        documentId: before.documentId,
+        baseRevision: before.revision,
+        actor: { type: "user", id: "test" },
+        commands: plan.commands,
+      }).ok,
+    ).toBe(true);
+    expect(runtime.getSnapshot().document.nodesById.hero).toMatchObject({
+      properties: { assetId: derivedAsset.id, placement: { mode: "fit" } },
+    });
+    expect(
+      runtime.getSnapshot().document.imageAssetDerivationsById
+        .remove_background_derivation,
+    ).toMatchObject({ operation: "remove-background" });
+    expect(runtime.undo().ok).toBe(true);
+    expect(
+      runtime.getSnapshot().document.assetsById[derivedAsset.id],
+    ).toBeUndefined();
+
+    expect(
+      planImageNodeUpdate(documentWithImage(), {
+        action: "derive-source",
+        pageId: "page_welcome",
+        nodeId: "hero",
+        expectedAssetId: "asset_stale",
+        asset: derivedAsset,
+        derivation: {
+          id: "stale_derivation",
+          sourceAssetId: "asset_stale",
+          resultAssetId: derivedAsset.id,
+          operation: "remove-background",
+          referenceAssetIds: [],
+          extensions: {},
+        },
+      }),
+    ).toMatchObject({ ok: false, code: "asset-stale" });
+  });
+
   it("preserves an old asset referenced by another Image or Path paint", () => {
     const document = documentWithImage();
     document.nodesById.secondary = imageNode("secondary");

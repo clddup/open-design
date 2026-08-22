@@ -314,6 +314,8 @@ beforeEach(() => {
     importAgentAttachments: vi.fn().mockResolvedValue([]),
     getAgentAttachmentPreview: vi.fn(),
     selectDesignImage: vi.fn().mockResolvedValue(null),
+    editDesignImage: vi.fn(),
+    cancelDesignImageEdit: vi.fn().mockResolvedValue(false),
     selectFontBinaries: vi.fn().mockResolvedValue([]),
     listFontBinaries: vi.fn().mockResolvedValue([]),
     readFontBinary: vi.fn(),
@@ -3153,6 +3155,147 @@ describe("App", () => {
     expect(
       runtime().getSnapshot().document.assetsById[oldAssetId],
     ).toBeDefined();
+  });
+
+  it("removes an image background as one recoverable source transaction", async () => {
+    const user = userEvent.setup();
+    renderApp();
+    const sourceAssetId = `asset_${"1".repeat(64)}`;
+    const resultAssetId = `asset_${"2".repeat(64)}`;
+    act(() => {
+      const current = runtime().getSnapshot().document;
+      const result = runtime().apply({
+        transactionId: "insert_background_removal_fixture",
+        documentId: current.documentId,
+        baseRevision: current.revision,
+        actor: { type: "user", id: "test" },
+        commands: [
+          {
+            commandId: "put_background_source",
+            type: "put_asset",
+            asset: {
+              id: sourceAssetId,
+              kind: "image",
+              name: "Portrait",
+              mimeType: "image/png",
+              source: { type: "data", value: "aW1hZ2U=" },
+              size: { width: 800, height: 600 },
+              extensions: {},
+            },
+          },
+          {
+            commandId: "insert_background_image",
+            type: "insert_element",
+            pageId: "page_welcome",
+            parentId: "frame_welcome",
+            index: 4,
+            node: {
+              id: "background_image",
+              kind: "image",
+              name: "Portrait",
+              parentId: "frame_welcome",
+              childIds: [],
+              visible: true,
+              locked: false,
+              transform: [1, 0, 0, 1, 100, 120],
+              size: { width: 400, height: 300 },
+              exportSettings: [],
+              opacity: 1,
+              properties: {
+                assetId: sourceAssetId,
+                placement: { mode: "fill", focalPoint: { x: 0.5, y: 0.5 } },
+                filters: { contrast: 0.2 },
+                altText: "Portrait",
+                cornerRadius: 12,
+              },
+              extensions: {},
+            },
+          },
+        ],
+      });
+      if (!result.ok) throw new Error(result.error.message);
+      runtime().setSelection(["background_image"], "background_image");
+    });
+    vi.mocked(window.desktop!.editDesignImage).mockImplementationOnce(
+      (request) =>
+        Promise.resolve({
+          requestId: request.requestId,
+          action: "remove-background",
+          sourceAssetId,
+          asset: {
+            id: resultAssetId,
+            kind: "image",
+            name: "Portrait — Background removed.png",
+            mimeType: "image/png",
+            source: { type: "data", value: "ZWRpdGVk" },
+            size: { width: 800, height: 600 },
+            extensions: { importedBy: "inspector-image-edit" },
+          },
+          derivation: {
+            id: "remove_background_result",
+            sourceAssetId,
+            resultAssetId,
+            operation: "remove-background",
+            referenceAssetIds: [],
+            extensions: { modelId: "gpt-image-2" },
+          },
+        }),
+    );
+
+    await user.click(screen.getByRole("tab", { name: "Properties" }));
+    await user.click(screen.getByRole("button", { name: "Remove background" }));
+    await waitFor(() =>
+      expect(
+        runtime().getSnapshot().document.nodesById.background_image,
+      ).toMatchObject({
+        properties: {
+          assetId: resultAssetId,
+          placement: { mode: "fill", focalPoint: { x: 0.5, y: 0.5 } },
+          filters: { contrast: 0.2 },
+          cornerRadius: 12,
+        },
+      }),
+    );
+    expect(
+      runtime().getSnapshot().document.imageAssetDerivationsById
+        .remove_background_result,
+    ).toMatchObject({ operation: "remove-background" });
+    expect(
+      runtime().getSnapshot().document.assetsById[sourceAssetId],
+    ).toBeDefined();
+
+    await user.click(screen.getByRole("button", { name: "Undo" }));
+    expect(
+      runtime().getSnapshot().document.nodesById.background_image,
+    ).toMatchObject({
+      properties: { assetId: sourceAssetId },
+    });
+    expect(
+      runtime().getSnapshot().document.assetsById[resultAssetId],
+    ).toBeUndefined();
+
+    let rejectEdit: ((reason: Error) => void) | undefined;
+    vi.mocked(window.desktop!.editDesignImage).mockImplementationOnce(
+      () =>
+        new Promise((_, reject) => {
+          rejectEdit = reject;
+        }),
+    );
+    const beforeCancelledEdit = runtime().getSnapshot().document.revision;
+    await user.click(screen.getByRole("button", { name: "Remove background" }));
+    await user.click(await screen.findByRole("button", { name: "Cancel" }));
+    expect(
+      vi.mocked(window.desktop!.cancelDesignImageEdit).mock.calls[0]?.[0]
+        .requestId,
+    ).toMatch(/^image_edit_/);
+    act(() => rejectEdit?.(new Error("Image editing cancelled")));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Remove background" }),
+      ).toBeEnabled(),
+    );
+    expect(runtime().getSnapshot().document.revision).toBe(beforeCancelledEdit);
+    expect(screen.queryByText("Image editing cancelled")).toBeNull();
   });
 
   it("manages current-file image assets through import, placement, file-wide replacement, and safe deletion", async () => {

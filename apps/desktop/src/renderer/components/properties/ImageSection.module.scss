@@ -42,6 +42,32 @@
   border-top: 1px solid var(--ui-border);
 }
 
+.aiEditActions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+
+  :global(.ui-button) {
+    min-height: 24px;
+    padding: 0 7px;
+    font-size: 9px;
+  }
+
+  :global(.ui-button:first-child) {
+    flex: 1;
+  }
+
+  [aria-busy="true"] svg {
+    animation: image-edit-spin 0.8s linear infinite;
+  }
+}
+
+@keyframes image-edit-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .sourceVersionHeader {
   display: flex;
   align-items: center;

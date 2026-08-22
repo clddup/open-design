@@ -19,8 +19,10 @@ import {
 } from "@opendesign/import-export-service/raster";
 import {
   isDesignAsset,
+  isImageAssetDerivation,
   isDesignDocument,
   type DesignAsset,
+  type ImageAssetDerivation,
   type DesignDocument,
   type LibraryReleaseSnapshot,
 } from "@opendesign/design-contracts";
@@ -260,6 +262,25 @@ export type DesignImageSelection = {
   asset: DesignAsset;
 };
 
+export type DesignImageEditRequest = {
+  requestId: string;
+  action: "remove-background";
+  pageId: string;
+  nodeId: string;
+  expectedAssetId: string;
+  source: DesignAsset;
+};
+
+export type DesignImageEditResult = {
+  requestId: string;
+  action: "remove-background";
+  sourceAssetId: string;
+  asset: DesignAsset;
+  derivation: ImageAssetDerivation;
+};
+
+export type CancelDesignImageEditRequest = { requestId: string };
+
 export type CreateProjectRequest = {
   projectId: string;
   name: string;
@@ -369,6 +390,12 @@ export interface DesktopApi {
     request: AgentAttachmentPreviewRequest,
   ) => Promise<AgentAttachmentPreviewResult>;
   selectDesignImage: () => Promise<DesignImageSelection | null>;
+  editDesignImage: (
+    request: DesignImageEditRequest,
+  ) => Promise<DesignImageEditResult>;
+  cancelDesignImageEdit: (
+    request: CancelDesignImageEditRequest,
+  ) => Promise<boolean>;
   selectFontBinaries: () => Promise<FontBinaryDescriptor[]>;
   listFontBinaries: () => Promise<FontBinaryDescriptor[]>;
   readFontBinary: (
@@ -484,6 +511,8 @@ export const channels = {
   importAgentAttachments: "agent-attachment:import",
   getAgentAttachmentPreview: "agent-attachment:preview",
   selectDesignImage: "design-image:select",
+  editDesignImage: "design-image:edit",
+  cancelDesignImageEdit: "design-image:edit-cancel",
   selectFontBinaries: "font-binary:select",
   listFontBinaries: "font-binary:list",
   readFontBinary: "font-binary:read",
@@ -608,6 +637,80 @@ export function isDesignImageSelection(
     asset.size.width > 0 &&
     asset.size.height > 0 &&
     Object.keys(value).every((key) => key === "asset")
+  );
+}
+
+export function isDesignImageEditRequest(
+  value: unknown,
+): value is DesignImageEditRequest {
+  return (
+    isRecord(value) &&
+    isStableId(value.requestId) &&
+    value.action === "remove-background" &&
+    isStableId(value.pageId) &&
+    isStableId(value.nodeId) &&
+    isStableId(value.expectedAssetId) &&
+    isEmbeddedEditableImageAsset(value.source) &&
+    value.source.id === value.expectedAssetId &&
+    hasExactKeys(value, [
+      "requestId",
+      "action",
+      "pageId",
+      "nodeId",
+      "expectedAssetId",
+      "source",
+    ])
+  );
+}
+
+export function isDesignImageEditResult(
+  value: unknown,
+): value is DesignImageEditResult {
+  return (
+    isRecord(value) &&
+    isStableId(value.requestId) &&
+    value.action === "remove-background" &&
+    isStableId(value.sourceAssetId) &&
+    isEmbeddedEditableImageAsset(value.asset) &&
+    isImageAssetDerivation(value.derivation) &&
+    value.derivation.sourceAssetId === value.sourceAssetId &&
+    value.derivation.resultAssetId === value.asset.id &&
+    value.derivation.operation === "remove-background" &&
+    hasExactKeys(value, [
+      "requestId",
+      "action",
+      "sourceAssetId",
+      "asset",
+      "derivation",
+    ])
+  );
+}
+
+export function isCancelDesignImageEditRequest(
+  value: unknown,
+): value is CancelDesignImageEditRequest {
+  return (
+    isRecord(value) &&
+    isStableId(value.requestId) &&
+    hasExactKeys(value, ["requestId"])
+  );
+}
+
+function isEmbeddedEditableImageAsset(value: unknown): value is DesignAsset {
+  return (
+    isDesignAsset(value) &&
+    value.kind === "image" &&
+    /^asset_[a-f0-9]{64}$/.test(value.id) &&
+    (value.mimeType === "image/png" ||
+      value.mimeType === "image/jpeg" ||
+      value.mimeType === "image/webp") &&
+    value.source.type === "data" &&
+    value.source.value.length > 0 &&
+    value.source.value.length <= 24_000_000 &&
+    /^[A-Za-z0-9+/]*={0,2}$/.test(value.source.value) &&
+    value.size !== undefined &&
+    value.size.width > 0 &&
+    value.size.height > 0
   );
 }
 

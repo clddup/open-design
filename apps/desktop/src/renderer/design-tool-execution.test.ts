@@ -23,6 +23,7 @@ import {
   DESIGN_VECTOR_TOOL_NAME,
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
   INTERNAL_IMPORT_SVG_TOOL_NAME,
+  INTERNAL_READ_IMAGE_SOURCE_TOOL_NAME,
   INTERNAL_UPDATE_IMAGE_TOOL_NAME,
 } from "../shared/design-agent-tools";
 import type { RendererDesignToolRequest } from "../shared/design-tool-bridge";
@@ -3227,6 +3228,87 @@ describe("Renderer design tool scope", () => {
           },
         },
       },
+    });
+
+    const prepared = await executeDesignToolRequest(
+      {
+        requestId: "prepare_image_edit_source",
+        call: {
+          toolCallId: "tool_prepare_image_edit_source",
+          toolName: INTERNAL_READ_IMAGE_SOURCE_TOOL_NAME,
+          input: {
+            pageId: "page_welcome",
+            nodeId: "hero_image",
+            expectedAssetId: oldAssetId,
+          },
+        },
+        context: { ...selectionContext, revision: 5 },
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(prepared).toMatchObject({
+      ok: true,
+      result: {
+        observedRevision: 5,
+        content: {
+          kind: "prepared-image-edit-source",
+          expectedAssetId: oldAssetId,
+          asset: { id: oldAssetId, source: { type: "data", value: "b2xk" } },
+        },
+      },
+    });
+
+    const derivedAssetId = `asset_${"c".repeat(64)}`;
+    const derived = await executeDesignToolRequest(
+      {
+        requestId: "commit_image_edit",
+        call: {
+          toolCallId: "tool_commit_image_edit",
+          toolName: INTERNAL_UPDATE_IMAGE_TOOL_NAME,
+          input: {
+            action: "derive-source",
+            label: "Remove hero background",
+            pageId: "page_welcome",
+            nodeId: "hero_image",
+            expectedAssetId: oldAssetId,
+            asset: {
+              id: derivedAssetId,
+              kind: "image",
+              name: "Hero — Background removed.png",
+              mimeType: "image/png",
+              source: { type: "data", value: "ZWRpdGVk" },
+              size: { width: 800, height: 600 },
+              extensions: {},
+            },
+            derivation: {
+              id: "remove_background_derivation",
+              sourceAssetId: oldAssetId,
+              resultAssetId: derivedAssetId,
+              operation: "remove-background",
+              referenceAssetIds: [],
+              extensions: { modelId: "gpt-image-2" },
+            },
+          },
+        },
+        context: { ...selectionContext, revision: 5 },
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(derived).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "derive-source",
+          assetId: derivedAssetId,
+          derivationId: "remove_background_derivation",
+          revision: 6,
+        },
+      },
+    });
+    expect(runtime.getSnapshot().document.nodesById.hero_image).toMatchObject({
+      properties: { assetId: derivedAssetId },
     });
   });
 

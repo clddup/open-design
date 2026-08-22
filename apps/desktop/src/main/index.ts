@@ -8,6 +8,10 @@ import type {
   TrustedToolResult,
 } from "@opendesign/agent-runtime";
 import { JsonlSessionStore } from "@opendesign/session-store";
+import type {
+  DesignAsset,
+  ImageAssetDerivation,
+} from "@opendesign/design-contracts";
 import {
   app,
   BrowserWindow,
@@ -92,6 +96,8 @@ import {
   isRendererDiagnosticReport,
   isAgentAttachmentImport,
   isAgentAttachmentPreviewRequest,
+  isCancelDesignImageEditRequest,
+  isDesignImageEditRequest,
   isLocalePreference,
   isSaveModelProviderProfileRequest,
   isTestModelProviderConnectionRequest,
@@ -126,8 +132,10 @@ import {
   DESIGN_REVIEW_TOOL_NAME,
   EXPORT_SVG_TOOL_NAME,
   EXPORT_RASTER_TOOL_NAME,
+  EDIT_IMAGE_TOOL_NAME,
   IMPORT_SVG_TOOL_NAME,
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
+  INTERNAL_READ_IMAGE_SOURCE_TOOL_NAME,
   GENERATE_IMAGE_TOOL_NAME,
   normalizeDesignApplyToolInput,
   isDesignComponentToolInput,
@@ -138,12 +146,14 @@ import {
   isPageStructureAccessToolInput,
   normalizeDesignVisualReviewToolInput,
   isGenerateImageToolInput,
+  isEditImageToolInput,
   isExportSvgToolInput,
   isExportRasterToolInput,
   isImportSvgToolInput,
   isPlaceImageToolInput,
   isReadImageToolInput,
   isUpdateImageToolInput,
+  isPreparedImageEditSource,
   INTERNAL_UPDATE_IMAGE_TOOL_NAME,
   PLACE_IMAGE_TOOL_NAME,
   READ_IMAGE_TOOL_NAME,
@@ -197,6 +207,7 @@ let projectIpc: ProjectIpcService | null = null;
 let globalTaskCoordinator: GlobalTaskCoordinator | null = null;
 let modelProviderHost: ModelProviderHost | null = null;
 let imageGenerationHost: ImageGenerationHost | null = null;
+const designImageEditControllers = new Map<string, AbortController>();
 let agentAttachmentHost: AgentAttachmentHost | null = null;
 let agentReferenceHost: AgentReferenceHost | null = null;
 let agentSvgExportHost: AgentSvgExportHost | null = null;
@@ -975,6 +986,54 @@ function registerIpc(fontBinaryService: FontBinaryMainService) {
       },
     };
   });
+  ipcMain.handle(
+    channels.editDesignImage,
+    async (event, ...args: unknown[]) => {
+      assertMainRenderer(event);
+      assertArgumentCount(args, 1);
+      const request = args[0];
+      if (!isDesignImageEditRequest(request)) {
+        throw new TypeError("Invalid design image edit request");
+      }
+      if (designImageEditControllers.has(request.requestId)) {
+        throw new Error(`Image edit ${request.requestId} is already running`);
+      }
+      const controller = new AbortController();
+      designImageEditControllers.set(request.requestId, controller);
+      try {
+        const result = await removeImageBackgroundAsset(
+          request.source,
+          "inspector-image-edit",
+          controller.signal,
+        );
+        return {
+          requestId: request.requestId,
+          action: request.action,
+          sourceAssetId: request.expectedAssetId,
+          ...result,
+        };
+      } finally {
+        designImageEditControllers.delete(request.requestId);
+      }
+    },
+  );
+  ipcMain.handle(
+    channels.cancelDesignImageEdit,
+    (event, ...args: unknown[]) => {
+      assertMainRenderer(event);
+      assertArgumentCount(args, 1);
+      const request = args[0];
+      if (!isCancelDesignImageEditRequest(request)) {
+        throw new TypeError("Invalid design image edit cancellation request");
+      }
+      const controller = designImageEditControllers.get(request.requestId);
+      if (!controller) return false;
+      controller.abort(
+        new DOMException("Image editing cancelled", "AbortError"),
+      );
+      return true;
+    },
+  );
   ipcMain.handle(channels.openDesignFile, async (event) => {
     assertMainRenderer(event);
     const window = mainWindow;
@@ -1894,6 +1953,66 @@ void app.whenReady().then(async () => {
         );
         return withDesignDelivery(result, context.runId);
       }
+      if (call.toolName === EDIT_IMAGE_TOOL_NAME) {
+        if (!isEditImageToolInput(call.input)) {
+          throw new TypeError("Invalid edit image tool input");
+        }
+        if (
+          executionContext.mutationTarget.kind === "page" &&
+          executionContext.mutationTarget.pageId !== call.input.pageId
+        ) {
+          throw new Error(
+            "Image edit targets a Page outside the active mutation target",
+          );
+        }
+        globalTaskCoordinator.assertDocumentInspected(context);
+        globalTaskCoordinator.assertVisualReviewBeforeWrite(context);
+        const targetIds = globalTaskCoordinator.resolveMaterialTargetIds(
+          context,
+          [call.input.nodeId],
+        );
+        const prepared = await executeRendererTool({
+          ...call,
+          toolCallId: `${call.toolCallId}_read_source`.slice(0, 256),
+          toolName: INTERNAL_READ_IMAGE_SOURCE_TOOL_NAME,
+          input: {
+            pageId: call.input.pageId,
+            nodeId: call.input.nodeId,
+            expectedAssetId: call.input.expectedAssetId,
+          },
+        });
+        if (!isPreparedImageEditSource(prepared.content)) {
+          throw new TypeError(
+            "Image edit source preparation returned invalid data",
+          );
+        }
+        const source = prepared.content.asset;
+        const derived = await removeImageBackgroundAsset(
+          source,
+          "agent-image-edit",
+          signal,
+        );
+        const result = await executeRendererTool({
+          ...call,
+          toolCallId: `${call.toolCallId}_commit_edit`.slice(0, 256),
+          toolName: INTERNAL_UPDATE_IMAGE_TOOL_NAME,
+          input: {
+            action: "derive-source",
+            label: call.input.label,
+            pageId: call.input.pageId,
+            nodeId: call.input.nodeId,
+            expectedAssetId: call.input.expectedAssetId,
+            asset: derived.asset,
+            derivation: derived.derivation,
+          },
+        });
+        globalTaskCoordinator.recordMaterialDesignWriteCompleted(
+          context.runId,
+          targetIds,
+          result.designRevision?.revision,
+        );
+        return withDesignDelivery(result, context.runId);
+      }
       if (call.toolName === DESIGN_APPLY_TOOL_NAME) {
         if (!normalizeDesignApplyToolInput(call.input)) {
           throw new TypeError("Invalid design apply tool input");
@@ -2236,11 +2355,100 @@ function withDesignDelivery(
   };
 }
 
+async function removeImageBackgroundAsset(
+  source: DesignAsset,
+  importedBy: "agent-image-edit" | "inspector-image-edit",
+  signal: AbortSignal,
+): Promise<{ asset: DesignAsset; derivation: ImageAssetDerivation }> {
+  if (
+    source.kind !== "image" ||
+    source.source.type !== "data" ||
+    (source.mimeType !== "image/png" &&
+      source.mimeType !== "image/jpeg" &&
+      source.mimeType !== "image/webp")
+  ) {
+    throw new TypeError("Image edit source is not a supported embedded raster");
+  }
+  const sourceBytes = Buffer.from(source.source.value, "base64");
+  if (
+    sourceBytes.byteLength === 0 ||
+    sourceBytes.byteLength > 16 * 1024 * 1024 ||
+    sourceBytes.toString("base64") !== source.source.value
+  ) {
+    throw new TypeError("Image edit source has invalid image data");
+  }
+  const edited = await requireImageGenerationHost().removeBackground(
+    {
+      bytes: sourceBytes,
+      mimeType: source.mimeType,
+      name: source.name,
+    },
+    signal,
+  );
+  const bytes = Buffer.from(edited.bytes);
+  const editedNativeImage = nativeImage.createFromBuffer(bytes);
+  const intrinsic = editedNativeImage.getSize();
+  if (
+    intrinsic.width <= 0 ||
+    intrinsic.height <= 0 ||
+    !nativeImageHasTransparentPixels(editedNativeImage.toBitmap())
+  ) {
+    throw new TypeError(
+      "Background removal did not return a valid image with transparent pixels",
+    );
+  }
+  const attachment = await requireAgentAttachmentHost().importImageBytes(
+    `${source.name.replace(/\.[^.]+$/, "")} — Background removed.png`,
+    edited.bytes,
+  );
+  const digest = attachment.attachmentId.slice("image_".length);
+  const asset: DesignAsset = {
+    id: `asset_${digest}`,
+    kind: "image",
+    name: attachment.name,
+    mimeType: attachment.mimeType,
+    source: { type: "data", value: bytes.toString("base64") },
+    size: intrinsic,
+    extensions: { importedBy },
+  };
+  return {
+    asset,
+    derivation: {
+      id: `image_derivation_${crypto.randomUUID()}`.slice(0, 256),
+      sourceAssetId: source.id,
+      resultAssetId: asset.id,
+      operation: "remove-background",
+      referenceAssetIds: [],
+      extensions: {
+        provider: edited.apiFormat,
+        modelId: edited.modelId,
+        ...(edited.providerRequestId
+          ? { providerRequestId: edited.providerRequestId }
+          : {}),
+      },
+    },
+  };
+}
+
+function nativeImageHasTransparentPixels(bitmap: Buffer): boolean {
+  if (bitmap.byteLength === 0 || bitmap.byteLength % 4 !== 0) return false;
+  for (let offset = 3; offset < bitmap.byteLength; offset += 4) {
+    if (bitmap[offset] !== 0xff) return true;
+  }
+  return false;
+}
+
 app.on("before-quit", () => {
   applicationLifecycle.markQuitRequested();
 });
 
 app.on("will-quit", () => {
+  for (const controller of designImageEditControllers.values()) {
+    controller.abort(
+      new DOMException("OpenDesign is shutting down", "AbortError"),
+    );
+  }
+  designImageEditControllers.clear();
   agentHost.stop();
   projectIpc = null;
   globalTaskCoordinator = null;

@@ -83,6 +83,9 @@ export function PropertiesPanel({
   onExportFormatChange,
   onCropImage,
   onReplaceImage,
+  imageEditStatus,
+  onRemoveImageBackground,
+  onCancelImageEdit,
   onSwitchImageSource,
   onUpdateImageFilters,
   onUpdateImagePaintFilters,
@@ -160,6 +163,9 @@ export function PropertiesPanel({
   onExportFormatChange: (format: ExportFormat) => void;
   onCropImage: () => boolean;
   onReplaceImage: () => void;
+  imageEditStatus: "running" | "cancelling" | null;
+  onRemoveImageBackground: () => void;
+  onCancelImageEdit: () => void;
   onSwitchImageSource: (
     nodeId: string,
     assetId: string,
@@ -322,6 +328,9 @@ export function PropertiesPanel({
             onGoToComponentMain={onGoToComponentMain}
             onCropImage={onCropImage}
             onReplaceImage={onReplaceImage}
+            imageEditStatus={imageEditStatus}
+            onRemoveImageBackground={onRemoveImageBackground}
+            onCancelImageEdit={onCancelImageEdit}
             onSwitchImageSource={onSwitchImageSource}
             onUpdateImageFilters={onUpdateImageFilters}
             onUpdateImagePaintFilters={onUpdateImagePaintFilters}

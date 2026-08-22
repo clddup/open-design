@@ -40,10 +40,12 @@ import {
   DESIGN_VECTOR_TOOL_NAME,
   EXPORT_RASTER_TOOL_NAME,
   EXPORT_SVG_TOOL_NAME,
+  EDIT_IMAGE_TOOL_NAME,
   GENERATE_IMAGE_TOOL_NAME,
   IMPORT_SVG_TOOL_NAME,
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
   INTERNAL_IMPORT_SVG_TOOL_NAME,
+  INTERNAL_READ_IMAGE_SOURCE_TOOL_NAME,
   INTERNAL_UPDATE_IMAGE_TOOL_NAME,
   PAGE_STRUCTURE_ACCESS_TOOL_NAME,
   PLACE_IMAGE_TOOL_NAME,
@@ -52,10 +54,13 @@ import {
 } from "./design-agent-tool-names";
 import {
   GENERATE_IMAGE_TOOL_INPUT_SCHEMA,
+  EDIT_IMAGE_TOOL_INPUT_SCHEMA,
   PLACE_IMAGE_TOOL_INPUT_SCHEMA,
   READ_IMAGE_TOOL_INPUT_SCHEMA,
   UPDATE_IMAGE_TOOL_INPUT_SCHEMA,
   isGenerateImageToolInput,
+  isEditImageToolInput,
+  isInternalReadImageSourceToolInput,
   isInternalUpdateImageToolInput,
   isPlaceImageToolInput,
   isUpdateImageToolInput,
@@ -214,24 +219,31 @@ export type {
 } from "./design-plan-component-strategy";
 export {
   DESIGN_IMAGE_PLACEMENT_SCHEMA,
+  EDIT_IMAGE_TOOL_INPUT_SCHEMA,
   GENERATE_IMAGE_TOOL_INPUT_SCHEMA,
   PLACE_IMAGE_TOOL_INPUT_SCHEMA,
   READ_IMAGE_TOOL_INPUT_SCHEMA,
   UPDATE_IMAGE_TOOL_INPUT_SCHEMA,
+  isEditImageToolInput,
   isGenerateImageToolInput,
+  isInternalReadImageSourceToolInput,
   isInternalUpdateImageToolInput,
   isPlaceImageToolInput,
   isReadImageToolInput,
+  isPreparedImageEditSource,
   isUpdateImageToolInput,
 } from "./design-agent-image-tools";
 export type {
+  EditImageToolInput,
   GenerateImageToolInput,
   ImageGenerationOutputFormat,
   ImageGenerationQuality,
   ImageGenerationSize,
   InternalUpdateImageToolInput,
+  InternalReadImageSourceToolInput,
   PlaceImageToolInput,
   ReadImageToolInput,
+  PreparedImageEditSource,
   UpdateImageToolInput,
 } from "./design-agent-image-tools";
 export {
@@ -429,6 +441,18 @@ export const DESIGN_AGENT_TOOL_SPECS = [
       "Update existing image content through OpenDesign's non-destructive image workflow. set-placement and set-filters target an Image node. set-paint-filters targets one exact image Fill or Stroke using the inspected paintField, paintIndex, and complete expectedPaint so concurrent paint reordering or mutation fails closed; it never rewrites a guessed paint list. Both filter actions apply sparse exposure, contrast, saturation, temperature, tint, highlights, and shadows values in the -1..1 range; missing fields are neutral and an empty object resets all adjustments. replace-source consumes an image attachment already authorized for this run, creates a new durable content-addressed asset and a recoverable source-family derivation, preserves placement and filters unless replacements are supplied, and atomically updates the Image node. switch-source changes the node to an existing asset in the inspected source family and requires expectedAssetId so stale requests fail closed. Targets are explicit Page and node IDs returned by inspection, never the live selection. This tool does not perform pixel generation, inpainting, background removal, or destructive file edits.",
     inputSchema: UPDATE_IMAGE_TOOL_INPUT_SCHEMA,
     risk: "design_write" as const,
+    approval: "never" as const,
+  },
+  {
+    name: EDIT_IMAGE_TOOL_NAME,
+    modelDisclosure: {
+      bootstrap: "deferred" as const,
+      role: "material-write" as const,
+    },
+    description:
+      "Apply a trusted AI image edit to one inspected Image node. The first supported action is remove-background, which preserves the foreground subject and returns a transparent PNG. pageId, nodeId, and expectedAssetId must come from current inspection. The host reads the current source without exposing image bytes to the model, calls the independently configured global image service, then atomically commits the derived asset, typed source history, and node reference only if the node still uses expectedAssetId. Cancellation, provider failure, invalid transparency, or stale targets produce no design revision.",
+    inputSchema: EDIT_IMAGE_TOOL_INPUT_SCHEMA,
+    risk: "external" as const,
     approval: "never" as const,
   },
   {
@@ -649,6 +673,7 @@ export function validateDesignAgentToolInput(
   }
   if (toolName === PLACE_IMAGE_TOOL_NAME) return isPlaceImageToolInput(input);
   if (toolName === UPDATE_IMAGE_TOOL_NAME) return isUpdateImageToolInput(input);
+  if (toolName === EDIT_IMAGE_TOOL_NAME) return isEditImageToolInput(input);
   if (toolName === IMPORT_SVG_TOOL_NAME) return isImportSvgToolInput(input);
   if (toolName === EXPORT_SVG_TOOL_NAME) return isExportSvgToolInput(input);
   if (toolName === EXPORT_RASTER_TOOL_NAME) {
@@ -659,6 +684,9 @@ export function validateDesignAgentToolInput(
   }
   if (toolName === INTERNAL_UPDATE_IMAGE_TOOL_NAME) {
     return isInternalUpdateImageToolInput(input);
+  }
+  if (toolName === INTERNAL_READ_IMAGE_SOURCE_TOOL_NAME) {
+    return isInternalReadImageSourceToolInput(input);
   }
   if (toolName === DESIGN_HIERARCHY_TOOL_NAME) {
     return isDesignHierarchyToolInput(input);

@@ -4,7 +4,7 @@
 
 能力清单版本：`1` · 更新日期：2026-08-22 · 文档协议：`1.42.0` · 画布基线：`leafer-editor@2.2.9`
 
-当前状态：可用 0 项，降级可用 21 项，不可用 1 项。只有必需表面全部可用，并同时具备自动化与实机证据时，能力才允许标记为“可用”。
+当前状态：可用 0 项，降级可用 22 项，不可用 0 项。只有必需表面全部可用，并同时具备自动化与实机证据时，能力才允许标记为“可用”。
 
 ## 基础工作流
 
@@ -171,16 +171,18 @@
 - 专业参照：[官方说明](docs/adr/0089-direct-image-crop-session.md)
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360040675194-Crop-an-image)
 
-### AI 图片编辑 — 不可用
+### AI 图片编辑 — 降级可用
 
 基于一张或多张源图，通过蒙版、局部重绘、扩图、背景替换、重打光或风格统一生成可追溯变体。
 
 - ID：`image.ai-editing`
-- 实现方：Not implemented
-- 表面：contract=unavailable；runtime=unavailable；human=unavailable；agent=unavailable；render=unavailable；export=unavailable
-- 证据：自动化 0 项；实机 0 项
-- 限制：当前全局 adapter 只能生成新图；后续编辑必须创建带来源追踪的派生 asset，绝不能覆盖原始 asset。
+- 实现方：ImageGenerationHost openai-images edit adapter + EditorRuntime recoverable derivation planner
+- 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=available
+- 证据：自动化 6 项；实机 0 项
+- 限制：内嵌 PNG、JPEG 与 WebP Image 节点已可通过全局 openai-images 服务去背景；局部重绘、扩图、背景替换、重打光、风格统一、Image Paint 编辑与多图编辑仍未完成。
+- 专业参照：[官方说明](docs/adr/0133-trusted-remove-background-image-editing.md)
 - 专业参照：[官方说明](https://developers.openai.com/api/docs/guides/image-generation)
+- 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/24004542669463-Make-or-edit-an-image-with-AI)
 
 ## 文字
 

@@ -175,6 +175,9 @@ function renderPanel(
           onExportSvg={onExportSvg}
           onCropImage={vi.fn(() => true)}
           onReplaceImage={vi.fn()}
+          imageEditStatus={null}
+          onRemoveImageBackground={vi.fn()}
+          onCancelImageEdit={vi.fn()}
           onSwitchImageSource={vi.fn()}
           onUpdateImageFilters={onUpdateImageFilters}
           onUpdateImagePaintFilters={onUpdateImagePaintFilters}

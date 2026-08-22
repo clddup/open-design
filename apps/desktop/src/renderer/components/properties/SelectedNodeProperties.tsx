@@ -123,6 +123,9 @@ export function SelectedNodeProperties({
   onGoToComponentMain,
   onCropImage,
   onReplaceImage,
+  imageEditStatus,
+  onRemoveImageBackground,
+  onCancelImageEdit,
   onSwitchImageSource,
   onUpdateImageFilters,
   onUpdateImagePaintFilters,
@@ -186,6 +189,9 @@ export function SelectedNodeProperties({
   onGoToComponentMain: () => void;
   onCropImage: () => boolean;
   onReplaceImage: () => void;
+  imageEditStatus: "running" | "cancelling" | null;
+  onRemoveImageBackground: () => void;
+  onCancelImageEdit: () => void;
   onSwitchImageSource: (
     nodeId: string,
     assetId: string,
@@ -947,6 +953,9 @@ export function SelectedNodeProperties({
           onFiltersChange={onUpdateImageFilters}
           onCrop={onCropImage}
           onReplace={onReplaceImage}
+          editStatus={imageEditStatus}
+          onRemoveBackground={onRemoveImageBackground}
+          onCancelEdit={onCancelImageEdit}
           onSourceChange={onSwitchImageSource}
         />
       )}

@@ -21,6 +21,7 @@ export const READ_IMAGE_TOOL_NAME = "opendesign_read_image";
 export const GENERATE_IMAGE_TOOL_NAME = "opendesign_generate_image";
 export const PLACE_IMAGE_TOOL_NAME = "opendesign_place_image";
 export const UPDATE_IMAGE_TOOL_NAME = "opendesign_update_image";
+export const EDIT_IMAGE_TOOL_NAME = "opendesign_edit_image";
 export const IMPORT_SVG_TOOL_NAME = "opendesign_import_svg";
 export const EXPORT_SVG_TOOL_NAME = "opendesign_export_svg";
 export const EXPORT_RASTER_TOOL_NAME = "opendesign_export_raster";
@@ -28,4 +29,6 @@ export const INTERNAL_DESIGN_APPLY_TOOL_NAME =
   "opendesign_internal_apply_transaction";
 export const INTERNAL_UPDATE_IMAGE_TOOL_NAME =
   "opendesign_internal_update_image";
+export const INTERNAL_READ_IMAGE_SOURCE_TOOL_NAME =
+  "opendesign_internal_read_image_source";
 export const INTERNAL_IMPORT_SVG_TOOL_NAME = "opendesign_internal_import_svg";

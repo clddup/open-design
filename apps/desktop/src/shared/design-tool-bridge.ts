@@ -14,6 +14,7 @@ import {
 } from "./design-plan-quality-profile";
 import {
   DESIGN_CAPTURE_TOOL_NAME,
+  isPreparedImageEditSource,
   isPreparedAgentRasterExport,
   validateDesignAgentToolInput,
 } from "./design-agent-tools";
@@ -427,6 +428,7 @@ function isTrustedToolResult(value: unknown): value is TrustedToolResult {
   if (
     !record(value) ||
     (!isPreparedAgentRasterExport(value.content) &&
+      !isPreparedImageEditSource(value.content) &&
       !jsonSizeWithin(value.content, 4_000_000))
   )
     return false;
