@@ -72,7 +72,7 @@ describe("DiagnosticNotifications", () => {
     expect(onDismiss).toHaveBeenCalledWith(event.eventId);
   });
 
-  it("leaves task-scoped diagnostics in the Agent timeline instead of duplicating a toast", () => {
+  it("renders the exact event list supplied by the diagnostics owner", () => {
     renderNotifications(vi.fn(), [
       {
         ...event,
@@ -84,17 +84,6 @@ describe("DiagnosticNotifications", () => {
       },
     ]);
 
-    expect(
-      screen.queryByRole("complementary", { name: "System notifications" }),
-    ).not.toBeInTheDocument();
-
-    renderNotifications(vi.fn(), [
-      {
-        ...event,
-        eventId: "diagnostic_global",
-        context: { requestId: "request_global" },
-      },
-    ]);
     expect(
       screen.getByRole("complementary", { name: "System notifications" }),
     ).toBeInTheDocument();

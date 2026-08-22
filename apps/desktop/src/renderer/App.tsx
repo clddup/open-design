@@ -10,16 +10,13 @@ import {
   useState,
   type CSSProperties,
 } from "react";
-import type { DiagnosticEvent, ThemePreference } from "../shared/desktop-api";
+import type { ThemePreference } from "../shared/desktop-api";
 import { AgentTimeline } from "./components/AgentTimeline";
 import { ConversationDeleteDialog } from "./components/ConversationDeleteDialog";
 import { ConversationHome } from "./components/ConversationHome";
 import { Canvas } from "./components/Canvas";
 import { CanvasSelectionActions } from "./components/CanvasSelectionActions";
-import {
-  DiagnosticNotifications,
-  isTaskScopedDiagnostic,
-} from "./components/DiagnosticNotifications";
+import { DiagnosticNotifications } from "./components/DiagnosticNotifications";
 import { DesignFileTabs } from "./components/DesignFileTabs";
 import { LeftSidebar } from "./components/LeftSidebar";
 import { RenameLayersDialog } from "./components/RenameLayersDialog";
@@ -50,6 +47,7 @@ import { useConversationNavigationController } from "./features/agent-conversati
 import { useProjectNavigationController } from "./features/project/use-project-navigation-controller";
 import { useProjectWorkspaceState } from "./features/project/use-project-workspace-state";
 import { useCanvasWorkspaceController } from "./features/canvas/use-canvas-workspace-controller";
+import { useDiagnosticNotificationsController } from "./features/diagnostics/use-diagnostic-notifications-controller";
 import { layoutInspectorMode } from "./features/editor/auto-layout-shortcut";
 import { useDocumentCommandControllers } from "./use-document-command-controllers";
 import { useLayerCommandController } from "./features/editor/use-layer-command-controller";
@@ -146,9 +144,8 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
     setConversations,
     setPendingConversationDeletionId,
   } = useConversationLifecycleState({ setWorkspaceError, t });
-  const [diagnosticEvents, setDiagnosticEvents] = useState<DiagnosticEvent[]>(
-    [],
-  );
+  const { dismiss: dismissDiagnostic, events: diagnosticEvents } =
+    useDiagnosticNotificationsController();
   const settingsReturnView = useRef<Exclude<AppView, "settings">>("workspace");
   const transactionCounter = useRef(0);
   useProfessionalFixtureSmoke({
@@ -230,38 +227,6 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
     void window.desktop
       ?.getPlatformInfo()
       .then((info) => setPlatform(info.platform));
-  }, []);
-
-  useEffect(() => {
-    const desktop = window.desktop;
-    if (!desktop || typeof desktop.onDiagnosticEvent !== "function") return;
-    let active = true;
-    const receive = (event: DiagnosticEvent) => {
-      if (
-        !active ||
-        event.presentation !== "toast" ||
-        isTaskScopedDiagnostic(event)
-      ) {
-        return;
-      }
-      setDiagnosticEvents((current) =>
-        [
-          ...current.filter((candidate) => candidate.eventId !== event.eventId),
-          event,
-        ].slice(-4),
-      );
-    };
-    const unsubscribe = desktop.onDiagnosticEvent(receive);
-    if (typeof desktop.getPendingDiagnostics === "function") {
-      void desktop
-        .getPendingDiagnostics()
-        .then((events) => events.forEach(receive))
-        .catch(() => undefined);
-    }
-    return () => {
-      active = false;
-      unsubscribe();
-    };
   }, []);
 
   useEffect(() => {
@@ -622,12 +587,6 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
     t,
     view,
   });
-
-  const dismissDiagnostic = useCallback((eventId: string) => {
-    setDiagnosticEvents((current) =>
-      current.filter((event) => event.eventId !== eventId),
-    );
-  }, []);
 
   const notifications = (
     <DiagnosticNotifications

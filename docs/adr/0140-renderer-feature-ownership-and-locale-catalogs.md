@@ -47,10 +47,11 @@ controller 可以组合纯 helper 和子 controller，但必须拥有完整业�
 
 第五个切片将 Canvas workspace 生命周期迁入独立 controller：viewport zoom/fit 始终在操作时读取当前 `EditorRuntime`，以 viewport 中心为缩放锚点，并从当前 Page/selection 权威几何计算 fit；图层 hover、文字范围/编辑样式、图片 crop/area/expand 入口和 Leafer text provider epoch 都是可丢弃 session bridge，不进入文档或 history。Figma 风格工具、选择、层级、布尔、蒙版、图层状态、缩放与面板快捷键由同一最新 action context 路由；文件切换会解绑旧 Runtime，输入/组合事件与非 Editor 视图不会触发后台画布操作。Canvas 内部 Enter/Tab/Escape 编辑 session 继续在 Canvas host 上优先处理并阻止冒泡，不建立第二套 selection。
 
+第六个切片将全局 Diagnostic notification 生命周期迁入 Diagnostics feature。controller 先订阅 live event，再读取 pending，并以 `occurredAt + eventId` 单调归并不可变事件；相同 ID 去重，只保留最近四条。`silent` 与同时绑定 Conversation/Run 的任务诊断在唯一入口过滤：前者不展示，后者继续由 Agent Timeline 的结构化事件与恢复语义承载，不重复弹全局 toast。组件只渲染 controller 已投影的精确列表并提供 copy/dismiss；卸载后取消订阅并忽略迟到 pending，不复制 Main diagnostic journal 或伪造恢复动作。
+
 后续按以下顺序继续：
 
-1. Diagnostics；
-2. 将剩余 core catalog 按上述 feature 所有权迁移。
+1. 将剩余 core catalog 按上述 feature 所有权迁移。
 
 每个切片保持产品行为，补定向 controller 测试和少量 App 接线测试。需要改变产品契约时单独记录 ADR，不借架构迁移静默改变行为。
 
@@ -70,3 +71,4 @@ controller 可以组合纯 helper 和子 controller，但必须拥有完整业�
 - i18n 中英文 key 完整性、插值和现有 Timeline/Main 翻译测试。
 - Project controller 定向测试覆盖复合 Project/File 身份、clean local placeholder 替换门禁、跨 Project 保存、重命名响应身份校验，以及 autosave 成功/失败归并；完整 App 测试继续覆盖 Workspace/Project/Editor 视图接线和关闭前 flush。
 - Canvas workspace controller 定向测试覆盖中心锚点缩放、Page/selection fit、Editor/输入门禁、Design File Runtime 切换和 disposable session bridge；完整 App 测试继续覆盖 macOS/Windows Figma 风格快捷键、Canvas 内部编辑优先级、状态栏和面板接线。
+- Diagnostics controller 定向测试覆盖 silent/task scope 过滤、pending/live 顺序、Event ID 去重、有界队列、dismiss 与卸载竞态；Notification 组件测试只负责语义呈现、copy、自动/人工 dismiss 和 placement，App 测试继续覆盖工作台接线。
