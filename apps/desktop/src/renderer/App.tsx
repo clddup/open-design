@@ -13,11 +13,7 @@ import {
   getSelectionBounds,
   screenToDocument,
 } from "@opendesign/editor-runtime";
-import type {
-  ConversationDescriptor,
-  GlobalTaskProjection,
-  ProjectManifest,
-} from "@opendesign/workspace-contracts";
+import type { ProjectManifest } from "@opendesign/workspace-contracts";
 import { MessageProvider, ResizeHandle, useMessage } from "@opendesign/ui";
 import {
   useCallback,
@@ -76,6 +72,8 @@ import { useImportExportWorkflow } from "./features/import-export/use-import-exp
 import { useImageEditWorkflow } from "./features/image/use-image-edit-workflow";
 import { useWorkbenchLayoutController } from "./features/workbench/use-workbench-layout-controller";
 import { useAgentConversationRuntime } from "./features/agent-conversation/use-agent-conversation-runtime";
+import { useConversationLifecycleState } from "./features/agent-conversation/use-conversation-lifecycle-state";
+import { useConversationNavigationController } from "./features/agent-conversation/use-conversation-navigation-controller";
 import { layoutInspectorMode } from "./features/editor/auto-layout-shortcut";
 import { useDocumentCommandControllers } from "./use-document-command-controllers";
 import { useLayerCommandController } from "./features/editor/use-layer-command-controller";
@@ -148,26 +146,24 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
     utilityTab,
     utilityWidth,
   } = useWorkbenchLayoutController();
-  const [conversations, setConversations] = useState<ConversationDescriptor[]>(
-    [],
-  );
-  const [activeConversationId, setActiveConversationId] = useState<
-    string | null
-  >(null);
-  const [conversationOpenIssue, setConversationOpenIssue] = useState<
-    | "project-unavailable"
-    | "design-file-unavailable"
-    | "page-unavailable"
-    | "no-target"
-    | null
-  >(null);
-  const [pendingConversationDeletionId, setPendingConversationDeletionId] =
-    useState<string | null>(null);
-  const [conversationDeletionBusy, setConversationDeletionBusy] =
-    useState(false);
-  const [conversationDeletionError, setConversationDeletionError] = useState<
-    string | null
-  >(null);
+  const {
+    activeConversation,
+    activeConversationId,
+    cancelDeleteConversation,
+    conversationDeletionBusy,
+    conversationDeletionError,
+    conversationOpenIssue,
+    conversations,
+    pendingConversationDeletion,
+    pendingConversationDeletionId,
+    requestDeleteConversation,
+    selectConversation,
+    setConversationDeletionBusy,
+    setConversationDeletionError,
+    setConversationOpenIssue,
+    setConversations,
+    setPendingConversationDeletionId,
+  } = useConversationLifecycleState({ setWorkspaceError, t });
   const [editorError, setEditorError] = useState<string | null>(null);
   const [layerHoverTarget, setLayerHoverTarget] =
     useState<LayerHoverTarget | null>(null);
@@ -348,10 +344,6 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
           conversation.lifecycle === "active",
       )
     : [];
-  const activeConversation =
-    conversations.find(
-      (conversation) => conversation.conversationId === activeConversationId,
-    ) ?? null;
   const {
     activeAgentState,
     activeCanvasAgentRunId,
@@ -391,18 +383,6 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
             "recent_projects_load_failed",
             error,
             t("error.loadRecentProjects"),
-          ),
-        );
-      });
-    void window.desktop
-      ?.listConversations()
-      .then(setConversations)
-      .catch((error: unknown) => {
-        setWorkspaceError(
-          reportRendererError(
-            "conversations_load_failed",
-            error,
-            t("error.loadConversations"),
           ),
         );
       });
@@ -979,11 +959,11 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
             conversation.filedProjectId === manifest.projectId,
         )?.conversationId;
       if (conversationId) {
-        setActiveConversationId(conversationId);
+        selectConversation(conversationId);
         void requestConversationHistory(conversationId);
       }
     },
-    [conversations, requestConversationHistory],
+    [conversations, requestConversationHistory, selectConversation],
   );
 
   const createProject = useCallback(
@@ -1110,55 +1090,6 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
     [t],
   );
 
-  const createConversation = useCallback(
-    async (title: string) => {
-      if (!window.desktop || !activeProject) return false;
-      setWorkspaceBusy(true);
-      setWorkspaceError(null);
-      try {
-        const conversation = await window.desktop.createConversation({
-          conversationId: createConversationId(),
-          filedProjectId: activeProject.projectId,
-          title: title.trim(),
-        });
-        setConversations((current) => [
-          conversation,
-          ...current.filter(
-            (candidate) =>
-              candidate.conversationId !== conversation.conversationId,
-          ),
-        ]);
-        setActiveConversationId(conversation.conversationId);
-        void requestConversationHistory(conversation.conversationId);
-        return true;
-      } catch (error) {
-        setWorkspaceError(
-          reportRendererError(
-            "conversation_create_failed",
-            error,
-            t("error.createConversation"),
-            { projectId: activeProject.projectId },
-          ),
-        );
-        return false;
-      } finally {
-        setWorkspaceBusy(false);
-      }
-    },
-    [activeProject, requestConversationHistory, t],
-  );
-
-  const requestDeleteConversation = useCallback((conversationId: string) => {
-    setConversationDeletionError(null);
-    setPendingConversationDeletionId(conversationId);
-  }, []);
-
-  const cancelDeleteConversation = useCallback(() => {
-    if (conversationDeletionBusy) return;
-    setConversationDeletionError(null);
-    setPendingConversationDeletionId(null);
-  }, [conversationDeletionBusy]);
-
   const openProjectTarget = useCallback(
     async (target: {
       projectId: string;
@@ -1224,136 +1155,31 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
     ],
   );
 
-  const openConversation = useCallback(
-    async (conversation: ConversationDescriptor) => {
-      if (!window.desktop || conversation.lifecycle !== "active") return;
-      setActiveConversationId(conversation.conversationId);
-      void requestConversationHistory(conversation.conversationId);
-      setWorkspaceBusy(true);
-      setWorkspaceError(null);
-      try {
-        const context = await window.desktop.resolveConversationOpenContext({
-          conversationId: conversation.conversationId,
-        });
-        if (context.kind === "target-unavailable") {
-          setConversationOpenIssue(context.reason);
-          setView("conversation");
-          return;
-        }
-        await openProjectTarget(context.target);
-        await refreshRecentProjects();
-      } catch (error) {
-        setConversationOpenIssue("project-unavailable");
-        setView("conversation");
-        setWorkspaceError(
-          reportRendererError(
-            "conversation_open_failed",
-            error,
-            t("error.openConversation"),
-            {
-              conversationId: conversation.conversationId,
-            },
-          ),
-        );
-      } finally {
-        setWorkspaceBusy(false);
-      }
-    },
-    [openProjectTarget, refreshRecentProjects, requestConversationHistory, t],
-  );
-
-  const deleteConversation = useCallback(
-    async (conversationId: string) => {
-      const desktop = window.desktop;
-      const target = conversations.find(
-        (conversation) => conversation.conversationId === conversationId,
-      );
-      if (!desktop || !target) return false;
-      setConversationDeletionBusy(true);
-      setConversationDeletionError(null);
-      try {
-        await desktop.deleteConversation({ conversationId });
-        const replacement = conversations.find(
-          (conversation) =>
-            conversation.conversationId !== conversationId &&
-            conversation.lifecycle === "active",
-        );
-        setConversations((current) =>
-          current.filter(
-            (conversation) => conversation.conversationId !== conversationId,
-          ),
-        );
-        forgetConversation(conversationId);
-        setActiveConversationId((current) =>
-          current === conversationId
-            ? (replacement?.conversationId ?? null)
-            : current,
-        );
-        if (
-          activeConversationId === conversationId &&
-          view === "conversation"
-        ) {
-          setConversationOpenIssue(null);
-          setView("workspace");
-        }
-        if (replacement) {
-          void requestConversationHistory(replacement.conversationId);
-        }
-        setPendingConversationDeletionId(null);
-        return true;
-      } catch (error) {
-        setConversationDeletionError(
-          reportRendererError(
-            "conversation_delete_failed",
-            error,
-            t("error.deleteConversation"),
-            { conversationId },
-          ),
-        );
-        return false;
-      } finally {
-        setConversationDeletionBusy(false);
-      }
-    },
-    [
-      activeConversationId,
-      conversations,
-      forgetConversation,
-      requestConversationHistory,
-      t,
-      view,
-    ],
-  );
-
-  const openGlobalTask = useCallback(
-    async (task: GlobalTaskProjection) => {
-      if (!window.desktop) return;
-      setActiveConversationId(task.conversationId);
-      void requestConversationHistory(task.conversationId);
-      setWorkspaceBusy(true);
-      setWorkspaceError(null);
-      try {
-        await openProjectTarget(task.targetSet.primaryTarget);
-        await refreshRecentProjects();
-      } catch (error) {
-        setWorkspaceError(
-          reportRendererError(
-            "agent_task_open_failed",
-            error,
-            t("error.openAgentTask"),
-            {
-              projectId: task.targetSet.primaryTarget.projectId,
-              conversationId: task.conversationId,
-              runId: task.runId,
-            },
-          ),
-        );
-      } finally {
-        setWorkspaceBusy(false);
-      }
-    },
-    [openProjectTarget, refreshRecentProjects, requestConversationHistory, t],
-  );
+  const {
+    createConversation,
+    deleteConversation,
+    openConversation,
+    openGlobalTask,
+  } = useConversationNavigationController({
+    activeConversationId,
+    activeProject,
+    conversations,
+    forgetConversation,
+    openProjectTarget,
+    refreshRecentProjects,
+    requestConversationHistory,
+    selectConversation,
+    setConversationDeletionBusy,
+    setConversationDeletionError,
+    setConversationOpenIssue,
+    setConversations,
+    setPendingConversationDeletionId,
+    setWorkspaceBusy,
+    setWorkspaceError,
+    showView: setView,
+    t,
+    view,
+  });
 
   const renameProjectDesignFile = useCallback(
     async (projectId: string, designFileId: string, nextName: string) => {
@@ -1544,11 +1370,6 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
       placement={view === "editor" ? "editor" : "window"}
     />
   );
-  const pendingConversationDeletion =
-    conversations.find(
-      (conversation) =>
-        conversation.conversationId === pendingConversationDeletionId,
-    ) ?? null;
   const conversationDeleteDialog = (
     <ConversationDeleteDialog
       busy={conversationDeletionBusy}
@@ -2189,8 +2010,4 @@ function isEditableTarget(target: EventTarget | null) {
 
 function createProjectId() {
   return `project_${crypto.randomUUID().replaceAll("-", "")}`;
-}
-
-function createConversationId() {
-  return `conversation_${crypto.randomUUID().replaceAll("-", "")}`;
 }

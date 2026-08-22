@@ -287,7 +287,7 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 - [x] 完成可信重打光垂直切片：`DesignDocument 1.44.0` 与 Image Service contract 8 新增独立 `relight` derivation 和五个 provider-independent lighting preset。Inspector 与 Agent 只提交 typed preset；Main 追加固定保主体、构图、材质和文字的指令，拒绝 prompt/reference/mask，结果通过 `expectedAssetId` 以一笔事务写入并保持节点几何、placement、filters、圆角和层级。取消、失败、返回不匹配或 stale 零 revision，来源可切换并一次 Undo。见 ADR-0139。
 - 扩展已建立的 Image service：继续支持带提示词的局部重绘和风格统一，并复用已完成的来源谱系；继续补齐大图按需加载、去重与资源生命周期。任何编辑都不得覆盖原始 asset。
 
-- 按 ADR-0140 继续收口 Renderer feature 所有权：首个切片已抽出 Image workflow 与 Workbench layout controller，并将 i18n registry、语言 catalog 和 Image feature 文案分层；第二个切片已抽出 Agent Conversation runtime，统一 history request 去重、live/durable 单调合并、Run→Design File retention、事件订阅、提交/停止/审批和 Global Task 刷新，并用纯 state 测试锁定消息顺序与历史裁剪。后续依次迁移 Conversation CRUD/navigation、Project/Design File navigation、Canvas viewport/session/shortcut 与 Diagnostics。验收依据是完整状态机所有权、依赖方向和定向测试，不使用机械源码行数预算。
+- 按 ADR-0140 继续收口 Renderer feature 所有权：首个切片已抽出 Image workflow 与 Workbench layout controller，并将 i18n registry、语言 catalog 和 Image feature 文案分层；第二个切片已抽出 Agent Conversation runtime，统一 history request 去重、live/durable 单调合并、Run→Design File retention、事件订阅、提交/停止/审批和 Global Task 刷新，并用纯 state 测试锁定消息顺序与历史裁剪；第三个切片已建立唯一 Conversation lifecycle state，并迁移初始加载、活动身份、删除确认、create/open/delete、只读 target fallback 和 Global Task 导航。后续依次迁移 Project target 恢复与 Project/Design File navigation、Canvas viewport/session/shortcut 与 Diagnostics。验收依据是完整状态机所有权、依赖方向和定向测试，不使用机械源码行数预算。
 - 扩展 P0-B 已建立的专业位图导出，补海报交付所需的高级颜色、资源和格式保真；导出继续读取 DesignDocument 和受控资源，不能把当前画布截图当作交付产物。
 - 为人工属性面板和 Agent 增加文字、裁剪、替换、调整和导出的语义命令；长任务必须展示进度、支持取消并返回稳定产物或明确失败。
 

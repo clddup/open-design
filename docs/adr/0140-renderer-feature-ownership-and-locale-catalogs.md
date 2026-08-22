@@ -41,15 +41,14 @@ controller 可以组合纯 helper 和子 controller，但必须拥有完整业�
 
 ### 渐进迁移顺序
 
-本决策首个切片抽出 Image workflow 与 Workbench layout controller，并建立分语言 catalog 和 Image feature 文案。第二个切片将 Agent Conversation runtime 抽为独立 controller：该 controller 独占 history request 去重与 debounce、live/durable 单调合并、Run→Design File retention、Agent event 订阅、乐观用户消息、提交/停止/审批和 Global Task 刷新；无副作用的消息追加、历史裁剪、Conversation activity 排序与 selection scope 进入同 feature 的纯 state 模块。App 只提供活动 Conversation、Page/Document/Workspace 身份和 UI 错误出口，Conversation CRUD/navigation 暂时保留在 App，等待下一切片整体迁移。
+本决策首个切片抽出 Image workflow 与 Workbench layout controller，并建立分语言 catalog 和 Image feature 文案。第二个切片将 Agent Conversation runtime 抽为独立 controller：该 controller 独占 history request 去重与 debounce、live/durable 单调合并、Run→Design File retention、Agent event 订阅、乐观用户消息、提交/停止/审批和 Global Task 刷新；无副作用的消息追加、历史裁剪、Conversation activity 排序与 selection scope 进入同 feature 的纯 state 模块。第三个切片进一步建立唯一 Conversation lifecycle state，并将初始加载、活动身份、删除确认状态、create/open/delete、只读 target fallback 和 Global Task 导航迁入 feature controller。App 只提供 Project target 打开能力、活动 Project 和 Workspace shell view 出口，不再直接拥有 Conversation 异步生命周期。
 
 后续按以下顺序继续：
 
-1. Conversation CRUD/navigation 与 Project target 恢复；
-2. Project/Design File navigation 与 autosave；
-3. Canvas viewport/session/shortcut；
-4. Diagnostics；
-5. 将剩余 core catalog 按上述 feature 所有权迁移。
+1. Project target 恢复与 Project/Design File navigation、autosave；
+2. Canvas viewport/session/shortcut；
+3. Diagnostics；
+4. 将剩余 core catalog 按上述 feature 所有权迁移。
 
 每个切片保持产品行为，补定向 controller 测试和少量 App 接线测试。需要改变产品契约时单独记录 ADR，不借架构迁移静默改变行为。
 
