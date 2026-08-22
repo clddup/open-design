@@ -7,16 +7,14 @@ description: Turn a UI brief into a usable task hierarchy, semantic structure, s
 
 Use this skill only for `deliverable=ui`. Preserve the user's product semantics and do not invent features to make a screen look richer.
 
-Define the primary user job and arrange information in the order needed to complete it. Make the primary action, current state, navigation context, and recovery path legible without forcing recall. Use progressive disclosure for secondary or advanced controls.
+Define the primary user job and classify the current surface by success: `persuade` for deciding, `operate` for completing a task, `read` for understanding, or `experience` when the work leads. Classify the surface, not the product: a design tool's landing page is persuade; its editor is operate. Arrange information in task order and expose the primary action, current state, navigation context, and recovery without forcing recall.
 
-Scale the composition for the delivery viewport, not for an enlarged editor zoom. At fit-to-artboard size, labels remain readable, controls do not collapse into texture, and the primary task is not stranded inside a small card surrounded by decorative emptiness. Use realistic copy lengths and reserve dense micro-labels for information the user genuinely needs.
+Operate favors familiar affordances, scan speed, stable density, complete states, keyboard/focus behavior, and restrained state motion. Persuade needs a clear argument and relevant subject evidence. Read prioritizes navigation, measure, and comprehension. Experience lets the artifact lead without losing orientation. Product character comes from precise details, not unfamiliar controls.
 
-Plan realistic content and the states that materially affect the composition: loading, empty, validation, error, success, disabled, selected, focus, and offline only when relevant. A polished happy-path mockup is not complete UX evidence.
+Design for the delivery viewport, not enlarged editor zoom. At fit-to-artboard size, labels remain readable, controls do not become texture, realistic copy fits, and the task is not stranded in a small card amid decorative emptiness. Use progressive disclosure for secondary controls.
 
-Choose components from semantic reuse, stable identity, centralized updates, and controlled variation. A repeated visual shape is not automatically a component; a brand mark, field, control, navigation item, or content module with one durable identity often is. Preserve meaningful nested groups for one-off composites.
+Plan only relevant states—loading, empty, validation, error, success, disabled, selected, focus, or offline—and show recovery. A polished happy path alone is not complete UX evidence.
 
-Inspect the current Design File's component catalog, styles, and variables before creating a parallel system. Reuse a catalog Component only when its documented semantic job and variant/property surface fit the requested object; create a linked Instance and configure supported properties instead of rebuilding its primitive layers. Visual similarity alone is insufficient, and a missing fit is a reason to create a deliberate new Main or ordinary structure—not to force an unrelated component.
+Choose components for semantic reuse, stable identity, centralized updates, and controlled variation; repeated shapes are not automatically components. Preserve meaningful one-off groups. Inspect the current file's Components, Styles, and Variables before creating a parallel system. Reuse a catalog Component only when its semantic job and properties fit, then create a linked Instance; visual similarity alone is insufficient.
 
-Keep interaction targets, keyboard/focus behavior, safe areas, readable text, contrast, and recovery visible in the plan. Do not solve hierarchy by wrapping every region in a card or by making every action equally prominent.
-
-For the first meaningful slice, make the actionable hierarchy real before adding atmospheric decoration. Decorative systems may connect regions, but they cannot replace field labels, recovery, focus order, status meaning, or a clear primary action.
+Keep hit targets, focus order, safe areas, text, contrast, and status meaning visible. Do not wrap every region in a card or give every action equal prominence. The first meaningful slice must establish the actionable hierarchy before decoration.

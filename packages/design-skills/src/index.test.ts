@@ -57,6 +57,8 @@ describe("built-in design skills", () => {
       formatBuiltinDesignPlanningSkillBundleForDeliverable("logo");
     expect(logoPlanning).toContain('id="graphic-visual-direction"');
     expect(logoPlanning).toContain('id="logo-visual-direction"');
+    expect(logoPlanning).toContain("product's primary action into a contour");
+    expect(logoPlanning).toContain("Do not choose a symbol first");
     expect(logoPlanning).not.toContain('id="ui-visual-direction"');
     expect(logoPlanning).not.toContain('id="logo-capture-critic"');
 
@@ -64,6 +66,8 @@ describe("built-in design skills", () => {
       formatBuiltinDesignPlanningSkillBundleForDeliverable("ui");
     expect(uiPlanning).toContain('id="ui-visual-direction"');
     expect(uiPlanning).toContain('id="ui-ux-structure"');
+    expect(uiPlanning).toContain("a design tool's landing page is persuade");
+    expect(uiPlanning).toContain("familiar affordances, scan speed");
     expect(uiPlanning).not.toContain('id="graphic-visual-direction"');
 
     const logoReview =

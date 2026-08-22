@@ -46,6 +46,12 @@ OpenDesign 尚未正式发布，也不需要兼容旧实验 skill 引用。Git �
 - 固定 UI/Logo prompt 不是产品内置模板，也不进入普通用户 Run。
 - 真实 macOS/Windows 打包产品 Run、人工盲评、成功率和性能结果完成前，roadmap 的视觉质量主项保持未完成。
 
+## 2026-08-22 外部 Skill 复审
+
+复审 Taste Skill（MIT，`843c8dd4d18ccff0d5a9cd4b0b71d7dbf7278293`）与 Impeccable（Apache-2.0，`56f44523f76efdcec813e67b38ee550e49b16f48`）后，继续维持“不整体安装外部设计 Skill”的决策。Taste Skill 的主路径面向 Landing Page、前端代码和固定风格拨盘，Brandkit 又默认把品牌交付收敛为特定网格与暗色 editorial 展示；整体注入会增加上下文、绝对禁令和跨任务同质化。Impeccable 的完整 new-work、browser、hook、detector、subagent 和多轮 decision-comp 流程同样不进入 OpenDesign，因为它会增加首个真实画面时间，并绕开现有 typed transaction、capture 与权限边界。
+
+只吸收不增加 Provider/tool 往返的通用判断方法：UI Plan 按当前 surface 的用户成功区分 persuade、operate、read 与 experience，其中 operate 强调熟悉性、扫描效率、完整状态和克制的状态动效；Logo Plan 把 product action、brief-specific metaphor fusion、negative space 与 letter-meaning fusion 作为可选概念生成方法。它们被压缩进现有 deliverable-scoped planning skill，不新增 skill、Plan 字段、运行时依赖、脚本、浏览器检查或 Critic 轮次。绝对风格禁令仍改写为可被明确 brief 推翻的审查信号。实际净收益继续由 ADR-0120 的固定场景、T1/T_all、成功率和匿名盲评证明，不能仅凭提示词变化宣称质量提升。
+
 ## 验证
 
 - `@opendesign/design-skills` 测试验证当前 skill 集合不可变、ID 唯一、deliverable 路由正确、未知或错误顺序的 ID 被拒绝，并确认模型可见 bundle 不含功能版本和内容哈希。
