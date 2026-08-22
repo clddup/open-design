@@ -95,7 +95,7 @@ MCP 只能依赖 Main 提供的稳定 resource handle、revision、`DesignReadPo
 
 步骤 7 已完整落地：无生产调用者的 `@opendesign/design-engine`、`@opendesign/mcp-host` 和 `@opendesign/mcp-server` package 已删除，不保留兼容 re-export、fallback 或空占位。独立 `DesignEngineAdapter` 的 `open/save/apply/undo/redo` 生命周期不再存在，避免在 Workspace 与唯一 `EditorRuntime` 之外形成第二份文档权威。未来双向 MCP 必须由 Main 组合稳定 resource handle、revision、`DesignReadPort` 与 `ToolInvocationPort`，并复用现有 capability、approval、audit、取消和 Design Transaction 链后才能重新接入。
 
-步骤 8 的 EditorRuntime 治理已开始但未完成：`document-diff` 现在单一负责 transaction、undo/redo 和 grouped history 共用的完整 `DesignChangeSet`，`EditorHistory` 单一持有 undo/redo stack、active group、rollback 与 `HistoryState`；`EditorRuntime` 只调用这两个 owner，不再复制 diff/history 状态。command executor 和 core operation family 尚未迁出，后续 Leafer、SVG 与 release inventory 也仍保持开放。
+步骤 8 的 EditorRuntime 治理已开始但未完成：`document-diff` 现在单一负责 transaction、undo/redo 和 grouped history 共用的完整 `DesignChangeSet`，`EditorHistory` 单一持有 undo/redo stack、active group、rollback 与 `HistoryState`；Page、Asset/Image Derivation 和 Component/Library Source mutation 已进入各自完整 command family，共用无状态稳定 ID/树定位原语，`EditorRuntime` 不再实现这些命令。Element/Text、字体测量与 Auto Layout execution context 及最终 dispatcher 尚未迁出，后续 Leafer、SVG 与 release inventory 也仍保持开放。
 
 ## 后果
 
