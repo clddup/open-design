@@ -28,6 +28,7 @@ import {
   PLACE_IMAGE_TOOL_NAME,
   UPDATE_IMAGE_TOOL_NAME,
   DesignApplyContract,
+  DesignCheckpointContract,
   DesignPlanContract,
   explainInvalidDesignComponentToolInput,
   FirstSliceContract,
@@ -109,6 +110,16 @@ describe("design Agent tool contract", () => {
     );
     expect(firstSlice?.description).toContain(
       "at most 48 model-authored content elements total, not per stage",
+    );
+  });
+
+  it("wires Checkpoint validation to its single contract entry", () => {
+    const checkpoint = DESIGN_AGENT_TOOL_SPECS.find(
+      (tool) => tool.name === DESIGN_CHECKPOINT_TOOL_NAME,
+    );
+    expect(checkpoint).toHaveProperty(
+      "validateInputIssues",
+      DesignCheckpointContract.issues,
     );
   });
 
@@ -1387,17 +1398,29 @@ describe("design Agent tool contract", () => {
       (tool) => tool.name === DESIGN_CHECKPOINT_TOOL_NAME,
     );
     expect(checkpointSpec?.inputSchema).toMatchObject({
-      properties: {
-        version: { const: 1 },
-        action: {
-          enum: ["apply-and-capture", "refine-and-capture"],
+      anyOf: [
+        {
+          properties: {
+            version: { const: 1 },
+            action: { const: "apply-and-capture" },
+          },
+          additionalProperties: false,
         },
-      },
-      oneOf: [{ additionalProperties: false }, { additionalProperties: false }],
-      additionalProperties: false,
+        {
+          properties: {
+            version: { const: 1 },
+            action: { const: "refine-and-capture" },
+          },
+          additionalProperties: false,
+        },
+      ],
     });
-    expect(checkpointSpec?.inputSchema).toHaveProperty("properties.apply");
-    expect(checkpointSpec?.inputSchema).toHaveProperty("properties.refinement");
+    expect(checkpointSpec?.inputSchema).toHaveProperty(
+      "anyOf.0.properties.apply",
+    );
+    expect(checkpointSpec?.inputSchema).toHaveProperty(
+      "anyOf.1.properties.refinement",
+    );
     expect(
       validateDesignAgentToolInput(DESIGN_CHECKPOINT_TOOL_NAME, {
         version: 1,

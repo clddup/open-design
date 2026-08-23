@@ -90,8 +90,8 @@ import {
   normalizeDesignPageToolInput,
 } from "./design-agent-document-tools";
 import {
+  DesignCheckpointContract,
   DESIGN_CHECKPOINT_TOOL_INPUT_SCHEMA,
-  normalizeDesignCheckpointToolInput,
 } from "./design-agent-checkpoint";
 import {
   explainInvalidDesignComponentToolInput,
@@ -287,9 +287,8 @@ export type {
   PageStructureAccessToolInput,
 } from "./design-agent-document-tools";
 export {
+  DesignCheckpointContract,
   DESIGN_CHECKPOINT_TOOL_INPUT_SCHEMA,
-  isDesignCheckpointToolInput,
-  normalizeDesignCheckpointToolInput,
 } from "./design-agent-checkpoint";
 export type { DesignCheckpointToolInput } from "./design-agent-checkpoint";
 export * from "./design-agent-tool-names";
@@ -385,6 +384,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     inputSchema: DESIGN_CHECKPOINT_TOOL_INPUT_SCHEMA,
     risk: "design_write" as const,
     approval: "never" as const,
+    validateInputIssues: DesignCheckpointContract.issues,
   },
   {
     name: READ_IMAGE_TOOL_NAME,
@@ -645,7 +645,7 @@ export function validateDesignAgentToolInput(
     return normalizeDesignVisualReviewToolInput(input) !== undefined;
   }
   if (toolName === DESIGN_CHECKPOINT_TOOL_NAME) {
-    return normalizeDesignCheckpointToolInput(input) !== undefined;
+    return DesignCheckpointContract.parse(input).ok;
   }
   if (toolName === READ_IMAGE_TOOL_NAME) {
     return (

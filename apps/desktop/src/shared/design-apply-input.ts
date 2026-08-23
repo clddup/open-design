@@ -50,6 +50,8 @@ export type InternalDesignApplyToolInput = DesignApplyToolInput & {
 export type DesignApplyContractContext = {
   canonical?: boolean;
   internal?: boolean;
+  /** Trusted composition only: the same model schema already validated this nested value. */
+  modelSchemaValidated?: boolean;
 };
 
 const PLANNED_DESIGN_REBASE_TARGET_SCHEMA = Type.Object(
@@ -103,13 +105,15 @@ function parseDesignApply(
 ): ValidationResult<InternalDesignApplyToolInput> {
   const internal = context.internal === true;
   const canonicalInput = context.canonical === true || internal;
-  const structureIssues = schemaIssues(
-    canonicalInput
-      ? INTERNAL_DESIGN_APPLY_TOOL_INPUT_SCHEMA
-      : DESIGN_APPLY_TOOL_INPUT_SCHEMA,
-    input,
-    "design_apply.schema_invalid",
-  );
+  const structureIssues = context.modelSchemaValidated
+    ? []
+    : schemaIssues(
+        canonicalInput
+          ? INTERNAL_DESIGN_APPLY_TOOL_INPUT_SCHEMA
+          : DESIGN_APPLY_TOOL_INPUT_SCHEMA,
+        input,
+        "design_apply.schema_invalid",
+      );
   if (structureIssues.length > 0) {
     return { ok: false, issues: structureIssues };
   }

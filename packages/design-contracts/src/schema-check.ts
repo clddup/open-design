@@ -32,6 +32,13 @@ function decorateSchema(schema: JsonSchema): TSchema {
   ) as JsonSchema & TSchema;
   const kind = schemaKind(schema);
   Object.defineProperty(clone, Kind, { value: kind, enumerable: false });
+  if (kind === "Intersect" && Array.isArray(schema.anyOf)) {
+    const { anyOf: branches, ...base } = schema;
+    Object.defineProperty(clone, "allOf", {
+      value: [decorateSchema(base), decorateSchema({ anyOf: branches })],
+      enumerable: false,
+    });
+  }
   if (kind === "Object" && !isRecord(schema.properties)) {
     Object.defineProperty(clone, "properties", {
       value: {},
@@ -79,6 +86,9 @@ function cloneJsonValue(value: unknown): unknown {
 }
 
 function schemaKind(schema: JsonSchema): string {
+  if (Array.isArray(schema.anyOf) && typeof schema.type === "string") {
+    return "Intersect";
+  }
   if (Array.isArray(schema.anyOf) || Array.isArray(schema.enum)) return "Union";
   if (Object.hasOwn(schema, "const")) return "Literal";
   switch (schema.type) {

@@ -7,10 +7,11 @@ import { isTrustedToolFailure } from "@opendesign/agent-contracts";
 import {
   DESIGN_APPLY_TOOL_NAME,
   DESIGN_CAPTURE_TOOL_NAME,
-  normalizeDesignCheckpointToolInput,
+  DesignCheckpointContract,
   type DesignApplyToolInput,
   type DesignCheckpointToolInput,
 } from "@/shared/design-agent-tools.js";
+import { formatValidationFailure } from "@/shared/contract-validation.js";
 
 type ReportProgress = (message: string, progress: number) => void;
 
@@ -55,10 +56,13 @@ export async function handleDesignCheckpointTool(
   dependencies: DesignCheckpointDependencies,
   reportProgress?: ReportProgress,
 ): Promise<TrustedToolResult> {
-  const input = normalizeDesignCheckpointToolInput(call.input);
-  if (!input) {
-    throw new TypeError("Invalid design checkpoint tool input");
+  const parsed = DesignCheckpointContract.parse(call.input);
+  if (!parsed.ok) {
+    throw new TypeError(
+      formatValidationFailure("opendesign_design_checkpoint", parsed.issues),
+    );
   }
+  const input = parsed.value;
   if (input.action === "apply-and-capture") {
     const applied = await dependencies.apply(
       subcall(call, "apply", DESIGN_APPLY_TOOL_NAME, input.apply),

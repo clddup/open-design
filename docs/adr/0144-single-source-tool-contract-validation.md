@@ -1,6 +1,6 @@
 # ADR-0144：单一来源的工具契约验证
 
-- 状态：Accepted，first-slice、node apply 与 Design Plan 已实施，其余契约分阶段实施
+- 状态：Accepted，first-slice、node apply、Design Plan 与 Checkpoint 已实施，其余契约分阶段实施
 - 日期：2026-08-23
 - 首个迁移对象：compact first-slice
 - 关联：ADR-0018、ADR-0100、ADR-0103、ADR-0141、ADR-0143
@@ -75,12 +75,14 @@ compact first-slice 已完成首个迁移切片：模型可见输入由可执行
 
 Design Plan 已完成第三个迁移切片：`DesignPlanContract.parse(input, context)` 使用同一可执行 schema 接受模型 Plan 或验证 canonical Plan，模型无权控制的 `skillRefs` 只由宿主绑定。target/Frame/region ID、parent-first 与 parent-local bounds、quality profile、Component occurrence、Reference Strategy、Logo exploration 和 single-raster 关系集中在一个 domain refinement，并返回稳定字段路径。旧 `isDesignPlanToolInput / normalizeDesignPlanToolInput` 及仅为该 Plan 服务的 `isDesignBriefFidelity / isDesignReferenceStrategy / isDesignPlanComponentStrategy` 手写结构遍历已删除；Pi、Main handler、compact first-slice compiler 和 Renderer Timeline 消费同一解析入口。
 
+Design Checkpoint 已完成第四个迁移切片：`DesignCheckpointContract.parse(input)` 以 action discriminant 直接选择 `apply-and-capture` 或 `refine-and-capture` 的真实 schema 分支；Provider、Pi、Main handler 与 Renderer Timeline 复用同一入口。顶层 schema 已验证完整嵌套 Apply 后，`DesignApplyContract` 只继续 canonicalization 和唯一 domain refinement，不再对相同结构重复遍历；嵌套错误保留 Apply 的稳定 code，并准确前缀为 `/apply` 或 `/refinement`。旧 `isDesignCheckpointToolInput / normalizeDesignCheckpointToolInput` 已删除。材料 apply 成功、capture 单独失败时保留已提交 revision 的现有恢复语义不变。
+
 `ValidationIssue` 的稳定 `code/path/expected/actual/recovery` 通过 `tool-validation` failure details 进入 Agent event、journal 和 Timeline；这种参数修正使用 `correct-and-retry`，不冒充需要文档 inspection 的事务错误。Design transaction 仍保留独立 `inspect-and-revise` 恢复语义。
 
-Visual Review、Checkpoint、图片、导入导出、结构、Page、Component、Style、Variable 等其余 Agent tools 与 IPC/持久化契约尚未迁移，不得据此宣称全仓已实现单一验证入口。
+Visual Review、图片、导入导出、结构、Page、Component、Style、Variable 等其余 Agent tools 与 IPC/持久化契约尚未迁移，不得据此宣称全仓已实现单一验证入口。
 
 ## 后果
 
 - 不重写 pi-agent-core 已有的循环或 TypeBox 参数验证；OpenDesign 只增加产品 domain refinement 和边界 issue adapter。
 - 首个迁移会删除较多手写代码并改变测试入口，属于允许的破坏性开发更新。
-- 在迁移完成前，新增 first-slice、node apply 或 Design Plan 字段必须进入对应单一入口；不得继续扩展三套旧函数。
+- 在迁移完成前，新增 first-slice、node apply、Design Plan 或 Checkpoint 字段必须进入对应单一入口；不得继续扩展三套旧函数。

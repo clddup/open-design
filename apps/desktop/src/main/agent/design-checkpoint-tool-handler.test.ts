@@ -63,6 +63,23 @@ function dependencies(
 }
 
 describe("design checkpoint tool handler", () => {
+  it("rejects structured input before apply with an exact field path", async () => {
+    const deps = dependencies();
+
+    await expect(
+      handleDesignCheckpointTool(
+        call({
+          version: 1,
+          action: "apply-and-capture",
+          apply: { label: "Missing commands" },
+        }),
+        deps,
+      ),
+    ).rejects.toThrow(/design_checkpoint\.schema_invalid at \/apply\/commands/);
+    expect(deps.apply).not.toHaveBeenCalled();
+    expect(deps.capture).not.toHaveBeenCalled();
+  });
+
   it("commits material before capturing the exact new revision", async () => {
     const order: string[] = [];
     const deps = dependencies({

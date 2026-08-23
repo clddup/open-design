@@ -28,11 +28,11 @@ import {
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
   INTERNAL_IMPORT_SVG_TOOL_NAME,
   INTERNAL_UPDATE_IMAGE_TOOL_NAME,
+  DesignCheckpointContract,
   DesignPlanContract,
   designPlanTargets,
   compileDesignFirstSliceToolInput,
   FirstSliceContract,
-  isDesignCheckpointToolInput,
   PLACE_IMAGE_TOOL_NAME,
   READ_IMAGE_TOOL_NAME,
   type DesignPlanTarget,
@@ -165,11 +165,13 @@ export function projectGenerationPlanPresentationEvent(
   }
   if (event.type === "tool.requested") {
     if (!state.acceptedByRunId[event.runId]) return state;
-    const checkpointInput =
-      event.toolName === DESIGN_CHECKPOINT_TOOL_NAME &&
-      isDesignCheckpointToolInput(event.input)
-        ? event.input
+    const checkpointResult =
+      event.toolName === DESIGN_CHECKPOINT_TOOL_NAME
+        ? DesignCheckpointContract.parse(event.input)
         : undefined;
+    const checkpointInput = checkpointResult?.ok
+      ? checkpointResult.value
+      : undefined;
     const phase =
       checkpointInput?.action === "refine-and-capture"
         ? "refining"

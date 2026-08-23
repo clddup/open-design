@@ -90,6 +90,64 @@ describe("executable JSON Schema", () => {
       executableJsonSchema({ oneOf: [{ type: "string" }, { type: "number" }] }),
     ).toThrow("Unsupported executable JSON Schema keyword: oneOf");
   });
+
+  it("executes a closed object and its discriminated branches as one schema", () => {
+    const source = {
+      type: "object",
+      properties: {
+        action: { enum: ["insert", "remove"] },
+        label: { type: "string" },
+        nodeId: { type: "string" },
+      },
+      required: ["action"],
+      additionalProperties: false,
+      anyOf: [
+        {
+          type: "object",
+          properties: {
+            action: { const: "insert" },
+            label: { type: "string", minLength: 1 },
+          },
+          required: ["action", "label"],
+          additionalProperties: false,
+        },
+        {
+          type: "object",
+          properties: {
+            action: { const: "remove" },
+            nodeId: { type: "string", minLength: 1 },
+          },
+          required: ["action", "nodeId"],
+          additionalProperties: false,
+        },
+      ],
+    } as const;
+    const schema = executableJsonSchema(source);
+
+    expect(JSON.stringify(schema)).toBe(JSON.stringify(source));
+    expect(
+      schemaValidationIssues(schema, { action: "insert", label: "A" }),
+    ).toHaveLength(0);
+    expect(
+      schemaValidationIssues(schema, { action: "remove", nodeId: "node_1" }),
+    ).toHaveLength(0);
+    expect(
+      schemaValidationIssues(schema, { action: "insert", nodeId: "node_1" }),
+    ).toEqual(
+      expect.arrayContaining([expect.objectContaining({ path: "/label" })]),
+    );
+    expect(
+      schemaValidationIssues(schema, {
+        action: "remove",
+        nodeId: "node_1",
+        unexpected: true,
+      }),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: "/unexpected" }),
+      ]),
+    );
+  });
 });
 
 it("validates typed image asset derivation commands", () => {
