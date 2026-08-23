@@ -5,17 +5,17 @@ import type {
 import { ResizeHandle, useMessage } from "@opendesign/ui";
 import { useCallback, useRef, type CSSProperties, type ReactNode } from "react";
 import type { ThemePreference } from "../../../shared/desktop-api";
-import { AgentTimeline } from "../../components/AgentTimeline";
-import { Canvas } from "../../components/Canvas";
-import { CanvasSelectionActions } from "../../components/CanvasSelectionActions";
-import { DesignFileTabs } from "../../components/DesignFileTabs";
-import { LeftSidebar } from "../../components/LeftSidebar";
-import { PropertiesPanel } from "../../components/PropertiesPanel";
-import { RenameLayersDialog } from "../../components/RenameLayersDialog";
-import { Statusbar } from "../../components/Statusbar";
-import { Titlebar } from "../../components/Titlebar";
-import { Toolbar } from "../../components/Toolbar";
-import { UtilityDock } from "../../components/UtilityDock";
+import { AgentTimeline } from "../agent-conversation/components/AgentTimeline";
+import { Canvas } from "./components/Canvas";
+import { CanvasSelectionActions } from "./components/CanvasSelectionActions";
+import { DesignFileTabs } from "./components/DesignFileTabs";
+import { LeftSidebar } from "./components/LeftSidebar";
+import { PropertiesPanel } from "./components/PropertiesPanel";
+import { RenameLayersDialog } from "./components/RenameLayersDialog";
+import { Statusbar } from "./components/Statusbar";
+import { Titlebar } from "./components/Titlebar";
+import { Toolbar } from "./components/Toolbar";
+import { UtilityDock } from "./components/UtilityDock";
 import {
   canAddSelectionToVariantSet,
   createComponentInspectorContext,
@@ -29,7 +29,7 @@ import { useDocumentCommandControllers } from "../../use-document-command-contro
 import type { useFontBinaryRuntime } from "../../use-font-binary-runtime";
 import { useFontInspectorContext } from "../../use-font-inspector-context";
 import { useProjectLibraryActions } from "../../use-project-library-actions";
-import type { AppNavigator } from "../app-navigation/app-navigator";
+import type { AppNavigationCoordinator } from "../../router/app-navigation-coordinator";
 import type { useAgentConversationRuntime } from "../agent-conversation/use-agent-conversation-runtime";
 import type { useConversationLifecycleState } from "../agent-conversation/use-conversation-lifecycle-state";
 import type { useConversationNavigationController } from "../agent-conversation/use-conversation-navigation-controller";
@@ -43,7 +43,7 @@ import type { useProjectNavigationController } from "../project/use-project-navi
 import type { useProjectWorkspaceState } from "../project/use-project-workspace-state";
 import { useWorkbenchLayoutController } from "../workbench/use-workbench-layout-controller";
 
-type EditorWorkbenchFeatureProps = {
+export type EditorWorkbenchFeatureProps = {
   activeProject:
     ReturnType<typeof useProjectWorkspaceState>["projectsById"][string] | null;
   agentRuntime: ReturnType<typeof useAgentConversationRuntime>;
@@ -56,7 +56,7 @@ type EditorWorkbenchFeatureProps = {
   editorError: string | null;
   fileName: string;
   fontBinaryRuntime: ReturnType<typeof useFontBinaryRuntime>;
-  navigator: AppNavigator;
+  navigator: AppNavigationCoordinator;
   notifications: ReactNode;
   openSettings: () => void;
   platform: NodeJS.Platform;

@@ -11,8 +11,9 @@ import type {
 import { reportRendererError } from "../../diagnostics";
 import type {
   AppNavigationTransition,
-  AppNavigator,
-} from "../app-navigation/app-navigator";
+  AppNavigationCoordinator,
+} from "../../router/app-navigation-coordinator";
+import type { AppDestination } from "../../router/app-route";
 import type { ConversationOpenIssue } from "./use-conversation-lifecycle-state";
 
 type Translate = (key: MessageKey, parameters?: MessageParameters) => string;
@@ -21,6 +22,7 @@ export function useConversationNavigationController({
   activeConversationId,
   activeProject,
   conversations,
+  currentDestination,
   forgetConversation,
   navigator,
   openProjectTarget,
@@ -39,8 +41,9 @@ export function useConversationNavigationController({
   activeConversationId: string | null;
   activeProject: ProjectManifest | null;
   conversations: ConversationDescriptor[];
+  currentDestination: AppDestination;
   forgetConversation: (conversationId: string) => void;
-  navigator: AppNavigator;
+  navigator: AppNavigationCoordinator;
   openProjectTarget: (
     target: {
       projectId: string;
@@ -113,7 +116,6 @@ export function useConversationNavigationController({
       const transition = navigator.begin({
         kind: "conversation",
         conversationId: conversation.conversationId,
-        issue: "no-target",
       });
       selectConversation(conversation.conversationId);
       void requestConversationHistory(conversation.conversationId);
@@ -129,7 +131,6 @@ export function useConversationNavigationController({
           navigator.commit(transition, {
             kind: "conversation",
             conversationId: conversation.conversationId,
-            issue: context.reason,
           });
           return;
         }
@@ -143,7 +144,6 @@ export function useConversationNavigationController({
         navigator.commit(transition, {
           kind: "conversation",
           conversationId: conversation.conversationId,
-          issue: "project-unavailable",
         });
         setWorkspaceError(
           reportRendererError(
@@ -195,11 +195,10 @@ export function useConversationNavigationController({
         if (activeConversationId === conversationId) {
           selectConversation(replacement?.conversationId ?? null);
         }
-        const destination = navigator.getSnapshot().destination;
         if (
           activeConversationId === conversationId &&
-          destination.kind === "conversation" &&
-          destination.conversationId === conversationId
+          currentDestination.kind === "conversation" &&
+          currentDestination.conversationId === conversationId
         ) {
           setConversationOpenIssue(null);
           navigator.navigate({ kind: "workspace" });
@@ -226,6 +225,7 @@ export function useConversationNavigationController({
     [
       activeConversationId,
       conversations,
+      currentDestination,
       forgetConversation,
       requestConversationHistory,
       navigator,

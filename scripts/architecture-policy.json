@@ -52,6 +52,7 @@
         "@opendesign/workspace-contracts",
         "react",
         "react-dom",
+        "react-router-dom",
         "virtual:offline-iconify"
       ],
       "forbiddenRelativeLayers": ["agent", "main", "preload"]

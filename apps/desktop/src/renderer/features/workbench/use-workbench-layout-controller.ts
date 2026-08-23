@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { UtilityDockTab } from "../../components/UtilityDock";
+import type { UtilityDockTab } from "../editor-workbench/components/UtilityDock";
 import type { SidebarTab } from "../../state/editor";
 
 const NAVIGATOR_AUTO_COLLAPSE_WIDTH = 960;

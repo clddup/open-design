@@ -3,6 +3,7 @@
 - 状态：已接受
 - 日期：2026-08-23
 - 关联：ADR-0001、ADR-0006、ADR-0046、ADR-0086、ADR-0094、ADR-0140
+- 部分取代：Renderer 导航决策由 ADR-0142 取代
 
 ## 背景
 
@@ -28,7 +29,9 @@ ADR-0046 已用完整业务切片拆出多组 Renderer feature、Main IPC host �
 
 不得通过互相回调的碎片、通用 Context、兼容 facade 或第二套 store 隐藏仍未迁移的所有权。高频 Canvas 状态不进入应用级 Context；文档、revision、history、selection 和 viewport 继续由现有 Runtime/session owner 持有。
 
-### Renderer 使用原子 destination，不机械引入 Web Router
+### Renderer 使用原子 destination，不机械引入 Web Router（已由 ADR-0142 取代）
+
+以下内容记录当时的过渡决策。当前实现与后续约束以 ADR-0142 的生产 Hash Router、测试 Memory Router、route boundary 和资源提交协调为准。
 
 建立唯一 `AppNavigator`，用判别联合表达可渲染 destination：
 
@@ -89,7 +92,7 @@ MCP 只能依赖 Main 提供的稳定 resource handle、revision、`DesignReadPo
 
 每一步必须保持可运行，只做最小充分的定向测试、typecheck、lint、format 和 architecture check；不以本地原生安装包构建作为日常架构重构验证。
 
-当前步骤 1—7 已落地：`AgentIpcRouter`、原子 `AppNavigator`、活动 Project/Design File 身份单 owner 与完整 `EditorWorkbenchFeature` 均已有定向测试。Workbench controller、selection projection、Image edit、人工 Import/Export 和画布 session 只随 Editor destination 建立；Settings 与 Workspace 会释放这些订阅，返回 Editor 复用同一权威 `EditorRuntime`。`AgentSupervisor` 持有单一 utility-process generation、ready/handshake watchdog、协议失败、异常退出和有界停止；`AgentRunCoordinator` 持有 Run→Conversation、preflight AbortController、continuation、Reference 与 Renderer/performance lease。进程级错误会中断 Global Task 并释放全部 Run lease，shutdown 按 `quiesce/cancelAll → Supervisor stop → detach/dispose` 执行。`DesktopApplication.start()` 使用显式 commit 和逆序 disposer 栈；`IpcRegistrationScope` 记录本次成功注册的 channel；Renderer load 失败会销毁未发布窗口，startup 错误在 rollback 后非零退出。Agent 握手不阻塞窗口首屏。步骤 8 和全仓治理仍保持进行中。
+当前步骤 1—7 已落地：`AgentIpcRouter`、React Router route boundary、活动 Project/Design File 身份单 owner 与完整 `EditorWorkbenchFeature` 均已有定向测试。Workbench controller、selection projection、Image edit、人工 Import/Export 和画布 session 只随 Editor destination 建立；Settings 与 Workspace 会释放这些订阅，返回 Editor 复用同一权威 `EditorRuntime`。`AgentSupervisor` 持有单一 utility-process generation、ready/handshake watchdog、协议失败、异常退出和有界停止；`AgentRunCoordinator` 持有 Run→Conversation、preflight AbortController、continuation、Reference 与 Renderer/performance lease。进程级错误会中断 Global Task 并释放全部 Run lease，shutdown 按 `quiesce/cancelAll → Supervisor stop → detach/dispose` 执行。`DesktopApplication.start()` 使用显式 commit 和逆序 disposer 栈；`IpcRegistrationScope` 记录本次成功注册的 channel；Renderer load 失败会销毁未发布窗口，startup 错误在 rollback 后非零退出。Agent 握手不阻塞窗口首屏。步骤 8 和全仓治理仍保持进行中。
 
 步骤 6 已完整落地：Main↔Agent 的 tool call/context/progress/result/failure schema、类型和语义校验由 `@opendesign/agent-contracts` 单一拥有，`agent-runtime` 不再兼容导出这些 wire 类型；Desktop shared 只保留 Renderer capture、阶段进度、性能和原生导入导出准备结果等 Renderer 专用契约。所有 Agent-facing design tools 由 `MainDesignToolRuntime` 使用同一份 `DESIGN_AGENT_TOOL_SPECS` 注册；Runtime 复核 semantic input、精确 Design File resource、Main 已记录的 Page 授权、TrustedToolResult、输出大小、硬超时、取消、调用冲突和 silent audit，再委托现有领域 dispatcher。`GlobalTaskCoordinator` 继续唯一拥有 Plan、ledger、revision、inspection、review 和目标规则；通用 runtime 不复制设计领域门禁。Agent utility process 原先直接解析 home path 并写 JSONL 的路径也已删除；`ParentSessionStore` 只发送受校验的 append/read/timeline/project 请求，由 Main 的 `AgentSessionStoreHost` 使用同一 `JsonlSessionStore` 持久化和恢复。新的 `architecture-policy.json` 按语义层分类 workspace package，而不是冻结精确依赖清单；TypeScript AST 门禁检查 Main/Preload/Renderer/Agent/Shared runtime package capability、Node/Electron builtin、相对进程越界、实际源码 runtime cycle、manifest undeclared/unused production dependency、workspace layer 方向和私有 deep import，并把 Desktop application 纳入同一 workspace DAG。Main 领域 dispatcher 的更细 service composition 仍属于后续步骤。
 
@@ -110,7 +113,7 @@ MCP 只能依赖 Main 提供的稳定 resource handle、revision、`DesignReadPo
 ## 验证
 
 - `AgentIpcRouter`：sender 优先、参数/payload、history correlation、dispatch rollback、重复 registration 与 dispose。
-- `AppNavigator`：判别联合、原子提交、latest-wins、settings return、invalid destination 与删除中的资源。
+- Renderer Router：稳定 route 编解码、生产 Hash history、测试 Memory history、latest-wins 资源提交、Settings return、invalid destination 与删除中的资源。
 - Project/Workspace：活动 Project 派生、文件 identity/name 单 owner、保存/重命名/切换无双写。
 - Main Supervisor/Startup：已覆盖单 process generation、ready timeout、握手顺序、协议不兼容、异常退出、并发 start、graceful/forced stop、并发 Run 取消、preflight/continuation/reference/Renderer lease 统一回收，以及 startup 并发调用、缺失 commit、部分 IPC、Renderer load 和 disposer 失败的逆序 rollback。
 - Architecture verifier：进程 allowlist、源码 cycle、undeclared/unused/deep import 和 workspace app DAG fixtures。

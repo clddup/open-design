@@ -23,8 +23,8 @@ import type {
 } from "../../workspace-runtime";
 import type {
   AppNavigationTransition,
-  AppNavigator,
-} from "../app-navigation/app-navigator";
+  AppNavigationCoordinator,
+} from "../../router/app-navigation-coordinator";
 import type { ProjectFileTarget } from "./use-project-workspace-state";
 
 type Translate = (key: MessageKey, parameters?: MessageParameters) => string;
@@ -63,7 +63,7 @@ export function useProjectNavigationController({
     identity: WorkspaceFileIdentity,
     document: DesignDocument,
   ) => EditorRuntime;
-  navigator: AppNavigator;
+  navigator: AppNavigationCoordinator;
   projectAutosave: ProjectAutosaveCoordinator;
   projectContextId: string;
   projectsById: Readonly<Record<string, ProjectManifest>>;

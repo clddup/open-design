@@ -1264,7 +1264,7 @@ describe("App", () => {
     const { user } = await openProjectWithConversations([first, second]);
     await user.click(screen.getByRole("button", { name: "Conversation A" }));
 
-    await user.type(screen.getByLabelText("Continue the task"), "Run A");
+    await user.type(await screen.findByLabelText("Continue the task"), "Run A");
     await user.click(screen.getByRole("button", { name: "Send" }));
     const firstRun = runRequests(first.conversationId).at(-1);
     if (!firstRun) throw new Error("Conversation A run request is missing");
@@ -1288,17 +1288,21 @@ describe("App", () => {
     );
 
     await user.click(screen.getByRole("button", { name: "Acme Design" }));
-    await user.click(screen.getByRole("button", { name: "Conversation B" }));
-    expect(screen.getByLabelText("Continue the task")).toBeEnabled();
+    await user.click(
+      await screen.findByRole("button", { name: "Conversation B" }),
+    );
+    expect(await screen.findByLabelText("Continue the task")).toBeEnabled();
 
     await user.type(screen.getByLabelText("Continue the task"), "Run B");
     await user.click(screen.getByRole("button", { name: "Send" }));
     expect(runRequests(second.conversationId)).toHaveLength(1);
 
     await user.click(screen.getByRole("button", { name: "Acme Design" }));
-    await user.click(screen.getByRole("button", { name: "Conversation A" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Conversation A" }),
+    );
 
-    expect(screen.getByText("Request in progress")).toBeInTheDocument();
+    expect(await screen.findByText("Request in progress")).toBeInTheDocument();
     const continuation = screen.getByLabelText("Continue the task");
     expect(continuation).toBeEnabled();
     await user.type(continuation, "Continue A after stopping");
@@ -1343,7 +1347,7 @@ describe("App", () => {
     await user.click(
       screen.getByRole("button", { name: "Recent Conversation" }),
     );
-    const conversationSelect = screen.getByRole("combobox", {
+    const conversationSelect = await screen.findByRole("combobox", {
       name: "Conversation",
     });
     conversationSelect.focus();
@@ -1375,8 +1379,12 @@ describe("App", () => {
     if (!oldRequest) throw new Error("Initial history request is missing");
 
     await user.click(screen.getByRole("button", { name: "Conversation B" }));
-    await user.click(screen.getByRole("button", { name: "Acme Design" }));
-    await user.click(screen.getByRole("button", { name: "Conversation A" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Acme Design" }),
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Conversation A" }),
+    );
     const latestRequest = historyRequests(first.conversationId).at(-1);
     if (!latestRequest || latestRequest.requestId === oldRequest.requestId) {
       throw new Error("Newer history request is missing");
@@ -1946,12 +1954,13 @@ describe("App", () => {
     );
     await user.click(screen.getByRole("button", { name: /Mobile UI/ }));
     await user.click(
-      screen.getByRole("button", { name: "Open Workspace Home" }),
+      await screen.findByRole("button", { name: "Open Workspace Home" }),
     );
     await user.click(
       await screen.findByRole("button", { name: /^Beta Studio/ }),
     );
     await user.click(screen.getByRole("button", { name: /Brand System/ }));
+    await screen.findByRole("main", { name: "Design canvas" });
 
     await user.click(screen.getByRole("tab", { name: "Mobile UI" }));
     expect(

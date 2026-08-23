@@ -22,7 +22,7 @@ import {
   type WorkspaceFileIdentity,
 } from "../../workspace-runtime";
 import { useProjectNavigationController } from "./use-project-navigation-controller";
-import { AppNavigator } from "../app-navigation/app-navigator";
+import { AppNavigationCoordinator } from "../../router/app-navigation-coordinator";
 import { useProjectWorkspaceState } from "./use-project-workspace-state";
 
 const now = "2026-08-23T00:00:00.000Z";
@@ -44,7 +44,8 @@ describe("Project workspace", () => {
         projectId === slowProject.projectId ? slow.promise : fast.promise,
       ),
     } as unknown as DesktopApi;
-    const navigator = new AppNavigator({ kind: "workspace" });
+    const routeNavigate = vi.fn();
+    const navigator = navigationCoordinator(routeNavigate);
     const setProjectsById = vi.fn();
     const args = navigationArgs(workspace, {
       navigator,
@@ -73,7 +74,7 @@ describe("Project workspace", () => {
       await slowOpen;
     });
 
-    expect(navigator.getSnapshot().destination).toEqual({
+    expect(routeNavigate).toHaveBeenLastCalledWith({
       kind: "project",
       projectId: fastProject.projectId,
     });
@@ -420,7 +421,7 @@ function navigationArgs(
     activatePage: (pageId) => workspace.activatePage(pageId),
     applySavedProjectFile: vi.fn(),
     conversations: [],
-    navigator: new AppNavigator({ kind: "workspace" }),
+    navigator: navigationCoordinator(),
     openFile: (identity, document) => workspace.openFile(identity, document),
     projectAutosave: {
       track: vi.fn(),
@@ -441,6 +442,10 @@ function navigationArgs(
     workspaceSnapshot: workspace.getSnapshot(),
     ...overrides,
   };
+}
+
+function navigationCoordinator(navigate = vi.fn()) {
+  return new AppNavigationCoordinator({ back: vi.fn(), navigate });
 }
 
 function localWorkspace() {

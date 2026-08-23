@@ -74,6 +74,12 @@ pnpm --dir apps/desktop package:win
 
 ```text
 apps/desktop/            Electron Main、Preload、Renderer 与 Agent 入口
+  src/renderer/          React 客户端源码根（不重复嵌套 src）
+    router/              生产 Hash Router、测试 Memory Router 与 route 契约
+    layouts/             应用布局和跨页面 route context 组合
+    pages/               Workspace、Project、Conversation、Editor、Settings 页面
+    features/            Agent、画布工作台、诊断、导入导出等业务垂直切片
+    components/          仅跨页面共享的应用窗口组件
 packages/design-contracts/ 设计文档、事务和运行时 schema
 packages/editor-runtime/   权威文档状态、revision、history 与几何查询
 packages/leafer-engine/    LeaferJS 场景与直接操作 adapter

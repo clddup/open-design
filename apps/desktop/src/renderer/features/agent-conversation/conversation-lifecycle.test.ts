@@ -2,7 +2,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ConversationDescriptor } from "@opendesign/workspace-contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DesktopApi } from "../../../shared/desktop-api";
-import { AppNavigator } from "../app-navigation/app-navigator";
+import { AppNavigationCoordinator } from "../../router/app-navigation-coordinator";
 import { useConversationLifecycleState } from "./use-conversation-lifecycle-state";
 import { useConversationNavigationController } from "./use-conversation-navigation-controller";
 
@@ -51,13 +51,15 @@ describe("conversation lifecycle", () => {
     const requestConversationHistory = vi.fn().mockResolvedValue(undefined);
     const selectConversation = vi.fn();
     const setConversationOpenIssue = vi.fn();
-    const navigator = new AppNavigator({ kind: "workspace" });
+    const routeNavigate = vi.fn();
+    const navigator = navigationCoordinator(routeNavigate);
     const openProjectTarget = vi.fn().mockResolvedValue(undefined);
     const { result } = renderHook(() =>
       useConversationNavigationController({
         activeConversationId: null,
         activeProject: null,
         conversations: [conversation],
+        currentDestination: { kind: "workspace" },
         forgetConversation: vi.fn(),
         navigator,
         openProjectTarget,
@@ -86,10 +88,9 @@ describe("conversation lifecycle", () => {
     expect(setConversationOpenIssue).toHaveBeenCalledWith(
       "design-file-unavailable",
     );
-    expect(navigator.getSnapshot().destination).toEqual({
+    expect(routeNavigate).toHaveBeenLastCalledWith({
       kind: "conversation",
       conversationId: conversation.conversationId,
-      issue: "design-file-unavailable",
     });
     expect(openProjectTarget).not.toHaveBeenCalled();
   });
@@ -107,8 +108,12 @@ describe("conversation lifecycle", () => {
         activeConversationId: conversation.conversationId,
         activeProject: null,
         conversations: [conversation],
+        currentDestination: {
+          kind: "conversation",
+          conversationId: conversation.conversationId,
+        },
         forgetConversation,
-        navigator: new AppNavigator({ kind: "workspace" }),
+        navigator: navigationCoordinator(),
         openProjectTarget: vi.fn().mockResolvedValue(undefined),
         refreshRecentProjects: vi.fn().mockResolvedValue(undefined),
         requestConversationHistory: vi.fn().mockResolvedValue(undefined),
@@ -136,3 +141,7 @@ describe("conversation lifecycle", () => {
     expect(setPendingConversationDeletionId).toHaveBeenCalledWith(null);
   });
 });
+
+function navigationCoordinator(navigate = vi.fn()) {
+  return new AppNavigationCoordinator({ back: vi.fn(), navigate });
+}
