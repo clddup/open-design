@@ -1,21 +1,24 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import type { ThemePreference } from "@/shared/desktop-api";
-import { ConversationDeleteDialog } from "../features/agent-conversation/components/ConversationDeleteDialog";
-import { DiagnosticNotifications } from "../features/diagnostics/components/DiagnosticNotifications";
-import { useEditorRuntime, useEditorSnapshot } from "../state/editor-runtime";
-import { useI18n } from "../i18n";
-import { useAgentConversationRuntime } from "../features/agent-conversation/use-agent-conversation-runtime";
-import { useConversationLifecycleState } from "../features/agent-conversation/use-conversation-lifecycle-state";
-import { useConversationNavigationController } from "../features/agent-conversation/use-conversation-navigation-controller";
-import { useProjectNavigationController } from "../features/project/use-project-navigation-controller";
-import { useProjectWorkspaceState } from "../features/project/use-project-workspace-state";
-import { useDiagnosticNotificationsController } from "../features/diagnostics/use-diagnostic-notifications-controller";
-import { useRendererDesignToolHost } from "../features/design-tools/use-renderer-design-tool-host";
-import { useFontBinaryRuntime } from "../features/editor-workbench/hooks/use-font-binary-runtime";
-import { AppNavigationCoordinator } from "../router/app-navigation-coordinator";
-import { appDestination, appRoute } from "../router/app-route";
-import type { AppRouteContext } from "../router/route-context";
+import { ConversationDeleteDialog } from "../agent-conversation/components/ConversationDeleteDialog";
+import { DiagnosticNotifications } from "../diagnostics/components/DiagnosticNotifications";
+import {
+  useEditorRuntime,
+  useEditorSnapshot,
+} from "../../state/editor-runtime";
+import { useI18n } from "../../i18n";
+import { useAgentConversationRuntime } from "../agent-conversation/use-agent-conversation-runtime";
+import { useConversationLifecycleState } from "../agent-conversation/use-conversation-lifecycle-state";
+import { useConversationNavigationController } from "../agent-conversation/use-conversation-navigation-controller";
+import { useProjectNavigationController } from "../project/use-project-navigation-controller";
+import { useProjectWorkspaceState } from "../project/use-project-workspace-state";
+import { useDiagnosticNotificationsController } from "../diagnostics/use-diagnostic-notifications-controller";
+import { useRendererDesignToolHost } from "../design-tools/use-renderer-design-tool-host";
+import { useFontBinaryRuntime } from "../editor-workbench/hooks/use-font-binary-runtime";
+import { AppNavigationCoordinator } from "../../router/app-navigation-coordinator";
+import { appDestination, appRoute } from "../../router/app-route";
+import type { AppRouteContext } from "../../router/route-context";
 
 function resolveTheme(preference: ThemePreference) {
   if (preference !== "system") return preference;

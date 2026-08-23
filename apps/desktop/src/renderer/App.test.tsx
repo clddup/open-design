@@ -1250,6 +1250,50 @@ describe("App", () => {
     expect(screen.queryByText("History from B")).not.toBeInTheDocument();
   });
 
+  it("retains Conversation history received before its editor route commits", async () => {
+    const conversation = conversationDescriptor({
+      conversationId: "conversation_early_history",
+      title: "Early history",
+    });
+    const { user, manifest } = await openProjectWithConversations([
+      conversation,
+    ]);
+    const descriptor = manifest.designFiles[0];
+    if (!descriptor) throw new Error("Design file descriptor is missing");
+    const document = structuredClone(createWelcomeDocument());
+    document.documentId = descriptor.documentId;
+    let resolveProjectFile: ((file: ProjectDesignFile) => void) | undefined;
+    vi.mocked(window.desktop!.readProjectDesignFile).mockReturnValueOnce(
+      new Promise<ProjectDesignFile>((resolve) => {
+        resolveProjectFile = resolve;
+      }),
+    );
+
+    await user.click(screen.getByRole("button", { name: conversation.title }));
+    const historyRequest = historyRequests(conversation.conversationId).at(-1);
+    if (!historyRequest) throw new Error("History request is missing");
+    act(() => {
+      emitAgentEvent?.({
+        type: "session.history",
+        requestId: historyRequest.requestId,
+        sessionId: conversation.conversationId,
+        timeline: [
+          historyMessage(conversation.conversationId, "History arrived early"),
+        ],
+      });
+    });
+    expect(screen.queryByText("History arrived early")).not.toBeInTheDocument();
+
+    const projectFileResolver = resolveProjectFile;
+    if (!projectFileResolver)
+      throw new Error("Project file resolver is missing");
+    act(() => projectFileResolver({ descriptor, document }));
+
+    expect(
+      await screen.findByText("History arrived early"),
+    ).toBeInTheDocument();
+  });
+
   it("preserves an active Run per Conversation and allows another Conversation to start", async () => {
     const first = conversationDescriptor({
       conversationId: "conversation_a",

@@ -1,5 +1,5 @@
 import type { RouteObject } from "react-router-dom";
-import { AppLayout } from "../layouts/AppLayout";
+import { AppShellFeature } from "../features/app-shell";
 import { ConversationPage } from "../pages/Conversation";
 import { EditorPage } from "../pages/Editor";
 import { InvalidPage } from "../pages/Invalid";
@@ -11,7 +11,7 @@ import { WorkspacePage } from "../pages/Workspace";
 export const appRoutes: RouteObject[] = [
   {
     path: "/",
-    element: <AppLayout />,
+    element: <AppShellFeature />,
     children: [
       { index: true, element: <WorkspacePage /> },
       { path: "projects/:projectId", element: <ProjectPage /> },
