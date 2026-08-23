@@ -16,7 +16,7 @@ import {
   type AssetActionResult,
   type DesignAssetIndexEntry,
   type DesignAssetReference,
-} from "../../../design-assets";
+} from "../../design-tools/design-assets";
 import styles from "./AssetsPanel.module.scss";
 import type { ProjectLibraryActions } from "../../../use-project-library-actions";
 import { ProjectLibrariesSection } from "./ProjectLibrariesSection";

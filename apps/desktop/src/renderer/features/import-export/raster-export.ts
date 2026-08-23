@@ -10,7 +10,7 @@ import {
   type LeaferTextRunStyle,
 } from "@opendesign/leafer-engine";
 import type { TextRunLayoutProvider } from "@opendesign/text-service";
-import { composeTextRunLayoutProviders } from "./text-run-provider-fallback";
+import { composeTextRunLayoutProviders } from "../../text-run-provider-fallback";
 
 const EXPORT_SURFACE_WIDTH = 1_280;
 const EXPORT_SURFACE_HEIGHT = 960;

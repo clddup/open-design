@@ -8,7 +8,7 @@ import {
   planUpdateStyleFromNode,
   type StyleOperationPlan,
 } from "@opendesign/editor-runtime";
-import type { DesignStyleToolInput } from "../shared/design-agent-tools";
+import type { DesignStyleToolInput } from "../../../shared/design-agent-tools";
 
 export function planDesignStyleTool(
   document: DesignDocument,

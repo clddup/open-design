@@ -7,7 +7,7 @@ import {
   type MouseEvent,
 } from "react";
 import { useI18n } from "../../../i18n";
-import type { WorkspaceSnapshot } from "../../../workspace-runtime";
+import type { WorkspaceSnapshot } from "../../../state/workspace-runtime";
 import styles from "./DesignFileTabs.module.scss";
 
 type RenameState = {

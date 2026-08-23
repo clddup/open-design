@@ -21,7 +21,7 @@ import type {
 } from "../../../shared/i18n/messages";
 import type { LayerHoverTarget } from "../../layer-hover-target";
 import type { Tool } from "../../state/editor";
-import type { WorkspaceRuntime } from "../../workspace-runtime";
+import type { WorkspaceRuntime } from "../../state/workspace-runtime";
 
 type Translate = (key: MessageKey, parameters?: MessageParameters) => string;
 type CanvasFitTarget = "page" | "selection";

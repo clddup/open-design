@@ -8,12 +8,12 @@ import type {
   MessageKey,
   MessageParameters,
 } from "../../../shared/i18n/messages";
-import { reportRendererError } from "../../diagnostics";
+import { reportRendererError } from "../diagnostics/diagnostics";
 import {
   ProjectAutosaveCoordinator,
   type ProjectAutosaveTarget,
-} from "../../project-autosave";
-import type { WorkspaceRuntime } from "../../workspace-runtime";
+} from "./project-autosave";
+import type { WorkspaceRuntime } from "../../state/workspace-runtime";
 
 type Translate = (key: MessageKey, parameters?: MessageParameters) => string;
 export type ProjectFileTarget = Pick<

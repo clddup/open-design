@@ -45,10 +45,10 @@ import {
   useEditorSnapshot,
 } from "./editor-runtime";
 import { I18nProvider } from "./i18n";
-import * as designCapture from "./design-capture";
-import * as rasterExport from "./raster-export";
-import * as svgInterchange from "./svg-interchange";
-import type { SuccessfulSvgImportResult } from "./svg-interchange-contract";
+import * as designCapture from "./features/design-tools/design-capture";
+import * as rasterExport from "./features/import-export/raster-export";
+import * as svgInterchange from "./features/import-export/svg-interchange";
+import type { SuccessfulSvgImportResult } from "./features/import-export/svg-interchange-contract";
 import type { RendererDesignToolRequest } from "../shared/design-tool-bridge";
 import type { TextLayoutRequest } from "@opendesign/text-service";
 import type { ProjectDesignFile } from "../shared/desktop-api";
@@ -149,9 +149,9 @@ vi.mock("@opendesign/leafer-engine", () => ({
   ),
 }));
 
-vi.mock("./svg-interchange", { spy: true });
-vi.mock("./design-capture", { spy: true });
-vi.mock("./raster-export", { spy: true });
+vi.mock("./features/import-export/svg-interchange", { spy: true });
+vi.mock("./features/design-tools/design-capture", { spy: true });
+vi.mock("./features/import-export/raster-export", { spy: true });
 
 const svgHarness = {
   runImport: vi.mocked(svgInterchange.runSvgImportInWorker),

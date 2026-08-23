@@ -5,8 +5,8 @@ import type {
   DesignTransaction,
 } from "@opendesign/design-contracts";
 import type { EditorRuntime } from "@opendesign/editor-runtime";
-import type { DesignStyleToolInput } from "../shared/design-style-tool";
-import type { RendererDesignToolResponse } from "../shared/design-tool-bridge";
+import type { DesignStyleToolInput } from "../../../shared/design-style-tool";
+import type { RendererDesignToolResponse } from "../../../shared/design-tool-bridge";
 import { planDesignStyleTool } from "./design-style-tool-plan";
 
 export function executeDesignStyleTool({

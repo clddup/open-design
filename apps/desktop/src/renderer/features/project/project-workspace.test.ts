@@ -16,11 +16,11 @@ import type {
   ProjectDesignFile,
 } from "../../../shared/desktop-api";
 import { LOCAL_DESIGN_FILE_ID, LOCAL_PROJECT_ID } from "../../editor-runtime";
-import type { ProjectAutosaveCoordinator } from "../../project-autosave";
+import type { ProjectAutosaveCoordinator } from "./project-autosave";
 import {
   WorkspaceRuntime,
   type WorkspaceFileIdentity,
-} from "../../workspace-runtime";
+} from "../../state/workspace-runtime";
 import { useProjectNavigationController } from "./use-project-navigation-controller";
 import { AppNavigationCoordinator } from "../../router/app-navigation-coordinator";
 import { useProjectWorkspaceState } from "./use-project-workspace-state";

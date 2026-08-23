@@ -23,7 +23,7 @@ import type {
   MessageKey,
   MessageParameters,
 } from "../../../shared/i18n/messages";
-import { reportRendererError } from "../../diagnostics";
+import { reportRendererError } from "../diagnostics/diagnostics";
 import {
   EMPTY_GENERATION_PLAN_PRESENTATION_STATE,
   clearGenerationPlanPresentationRun,
@@ -34,7 +34,7 @@ import {
 import type {
   WorkspaceRuntime,
   WorkspaceSnapshot,
-} from "../../workspace-runtime";
+} from "../../state/workspace-runtime";
 import { projectAgentRunExperience } from "./agent-run-experience";
 import {
   EMPTY_AGENT_STATE,

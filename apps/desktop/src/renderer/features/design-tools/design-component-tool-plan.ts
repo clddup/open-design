@@ -31,7 +31,7 @@ import {
   type ComponentOperationPlan,
   type VariantSetOperationPlan,
 } from "@opendesign/editor-runtime";
-import type { DesignComponentToolInput } from "../shared/design-agent-tools";
+import type { DesignComponentToolInput } from "../../../shared/design-agent-tools";
 
 type WritableComponentToolInput = Exclude<
   DesignComponentToolInput,

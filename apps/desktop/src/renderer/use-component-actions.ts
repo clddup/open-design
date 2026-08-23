@@ -34,7 +34,7 @@ import {
 } from "@opendesign/editor-runtime";
 import { useCallback } from "react";
 import type { MessageKey, MessageParameters } from "../shared/i18n/messages";
-import type { AssetActionResult } from "./design-assets";
+import type { AssetActionResult } from "./features/design-tools/design-assets";
 import { useComponentPropertyOrderAction } from "./use-component-property-order-action";
 import { useVariantMatrixActions } from "./use-variant-matrix-actions";
 

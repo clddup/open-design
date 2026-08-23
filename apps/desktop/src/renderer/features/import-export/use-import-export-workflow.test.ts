@@ -6,10 +6,10 @@ import {
 import type { AppMessageApi } from "@opendesign/ui";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DesktopApi } from "../../../shared/desktop-api";
-import { exportDesignRaster } from "../../raster-export";
+import { exportDesignRaster } from "./raster-export";
 import { useImportExportWorkflow } from "./use-import-export-workflow";
 
-vi.mock("../../raster-export", () => ({
+vi.mock("./raster-export", () => ({
   exportDesignRaster: vi.fn(),
   suggestRasterExportName: (name: string | undefined) => name ?? "Export",
 }));

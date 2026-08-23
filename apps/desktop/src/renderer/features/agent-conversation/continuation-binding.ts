@@ -1,5 +1,5 @@
 import type { AgentEvent } from "@opendesign/agent-contracts";
-import type { WorkspaceRuntime } from "../../workspace-runtime";
+import type { WorkspaceRuntime } from "../../state/workspace-runtime";
 
 export type AgentRunFileTarget = {
   projectId: string;

@@ -9,7 +9,7 @@ import {
   MAX_DESIGN_SYSTEM_CATALOG_PROPERTIES,
   type DesignSystemComponentCatalog,
   type DesignSystemComponentCatalogEntry,
-} from "../shared/design-system-component-catalog";
+} from "../../../shared/design-system-component-catalog";
 
 export function createScopedComponentInspection(
   document: DesignDocument,

@@ -14,13 +14,13 @@ import type {
   RecentProject,
 } from "../../../shared/desktop-api";
 import { LOCAL_PROJECT_ID } from "../../editor-runtime";
-import { reportRendererError } from "../../diagnostics";
-import type { ProjectAutosaveCoordinator } from "../../project-autosave";
+import { reportRendererError } from "../diagnostics/diagnostics";
+import type { ProjectAutosaveCoordinator } from "./project-autosave";
 import type {
   WorkspaceFileIdentity,
   WorkspaceRuntime,
   WorkspaceSnapshot,
-} from "../../workspace-runtime";
+} from "../../state/workspace-runtime";
 import type {
   AppNavigationTransition,
   AppNavigationCoordinator,

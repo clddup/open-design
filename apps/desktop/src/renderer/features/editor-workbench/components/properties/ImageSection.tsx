@@ -17,7 +17,7 @@ import { useI18n } from "../../../../i18n";
 import {
   IMAGE_DERIVATION_OPERATION_LABEL_KEYS,
   IMAGE_EDIT_PROGRESS_LABEL_KEYS,
-} from "../../../../design-assets";
+} from "../../../design-tools/design-assets";
 import styles from "../PropertiesPanel.module.scss";
 import imageStyles from "./ImageSection.module.scss";
 import { Field, Section, commitNumber, cx, formatNumber } from "./controls";

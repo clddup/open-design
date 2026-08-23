@@ -15,7 +15,7 @@ import {
   planUpdateVariableCollection,
   type VariableOperationPlan,
 } from "@opendesign/editor-runtime";
-import type { DesignVariableToolInput } from "../shared/design-agent-tools";
+import type { DesignVariableToolInput } from "../../../shared/design-agent-tools";
 
 export function planDesignVariableTool(
   document: DesignDocument,

@@ -10,10 +10,10 @@ import type {
   ProfessionalFixtureSmokeBootstrap,
   ProfessionalFixtureSmokeResult,
 } from "../shared/professional-fixture-smoke";
-import * as designCapture from "./design-capture";
+import * as designCapture from "./features/design-tools/design-capture";
 import { runProfessionalFixtureSmoke } from "./use-professional-fixture-smoke";
 
-vi.mock("./design-capture", { spy: true });
+vi.mock("./features/design-tools/design-capture", { spy: true });
 
 const repositoryRoot = resolve(import.meta.dirname, "../../../..");
 const capture = vi.mocked(designCapture.captureDesignTarget);

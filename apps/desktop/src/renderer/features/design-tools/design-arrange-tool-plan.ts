@@ -12,7 +12,7 @@ import {
   planSetFrameLayoutGuides,
   planSetNodeGridPlacement,
 } from "@opendesign/editor-runtime";
-import type { DesignArrangeToolInput } from "../shared/design-arrange-tool";
+import type { DesignArrangeToolInput } from "../../../shared/design-arrange-tool";
 
 export function planDesignArrangeTool(
   document: DesignDocument,

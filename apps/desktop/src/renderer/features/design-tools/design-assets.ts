@@ -8,8 +8,8 @@ import {
   indexImageAssetFamilies,
   nodeReferencesAsset,
 } from "@opendesign/editor-runtime";
-import type { MessageKey } from "../shared/i18n/messages";
-import type { DesignImageEditAction } from "../shared/desktop-api";
+import type { MessageKey } from "../../../shared/i18n/messages";
+import type { DesignImageEditAction } from "../../../shared/desktop-api";
 
 export const DESIGN_ASSET_DRAG_MIME =
   "application/x-opendesign-image-asset-id" as const;

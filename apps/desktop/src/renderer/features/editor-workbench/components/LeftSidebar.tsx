@@ -24,7 +24,7 @@ import {
 import type {
   AssetActionResult,
   DesignAssetReference,
-} from "../../../design-assets";
+} from "../../design-tools/design-assets";
 import type {
   LayerDropPosition,
   LayerActionResult,

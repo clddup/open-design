@@ -13,7 +13,7 @@ import type {
   SvgInterchangeFeedback,
   SvgOperationStatus,
 } from "../../../import-export/types";
-import type { SvgWorkerExportSettings } from "../../../../svg-interchange-contract";
+import type { SvgWorkerExportSettings } from "../../../import-export/svg-interchange-contract";
 import styles from "../PropertiesPanel.module.scss";
 import {
   ColorPicker,

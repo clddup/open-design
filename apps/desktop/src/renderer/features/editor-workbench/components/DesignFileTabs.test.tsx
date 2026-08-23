@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   workspaceFileKey,
   type WorkspaceSnapshot,
-} from "../../../workspace-runtime";
+} from "../../../state/workspace-runtime";
 import { DesignFileTabs } from "./DesignFileTabs";
 
 const files = [

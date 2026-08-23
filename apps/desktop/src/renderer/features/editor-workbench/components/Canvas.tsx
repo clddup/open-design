@@ -35,7 +35,7 @@ import {
 import { navigateComponentSelection } from "@opendesign/component-service";
 import { Icon } from "@opendesign/ui";
 import type { DesignImageEditAction } from "../../../../shared/desktop-api";
-import { IMAGE_EDIT_PROGRESS_LABEL_KEYS } from "../../../design-assets";
+import { IMAGE_EDIT_PROGRESS_LABEL_KEYS } from "../../design-tools/design-assets";
 import {
   createLeaferEngineAdapter,
   resolveDesignTextRuns,
@@ -88,7 +88,7 @@ import {
 import { commitCanvasOperation } from "../../editor/canvas-operation-commit";
 import type { ResizeFrameHandler } from "../../editor/canvas-responsive-resize";
 import { isTool } from "../../../state/editor";
-import { DESIGN_ASSET_DRAG_MIME } from "../../../design-assets";
+import { DESIGN_ASSET_DRAG_MIME } from "../../design-tools/design-assets";
 import { composeTextRunLayoutProviders } from "../../../text-run-provider-fallback";
 import styles from "./Canvas.module.scss";
 import {

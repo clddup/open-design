@@ -14,7 +14,7 @@ import type {
   TextLayoutQualityEvidence,
   TextRunLayoutProvider,
 } from "@opendesign/text-service";
-import { composeTextRunLayoutProviders } from "./text-run-provider-fallback";
+import { composeTextRunLayoutProviders } from "../../text-run-provider-fallback";
 
 const CAPTURE_WIDTH = 1_280;
 const CAPTURE_HEIGHT = 960;

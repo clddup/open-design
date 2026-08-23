@@ -1,14 +1,14 @@
 import { useEffect, useRef } from "react";
 import type { LeaferTextRunStyle } from "@opendesign/leafer-engine";
 import type { TextRunLayoutProvider } from "@opendesign/text-service";
-import type { ProjectAutosaveCoordinator } from "./project-autosave";
-import type { WorkspaceRuntime } from "./workspace-runtime";
+import { reportRendererError } from "../diagnostics/diagnostics";
+import type { ProjectAutosaveCoordinator } from "../project/project-autosave";
+import type { WorkspaceRuntime } from "../../state/workspace-runtime";
 import { executeDesignToolRequest } from "./design-tool-execution";
 import {
   captureDesignTarget,
   DesignCaptureTimeoutError,
 } from "./design-capture";
-import { reportRendererError } from "./diagnostics";
 
 export function useRendererDesignToolHost(
   workspace: WorkspaceRuntime,

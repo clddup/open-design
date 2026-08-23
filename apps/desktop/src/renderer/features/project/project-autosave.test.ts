@@ -4,7 +4,7 @@ import {
   planCreateComponent,
 } from "@opendesign/editor-runtime";
 import type { DesignDocument } from "@opendesign/design-contracts";
-import type { ProjectDesignFile } from "../shared/desktop-api";
+import type { ProjectDesignFile } from "../../../shared/desktop-api";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ProjectAutosaveCoordinator } from "./project-autosave";
 

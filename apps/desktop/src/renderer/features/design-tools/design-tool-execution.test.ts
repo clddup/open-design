@@ -25,14 +25,14 @@ import {
   INTERNAL_IMPORT_SVG_TOOL_NAME,
   INTERNAL_READ_IMAGE_SOURCE_TOOL_NAME,
   INTERNAL_UPDATE_IMAGE_TOOL_NAME,
-} from "../shared/design-agent-tools";
-import type { RendererDesignToolRequest } from "../shared/design-tool-bridge";
+} from "../../../shared/design-agent-tools";
+import type { RendererDesignToolRequest } from "../../../shared/design-tool-bridge";
 import { decodeAgentTextLineBreaks } from "./agent-text-normalization";
 import { executeDesignToolRequest } from "./design-tool-execution";
 import type {
   runSvgExportInWorker,
   runSvgImportInWorker,
-} from "./svg-interchange";
+} from "../import-export/svg-interchange";
 
 const selectionContext = {
   runId: "run_1",

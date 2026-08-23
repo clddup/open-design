@@ -77,15 +77,18 @@ import {
   type DesignFontToolInput,
   type DesignPageToolInput,
   type DesignTextRangeToolInput,
-} from "../shared/design-agent-tools";
-import { createAgentDesignIdAllocation } from "../shared/design-id-allocation";
+} from "../../../shared/design-agent-tools";
+import { createAgentDesignIdAllocation } from "../../../shared/design-id-allocation";
 import type {
   RendererDesignToolProgressPhase,
   RendererDesignToolRequest,
   RendererDesignToolResponse,
-} from "../shared/design-tool-bridge";
-import { runSvgExportInWorker, runSvgImportInWorker } from "./svg-interchange";
-import { exportDesignRaster } from "./raster-export";
+} from "../../../shared/design-tool-bridge";
+import { exportDesignRaster } from "../import-export/raster-export";
+import {
+  runSvgExportInWorker,
+  runSvgImportInWorker,
+} from "../import-export/svg-interchange";
 import { normalizeAgentTextContent } from "./agent-text-normalization";
 import { throwIfAgentGenerationAborted } from "./agent-generation-timing";
 import { executeSemanticDesignTransaction } from "./design-transaction-steps";

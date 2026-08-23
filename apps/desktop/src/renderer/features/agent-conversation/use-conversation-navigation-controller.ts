@@ -8,7 +8,7 @@ import type {
   MessageKey,
   MessageParameters,
 } from "../../../shared/i18n/messages";
-import { reportRendererError } from "../../diagnostics";
+import { reportRendererError } from "../diagnostics/diagnostics";
 import type {
   AppNavigationTransition,
   AppNavigationCoordinator,

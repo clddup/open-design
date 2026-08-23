@@ -1,6 +1,6 @@
 import { createWelcomeDocument } from "@opendesign/editor-runtime";
 import { describe, expect, it } from "vitest";
-import { MAX_DESIGN_SYSTEM_CATALOG_CHARACTERS } from "../shared/design-system-component-catalog";
+import { MAX_DESIGN_SYSTEM_CATALOG_CHARACTERS } from "../../../shared/design-system-component-catalog";
 import { createScopedComponentInspection } from "./design-component-inspection";
 
 describe("scoped component inspection catalog", () => {

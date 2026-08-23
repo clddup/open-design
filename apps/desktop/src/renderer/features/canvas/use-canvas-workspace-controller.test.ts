@@ -6,7 +6,7 @@ import {
 } from "@opendesign/editor-runtime";
 import { act, fireEvent, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { WorkspaceRuntime } from "../../workspace-runtime";
+import { WorkspaceRuntime } from "../../state/workspace-runtime";
 import { useCanvasWorkspaceController } from "./use-canvas-workspace-controller";
 
 describe("useCanvasWorkspaceController", () => {

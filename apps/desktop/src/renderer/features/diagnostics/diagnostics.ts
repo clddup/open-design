@@ -1,4 +1,4 @@
-import type { DiagnosticContext } from "../shared/desktop-api";
+import type { DiagnosticContext } from "../../../shared/desktop-api";
 
 export function rendererErrorMessage(error: unknown, fallback: string): string {
   if (!(error instanceof Error)) return fallback;

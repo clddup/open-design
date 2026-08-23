@@ -11,7 +11,7 @@ import { useConversationNavigationController } from "../features/agent-conversat
 import { useProjectNavigationController } from "../features/project/use-project-navigation-controller";
 import { useProjectWorkspaceState } from "../features/project/use-project-workspace-state";
 import { useDiagnosticNotificationsController } from "../features/diagnostics/use-diagnostic-notifications-controller";
-import { useRendererDesignToolHost } from "../use-renderer-design-tool-host";
+import { useRendererDesignToolHost } from "../features/design-tools/use-renderer-design-tool-host";
 import { useProfessionalFixtureSmoke } from "../use-professional-fixture-smoke";
 import { useFontBinaryRuntime } from "../use-font-binary-runtime";
 import { AppNavigationCoordinator } from "../router/app-navigation-coordinator";

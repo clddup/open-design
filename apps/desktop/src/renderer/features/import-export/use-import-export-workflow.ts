@@ -13,7 +13,7 @@ import type {
   MessageKey,
   MessageParameters,
 } from "../../../shared/i18n/messages";
-import type { SvgWorkerExportSettings } from "../../svg-interchange-contract";
+import type { SvgWorkerExportSettings } from "./svg-interchange-contract";
 import {
   captureSvgImportTarget,
   normalizeSvgExportRoots,
@@ -21,12 +21,9 @@ import {
   runSvgExportInWorker,
   runSvgImportInWorker,
   suggestSvgExportName,
-} from "../../svg-interchange";
-import {
-  exportDesignRaster,
-  suggestRasterExportName,
-} from "../../raster-export";
-import { isAbortError, reportRendererError } from "../../diagnostics";
+} from "./svg-interchange";
+import { exportDesignRaster, suggestRasterExportName } from "./raster-export";
+import { isAbortError, reportRendererError } from "../diagnostics/diagnostics";
 import type {
   ExportFormat,
   RasterExportSettings,
