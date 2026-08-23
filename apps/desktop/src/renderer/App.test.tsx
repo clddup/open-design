@@ -415,6 +415,19 @@ function runtimeOutput() {
   return screen.getByLabelText("Runtime state");
 }
 
+async function openWorkspaceProject(
+  user: ReturnType<typeof userEvent.setup>,
+  projectName: string | RegExp,
+  readyDesignFileName: string | RegExp,
+) {
+  await user.click(await screen.findByRole("button", { name: projectName }));
+  const designFile = await screen.findByRole("button", {
+    name: readyDesignFileName,
+  });
+  await waitFor(() => expect(designFile).toBeEnabled());
+  return designFile;
+}
+
 function mockConversationTargetResolution(manifest: ProjectManifest) {
   vi.mocked(window.desktop!.resolveConversationOpenContext).mockImplementation(
     ({ conversationId }) =>
@@ -479,10 +492,7 @@ async function openProjectWithConversations(
     },
   );
   renderApp("workspace");
-  await user.click(await screen.findByRole("button", { name: /^Acme Design/ }));
-  await waitFor(() =>
-    expect(screen.getByRole("button", { name: /Mobile UI/ })).toBeEnabled(),
-  );
+  await openWorkspaceProject(user, /^Acme Design/, /Mobile UI/);
   return { user, manifest };
 }
 
@@ -1171,9 +1181,7 @@ describe("App", () => {
     );
 
     renderApp("workspace");
-    await user.click(
-      await screen.findByRole("button", { name: /^Acme Design/ }),
-    );
+    await openWorkspaceProject(user, /^Acme Design/, /Mobile UI/);
     expect(window.desktop?.listConversations).toHaveBeenCalledWith();
     expect(
       await screen.findByRole("button", {
@@ -1995,16 +2003,14 @@ describe("App", () => {
 
     renderApp("workspace");
     await user.click(
-      await screen.findByRole("button", { name: /^Acme Design/ }),
+      await openWorkspaceProject(user, /^Acme Design/, /Mobile UI/),
     );
-    await user.click(screen.getByRole("button", { name: /Mobile UI/ }));
     await user.click(
       await screen.findByRole("button", { name: "Open Workspace Home" }),
     );
     await user.click(
-      await screen.findByRole("button", { name: /^Beta Studio/ }),
+      await openWorkspaceProject(user, /^Beta Studio/, /Brand System/),
     );
-    await user.click(screen.getByRole("button", { name: /Brand System/ }));
     await screen.findByRole("main", { name: "Design canvas" });
 
     await user.click(screen.getByRole("tab", { name: "Mobile UI" }));
