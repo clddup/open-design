@@ -3437,8 +3437,22 @@ describe("Leafer engine selection bounds synchronization", () => {
     });
     flushAnimationFramesAt(1_100);
     expect(element.localTransform.e).toBeLessThan(780);
+    const skeletonLayer = app.sky.children[0];
+    const activityLayer = app.sky.children.find(
+      (child): child is FakeGroup =>
+        child instanceof FakeGroup &&
+        child.children.some((candidate) => candidate instanceof FakeText) &&
+        child.children.some((candidate) => candidate instanceof FakePath),
+    );
+    const revealStroker = leaferHarness.strokers[0];
+    if (!skeletonLayer || !activityLayer || !revealStroker) {
+      throw new Error("Missing generation presentation resources");
+    }
     adapter.dispose();
     expect(element.localTransform.e).toBe(780);
+    expect(skeletonLayer.destroy).toHaveBeenCalledTimes(1);
+    expect(activityLayer.destroy).toHaveBeenCalledTimes(1);
+    expect(revealStroker.destroy).toHaveBeenCalledTimes(1);
   });
 
   it("refreshes an unchanged selection after revisions and viewport gestures", async () => {
