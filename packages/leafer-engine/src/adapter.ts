@@ -1,19 +1,11 @@
 import type {
   ComponentSelectionTarget,
   DesignChangeSet,
-  DesignDocument,
   SelectionState,
   VectorPointMode,
   ViewportState,
 } from "@opendesign/design-contracts";
 import { componentSourcePathKey } from "@opendesign/component-service";
-import {
-  BOOLEAN_GEOMETRY_RESOLVER_VERSION,
-  createBooleanGeometryResolver,
-  type BooleanGeometryResolution,
-  type BooleanGeometryResolver,
-} from "@opendesign/geometry-service/boolean-resolver";
-import type { VectorGeometryProvider } from "@opendesign/geometry-service/vector-path";
 import {
   isRasterExportRequest,
   type RasterExportRequest,
@@ -25,10 +17,6 @@ import type {
 import type * as LeaferEditorModule from "leafer-editor";
 import {
   LEAFER_EDITOR_SELECTION_COLOR,
-  projectBooleanEditScope,
-  projectDesignPage,
-  projectDesignPageIncrementally,
-  projectResolvedBooleanGeometry,
   type LeaferElementSpec,
   type LeaferSceneProjection,
 } from "./mapping.js";
@@ -42,7 +30,6 @@ import { TextRunEditController } from "./text-run-edit-controller.js";
 import { TextEditDomController } from "./text-edit-dom-controller.js";
 import {
   projectionNodeId,
-  projectTextRunProjection,
   textRunProjectionNodeIds,
 } from "./text-run-projection.js";
 import { exportLeaferCapture } from "./capture-export.js";
@@ -78,6 +65,7 @@ import { VectorEditController } from "./vector-edit-controller.js";
 import { asLeaferEvent } from "./pointer-event.js";
 import { SceneReconciler } from "./scene-reconciler.js";
 import { GenerationPresentationController } from "./generation-presentation-controller.js";
+import { SceneProjectionController } from "./scene-projection-controller.js";
 
 type LeaferModule = typeof LeaferEditorModule;
 type LeaferApp = InstanceType<LeaferModule["App"]>;
@@ -122,16 +110,10 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   readonly #imageCropController: ImageCropController;
   readonly #penToolController: PenToolController;
   readonly #scene: SceneReconciler;
+  readonly #sceneProjection: SceneProjectionController;
   readonly #textEditDomController: TextEditDomController<LeaferElement>;
   readonly #textRunEditor: TextRunEditController<LeaferElement>;
   readonly #vectorEditController: VectorEditController;
-  readonly #loadVectorGeometryProvider: () => Promise<VectorGeometryProvider>;
-  #baseProjection: LeaferSceneProjection | null = null;
-  #booleanNodeIds = new Set<string>();
-  #booleanResolver: BooleanGeometryResolver | null = null;
-  #geometryLoadError: Error | null = null;
-  #geometryLoadGeneration = 0;
-  #geometryLoadPromise: Promise<void> | null = null;
   #disposed = false;
   #input: LeaferEngineSyncInput | null = null;
   #synchronizing = false;
@@ -151,8 +133,6 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     this.#leafer = leafer;
     this.textLayoutProvider = createLeaferTextLayoutProvider(leafer);
     this.textRunLayoutProvider = createLeaferTextRunLayoutProvider(leafer);
-    this.#loadVectorGeometryProvider =
-      options.loadVectorGeometryProvider ?? loadBrowserVectorGeometryProvider;
     this.#app = new leafer.App({
       view: host,
       type: "design",
@@ -210,6 +190,27 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         }),
       selectionNodeIds: () => this.#input?.selection.nodeIds ?? [],
     });
+    this.#sceneProjection = new SceneProjectionController({
+      current: () => ({
+        disposed: this.#disposed,
+        input: this.#input,
+        sceneProjection: this.#scene.projection,
+      }),
+      ...(options.loadVectorGeometryProvider
+        ? { loadVectorGeometryProvider: options.loadVectorGeometryProvider }
+        : {}),
+      onAsyncProjection: (projection, input) => {
+        if (this.#disposed || this.#input !== input) return;
+        this.#synchronizing = true;
+        try {
+          this.#scene.reconcile(projection);
+          this.#syncSelection(input.selection);
+        } finally {
+          this.#synchronizing = false;
+        }
+      },
+      report: (error) => this.#report(error),
+    });
     // World-space editing presentation belongs to Leafer's built-in editor sky.
     // The sky is the same viewport plane used by selection chrome, so a pan or
     // zoom cannot advance the document and overlays on independently scheduled
@@ -252,7 +253,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       applySpecData: (element, spec, overrides) =>
         this.#scene.applySpecData(element, spec, overrides),
       current: () => ({
-        baseProjection: this.#baseProjection,
+        baseProjection: this.#sceneProjection.baseProjection,
         document: this.#input?.document ?? null,
         projection: this.#scene.projection,
       }),
@@ -283,7 +284,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       applySpecData: (element, spec) =>
         this.#scene.applySpecData(element, spec),
       current: () => ({
-        baseProjection: this.#baseProjection,
+        baseProjection: this.#sceneProjection.baseProjection,
         disposed: this.#disposed,
         input: this.#input,
         projection: this.#scene.projection,
@@ -333,8 +334,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         !this.#disposed &&
         this.#input?.booleanEditScope !== undefined &&
         !this.#input.booleanEditScope.readOnly &&
-        this.#booleanResolver !== null &&
-        this.#baseProjection !== null,
+        this.#sceneProjection.canPreviewBoolean,
       current: () => ({
         disposed: this.#disposed,
         input: this.#input,
@@ -433,24 +433,22 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
           ...textRunProjectionNodeIds(previous?.textRunProjection),
           ...textRunProjectionNodeIds(input.textRunProjection),
         ]);
-        const baseProjection = documentSceneChanged
-          ? previous && this.#baseProjection && input.changes
-            ? projectDesignPageIncrementally(
-                this.#baseProjection,
-                input.document,
-                input.pageId,
-                input.changes,
-              )
-            : projectDesignPage(input.document, input.pageId)
-          : (this.#baseProjection ??
-            projectDesignPage(input.document, input.pageId));
-        this.#baseProjection = baseProjection;
-        const projection = this.#projectScene(
+        const baseProjection = this.#sceneProjection.baseFor(
+          previous,
+          input,
+          documentSceneChanged,
+        );
+        const projection = this.#sceneProjection.project(
+          input,
           baseProjection,
-          undefined,
           editScopeChanged
-            ? changedBooleanEditScopeIds(previous, input)
-            : undefined,
+            ? {
+                affectedEditScopeBooleanIds: changedBooleanEditScopeIds(
+                  previous,
+                  input,
+                ),
+              }
+            : {},
         );
         if (!contiguousChanges || input.reducedMotion === true) {
           this.#generationPresentation.finishTweens();
@@ -540,13 +538,18 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
           this.#editor.hoverTarget = null as never;
         }
         this.#scene.reconcile(projection);
-      } else if (editScopeChanged && this.#baseProjection) {
+      } else if (editScopeChanged && this.#sceneProjection.baseProjection) {
         this.#scene.reconcile(
-          this.#projectScene(
-            this.#baseProjection,
-            undefined,
-            changedBooleanEditScopeIds(previous, input),
-            true,
+          this.#sceneProjection.project(
+            input,
+            this.#sceneProjection.baseProjection,
+            {
+              affectedEditScopeBooleanIds: changedBooleanEditScopeIds(
+                previous,
+                input,
+              ),
+              forceEditScopeAffected: true,
+            },
           ),
         );
       }
@@ -587,7 +590,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     if (!input || input.pageId !== target.pageId) {
       throw new Error("Leafer capture target is not the projected Page");
     }
-    if (this.#geometryLoadPromise) await this.#geometryLoadPromise;
+    await this.#sceneProjection.settlePendingGeometry();
     if (this.#disposed || this.#input !== input) {
       throw new Error("Leafer capture target changed during rendering");
     }
@@ -628,7 +631,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     if (!input || input.pageId !== request.pageId) {
       throw new Error("Leafer raster export target is not the projected Page");
     }
-    if (this.#geometryLoadPromise) await this.#geometryLoadPromise;
+    await this.#sceneProjection.settlePendingGeometry();
     if (this.#disposed || this.#input !== input) {
       throw new Error("Leafer raster export target changed during rendering");
     }
@@ -649,12 +652,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   dispose(): void {
     if (this.#disposed) return;
     this.#disposed = true;
-    this.#geometryLoadGeneration += 1;
-    this.#geometryLoadPromise = null;
-    this.#booleanResolver?.clear();
-    this.#booleanResolver = null;
-    this.#baseProjection = null;
-    this.#booleanNodeIds.clear();
+    this.#sceneProjection.dispose();
     this.#textEditDomController.dispose();
     this.#textRunEditor.clear();
     this.#boxDrawController.dispose();
@@ -705,17 +703,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   }
 
   retryBooleanGeometry(): boolean {
-    if (
-      this.#disposed ||
-      !this.#geometryLoadError ||
-      this.#booleanNodeIds.size === 0
-    ) {
-      return false;
-    }
-    this.#geometryLoadError = null;
-    this.#geometryLoadPromise = null;
-    this.#refreshBooleanGeometry();
-    return true;
+    return this.#sceneProjection.retry();
   }
 
   setVectorPointMode(mode: VectorPointMode): boolean {
@@ -855,153 +843,6 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     window.addEventListener("keydown", this.#onWindowKeyDown, true);
     window.addEventListener("keyup", this.#onWindowKeyUp, true);
     this.#host.addEventListener("contextlost", this.#onContextLost, true);
-  }
-
-  #projectBooleanGeometry(
-    base: LeaferSceneProjection,
-    forceBooleanIds?: ReadonlySet<string>,
-  ): LeaferSceneProjection {
-    const currentBooleanIds = collectBooleanNodeIds(base);
-    const removedBooleanIds = new Set(
-      [...this.#booleanNodeIds].filter(
-        (nodeId) => !currentBooleanIds.has(nodeId),
-      ),
-    );
-    this.#booleanNodeIds = currentBooleanIds;
-    const document = this.#input?.document;
-    if (!document) return base;
-    if (currentBooleanIds.size === 0) {
-      return removedBooleanIds.size === 0
-        ? base
-        : projectResolvedBooleanGeometry(
-            base,
-            document,
-            emptyBooleanResolution(base.pageId),
-            { removedBooleanNodeIds: removedBooleanIds },
-          );
-    }
-
-    if (!this.#booleanResolver) {
-      if (this.#geometryLoadError) {
-        const incremental =
-          base.affectedNodeIds !== undefined || forceBooleanIds !== undefined;
-        return projectResolvedBooleanGeometry(
-          base,
-          document,
-          failedBooleanResolution(
-            base.pageId,
-            currentBooleanIds,
-            this.#geometryLoadError,
-          ),
-          incremental
-            ? {
-                affectedBooleanNodeIds:
-                  forceBooleanIds ?? new Set(currentBooleanIds),
-                removedBooleanNodeIds: removedBooleanIds,
-              }
-            : {},
-        );
-      }
-      this.#ensureVectorGeometryProvider();
-      return base;
-    }
-
-    const resolution = this.#booleanResolver.resolve(document, base.pageId);
-    const incremental =
-      base.affectedNodeIds !== undefined || forceBooleanIds !== undefined;
-    return projectResolvedBooleanGeometry(
-      base,
-      document,
-      resolution,
-      incremental
-        ? {
-            affectedBooleanNodeIds: new Set([
-              ...resolution.computedNodeIds,
-              ...(forceBooleanIds ?? []),
-            ]),
-            removedBooleanNodeIds: removedBooleanIds,
-          }
-        : {},
-    );
-  }
-
-  #projectScene(
-    base: LeaferSceneProjection,
-    forceBooleanIds?: ReadonlySet<string>,
-    affectedEditScopeBooleanIds?: ReadonlySet<string>,
-    forceEditScopeAffected = false,
-  ): LeaferSceneProjection {
-    const projection = this.#projectBooleanGeometry(base, forceBooleanIds);
-    const document = this.#input?.document;
-    if (!document) return projection;
-    return projectTextRunProjection(
-      projectBooleanEditScope(
-        projection,
-        document,
-        this.#input?.booleanEditScope,
-        affectedEditScopeBooleanIds
-          ? {
-              affectedBooleanNodeIds: affectedEditScopeBooleanIds,
-              forceAffected: forceEditScopeAffected,
-            }
-          : {},
-      ),
-      this.#input?.textRunProjection,
-      this.#scene.projection,
-    );
-  }
-
-  #ensureVectorGeometryProvider(): void {
-    if (
-      this.#disposed ||
-      this.#geometryLoadPromise ||
-      this.#booleanResolver ||
-      this.#geometryLoadError
-    ) {
-      return;
-    }
-    const generation = ++this.#geometryLoadGeneration;
-    this.#geometryLoadPromise = this.#loadVectorGeometryProvider().then(
-      (provider) => {
-        if (this.#disposed || generation !== this.#geometryLoadGeneration) {
-          return;
-        }
-        this.#booleanResolver = createBooleanGeometryResolver(provider);
-        this.#geometryLoadError = null;
-        this.#geometryLoadPromise = null;
-        this.#refreshBooleanGeometry();
-      },
-      (error: unknown) => {
-        if (this.#disposed || generation !== this.#geometryLoadGeneration) {
-          return;
-        }
-        this.#geometryLoadError =
-          error instanceof Error
-            ? error
-            : new Error("PathKit geometry provider failed to load");
-        this.#geometryLoadPromise = null;
-        this.#refreshBooleanGeometry();
-      },
-    );
-  }
-
-  #refreshBooleanGeometry(): void {
-    const base = this.#baseProjection;
-    const input = this.#input;
-    if (!base || !input || this.#disposed) return;
-    this.#synchronizing = true;
-    try {
-      const projection = this.#projectScene(
-        base,
-        new Set(this.#booleanNodeIds),
-      );
-      this.#scene.reconcile(projection);
-      this.#syncSelection(input.selection);
-    } catch (error) {
-      this.#report(error);
-    } finally {
-      this.#synchronizing = false;
-    }
   }
 
   #syncTool(tool: LeaferCanvasTool): void {
@@ -1162,66 +1003,20 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     states: ReadonlyMap<string, DirectTransformElementState>,
   ): void {
     const input = this.#input;
-    const base = this.#baseProjection;
-    const resolver = this.#booleanResolver;
-    if (
-      !input?.booleanEditScope ||
-      input.booleanEditScope.readOnly ||
-      !base ||
-      !resolver ||
-      this.#disposed
-    ) {
-      return;
-    }
-    const nodesById: DesignDocument["nodesById"] = {
-      ...input.document.nodesById,
-    };
-    for (const [nodeId, current] of states) {
-      const node = input.document.nodesById[nodeId];
-      if (!node) continue;
-      nodesById[nodeId] = {
-        ...node,
-        transform: current.transform,
-        ...(node.kind === "group" ||
-        node.kind === "boolean" ||
-        node.kind === "instance"
-          ? {}
-          : { size: current.size }),
-      };
-    }
-    const previewDocument: DesignDocument = {
-      ...input.document,
-      nodesById,
-    };
+    if (!input || this.#disposed) return;
+    const projection = this.#sceneProjection.previewBooleanTransform(
+      input,
+      states,
+    );
+    if (!projection) return;
+    this.#synchronizing = true;
     try {
-      const resolution = resolver.resolve(previewDocument, input.pageId);
-      const projection = projectResolvedBooleanGeometry(
-        base,
-        previewDocument,
-        resolution,
-        {
-          affectedBooleanNodeIds: new Set([
-            ...resolution.computedNodeIds,
-            input.booleanEditScope.booleanId,
-          ]),
-        },
-      );
-      this.#synchronizing = true;
-      this.#scene.reconcile(
-        projectBooleanEditScope(
-          projection,
-          previewDocument,
-          input.booleanEditScope,
-        ),
-      );
+      this.#scene.reconcile(projection);
       this.#syncSelection(input.selection);
-    } catch (error) {
-      this.#report(error);
     } finally {
       this.#synchronizing = false;
     }
   }
-
   #selectedNodeIds(): string[] {
     return this.#editor.list.flatMap((element) => {
       const nodeId = this.#nodeId(element as LeaferElement);
@@ -1385,9 +1180,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     if (!this.#input) return;
     this.#synchronizing = true;
     try {
-      const base = projectDesignPage(this.#input.document, this.#input.pageId);
-      this.#baseProjection = base;
-      this.#scene.reconcile(this.#projectScene(base), {
+      this.#scene.reconcile(this.#sceneProjection.rebuild(this.#input), {
         reapplyAll: true,
       });
       this.#syncViewport(this.#input.viewport);
@@ -1501,12 +1294,6 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   }
 }
 
-async function loadBrowserVectorGeometryProvider(): Promise<VectorGeometryProvider> {
-  const module =
-    await import("@opendesign/geometry-service/browser-vector-path");
-  return module.loadBrowserVectorGeometryProvider();
-}
-
 function sameBooleanEditScope(
   left: LeaferEngineSyncInput["booleanEditScope"],
   right: LeaferEngineSyncInput["booleanEditScope"],
@@ -1531,44 +1318,6 @@ function changedBooleanEditScopeIds(
       current.booleanEditScope?.booleanId,
     ].filter((nodeId): nodeId is string => nodeId !== undefined),
   );
-}
-
-function collectBooleanNodeIds(projection: LeaferSceneProjection): Set<string> {
-  return new Set(
-    [...projection.elementsById.values()]
-      .filter((spec) => spec.kind === "boolean")
-      .map((spec) => spec.id),
-  );
-}
-
-function failedBooleanResolution(
-  pageId: string,
-  nodeIds: ReadonlySet<string>,
-  error: Error,
-): BooleanGeometryResolution {
-  return {
-    computedNodeIds: [],
-    issues: [...nodeIds].map((nodeId) => ({
-      code: "provider-failure" as const,
-      message: `Boolean geometry provider failed to load: ${error.message}`,
-      nodeId,
-    })),
-    pageId,
-    resolverVersion: BOOLEAN_GEOMETRY_RESOLVER_VERSION,
-    resultsByNodeId: new Map(),
-    reusedNodeIds: [],
-  };
-}
-
-function emptyBooleanResolution(pageId: string): BooleanGeometryResolution {
-  return {
-    computedNodeIds: [],
-    issues: [],
-    pageId,
-    resolverVersion: BOOLEAN_GEOMETRY_RESOLVER_VERSION,
-    resultsByNodeId: new Map(),
-    reusedNodeIds: [],
-  };
 }
 
 function changeSetNodeIds(changes: DesignChangeSet): Set<string> {
