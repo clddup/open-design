@@ -219,6 +219,7 @@ export const agentConversationMessages = {
   "agent.changeCompleted": "Design change completed",
   "agent.changeApplied": "The structured edit was applied successfully",
   "agent.changeFailed": "Design change failed",
+  "agent.correctingDesign": "Correcting design structure · {{count}}",
   "agent.inspectRequiredBeforeRetry":
     "Inspect the current document before another retry",
   "agent.finishedPass": "The Agent finished its current pass",

@@ -20,6 +20,8 @@ export interface AgentTimelineItem {
   attachments?: AgentAttachment[];
   toolName?: string;
   routine?: boolean;
+  recoverableFailure?: boolean;
+  structuredFailure?: boolean;
   order: number;
   approvalId?: string;
   toolCallId?: string;

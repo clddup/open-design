@@ -100,6 +100,48 @@ describe("Agent continuation timeline projection", () => {
     ).toEqual([]);
   });
 
+  it("collapses repeated recoverable design failures into one active correction", () => {
+    const runId = "run_first_slice_recovery";
+    const events: AgentEvent[] = [
+      {
+        type: "tool.failed",
+        runId,
+        toolCallId: "first_slice_budget",
+        code: "invalid_tool_input",
+        message: "35 elements exceeded the compact first-screen budget",
+        retryable: false,
+        recoverable: true,
+      },
+      {
+        type: "tool.failed",
+        runId,
+        toolCallId: "first_slice_region",
+        code: "design.invalid",
+        message: "Planned region footer_region must be a Frame",
+        retryable: false,
+        recoverable: true,
+      },
+    ];
+
+    const items = projectAgentTimeline({
+      activeRunId: runId,
+      events,
+      locale: "zh-CN",
+      stoppingRunId: null,
+      timeline: [],
+      t: (key, parameters) => translate("zh-CN", key, parameters),
+    });
+
+    expect(items.filter((item) => item.state === "error")).toEqual([]);
+    expect(items).toContainEqual(
+      expect.objectContaining({
+        id: `design-recovery:${runId}`,
+        state: "active",
+        title: "正在修正设计结构 · 2 次",
+      }),
+    );
+  });
+
   it("keeps assistant text before tools while hiding routine component repair failures", () => {
     const runId = "run_component_repair";
     const events: AgentEvent[] = [

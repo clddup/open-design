@@ -143,6 +143,7 @@ export type DesignFirstSliceToolInput = {
         | "decoration"
         | "interaction"
         | "other";
+      parentId: string;
       x: number;
       y: number;
       width: number;
@@ -277,18 +278,12 @@ export function isDesignFirstSliceToolInput(
   const regionIds = targets.flatMap((target) =>
     target.regions.map((region) => region.nodeId),
   );
+  const allRegionIds = new Set(regionIds);
   if (
     targetIds.size !== targets.length ||
     frameIds.size !== targets.length ||
     new Set(regionIds).size !== regionIds.length ||
-    targets.some((target) =>
-      target.regions.some(
-        (region) =>
-          region.nodeId === target.frame.frameId ||
-          region.x + region.width > target.frame.width ||
-          region.y + region.height > target.frame.height,
-      ),
-    )
+    targets.some((target) => !hasValidRegionHierarchy(target))
   ) {
     return false;
   }
@@ -299,28 +294,53 @@ export function isDesignFirstSliceToolInput(
   if (!firstTarget) return false;
   const allElements = firstSlice.stages.flatMap((stage) => stage.elements);
   const elementIds = new Set<string>();
-  const parentById = new Map<string, string>();
+  const plannedRegionIds = new Set(
+    firstTarget.regions.map((region) => region.nodeId),
+  );
+  const parentById = new Map(
+    firstTarget.regions.map((region) => [region.nodeId, region.parentId]),
+  );
   for (const element of allElements) {
     if (
       elementIds.has(element.id) ||
       frameIds.has(element.id) ||
+      allRegionIds.has(element.id) ||
       (!elementIds.has(element.parentId) &&
-        element.parentId !== firstTarget.frame.frameId)
+        !plannedRegionIds.has(element.parentId))
     ) {
       return false;
     }
     elementIds.add(element.id);
     parentById.set(element.id, element.parentId);
   }
-  const materializedRegions = new Set(
-    allElements.flatMap((element) =>
-      firstTarget.regions.some((region) => region.nodeId === element.id) &&
-      (element.kind === "group" || element.kind === "frame")
-        ? [element.id]
+  const referencedRegions = new Set(
+    firstTarget.regions.flatMap((region) =>
+      allElements.some((element) =>
+        parentChainReaches(element.parentId, region.nodeId, parentById),
+      )
+        ? [region.nodeId]
         : [],
     ),
   );
-  if (materializedRegions.size < 1) return false;
+  const materializedRegions = new Set(
+    firstTarget.regions.flatMap((region) =>
+      allElements.some(
+        (element) =>
+          isMaterialElement(element) &&
+          parentChainReaches(element.parentId, region.nodeId, parentById),
+      )
+        ? [region.nodeId]
+        : [],
+    ),
+  );
+  if (
+    referencedRegions.size < 1 ||
+    [...referencedRegions].some(
+      (regionId) => !materializedRegions.has(regionId),
+    )
+  ) {
+    return false;
+  }
   if (
     value.logoExploration !== undefined &&
     !value.logoExploration.directions.some((direction) =>
@@ -333,7 +353,7 @@ export function isDesignFirstSliceToolInput(
     ![...materializedRegions].some((regionId) =>
       allElements.some(
         (element) =>
-          element.id !== regionId &&
+          isMaterialElement(element) &&
           parentChainReaches(element.parentId, regionId, parentById),
       ),
     )
@@ -791,6 +811,9 @@ export function explainInvalidDesignFirstSliceToolInput(
 
   const firstTarget = targets[0];
   const frameIds = new Set(targets.map((target) => target.frame.frameId));
+  const allPlannedRegionIds = new Set(
+    targets.flatMap((target) => target.regions.map((region) => region.nodeId)),
+  );
   const seenElementIds = new Set<string>();
   const flattenedElements: DesignFirstSliceElement[] = [];
   for (const stage of stages) {
@@ -812,33 +835,60 @@ export function explainInvalidDesignFirstSliceToolInput(
         `/firstSlice/stages: element ID ${JSON.stringify(element.id)} collides with a delivery artboard Frame ID`,
       );
     }
+    const plannedRegionIds = new Set(
+      firstTarget?.regions.map((region) => region.nodeId) ?? [],
+    );
+    if (allPlannedRegionIds.has(element.id)) {
+      return invalidFirstSliceMessage(
+        `/firstSlice/stages: element ID ${JSON.stringify(element.id)} is reserved for a host-owned planned region container; parent content to that region ID instead of creating it`,
+      );
+    }
     if (
-      element.parentId !== firstTarget?.frame.frameId &&
+      !plannedRegionIds.has(element.parentId) &&
       !seenElementIds.has(element.parentId)
     ) {
       return invalidFirstSliceMessage(
-        `/firstSlice/stages: parent ${JSON.stringify(element.parentId)} for element ${JSON.stringify(element.id)} must be declared earlier or equal the first target Frame ID`,
+        `/firstSlice/stages: parent ${JSON.stringify(element.parentId)} for element ${JSON.stringify(element.id)} must be a declared first-target region or an earlier element`,
       );
     }
     seenElementIds.add(element.id);
   }
-  const plannedRegionIds = new Set(
-    firstTarget?.regions.map((region) => region.nodeId) ?? [],
+  const regionParents = new Map(
+    firstTarget?.regions.map((region) => [region.nodeId, region.parentId]) ??
+      [],
   );
-  const materializedRegionIds = flattenedElements.flatMap((element) =>
-    plannedRegionIds.has(element.id) &&
-    (element.kind === "group" || element.kind === "frame")
-      ? [element.id]
-      : [],
+  for (const element of flattenedElements) {
+    regionParents.set(element.id, element.parentId);
+  }
+  const materializedRegionIds = [...(firstTarget?.regions ?? [])].flatMap(
+    (region) =>
+      flattenedElements.some(
+        (element) =>
+          isMaterialElement(element) &&
+          parentChainReaches(element.parentId, region.nodeId, regionParents),
+      )
+        ? [region.nodeId]
+        : [],
   );
   if (materializedRegionIds.length === 0) {
     return invalidFirstSliceMessage(
-      `/firstSlice/stages: no first-target planned region was materialized; insert one or more Group/Frame elements using declared region IDs ${JSON.stringify([...plannedRegionIds])}`,
+      `/firstSlice/stages: no first-target planned region contains material; parent at least one real editable element to a declared region ID`,
+    );
+  }
+  const emptyReferencedRegion = [...(firstTarget?.regions ?? [])].find(
+    (region) =>
+      flattenedElements.some((element) =>
+        parentChainReaches(element.parentId, region.nodeId, regionParents),
+      ) && !materializedRegionIds.includes(region.nodeId),
+  );
+  if (emptyReferencedRegion) {
+    return invalidFirstSliceMessage(
+      `/firstSlice/stages: planned region ${JSON.stringify(emptyReferencedRegion.nodeId)} is referenced but contains no visible editable material; do not create an empty Group-only region`,
     );
   }
 
   return invalidFirstSliceMessage(
-    "Cross-field structure is invalid. The first slice must target targets[0], use unique IDs, declare parents before children, materialize one or more declared planned regions, and include editable non-container content inside them",
+    "Cross-field structure is invalid. The first slice must target targets[0], use unique non-region IDs, declare element parents before children, and place editable non-container content inside host-owned planned regions",
   );
 }
 
@@ -1004,12 +1054,45 @@ function isRegion(value: unknown): boolean {
       "interaction",
       "other",
     ].includes(String(value.role)) &&
+    safeId(value.parentId) &&
     nonnegative(value.x) &&
     nonnegative(value.y) &&
     dimension(value.width) &&
     dimension(value.height) &&
-    exactKeys(value, ["nodeId", "name", "role", "x", "y", "width", "height"])
+    exactKeys(value, [
+      "nodeId",
+      "name",
+      "role",
+      "parentId",
+      "x",
+      "y",
+      "width",
+      "height",
+    ])
   );
+}
+
+function hasValidRegionHierarchy(
+  target: DesignFirstSliceToolInput["targets"][number],
+): boolean {
+  const seen = new Map<string, { width: number; height: number }>([
+    [target.frame.frameId, target.frame],
+  ]);
+  for (const region of target.regions) {
+    if (region.nodeId === target.frame.frameId || seen.has(region.nodeId)) {
+      return false;
+    }
+    const parent = seen.get(region.parentId);
+    if (
+      !parent ||
+      region.x + region.width > parent.width ||
+      region.y + region.height > parent.height
+    ) {
+      return false;
+    }
+    seen.set(region.nodeId, region);
+  }
+  return true;
 }
 
 function isVisualSystem(value: unknown): boolean {

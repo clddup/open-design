@@ -220,13 +220,14 @@ export function assertDeliveryTargetStructure(
   }
   for (const region of target.planned.composition.regions) {
     const regionNode = inspection.nodesById.get(region.nodeId);
+    const expectedParentId = region.parentId ?? artboardId;
     if (
       !regionNode ||
       (regionNode.kind !== "group" && regionNode.kind !== "frame") ||
-      regionNode.parentId !== artboardId
+      regionNode.parentId !== expectedParentId
     ) {
       throw new Error(
-        `design_workflow.delivery_structure_incomplete: Planned region ${region.nodeId} must be a direct Group or Frame child of delivery artboard ${artboardId}; inspect the current document and finish that region before capturing again`,
+        `design_workflow.delivery_structure_incomplete: Planned region ${region.nodeId} must be a Group or Frame child of declared parent ${expectedParentId} inside delivery artboard ${artboardId}; inspect the current document and finish that region before capturing again`,
       );
     }
     if (!inspectedSubtreeHasMaterialNode(inspection.nodesById, region.nodeId)) {

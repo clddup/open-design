@@ -106,6 +106,11 @@ export const DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA = {
               properties: {
                 nodeId: ID_SCHEMA,
                 name: { type: "string", minLength: 1, maxLength: 128 },
+                parentId: {
+                  ...ID_SCHEMA,
+                  description:
+                    "Parent region ID, or this target's frameId for a top-level region. Regions are parent-first and bounds are local to this parent. Main creates the real Frame container; firstSlice elements must not repeat the region ID.",
+                },
                 role: {
                   enum: [
                     "structure",
@@ -123,7 +128,16 @@ export const DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA = {
                 width: DIMENSION_SCHEMA,
                 height: DIMENSION_SCHEMA,
               },
-              required: ["nodeId", "name", "role", "x", "y", "width", "height"],
+              required: [
+                "nodeId",
+                "name",
+                "role",
+                "parentId",
+                "x",
+                "y",
+                "width",
+                "height",
+              ],
               additionalProperties: false,
             },
           },

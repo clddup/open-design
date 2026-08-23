@@ -82,44 +82,44 @@ export function projectAgentTimeline({
     });
   }
   const latestRunId = [...runOrder.keys()].at(-1);
-  const ordered = [...merged.values()]
-    .map((item) => {
-      if (
-        item.runId === stoppingRunId &&
-        (item.state === "active" || item.state === "queued")
-      ) {
-        return { ...item, state: "stopping" as const };
-      }
-      if (
-        item.runId &&
-        item.runId !== activeRunId &&
-        (item.state === "active" ||
-          item.state === "queued" ||
-          item.state === "stopping")
-      ) {
-        return finalizeTimelineActivity(item);
-      }
-      if (
-        item.kind === "run" &&
-        item.state === "error" &&
-        item.runId !== latestRunId
-      ) {
-        return {
-          ...item,
-          state: "done" as const,
-          historical: true,
-          title: t("agent.previousRunFailed"),
-        };
-      }
-      if (
-        item.kind === "run" &&
-        item.state === "done" &&
-        item.runId !== latestRunId
-      ) {
-        return { ...item, routine: true };
-      }
-      return item;
-    })
+  const normalized = [...merged.values()].map((item) => {
+    if (
+      item.runId === stoppingRunId &&
+      (item.state === "active" || item.state === "queued")
+    ) {
+      return { ...item, state: "stopping" as const };
+    }
+    if (
+      item.runId &&
+      item.runId !== activeRunId &&
+      (item.state === "active" ||
+        item.state === "queued" ||
+        item.state === "stopping")
+    ) {
+      return finalizeTimelineActivity(item);
+    }
+    if (
+      item.kind === "run" &&
+      item.state === "error" &&
+      item.runId !== latestRunId
+    ) {
+      return {
+        ...item,
+        state: "done" as const,
+        historical: true,
+        title: t("agent.previousRunFailed"),
+      };
+    }
+    if (
+      item.kind === "run" &&
+      item.state === "done" &&
+      item.runId !== latestRunId
+    ) {
+      return { ...item, routine: true };
+    }
+    return item;
+  });
+  const ordered = collapseRecoverableFailures(normalized, activeRunId, t)
     .filter((item) => !item.routine)
     .sort((left, right) => {
       const leftRunOrder = left.runId ? runOrder.get(left.runId) : undefined;
@@ -138,6 +138,61 @@ export function projectAgentTimeline({
       return left.order - right.order || left.id.localeCompare(right.id);
     });
   return mergeReasoningByRun(ordered, t);
+}
+
+function collapseRecoverableFailures(
+  items: readonly AgentTimelineItem[],
+  activeRunId: string | null,
+  t: Translate,
+): AgentTimelineItem[] {
+  const failuresByRun = new Map<string, AgentTimelineItem[]>();
+  for (const item of items) {
+    if (!item.recoverableFailure || !item.runId) continue;
+    const failures = failuresByRun.get(item.runId) ?? [];
+    failures.push(item);
+    failuresByRun.set(item.runId, failures);
+  }
+  const visible = items.filter((item) => !item.recoverableFailure);
+  if (!activeRunId) return visible;
+  const failures = failuresByRun.get(activeRunId);
+  if (!failures || failures.length === 0) return visible;
+  const orderedFailures = [...failures].sort(
+    (left, right) => left.order - right.order,
+  );
+  const lastFailure = orderedFailures.at(-1)!;
+  const recovered = items.some(
+    (item) =>
+      item.runId === activeRunId &&
+      item.order > lastFailure.order &&
+      ((item.kind === "tool" &&
+        item.state === "done" &&
+        /^r\d+$/.test(item.time)) ||
+        item.id.startsWith("design-step:") ||
+        item.id.startsWith("design-revision:")),
+  );
+  if (recovered) return visible;
+  const structuredFailure = orderedFailures.find(
+    (failure) => failure.structuredFailure && failure.detail,
+  );
+  visible.push({
+    id: `design-recovery:${activeRunId}`,
+    runId: activeRunId,
+    order: lastFailure.order,
+    state: "active",
+    kind: "system",
+    time: t("common.now"),
+    title: t("agent.correctingDesign", { count: orderedFailures.length }),
+    ...(structuredFailure?.detail ? { detail: structuredFailure.detail } : {}),
+  });
+  return visible;
+}
+
+function isDesignCorrectionFailure(code: string, message: string): boolean {
+  return (
+    !code.startsWith("renderer_") &&
+    (code.startsWith("design") ||
+      isRoutineRecoverableToolFailure(code, message))
+  );
 }
 
 export function timelineRenderMarker(
@@ -262,6 +317,11 @@ function projectDurableTimeline(
         isRoutineRecoverableToolFailure(item.error.code, item.error.message);
       return {
         ...base,
+        recoverableFailure:
+          item.status === "failed" &&
+          item.error?.recoverable === true &&
+          isDesignCorrectionFailure(item.error.code, item.error.message),
+        structuredFailure: item.error?.details !== undefined,
         routine:
           routineRecoverableFailure ||
           ((state === "active" || state === "queued") &&
@@ -617,6 +677,10 @@ function projectLiveEvents(
       );
       updateEvent(`tool:${event.toolCallId}`, {
         routine,
+        recoverableFailure:
+          event.recoverable === true &&
+          isDesignCorrectionFailure(event.code, event.message),
+        structuredFailure: event.details !== undefined,
         state: "error",
         kind: "tool",
         time: t("common.error"),

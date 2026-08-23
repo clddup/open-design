@@ -17,6 +17,9 @@ export type ModelProviderPerformanceSample = {
   totalMs: number;
   firstProviderEventMs: number | null;
   firstContentEventMs: number | null;
+  firstTextDeltaMs: number | null;
+  firstToolCallStartMs: number | null;
+  reasoningEffort: NonNullable<ModelSelection["reasoningEffort"]>;
   retries: number;
 };
 
@@ -43,10 +46,13 @@ export async function* streamModelProvider(
   let performanceReported = false;
   let firstContentEventAt: number | undefined;
   let firstProviderEventAt: number | undefined;
+  let firstTextDeltaAt: number | undefined;
+  let firstToolCallStartAt: number | undefined;
   let providerRequestId: string | undefined;
   let retries = 0;
   let latestAttemptStarted:
     Extract<CanonicalStreamEvent, { type: "attempt.started" }> | undefined;
+  let latestAttemptPublished = false;
   const reportPerformance = (
     status: ModelProviderPerformanceSample["status"],
   ): void => {
@@ -66,6 +72,15 @@ export async function* streamModelProvider(
           firstContentEventAt === undefined
             ? null
             : roundedDuration(firstContentEventAt - startedAt),
+        firstTextDeltaMs:
+          firstTextDeltaAt === undefined
+            ? null
+            : roundedDuration(firstTextDeltaAt - startedAt),
+        firstToolCallStartMs:
+          firstToolCallStartAt === undefined
+            ? null
+            : roundedDuration(firstToolCallStartAt - startedAt),
+        reasoningEffort: request.modelSelection.reasoningEffort ?? "off",
         retries,
       });
     } catch {
@@ -80,6 +95,7 @@ export async function* streamModelProvider(
       retryIndex += 1
     ) {
       providerRequestId = undefined;
+      latestAttemptPublished = false;
       const attemptController = new AbortController();
       const abortAttempt = () =>
         attemptController.abort(controller.signal.reason);
@@ -93,9 +109,13 @@ export async function* streamModelProvider(
         signal: attemptController.signal,
       });
       const iterator = source[Symbol.asyncIterator]();
-      const attemptEvents: CanonicalStreamEvent[] = [];
       let attemptStarted:
         Extract<CanonicalStreamEvent, { type: "attempt.started" }> | undefined;
+      let attemptPublished = false;
+      const blockKinds = new Map<
+        string,
+        Extract<CanonicalStreamEvent, { type: "block.started" }>["kind"]
+      >();
       let retry = false;
       let waitingForFirstResponse = true;
       try {
@@ -136,10 +156,22 @@ export async function* streamModelProvider(
           const event: CanonicalStreamEvent = result.done
             ? providerEndedEvent(request, providerRequestId)
             : result.value;
-          if (!result.done) firstProviderEventAt ??= Date.now();
           if (event.type !== "attempt.started") {
+            firstProviderEventAt ??= Date.now();
             waitingForFirstResponse = false;
             if (isModelContentEvent(event)) firstContentEventAt ??= Date.now();
+            if (event.type === "block.started") {
+              blockKinds.set(event.blockId, event.kind);
+              if (event.kind === "tool_call") {
+                firstToolCallStartAt ??= Date.now();
+              }
+            } else if (
+              event.type === "block.delta" &&
+              blockKinds.get(event.blockId) === "text" &&
+              event.delta.length > 0
+            ) {
+              firstTextDeltaAt ??= Date.now();
+            }
           }
           const observedRequestId = observedProviderRequestId(event);
           if (observedRequestId !== undefined) {
@@ -151,11 +183,14 @@ export async function* streamModelProvider(
             continue;
           }
           if (event.type === "attempt.failed") {
-            retry = shouldRetry(event.error, retryIndex);
+            retry = !attemptPublished && shouldRetry(event.error, retryIndex);
             if (retry) break;
             completed = true;
             reportPerformance("failed");
-            if (attemptStarted) yield attemptStarted;
+            if (!attemptPublished && attemptStarted) {
+              latestAttemptPublished = true;
+              yield attemptStarted;
+            }
             yield event;
             return;
           }
@@ -170,12 +205,19 @@ export async function* streamModelProvider(
                 maxRetries: transientRetryDelaysMs.length,
               };
             }
-            if (attemptStarted) yield attemptStarted;
-            for (const buffered of attemptEvents) yield buffered;
+            if (!attemptPublished && attemptStarted) {
+              latestAttemptPublished = true;
+              yield attemptStarted;
+            }
             yield event;
             return;
           }
-          attemptEvents.push(event);
+          if (!attemptPublished && attemptStarted) {
+            latestAttemptPublished = true;
+            yield attemptStarted;
+          }
+          attemptPublished = true;
+          yield event;
         }
       } finally {
         controller.signal.removeEventListener("abort", abortAttempt);
@@ -201,7 +243,9 @@ export async function* streamModelProvider(
   } catch (error) {
     if (error instanceof ModelStreamTimeoutError) {
       reportPerformance("failed");
-      if (latestAttemptStarted) yield latestAttemptStarted;
+      if (latestAttemptStarted && !latestAttemptPublished) {
+        yield latestAttemptStarted;
+      }
       yield {
         type: "attempt.failed",
         attemptId: request.attemptId,

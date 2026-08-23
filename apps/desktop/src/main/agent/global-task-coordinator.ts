@@ -1719,10 +1719,11 @@ function assertNewNodeIdHasPrefix(nodeId: string, prefix: string): void {
 }
 
 /**
- * The accepted plan owns only the disposable structural intent. When the
- * model materializes one of those stable IDs, Main compiles its parent-local
- * geometry from the trusted plan instead of asking the model to repeat exact
- * scaffold coordinates. Real content geometry remains model-authored.
+ * The accepted plan owns create-target structure. Main materializes a planned
+ * region's parent-first Frame closure when real content first references it,
+ * and canonicalizes any legacy Group/Frame scaffold request to the same
+ * trusted geometry. Models never own region kind, parent, transform, or size.
+ * Real content geometry remains model-authored.
  */
 function resolvePlannedStructureGeometry(
   input: DesignApplyToolInput,
@@ -1753,7 +1754,91 @@ function resolvePlannedStructureGeometry(
   }
 
   let changed = false;
-  const commands = input.commands.flatMap((command) => {
+  const availableNodeIds = new Set<string>();
+  for (const target of state.targetsById.values()) {
+    if (target.artboardEstablished) {
+      availableNodeIds.add(target.planned.artboard.frameId);
+    }
+    for (const nodeId of target.artboardDescendantIds) {
+      availableNodeIds.add(nodeId);
+    }
+  }
+  const nextRegionIndexByParent = new Map<string, number>();
+  for (const planned of plannedNodes.values()) {
+    if (
+      planned.kind !== "region" ||
+      !availableNodeIds.has(planned.region.nodeId)
+    ) {
+      continue;
+    }
+    const parentId =
+      planned.region.parentId ?? planned.target.planned.artboard.frameId;
+    nextRegionIndexByParent.set(
+      parentId,
+      (nextRegionIndexByParent.get(parentId) ?? 0) + 1,
+    );
+  }
+  const usedCommandIds = new Set(
+    input.commands.map((command) => command.commandId),
+  );
+  const injectedBefore = new Map<string, DesignOperation[]>();
+  const hostOwnedRegionCommandIds = new Set<string>();
+  const ensureRegion = (regionId: string, output: DesignOperation[]): void => {
+    if (availableNodeIds.has(regionId)) return;
+    const planned = plannedNodes.get(regionId);
+    if (!planned || planned.kind !== "region") return;
+    const parentId =
+      planned.region.parentId ?? planned.target.planned.artboard.frameId;
+    ensureRegion(parentId, output);
+    const commandId = uniqueGeneratedCommandId(
+      `materialize_region_${regionId}`,
+      usedCommandIds,
+    );
+    usedCommandIds.add(commandId);
+    const index = nextRegionIndexByParent.get(parentId) ?? 0;
+    nextRegionIndexByParent.set(parentId, index + 1);
+    output.push({
+      commandId,
+      type: "insert_element",
+      pageId: planned.target.planned.pageId,
+      parentId,
+      index,
+      node: plannedRegionFrame(planned.region, parentId),
+    });
+    availableNodeIds.add(regionId);
+    changed = true;
+  };
+  for (const command of input.commands) {
+    if (command.type !== "insert_element") continue;
+    const planned = plannedNodes.get(command.node.id);
+    if (planned?.kind === "region") {
+      if (command.node.kind !== "group" && command.node.kind !== "frame") {
+        throw new Error(
+          `design_workflow.planned_region_id_reserved: Planned region ${command.node.id} is a host-owned Frame identity and cannot be inserted as ${command.node.kind}; parent real content to that region ID instead`,
+        );
+      }
+      hostOwnedRegionCommandIds.add(command.commandId);
+    }
+    const injected: DesignOperation[] = [];
+    ensureRegion(
+      planned?.kind === "region" ? command.node.id : (command.parentId ?? ""),
+      injected,
+    );
+    if (injected.length > 0) injectedBefore.set(command.commandId, injected);
+  }
+  const commandsWithHostRegions = input.commands.flatMap((command) => [
+    ...(injectedBefore.get(command.commandId) ?? []),
+    command,
+  ]);
+  const stepsWithHostRegions = input.steps?.map((step) => ({
+    ...step,
+    commandIds: step.commandIds.flatMap((commandId) => [
+      ...(injectedBefore.get(commandId)?.map((command) => command.commandId) ??
+        []),
+      commandId,
+    ]),
+  }));
+  const commands = commandsWithHostRegions.flatMap((command) => {
     if (command.type !== "insert_element") return command;
     const planned = plannedNodes.get(command.node.id);
     if (!planned) return command;
@@ -1779,6 +1864,13 @@ function resolvePlannedStructureGeometry(
         },
       ];
     }
+    if (
+      planned.kind === "region" &&
+      hostOwnedRegionCommandIds.has(command.commandId)
+    ) {
+      changed = true;
+      return [];
+    }
     if (command.node.kind !== "group" && command.node.kind !== "frame") {
       return command;
     }
@@ -1787,10 +1879,12 @@ function resolvePlannedStructureGeometry(
       {
         ...command,
         pageId: planned.target.planned.pageId,
-        parentId: planned.target.planned.artboard.frameId,
+        parentId:
+          planned.region.parentId ?? planned.target.planned.artboard.frameId,
         node: {
           ...command.node,
-          parentId: planned.target.planned.artboard.frameId,
+          parentId:
+            planned.region.parentId ?? planned.target.planned.artboard.frameId,
           transform: [
             1,
             0,
@@ -1816,7 +1910,7 @@ function resolvePlannedStructureGeometry(
   const retainedCommandIds = new Set(
     commands.map((command) => command.commandId),
   );
-  const steps = input.steps
+  const steps = stepsWithHostRegions
     ?.map((step) => ({
       ...step,
       commandIds: step.commandIds.filter((commandId) =>
@@ -1828,6 +1922,46 @@ function resolvePlannedStructureGeometry(
     ...input,
     commands,
     ...(steps === undefined ? {} : { steps }),
+  };
+}
+
+function uniqueGeneratedCommandId(
+  base: string,
+  used: ReadonlySet<string>,
+): string {
+  let candidate = base;
+  let suffix = 2;
+  while (used.has(candidate)) {
+    candidate = `${base}_${suffix}`;
+    suffix += 1;
+  }
+  return candidate;
+}
+
+function plannedRegionFrame(
+  region: DesignPlanTarget["composition"]["regions"][number],
+  parentId: string,
+): Extract<DesignOperation, { type: "insert_element" }>["node"] {
+  return {
+    id: region.nodeId,
+    name: region.name,
+    kind: "frame",
+    parentId,
+    childIds: [],
+    visible: true,
+    locked: false,
+    transform: [1, 0, 0, 1, region.x, region.y],
+    size: { width: region.width, height: region.height },
+    exportSettings: [],
+    opacity: 1,
+    properties: {
+      fills: [],
+      strokes: [],
+      strokeWidth: 0,
+      cornerRadius: 0,
+      clipsContent: false,
+    },
+    extensions: { generatedBy: "host-planned-region" },
   };
 }
 
@@ -2019,10 +2153,11 @@ function assertPlannedRegionWrites(
   for (const command of inserts) {
     const region = regionsById.get(command.node.id);
     if (!region) continue;
+    const expectedParentId = region.parentId ?? target.artboard.frameId;
     if (
       (command.node.kind !== "group" && command.node.kind !== "frame") ||
-      command.parentId !== target.artboard.frameId ||
-      command.node.parentId !== target.artboard.frameId ||
+      command.parentId !== expectedParentId ||
+      command.node.parentId !== expectedParentId ||
       command.node.transform[0] !== 1 ||
       command.node.transform[1] !== 0 ||
       command.node.transform[2] !== 0 ||
@@ -2033,7 +2168,7 @@ function assertPlannedRegionWrites(
       command.node.size.height !== region.height
     ) {
       throw new Error(
-        `Planned region ${region.nodeId} must be an axis-aligned Group or Frame directly inside the artboard at its declared bounds`,
+        `Planned region ${region.nodeId} must be an axis-aligned Group or Frame inside declared parent ${expectedParentId} at its parent-local bounds`,
       );
     }
     if (!insertedSubtreeHasMaterialNode(inserts, region.nodeId)) {

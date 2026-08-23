@@ -2632,6 +2632,189 @@ describe("GlobalTaskCoordinator", () => {
     store.close();
   });
 
+  it("materializes nested planned region Frames before first referenced content", async () => {
+    const { store, host, file, opened, pageId } = await setup();
+    const coordinator = new GlobalTaskCoordinator(host, store);
+    await coordinator.registerRun({
+      type: "run.start",
+      runId: "run_nested_regions",
+      sessionId: "conversation_mobile",
+      prompt: "Design one login screen",
+      documentId: file.documentId,
+      revision: opened.document.revision,
+      modelSelection,
+      scope: { kind: "page", pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page", pageId },
+    });
+    const context = {
+      runId: "run_nested_regions",
+      sessionId: "conversation_mobile",
+      documentId: file.documentId,
+      revision: opened.document.revision,
+      scope: { kind: "page" as const, pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page" as const, pageId },
+    };
+    coordinator.recordDocumentInspection(
+      context,
+      inspectionResult(opened.document, pageId),
+    );
+    const sourcePlan = multiTargetPlan(pageId);
+    const sourceTarget = sourcePlan.targets[0];
+    if (!sourceTarget) throw new Error("Home target is missing");
+    const target: DesignPlanTarget = {
+      ...sourceTarget,
+      composition: {
+        ...sourceTarget.composition,
+        regions: [
+          {
+            nodeId: "frame_home_content",
+            name: "Authentication",
+            role: "content",
+            x: 24,
+            y: 96,
+            width: 342,
+            height: 600,
+          },
+          {
+            nodeId: "form_region",
+            name: "Form",
+            role: "interaction",
+            parentId: "frame_home_content",
+            x: 24,
+            y: 120,
+            width: 294,
+            height: 360,
+          },
+          {
+            nodeId: "footer_region",
+            name: "Footer",
+            role: "typography",
+            x: 24,
+            y: 720,
+            width: 342,
+            height: 72,
+          },
+        ],
+      },
+    };
+    const plan: DesignPlanToolInput = {
+      ...sourcePlan,
+      objective: "Design the requested login screen",
+      targets: [target],
+    };
+    coordinator.registerDesignPlan(context, plan);
+    const allocation = coordinator.createDesignPlanAllocation(context.runId);
+    if (!allocation) throw new Error("Expected allocation");
+    const material = draftTargets(pageId, [target]).commands.find(
+      (command) =>
+        command.type === "insert_element" &&
+        command.node.id === "frame_home_material",
+    );
+    if (!material || material.type !== "insert_element") {
+      throw new Error("Expected material template");
+    }
+    const input: DesignApplyToolInput = {
+      label: "Build login content",
+      steps: [
+        {
+          stepId: "login",
+          label: "Build real login content",
+          commandIds: ["insert_form_copy", "insert_footer_copy"],
+        },
+      ],
+      commands: [
+        {
+          ...material,
+          commandId: "insert_form_copy",
+          parentId: "form_region",
+          index: 0,
+          node: {
+            ...material.node,
+            id: "form_copy",
+            name: "Form Copy",
+            parentId: "form_region",
+          },
+        },
+        {
+          ...material,
+          commandId: "insert_footer_copy",
+          parentId: "footer_region",
+          index: 0,
+          node: {
+            ...material.node,
+            id: "footer_copy",
+            name: "Footer Copy",
+            parentId: "footer_region",
+          },
+        },
+      ],
+    };
+
+    const authorization = coordinator.assertDesignPlanForAllocatedApply(
+      context,
+      input,
+      allocation.targetIds,
+    );
+
+    expect(authorization.input.commands).toMatchObject([
+      {
+        commandId: "materialize_region_frame_home_content",
+        parentId: "frame_home",
+        index: 0,
+        node: { id: "frame_home_content", kind: "frame" },
+      },
+      {
+        commandId: "materialize_region_form_region",
+        parentId: "frame_home_content",
+        index: 0,
+        node: { id: "form_region", kind: "frame" },
+      },
+      { commandId: "insert_form_copy", parentId: "form_region" },
+      {
+        commandId: "materialize_region_footer_region",
+        parentId: "frame_home",
+        index: 1,
+        node: { id: "footer_region", kind: "frame" },
+      },
+      { commandId: "insert_footer_copy", parentId: "footer_region" },
+    ]);
+    expect(authorization.input.steps?.[0]?.commandIds).toEqual([
+      "materialize_region_frame_home_content",
+      "materialize_region_form_region",
+      "insert_form_copy",
+      "materialize_region_footer_region",
+      "insert_footer_copy",
+    ]);
+
+    const explicitFormRegion = authorization.input.commands.find(
+      (command) =>
+        command.type === "insert_element" && command.node.id === "form_region",
+    );
+    if (!explicitFormRegion) throw new Error("Expected canonical form region");
+    const contentBeforeLegacyRegion: DesignApplyToolInput = {
+      label: "Build content before legacy region scaffold",
+      commands: [input.commands[0], explicitFormRegion],
+    };
+    const reordered = coordinator.assertDesignPlanForAllocatedApply(
+      context,
+      contentBeforeLegacyRegion,
+      allocation.targetIds,
+    );
+    expect(
+      reordered.input.commands.map((command) =>
+        command.type === "insert_element" ? command.node.id : command.commandId,
+      ),
+    ).toEqual(["frame_home_content", "form_region", "form_copy"]);
+    expect(
+      reordered.input.commands.filter(
+        (command) =>
+          command.type === "insert_element" &&
+          command.node.id === "form_region",
+      ),
+    ).toHaveLength(1);
+    store.close();
+  });
+
   it("recovers the first incomplete target from an interrupted persisted ledger", async () => {
     const { store, host, file, opened, pageId } = await setup();
     const coordinator = new GlobalTaskCoordinator(host, store);

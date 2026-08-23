@@ -40,7 +40,7 @@ describe("compact first-slice tool", () => {
     expect(
       properties.firstSlice.properties.stages.items.properties.elements
         .maxItems,
-    ).toBe(32);
+    ).toBe(48);
     expect(properties.firstSlice.properties.stages.description).toContain(
       "total across all stages",
     );
@@ -224,14 +224,10 @@ describe("compact first-slice tool", () => {
       {
         stepId: "hero_stage",
         label: "Build real hero",
-        commandIds: ["first_slice_1", "first_slice_2", "first_slice_3"],
+        commandIds: ["first_slice_1", "first_slice_2"],
       },
     ]);
     expect(compiled.apply.commands).toMatchObject([
-      {
-        parentId: "frame_home",
-        node: { id: "home_hero", kind: "frame", childIds: [] },
-      },
       {
         parentId: "home_hero",
         node: { id: "hero_panel", kind: "rectangle", childIds: [] },
@@ -307,6 +303,7 @@ describe("compact first-slice tool", () => {
         nodeId: "negative_root",
         name: "Negative Space Direction",
         role: "content",
+        parentId: "frame_home",
         x: 24,
         y: 80,
         width: 342,
@@ -316,6 +313,7 @@ describe("compact first-slice tool", () => {
         nodeId: "modular_root",
         name: "Modular Direction",
         role: "content",
+        parentId: "frame_home",
         x: 24,
         y: 324,
         width: 342,
@@ -325,6 +323,7 @@ describe("compact first-slice tool", () => {
         nodeId: "typographic_root",
         name: "Typographic Direction",
         role: "content",
+        parentId: "frame_home",
         x: 24,
         y: 568,
         width: 342,
@@ -343,7 +342,7 @@ describe("compact first-slice tool", () => {
         ),
       ],
     };
-    input.firstSlice.stages[0].elements[1] = {
+    input.firstSlice.stages[0].elements[0] = {
       id: "hero_panel",
       kind: "path",
       name: "Editable Identity Contour",
@@ -355,9 +354,7 @@ describe("compact first-slice tool", () => {
       path: "M 0 0 H 160 V 48 H 48 V 160 H 0 Z",
       fill: { color: "#0F172A" },
     };
-    input.firstSlice.stages[0].elements[0].id = "negative_root";
-    input.firstSlice.stages[0].elements[0].name = "Negative Space Direction";
-    input.firstSlice.stages[0].elements[2].parentId = "negative_root";
+    input.firstSlice.stages[0].elements[1].parentId = "negative_root";
 
     const modelInput = structuredClone(input);
     Reflect.deleteProperty(modelInput, "skillRefs");
@@ -367,7 +364,7 @@ describe("compact first-slice tool", () => {
     expect(normalized && isDesignFirstSliceToolInput(normalized)).toBe(true);
     expect(
       normalized &&
-        compileDesignFirstSliceToolInput(normalized).apply.commands[1],
+        compileDesignFirstSliceToolInput(normalized).apply.commands[0],
     ).toMatchObject({
       node: {
         kind: "path",
@@ -442,11 +439,11 @@ describe("compact first-slice tool", () => {
     expect(isDesignFirstSliceToolInput(duplicate)).toBe(false);
 
     const forwardParent = fixture();
-    forwardParent.firstSlice.stages[0].elements[0].parentId = "hero_panel";
+    forwardParent.firstSlice.stages[0].elements[0].parentId = "hero_title";
     expect(isDesignFirstSliceToolInput(forwardParent)).toBe(false);
 
     const emptyRegion = fixture();
-    emptyRegion.firstSlice.stages[0].elements.splice(1);
+    emptyRegion.firstSlice.stages[0].elements.splice(0);
     expect(isDesignFirstSliceToolInput(emptyRegion)).toBe(false);
 
     const wrongTarget = fixture();
@@ -454,14 +451,11 @@ describe("compact first-slice tool", () => {
     expect(isDesignFirstSliceToolInput(wrongTarget)).toBe(false);
 
     const unplannedRegion = fixture();
-    unplannedRegion.firstSlice.stages[0].elements[0].id = "home_intro";
-    for (const element of unplannedRegion.firstSlice.stages[0].elements.slice(
-      1,
-    )) {
+    for (const element of unplannedRegion.firstSlice.stages[0].elements) {
       element.parentId = "home_intro";
     }
     expect(explainInvalidDesignFirstSliceToolInput(unplannedRegion)).toContain(
-      'insert one or more Group/Frame elements using declared region IDs ["home_hero"]',
+      'parent "home_intro" for element "hero_panel" must be a declared first-target region or an earlier element',
     );
   });
 
@@ -470,7 +464,7 @@ describe("compact first-slice tool", () => {
     input.firstSlice.stages.push({
       stageId: "auth_stage",
       label: "Build editable authentication controls",
-      elements: Array.from({ length: 22 }, (_, index) => ({
+      elements: Array.from({ length: 23 }, (_, index) => ({
         id: `auth_control_${index}`,
         kind: "rectangle" as const,
         name: `Auth Control ${index}`,
@@ -493,10 +487,101 @@ describe("compact first-slice tool", () => {
     expect(explainInvalidDesignFirstSliceToolInput(input)).toBeUndefined();
   });
 
-  it("bounds the first visible write to planned regions, three stages and 32 elements with a field-level recovery", () => {
+  it("compiles a 35-element login first screen with nested host-owned regions in one call", () => {
+    const input = fixture();
+    input.targets[0].regions = [
+      {
+        nodeId: "auth_region",
+        name: "Authentication",
+        role: "content",
+        parentId: "frame_home",
+        x: 24,
+        y: 80,
+        width: 342,
+        height: 620,
+      },
+      {
+        nodeId: "form_region",
+        name: "Form",
+        role: "interaction",
+        parentId: "auth_region",
+        x: 24,
+        y: 160,
+        width: 294,
+        height: 380,
+      },
+      {
+        nodeId: "footer_region",
+        name: "Footer",
+        role: "typography",
+        parentId: "frame_home",
+        x: 24,
+        y: 724,
+        width: 342,
+        height: 72,
+      },
+    ];
+    input.firstSlice.stages = [
+      {
+        stageId: "login_screen",
+        label: "Build the real login screen",
+        elements: [
+          {
+            ...input.firstSlice.stages[0].elements[1],
+            id: "auth_title",
+            name: "Authentication Title",
+            parentId: "auth_region",
+          },
+          ...Array.from({ length: 33 }, (_, index) => ({
+            id: `form_element_${index}`,
+            kind: "rectangle" as const,
+            name: `Form Element ${index}`,
+            parentId: "form_region",
+            x: (index % 3) * 92,
+            y: Math.floor(index / 3) * 30,
+            width: 80,
+            height: 24,
+            fill: { color: "#F8FAFC" },
+            cornerRadius: 6,
+          })),
+          {
+            ...input.firstSlice.stages[0].elements[1],
+            id: "footer_copy",
+            name: "Footer Copy",
+            parentId: "footer_region",
+            x: 0,
+            y: 0,
+            width: 342,
+            height: 24,
+          },
+        ],
+      },
+    ];
+
+    expect(input.firstSlice.stages[0].elements).toHaveLength(35);
+    const normalized = normalizeDesignFirstSliceToolInput(input);
+    expect(normalized).toBeDefined();
+    const compiled = compileDesignFirstSliceToolInput(normalized!);
+    const compiledRegions = compiled.plan.targets[0]?.composition.regions ?? [];
+    expect(compiledRegions).toMatchObject([
+      { nodeId: "auth_region" },
+      { nodeId: "form_region", parentId: "auth_region" },
+      { nodeId: "footer_region" },
+    ]);
+    expect(compiledRegions[0]).not.toHaveProperty("parentId");
+    expect(compiledRegions[2]).not.toHaveProperty("parentId");
+    expect(compiled.apply.commands).toHaveLength(35);
+    expect(compiled.apply.commands[0]).toMatchObject({
+      parentId: "auth_region",
+      node: { id: "auth_title" },
+    });
+    expect(compiled.insertedNodeIds).toContain("footer_copy");
+  });
+
+  it("bounds the first visible write to planned regions, three stages and 48 model elements with a field-level recovery", () => {
     const tooManyElements = fixture();
     const stage = tooManyElements.firstSlice.stages[0];
-    for (let index = 0; index < 30; index += 1) {
+    for (let index = 0; index < 47; index += 1) {
       stage.elements.push({
         id: `support_${index}`,
         kind: "rectangle",
@@ -511,10 +596,10 @@ describe("compact first-slice tool", () => {
     }
     expect(isDesignFirstSliceToolInput(tooManyElements)).toBe(false);
     expect(explainInvalidDesignFirstSliceToolInput(tooManyElements)).toContain(
-      "/firstSlice/stages: contains 33 elements",
+      "/firstSlice/stages: contains 49 elements",
     );
     expect(explainInvalidDesignFirstSliceToolInput(tooManyElements)).toContain(
-      "combined maximum is 32",
+      "combined maximum is 48",
     );
 
     const tooManyStages = fixture();
@@ -544,6 +629,7 @@ describe("compact first-slice tool", () => {
       nodeId: "home_navigation",
       name: "Navigation",
       role: "interaction",
+      parentId: "frame_home",
       x: 24,
       y: 24,
       width: 342,
@@ -553,16 +639,6 @@ describe("compact first-slice tool", () => {
       stageId: "navigation_stage",
       label: "Build navigation",
       elements: [
-        {
-          id: "home_navigation",
-          kind: "group",
-          name: "Navigation",
-          parentId: "frame_home",
-          x: 24,
-          y: 24,
-          width: 342,
-          height: 40,
-        },
         {
           id: "navigation_mark",
           kind: "rectangle",
@@ -644,6 +720,7 @@ export function fixture(): DesignFirstSliceToolInput {
             nodeId: "home_hero",
             name: "Hero",
             role: "content",
+            parentId: "frame_home",
             x: 24,
             y: 80,
             width: 342,
@@ -678,6 +755,7 @@ export function fixture(): DesignFirstSliceToolInput {
             nodeId: "profile_header",
             name: "Profile Header",
             role: "content",
+            parentId: "frame_profile",
             x: 24,
             y: 80,
             width: 342,
@@ -701,18 +779,6 @@ export function fixture(): DesignFirstSliceToolInput {
           stageId: "hero_stage",
           label: "Build real hero",
           elements: [
-            {
-              id: "home_hero",
-              kind: "frame",
-              name: "Hero",
-              parentId: "frame_home",
-              x: 24,
-              y: 80,
-              width: 342,
-              height: 260,
-              fill: { color: "#F8FAFC" },
-              cornerRadius: 24,
-            },
             {
               id: "hero_panel",
               kind: "rectangle",

@@ -35,6 +35,7 @@ import {
   isDesignPlanToolInput,
   PLACE_IMAGE_TOOL_NAME,
   READ_IMAGE_TOOL_NAME,
+  type DesignPlanTarget,
   type DesignPlanToolInput,
   UPDATE_IMAGE_TOOL_NAME,
 } from "@/shared/design-agent-tools";
@@ -382,6 +383,9 @@ export function generationSkeletonFromAcceptedPlan(
   const transform: Transform = useActualArtboard
     ? actualArtboard.transform
     : [1, 0, 0, 1, artboard.x, artboard.y];
+  const regionsById = new Map(
+    target.composition.regions.map((region) => [region.nodeId, region]),
+  );
   return {
     id: `${accepted.id}:${target.targetId}`,
     artboard: {
@@ -403,16 +407,46 @@ export function generationSkeletonFromAcceptedPlan(
                   region.nodeId,
                 ),
             )
-            .map((region) => ({
-              height: region.height,
-              id: region.nodeId,
-              name: region.name,
-              role: region.role,
-              width: region.width,
-              x: region.x,
-              y: region.y,
-            })),
+            .map((region) => {
+              const offset = plannedRegionArtboardOffset(
+                region,
+                regionsById,
+                artboard.frameId,
+              );
+              return {
+                height: region.height,
+                id: region.nodeId,
+                name: region.name,
+                role: region.role,
+                width: region.width,
+                x: offset.x,
+                y: offset.y,
+              };
+            }),
   };
+}
+
+function plannedRegionArtboardOffset(
+  region: DesignPlanTarget["composition"]["regions"][number],
+  regionsById: ReadonlyMap<
+    string,
+    DesignPlanTarget["composition"]["regions"][number]
+  >,
+  artboardId: string,
+): { x: number; y: number } {
+  let x = region.x;
+  let y = region.y;
+  let parentId = region.parentId;
+  const visited = new Set([region.nodeId]);
+  while (parentId && parentId !== artboardId && !visited.has(parentId)) {
+    visited.add(parentId);
+    const parent = regionsById.get(parentId);
+    if (!parent) break;
+    x += parent.x;
+    y += parent.y;
+    parentId = parent.parentId;
+  }
+  return { x, y };
 }
 
 export function generationActivityFromAcceptedPlan(

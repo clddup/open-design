@@ -130,7 +130,6 @@ describe("handleDesignFirstSliceTool", () => {
         commands: [
           { commandId: "allocate_home" },
           { commandId: "first_slice_1" },
-          { commandId: "first_slice_2" },
         ],
       },
     });
@@ -316,6 +315,7 @@ function firstSliceInput(): DesignFirstSliceToolInput {
             nodeId: "home_hero",
             name: "Hero",
             role: "content",
+            parentId: "frame_home",
             x: 24,
             y: 80,
             width: 342,
@@ -339,17 +339,6 @@ function firstSliceInput(): DesignFirstSliceToolInput {
           stageId: "hero",
           label: "Build hero",
           elements: [
-            {
-              id: "home_hero",
-              kind: "frame",
-              name: "Hero",
-              parentId: "frame_home",
-              x: 24,
-              y: 80,
-              width: 342,
-              height: 240,
-              fill: { color: "#F8FAFC" },
-            },
             {
               id: "hero_title",
               kind: "text",

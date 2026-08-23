@@ -26,6 +26,14 @@ describe("DesignGenerationPerformanceTracker", () => {
         startedAt: new Date(baseTime).toISOString(),
       });
 
+      now = baseTime + 5;
+      tracker.recordAgentEvent({
+        type: "message.delta",
+        runId,
+        messageId: "assistant_1",
+        blockId: "text_1",
+        delta: "开始设计",
+      });
       now = baseTime + 10;
       requested(tracker, runId, "plan", DESIGN_PLAN_TOOL_NAME);
       now = baseTime + 100;
@@ -37,6 +45,9 @@ describe("DesignGenerationPerformanceTracker", () => {
         totalMs: 80,
         firstProviderEventMs: 20,
         firstContentEventMs: 35,
+        firstTextDeltaMs: 40,
+        firstToolCallStartMs: 60,
+        reasoningEffort: "low",
         retries: 1,
       });
       tracker.recordRendererTool({
@@ -115,6 +126,8 @@ describe("DesignGenerationPerformanceTracker", () => {
           T2: 600,
           T_all: allFinishedAt - baseTime,
           firstReviewed: 400,
+          T_assistant_visible: 5,
+          T_tool_requested: 10,
         },
         unavailable: { T0: null },
         provider: {
@@ -124,6 +137,9 @@ describe("DesignGenerationPerformanceTracker", () => {
           totalMs: { count: 1, maxMs: 80, totalMs: 80 },
           firstProviderEventMs: { count: 1, maxMs: 20, totalMs: 20 },
           firstContentMs: { count: 1, maxMs: 35, totalMs: 35 },
+          firstTextDeltaMs: { count: 1, maxMs: 40, totalMs: 40 },
+          firstToolCallStartMs: { count: 1, maxMs: 60, totalMs: 60 },
+          reasoningEfforts: ["low"],
         },
         renderer: {
           canvasWaitCount: 3,
@@ -156,6 +172,74 @@ describe("DesignGenerationPerformanceTracker", () => {
         stopReason: "complete",
       }),
     ).toBeNull();
+  });
+
+  it("keeps a zero-revision failed first-slice run observable", () => {
+    let now = baseTime;
+    const tracker = new DesignGenerationPerformanceTracker(() => now);
+    const runId = "run_failed_first_slice";
+    tracker.recordAgentEvent({
+      type: "run.started",
+      runId,
+      startedAt: new Date(now).toISOString(),
+    });
+    now += 80_000;
+    requested(tracker, runId, "first_slice", "opendesign_generate_first_slice");
+    tracker.recordAgentEvent({
+      type: "tool.failed",
+      runId,
+      toolCallId: "first_slice",
+      code: "invalid_tool_input",
+      message: "35 elements exceeded the old budget",
+      retryable: true,
+      recoverable: true,
+    });
+    tracker.recordModelProvider({
+      attemptId: `${runId}_attempt_1`,
+      status: "completed",
+      totalMs: 79_000,
+      firstProviderEventMs: 1_000,
+      firstContentEventMs: 75_000,
+      firstTextDeltaMs: 75_100,
+      firstToolCallStartMs: 78_000,
+      reasoningEffort: "low",
+      retries: 0,
+    });
+    now += 10;
+    tracker.recordAgentEvent({
+      type: "agent.error",
+      runId,
+      code: "design_recovery_no_progress",
+      message: "No material revision was produced",
+      failure: {
+        code: "design_recovery_no_progress",
+        message: "No material revision was produced",
+        retryable: false,
+      },
+    });
+    now += 1;
+    const summary = tracker.recordAgentEvent({
+      type: "run.completed",
+      runId,
+      finishedAt: new Date(now).toISOString(),
+      stopReason: "error",
+    });
+
+    expect(summary).toMatchObject({
+      terminal: "error",
+      stopReason: "error",
+      milestonesMs: { T_plan: null, T0: null, T1: null },
+      unavailable: {
+        T0: "allocation-not-observed",
+        T1: "material-revision-not-observed",
+      },
+      provider: {
+        attempts: 1,
+        reasoningEfforts: ["low"],
+        firstTextDeltaMs: { count: 1, totalMs: 75_100 },
+      },
+      agentTools: { plan: { count: 1 } },
+    });
   });
 
   it("includes a host inspection that completes before run.started in T_plan", () => {

@@ -133,7 +133,18 @@ function compileTarget(
     composition: {
       direction: target.layout,
       hierarchy: [target.label, ...regionNames],
-      regions: target.regions.map((region) => ({ ...region })),
+      regions: target.regions.map((region) => ({
+        nodeId: region.nodeId,
+        name: region.name,
+        role: region.role,
+        ...(region.parentId === target.frame.frameId
+          ? {}
+          : { parentId: region.parentId }),
+        x: region.x,
+        y: region.y,
+        width: region.width,
+        height: region.height,
+      })),
       assetIntegration:
         "Use editable typography, native vectors and shapes; raster assets are limited to the explicitly declared roles.",
       spacingRhythm: target.spacing,

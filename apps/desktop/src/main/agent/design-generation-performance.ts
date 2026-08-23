@@ -29,16 +29,23 @@ type DurationAggregate = {
 type RunState = {
   allAllocatedAtMs: number | null;
   agentTools: Record<ToolKind, DurationAggregate>;
+  designActivityObserved: boolean;
+  firstAssistantTextAtMs: number | null;
   firstReviewedAtMs: number | null;
   firstRevisionAtMs: number | null;
+  firstToolRequestedAtMs: number | null;
   firstVerifiedAtMs: number | null;
   allVerifiedAtMs: number | null;
+  hadAgentError: boolean;
   model: {
     attempts: number;
     completed: number;
     failed: number;
     firstContentMs: DurationAggregate;
     firstProviderEventMs: DurationAggregate;
+    firstTextDeltaMs: DurationAggregate;
+    firstToolCallStartMs: DurationAggregate;
+    reasoningEfforts: Set<string>;
     retries: number;
     totalMs: DurationAggregate;
   };
@@ -76,8 +83,13 @@ export type DesignGenerationPerformanceSummary = {
     T2: number | null;
     T_all: number | null;
     firstReviewed: number | null;
+    T_assistant_visible: number | null;
+    T_tool_requested: number | null;
   };
-  unavailable: { T0: null | "allocation-not-observed" };
+  unavailable: {
+    T0: null | "allocation-not-observed";
+    T1: null | "material-revision-not-observed";
+  };
   provider: {
     attempts: number;
     completed: number;
@@ -86,6 +98,9 @@ export type DesignGenerationPerformanceSummary = {
     totalMs: DurationAggregate;
     firstProviderEventMs: DurationAggregate;
     firstContentMs: DurationAggregate;
+    firstTextDeltaMs: DurationAggregate;
+    firstToolCallStartMs: DurationAggregate;
+    reasoningEfforts: string[];
   };
   renderer: {
     canvasWaitCount: number;
@@ -148,8 +163,15 @@ export class DesignGenerationPerformanceTracker {
     if (!state) return null;
     const observedAtMs = this.now();
 
+    if (event.type === "message.delta") {
+      state.firstAssistantTextAtMs ??= observedAtMs;
+      return null;
+    }
+
     if (event.type === "tool.requested") {
       const kind = classifyTool(event.toolName);
+      state.designActivityObserved ||= kind !== "other";
+      state.firstToolRequestedAtMs ??= observedAtMs;
       if (state.toolCalls.size < MAX_TRACKED_TOOL_CALLS) {
         state.toolCalls.set(event.toolCallId, {
           kind,
@@ -194,10 +216,15 @@ export class DesignGenerationPerformanceTracker {
       return null;
     }
     if (event.type === "run.completed") {
-      return this.#finishRun(runId, "completed", event.stopReason);
+      return this.#finishRun(
+        runId,
+        state.hadAgentError ? "error" : "completed",
+        event.stopReason,
+      );
     }
     if (event.type === "agent.error") {
-      return this.#finishRun(runId, "error", null);
+      state.hadAgentError = true;
+      return null;
     }
     return null;
   }
@@ -221,6 +248,16 @@ export class DesignGenerationPerformanceTracker {
     if (sample.firstContentEventMs !== null) {
       addDuration(state.model.firstContentMs, sample.firstContentEventMs);
     }
+    if (sample.firstTextDeltaMs !== null) {
+      addDuration(state.model.firstTextDeltaMs, sample.firstTextDeltaMs);
+    }
+    if (sample.firstToolCallStartMs !== null) {
+      addDuration(
+        state.model.firstToolCallStartMs,
+        sample.firstToolCallStartMs,
+      );
+    }
+    state.model.reasoningEfforts.add(sample.reasoningEffort);
   }
 
   recordRendererTool(sample: RendererDesignToolPerformanceSample): void {
@@ -303,7 +340,9 @@ export class DesignGenerationPerformanceTracker {
     const state = this.#runs.get(runId);
     if (!state) return null;
     this.#runs.delete(runId);
-    if (state.planAcceptedAtMs === null) return null;
+    if (!state.designActivityObserved && state.planAcceptedAtMs === null) {
+      return null;
+    }
     return {
       version: 1,
       runId,
@@ -317,11 +356,26 @@ export class DesignGenerationPerformanceTracker {
         T2: elapsedMs(state.startedAtMs, state.firstVerifiedAtMs),
         T_all: elapsedMs(state.startedAtMs, state.allVerifiedAtMs),
         firstReviewed: elapsedMs(state.startedAtMs, state.firstReviewedAtMs),
+        T_assistant_visible: elapsedMs(
+          state.startedAtMs,
+          state.firstAssistantTextAtMs,
+        ),
+        T_tool_requested: elapsedMs(
+          state.startedAtMs,
+          state.firstToolRequestedAtMs,
+        ),
       },
       unavailable: {
         T0: state.allAllocatedAtMs === null ? "allocation-not-observed" : null,
+        T1:
+          state.firstRevisionAtMs === null
+            ? "material-revision-not-observed"
+            : null,
       },
-      provider: structuredClone(state.model),
+      provider: {
+        ...structuredClone(state.model),
+        reasoningEfforts: [...state.model.reasoningEfforts].sort(),
+      },
       renderer: structuredClone(state.renderer),
       agentTools: structuredClone(state.agentTools),
       droppedToolCalls: state.toolCallsDropped,
@@ -347,16 +401,23 @@ function createRunState(startedAtMs: number): RunState {
       inspect: emptyAggregate(),
       other: emptyAggregate(),
     },
+    designActivityObserved: false,
+    firstAssistantTextAtMs: null,
     firstReviewedAtMs: null,
     firstRevisionAtMs: null,
+    firstToolRequestedAtMs: null,
     firstVerifiedAtMs: null,
     allVerifiedAtMs: null,
+    hadAgentError: false,
     model: {
       attempts: 0,
       completed: 0,
       failed: 0,
       firstContentMs: emptyAggregate(),
       firstProviderEventMs: emptyAggregate(),
+      firstTextDeltaMs: emptyAggregate(),
+      firstToolCallStartMs: emptyAggregate(),
+      reasoningEfforts: new Set(),
       retries: 0,
       totalMs: emptyAggregate(),
     },

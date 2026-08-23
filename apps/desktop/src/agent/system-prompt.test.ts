@@ -38,7 +38,10 @@ describe("OpenDesign Agent system prompt", () => {
       "stages are real semantic commits",
     );
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
-      "no more than 32 total elements",
+      "no more than 48 model-authored content elements",
+    );
+    expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
+      "Main owns and creates the real region Frames",
     );
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
       "one or more meaningful editable regions",

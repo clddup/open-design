@@ -147,7 +147,9 @@ export async function handleDesignFirstSliceTool(
       firstSlice: {
         targetId: input.firstSlice.targetId,
         label: input.firstSlice.label,
-        insertedNodeIds: compiled.insertedNodeIds,
+        insertedNodeIds: resolvedApply.commands.flatMap((command) =>
+          command.type === "insert_element" ? [command.node.id] : [],
+        ),
         revision: applied.designRevision?.revision,
       },
       delivery: coordinator.getDeliveryLedger(context.runId),

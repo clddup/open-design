@@ -202,6 +202,7 @@ export const agentConversationMessages = {
   "agent.changeCompleted": "设计更改已完成",
   "agent.changeApplied": "结构化修改已成功应用",
   "agent.changeFailed": "设计更改失败",
+  "agent.correctingDesign": "正在修正设计结构 · {{count}} 次",
   "agent.inspectRequiredBeforeRetry": "再次重试前需要重新读取当前文档",
   "agent.finishedPass": "Agent 已完成当前处理",
   "risk.read": "读取",

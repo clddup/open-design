@@ -70,6 +70,7 @@ export type DesignPlanRegion = {
   nodeId: string;
   name: string;
   role: DesignPlanRegionRole;
+  parentId?: string;
   x: number;
   y: number;
   width: number;
@@ -239,12 +240,19 @@ const DESIGN_PLAN_COMPOSITION_SCHEMA = {
       minItems: 1,
       maxItems: 16,
       description:
-        "Major composition regions in artboard-local coordinates. Each nodeId must later become a direct Group or Frame child of this target artboard.",
+        "Parent-first major composition regions. Omitted parentId means the target artboard; otherwise bounds are local to an earlier region parent. Main owns create-target region containers.",
       items: {
         type: "object",
         properties: {
           nodeId: { type: "string", minLength: 1, maxLength: 256 },
           name: { type: "string", minLength: 1, maxLength: 128 },
+          parentId: {
+            type: "string",
+            minLength: 1,
+            maxLength: 256,
+            description:
+              "Optional parent region ID. Omit for a top-level artboard region. Bounds are local to the declared parent.",
+          },
           role: {
             enum: [
               "structure",
@@ -1026,6 +1034,7 @@ function isDesignPlanTarget(value: unknown): value is DesignPlanTarget {
     composition.regions.every((region) =>
       isDesignPlanRegion(region, artboard.width, artboard.height),
     ) &&
+    hasValidDesignPlanRegionHierarchy(composition.regions, artboard) &&
     !composition.regions.some(
       (region) => isRecord(region) && region.nodeId === artboard.frameId,
     ) &&
@@ -1120,8 +1129,41 @@ function isDesignPlanRegion(
     positiveBounded(value.height, 100_000) &&
     value.x + value.width <= artboardWidth &&
     value.y + value.height <= artboardHeight &&
-    exactKeys(value, ["nodeId", "name", "role", "x", "y", "width", "height"])
+    (value.parentId === undefined || safeId(value.parentId)) &&
+    exactKeys(value, [
+      "nodeId",
+      "name",
+      "role",
+      ...(value.parentId === undefined ? [] : ["parentId"]),
+      "x",
+      "y",
+      "width",
+      "height",
+    ])
   );
+}
+
+function hasValidDesignPlanRegionHierarchy(
+  regions: readonly DesignPlanRegion[],
+  artboard: DesignPlanArtboard,
+): boolean {
+  const seen = new Map<string, { width: number; height: number }>([
+    [artboard.frameId, artboard],
+  ]);
+  for (const region of regions) {
+    const parentId = region.parentId ?? artboard.frameId;
+    const parent = seen.get(parentId);
+    if (
+      !parent ||
+      seen.has(region.nodeId) ||
+      region.x + region.width > parent.width ||
+      region.y + region.height > parent.height
+    ) {
+      return false;
+    }
+    seen.set(region.nodeId, region);
+  }
+  return true;
 }
 
 function isDesignPlanRegionRole(value: unknown): value is DesignPlanRegionRole {

@@ -202,7 +202,12 @@ function nextValidSemanticStage(
   ) => Error,
 ): DesignOperation[] {
   const baseRevision = runtime.getSnapshot().document.revision;
-  let lastFailure: ReturnType<EditorRuntime["preview"]> | undefined;
+  let firstFailure:
+    | {
+        result: ReturnType<EditorRuntime["preview"]>;
+        commands: DesignOperation[];
+      }
+    | undefined;
   for (const commandCount of candidateSizes) {
     const commands = remainingCommands.slice(0, commandCount);
     const candidate = runtime.preview({
@@ -212,10 +217,10 @@ function nextValidSemanticStage(
       commands,
     });
     if (candidate.ok) return commands;
-    lastFailure = candidate;
+    firstFailure ??= { result: candidate, commands };
   }
-  if (lastFailure && !lastFailure.ok) {
-    throw createFailure(lastFailure.error, remainingCommands);
+  if (firstFailure && !firstFailure.result.ok) {
+    throw createFailure(firstFailure.result.error, firstFailure.commands);
   }
   throw new Error("Design transaction has no document-valid visible stage");
 }

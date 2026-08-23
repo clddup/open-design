@@ -385,8 +385,7 @@ describe("ModelProviderHost", () => {
     }
   });
 
-  it("keeps partial output private while bounded retries are exhausted", async () => {
-    vi.useFakeTimers();
+  it("publishes started semantic output immediately and does not replay it through retries", async () => {
     const store = new WorkspaceStore(":memory:");
     let callCount = 0;
     const host = new ModelProviderHost(
@@ -422,27 +421,97 @@ describe("ModelProviderHost", () => {
     host.saveProfile({ ...profile, apiKey: "provider-secret" });
 
     try {
-      const pending = host.complete(
+      const events = await host.complete(
         baseRequest("attempt_no_retry"),
         new AbortController().signal,
       );
-      await vi.advanceTimersByTimeAsync(11_301);
-      const events = await pending;
 
-      expect(callCount).toBe(6);
+      expect(callCount).toBe(1);
       expect(
         events.filter((event) => event.type === "block.started"),
-      ).toHaveLength(0);
+      ).toHaveLength(1);
       expect(
         events.filter((event) => event.type === "attempt.retrying"),
-      ).toHaveLength(5);
+      ).toHaveLength(0);
       expect(events.at(-1)).toMatchObject({
         type: "attempt.failed",
         error: { message: "terminated" },
       });
     } finally {
       store.close();
-      vi.useRealTimers();
+    }
+  });
+
+  it("forwards a text delta before the Provider attempt completes", async () => {
+    const store = new WorkspaceStore(":memory:");
+    let releaseCompletion!: () => void;
+    const completionGate = new Promise<void>((resolve) => {
+      releaseCompletion = resolve;
+    });
+    const host = new ModelProviderHost(
+      store,
+      cipher,
+      globalThis.fetch,
+      undefined,
+      undefined,
+      () => ({
+        async *stream(request): AsyncIterable<CanonicalStreamEvent> {
+          yield startedEvent(request.attemptId);
+          yield {
+            type: "block.started",
+            attemptId: request.attemptId,
+            blockId: "text",
+            kind: "text",
+          };
+          yield {
+            type: "block.delta",
+            attemptId: request.attemptId,
+            blockId: "text",
+            delta: "正在创建首屏",
+          };
+          await completionGate;
+          yield {
+            type: "block.completed",
+            attemptId: request.attemptId,
+            block: { id: "text", type: "text", text: "正在创建首屏" },
+          };
+          yield completedEvent(request.attemptId, "resp_live_text");
+        },
+      }),
+    );
+    const performance =
+      vi.fn<(sample: ModelProviderPerformanceSample) => void>();
+    host.setPerformanceObserver(performance);
+    host.saveProfile({ ...profile, apiKey: "provider-secret" });
+
+    try {
+      const stream = host.stream(
+        baseRequest("attempt_live_text"),
+        new AbortController().signal,
+      );
+      const iterator = stream[Symbol.asyncIterator]();
+      await expect(iterator.next()).resolves.toMatchObject({
+        value: { type: "attempt.started" },
+      });
+      await expect(iterator.next()).resolves.toMatchObject({
+        value: { type: "block.started", kind: "text" },
+      });
+      await expect(iterator.next()).resolves.toMatchObject({
+        value: { type: "block.delta", delta: "正在创建首屏" },
+      });
+      expect(performance).not.toHaveBeenCalled();
+      releaseCompletion();
+      while (!(await iterator.next()).done) {
+        // Drain the completed block and terminal event.
+      }
+      const sample = performance.mock.calls[0]?.[0];
+      expect(typeof sample?.firstTextDeltaMs).toBe("number");
+      expect(sample).toMatchObject({
+        reasoningEffort: "medium",
+        status: "completed",
+      });
+    } finally {
+      store.close();
     }
   });
 
