@@ -25,8 +25,8 @@ import type { DesignImageEditAction } from "../../../../../shared/desktop-api";
 import type { MessageKey } from "../../../../../shared/i18n/messages";
 import { useI18n } from "../../../../i18n";
 import type { UpdatePropertiesPatch } from "../../../editor/types";
-import type { StyleActions } from "../../../../use-style-actions";
-import type { ProjectLibraryActions } from "../../../../use-project-library-actions";
+import type { StyleActions } from "../../hooks/use-style-actions";
+import type { ProjectLibraryActions } from "../../hooks/use-project-library-actions";
 import styles from "../PropertiesPanel.module.scss";
 import {
   AppearanceBasicsSection,

@@ -16,7 +16,7 @@ import {
   WorkspaceRuntime,
   type WorkspaceFileIdentity,
   type WorkspaceSnapshot,
-} from "./state/workspace-runtime";
+} from "./workspace-runtime";
 
 export const LOCAL_PROJECT_ID = "project_local";
 export const LOCAL_DESIGN_FILE_ID = "design_local";

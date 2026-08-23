@@ -7,7 +7,7 @@ import type {
 import { Button, Icon, IconButton } from "@opendesign/ui";
 import { useMemo, useState } from "react";
 import { useI18n } from "../../../i18n";
-import type { ProjectLibraryActions } from "../../../use-project-library-actions";
+import type { ProjectLibraryActions } from "../hooks/use-project-library-actions";
 import styles from "./ProjectLibrariesSection.module.scss";
 
 export function ProjectLibrariesSection({

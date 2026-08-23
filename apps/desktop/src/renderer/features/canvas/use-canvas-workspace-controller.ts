@@ -19,7 +19,7 @@ import type {
   MessageKey,
   MessageParameters,
 } from "../../../shared/i18n/messages";
-import type { LayerHoverTarget } from "../../layer-hover-target";
+import type { LayerHoverTarget } from "../editor-workbench/layer-hover-target";
 import type { Tool } from "../../state/editor";
 import type { WorkspaceRuntime } from "../../state/workspace-runtime";
 

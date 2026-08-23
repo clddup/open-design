@@ -18,7 +18,7 @@ import {
   type DesignAssetReference,
 } from "../../design-tools/design-assets";
 import styles from "./AssetsPanel.module.scss";
-import type { ProjectLibraryActions } from "../../../use-project-library-actions";
+import type { ProjectLibraryActions } from "../hooks/use-project-library-actions";
 import { ProjectLibrariesSection } from "./ProjectLibrariesSection";
 
 export function AssetsPanel({

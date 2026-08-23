@@ -4,7 +4,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "../../../i18n";
-import type { ProjectLibraryActions } from "../../../use-project-library-actions";
+import type { ProjectLibraryActions } from "../hooks/use-project-library-actions";
 import { ProjectLibrariesSection } from "./ProjectLibrariesSection";
 
 describe("ProjectLibrariesSection", () => {

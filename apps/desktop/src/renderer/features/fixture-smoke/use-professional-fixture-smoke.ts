@@ -1,8 +1,8 @@
 import type { EditorRuntime } from "@opendesign/editor-runtime";
 import { useEffect, useRef } from "react";
-import type { DesktopApi } from "../shared/desktop-api";
-import type { ProfessionalFixtureSmokeBootstrap } from "../shared/professional-fixture-smoke";
-import { captureDesignTarget } from "./features/design-tools/design-capture";
+import type { DesktopApi } from "../../../shared/desktop-api";
+import type { ProfessionalFixtureSmokeBootstrap } from "../../../shared/professional-fixture-smoke";
+import { captureDesignTarget } from "../design-tools/design-capture";
 
 type FixtureSmokePresentation = (
   bootstrap: ProfessionalFixtureSmokeBootstrap,

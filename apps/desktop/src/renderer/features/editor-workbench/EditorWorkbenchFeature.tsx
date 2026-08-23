@@ -19,16 +19,19 @@ import { UtilityDock } from "./components/UtilityDock";
 import {
   canAddSelectionToVariantSet,
   createComponentInspectorContext,
-} from "../../component-inspector-context";
-import { useEditorRuntime, useEditorSnapshot } from "../../editor-runtime";
+} from "./component-inspector-context";
+import {
+  useEditorRuntime,
+  useEditorSnapshot,
+} from "../../state/editor-runtime";
 import { useI18n } from "../../i18n";
 import { isTool, type Tool } from "../../state/editor";
-import { useComponentActions } from "../../use-component-actions";
-import { useDesignAssetActions } from "../../use-design-asset-actions";
-import { useDocumentCommandControllers } from "../../use-document-command-controllers";
-import type { useFontBinaryRuntime } from "../../use-font-binary-runtime";
-import { useFontInspectorContext } from "../../use-font-inspector-context";
-import { useProjectLibraryActions } from "../../use-project-library-actions";
+import { useComponentActions } from "./hooks/use-component-actions";
+import { useDesignAssetActions } from "./hooks/use-design-asset-actions";
+import { useDocumentCommandControllers } from "./hooks/use-document-command-controllers";
+import type { useFontBinaryRuntime } from "./hooks/use-font-binary-runtime";
+import { useFontInspectorContext } from "./hooks/use-font-inspector-context";
+import { useProjectLibraryActions } from "./hooks/use-project-library-actions";
 import type { AppNavigationCoordinator } from "../../router/app-navigation-coordinator";
 import type { useAgentConversationRuntime } from "../agent-conversation/use-agent-conversation-runtime";
 import type { useConversationLifecycleState } from "../agent-conversation/use-conversation-lifecycle-state";

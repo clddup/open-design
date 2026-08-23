@@ -8,7 +8,7 @@ import type {
 import { Icon, IconButton } from "@opendesign/ui";
 import { useMemo, useState } from "react";
 import { useI18n } from "../../../i18n";
-import type { StyleActions } from "../../../use-style-actions";
+import type { StyleActions } from "../hooks/use-style-actions";
 import styles from "./LocalStylesPanel.module.scss";
 
 export type LocalStylesPanelActions = StyleActions;

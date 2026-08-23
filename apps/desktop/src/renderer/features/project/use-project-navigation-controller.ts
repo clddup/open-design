@@ -13,7 +13,7 @@ import type {
   ProjectDesignFile,
   RecentProject,
 } from "../../../shared/desktop-api";
-import { LOCAL_PROJECT_ID } from "../../editor-runtime";
+import { LOCAL_PROJECT_ID } from "../../state/editor-runtime";
 import { reportRendererError } from "../diagnostics/diagnostics";
 import type { ProjectAutosaveCoordinator } from "./project-autosave";
 import type {

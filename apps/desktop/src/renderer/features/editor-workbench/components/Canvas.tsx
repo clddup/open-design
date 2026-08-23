@@ -79,7 +79,7 @@ import type {
   MessageParameters,
 } from "../../../../shared/i18n/messages";
 import { useI18n } from "../../../i18n";
-import { generationRevealFromEditorEvent } from "../../../generation-presentation";
+import { generationRevealFromEditorEvent } from "../../canvas/generation-presentation";
 import {
   agentRunPhaseDetailKey,
   agentRunPhaseTitleKey,
@@ -89,7 +89,7 @@ import { commitCanvasOperation } from "../../editor/canvas-operation-commit";
 import type { ResizeFrameHandler } from "../../editor/canvas-responsive-resize";
 import { isTool } from "../../../state/editor";
 import { DESIGN_ASSET_DRAG_MIME } from "../../design-tools/design-assets";
-import { composeTextRunLayoutProviders } from "../../../text-run-provider-fallback";
+import { composeTextRunLayoutProviders } from "../../../services/text/text-run-provider-fallback";
 import styles from "./Canvas.module.scss";
 import {
   ImageAreaSelectionOverlay,

@@ -34,9 +34,9 @@ import type {
   PageActionResult,
 } from "../../editor/types";
 import { useI18n } from "../../../i18n";
-import type { LayerHoverTarget } from "../../../layer-hover-target";
+import type { LayerHoverTarget } from "../layer-hover-target";
 import type { SidebarTab } from "../../../state/editor";
-import type { ProjectLibraryActions } from "../../../use-project-library-actions";
+import type { ProjectLibraryActions } from "../hooks/use-project-library-actions";
 import { AssetsPanel } from "./AssetsPanel";
 import { VariablesPanel, type VariablesPanelActions } from "./VariablesPanel";
 import {

@@ -27,8 +27,8 @@ import { Icon } from "@opendesign/ui";
 import type { DesignImageEditAction } from "../../../../shared/desktop-api";
 import { useI18n } from "../../../i18n";
 import type { UpdatePropertiesPatch } from "../../editor/types";
-import type { StyleActions } from "../../../use-style-actions";
-import type { ProjectLibraryActions } from "../../../use-project-library-actions";
+import type { StyleActions } from "../hooks/use-style-actions";
+import type { ProjectLibraryActions } from "../hooks/use-project-library-actions";
 import type {
   ExportFormat,
   RasterExportSettings,

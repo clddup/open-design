@@ -1,7 +1,7 @@
 import { MessageProvider } from "@opendesign/ui";
 import { useState } from "react";
 import { RouterProvider } from "react-router-dom";
-import { useEditorRuntime } from "./editor-runtime";
+import { useEditorRuntime } from "./state/editor-runtime";
 import { useI18n } from "./i18n";
 import { createAppRouter } from "./router";
 import type { AppResolvedDestination } from "./router/app-route";

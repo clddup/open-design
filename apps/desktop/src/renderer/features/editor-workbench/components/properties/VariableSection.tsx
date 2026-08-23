@@ -12,7 +12,7 @@ import {
   variableCollectionDefinitions,
 } from "@opendesign/variable-service";
 import { useI18n } from "../../../../i18n";
-import type { ProjectLibraryActions } from "../../../../use-project-library-actions";
+import type { ProjectLibraryActions } from "../../hooks/use-project-library-actions";
 import { Section } from "./controls";
 import styles from "./VariableSection.module.scss";
 

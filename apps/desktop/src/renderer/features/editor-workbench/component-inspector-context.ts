@@ -8,7 +8,7 @@ import type {
   DesignDocument,
   DesignNode,
 } from "@opendesign/design-contracts";
-import type { ComponentInspectorContext } from "./features/editor-workbench/components/properties/ComponentSection";
+import type { ComponentInspectorContext } from "./components/properties/ComponentSection";
 
 export function createComponentInspectorContext(
   document: DesignDocument,

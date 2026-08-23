@@ -7,8 +7,11 @@ import {
 } from "@opendesign/editor-runtime";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { DesktopApi, ProjectLibraryCatalog } from "../shared/desktop-api";
-import { translate } from "../shared/i18n/messages";
+import type {
+  DesktopApi,
+  ProjectLibraryCatalog,
+} from "../../../../shared/desktop-api";
+import { translate } from "../../../../shared/i18n/messages";
 import { useProjectLibraryActions } from "./use-project-library-actions";
 
 afterEach(() => {

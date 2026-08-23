@@ -6,8 +6,8 @@ import type {
 } from "@opendesign/design-contracts";
 import { DesktopCombobox, Icon, IconButton } from "@opendesign/ui";
 import { useI18n } from "../../../../i18n";
-import type { ProjectLibraryActions } from "../../../../use-project-library-actions";
-import type { StyleActions } from "../../../../use-style-actions";
+import type { ProjectLibraryActions } from "../../hooks/use-project-library-actions";
+import type { StyleActions } from "../../hooks/use-style-actions";
 import styles from "./StyleReferencesSection.module.scss";
 import { Section } from "./controls";
 

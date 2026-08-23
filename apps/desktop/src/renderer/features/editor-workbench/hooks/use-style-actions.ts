@@ -14,8 +14,11 @@ import {
   type StyleOperationPlan,
 } from "@opendesign/editor-runtime";
 import { useCallback } from "react";
-import type { MessageKey, MessageParameters } from "../shared/i18n/messages";
-import type { LocalStylesPanelActions } from "./features/editor-workbench/components/LocalStylesPanel";
+import type {
+  MessageKey,
+  MessageParameters,
+} from "../../../../shared/i18n/messages";
+import type { LocalStylesPanelActions } from "../components/LocalStylesPanel";
 
 type Translate = (key: MessageKey, parameters?: MessageParameters) => string;
 

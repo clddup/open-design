@@ -9,13 +9,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   ProfessionalFixtureSmokeBootstrap,
   ProfessionalFixtureSmokeResult,
-} from "../shared/professional-fixture-smoke";
-import * as designCapture from "./features/design-tools/design-capture";
+} from "../../../shared/professional-fixture-smoke";
+import * as designCapture from "../design-tools/design-capture";
 import { runProfessionalFixtureSmoke } from "./use-professional-fixture-smoke";
 
-vi.mock("./features/design-tools/design-capture", { spy: true });
+vi.mock("../design-tools/design-capture", { spy: true });
 
-const repositoryRoot = resolve(import.meta.dirname, "../../../..");
+const repositoryRoot = resolve(import.meta.dirname, "../../../../../..");
 const capture = vi.mocked(designCapture.captureDesignTarget);
 
 beforeEach(() => {

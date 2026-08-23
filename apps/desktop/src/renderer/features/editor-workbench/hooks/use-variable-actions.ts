@@ -22,8 +22,11 @@ import {
   type VariableOperationPlan,
 } from "@opendesign/editor-runtime";
 import { useCallback } from "react";
-import type { MessageKey, MessageParameters } from "../shared/i18n/messages";
-import type { VariablesPanelActions } from "./features/editor-workbench/components/VariablesPanel";
+import type {
+  MessageKey,
+  MessageParameters,
+} from "../../../../shared/i18n/messages";
+import type { VariablesPanelActions } from "../components/VariablesPanel";
 
 type Translate = (key: MessageKey, parameters?: MessageParameters) => string;
 

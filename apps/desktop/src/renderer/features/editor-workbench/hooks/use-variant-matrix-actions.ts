@@ -10,7 +10,10 @@ import {
   type EditorRuntime,
 } from "@opendesign/editor-runtime";
 import { useCallback } from "react";
-import type { MessageKey, MessageParameters } from "../shared/i18n/messages";
+import type {
+  MessageKey,
+  MessageParameters,
+} from "../../../../shared/i18n/messages";
 
 type Translate = (key: MessageKey, parameters?: MessageParameters) => string;
 

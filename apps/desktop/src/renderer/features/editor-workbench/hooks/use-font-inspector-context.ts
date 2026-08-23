@@ -12,9 +12,12 @@ import {
   type TextFontDescriptor,
 } from "@opendesign/text-service";
 import { useMemo } from "react";
-import type { MessageKey, MessageParameters } from "../shared/i18n/messages";
-import type { FontInspectorContext } from "./features/editor-workbench/components/properties/TypographySection";
-import type { ApplyEditorCommands } from "./features/editor/use-editor-command-controller";
+import type {
+  MessageKey,
+  MessageParameters,
+} from "../../../../shared/i18n/messages";
+import type { FontInspectorContext } from "../components/properties/TypographySection";
+import type { ApplyEditorCommands } from "../../editor/use-editor-command-controller";
 import type { FontBinaryRuntime } from "./use-font-binary-runtime";
 
 type Translate = (key: MessageKey, parameters?: MessageParameters) => string;

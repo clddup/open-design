@@ -30,7 +30,7 @@ import {
   generationActivityFromAcceptedPlan,
   generationActivityMessageKey,
   projectGenerationPlanPresentationEvent,
-} from "../../generation-presentation";
+} from "../canvas/generation-presentation";
 import type {
   WorkspaceRuntime,
   WorkspaceSnapshot,

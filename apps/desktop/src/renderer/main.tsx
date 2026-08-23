@@ -4,7 +4,7 @@ import { TooltipProvider } from "@opendesign/ui";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
-import { EditorRuntimeProvider } from "./editor-runtime";
+import { EditorRuntimeProvider } from "./state/editor-runtime";
 import { I18nProvider } from "./i18n";
 import "./styles.css";
 

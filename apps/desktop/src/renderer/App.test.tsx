@@ -43,7 +43,7 @@ import {
   EditorRuntimeProvider,
   useEditorRuntime,
   useEditorSnapshot,
-} from "./editor-runtime";
+} from "./state/editor-runtime";
 import { I18nProvider } from "./i18n";
 import * as designCapture from "./features/design-tools/design-capture";
 import * as rasterExport from "./features/import-export/raster-export";

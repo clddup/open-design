@@ -15,7 +15,10 @@ import type {
   DesktopApi,
   ProjectDesignFile,
 } from "../../../shared/desktop-api";
-import { LOCAL_DESIGN_FILE_ID, LOCAL_PROJECT_ID } from "../../editor-runtime";
+import {
+  LOCAL_DESIGN_FILE_ID,
+  LOCAL_PROJECT_ID,
+} from "../../state/editor-runtime";
 import type { ProjectAutosaveCoordinator } from "./project-autosave";
 import {
   WorkspaceRuntime,
