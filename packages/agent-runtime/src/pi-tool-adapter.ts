@@ -3,8 +3,10 @@ import {
   type BeforeToolCallContext,
   type BeforeToolCallResult,
 } from "@earendil-works/pi-agent-core";
+import { createHash } from "node:crypto";
 import {
   isAgentAttachment,
+  type AgentToolFailureIssue,
   type ApprovalDecision,
   type RunStopReason,
   type ToolRisk,
@@ -346,11 +348,9 @@ export class OpenDesignPiToolAdapter {
       const definition = this.#definitions.get(active.toolName);
       const existingFailure = this.#failures.get(event.toolCallId);
       const inferredFailure =
-        definition &&
-        definition.explainInvalidInput &&
-        !definition.validateInput(active.input)
-          ? invalidInputFailure(definition, active.input)
-          : inferPiToolFailure(active, event.result);
+        existingFailure ??
+        (definition && toolOwnedValidationFailure(definition, active.input)) ??
+        inferPiToolFailure(active, event.result);
       const failure =
         existingFailure ??
         this.#recordProgressFailure(
@@ -459,8 +459,9 @@ export class OpenDesignPiToolAdapter {
         `Tool ${active.toolName} is not registered for this run`,
       );
     }
-    if (!definition.validateInput(context.args)) {
-      const baseFailure = invalidInputFailure(definition, context.args);
+    const validationFailure = toolValidationFailure(definition, context.args);
+    if (validationFailure) {
+      const baseFailure = validationFailure;
       const recoveredFailure = this.#designFailureRecovery.recordFailure({
         toolCallId: active.toolCallId,
         toolName: active.toolName,
@@ -510,11 +511,14 @@ export class OpenDesignPiToolAdapter {
       context.args,
     );
     if (blockedFailure) {
+      const validationFailure =
+        blockedFailure.details?.kind === "tool-validation";
       const failure = this.#recordProgressFailure(active.toolName, {
         ...blockedFailure,
         code: "repeated_tool_failure",
-        message:
-          "The same failing tool input was suppressed. Inspect the current document and revise the transaction before retrying.",
+        message: validationFailure
+          ? "The same invalid tool arguments were suppressed. Correct the reported field paths before retrying."
+          : "The same failing tool input was suppressed. Inspect the current document and revise the transaction before retrying.",
         retryable: false,
         recoverable: true,
         ...(blockedFailure.details
@@ -639,10 +643,9 @@ export class OpenDesignPiToolAdapter {
     onUpdate: Parameters<AgentTool["execute"]>[3],
   ) {
     try {
-      if (!definition.validateInput(parameters)) {
-        throw new TrustedToolExecutionError(
-          invalidInputFailure(definition, parameters),
-        );
+      const validationFailure = toolValidationFailure(definition, parameters);
+      if (validationFailure) {
+        throw new TrustedToolExecutionError(validationFailure);
       }
       if (this.#toolExecutor === undefined) {
         throw new Error("Tool executor became unavailable");
@@ -890,15 +893,91 @@ function failure(
 function invalidInputFailure(
   definition: AgentToolDefinition,
   input: unknown,
+  issues: readonly AgentToolFailureIssue[] = [],
 ): TrustedToolFailure {
-  const explanation = definition.explainInvalidInput?.(input)?.trim();
-  return failure(
+  const explanation =
+    issues.length > 0
+      ? validationIssuesMessage(definition.name, issues)
+      : definition.explainInvalidInput?.(input)?.trim();
+  const base = failure(
     "invalid_tool_input",
     explanation && explanation.length <= 20_000
       ? explanation
       : `The ${definition.name} arguments do not match its schema. Review the tool parameters and submit a corrected call.`,
     true,
   );
+  if (issues.length === 0) return base;
+  return {
+    ...base,
+    details: {
+      kind: "tool-validation",
+      fingerprint: validationFingerprint(definition.name, issues),
+      issues: issues.map((issue) => structuredClone(issue)),
+      recovery: { action: "correct-and-retry", required: false },
+    },
+  };
+}
+
+function toolValidationFailure(
+  definition: AgentToolDefinition,
+  input: unknown,
+): TrustedToolFailure | undefined {
+  if (definition.validateInputIssues) {
+    const issues = definition.validateInputIssues(input).slice(0, 128);
+    return issues.length > 0
+      ? invalidInputFailure(definition, input, issues)
+      : undefined;
+  }
+  return definition.validateInput(input)
+    ? undefined
+    : invalidInputFailure(definition, input);
+}
+
+function toolOwnedValidationFailure(
+  definition: AgentToolDefinition,
+  input: unknown,
+): TrustedToolFailure | undefined {
+  if (definition.validateInputIssues) {
+    const issues = definition.validateInputIssues(input).slice(0, 128);
+    return issues.length > 0
+      ? invalidInputFailure(definition, input, issues)
+      : undefined;
+  }
+  if (definition.explainInvalidInput && !definition.validateInput(input)) {
+    return invalidInputFailure(definition, input);
+  }
+  return undefined;
+}
+
+function validationIssuesMessage(
+  toolName: string,
+  issues: readonly AgentToolFailureIssue[],
+): string {
+  const detail = issues
+    .slice(0, 8)
+    .map((issue) => {
+      const code = issue.code ? `${issue.code} ` : "";
+      const path = issue.path || "/";
+      return `${code}at ${path}: ${issue.message}${issue.recovery ? `. ${issue.recovery}` : ""}`;
+    })
+    .join(" ");
+  return `Invalid ${toolName} input. ${detail}`.slice(0, 20_000);
+}
+
+function validationFingerprint(
+  toolName: string,
+  issues: readonly { code?: string; path: string }[],
+): string {
+  const canonical = issues
+    .map((issue) => `${issue.code ?? "invalid"}:${issue.path}`)
+    .sort()
+    .join("|");
+  return `validation_${createHash("sha256")
+    .update(toolName)
+    .update("\0")
+    .update(canonical)
+    .digest("hex")
+    .slice(0, 16)}`;
 }
 
 function toolResultErrorText(value: unknown): string {

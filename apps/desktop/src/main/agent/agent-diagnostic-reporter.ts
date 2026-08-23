@@ -27,7 +27,8 @@ export function reportAgentDiagnostic(
     publish({
       level: "warning",
       source: "design-tool",
-      presentation: event.details ? "toast" : "silent",
+      presentation:
+        event.details?.kind === "design-transaction" ? "toast" : "silent",
       code: event.code,
       message: event.message,
       context: contextFor(event),

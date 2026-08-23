@@ -1,25 +1,33 @@
+import type { TSchema } from "@sinclair/typebox";
+import { schemaValidationIssues } from "@opendesign/design-contracts";
 import {
   builtinDesignSkillRefsForDeliverable,
   isBuiltinDesignSkillRefsForDeliverable,
   type BuiltinDesignSkillRef,
 } from "@opendesign/design-skills";
+import {
+  type ValidationIssue,
+  type ValidationIssueValue,
+  type ValidationResult,
+} from "./contract-validation";
 import type { DesignIntent, RasterAssetRole } from "./design-agent-tools";
-import {
-  isDesignLogoOutputs,
+import type {
   LOGO_CONCEPT_PRINCIPLES,
-  type DesignLogoOutput,
+  DesignLogoOutput,
 } from "./design-agent-plan-review";
-import {
-  isDesignBriefFidelity,
-  type DesignBriefFidelity,
-} from "./design-brief-fidelity";
+import type { DesignBriefFidelity } from "./design-brief-fidelity";
+import { DESIGN_FIRST_SLICE_MAX_ELEMENTS } from "./design-first-slice-budget";
 import { compileValidatedDesignFirstSliceToolInput } from "./design-first-slice-compiler";
 import {
-  DESIGN_FIRST_SLICE_MAX_ELEMENTS,
-  DESIGN_FIRST_SLICE_MAX_STAGES,
-} from "./design-first-slice-budget";
+  DESIGN_FIRST_SLICE_CANONICAL_INPUT_SCHEMA,
+  DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA,
+  type DesignFirstSliceCanonicalInput,
+  type DesignFirstSliceElementInput,
+  type DesignFirstSliceModelInput,
+} from "./design-first-slice-tool-schema";
 import {
-  isDesignReferenceStrategy,
+  isActiveVisualReferenceDecision,
+  MAX_ACTIVE_VISUAL_REFERENCES,
   type DesignReferenceStrategy,
 } from "./design-reference-strategy";
 
@@ -204,205 +212,51 @@ export type DesignFirstSliceToolInput = {
   };
 };
 
-export function isDesignFirstSliceToolInput(
-  value: unknown,
-): value is DesignFirstSliceToolInput {
-  if (
-    !isRecord(value) ||
-    value.version !== 1 ||
-    !isDesignBriefFidelity(value.briefFidelity) ||
-    !isCompactDesignIntent(value.designIntent) ||
-    !isCompactDeliverable(value.deliverable) ||
-    !isBuiltinDesignSkillRefsForDeliverable(value.deliverable, value.skillRefs)
-  )
-    return false;
-  if (
-    !text(value.objective, 1, 2_000) ||
-    !Array.isArray(value.targets) ||
-    value.targets.length < 1 ||
-    value.targets.length > 32 ||
-    !value.targets.every(isTarget) ||
-    !isVisualSystem(value.visualSystem) ||
-    !isRasterRoles(value.rasterAssetRoles) ||
-    (value.referenceStrategy !== undefined &&
-      !isDesignReferenceStrategy(value.referenceStrategy)) ||
-    (value.logoOutputs !== undefined &&
-      (value.deliverable !== "logo" ||
-        !isDesignLogoOutputs(value.logoOutputs))) ||
-    (value.semanticObjects !== undefined &&
-      (!Array.isArray(value.semanticObjects) ||
-        value.semanticObjects.length > 24)) ||
-    !isFirstSlice(value.firstSlice)
-  ) {
-    return false;
-  }
-  if (
-    !exactKeys(value, [
-      "version",
-      "deliverable",
-      "objective",
-      "designIntent",
-      "skillRefs",
-      "briefFidelity",
-      "targets",
-      "visualSystem",
-      "rasterAssetRoles",
-      ...(value.referenceStrategy === undefined ? [] : ["referenceStrategy"]),
-      ...(value.logoOutputs === undefined ? [] : ["logoOutputs"]),
-      ...(value.logoExploration === undefined ? [] : ["logoExploration"]),
-      ...(value.semanticObjects === undefined ? [] : ["semanticObjects"]),
-      "firstSlice",
-    ])
-  ) {
-    return false;
-  }
-  const targets = value.targets as DesignFirstSliceToolInput["targets"];
-  if (
-    value.logoExploration !== undefined &&
-    (value.deliverable !== "logo" ||
-      !isCompactLogoExploration(value.logoExploration, targets))
-  ) {
-    return false;
-  }
-  if (
-    targets.some((target) =>
-      value.deliverable === "ui"
-        ? target.qualityProfile.kind !== "ui"
-        : target.qualityProfile.kind !== "graphic",
-    )
-  ) {
-    return false;
-  }
-  const targetIds = new Set(targets.map((target) => target.targetId));
-  const frameIds = new Set(targets.map((target) => target.frame.frameId));
-  const regionIds = targets.flatMap((target) =>
-    target.regions.map((region) => region.nodeId),
+export type FirstSliceContractContext = {
+  authoritativePrompt?: string;
+};
+
+function parseFirstSlice(
+  input: unknown,
+  context: FirstSliceContractContext = {},
+): ValidationResult<DesignFirstSliceToolInput> {
+  const modelIssues = schemaIssues(
+    DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA,
+    input,
+    "first_slice.schema_invalid",
   );
-  const allRegionIds = new Set(regionIds);
-  if (
-    targetIds.size !== targets.length ||
-    frameIds.size !== targets.length ||
-    new Set(regionIds).size !== regionIds.length ||
-    targets.some((target) => !hasValidRegionHierarchy(target))
-  ) {
-    return false;
-  }
-  const firstSlice =
-    value.firstSlice as DesignFirstSliceToolInput["firstSlice"];
-  if (firstSlice.targetId !== targets[0]?.targetId) return false;
-  const firstTarget = targets[0];
-  if (!firstTarget) return false;
-  const allElements = firstSlice.stages.flatMap((stage) => stage.elements);
-  const elementIds = new Set<string>();
-  const plannedRegionIds = new Set(
-    firstTarget.regions.map((region) => region.nodeId),
+  if (modelIssues.length > 0) return { ok: false, issues: modelIssues };
+
+  const canonical = bindFirstSliceHostContext(
+    structuredClone(input) as DesignFirstSliceModelInput,
+    context,
   );
-  const parentById = new Map(
-    firstTarget.regions.map((region) => [region.nodeId, region.parentId]),
+  const canonicalIssues = schemaIssues(
+    DESIGN_FIRST_SLICE_CANONICAL_INPUT_SCHEMA,
+    canonical,
+    "first_slice.host_binding_invalid",
   );
-  for (const element of allElements) {
-    if (
-      elementIds.has(element.id) ||
-      frameIds.has(element.id) ||
-      allRegionIds.has(element.id) ||
-      (!elementIds.has(element.parentId) &&
-        !plannedRegionIds.has(element.parentId))
-    ) {
-      return false;
-    }
-    elementIds.add(element.id);
-    parentById.set(element.id, element.parentId);
+  if (canonicalIssues.length > 0) {
+    return { ok: false, issues: canonicalIssues };
   }
-  const referencedRegions = new Set(
-    firstTarget.regions.flatMap((region) =>
-      allElements.some((element) =>
-        parentChainReaches(element.parentId, region.nodeId, parentById),
-      )
-        ? [region.nodeId]
-        : [],
-    ),
-  );
-  const materializedRegions = new Set(
-    firstTarget.regions.flatMap((region) =>
-      allElements.some(
-        (element) =>
-          isMaterialElement(element) &&
-          parentChainReaches(element.parentId, region.nodeId, parentById),
-      )
-        ? [region.nodeId]
-        : [],
-    ),
-  );
-  if (
-    referencedRegions.size < 1 ||
-    [...referencedRegions].some(
-      (regionId) => !materializedRegions.has(regionId),
-    )
-  ) {
-    return false;
-  }
-  if (
-    value.logoExploration !== undefined &&
-    !value.logoExploration.directions.some((direction) =>
-      materializedRegions.has(direction.rootNodeId),
-    )
-  ) {
-    return false;
-  }
-  if (
-    ![...materializedRegions].some((regionId) =>
-      allElements.some(
-        (element) =>
-          isMaterialElement(element) &&
-          parentChainReaches(element.parentId, regionId, parentById),
-      ),
-    )
-  ) {
-    return false;
-  }
-  if (!allElements.some(isMaterialElement)) return false;
-  const semanticObjects = value.semanticObjects as
-    DesignFirstSliceToolInput["semanticObjects"] | undefined;
-  if (semanticObjects && !isSemanticObjects(semanticObjects, targetIds)) {
-    return false;
-  }
-  return true;
+  const value = canonical as DesignFirstSliceCanonicalInput;
+  const domainIssues = refineFirstSlice(value);
+  return domainIssues.length > 0
+    ? { ok: false, issues: domainIssues }
+    : {
+        ok: true,
+        value: structuredClone(value) as DesignFirstSliceToolInput,
+      };
 }
 
-export function normalizeDesignFirstSliceToolInput(
-  input: unknown,
-  options: { authoritativePrompt?: string } = {},
-): DesignFirstSliceToolInput | undefined {
-  if (!isRecord(input)) return undefined;
-  const modelInput = { ...input };
-  delete modelInput.skillRefs;
-  if (!isCompactDeliverable(input.deliverable)) return undefined;
-  const deliverable = input.deliverable;
-  const objective =
-    typeof input.objective === "string" ? input.objective.trim() : "";
-  const targets = Array.isArray(input.targets)
-    ? input.targets.map((target) =>
-        normalizeFirstSliceTarget(target, deliverable),
-      )
-    : input.targets;
-  const skillRefs = builtinDesignSkillRefsForDeliverable(deliverable);
-  const candidate = {
-    ...modelInput,
-    designIntent:
-      input.designIntent ?? defaultDesignIntent(deliverable, objective),
-    briefFidelity:
-      options.authoritativePrompt !== undefined
-        ? defaultBriefFidelity(options.authoritativePrompt)
-        : (input.briefFidelity ?? defaultBriefFidelity(objective)),
-    targets,
-    visualSystem: input.visualSystem ?? deriveVisualSystem(input.firstSlice),
-    rasterAssetRoles: input.rasterAssetRoles ?? [],
-    skillRefs,
-  };
-  return isDesignFirstSliceToolInput(candidate)
-    ? structuredClone(candidate)
-    : undefined;
-}
+export const FirstSliceContract = {
+  schema: DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA,
+  parse: parseFirstSlice,
+  issues: (input: unknown): ValidationIssue[] => {
+    const result = parseFirstSlice(input);
+    return result.ok ? [] : result.issues;
+  },
+} as const;
 
 export function logoBriefRequiresExploration(prompt: string): boolean {
   return (
@@ -415,31 +269,40 @@ export function logoBriefRequiresExploration(prompt: string): boolean {
   );
 }
 
-function normalizeFirstSliceTarget(
-  value: unknown,
+function bindFirstSliceHostContext(
+  input: DesignFirstSliceModelInput,
+  context: FirstSliceContractContext,
+): unknown {
+  const objective = input.objective.trim();
+  return {
+    ...input,
+    designIntent: defaultDesignIntent(input.deliverable, objective),
+    skillRefs: builtinDesignSkillRefsForDeliverable(input.deliverable),
+    briefFidelity: defaultBriefFidelity(
+      context.authoritativePrompt ?? objective,
+    ),
+    targets: input.targets.map((target) =>
+      bindFirstSliceTarget(target, input.deliverable),
+    ),
+    visualSystem: deriveVisualSystem(input.firstSlice),
+    rasterAssetRoles: [],
+  };
+}
+
+function bindFirstSliceTarget(
+  target: DesignFirstSliceModelInput["targets"][number],
   deliverable: DesignFirstSliceToolInput["deliverable"],
 ): unknown {
-  if (!isRecord(value)) return value;
-  const label = typeof value.label === "string" ? value.label : "Design target";
-  const firstRegion = Array.isArray(value.regions)
-    ? value.regions.find(isRecord)
-    : undefined;
-  const safeNodeId =
-    firstRegion && typeof firstRegion.nodeId === "string"
-      ? firstRegion.nodeId
-      : "";
+  const safeNodeId = target.regions[0]?.nodeId ?? "";
   return {
-    ...value,
-    objective: value.objective ?? `Complete ${label} as requested`,
+    ...target,
+    objective: `Complete ${target.label} as requested`,
     layout:
-      value.layout ??
       "Use one clear visual hierarchy inside the declared delivery frame.",
     spacing:
-      value.spacing ??
       "Use a consistent spacing rhythm derived from the visible composition.",
     qualityProfile:
-      value.qualityProfile ??
-      (deliverable === "ui"
+      deliverable === "ui"
         ? {
             kind: "ui",
             platform: "other",
@@ -448,7 +311,7 @@ function normalizeFirstSliceTarget(
             safeNodeIds: safeNodeId ? [safeNodeId] : [],
             hitNodeIds: [],
           }
-        : { kind: "graphic" }),
+        : { kind: "graphic" },
   };
 }
 
@@ -456,12 +319,11 @@ function defaultDesignIntent(
   deliverable: DesignFirstSliceToolInput["deliverable"],
   objective: string,
 ): DesignIntent {
-  const subject = boundedDefaultText(
-    `Requested ${deliverable} design: ${objective || "visible editable design"}`,
-    500,
-  );
   return {
-    subject,
+    subject: boundedDefaultText(
+      `Requested ${deliverable} design: ${objective || "visible editable design"}`,
+      500,
+    ),
     audience: "The people addressed by the current user request",
     primaryJob: boundedDefaultText(
       objective || "Deliver the requested visual result clearly",
@@ -529,937 +391,604 @@ function chunkRequiredContent(value: string): string[] {
 }
 
 function deriveVisualSystem(
-  firstSlice: unknown,
+  firstSlice: DesignFirstSliceModelInput["firstSlice"],
 ): DesignFirstSliceToolInput["visualSystem"] {
   const colors: string[] = [];
   const typography: string[] = [];
-  if (isRecord(firstSlice) && Array.isArray(firstSlice.stages)) {
-    for (const stage of firstSlice.stages) {
-      if (!isRecord(stage) || !Array.isArray(stage.elements)) continue;
-      for (const element of stage.elements) {
-        if (!isRecord(element)) continue;
-        for (const paint of [element.fill, element.stroke]) {
-          if (isRecord(paint) && typeof paint.color === "string") {
-            colors.push(paint.color);
-          }
-        }
-        if (isRecord(element.text)) {
-          if (typeof element.text.color === "string") {
-            colors.push(element.text.color);
-          }
-          if (typeof element.text.fontFamily === "string") {
-            typography.push(
-              `${element.text.fontFamily}${
-                typeof element.text.fontStyleName === "string"
-                  ? ` ${element.text.fontStyleName}`
-                  : ""
-              }`,
-            );
-          }
-        }
+  for (const stage of firstSlice.stages) {
+    for (const element of stage.elements) {
+      for (const paint of [
+        "fill" in element ? element.fill : undefined,
+        "stroke" in element ? element.stroke : undefined,
+      ]) {
+        if (paint) colors.push(paint.color);
+      }
+      if (element.kind === "text") {
+        colors.push(element.text.color);
+        typography.push(
+          `${element.text.fontFamily} ${element.text.fontStyleName}`,
+        );
       }
     }
   }
+  const palette = uniqueText(colors).slice(0, 12);
+  const typefaces = uniqueText(typography).slice(0, 8);
   return {
     formLanguage:
       "Use the editable geometry and hierarchy established by the first visible slice.",
-    palette: uniqueText(colors).slice(0, 12).length
-      ? uniqueText(colors).slice(0, 12)
-      : ["#111111", "#FFFFFF"],
+    palette: palette.length > 0 ? palette : ["#111111", "#FFFFFF"],
     surfaceAndDepth:
       "Depth follows explicit fills, strokes, clipping, and overlap in the editable composition.",
-    typography: uniqueText(typography).slice(0, 8).length
-      ? uniqueText(typography).slice(0, 8)
-      : ["Use a resolvable system typeface with clear hierarchy"],
+    typography:
+      typefaces.length > 0
+        ? typefaces
+        : ["Use a resolvable system typeface with clear hierarchy"],
     effects: [],
   };
 }
 
-function uniqueText(values: string[]): string[] {
-  return [...new Set(values.filter((value) => value.trim().length > 0))];
-}
-
-function boundedDefaultText(value: string, maximum: number): string {
-  const trimmed = value.trim();
-  return (trimmed || "Requested visual deliverable").slice(0, maximum);
-}
-
-function isCompactDeliverable(
+function schemaIssues(
+  schema: TSchema,
   value: unknown,
-): value is DesignFirstSliceToolInput["deliverable"] {
-  return (
-    value === "ui" ||
-    value === "poster" ||
-    value === "logo" ||
-    value === "brand-asset" ||
-    value === "illustration" ||
-    value === "presentation-visual" ||
-    value === "other"
-  );
+  code: string,
+): ValidationIssue[] {
+  return schemaValidationIssues(schema, value)
+    .slice(0, 32)
+    .map((issue) => ({
+      code,
+      path: issue.path || "/",
+      message: issue.message,
+      recovery:
+        "Correct the reported field and submit one revised call; do not repeat unchanged arguments.",
+    }));
 }
 
-/**
- * Returns a bounded, model-facing explanation for the first failing contract
- * layer. The Provider schema cannot express aggregate counts across nested
- * stage arrays, so those semantic constraints must never collapse into a
- * generic top-level schema mismatch.
- */
-export function explainInvalidDesignFirstSliceToolInput(
-  input: unknown,
-): string | undefined {
-  if (normalizeDesignFirstSliceToolInput(input)) return undefined;
-  if (!isRecord(input)) {
-    return "Invalid compact first-slice input. / must be an object.";
-  }
-
-  const allowedKeys = new Set([
-    "version",
-    "deliverable",
-    "objective",
-    "designIntent",
-    "briefFidelity",
-    "targets",
-    "visualSystem",
-    "rasterAssetRoles",
-    "referenceStrategy",
-    "logoOutputs",
-    "logoExploration",
-    "semanticObjects",
-    "firstSlice",
-    // Host-owned legacy echoes are ignored and replaced with locally pinned
-    // refs. They are not part of the Provider schema or model authority.
-    "skillRefs",
-  ]);
-  const unexpected = Object.keys(input).filter((key) => !allowedKeys.has(key));
-  if (unexpected.length > 0) {
-    return invalidFirstSliceMessage(
-      `/: unexpected field${unexpected.length === 1 ? "" : "s"} ${unexpected
-        .map((key) => JSON.stringify(key))
-        .join(", ")}`,
-    );
-  }
-
-  if (input.version !== 1) {
-    return invalidFirstSliceMessage("/version: must equal 1");
-  }
+function refineFirstSlice(
+  input: DesignFirstSliceCanonicalInput,
+): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
   if (
-    ![
-      "ui",
-      "poster",
-      "logo",
-      "brand-asset",
-      "illustration",
-      "presentation-visual",
-      "other",
-    ].includes(String(input.deliverable))
+    !isBuiltinDesignSkillRefsForDeliverable(input.deliverable, input.skillRefs)
   ) {
-    return invalidFirstSliceMessage(
-      "/deliverable: must be a supported current deliverable",
-    );
-  }
-  if (!text(input.objective, 1, 2_000)) {
-    return invalidFirstSliceMessage(
-      "/objective: must be a non-empty string of at most 2000 characters",
-    );
-  }
-  if (
-    input.designIntent !== undefined &&
-    !isCompactDesignIntent(input.designIntent)
-  ) {
-    return invalidFirstSliceMessage(
-      "/designIntent: must contain the exact current visual intent fields and 3-12 distinct antiPatterns",
-    );
-  }
-  if (
-    input.briefFidelity !== undefined &&
-    !isDesignBriefFidelity(input.briefFidelity)
-  ) {
-    return invalidFirstSliceMessage(
-      "/briefFidelity: must contain the current requiredContent, preservedSemantics, prohibitedAdditions, and assumptions arrays",
-    );
-  }
-  if (
-    input.referenceStrategy !== undefined &&
-    !isDesignReferenceStrategy(input.referenceStrategy)
-  ) {
-    return invalidFirstSliceMessage(
-      "/referenceStrategy: must classify each image attachment once and use at most two active visual references",
-    );
-  }
-  if (!Array.isArray(input.targets) || input.targets.length < 1) {
-    return invalidFirstSliceMessage("/targets: must contain 1-32 targets");
-  }
-  if (input.targets.length > 32) {
-    return invalidFirstSliceMessage(
-      `/targets: contains ${input.targets.length} targets; maximum is 32`,
-    );
-  }
-  const normalizedTargets = input.targets.map((target) =>
-    normalizeFirstSliceTarget(
-      target,
-      input.deliverable as DesignFirstSliceToolInput["deliverable"],
-    ),
-  );
-  const invalidTargetIndex = normalizedTargets.findIndex(
-    (target) => !isTarget(target),
-  );
-  if (invalidTargetIndex >= 0) {
-    return invalidFirstSliceMessage(
-      `/targets/${invalidTargetIndex}: target, frame, qualityProfile, or region fields do not match the exact current shape`,
-    );
-  }
-  if (input.visualSystem !== undefined && !isVisualSystem(input.visualSystem)) {
-    return invalidFirstSliceMessage(
-      "/visualSystem: must contain formLanguage, palette, surfaceAndDepth, typography, and optional effects",
-    );
-  }
-  if (
-    input.rasterAssetRoles !== undefined &&
-    !isRasterRoles(input.rasterAssetRoles)
-  ) {
-    return invalidFirstSliceMessage(
-      "/rasterAssetRoles: must contain at most four distinct supported roles",
-    );
-  }
-  if (
-    input.logoOutputs !== undefined &&
-    (input.deliverable !== "logo" || !isDesignLogoOutputs(input.logoOutputs))
-  ) {
-    return invalidFirstSliceMessage(
-      "/logoOutputs: when present, use only the requested symbol, wordmark, app-icon, lockups, or usage-preview outputs on a logo deliverable",
-    );
-  }
-  if (
-    input.logoExploration !== undefined &&
-    !isCompactLogoExploration(
-      input.logoExploration,
-      input.targets as DesignFirstSliceToolInput["targets"],
-    )
-  ) {
-    return invalidFirstSliceMessage(
-      "/logoExploration: must target targets[0] and declare exactly three directions with distinct principles, rootNodeIds matching three first-target regions, and stable monochrome plus 32/24/16 px evidence nodes",
-    );
-  }
-  const targetIds = new Set(
-    (input.targets as DesignFirstSliceToolInput["targets"]).map(
-      (target) => target.targetId,
-    ),
-  );
-  if (
-    input.semanticObjects !== undefined &&
-    (!Array.isArray(input.semanticObjects) ||
-      !isSemanticObjects(input.semanticObjects, targetIds))
-  ) {
-    return invalidFirstSliceMessage(
-      "/semanticObjects: decisions and occurrences must use the exact current shape and declared target IDs",
-    );
-  }
-
-  const firstSlice = input.firstSlice;
-  if (!isRecord(firstSlice) || !Array.isArray(firstSlice.stages)) {
-    return invalidFirstSliceMessage(
-      "/firstSlice: must contain targetId, label, and 1-3 semantic stages",
-    );
-  }
-  const stages = firstSlice.stages as unknown[];
-  if (stages.length < 1 || stages.length > DESIGN_FIRST_SLICE_MAX_STAGES) {
-    return invalidFirstSliceMessage(
-      `/firstSlice/stages: contains ${stages.length} stages; expected 1-${DESIGN_FIRST_SLICE_MAX_STAGES}`,
-    );
-  }
-  const stageElementCounts = stages.map((stage) =>
-    isRecord(stage) && Array.isArray(stage.elements)
-      ? stage.elements.length
-      : 0,
-  );
-  const totalElements = stageElementCounts.reduce(
-    (total, count) => total + count,
-    0,
-  );
-  if (totalElements > DESIGN_FIRST_SLICE_MAX_ELEMENTS) {
-    return invalidFirstSliceMessage(
-      `/firstSlice/stages: contains ${totalElements} elements across ${stages.length} stages (${stageElementCounts.join(" + ")}); combined maximum is ${DESIGN_FIRST_SLICE_MAX_ELEMENTS}. Remove or defer ${totalElements - DESIGN_FIRST_SLICE_MAX_ELEMENTS} nonessential element${totalElements - DESIGN_FIRST_SLICE_MAX_ELEMENTS === 1 ? "" : "s"}`,
-    );
-  }
-  for (let stageIndex = 0; stageIndex < stages.length; stageIndex += 1) {
-    const stage = stages[stageIndex];
-    if (!isRecord(stage) || !Array.isArray(stage.elements)) {
-      return invalidFirstSliceMessage(
-        `/firstSlice/stages/${stageIndex}: must contain stageId, label, and a non-empty elements array`,
-      );
-    }
-    const invalidElementIndex = stage.elements.findIndex(
-      (element) => !isElement(element),
-    );
-    if (invalidElementIndex >= 0) {
-      return invalidFirstSliceMessage(
-        `/firstSlice/stages/${stageIndex}/elements/${invalidElementIndex}: element fields do not match its kind-specific exact shape`,
-      );
-    }
-  }
-  if (!isFirstSlice(firstSlice)) {
-    return invalidFirstSliceMessage(
-      "/firstSlice: stage IDs, labels, element arrays, or exact fields are invalid",
-    );
-  }
-  const targets = input.targets as DesignFirstSliceToolInput["targets"];
-  if (firstSlice.targetId !== targets[0]?.targetId) {
-    return invalidFirstSliceMessage(
-      `/firstSlice/targetId: must equal the first declared target ID ${JSON.stringify(targets[0]?.targetId)}`,
-    );
-  }
-
-  const firstTarget = targets[0];
-  const frameIds = new Set(targets.map((target) => target.frame.frameId));
-  const allPlannedRegionIds = new Set(
-    targets.flatMap((target) => target.regions.map((region) => region.nodeId)),
-  );
-  const seenElementIds = new Set<string>();
-  const flattenedElements: DesignFirstSliceElement[] = [];
-  for (const stage of stages) {
-    if (!isRecord(stage) || !Array.isArray(stage.elements)) continue;
-    for (const element of stage.elements as unknown[]) {
-      if (isElement(element)) flattenedElements.push(element);
-    }
-  }
-  for (let index = 0; index < flattenedElements.length; index += 1) {
-    const element = flattenedElements[index];
-    if (!element) continue;
-    if (seenElementIds.has(element.id)) {
-      return invalidFirstSliceMessage(
-        `/firstSlice/stages: element ID ${JSON.stringify(element.id)} is duplicated at flattened element ${index}`,
-      );
-    }
-    if (frameIds.has(element.id)) {
-      return invalidFirstSliceMessage(
-        `/firstSlice/stages: element ID ${JSON.stringify(element.id)} collides with a delivery artboard Frame ID`,
-      );
-    }
-    const plannedRegionIds = new Set(
-      firstTarget?.regions.map((region) => region.nodeId) ?? [],
-    );
-    if (allPlannedRegionIds.has(element.id)) {
-      return invalidFirstSliceMessage(
-        `/firstSlice/stages: element ID ${JSON.stringify(element.id)} is reserved for a host-owned planned region container; parent content to that region ID instead of creating it`,
-      );
-    }
-    if (
-      !plannedRegionIds.has(element.parentId) &&
-      !seenElementIds.has(element.parentId)
-    ) {
-      return invalidFirstSliceMessage(
-        `/firstSlice/stages: parent ${JSON.stringify(element.parentId)} for element ${JSON.stringify(element.id)} must be a declared first-target region or an earlier element`,
-      );
-    }
-    seenElementIds.add(element.id);
-  }
-  const regionParents = new Map(
-    firstTarget?.regions.map((region) => [region.nodeId, region.parentId]) ??
-      [],
-  );
-  for (const element of flattenedElements) {
-    regionParents.set(element.id, element.parentId);
-  }
-  const materializedRegionIds = [...(firstTarget?.regions ?? [])].flatMap(
-    (region) =>
-      flattenedElements.some(
-        (element) =>
-          isMaterialElement(element) &&
-          parentChainReaches(element.parentId, region.nodeId, regionParents),
-      )
-        ? [region.nodeId]
-        : [],
-  );
-  if (materializedRegionIds.length === 0) {
-    return invalidFirstSliceMessage(
-      `/firstSlice/stages: no first-target planned region contains material; parent at least one real editable element to a declared region ID`,
-    );
-  }
-  const emptyReferencedRegion = [...(firstTarget?.regions ?? [])].find(
-    (region) =>
-      flattenedElements.some((element) =>
-        parentChainReaches(element.parentId, region.nodeId, regionParents),
-      ) && !materializedRegionIds.includes(region.nodeId),
-  );
-  if (emptyReferencedRegion) {
-    return invalidFirstSliceMessage(
-      `/firstSlice/stages: planned region ${JSON.stringify(emptyReferencedRegion.nodeId)} is referenced but contains no visible editable material; do not create an empty Group-only region`,
-    );
-  }
-
-  return invalidFirstSliceMessage(
-    "Cross-field structure is invalid. The first slice must target targets[0], use unique non-region IDs, declare element parents before children, and place editable non-container content inside host-owned planned regions",
-  );
-}
-
-function invalidFirstSliceMessage(issue: string): string {
-  return `Invalid opendesign_generate_first_slice input. ${issue}. Submit a corrected call; do not repeat the unchanged arguments or finish with a text-only explanation.`;
-}
-
-function isCompactDesignIntent(value: unknown): value is DesignIntent {
-  if (!isRecord(value)) return false;
-  const antiPatterns = value.antiPatterns;
-  return (
-    text(value.subject, 8, 500) &&
-    text(value.audience, 8, 500) &&
-    text(value.primaryJob, 8, 500) &&
-    text(value.visualThesis, 16, 1_000) &&
-    text(value.signatureMotif, 16, 1_000) &&
-    text(value.typographyLanguage, 12, 1_000) &&
-    text(value.colorMaterialLanguage, 12, 1_000) &&
-    text(value.compositionTension, 12, 1_000) &&
-    textArray(antiPatterns, 3, 12, 256) &&
-    Array.isArray(antiPatterns) &&
-    antiPatterns.every(
-      (item) => typeof item === "string" && item.trim().length >= 8,
-    ) &&
-    new Set(antiPatterns).size === antiPatterns.length &&
-    exactKeys(value, [
-      "subject",
-      "audience",
-      "primaryJob",
-      "visualThesis",
-      "signatureMotif",
-      "typographyLanguage",
-      "colorMaterialLanguage",
-      "compositionTension",
-      "antiPatterns",
-    ])
-  );
-}
-
-export function compileDesignFirstSliceToolInput(
-  input: DesignFirstSliceToolInput,
-): ReturnType<typeof compileValidatedDesignFirstSliceToolInput> {
-  if (!isDesignFirstSliceToolInput(input)) {
-    throw new TypeError("Invalid compact first-slice input");
-  }
-  return compileValidatedDesignFirstSliceToolInput(input);
-}
-
-function isTarget(value: unknown): boolean {
-  if (!isRecord(value) || !safeId(value.targetId, 128)) return false;
-  if (
-    !safeId(value.label) ||
-    !safeId(value.pageId) ||
-    !text(value.objective, 1, 2_000) ||
-    !text(value.layout, 1, 1_000) ||
-    !text(value.spacing, 1, 500) ||
-    !isRecord(value.frame) ||
-    !safeId(value.frame.frameId) ||
-    !coordinate(value.frame.x) ||
-    !coordinate(value.frame.y) ||
-    !dimension(value.frame.width) ||
-    !dimension(value.frame.height) ||
-    !exactKeys(value.frame, ["frameId", "x", "y", "width", "height"]) ||
-    !isCompactQualityProfile(value.qualityProfile, {
-      width: value.frame.width,
-      height: value.frame.height,
-    }) ||
-    !Array.isArray(value.regions) ||
-    value.regions.length < 1 ||
-    value.regions.length > 12 ||
-    !value.regions.every(isRegion)
-  ) {
-    return false;
-  }
-  return exactKeys(value, [
-    "targetId",
-    "label",
-    "pageId",
-    "objective",
-    "frame",
-    "layout",
-    "spacing",
-    "qualityProfile",
-    "regions",
-  ]);
-}
-
-function isCompactQualityProfile(
-  value: unknown,
-  frameSize: { width: number; height: number },
-): value is DesignFirstSliceQualityProfile {
-  if (!isRecord(value)) return false;
-  if (value.kind === "graphic") return exactKeys(value, ["kind"]);
-  const safeNodeIds = value.safeNodeIds;
-  const hitNodeIds = value.hitNodeIds;
-  const insets = value.insets;
-  if (
-    value.kind !== "ui" ||
-    !["web", "macos", "windows", "ios", "ipados", "android", "other"].includes(
-      String(value.platform),
-    ) ||
-    !["pointer", "touch", "mixed"].includes(String(value.input)) ||
-    !isInsetTuple(insets) ||
-    !idArray(safeNodeIds, 1, 64) ||
-    !idArray(hitNodeIds, 0, 64) ||
-    !exactKeys(value, [
-      "kind",
-      "platform",
-      "input",
-      "insets",
-      "safeNodeIds",
-      "hitNodeIds",
-    ])
-  ) {
-    return false;
-  }
-  const [top, right, bottom, left] = insets;
-  return left + right < frameSize.width && top + bottom < frameSize.height;
-}
-
-function isInsetTuple(
-  value: unknown,
-): value is [number, number, number, number] {
-  return (
-    Array.isArray(value) &&
-    value.length === 4 &&
-    value.every(
-      (inset: unknown) =>
-        typeof inset === "number" &&
-        Number.isFinite(inset) &&
-        inset >= 0 &&
-        inset <= 10_000,
-    )
-  );
-}
-
-function idArray(
-  value: unknown,
-  minimum: number,
-  maximum: number,
-): value is string[] {
-  return (
-    Array.isArray(value) &&
-    value.length >= minimum &&
-    value.length <= maximum &&
-    value.every((nodeId) => safeId(nodeId)) &&
-    new Set(value).size === value.length
-  );
-}
-
-function isRegion(value: unknown): boolean {
-  return (
-    isRecord(value) &&
-    safeId(value.nodeId) &&
-    text(value.name, 1, 128) &&
-    [
-      "structure",
-      "content",
-      "typography",
-      "media",
-      "graphic",
-      "decoration",
-      "interaction",
-      "other",
-    ].includes(String(value.role)) &&
-    safeId(value.parentId) &&
-    nonnegative(value.x) &&
-    nonnegative(value.y) &&
-    dimension(value.width) &&
-    dimension(value.height) &&
-    exactKeys(value, [
-      "nodeId",
-      "name",
-      "role",
-      "parentId",
-      "x",
-      "y",
-      "width",
-      "height",
-    ])
-  );
-}
-
-function hasValidRegionHierarchy(
-  target: DesignFirstSliceToolInput["targets"][number],
-): boolean {
-  const seen = new Map<string, { width: number; height: number }>([
-    [target.frame.frameId, target.frame],
-  ]);
-  for (const region of target.regions) {
-    if (region.nodeId === target.frame.frameId || seen.has(region.nodeId)) {
-      return false;
-    }
-    const parent = seen.get(region.parentId);
-    if (
-      !parent ||
-      region.x + region.width > parent.width ||
-      region.y + region.height > parent.height
-    ) {
-      return false;
-    }
-    seen.set(region.nodeId, region);
-  }
-  return true;
-}
-
-function isVisualSystem(value: unknown): boolean {
-  return (
-    isRecord(value) &&
-    text(value.formLanguage, 1, 1_000) &&
-    textArray(value.palette, 1, 12, 128) &&
-    text(value.surfaceAndDepth, 1, 1_000) &&
-    textArray(value.typography, 1, 8, 256) &&
-    (value.effects === undefined || textArray(value.effects, 0, 12, 256)) &&
-    exactKeys(value, [
-      "formLanguage",
-      "palette",
-      "surfaceAndDepth",
-      "typography",
-      ...(value.effects === undefined ? [] : ["effects"]),
-    ])
-  );
-}
-
-function isRasterRoles(value: unknown): boolean {
-  return (
-    Array.isArray(value) &&
-    value.length <= 4 &&
-    value.every((role) =>
-      ["reference", "background", "hero", "supporting-content"].includes(
-        String(role),
+    issues.push(
+      issue(
+        "first_slice.host_skill_binding_invalid",
+        "/skillRefs",
+        "Host-bound design skills do not match the deliverable",
       ),
-    ) &&
-    new Set(value).size === value.length
-  );
-}
-
-function isFirstSlice(value: unknown): boolean {
-  if (
-    !isRecord(value) ||
-    !safeId(value.targetId, 128) ||
-    !safeId(value.label) ||
-    !Array.isArray(value.stages) ||
-    value.stages.length < 1 ||
-    value.stages.length > DESIGN_FIRST_SLICE_MAX_STAGES ||
-    !exactKeys(value, ["targetId", "label", "stages"])
-  ) {
-    return false;
+    );
   }
-  let total = 0;
-  const stageIds = new Set<string>();
-  for (const stage of value.stages) {
-    if (
-      !isRecord(stage) ||
-      !safeId(stage.stageId, 128) ||
-      stageIds.has(stage.stageId) ||
-      !safeId(stage.label) ||
-      !Array.isArray(stage.elements) ||
-      stage.elements.length < 1 ||
-      !stage.elements.every(isElement) ||
-      !exactKeys(stage, ["stageId", "label", "elements"])
-    ) {
-      return false;
+  if (input.logoOutputs && input.deliverable !== "logo") {
+    issues.push(
+      issue(
+        "first_slice.logo_outputs_wrong_deliverable",
+        "/logoOutputs",
+        "Logo outputs are only valid for a logo deliverable",
+        "logo",
+        input.deliverable,
+      ),
+    );
+  }
+
+  const targetIds = new Map<string, string>();
+  const frameIds = new Map<string, string>();
+  const regionIds = new Map<string, string>();
+  for (const [targetIndex, target] of input.targets.entries()) {
+    registerUniqueId(
+      targetIds,
+      target.targetId,
+      `/targets/${targetIndex}/targetId`,
+      "first_slice.duplicate_target_id",
+      "Target ID",
+      issues,
+    );
+    registerUniqueId(
+      frameIds,
+      target.frame.frameId,
+      `/targets/${targetIndex}/frame/frameId`,
+      "first_slice.duplicate_frame_id",
+      "Delivery Frame ID",
+      issues,
+    );
+  }
+  const declaredFrameIds = new Set(frameIds.keys());
+  for (const [targetIndex, target] of input.targets.entries()) {
+    refineQualityProfile(target, targetIndex, input.deliverable, issues);
+    refineRegionHierarchy(
+      target,
+      targetIndex,
+      declaredFrameIds,
+      regionIds,
+      issues,
+    );
+  }
+
+  const firstTarget = input.targets[0];
+  if (!firstTarget) return issues;
+  if (input.firstSlice.targetId !== firstTarget.targetId) {
+    issues.push(
+      issue(
+        "first_slice.target_mismatch",
+        "/firstSlice/targetId",
+        "The first slice must materialize targets[0]",
+        firstTarget.targetId,
+        input.firstSlice.targetId,
+      ),
+    );
+  }
+
+  const stageIds = new Map<string, string>();
+  const flattened: Array<{
+    element: DesignFirstSliceElementInput;
+    path: string;
+  }> = [];
+  for (const [stageIndex, stage] of input.firstSlice.stages.entries()) {
+    registerUniqueId(
+      stageIds,
+      stage.stageId,
+      `/firstSlice/stages/${stageIndex}/stageId`,
+      "first_slice.duplicate_stage_id",
+      "Stage ID",
+      issues,
+    );
+    for (const [elementIndex, element] of stage.elements.entries()) {
+      flattened.push({
+        element,
+        path: `/firstSlice/stages/${stageIndex}/elements/${elementIndex}`,
+      });
     }
-    stageIds.add(stage.stageId);
-    total += stage.elements.length;
   }
-  return total <= DESIGN_FIRST_SLICE_MAX_ELEMENTS;
-}
-
-function isElement(value: unknown): value is DesignFirstSliceElement {
-  if (
-    !isRecord(value) ||
-    !safeId(value.id) ||
-    !safeId(value.name) ||
-    !safeId(value.parentId) ||
-    !coordinate(value.x) ||
-    !coordinate(value.y) ||
-    !dimension(value.width) ||
-    !dimension(value.height) ||
-    (value.opacity !== undefined && !unit(value.opacity))
-  ) {
-    return false;
-  }
-  const common = [
-    "id",
-    "name",
-    "parentId",
-    "kind",
-    "x",
-    "y",
-    "width",
-    "height",
-    ...(value.opacity === undefined ? [] : ["opacity"]),
-  ];
-  if (value.kind === "group") return exactKeys(value, common);
-  if (value.kind === "text") {
-    return isCompactText(value.text) && exactKeys(value, [...common, "text"]);
-  }
-  if (value.kind === "frame") {
-    return (
-      (value.fill === undefined || isPaint(value.fill)) &&
-      (value.stroke === undefined || isStroke(value.stroke)) &&
-      (value.cornerRadius === undefined || nonnegative(value.cornerRadius)) &&
-      (value.clipsContent === undefined ||
-        typeof value.clipsContent === "boolean") &&
-      exactKeys(value, [
-        ...common,
-        ...(value.fill === undefined ? [] : ["fill"]),
-        ...(value.stroke === undefined ? [] : ["stroke"]),
-        ...(value.cornerRadius === undefined ? [] : ["cornerRadius"]),
-        ...(value.clipsContent === undefined ? [] : ["clipsContent"]),
-      ])
+  if (flattened.length > DESIGN_FIRST_SLICE_MAX_ELEMENTS) {
+    issues.push(
+      issue(
+        "first_slice.element_limit_exceeded",
+        "/firstSlice/stages",
+        `${flattened.length} model-authored content elements exceed the combined first-slice budget`,
+        DESIGN_FIRST_SLICE_MAX_ELEMENTS,
+        flattened.length,
+        `Defer ${flattened.length - DESIGN_FIRST_SLICE_MAX_ELEMENTS} secondary elements to continuation.`,
+      ),
     );
   }
-  if (value.kind === "path") {
-    return (
-      text(value.path, 1, 20_000) &&
-      isPaint(value.fill) &&
-      exactKeys(value, [...common, "path", "fill"])
-    );
-  }
-  if (value.kind !== "rectangle" && value.kind !== "ellipse") return false;
-  return (
-    isPaint(value.fill) &&
-    (value.stroke === undefined || isStroke(value.stroke)) &&
-    (value.kind !== "rectangle" ||
-      value.cornerRadius === undefined ||
-      nonnegative(value.cornerRadius)) &&
-    exactKeys(value, [
-      ...common,
-      "fill",
-      ...(value.stroke === undefined ? [] : ["stroke"]),
-      ...(value.kind === "rectangle" && value.cornerRadius !== undefined
-        ? ["cornerRadius"]
-        : []),
-    ])
-  );
-}
 
-function isCompactLogoExploration(
-  value: unknown,
-  targets: readonly Pick<
-    DesignFirstSliceToolInput["targets"][number],
-    "targetId" | "regions"
-  >[],
-): value is NonNullable<DesignFirstSliceToolInput["logoExploration"]> {
-  const firstTarget = targets[0];
-  if (
-    !isRecord(value) ||
-    !safeId(value.targetId, 128) ||
-    value.targetId !== firstTarget?.targetId ||
-    !Array.isArray(value.directions) ||
-    value.directions.length !== 3 ||
-    !exactKeys(value, ["targetId", "directions"])
-  ) {
-    return false;
-  }
   const firstTargetRegionIds = new Set(
     firstTarget.regions.map((region) => region.nodeId),
   );
-  const ids = new Set<string>();
-  const principles = new Set<string>();
-  for (const direction of value.directions) {
-    if (
-      !isRecord(direction) ||
-      !safeId(direction.conceptId, 128) ||
-      !LOGO_CONCEPT_PRINCIPLES.includes(
-        direction.principle as (typeof LOGO_CONCEPT_PRINCIPLES)[number],
-      ) ||
-      !text(direction.thesis, 16, 1_000) ||
-      !text(direction.constructionLogic, 24, 1_000) ||
-      !safeId(direction.rootNodeId) ||
-      !firstTargetRegionIds.has(direction.rootNodeId) ||
-      !Array.isArray(direction.evidenceNodeIds) ||
-      direction.evidenceNodeIds.length !== 4 ||
-      !direction.evidenceNodeIds.every((nodeId) => safeId(nodeId)) ||
-      new Set(direction.evidenceNodeIds).size !== 4 ||
-      !exactKeys(direction, [
-        "conceptId",
-        "principle",
-        "thesis",
-        "constructionLogic",
-        "rootNodeId",
-        "evidenceNodeIds",
-      ])
-    ) {
-      return false;
+  const allFrameIds = new Set(frameIds.keys());
+  const allRegionIds = new Set(regionIds.keys());
+  const elementIds = new Map<string, string>();
+  const parentById = new Map(
+    firstTarget.regions.map((region) => [region.nodeId, region.parentId]),
+  );
+  for (const { element, path } of flattened) {
+    registerUniqueId(
+      elementIds,
+      element.id,
+      `${path}/id`,
+      "first_slice.duplicate_element_id",
+      "Element ID",
+      issues,
+    );
+    if (allFrameIds.has(element.id)) {
+      issues.push(
+        issue(
+          "first_slice.element_frame_id_conflict",
+          `${path}/id`,
+          "Element ID collides with a declared delivery Frame ID",
+          "a globally unique content node ID",
+          element.id,
+        ),
+      );
     }
-    const principle = String(direction.principle);
-    if (principles.has(principle)) return false;
-    principles.add(principle);
-    for (const id of [
-      direction.conceptId,
-      direction.rootNodeId,
-      ...direction.evidenceNodeIds,
-    ]) {
-      if (ids.has(id)) return false;
-      ids.add(id);
+    if (allRegionIds.has(element.id)) {
+      issues.push(
+        issue(
+          "first_slice.planned_region_id_reserved",
+          `${path}/id`,
+          "Planned region IDs are host-owned Frame identities",
+          "a unique content node ID parented to the region",
+          element.id,
+        ),
+      );
+    }
+    if (
+      !firstTargetRegionIds.has(element.parentId) &&
+      !elementIds.has(element.parentId)
+    ) {
+      issues.push(
+        issue(
+          "first_slice.parent_not_available",
+          `${path}/parentId`,
+          "Element parent must be a first-target region or an earlier element",
+          "declared region ID or earlier element ID",
+          element.parentId,
+        ),
+      );
+    }
+    if (!parentById.has(element.id)) {
+      parentById.set(element.id, element.parentId);
     }
   }
-  return true;
-}
 
-function isCompactText(value: unknown): boolean {
-  return (
-    isRecord(value) &&
-    text(value.content, 1, 100_000) &&
-    safeId(value.fontFamily, 4_096) &&
-    text(value.fontStyleName, 1, 512) &&
-    Number.isInteger(value.fontWeight) &&
-    Number(value.fontWeight) >= 1 &&
-    Number(value.fontWeight) <= 1_000 &&
-    (value.fontSlant === "normal" || value.fontSlant === "italic") &&
-    dimension(value.fontSize) &&
-    dimension(value.lineHeight) &&
-    (value.letterSpacing === undefined ||
-      Number.isFinite(value.letterSpacing)) &&
-    text(value.color, 1, 128) &&
-    typeof value.textResize === "string" &&
-    ["auto-width", "auto-height", "fixed"].includes(value.textResize) &&
-    (value.align === undefined ||
-      (typeof value.align === "string" &&
-        ["left", "center", "right", "justify"].includes(value.align))) &&
-    exactKeys(value, [
-      "content",
-      "fontFamily",
-      "fontStyleName",
-      "fontWeight",
-      "fontSlant",
-      "fontSize",
-      "lineHeight",
-      ...(value.letterSpacing === undefined ? [] : ["letterSpacing"]),
-      "color",
-      "textResize",
-      ...(value.align === undefined ? [] : ["align"]),
-    ])
-  );
-}
-
-function isPaint(value: unknown): value is CompactPaint {
-  return (
-    isRecord(value) &&
-    text(value.color, 1, 128) &&
-    (value.opacity === undefined || unit(value.opacity)) &&
-    exactKeys(value, [
-      "color",
-      ...(value.opacity === undefined ? [] : ["opacity"]),
-    ])
-  );
-}
-
-function isStroke(value: unknown): value is CompactStroke {
-  return (
-    isPaintLike(value) &&
-    dimension(value.width) &&
-    exactKeys(value, [
-      "color",
-      ...(value.opacity === undefined ? [] : ["opacity"]),
-      "width",
-    ])
-  );
-}
-
-function isPaintLike(
-  value: unknown,
-): value is Record<string, unknown> & { color: string; opacity?: number } {
-  return (
-    isRecord(value) &&
-    text(value.color, 1, 128) &&
-    (value.opacity === undefined || unit(value.opacity))
-  );
-}
-
-function isSemanticObjects(
-  objects: unknown,
-  targetIds: ReadonlySet<string>,
-): objects is NonNullable<DesignFirstSliceToolInput["semanticObjects"]> {
-  if (!Array.isArray(objects)) return false;
-  const decisions = new Set<string>();
-  const components = new Set<string>();
-  const nodes = new Set<string>();
-  for (const object of objects) {
-    if (
-      !isRecord(object) ||
-      !safeId(object.decisionId, 128) ||
-      decisions.has(object.decisionId) ||
-      !safeId(object.label)
-    ) {
-      return false;
+  const referencedRegions = new Set<string>();
+  const materializedRegions = new Set<string>();
+  for (const region of firstTarget.regions) {
+    for (const { element } of flattened) {
+      if (!parentChainReaches(element.parentId, region.nodeId, parentById)) {
+        continue;
+      }
+      referencedRegions.add(region.nodeId);
+      if (isMaterialElement(element)) materializedRegions.add(region.nodeId);
     }
-    decisions.add(object.decisionId);
-    const instances: unknown[] = Array.isArray(object.instances)
-      ? (object.instances as unknown[])
-      : [];
+  }
+  if (referencedRegions.size === 0) {
+    issues.push(
+      issue(
+        "first_slice.material_region_required",
+        "/firstSlice/stages",
+        "At least one first-target planned region must contain editable material",
+      ),
+    );
+  }
+  for (const regionId of referencedRegions) {
+    if (!materializedRegions.has(regionId)) {
+      const regionIndex = firstTarget.regions.findIndex(
+        (region) => region.nodeId === regionId,
+      );
+      issues.push(
+        issue(
+          "first_slice.empty_referenced_region",
+          `/targets/0/regions/${regionIndex}`,
+          "Referenced planned region contains only empty containers",
+          "at least one visible editable material descendant",
+          regionId,
+        ),
+      );
+    }
+  }
+
+  refineLogoExploration(
+    input,
+    firstTargetRegionIds,
+    materializedRegions,
+    issues,
+  );
+  refineSemanticObjects(input, new Set(targetIds.keys()), issues);
+  refineReferenceStrategy(input.referenceStrategy, issues);
+  return issues.slice(0, 64);
+}
+
+function refineQualityProfile(
+  target: DesignFirstSliceCanonicalInput["targets"][number],
+  targetIndex: number,
+  deliverable: DesignFirstSliceToolInput["deliverable"],
+  issues: ValidationIssue[],
+): void {
+  const expectedKind = deliverable === "ui" ? "ui" : "graphic";
+  if (target.qualityProfile.kind !== expectedKind) {
+    issues.push(
+      issue(
+        "first_slice.quality_profile_mismatch",
+        `/targets/${targetIndex}/qualityProfile/kind`,
+        "Quality profile does not match the deliverable",
+        expectedKind,
+        target.qualityProfile.kind,
+      ),
+    );
+    return;
+  }
+  if (target.qualityProfile.kind !== "ui") return;
+  const [top, right, bottom, left] = target.qualityProfile.insets;
+  if (
+    left + right >= target.frame.width ||
+    top + bottom >= target.frame.height
+  ) {
+    issues.push(
+      issue(
+        "first_slice.safe_area_exceeds_frame",
+        `/targets/${targetIndex}/qualityProfile/insets`,
+        "Safe-area insets leave no positive content area",
+        {
+          horizontalLessThan: target.frame.width,
+          verticalLessThan: target.frame.height,
+        },
+        { horizontal: left + right, vertical: top + bottom },
+      ),
+    );
+  }
+}
+
+function refineRegionHierarchy(
+  target: DesignFirstSliceCanonicalInput["targets"][number],
+  targetIndex: number,
+  declaredFrameIds: ReadonlySet<string>,
+  globalRegionIds: Map<string, string>,
+  issues: ValidationIssue[],
+): void {
+  const seen = new Map<string, { width: number; height: number }>([
+    [target.frame.frameId, target.frame],
+  ]);
+  for (const [regionIndex, region] of target.regions.entries()) {
+    const path = `/targets/${targetIndex}/regions/${regionIndex}`;
+    registerUniqueId(
+      globalRegionIds,
+      region.nodeId,
+      `${path}/nodeId`,
+      "first_slice.duplicate_region_id",
+      "Planned region ID",
+      issues,
+    );
+    if (declaredFrameIds.has(region.nodeId)) {
+      issues.push(
+        issue(
+          "first_slice.region_frame_id_conflict",
+          `${path}/nodeId`,
+          "Region ID must not reuse any declared delivery Frame ID",
+          "a unique region ID",
+          region.nodeId,
+        ),
+      );
+    }
+    const parent = seen.get(region.parentId);
+    if (!parent) {
+      issues.push(
+        issue(
+          "first_slice.region_parent_not_available",
+          `${path}/parentId`,
+          "Region parent must be the target Frame or an earlier region",
+          "target frameId or earlier region nodeId",
+          region.parentId,
+        ),
+      );
+    } else if (
+      region.x + region.width > parent.width ||
+      region.y + region.height > parent.height
+    ) {
+      issues.push(
+        issue(
+          "first_slice.region_bounds_exceeded",
+          path,
+          "Parent-local region bounds exceed the declared parent",
+          { width: parent.width, height: parent.height },
+          {
+            right: region.x + region.width,
+            bottom: region.y + region.height,
+          },
+        ),
+      );
+    }
+    if (!seen.has(region.nodeId)) seen.set(region.nodeId, region);
+  }
+}
+
+function refineLogoExploration(
+  input: DesignFirstSliceCanonicalInput,
+  firstTargetRegionIds: ReadonlySet<string>,
+  materializedRegions: ReadonlySet<string>,
+  issues: ValidationIssue[],
+): void {
+  const exploration = input.logoExploration;
+  if (!exploration) return;
+  if (input.deliverable !== "logo") {
+    issues.push(
+      issue(
+        "first_slice.logo_exploration_wrong_deliverable",
+        "/logoExploration",
+        "Logo exploration is only valid for a logo deliverable",
+        "logo",
+        input.deliverable,
+      ),
+    );
+  }
+  const expectedTargetId = input.targets[0]?.targetId;
+  if (exploration.targetId !== expectedTargetId) {
+    issues.push(
+      issue(
+        "first_slice.logo_exploration_target_mismatch",
+        "/logoExploration/targetId",
+        "Logo exploration must target targets[0]",
+        expectedTargetId,
+        exploration.targetId,
+      ),
+    );
+  }
+  const principles = new Map<string, string>();
+  const identities = new Map<string, string>();
+  for (const [directionIndex, direction] of exploration.directions.entries()) {
+    const path = `/logoExploration/directions/${directionIndex}`;
+    registerUniqueId(
+      principles,
+      String(direction.principle),
+      `${path}/principle`,
+      "first_slice.duplicate_logo_principle",
+      "Logo generative principle",
+      issues,
+    );
+    if (!firstTargetRegionIds.has(direction.rootNodeId)) {
+      issues.push(
+        issue(
+          "first_slice.logo_root_not_planned",
+          `${path}/rootNodeId`,
+          "Logo concept root must be a declared first-target region",
+          "first-target region nodeId",
+          direction.rootNodeId,
+        ),
+      );
+    }
+    for (const [id, idPath] of [
+      [direction.conceptId, `${path}/conceptId`],
+      [direction.rootNodeId, `${path}/rootNodeId`],
+      ...direction.evidenceNodeIds.map(
+        (nodeId, evidenceIndex) =>
+          [nodeId, `${path}/evidenceNodeIds/${evidenceIndex}`] as const,
+      ),
+    ] as const) {
+      registerUniqueId(
+        identities,
+        id,
+        idPath,
+        "first_slice.duplicate_logo_identity",
+        "Logo concept/evidence ID",
+        issues,
+      );
+    }
+  }
+  if (
+    !exploration.directions.some((direction) =>
+      materializedRegions.has(direction.rootNodeId),
+    )
+  ) {
+    issues.push(
+      issue(
+        "first_slice.logo_direction_material_required",
+        "/firstSlice/stages",
+        "At least one declared Logo direction must contain editable material",
+      ),
+    );
+  }
+}
+
+function refineSemanticObjects(
+  input: DesignFirstSliceCanonicalInput,
+  targetIds: ReadonlySet<string>,
+  issues: ValidationIssue[],
+): void {
+  if (!input.semanticObjects) return;
+  const decisions = new Map<string, string>();
+  const components = new Map<string, string>();
+  const nodes = new Map<string, string>();
+  for (const [objectIndex, object] of input.semanticObjects.entries()) {
+    const path = `/semanticObjects/${objectIndex}`;
+    registerUniqueId(
+      decisions,
+      object.decisionId,
+      `${path}/decisionId`,
+      "first_slice.duplicate_semantic_decision",
+      "Semantic decision ID",
+      issues,
+    );
+    if (object.decision !== "ordinary") {
+      registerUniqueId(
+        components,
+        object.componentId,
+        `${path}/componentId`,
+        "first_slice.duplicate_component_id",
+        "Component ID",
+        issues,
+      );
+    }
     const occurrences =
       object.decision === "ordinary"
         ? object.occurrences
         : object.decision === "component"
-          ? [object.main, ...instances]
-          : object.decision === "reuse-component"
-            ? instances
-            : undefined;
-    if (
-      !Array.isArray(occurrences) ||
-      occurrences.length < 1 ||
-      occurrences.length > 33 ||
-      !occurrences.every(
-        (occurrence) =>
-          isRecord(occurrence) &&
-          safeId(occurrence.targetId, 128) &&
-          targetIds.has(occurrence.targetId) &&
-          safeId(occurrence.nodeId) &&
-          exactKeys(occurrence, ["targetId", "nodeId"]),
-      )
-    ) {
-      return false;
-    }
-    for (const occurrence of occurrences) {
-      const nodeId = (occurrence as { nodeId: string }).nodeId;
-      if (nodes.has(nodeId)) return false;
-      nodes.add(nodeId);
-    }
-    if (object.decision === "ordinary") {
-      if (
-        !exactKeys(object, ["decisionId", "label", "decision", "occurrences"])
-      ) {
-        return false;
+          ? [object.main, ...object.instances]
+          : object.instances;
+    for (const [occurrenceIndex, occurrence] of occurrences.entries()) {
+      const occurrencePath = `${path}/occurrences/${occurrenceIndex}`;
+      if (!targetIds.has(occurrence.targetId)) {
+        issues.push(
+          issue(
+            "first_slice.semantic_target_not_declared",
+            `${occurrencePath}/targetId`,
+            "Semantic occurrence references an undeclared target",
+            [...targetIds],
+            occurrence.targetId,
+          ),
+        );
       }
-      continue;
+      registerUniqueId(
+        nodes,
+        occurrence.nodeId,
+        `${occurrencePath}/nodeId`,
+        "first_slice.duplicate_semantic_node",
+        "Semantic occurrence node ID",
+        issues,
+      );
     }
-    if (object.decision === "reuse-component") {
-      if (
-        !safeId(object.componentId) ||
-        components.has(object.componentId) ||
-        !Array.isArray(object.instances) ||
-        object.instances.length < 1 ||
-        !exactKeys(object, [
-          "decisionId",
-          "label",
-          "decision",
-          "componentId",
-          "instances",
-        ])
-      ) {
-        return false;
-      }
-      components.add(object.componentId);
-      continue;
-    }
-    if (
-      !safeId(object.componentId) ||
-      components.has(object.componentId) ||
-      !Array.isArray(object.instances) ||
-      !exactKeys(object, [
-        "decisionId",
-        "label",
-        "decision",
-        "componentId",
-        "main",
-        "instances",
-      ])
-    ) {
-      return false;
-    }
-    components.add(object.componentId);
   }
-  return true;
 }
 
-function isMaterialElement(element: DesignFirstSliceElement): boolean {
+function refineReferenceStrategy(
+  strategy: DesignReferenceStrategy | undefined,
+  issues: ValidationIssue[],
+): void {
+  if (!strategy) return;
+  const attachments = new Map<string, string>();
+  let activeCount = 0;
+  for (const [index, reference] of strategy.references.entries()) {
+    registerUniqueId(
+      attachments,
+      reference.attachmentId,
+      `/referenceStrategy/references/${index}/attachmentId`,
+      "first_slice.duplicate_reference_attachment",
+      "Reference attachment ID",
+      issues,
+    );
+    if (isActiveVisualReferenceDecision(reference.decision)) activeCount += 1;
+  }
+  if (activeCount > MAX_ACTIVE_VISUAL_REFERENCES) {
+    issues.push(
+      issue(
+        "first_slice.active_reference_limit_exceeded",
+        "/referenceStrategy/references",
+        "Too many active visual references",
+        MAX_ACTIVE_VISUAL_REFERENCES,
+        activeCount,
+      ),
+    );
+  }
+}
+
+function registerUniqueId(
+  seen: Map<string, string>,
+  id: string,
+  path: string,
+  code: string,
+  label: string,
+  issues: ValidationIssue[],
+): void {
+  const firstPath = seen.get(id);
+  if (firstPath) {
+    issues.push(
+      issue(
+        code,
+        path,
+        `${label} is already declared at ${firstPath}`,
+        "globally unique ID",
+        id,
+      ),
+    );
+    return;
+  }
+  seen.set(id, path);
+}
+
+function issue(
+  code: string,
+  path: string,
+  message: string,
+  expected?: ValidationIssueValue,
+  actual?: ValidationIssueValue,
+  recovery = "Correct the reported relationship and submit one revised call; do not repeat unchanged arguments.",
+): ValidationIssue {
+  return {
+    code,
+    path,
+    message,
+    ...(expected === undefined ? {} : { expected }),
+    ...(actual === undefined ? {} : { actual }),
+    recovery,
+  };
+}
+
+/** Input must come from FirstSliceContract.parse. */
+export function compileDesignFirstSliceToolInput(
+  input: DesignFirstSliceToolInput,
+): ReturnType<typeof compileValidatedDesignFirstSliceToolInput> {
+  return compileValidatedDesignFirstSliceToolInput(input);
+}
+
+function isMaterialElement(element: DesignFirstSliceElementInput): boolean {
   return (
     element.kind === "text" ||
     element.kind === "rectangle" ||
@@ -1484,71 +1013,11 @@ function parentChainReaches(
   return false;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+function uniqueText(values: string[]): string[] {
+  return [...new Set(values.filter((value) => value.trim().length > 0))];
 }
 
-function exactKeys(
-  value: Record<string, unknown>,
-  expected: readonly string[],
-): boolean {
-  const keys = Object.keys(value);
-  return (
-    keys.length === expected.length &&
-    keys.every((key) => expected.includes(key))
-  );
-}
-
-function safeId(value: unknown, max = 256): value is string {
-  return (
-    text(value, 1, max) &&
-    ![...value].some((character) => {
-      const code = character.charCodeAt(0);
-      return code <= 0x1f || code === 0x7f;
-    })
-  );
-}
-
-function text(
-  value: unknown,
-  minimum: number,
-  maximum: number,
-): value is string {
-  return (
-    typeof value === "string" &&
-    value.length >= minimum &&
-    value.length <= maximum
-  );
-}
-
-function textArray(
-  value: unknown,
-  minimum: number,
-  maximum: number,
-  textMaximum: number,
-): boolean {
-  return (
-    Array.isArray(value) &&
-    value.length >= minimum &&
-    value.length <= maximum &&
-    value.every((item) => text(item, 1, textMaximum))
-  );
-}
-
-function coordinate(value: unknown): value is number {
-  return Number.isFinite(value) && Math.abs(Number(value)) <= 1_000_000;
-}
-
-function nonnegative(value: unknown): value is number {
-  return Number.isFinite(value) && Number(value) >= 0;
-}
-
-function dimension(value: unknown): value is number {
-  return (
-    Number.isFinite(value) && Number(value) > 0 && Number(value) <= 100_000
-  );
-}
-
-function unit(value: unknown): value is number {
-  return Number.isFinite(value) && Number(value) >= 0 && Number(value) <= 1;
+function boundedDefaultText(value: string, maximum: number): string {
+  const trimmed = value.trim();
+  return (trimmed || "Requested visual deliverable").slice(0, maximum);
 }

@@ -220,6 +220,15 @@ export function structuredToolFailureDetail(
                   : friendlyAgentError(message, t);
   const issue = details?.issues[0];
   if (!issue) return friendly;
+  if (details.kind === "tool-validation") {
+    return [
+      issue.code ? `${issue.code}: ${issue.message}` : issue.message,
+      issue.path || null,
+      issue.recovery ?? null,
+    ]
+      .filter(Boolean)
+      .join("\n");
+  }
   const target = [
     issue.commandId ? `command ${issue.commandId}` : null,
     issue.nodeId ? `node ${issue.nodeId}` : null,

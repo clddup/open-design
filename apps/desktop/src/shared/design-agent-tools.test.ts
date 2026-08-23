@@ -29,7 +29,7 @@ import {
   UPDATE_IMAGE_TOOL_NAME,
   explainInvalidDesignApplyToolInput,
   explainInvalidDesignComponentToolInput,
-  explainInvalidDesignFirstSliceToolInput,
+  FirstSliceContract,
   isAgentSvgImportResult,
   isPreparedAgentSvgExport,
   isPreparedAgentRasterExport,
@@ -87,12 +87,13 @@ describe("design Agent tool contract", () => {
     const firstSlice = DESIGN_AGENT_TOOL_SPECS.find(
       (tool) => tool.name === DESIGN_FIRST_SLICE_TOOL_NAME,
     );
+    expect(firstSlice).not.toHaveProperty("explainInvalidInput");
     expect(firstSlice).toHaveProperty(
-      "explainInvalidInput",
-      explainInvalidDesignFirstSliceToolInput,
+      "validateInputIssues",
+      FirstSliceContract.issues,
     );
     expect(firstSlice?.description).toContain(
-      "at most 32 elements total, not per stage",
+      "at most 48 model-authored content elements total, not per stage",
     );
   });
 

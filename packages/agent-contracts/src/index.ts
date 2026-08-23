@@ -19,18 +19,43 @@ const RevisionSchema = Type.Integer({ minimum: 0 });
 const SequenceSchema = Type.Integer({ minimum: 1 });
 const ProgressSchema = Type.Number({ minimum: 0, maximum: 1 });
 const EmptyObjectSchema = Type.Object({}, { additionalProperties: false });
+const FailureIssueScalarSchema = Type.Union([
+  Type.String({ maxLength: 4_000 }),
+  Type.Number(),
+  Type.Boolean(),
+  Type.Null(),
+]);
+const FailureIssueValueSchema = Type.Union([
+  FailureIssueScalarSchema,
+  Type.Array(FailureIssueScalarSchema, { maxItems: 64 }),
+  Type.Record(
+    Type.String({ minLength: 1, maxLength: 128 }),
+    FailureIssueScalarSchema,
+    { maxProperties: 64 },
+  ),
+]);
 
 export const AgentToolFailureIssueSchema = Type.Object(
   {
+    code: Type.Optional(IdSchema),
     commandId: Type.Optional(IdSchema),
     nodeId: Type.Optional(IdSchema),
     path: Type.String({ maxLength: 4_000 }),
     message: Type.String({ minLength: 1, maxLength: 20_000 }),
+    expected: Type.Optional(FailureIssueValueSchema),
+    actual: Type.Optional(FailureIssueValueSchema),
+    recovery: Type.Optional(Type.String({ minLength: 1, maxLength: 4_000 })),
   },
   { additionalProperties: false },
 );
 
-export const AgentToolFailureDetailsSchema = Type.Object(
+const FailureAttemptFields = {
+  attempt: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
+  maxAttempts: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
+  retrySuppressed: Type.Optional(Type.Boolean()),
+};
+
+export const DesignTransactionFailureDetailsSchema = Type.Object(
   {
     kind: Type.Literal("design-transaction"),
     fingerprint: IdSchema,
@@ -46,12 +71,35 @@ export const AgentToolFailureDetailsSchema = Type.Object(
       },
       { additionalProperties: false },
     ),
-    attempt: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
-    maxAttempts: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
-    retrySuppressed: Type.Optional(Type.Boolean()),
+    ...FailureAttemptFields,
   },
   { additionalProperties: false },
 );
+
+export const AgentToolValidationFailureDetailsSchema = Type.Object(
+  {
+    kind: Type.Literal("tool-validation"),
+    fingerprint: IdSchema,
+    issues: Type.Array(AgentToolFailureIssueSchema, {
+      minItems: 1,
+      maxItems: 128,
+    }),
+    recovery: Type.Object(
+      {
+        action: Type.Literal("correct-and-retry"),
+        required: Type.Literal(false),
+      },
+      { additionalProperties: false },
+    ),
+    ...FailureAttemptFields,
+  },
+  { additionalProperties: false },
+);
+
+export const AgentToolFailureDetailsSchema = Type.Union([
+  DesignTransactionFailureDetailsSchema,
+  AgentToolValidationFailureDetailsSchema,
+]);
 
 const ToolFailureFields = {
   code: IdSchema,

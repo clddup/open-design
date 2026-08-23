@@ -105,7 +105,7 @@ describe("handleDesignFirstSliceTool", () => {
     const call = {
       toolCallId: "slice_1",
       toolName: DESIGN_FIRST_SLICE_TOOL_NAME,
-      input,
+      input: firstSliceModelInput(input),
     };
 
     const result = await handleDesignFirstSliceTool(
@@ -208,7 +208,7 @@ describe("handleDesignFirstSliceTool", () => {
         {
           toolCallId: "slice_failed",
           toolName: DESIGN_FIRST_SLICE_TOOL_NAME,
-          input,
+          input: firstSliceModelInput(input),
         },
         context,
         context,
@@ -241,7 +241,7 @@ describe("handleDesignFirstSliceTool", () => {
         {
           toolCallId: "slice_logo_incomplete",
           toolName: DESIGN_FIRST_SLICE_TOOL_NAME,
-          input,
+          input: firstSliceModelInput(input),
         },
         context,
         context,
@@ -251,7 +251,66 @@ describe("handleDesignFirstSliceTool", () => {
     expect(coordinator.registerDesignPlan).not.toHaveBeenCalled();
     expect(rendererHost.execute).not.toHaveBeenCalled();
   });
+
+  it("returns a field-level domain failure before any zero-revision write", async () => {
+    const input = firstSliceModelInput(firstSliceInput());
+    const firstSlice = input.firstSlice as {
+      stages: Array<{ elements: Array<Record<string, unknown>> }>;
+    };
+    firstSlice.stages[0].elements[0].parentId = "missing_region";
+    const coordinator = {
+      authoritativeDesignPrompt: vi
+        .fn()
+        .mockReturnValue("Create a focused home screen"),
+      registerDesignPlan: vi.fn(),
+      createDesignPlanAllocation: vi.fn(),
+    };
+    const rendererHost = { execute: vi.fn() };
+
+    await expect(
+      handleDesignFirstSliceTool(
+        coordinator as never,
+        rendererHost as never,
+        {
+          toolCallId: "slice_invalid_parent",
+          toolName: DESIGN_FIRST_SLICE_TOOL_NAME,
+          input,
+        },
+        { ...context, revision: 0 },
+        { ...context, revision: 0 },
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow(
+      "first_slice.parent_not_available at /firstSlice/stages/0/elements/0/parentId",
+    );
+    expect(coordinator.registerDesignPlan).not.toHaveBeenCalled();
+    expect(coordinator.createDesignPlanAllocation).not.toHaveBeenCalled();
+    expect(rendererHost.execute).not.toHaveBeenCalled();
+  });
 });
+
+function firstSliceModelInput(
+  input: DesignFirstSliceToolInput,
+): Record<string, unknown> {
+  const value = structuredClone(input) as unknown as Record<string, unknown>;
+  for (const key of [
+    "designIntent",
+    "skillRefs",
+    "briefFidelity",
+    "visualSystem",
+    "rasterAssetRoles",
+    "referenceStrategy",
+    "semanticObjects",
+  ]) {
+    Reflect.deleteProperty(value, key);
+  }
+  for (const target of value.targets as Array<Record<string, unknown>>) {
+    for (const key of ["objective", "layout", "spacing", "qualityProfile"]) {
+      Reflect.deleteProperty(target, key);
+    }
+  }
+  return value;
+}
 
 function firstSliceInput(): DesignFirstSliceToolInput {
   return {

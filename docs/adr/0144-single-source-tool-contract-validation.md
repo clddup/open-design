@@ -1,6 +1,6 @@
 # ADR-0144：单一来源的工具契约验证
 
-- 状态：Accepted，分阶段实施
+- 状态：Accepted，first-slice 已实施，其余契约分阶段实施
 - 日期：2026-08-23
 - 首个迁移对象：compact first-slice
 - 关联：ADR-0018、ADR-0100、ADR-0103、ADR-0141、ADR-0143
@@ -66,6 +66,14 @@ Normalization 只允许绑定当前 Page、权威 Run prompt、固定 skill refs
 - 48 个模型内容元素与宿主 region Frame 的预算语义只定义一次；
 - pi/Provider schema、Runtime parse 和 Main handler 对同一 fixture 结果一致；
 - 结构化 issue 贯通 completion recovery、journal、diagnostic 与 Timeline 聚合。
+
+## 当前实施状态
+
+compact first-slice 已完成首个迁移切片：模型可见输入由可执行 TypeBox schema 直接生成并由 pi 预校验；Main 使用同一 `FirstSliceContract.parse(input, hostContext)` 完成可信宿主绑定与唯一 domain refinement。旧 `isDesignFirstSliceToolInput / normalizeDesignFirstSliceToolInput / explainInvalidDesignFirstSliceToolInput` 已删除，Provider 描述中的 32 元素旧事实也已移除。
+
+`ValidationIssue` 的稳定 `code/path/expected/actual/recovery` 通过 `tool-validation` failure details 进入 Agent event、journal 和 Timeline；这种参数修正使用 `correct-and-retry`，不冒充需要文档 inspection 的事务错误。Design transaction 仍保留独立 `inspect-and-revise` 恢复语义。
+
+剩余 Agent tools 与 IPC/持久化契约尚未迁移，不得据此宣称全仓已实现单一验证入口。
 
 ## 后果
 

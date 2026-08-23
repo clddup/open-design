@@ -30,8 +30,8 @@ import {
   INTERNAL_UPDATE_IMAGE_TOOL_NAME,
   designPlanTargets,
   compileDesignFirstSliceToolInput,
+  FirstSliceContract,
   isDesignCheckpointToolInput,
-  isDesignFirstSliceToolInput,
   isDesignPlanToolInput,
   PLACE_IMAGE_TOOL_NAME,
   READ_IMAGE_TOOL_NAME,
@@ -119,14 +119,15 @@ export function projectGenerationPlanPresentationEvent(
     (event.toolName === DESIGN_PLAN_TOOL_NAME ||
       event.toolName === DESIGN_FIRST_SLICE_TOOL_NAME)
   ) {
-    const plan =
-      event.toolName === DESIGN_FIRST_SLICE_TOOL_NAME
-        ? isDesignFirstSliceToolInput(event.input)
-          ? compileDesignFirstSliceToolInput(event.input).plan
-          : undefined
-        : isDesignPlanToolInput(event.input)
-          ? event.input
-          : undefined;
+    let plan: DesignPlanToolInput | undefined;
+    if (event.toolName === DESIGN_FIRST_SLICE_TOOL_NAME) {
+      const parsed = FirstSliceContract.parse(event.input);
+      plan = parsed.ok
+        ? compileDesignFirstSliceToolInput(parsed.value).plan
+        : undefined;
+    } else if (isDesignPlanToolInput(event.input)) {
+      plan = event.input;
+    }
     if (!plan) return state;
     const callId = generationPlanCallId(event.runId, event.toolCallId);
     return {

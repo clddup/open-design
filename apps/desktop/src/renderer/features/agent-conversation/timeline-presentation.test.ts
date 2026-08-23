@@ -76,4 +76,35 @@ describe("Agent component timeline presentation", () => {
       ].join("\n"),
     });
   });
+
+  it("presents structured tool validation by stable code and field path", () => {
+    expect(
+      structuredToolFailureDetail(
+        "invalid_tool_input",
+        "generic schema mismatch",
+        {
+          kind: "tool-validation",
+          fingerprint: "validation_first_slice",
+          issues: [
+            {
+              code: "first_slice.element_limit_exceeded",
+              path: "/firstSlice/stages",
+              message: "49 content elements exceed the first-slice budget",
+              expected: 48,
+              actual: 49,
+              recovery: "Defer secondary content to continuation.",
+            },
+          ],
+          recovery: { action: "correct-and-retry", required: false },
+        },
+        t,
+      ),
+    ).toBe(
+      [
+        "first_slice.element_limit_exceeded: 49 content elements exceed the first-slice budget",
+        "/firstSlice/stages",
+        "Defer secondary content to continuation.",
+      ].join("\n"),
+    );
+  });
 });

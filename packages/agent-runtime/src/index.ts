@@ -3,6 +3,7 @@ import {
   type AgentAttachment,
   type AgentInitialDesignInspection,
   type AgentModelContext,
+  type AgentToolFailureIssue,
   type DesignGenerationMode,
   type AgentRunContinuation,
   type ApprovalDecision,
@@ -97,6 +98,7 @@ export interface AgentToolDefinition extends CanonicalTool {
     summary: string;
   };
   validateInput(input: unknown): boolean;
+  validateInputIssues?(input: unknown): readonly AgentToolFailureIssue[];
   explainInvalidInput?(input: unknown): string | undefined;
 }
 

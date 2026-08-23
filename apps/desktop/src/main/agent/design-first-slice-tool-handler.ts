@@ -6,12 +6,13 @@ import type {
 import {
   compileDesignFirstSliceToolInput,
   designPlanTargets,
+  FirstSliceContract,
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
   isDesignPlanToolInput,
   logoBriefRequiresExploration,
   normalizeDesignApplyToolInput,
-  normalizeDesignFirstSliceToolInput,
 } from "@/shared/design-agent-tools.js";
+import { formatValidationFailure } from "@/shared/contract-validation.js";
 import type { GlobalTaskCoordinator } from "./global-task-coordinator.js";
 import type { RendererDesignToolHost } from "./renderer-design-tool-host.js";
 
@@ -25,12 +26,15 @@ export async function handleDesignFirstSliceTool(
   reportProgress?: (message: string, progress: number) => void,
 ): Promise<TrustedToolResult> {
   const authoritativePrompt = coordinator.authoritativeDesignPrompt(context);
-  const input = normalizeDesignFirstSliceToolInput(call.input, {
+  const parsed = FirstSliceContract.parse(call.input, {
     authoritativePrompt,
   });
-  if (!input) {
-    throw new TypeError("Invalid compact first-slice tool input");
+  if (!parsed.ok) {
+    throw new TypeError(
+      formatValidationFailure("opendesign_generate_first_slice", parsed.issues),
+    );
   }
+  const input = parsed.value;
   if (
     input.deliverable === "logo" &&
     logoBriefRequiresExploration(authoritativePrompt) &&

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { Value } from "@sinclair/typebox/value";
 import {
   BUILTIN_GRAPHIC_DESIGN_SKILL_REFS,
   BUILTIN_LOGO_DESIGN_SKILL_REFS,
@@ -7,10 +8,8 @@ import {
 import {
   compileDesignFirstSliceToolInput,
   DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA,
-  explainInvalidDesignFirstSliceToolInput,
-  isDesignFirstSliceToolInput,
+  FirstSliceContract,
   logoBriefRequiresExploration,
-  normalizeDesignFirstSliceToolInput,
   type DesignFirstSliceToolInput,
 } from "./design-first-slice-tool";
 import {
@@ -51,27 +50,19 @@ describe("compact first-slice tool", () => {
       "targets",
       "firstSlice",
     ]);
+    const valid = providerInput(fixture());
+    expect(Value.Check(DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA, valid)).toBe(true);
+    expect(FirstSliceContract.parse(valid).ok).toBe(true);
+    const unexpected = { ...valid, hiddenLimit: 32 };
+    expect(Value.Check(DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA, unexpected)).toBe(
+      false,
+    );
+    expect(FirstSliceContract.parse(unexpected).ok).toBe(false);
   });
 
   it("derives ordinary planning metadata instead of making the model repeat it before pixels", () => {
-    const modelInput = structuredClone(fixture()) as unknown as Record<
-      string,
-      unknown
-    >;
-    Reflect.deleteProperty(modelInput, "skillRefs");
-    Reflect.deleteProperty(modelInput, "designIntent");
-    Reflect.deleteProperty(modelInput, "briefFidelity");
-    Reflect.deleteProperty(modelInput, "visualSystem");
-    Reflect.deleteProperty(modelInput, "rasterAssetRoles");
-    const targets = modelInput.targets as Array<Record<string, unknown>>;
-    for (const target of targets) {
-      Reflect.deleteProperty(target, "objective");
-      Reflect.deleteProperty(target, "layout");
-      Reflect.deleteProperty(target, "spacing");
-      Reflect.deleteProperty(target, "qualityProfile");
-    }
-
-    const normalized = normalizeDesignFirstSliceToolInput(modelInput);
+    const modelInput = providerInput(fixture());
+    const normalized = parsedFirstSlice(modelInput);
     expect(normalized).toBeDefined();
     expect(normalized?.designIntent.visualThesis).toContain(
       "visible first slice",
@@ -93,12 +84,25 @@ describe("compact first-slice tool", () => {
     ).toBe(true);
   });
 
+  it("uses the element kind discriminator to report the concrete invalid field", () => {
+    const modelInput = providerInput(fixture());
+    const firstSlice = modelInput.firstSlice as {
+      stages: Array<{ elements: Array<Record<string, unknown>> }>;
+    };
+    Reflect.deleteProperty(firstSlice.stages[0].elements[0], "fill");
+
+    const result = FirstSliceContract.parse(modelInput);
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("Expected element schema failure");
+    expect(result.issues[0]).toMatchObject({
+      code: "first_slice.schema_invalid",
+      path: "/firstSlice/stages/0/elements/0/fill",
+    });
+    expect(result.issues[0]?.message).not.toContain("union");
+  });
+
   it("binds the complete Run prompt as authoritative brief fidelity", () => {
-    const modelInput = structuredClone(fixture()) as unknown as Record<
-      string,
-      unknown
-    >;
-    Reflect.deleteProperty(modelInput, "skillRefs");
+    const modelInput = providerInput(fixture());
     const authoritativePrompt = [
       "Create four real brand artboards.",
       "Concept Exploration must contain three genuinely different directions.",
@@ -107,7 +111,7 @@ describe("compact first-slice tool", () => {
       "Brand Usage Preview must include title bar, launch screen, app list, and light/dark canvas.",
     ].join("\n");
 
-    const normalized = normalizeDesignFirstSliceToolInput(modelInput, {
+    const normalized = parsedFirstSlice(modelInput, {
       authoritativePrompt,
     });
 
@@ -142,7 +146,6 @@ describe("compact first-slice tool", () => {
     profile.hitNodeIds = ["hero_panel"];
 
     expect(profile.safeNodeIds).not.toContain("hero_panel");
-    expect(isDesignFirstSliceToolInput(input)).toBe(true);
     expect(
       compileDesignFirstSliceToolInput(input).plan.targets[0]?.qualityProfile,
     ).toMatchObject({
@@ -178,8 +181,6 @@ describe("compact first-slice tool", () => {
         },
       ],
     };
-    expect(isDesignFirstSliceToolInput(input)).toBe(true);
-
     const compiled = compileDesignFirstSliceToolInput(input);
     expect(isDesignPlanToolInput(compiled.plan)).toBe(true);
     expect(isDesignApplyToolInput(compiled.apply)).toBe(true);
@@ -250,42 +251,38 @@ describe("compact first-slice tool", () => {
 
   it("lets Main bind the current skill IDs instead of trusting model input", () => {
     const input = fixture();
-    const { skillRefs: _skillRefs, ...modelInput } = input;
-    expect(_skillRefs).toEqual(BUILTIN_UI_DESIGN_SKILL_REFS);
+    const modelInput = providerInput(input);
 
-    const normalized = normalizeDesignFirstSliceToolInput(modelInput);
+    const normalized = parsedFirstSlice(modelInput);
     expect(normalized?.skillRefs).toEqual(BUILTIN_UI_DESIGN_SKILL_REFS);
-    expect(normalized && isDesignFirstSliceToolInput(normalized)).toBe(true);
 
     const staleHostEcho = {
       ...modelInput,
       skillRefs: [{ id: "model-controlled" }],
     };
-    expect(
-      normalizeDesignFirstSliceToolInput(staleHostEcho)?.skillRefs,
-    ).toEqual(BUILTIN_UI_DESIGN_SKILL_REFS);
+    const rejected = FirstSliceContract.parse(staleHostEcho);
+    expect(rejected.ok).toBe(false);
+    if (rejected.ok) throw new Error("Expected host echo rejection");
+    expect(rejected.issues[0]?.path).toBe("/skillRefs");
   });
 
   it("binds graphic judgment skills and raster evidence roles for a poster", () => {
     const input = fixture();
     input.deliverable = "poster";
-    input.rasterAssetRoles = ["hero"];
     input.targets = input.targets.map((target) => ({
       ...target,
       qualityProfile: { kind: "graphic" },
     }));
-    const { skillRefs: modelSkillRefs, ...modelInput } = input;
-    expect(modelSkillRefs).toEqual(BUILTIN_UI_DESIGN_SKILL_REFS);
+    const modelInput = providerInput(input);
 
-    const normalized = normalizeDesignFirstSliceToolInput(modelInput);
+    const normalized = parsedFirstSlice(modelInput);
     expect(normalized?.skillRefs).toEqual(BUILTIN_GRAPHIC_DESIGN_SKILL_REFS);
-    expect(normalized?.rasterAssetRoles).toEqual(["hero"]);
-    expect(normalized && isDesignFirstSliceToolInput(normalized)).toBe(true);
+    expect(normalized?.rasterAssetRoles).toEqual([]);
     expect(
       normalized && compileDesignFirstSliceToolInput(normalized).plan,
     ).toMatchObject({
       deliverable: "poster",
-      rasterAssetRoles: ["hero"],
+      rasterAssetRoles: [],
       skillRefs: BUILTIN_GRAPHIC_DESIGN_SKILL_REFS,
     });
   });
@@ -356,12 +353,9 @@ describe("compact first-slice tool", () => {
     };
     input.firstSlice.stages[0].elements[1].parentId = "negative_root";
 
-    const modelInput = structuredClone(input);
-    Reflect.deleteProperty(modelInput, "skillRefs");
-    expect(explainInvalidDesignFirstSliceToolInput(modelInput)).toBeUndefined();
-    const normalized = normalizeDesignFirstSliceToolInput(modelInput);
+    const modelInput = providerInput(input);
+    const normalized = parsedFirstSlice(modelInput);
     expect(normalized?.skillRefs).toEqual(BUILTIN_LOGO_DESIGN_SKILL_REFS);
-    expect(normalized && isDesignFirstSliceToolInput(normalized)).toBe(true);
     expect(
       normalized &&
         compileDesignFirstSliceToolInput(normalized).apply.commands[0],
@@ -375,45 +369,52 @@ describe("compact first-slice tool", () => {
       },
     });
 
-    const aliasedPlan = compileDesignFirstSliceToolInput(normalized!).plan;
+    if (!normalized) throw new Error("Expected parsed Logo input");
+    const aliasedPlan = compileDesignFirstSliceToolInput(normalized).plan;
     const firstDirection = aliasedPlan.logoExploration?.directions[0];
     if (!firstDirection) throw new Error("Expected compiled Logo exploration");
     firstDirection.monochromeNodeId = firstDirection.smallSizeNodeIds[0];
     expect(isDesignPlanToolInput(aliasedPlan)).toBe(true);
 
-    const duplicatePrinciple = structuredClone(modelInput);
+    const duplicatePrinciple = structuredClone(modelInput) as {
+      logoExploration?: NonNullable<
+        DesignFirstSliceToolInput["logoExploration"]
+      >;
+    };
     if (!duplicatePrinciple.logoExploration) {
       throw new Error("Expected Logo exploration fixture");
     }
     duplicatePrinciple.logoExploration.directions[1].principle =
       "negative-space";
-    expect(
-      normalizeDesignFirstSliceToolInput(duplicatePrinciple),
-    ).toBeUndefined();
+    expect(FirstSliceContract.parse(duplicatePrinciple).ok).toBe(false);
 
-    const unplannedConceptRoot = structuredClone(modelInput);
+    const unplannedConceptRoot = structuredClone(modelInput) as {
+      logoExploration?: NonNullable<
+        DesignFirstSliceToolInput["logoExploration"]
+      >;
+    };
     if (!unplannedConceptRoot.logoExploration) {
       throw new Error("Expected Logo exploration fixture");
     }
     unplannedConceptRoot.logoExploration.directions[0].rootNodeId =
       "unplanned_concept_root";
-    expect(
-      normalizeDesignFirstSliceToolInput(unplannedConceptRoot),
-    ).toBeUndefined();
+    expect(FirstSliceContract.parse(unplannedConceptRoot).ok).toBe(false);
 
-    const laterTargetExploration = structuredClone(modelInput);
+    const laterTargetExploration = structuredClone(modelInput) as {
+      logoExploration?: NonNullable<
+        DesignFirstSliceToolInput["logoExploration"]
+      >;
+    };
     if (!laterTargetExploration.logoExploration) {
       throw new Error("Expected Logo exploration fixture");
     }
     laterTargetExploration.logoExploration.targetId = "profile";
-    expect(
-      normalizeDesignFirstSliceToolInput(laterTargetExploration),
-    ).toBeUndefined();
+    expect(FirstSliceContract.parse(laterTargetExploration).ok).toBe(false);
 
     const missingExploration = structuredClone(modelInput);
     delete missingExploration.logoExploration;
     missingExploration.logoOutputs = ["symbol"];
-    const focused = normalizeDesignFirstSliceToolInput(missingExploration);
+    const focused = parsedFirstSlice(missingExploration);
     expect(focused).toMatchObject({
       deliverable: "logo",
       logoOutputs: ["symbol"],
@@ -428,7 +429,7 @@ describe("compact first-slice tool", () => {
 
     const omittedOutputs = structuredClone(missingExploration);
     delete omittedOutputs.logoOutputs;
-    const omitted = normalizeDesignFirstSliceToolInput(omittedOutputs);
+    const omitted = parsedFirstSlice(omittedOutputs);
     expect(omitted?.deliverable).toBe("logo");
     expect(omitted?.logoOutputs).toBeUndefined();
   });
@@ -436,26 +437,85 @@ describe("compact first-slice tool", () => {
   it("rejects duplicate IDs, forward parents, empty regions and a slice for a later target", () => {
     const duplicate = fixture();
     duplicate.firstSlice.stages[0].elements[1].id = "home_hero";
-    expect(isDesignFirstSliceToolInput(duplicate)).toBe(false);
+    expect(parseCanonicalProjection(duplicate).ok).toBe(false);
 
     const forwardParent = fixture();
     forwardParent.firstSlice.stages[0].elements[0].parentId = "hero_title";
-    expect(isDesignFirstSliceToolInput(forwardParent)).toBe(false);
+    expect(parseCanonicalProjection(forwardParent).ok).toBe(false);
 
     const emptyRegion = fixture();
     emptyRegion.firstSlice.stages[0].elements.splice(0);
-    expect(isDesignFirstSliceToolInput(emptyRegion)).toBe(false);
+    expect(parseCanonicalProjection(emptyRegion).ok).toBe(false);
 
     const wrongTarget = fixture();
     wrongTarget.firstSlice.targetId = "profile";
-    expect(isDesignFirstSliceToolInput(wrongTarget)).toBe(false);
+    expect(parseCanonicalProjection(wrongTarget).ok).toBe(false);
+
+    const crossTargetFrameCollision = fixture();
+    crossTargetFrameCollision.targets[0].regions[0].nodeId = "frame_profile";
+    for (const element of crossTargetFrameCollision.firstSlice.stages[0]
+      .elements) {
+      element.parentId = "frame_profile";
+    }
+    const collisionResult = parseCanonicalProjection(crossTargetFrameCollision);
+    expect(collisionResult.ok).toBe(false);
+    if (collisionResult.ok) throw new Error("Expected ID collision");
+    expect(collisionResult.issues).toContainEqual(
+      expect.objectContaining({
+        code: "first_slice.region_frame_id_conflict",
+        path: "/targets/0/regions/0/nodeId",
+        actual: "frame_profile",
+      }),
+    );
+
+    const invalidRegionGraph = fixture();
+    invalidRegionGraph.targets[0].regions[0].parentId = "later_region";
+    invalidRegionGraph.targets[0].regions.push({
+      nodeId: "later_region",
+      name: "Later Region",
+      role: "content",
+      parentId: "frame_home",
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 100,
+    });
+    const graphResult = parseCanonicalProjection(invalidRegionGraph);
+    expect(graphResult.ok).toBe(false);
+    if (graphResult.ok) throw new Error("Expected region graph failure");
+    expect(graphResult.issues).toContainEqual(
+      expect.objectContaining({
+        code: "first_slice.region_parent_not_available",
+        path: "/targets/0/regions/0/parentId",
+        actual: "later_region",
+      }),
+    );
+
+    const overflowingRegion = fixture();
+    overflowingRegion.targets[0].regions[0].width = 400;
+    const overflowResult = parseCanonicalProjection(overflowingRegion);
+    expect(overflowResult.ok).toBe(false);
+    if (overflowResult.ok) throw new Error("Expected region overflow");
+    expect(overflowResult.issues).toContainEqual(
+      expect.objectContaining({
+        code: "first_slice.region_bounds_exceeded",
+        path: "/targets/0/regions/0",
+      }),
+    );
 
     const unplannedRegion = fixture();
     for (const element of unplannedRegion.firstSlice.stages[0].elements) {
       element.parentId = "home_intro";
     }
-    expect(explainInvalidDesignFirstSliceToolInput(unplannedRegion)).toContain(
-      'parent "home_intro" for element "hero_panel" must be a declared first-target region or an earlier element',
+    const unplannedResult = parseCanonicalProjection(unplannedRegion);
+    expect(unplannedResult.ok).toBe(false);
+    if (unplannedResult.ok) throw new Error("Expected parent failure");
+    expect(unplannedResult.issues).toContainEqual(
+      expect.objectContaining({
+        code: "first_slice.parent_not_available",
+        path: "/firstSlice/stages/0/elements/0/parentId",
+        actual: "home_intro",
+      }),
     );
   });
 
@@ -483,8 +543,7 @@ describe("compact first-slice tool", () => {
         0,
       ),
     ).toBe(25);
-    expect(normalizeDesignFirstSliceToolInput(input)).toBeDefined();
-    expect(explainInvalidDesignFirstSliceToolInput(input)).toBeUndefined();
+    expect(parseCanonicalProjection(input).ok).toBe(true);
   });
 
   it("compiles a 35-element login first screen with nested host-owned regions in one call", () => {
@@ -559,9 +618,10 @@ describe("compact first-slice tool", () => {
     ];
 
     expect(input.firstSlice.stages[0].elements).toHaveLength(35);
-    const normalized = normalizeDesignFirstSliceToolInput(input);
+    const normalized = parsedFirstSlice(providerInput(input));
     expect(normalized).toBeDefined();
-    const compiled = compileDesignFirstSliceToolInput(normalized!);
+    if (!normalized) throw new Error("Expected parsed 35-element input");
+    const compiled = compileDesignFirstSliceToolInput(normalized);
     const compiledRegions = compiled.plan.targets[0]?.composition.regions ?? [];
     expect(compiledRegions).toMatchObject([
       { nodeId: "auth_region" },
@@ -581,7 +641,7 @@ describe("compact first-slice tool", () => {
   it("bounds the first visible write to planned regions, three stages and 48 model elements with a field-level recovery", () => {
     const tooManyElements = fixture();
     const stage = tooManyElements.firstSlice.stages[0];
-    for (let index = 0; index < 47; index += 1) {
+    for (let index = 0; index < 23; index += 1) {
       stage.elements.push({
         id: `support_${index}`,
         kind: "rectangle",
@@ -594,12 +654,31 @@ describe("compact first-slice tool", () => {
         fill: { color: "#7C3AED" },
       });
     }
-    expect(isDesignFirstSliceToolInput(tooManyElements)).toBe(false);
-    expect(explainInvalidDesignFirstSliceToolInput(tooManyElements)).toContain(
-      "/firstSlice/stages: contains 49 elements",
-    );
-    expect(explainInvalidDesignFirstSliceToolInput(tooManyElements)).toContain(
-      "combined maximum is 48",
+    tooManyElements.firstSlice.stages.push({
+      stageId: "secondary_content",
+      label: "Build secondary content",
+      elements: Array.from({ length: 24 }, (_, index) => ({
+        id: `secondary_${index}`,
+        kind: "rectangle" as const,
+        name: `Secondary ${index}`,
+        parentId: "home_hero",
+        x: 8 + index,
+        y: 180,
+        width: 8,
+        height: 8,
+        fill: { color: "#7C3AED" },
+      })),
+    });
+    const tooManyResult = parseCanonicalProjection(tooManyElements);
+    expect(tooManyResult.ok).toBe(false);
+    if (tooManyResult.ok) throw new Error("Expected element budget failure");
+    expect(tooManyResult.issues).toContainEqual(
+      expect.objectContaining({
+        code: "first_slice.element_limit_exceeded",
+        path: "/firstSlice/stages",
+        expected: 48,
+        actual: 49,
+      }),
     );
 
     const tooManyStages = fixture();
@@ -622,7 +701,7 @@ describe("compact first-slice tool", () => {
         ],
       });
     }
-    expect(isDesignFirstSliceToolInput(tooManyStages)).toBe(false);
+    expect(parseCanonicalProjection(tooManyStages).ok).toBe(false);
 
     const multipleRegions = fixture();
     multipleRegions.targets[0].regions.push({
@@ -652,9 +731,44 @@ describe("compact first-slice tool", () => {
         },
       ],
     });
-    expect(isDesignFirstSliceToolInput(multipleRegions)).toBe(true);
+    expect(parseCanonicalProjection(multipleRegions).ok).toBe(true);
   });
 });
+
+function providerInput(
+  input: DesignFirstSliceToolInput,
+): Record<string, unknown> {
+  const value = structuredClone(input) as unknown as Record<string, unknown>;
+  for (const key of [
+    "designIntent",
+    "skillRefs",
+    "briefFidelity",
+    "visualSystem",
+    "rasterAssetRoles",
+    "referenceStrategy",
+    "semanticObjects",
+  ]) {
+    Reflect.deleteProperty(value, key);
+  }
+  for (const target of value.targets as Array<Record<string, unknown>>) {
+    for (const key of ["objective", "layout", "spacing", "qualityProfile"]) {
+      Reflect.deleteProperty(target, key);
+    }
+  }
+  return value;
+}
+
+function parsedFirstSlice(
+  input: unknown,
+  context: { authoritativePrompt?: string } = {},
+): DesignFirstSliceToolInput | undefined {
+  const result = FirstSliceContract.parse(input, context);
+  return result.ok ? result.value : undefined;
+}
+
+function parseCanonicalProjection(input: DesignFirstSliceToolInput) {
+  return FirstSliceContract.parse(providerInput(input));
+}
 
 export function fixture(): DesignFirstSliceToolInput {
   return {

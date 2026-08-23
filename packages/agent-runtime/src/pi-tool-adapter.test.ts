@@ -14,7 +14,7 @@ import {
   type SessionProjection,
   type SessionStore,
 } from "@opendesign/session-store";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { AgentRunRequest, AgentToolDefinition } from "./index.js";
 import { createOpenDesignPiAgent } from "./pi-core-adapter.js";
 import { createPiModelGatewayStreamFn } from "./pi-model-gateway-adapter.js";
@@ -1036,6 +1036,16 @@ describe("OpenDesign Pi tool adapter", () => {
   });
 
   it("uses a tool-owned action diagnostic when structural schema validation is too broad", async () => {
+    const validateInputIssues = vi.fn(() => [
+      {
+        code: "move.dx_type_invalid",
+        path: "/dx",
+        message: "dx must be a number",
+        expected: "number",
+        actual: "string",
+        recovery: "Use a numeric delta.",
+      },
+    ]);
     const actionAwareTool: AgentToolDefinition = {
       ...moveTool,
       inputSchema: {
@@ -1044,6 +1054,7 @@ describe("OpenDesign Pi tool adapter", () => {
         required: ["dx"],
         additionalProperties: false,
       },
+      validateInputIssues,
       explainInvalidInput: () =>
         'Invalid move action. Expected exact shape: {"dx":<number>}.',
     };
@@ -1074,11 +1085,25 @@ describe("OpenDesign Pi tool adapter", () => {
         event.type === "tool.failed" &&
         event.toolCallId === "invalid_move_explained",
     );
+    expect(failure?.details).toMatchObject({
+      kind: "tool-validation",
+      issues: [
+        {
+          code: "move.dx_type_invalid",
+          path: "/dx",
+          expected: "number",
+          actual: "string",
+        },
+      ],
+      recovery: { action: "correct-and-retry", required: false },
+    });
     expect(failure).toMatchObject({
       code: "invalid_tool_input",
-      message: 'Invalid move action. Expected exact shape: {"dx":<number>}.',
+      message:
+        "Invalid opendesign_apply_transaction input. move.dx_type_invalid at /dx: dx must be a number. Use a numeric delta.",
       recoverable: true,
     });
+    expect(validateInputIssues).toHaveBeenCalledTimes(1);
   });
 
   it("terminates different malformed calls to one tool after two attempts without a revision", async () => {

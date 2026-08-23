@@ -386,6 +386,27 @@ describe("Agent contracts", () => {
         details: { ...failure.details, filePath: "C:\\private\\draft" },
       }),
     ).toBe(false);
+
+    expect(
+      Value.Check(AgentEventSchema, {
+        ...failure,
+        details: {
+          kind: "tool-validation",
+          fingerprint: "validation_first_slice",
+          issues: [
+            {
+              code: "first_slice.element_limit_exceeded",
+              path: "/firstSlice/stages",
+              message: "49 elements exceed the first-slice budget",
+              expected: 48,
+              actual: 49,
+              recovery: "Defer secondary elements to continuation.",
+            },
+          ],
+          recovery: { action: "correct-and-retry", required: false },
+        },
+      }),
+    ).toBe(true);
   });
 
   it("carries bounded structured Provider failure diagnostics", () => {

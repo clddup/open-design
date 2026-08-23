@@ -1,8 +1,7 @@
 import { DESIGN_BOOTSTRAP_APPLY_INPUT_SCHEMA } from "./design-bootstrap-apply-schema";
 import {
   DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA,
-  explainInvalidDesignFirstSliceToolInput,
-  normalizeDesignFirstSliceToolInput,
+  FirstSliceContract,
 } from "./design-first-slice-tool";
 import {
   explainInvalidDesignApplyToolInput,
@@ -131,14 +130,13 @@ export type {
 export {
   compileDesignFirstSliceToolInput,
   DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA,
-  explainInvalidDesignFirstSliceToolInput,
-  isDesignFirstSliceToolInput,
+  FirstSliceContract,
   logoBriefRequiresExploration,
-  normalizeDesignFirstSliceToolInput,
 } from "./design-first-slice-tool";
 export type {
   DesignFirstSliceElement,
   DesignFirstSliceToolInput,
+  FirstSliceContractContext,
 } from "./design-first-slice-tool";
 export type {
   DesignApplyToolInput,
@@ -316,11 +314,11 @@ export const DESIGN_AGENT_TOOL_SPECS = [
       surfaces: ["new-design" as const],
     },
     description:
-      "Create all requested artboard roots and one or more meaningful targets[0] regions in one rollback-safe call. Declare every requested target and its complete required region set; materialize the complete first target when it fits the 32-element budget, otherwise submit the smallest coherent real portion and continue it directly after this commit. For a requested multi-direction Logo exploration, declare logoExploration and all three concept regions before drawing so partial evidence cannot be verified. Main binds the exact user brief, derives ordinary internal planning defaults, and keeps this Plan authoritative for continuation; do not submit a second full Plan after success. Use 1-3 semantic stages and at most 32 elements total, not per stage. Use inspected Pages, prefixed IDs, parent-local geometry, and exact font faces. Full material tools follow success.",
+      "Create all requested artboard roots and one or more meaningful targets[0] regions in one rollback-safe call. Declare every requested target and its complete required region set; materialize the complete first target when it fits the 48 model-content-element budget, otherwise submit the smallest coherent real portion and continue it directly after this commit. Main creates host-owned region Frames, so firstSlice elements must parent content to region IDs and never repeat those IDs. For a requested multi-direction Logo exploration, declare logoExploration and all three concept regions before drawing so partial evidence cannot be verified. Main binds the exact user brief, derives ordinary internal planning defaults, and keeps this Plan authoritative for continuation; do not submit a second full Plan after success. Use 1-3 semantic stages and at most 48 model-authored content elements total, not per stage. Use inspected Pages, prefixed IDs, parent-local geometry, and exact font faces. Full material tools follow success.",
     inputSchema: DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA,
     risk: "design_write" as const,
     approval: "never" as const,
-    explainInvalidInput: explainInvalidDesignFirstSliceToolInput,
+    validateInputIssues: FirstSliceContract.issues,
   },
   {
     name: DESIGN_CAPABILITIES_TOOL_NAME,
@@ -639,7 +637,7 @@ export function validateDesignAgentToolInput(
   input: unknown,
 ): boolean {
   if (toolName === DESIGN_FIRST_SLICE_TOOL_NAME) {
-    return normalizeDesignFirstSliceToolInput(input) !== undefined;
+    return FirstSliceContract.parse(input).ok;
   }
   if (toolName === DESIGN_CAPABILITIES_TOOL_NAME) {
     return isRecord(input) && Object.keys(input).length === 0;
