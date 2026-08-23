@@ -480,6 +480,9 @@ async function openProjectWithConversations(
   );
   renderApp("workspace");
   await user.click(await screen.findByRole("button", { name: /^Acme Design/ }));
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: /Mobile UI/ })).toBeEnabled(),
+  );
   return { user, manifest };
 }
 
