@@ -9,6 +9,6 @@ Each fixture keeps four distinct artifacts:
 - `refinement.transaction.json`: one versioned OpenDesign transaction.
 - `document.opendesign`: the expected document after that transaction.
 
-`manifest.json` records stable IDs, expected structure, minimum feature use, evidence state, and SHA-256 digests. Run `pnpm fixtures:generate` after intentionally changing a fixture and `pnpm fixtures:check` in verification.
+`manifest.json` records stable IDs, expected structure, minimum feature use, evidence state, and SHA-256 digests. Run `pnpm fixtures:generate` after intentionally changing a fixture. EditorRuntime and Leafer fixture tests validate the checked-in artifacts; there is no package-time fixture smoke bridge.
 
 Current automated evidence proves schema validity, named hierarchy, formal Path use, effects/image projection, diagnostics, persistence, and transaction undo/redo. `OD-BRAND-01` additionally resolves its non-destructive Boolean master through the pinned PathKit WASM provider and pins the resulting geometry checksum before Leafer projection. Pixel baselines, real Agent tool traces, `capture_canvas` artifacts, professional export, and macOS/Windows visual acceptance remain separate pending evidence and must not be inferred from these files.

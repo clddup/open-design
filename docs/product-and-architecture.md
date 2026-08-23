@@ -257,7 +257,7 @@ Agent composer 在每个 Conversation 中只选择 `Provider/Model` 与模型支
 
 Conversation 的原始 append-only journal 与模型上下文投影分离。Agent Runtime 在完整 run 边界把旧事件写成累计 `context.compacted` checkpoint，并在同一 Run 的每个 Provider turn 前重新预算；较早的 assistant/tool 段在超限时进入临时有界 checkpoint，当前用户原文和最近完整 tool call/result 段继续保留。checkpoint 只含有界消息摘录、附件元数据、工具统计和最新 design revision，原始 Timeline 与工具审计不删除。模型投影会同时限制超长单字段和大量短字段组成的超大结构化工具结果，原始 journal 仍保存完整审计。Main 注入所选 Model Profile 的 `contextWindow/maxOutputTokens`，Agent 对文字、图片、文档、工具 schema 和输出预留做保守 token 估算；有可信模型窗口时 token 预算是唯一硬门禁，本地字符限制只用于缺少模型窗口元数据的保底路径。固定协议装不下返回 `model_context_incompatible`，最小必要上下文仍过大才返回 `context_budget_exceeded`；两类错误按 system、tool schemas、Conversation/tool results 和请求 framing 提供估算分账。Run 级防失控限制另外使用 turn、tool-call 与实际 Provider output 预算；重复 input 只受每轮窗口约束，不会在工具往返时反复累计并把未完成 delivery 提前终止。模型可见设计工具使用紧凑跨 Provider Schema，所有工具输入仍由完整运行时 Schema 重新验证。服务端模型元数据探测、精确 tokenizer/image 预算、可替换语义 compactor 与上游超限单次恢复仍未完成，详见 [ADR-0016](adr/0016-durable-agent-context-compaction.md) 与 [ADR-0017](adr/0017-model-token-budget-authority.md)。
 
-专业设计回归使用 `fixtures/professional/manifest.json` 作为手动样张证据索引。每个样张分别保存固定 prompt、干净初稿、一个可校验 refinement 事务和预期最终 `.opendesign` 文档；生成器记录 SHA-256，但生成内容或 hash 漂移不再阻塞普通 push。需要画布真实证据时显式执行专业 fixture smoke；当前结构自动化不冒充像素视觉、真实 Agent 工具轨迹、专业导出或 macOS/Windows 实机验收。
+专业设计回归使用 `fixtures/professional/manifest.json` 作为手动样张证据索引。每个样张分别保存固定 prompt、干净初稿、一个可校验 refinement 事务和预期最终 `.opendesign` 文档；生成器记录 SHA-256，但生成内容或 hash 漂移不再阻塞普通 push。EditorRuntime 与 Leafer 的纯测试直接验证事务、历史和投影；旧 Electron fixture smoke bridge 已退休，fixture 不进入安装包。当前结构自动化不冒充像素视觉、真实 Agent 工具轨迹、专业导出或 macOS/Windows 实机验收。
 
 用户请求停止后，Renderer 立即把对应 Run 显示为“正在停止”并去除流式活动光标，但在 `run.completed` 或失败终态到达前仍保持并发占用。终态会兜底结束该 Run 遗留的 partial message、tool 与 approval 活动态，避免对话中残留看似仍在运行的蓝色光标。
 

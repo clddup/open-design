@@ -75,7 +75,7 @@ Phase 8 已落地七个 Leafer interaction owner、一个 scene reconcile owner 
 
 Phase 6 的首个切片把 Project、Conversation 与 Project Library 的 22 个 IPC channel 迁入 `project-ipc-registration`，并把 Renderer design-tool progress/resolve 的 2 个 channel 迁入 Agent host 邻近的 registration owner。Main 入口只注入 `ipcMain`、sender validator、动态 `ProjectIpcService` resolver 和唯一 `RendererDesignToolHost`；新 owner 不缓存 service 或 host 状态。sender 校验继续先于参数与 payload 校验，Project service 在每次 invoke 时解析，退出后的旧 service 不能继续使用，stale design response 继续失败关闭。该切片没有改变 shared/preload 契约、IPC 名称、参数数量、返回值或 macOS/Windows 行为。
 
-Phase 6 的第二个切片用唯一 `DesktopWindowHost` 接管 BrowserWindow 实例、创建参数、安全 webPreferences、开发/打包 Renderer 加载、同源导航、外链拒绝、ready-to-show、关闭清理、Renderer sender identity、Main→Renderer 发送、原生窗口动作及 macOS activate 重建。Main 入口只注入 Electron factory、路径、主题、外链和 fixture adapter；字体、原生对话框、Agent、Diagnostics 与 fixture smoke 都从同一 host 解析当前活动窗口，不保存第二个窗口引用。旧窗口迟到的 ready/closed 事件不能显示或清除替代窗口，destroyed window 不再接收发送。application quit/flush、Main service bootstrap 与剩余 IPC family 仍属于未完成的 Phase 6。
+Phase 6 的第二个切片用唯一 `DesktopWindowHost` 接管 BrowserWindow 实例、创建参数、安全 webPreferences、开发/打包 Renderer 加载、同源导航、外链拒绝、ready-to-show、关闭清理、Renderer sender identity、Main→Renderer 发送、原生窗口动作及 macOS activate 重建。Main 入口只注入 Electron factory、路径、主题和外链；字体、原生对话框、Agent 与 Diagnostics 都从同一 host 解析当前活动窗口，不保存第二个窗口引用。旧 Electron fixture smoke adapter 已退休。旧窗口迟到的 ready/closed 事件不能显示或清除替代窗口，destroyed window 不再接收发送。application quit/flush、Main service bootstrap 与剩余 IPC family 仍属于未完成的 Phase 6。
 
 Phase 6 的第三个切片把 `ApplicationLifecycle` 从最后窗口策略扩展为唯一 shutdown coordinator。Renderer 的 `beforeunload → ProjectAutosaveCoordinator.flushAll → window.close` 仍先完成文档持久化；Main 在 `will-quit` 只建立一次异步终止屏障，随后按固定顺序取消图片工作、停止 Agent、断开 provider/tool handler、拒绝悬挂 Renderer tool、关闭 Workspace、清理 Run correlation、等待 `DiagnosticLog.flush()`，最后清空 service 引用并调用 `app.exit(0)`。单个 teardown step 失败会聚合报告但不跳过其余步骤；重复 `will-quit` 不会重复关闭数据库或退出。普通 macOS 最后窗口继续保留应用，Windows/Linux 最后窗口继续退出，显式 macOS Quit 在 Renderer autosave 后继续退出。Main service bootstrap 与剩余 IPC family 仍属于未完成的 Phase 6。
 
@@ -132,7 +132,7 @@ ADR-0086 已退休默认 800 行和历史逐文件行数预算：连续切片证
 - `AgentTimeline.test.tsx`：durable/live 单调投影、近底自动滚动、审批、取消、历史终态与 Conversation epoch 竞态
 - `editor-command-controllers.test.tsx`：唯一 Runtime 写入、Page 操作、Layer capability、复合事务、selection 与 undo
 - `project-ipc-registration.test.ts`、`project-ipc.test.ts`、`renderer-design-tool-ipc.test.ts` 与 `renderer-design-tool-host.test.ts`：完整 channel 映射、sender/argument/payload 校验顺序、动态 service 生命周期和 stale response
-- `desktop-window-host.test.ts`、`navigation-policy.test.ts`、`renderer-url.test.ts`、`application-lifecycle.test.ts` 与相邻字体/fixture smoke 测试：安全窗口配置、开发/打包加载、导航/外链、Renderer identity、窗口动作、关闭和双平台最后窗口策略
+- `desktop-window-host.test.ts`、`navigation-policy.test.ts`、`renderer-url.test.ts`、`application-lifecycle.test.ts` 与相邻字体测试：安全窗口配置、开发/打包加载、导航/外链、Renderer identity、窗口动作、关闭和双平台最后窗口策略
 - `application-lifecycle.test.ts`、`diagnostic-log.test.ts`、`project-autosave.test.ts`、Project workspace 与 App 关窗测试：Renderer autosave 先行、单次有序 Main teardown、异步诊断 flush、局部失败隔离及 macOS/Windows 退出语义
 - `model-service-ipc.test.ts`、`model-provider-host.test.ts`、`image-generation-host.test.ts`、shared desktop API 与 Settings 测试：完整 channel family、动态 host、凭据 payload 校验、成功后 catalog 通知、连接测试与设置持久化
 - `diagnostic-host.test.ts`、`diagnostic-log.test.ts`、`application-preferences-host.test.ts`、Application Menu、shared API、Renderer i18n/diagnostics 测试：有界 pending、source ownership、flush/clear、Locale 持久化/菜单/通知、Theme 投影及 sender/arity 失败关闭

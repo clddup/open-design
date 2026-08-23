@@ -19,13 +19,6 @@ files:
 extraResources:
   - from: ../../THIRD_PARTY_NOTICES.md
     to: THIRD_PARTY_NOTICES.md
-  - from: ../../fixtures/professional
-    to: fixtures/professional
-    filter:
-      - manifest.json
-      - "OD-*/initial.opendesign"
-      - "OD-*/refinement.transaction.json"
-      - "OD-*/document.opendesign"
   - from: build/icon.png
     to: icon.png
 
