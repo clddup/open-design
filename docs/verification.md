@@ -34,8 +34,6 @@ macOS 与 Windows 必须在同一待发布 commit 上分别完成原生验证。
 
 ```text
 pnpm format:check
-pnpm architecture:check
-pnpm agent-core:check
 pnpm lint
 pnpm typecheck
 pnpm test

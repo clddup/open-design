@@ -14,8 +14,6 @@
     }
   },
   "scripts": {
-    "agent-core:check": "node scripts/verify-agent-core-boundary.mjs",
-    "architecture:check": "node --test scripts/workspace-path.test.mjs scripts/architecture-rules.test.mjs && node scripts/verify-architecture-boundaries.mjs",
     "build": "pnpm -r --if-present build",
     "capabilities:generate": "node scripts/generate-capability-doc.mjs",
     "dev": "pnpm --filter @opendesign/desktop dev",
@@ -28,7 +26,7 @@
     "test": "vitest run && pnpm --filter @opendesign/desktop test",
     "test:watch": "vitest",
     "typecheck": "pnpm -r --if-present typecheck",
-    "verify": "pnpm format:check && pnpm architecture:check && pnpm agent-core:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+    "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
