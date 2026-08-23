@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { resolve } from "node:path";
 import { describe, it } from "node:test";
 
 import {
@@ -31,8 +32,8 @@ describe("architecture source rules", () => {
   });
 
   it("resolves NodeNext .js source imports without a generated file", () => {
-    const importer = "/workspace/src/agent/index.ts";
-    const target = "/workspace/src/shared/bridge.ts";
+    const importer = resolve("workspace", "src", "agent", "index.ts");
+    const target = resolve("workspace", "src", "shared", "bridge.ts");
     assert.equal(
       resolveSourceImport(importer, "../shared/bridge.js", new Set([target])),
       target,

@@ -4,7 +4,6 @@ import type {
   TrustedToolContext,
   TrustedToolResult,
 } from "@opendesign/agent-contracts";
-import { JsonlSessionStore } from "@opendesign/session-store";
 import type {
   DesignAsset,
   ImageAssetDerivation,
@@ -32,7 +31,7 @@ import { AgentReferenceHost } from "./agent/agent-reference-host";
 import { AgentSvgExportHost } from "./agent/agent-svg-export-host";
 import { AgentSvgImportHost } from "./agent/agent-svg-import-host";
 import { AgentRasterExportHost } from "./agent/agent-raster-export-host";
-import { AgentSessionStoreHost } from "./agent/agent-session-store-host";
+import { AgentSessionStoreBinding } from "./agent/agent-session-store-binding";
 import { RendererDesignToolHost } from "./agent/renderer-design-tool-host";
 import {
   DesignGenerationPerformanceTracker,
@@ -714,15 +713,36 @@ async function startDesktopApplication(
         { cause: error },
       );
     }
-    const timeout = setTimeout(() => {
-      console.error("Agent smoke timed out");
-      app.exit(1);
+    const smokeRoot = await mkdtemp(join(tmpdir(), "opendesign-agent-smoke-"));
+    const sessionStoreBinding = new AgentSessionStoreBinding(
+      agentHost,
+      join(smokeRoot, "events.jsonl"),
+    );
+    let finished = false;
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+    let unsubscribe: () => void = () => undefined;
+    const disposeSmoke = async () => {
+      if (timeout) clearTimeout(timeout);
+      timeout = null;
+      unsubscribe();
+      await agentHost.stop();
+      sessionStoreBinding.dispose();
+      await rm(smokeRoot, { recursive: true, force: true });
+    };
+    startup.defer("Packaged Agent smoke", disposeSmoke);
+    const finish = (code: number, message: string) => {
+      if (finished) return;
+      finished = true;
+      if (code === 0) console.log(message);
+      else console.error(message);
+      void disposeSmoke().finally(() => app.exit(code));
+    };
+    timeout = setTimeout(() => {
+      finish(1, "Agent smoke timed out");
     }, 10_000);
-    agentHost.on((event) => {
+    unsubscribe = agentHost.on((event) => {
       if (event.type === "agent.error") {
-        clearTimeout(timeout);
-        console.error(`Agent smoke failed: ${event.message}`);
-        app.exit(1);
+        finish(1, `Agent smoke failed: ${event.message}`);
       }
       if (event.type === "agent.connected") {
         agentHost.send({
@@ -746,13 +766,13 @@ async function startDesktopApplication(
         });
       }
       if (event.type === "run.completed") {
-        clearTimeout(timeout);
-        console.log(`Agent smoke passed: ${event.runId} ${event.stopReason}`);
-        void agentHost.stop();
-        app.exit(event.stopReason === "complete" ? 0 : 1);
+        finish(
+          event.stopReason === "complete" ? 0 : 1,
+          `Agent smoke ${event.stopReason === "complete" ? "passed" : "failed"}: ${event.runId} ${event.stopReason}`,
+        );
       }
     });
-    void agentHost.start().catch(() => undefined);
+    await agentHost.start();
     startup.commit();
     return;
   }
@@ -787,10 +807,11 @@ async function startDesktopApplication(
     fixtureSmoke.path(".opendesign", "fonts"),
   );
   agentReferenceHost = new AgentReferenceHost(agentAttachmentHost);
-  const agentSessionStore = new JsonlSessionStore(
+  const agentSessionStoreBinding = new AgentSessionStoreBinding(
+    agentHost,
     fixtureSmoke.path(".opendesign", "sessions", "events.jsonl"),
   );
-  const agentSessionStoreHost = new AgentSessionStoreHost(agentSessionStore);
+  const agentSessionStore = agentSessionStoreBinding.store;
   const persistedLocale = workspaceStore.getPreference("locale");
   applicationPreferences.restoreLocale(persistedLocale);
   const previousMenu = Menu.getApplicationMenu();
@@ -827,11 +848,8 @@ async function startDesktopApplication(
   startup.defer("Agent handlers", () => {
     agentHost.setModelRequestHandler(null);
     agentHost.setDesignToolRequestHandler(null);
-    agentHost.setSessionStoreRequestHandler(null);
+    agentSessionStoreBinding.dispose();
   });
-  agentHost.setSessionStoreRequestHandler((request, signal) =>
-    agentSessionStoreHost.execute(request, signal),
-  );
   const mainDesignToolRuntime = new MainDesignToolRuntime({
     dispatch: async (call, context, signal, reportProgress) => {
       if (!globalTaskCoordinator) {
