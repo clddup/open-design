@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Value } from "@sinclair/typebox/value";
+import { schemaValidationIssues } from "@opendesign/design-contracts";
 import {
   BUILTIN_GRAPHIC_DESIGN_SKILL_REFS,
   BUILTIN_LOGO_DESIGN_SKILL_REFS,
@@ -51,12 +51,14 @@ describe("compact first-slice tool", () => {
       "firstSlice",
     ]);
     const valid = providerInput(fixture());
-    expect(Value.Check(DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA, valid)).toBe(true);
+    expect(
+      schemaValidationIssues(DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA, valid),
+    ).toHaveLength(0);
     expect(FirstSliceContract.parse(valid).ok).toBe(true);
     const unexpected = { ...valid, hiddenLimit: 32 };
-    expect(Value.Check(DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA, unexpected)).toBe(
-      false,
-    );
+    expect(
+      schemaValidationIssues(DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA, unexpected),
+    ).not.toHaveLength(0);
     expect(FirstSliceContract.parse(unexpected).ok).toBe(false);
   });
 

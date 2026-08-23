@@ -1,5 +1,7 @@
-import type { TSchema } from "@sinclair/typebox";
-import { schemaValidationIssues } from "@opendesign/design-contracts";
+import {
+  schemaValidationIssues,
+  type TSchema,
+} from "@opendesign/design-contracts";
 import {
   builtinDesignSkillRefsForDeliverable,
   isBuiltinDesignSkillRefsForDeliverable,

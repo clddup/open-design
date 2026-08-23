@@ -6,6 +6,7 @@ import {
   type TUnion,
 } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
+export { Type, type Static, type TSchema };
 import { checkSchema } from "./schema-check.js";
 import * as layout from "./layout.js";
 import {

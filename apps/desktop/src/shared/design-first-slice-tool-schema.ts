@@ -1,4 +1,4 @@
-import { Type, type Static } from "@sinclair/typebox";
+import { Type, type Static } from "@opendesign/design-contracts";
 import {
   DESIGN_FIRST_SLICE_MAX_ELEMENTS,
   DESIGN_FIRST_SLICE_MAX_STAGES,

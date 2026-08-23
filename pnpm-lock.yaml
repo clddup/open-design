@@ -113,9 +113,6 @@ importers:
       '@opendesign/workspace-contracts':
         specifier: workspace:*
         version: link:../../packages/workspace-contracts
-      '@sinclair/typebox':
-        specifier: ^0.34.52
-        version: 0.34.52
       mammoth:
         specifier: 1.12.0
         version: 1.12.0
