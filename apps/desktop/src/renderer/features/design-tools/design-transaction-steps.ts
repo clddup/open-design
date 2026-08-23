@@ -7,9 +7,9 @@ import type {
 import type { EditorRuntime } from "@opendesign/editor-runtime";
 import {
   DESIGN_APPLY_TOOL_NAME,
+  DesignApplyContract,
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
-  isDesignApplyToolInput,
-  isInternalDesignApplyToolInput,
+  type InternalDesignApplyToolInput,
 } from "@/shared/design-agent-tools";
 import type {
   RendererDesignToolProgressPhase,
@@ -45,10 +45,10 @@ export async function executeSemanticDesignTransaction(options: {
 }): Promise<RendererDesignToolResponse> {
   const { request, runtime, transaction, preview, execution, createFailure } =
     options;
+  const applyInput = designApplyInput(request);
   if (
     request.call.toolName === INTERNAL_DESIGN_APPLY_TOOL_NAME &&
-    isInternalDesignApplyToolInput(request.call.input) &&
-    request.call.input.executionMode === "atomic"
+    applyInput?.executionMode === "atomic"
   ) {
     throwIfAgentGenerationAborted(execution.signal);
     const result = runtime.apply(transaction);
@@ -236,13 +236,9 @@ function semanticApplySteps(
   commands: readonly DesignOperation[],
   fallbackLabel: string,
 ): SemanticApplyStep[] {
-  if (
-    (request.call.toolName === DESIGN_APPLY_TOOL_NAME &&
-      isDesignApplyToolInput(request.call.input)) ||
-    (request.call.toolName === INTERNAL_DESIGN_APPLY_TOOL_NAME &&
-      isInternalDesignApplyToolInput(request.call.input))
-  ) {
-    const steps = request.call.input.steps;
+  const applyInput = designApplyInput(request);
+  if (applyInput) {
+    const steps = applyInput.steps;
     if (steps) {
       return steps.map((step) => ({
         commandCount: step.commandIds.length,
@@ -258,6 +254,24 @@ function semanticApplySteps(
       stepId: "transaction",
     },
   ];
+}
+
+function designApplyInput(
+  request: RendererDesignToolRequest,
+): InternalDesignApplyToolInput | undefined {
+  if (request.call.toolName === DESIGN_APPLY_TOOL_NAME) {
+    const parsed = DesignApplyContract.parse(request.call.input, {
+      canonical: true,
+    });
+    return parsed.ok ? parsed.value : undefined;
+  }
+  if (request.call.toolName === INTERNAL_DESIGN_APPLY_TOOL_NAME) {
+    const parsed = DesignApplyContract.parse(request.call.input, {
+      internal: true,
+    });
+    return parsed.ok ? parsed.value : undefined;
+  }
+  return undefined;
 }
 
 function semanticStageCandidateSizes(

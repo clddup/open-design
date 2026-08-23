@@ -50,10 +50,47 @@ import {
   resolveLineEndpointPoint,
   resolveStarPoints,
   schemaValidationIssues,
+  executableJsonSchema,
   type DesignDocument,
 } from "./index.js";
 
 const actor = { type: "user" as const, id: "user_1" };
+
+describe("executable JSON Schema", () => {
+  it("keeps Provider JSON unchanged while enforcing the same Runtime tree", () => {
+    const source = {
+      type: "object",
+      properties: {
+        action: { enum: ["insert", "remove"] },
+        label: { type: "string", minLength: 1 },
+      },
+      required: ["action", "label"],
+      additionalProperties: false,
+    } as const;
+    const schema = executableJsonSchema(source);
+
+    expect(JSON.stringify(schema)).toBe(JSON.stringify(source));
+    expect(
+      schemaValidationIssues(schema, { action: "insert", label: "A" }),
+    ).toHaveLength(0);
+    expect(
+      schemaValidationIssues(schema, { action: "rename", label: "A" }),
+    ).toEqual(
+      expect.arrayContaining([expect.objectContaining({ path: "/action" })]),
+    );
+    expect(
+      schemaValidationIssues(schema, { action: "insert", label: "" }),
+    ).toEqual(
+      expect.arrayContaining([expect.objectContaining({ path: "/label" })]),
+    );
+  });
+
+  it("rejects unsupported schema composition instead of silently weakening it", () => {
+    expect(() =>
+      executableJsonSchema({ oneOf: [{ type: "string" }, { type: "number" }] }),
+    ).toThrow("Unsupported executable JSON Schema keyword: oneOf");
+  });
+});
 
 it("validates typed image asset derivation commands", () => {
   const derivation = {

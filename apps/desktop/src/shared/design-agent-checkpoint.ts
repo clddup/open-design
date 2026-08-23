@@ -1,5 +1,5 @@
 import {
-  normalizeDesignApplyToolInput,
+  DesignApplyContract,
   type DesignApplyToolInput,
 } from "./design-apply-input";
 import { DESIGN_APPLY_TOOL_INPUT_SCHEMA } from "./design-agent-operation-schemas";
@@ -70,17 +70,17 @@ export function normalizeDesignCheckpointToolInput(
     return undefined;
   }
   if (input.action === "apply-and-capture") {
-    const apply = normalizeDesignApplyToolInput(input.apply);
-    return apply && exactKeys(input, ["version", "action", "apply"])
-      ? { version: 1, action: "apply-and-capture", apply }
+    const parsed = DesignApplyContract.parse(input.apply);
+    return parsed.ok && exactKeys(input, ["version", "action", "apply"])
+      ? { version: 1, action: "apply-and-capture", apply: parsed.value }
       : undefined;
   }
-  const refinement = normalizeDesignApplyToolInput(input.refinement);
-  return refinement && exactKeys(input, ["version", "action", "refinement"])
+  const parsed = DesignApplyContract.parse(input.refinement);
+  return parsed.ok && exactKeys(input, ["version", "action", "refinement"])
     ? {
         version: 1,
         action: "refine-and-capture",
-        refinement,
+        refinement: parsed.value,
       }
     : undefined;
 }

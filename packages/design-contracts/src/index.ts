@@ -8,6 +8,7 @@ import {
 import { Value } from "@sinclair/typebox/value";
 export { Type, type Static, type TSchema };
 import { checkSchema } from "./schema-check.js";
+export { executableJsonSchema } from "./schema-check.js";
 import * as layout from "./layout.js";
 import {
   designDocumentHasValidLayoutLimits,
@@ -2578,9 +2579,17 @@ export function schemaValidationIssues(
         message: actionable.message,
       })),
     );
-  } catch {
+  } catch (error) {
     return [
-      { path: "", message: "Value contains an unsupported cyclic structure" },
+      {
+        path: "",
+        message:
+          error instanceof RangeError
+            ? "Value contains an unsupported cyclic structure"
+            : error instanceof Error
+              ? `Schema validation failed: ${error.message}`
+              : "Schema validation failed",
+      },
     ];
   }
 }

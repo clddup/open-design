@@ -5,12 +5,12 @@ import type {
 } from "@opendesign/agent-contracts";
 import {
   compileDesignFirstSliceToolInput,
+  DesignApplyContract,
   designPlanTargets,
   FirstSliceContract,
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
   isDesignPlanToolInput,
   logoBriefRequiresExploration,
-  normalizeDesignApplyToolInput,
 } from "@/shared/design-agent-tools.js";
 import { formatValidationFailure } from "@/shared/contract-validation.js";
 import type { GlobalTaskCoordinator } from "./global-task-coordinator.js";
@@ -48,10 +48,14 @@ export async function handleDesignFirstSliceTool(
   if (!isDesignPlanToolInput(compiled.plan)) {
     throw new TypeError("Compiled first-slice plan is invalid");
   }
-  const normalizedApply = normalizeDesignApplyToolInput(compiled.apply);
-  if (!normalizedApply) {
+  const parsedApply = DesignApplyContract.parse(compiled.apply, {
+    canonical: true,
+    internal: true,
+  });
+  if (!parsedApply.ok) {
     throw new TypeError("Compiled first-slice transaction is invalid");
   }
+  const normalizedApply = parsedApply.value;
 
   const registration = coordinator.registerDesignPlan(context, compiled.plan);
   const allocation = coordinator.createDesignPlanAllocation(context.runId);

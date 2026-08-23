@@ -59,8 +59,8 @@ import {
   INTERNAL_IMPORT_SVG_TOOL_NAME,
   INTERNAL_READ_IMAGE_SOURCE_TOOL_NAME,
   INTERNAL_UPDATE_IMAGE_TOOL_NAME,
+  DesignApplyContract,
   isDesignArrangeToolInput,
-  isDesignApplyToolInput,
   isDesignComponentToolInput,
   isDesignFontToolInput,
   isDesignHierarchyToolInput,
@@ -69,7 +69,6 @@ import {
   isDesignVectorToolInput,
   isExportSvgToolInput,
   isExportRasterToolInput,
-  isInternalDesignApplyToolInput,
   isInternalImportSvgToolInput,
   isInternalReadImageSourceToolInput,
   isInternalUpdateImageToolInput,
@@ -77,6 +76,7 @@ import {
   type DesignFontToolInput,
   type DesignPageToolInput,
   type DesignTextRangeToolInput,
+  type InternalDesignApplyToolInput,
 } from "@/shared/design-agent-tools";
 import { createAgentDesignIdAllocation } from "@/shared/design-id-allocation";
 import type {
@@ -1606,16 +1606,12 @@ async function executeDesignToolRequestUnsafe(
     };
   }
 
-  if (!(
-    (request.call.toolName === DESIGN_APPLY_TOOL_NAME &&
-      isDesignApplyToolInput(request.call.input)) ||
-    (request.call.toolName === INTERNAL_DESIGN_APPLY_TOOL_NAME &&
-      isInternalDesignApplyToolInput(request.call.input))
-  )) {
+  const applyInput = designApplyInput(request);
+  if (!applyInput) {
     throw new Error(`Unsupported design tool: ${request.call.toolName}`);
   }
   const commands = normalizeAgentTextContent(
-    normalizeAgentInsertHierarchy(request.call.input.commands),
+    normalizeAgentInsertHierarchy(applyInput.commands),
   );
   assertAgentDoesNotBypassFrameConstraints(document, commands);
   assertAgentDoesNotBypassAutoLayout(document, commands);
@@ -1635,10 +1631,10 @@ async function executeDesignToolRequestUnsafe(
       id: `agent_${request.context.sessionId}`,
       displayName: "OpenDesign Agent",
     },
-    label: request.call.input.label,
-    ...(request.call.input.summary === undefined
+    label: applyInput.label,
+    ...(applyInput.summary === undefined
       ? {}
-      : { summary: request.call.input.summary }),
+      : { summary: applyInput.summary }),
     commands,
   } satisfies DesignTransaction;
   const preview = runtime.preview(transaction);
@@ -1654,18 +1650,43 @@ async function executeDesignToolRequestUnsafe(
   });
 }
 
+function designApplyInput(
+  request: RendererDesignToolRequest,
+): InternalDesignApplyToolInput | undefined {
+  if (request.call.toolName === DESIGN_APPLY_TOOL_NAME) {
+    const parsed = DesignApplyContract.parse(request.call.input, {
+      canonical: true,
+    });
+    return parsed.ok ? parsed.value : undefined;
+  }
+  return internalDesignApplyInput(request);
+}
+
+function internalDesignApplyInput(
+  request: RendererDesignToolRequest,
+): InternalDesignApplyToolInput | undefined {
+  if (request.call.toolName !== INTERNAL_DESIGN_APPLY_TOOL_NAME) {
+    return undefined;
+  }
+  const parsed = DesignApplyContract.parse(request.call.input, {
+    internal: true,
+  });
+  return parsed.ok ? parsed.value : undefined;
+}
+
 function canRebaseNewDesignFileAssets(
   request: RendererDesignToolRequest,
   document: DesignDocument,
 ): boolean {
+  const input = internalDesignApplyInput(request);
   if (
     request.call.toolName !== INTERNAL_DESIGN_APPLY_TOOL_NAME ||
-    !isInternalDesignApplyToolInput(request.call.input) ||
-    request.call.input.commands.length === 0
+    !input ||
+    input.commands.length === 0
   ) {
     return false;
   }
-  return request.call.input.commands.every(
+  return input.commands.every(
     (command) =>
       command.type === "put_asset" &&
       document.assetsById[command.asset.id] === undefined,
@@ -1930,24 +1951,20 @@ function canRebasePlannedInsert(
   request: RendererDesignToolRequest,
   document: DesignDocument,
 ): boolean {
-  if (
-    request.call.toolName !== INTERNAL_DESIGN_APPLY_TOOL_NAME ||
-    !isInternalDesignApplyToolInput(request.call.input)
-  ) {
+  const input = internalDesignApplyInput(request);
+  if (request.call.toolName !== INTERNAL_DESIGN_APPLY_TOOL_NAME || !input) {
     return false;
   }
-  const guard = request.call.input.rebaseGuard;
+  const guard = input.rebaseGuard;
   if (
     !guard ||
     guard.fromRevision !== request.context.revision ||
-    request.call.input.commands.some(
-      (command) => command.type !== "insert_element",
-    )
+    input.commands.some((command) => command.type !== "insert_element")
   ) {
     return false;
   }
   const insertedParents = new Map(
-    request.call.input.commands.map((command) => {
+    input.commands.map((command) => {
       if (command.type !== "insert_element") {
         throw new Error("Planned rebase accepts insert commands only");
       }
@@ -1968,7 +1985,7 @@ function canRebasePlannedInsert(
       return false;
     }
   }
-  return request.call.input.commands.every((command) => {
+  return input.commands.every((command) => {
     if (command.type !== "insert_element") return false;
     return guard.targets.some((target) =>
       currentParentChainReaches(

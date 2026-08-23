@@ -129,7 +129,7 @@ import {
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
   INTERNAL_READ_IMAGE_SOURCE_TOOL_NAME,
   GENERATE_IMAGE_TOOL_NAME,
-  normalizeDesignApplyToolInput,
+  DesignApplyContract,
   isDesignComponentToolInput,
   isDesignFontToolInput,
   isDesignTextRangeToolInput,
@@ -894,10 +894,13 @@ async function startDesktopApplication(
         input: DesignApplyToolInput,
         stageProgress?: (message: string, progress: number) => void,
       ): Promise<TrustedToolResult> => {
-        const normalizedInput = normalizeDesignApplyToolInput(input);
-        if (!normalizedInput) {
+        const parsedInput = DesignApplyContract.parse(input, {
+          canonical: true,
+        });
+        if (!parsedInput.ok) {
           throw new TypeError("Invalid design apply tool input");
         }
+        const normalizedInput = parsedInput.value;
         globalTaskCoordinator!.assertVisualReviewBeforeWrite(context);
         const authorization = globalTaskCoordinator!.assertDesignPlanForApply(
           context,
@@ -1611,13 +1614,11 @@ async function startDesktopApplication(
         return withDesignDelivery(result, context.runId);
       }
       if (call.toolName === DESIGN_APPLY_TOOL_NAME) {
-        if (!normalizeDesignApplyToolInput(call.input)) {
+        const parsedInput = DesignApplyContract.parse(call.input);
+        if (!parsedInput.ok) {
           throw new TypeError("Invalid design apply tool input");
         }
-        return await executeDesignApply(
-          call,
-          call.input as DesignApplyToolInput,
-        );
+        return await executeDesignApply(call, parsedInput.value);
       }
       if (call.toolName === DESIGN_FONT_TOOL_NAME) {
         if (!isDesignFontToolInput(call.input)) {

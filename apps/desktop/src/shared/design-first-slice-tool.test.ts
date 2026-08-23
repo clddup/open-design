@@ -13,7 +13,7 @@ import {
   type DesignFirstSliceToolInput,
 } from "./design-first-slice-tool";
 import {
-  isDesignApplyToolInput,
+  DesignApplyContract,
   isDesignPlanToolInput,
 } from "./design-agent-tools";
 
@@ -185,7 +185,12 @@ describe("compact first-slice tool", () => {
     };
     const compiled = compileDesignFirstSliceToolInput(input);
     expect(isDesignPlanToolInput(compiled.plan)).toBe(true);
-    expect(isDesignApplyToolInput(compiled.apply)).toBe(true);
+    expect(
+      DesignApplyContract.parse(compiled.apply, {
+        canonical: true,
+        internal: true,
+      }).ok,
+    ).toBe(true);
     expect(compiled.plan).toMatchObject({
       version: 1,
       skillRefs: BUILTIN_UI_DESIGN_SKILL_REFS,

@@ -71,6 +71,8 @@ Normalization 只允许绑定当前 Page、权威 Run prompt、固定 skill refs
 
 compact first-slice 已完成首个迁移切片：模型可见输入由可执行 TypeBox schema 直接生成并由 pi 预校验；Main 使用同一 `FirstSliceContract.parse(input, hostContext)` 完成可信宿主绑定与唯一 domain refinement。旧 `isDesignFirstSliceToolInput / normalizeDesignFirstSliceToolInput / explainInvalidDesignFirstSliceToolInput` 已删除，Provider 描述中的 32 元素旧事实也已移除。
 
+通用 node apply 已完成第二个迁移切片：`DesignApplyContract.parse(input, context)` 明确区分模型 compact 输入、Main/Renderer canonical 输入与 trusted internal 操作，但三种阶段共享同一个契约入口和结构化 issue。模型可见 JSON Schema 被原样赋予不可序列化的 TypeBox runtime metadata，Provider JSON 与 Runtime schema 不再复制；宿主只补全 canonical node/export defaults。旧 `normalizeDesignApplyToolInput / isDesignApplyToolInput / isInternalDesignApplyToolInput / explainInvalidDesignApplyToolInput` 已删除。语义 step 顺序、内部字段、允许的 operation、Component Instance 边界与 rebase target 唯一性只在一个 refinement 中维护；Pi 直接消费 `validateInputIssues`，不再回退到字符串 explainer。
+
 `ValidationIssue` 的稳定 `code/path/expected/actual/recovery` 通过 `tool-validation` failure details 进入 Agent event、journal 和 Timeline；这种参数修正使用 `correct-and-retry`，不冒充需要文档 inspection 的事务错误。Design transaction 仍保留独立 `inspect-and-revise` 恢复语义。
 
 剩余 Agent tools 与 IPC/持久化契约尚未迁移，不得据此宣称全仓已实现单一验证入口。

@@ -1,3 +1,4 @@
+import { executableJsonSchema } from "@opendesign/design-contracts";
 import { DESIGN_IMAGE_PLACEMENT_SCHEMA } from "./design-agent-image-tools";
 
 const MODEL_BLEND_MODES = [
@@ -678,6 +679,22 @@ const MODEL_TEXT_RANGE_TOOL_SCHEMA = {
   additionalProperties: false,
 } as const;
 
+const MODEL_APPLY_STEP_SCHEMA = {
+  type: "object",
+  properties: {
+    stepId: { type: "string", minLength: 1, maxLength: 256 },
+    label: { type: "string", minLength: 1, maxLength: 256 },
+    commandIds: {
+      type: "array",
+      minItems: 1,
+      maxItems: 1_000,
+      items: { type: "string", minLength: 1, maxLength: 256 },
+    },
+  },
+  required: ["stepId", "label", "commandIds"],
+  additionalProperties: false,
+} as const;
+
 const MODEL_APPLY_TRANSACTION_SCHEMA = {
   type: "object",
   properties: {
@@ -689,21 +706,7 @@ const MODEL_APPLY_TRANSACTION_SCHEMA = {
       maxItems: 32,
       description:
         "Ordered semantic steps. commandIds must cover commands once in order. Use navigation, hero, content, footer—not arbitrary batches.",
-      items: {
-        type: "object",
-        properties: {
-          stepId: { type: "string", minLength: 1, maxLength: 256 },
-          label: { type: "string", minLength: 1, maxLength: 256 },
-          commandIds: {
-            type: "array",
-            minItems: 1,
-            maxItems: 1_000,
-            items: { type: "string", minLength: 1, maxLength: 256 },
-          },
-        },
-        required: ["stepId", "label", "commandIds"],
-        additionalProperties: false,
-      },
+      items: MODEL_APPLY_STEP_SCHEMA,
     },
     commands: {
       type: "array",
@@ -716,7 +719,12 @@ const MODEL_APPLY_TRANSACTION_SCHEMA = {
   additionalProperties: false,
 } as const;
 
-export const DESIGN_APPLY_TOOL_INPUT_SCHEMA = MODEL_APPLY_TRANSACTION_SCHEMA;
+export const DESIGN_APPLY_STEP_SCHEMA = executableJsonSchema(
+  MODEL_APPLY_STEP_SCHEMA,
+);
+export const DESIGN_APPLY_TOOL_INPUT_SCHEMA = executableJsonSchema(
+  MODEL_APPLY_TRANSACTION_SCHEMA,
+);
 export const DESIGN_TEXT_RANGE_TOOL_INPUT_SCHEMA = MODEL_TEXT_RANGE_TOOL_SCHEMA;
 export const DESIGN_MODEL_BLEND_MODES = MODEL_BLEND_MODES;
 export const DESIGN_MODEL_EFFECT_SCHEMA = MODEL_EFFECT_SCHEMA;

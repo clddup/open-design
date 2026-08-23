@@ -27,18 +27,25 @@ import {
   INTERNAL_UPDATE_IMAGE_TOOL_NAME,
   PLACE_IMAGE_TOOL_NAME,
   UPDATE_IMAGE_TOOL_NAME,
-  explainInvalidDesignApplyToolInput,
+  DesignApplyContract,
   explainInvalidDesignComponentToolInput,
   FirstSliceContract,
   isAgentSvgImportResult,
   isPreparedAgentSvgExport,
   isPreparedAgentRasterExport,
-  normalizeDesignApplyToolInput,
   normalizeDesignPlanToolInput,
   normalizeDesignVisualReviewToolInput,
   normalizeDesignPageToolInput,
   validateDesignAgentToolInput,
 } from "./design-agent-tools";
+
+function parsedApply(input: unknown) {
+  const result = DesignApplyContract.parse(input);
+  if (!result.ok) {
+    throw new Error(JSON.stringify(result.issues));
+  }
+  return result.value;
+}
 
 describe("component tool recovery contract", () => {
   it("uses one rootNodeId contract for promoting a Component Main", () => {
@@ -141,7 +148,7 @@ describe("design Agent tool contract", () => {
     expect(
       validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, compactInput),
     ).toBe(true);
-    expect(normalizeDesignApplyToolInput(compactInput)).toMatchObject({
+    expect(parsedApply(compactInput)).toMatchObject({
       commands: [
         {
           node: {
@@ -182,11 +189,12 @@ describe("design Agent tool contract", () => {
     const apply = DESIGN_AGENT_TOOL_SPECS.find(
       (tool) => tool.name === DESIGN_APPLY_TOOL_NAME,
     );
+    expect(apply).not.toHaveProperty("explainInvalidInput");
     expect(apply).toHaveProperty(
-      "explainInvalidInput",
-      explainInvalidDesignApplyToolInput,
+      "validateInputIssues",
+      DesignApplyContract.issues,
     );
-    const explanation = explainInvalidDesignApplyToolInput({
+    const issues = DesignApplyContract.issues({
       label: "Create incomplete star",
       commands: [
         {
@@ -209,10 +217,19 @@ describe("design Agent tool contract", () => {
       ],
     });
 
-    expect(explanation).toContain("insert_star node star_1");
-    expect(explanation).toContain("/properties/pointCount");
-    expect(explanation).toContain("/properties/innerRadius");
-    expect(explanation).toContain("Correct these exact fields");
+    expect(
+      issues.some(
+        (issue) =>
+          issue.code === "design_apply.canonical_invalid" &&
+          issue.path.startsWith("/commands/0/node/properties"),
+      ),
+    ).toBe(true);
+    expect(issues.map((issue) => issue.path).join("\n")).toContain(
+      "pointCount",
+    );
+    expect(issues.map((issue) => issue.path).join("\n")).toContain(
+      "innerRadius",
+    );
   });
 
   it("accepts fill-only status primitives with semantic steps", () => {
@@ -283,7 +300,7 @@ describe("design Agent tool contract", () => {
     expect(validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, input)).toBe(
       true,
     );
-    expect(explainInvalidDesignApplyToolInput(input)).toBeUndefined();
+    expect(DesignApplyContract.issues(input)).toHaveLength(0);
   });
 
   it("normalizes compact Agent export settings to the full document contract", () => {
@@ -305,7 +322,7 @@ describe("design Agent tool contract", () => {
         },
       ],
     };
-    expect(normalizeDesignApplyToolInput(input)?.commands[0]).toMatchObject({
+    expect(parsedApply(input).commands[0]).toMatchObject({
       exportSettings: [
         {
           format: "PNG",
@@ -356,7 +373,7 @@ describe("design Agent tool contract", () => {
     expect(validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, input)).toBe(
       true,
     );
-    expect(normalizeDesignApplyToolInput(input)?.steps).toEqual(input.steps);
+    expect(parsedApply(input).steps).toEqual(input.steps);
     expect(
       validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, {
         ...input,
@@ -857,7 +874,6 @@ describe("design Agent tool contract", () => {
               locked: false,
               transform: [1, 0, 0, 1, 0, 0],
               size: { width: 120, height: 40 },
-              exportSettings: [],
               opacity: 1,
               properties: {
                 componentId: "component_button",
@@ -1515,7 +1531,7 @@ describe("design Agent tool contract", () => {
       ],
     };
 
-    expect(normalizeDesignApplyToolInput(input)).toBeUndefined();
+    expect(DesignApplyContract.parse(input).ok).toBe(false);
     expect(validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, input)).toBe(
       false,
     );
@@ -1640,7 +1656,6 @@ describe("design Agent tool contract", () => {
             locked: false,
             transform: [1, 0, 0, 1, 24, 24],
             size: { width: 240, height: 64 },
-            exportSettings: [],
             opacity: 1,
             extensions: {},
             kind: "text",
@@ -1905,7 +1920,6 @@ describe("design Agent tool contract", () => {
             locked: false,
             transform: [1, 0, 0, 1, 0, 0],
             size: { width: 120, height: 160 },
-            exportSettings: [],
             opacity: 1,
             extensions: {},
             kind: "path",
@@ -1961,7 +1975,6 @@ describe("design Agent tool contract", () => {
             locked: false,
             transform: [1, 0, 0, 1, 0, 0],
             size: { width: 120, height: 160 },
-            exportSettings: [],
             opacity: 1,
             extensions: {},
             kind: "vector",
@@ -2051,7 +2064,6 @@ describe("design Agent tool contract", () => {
       locked: false,
       transform: [1, 0, 0, 1, 120, 80],
       size: { width: 240, height: 120 },
-      exportSettings: [],
       opacity: 1,
       extensions: {},
       kind: "line",
@@ -2132,7 +2144,6 @@ describe("design Agent tool contract", () => {
       locked: false,
       transform: [1, 0, 0, 1, 120, 80],
       size: { width: 180, height: 180 },
-      exportSettings: [],
       opacity: 1,
       extensions: {},
       kind: "star",

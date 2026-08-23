@@ -3,11 +3,7 @@ import {
   DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA,
   FirstSliceContract,
 } from "./design-first-slice-tool";
-import {
-  explainInvalidDesignApplyToolInput,
-  isInternalDesignApplyToolInput,
-  normalizeDesignApplyToolInput,
-} from "./design-apply-input";
+import { DesignApplyContract } from "./design-apply-input";
 import {
   DESIGN_ARRANGE_TOOL_INPUT_SCHEMA,
   isDesignArrangeToolInput,
@@ -106,11 +102,8 @@ import { DESIGN_VARIABLE_TOOL_INPUT_SCHEMA } from "./design-variable-tool-schema
 import { isDesignStyleToolInput } from "./design-style-tool";
 import { DESIGN_STYLE_TOOL_INPUT_SCHEMA } from "./design-style-tool-schema";
 export {
+  DesignApplyContract,
   designApplyRequiresPlan,
-  explainInvalidDesignApplyToolInput,
-  isDesignApplyToolInput,
-  isInternalDesignApplyToolInput,
-  normalizeDesignApplyToolInput,
 } from "./design-apply-input";
 export { DESIGN_BOOTSTRAP_APPLY_INPUT_SCHEMA } from "./design-bootstrap-apply-schema";
 export { isDesignBriefFidelity } from "./design-brief-fidelity";
@@ -140,6 +133,7 @@ export type {
 } from "./design-first-slice-tool";
 export type {
   DesignApplyToolInput,
+  DesignApplyContractContext,
   InternalDesignApplyToolInput,
   PlannedDesignRebaseGuard,
   PlannedDesignRebaseTarget,
@@ -628,7 +622,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     inputSchema: DESIGN_APPLY_TOOL_INPUT_SCHEMA,
     risk: "design_write" as const,
     approval: "never" as const,
-    explainInvalidInput: explainInvalidDesignApplyToolInput,
+    validateInputIssues: DesignApplyContract.issues,
   },
 ] as const;
 
@@ -717,14 +711,13 @@ export function validateDesignAgentToolInput(
     return isPageStructureAccessToolInput(input);
   }
   if (
-    (toolName !== DESIGN_APPLY_TOOL_NAME &&
-      toolName !== INTERNAL_DESIGN_APPLY_TOOL_NAME) ||
-    !isRecord(input)
+    toolName !== DESIGN_APPLY_TOOL_NAME &&
+    toolName !== INTERNAL_DESIGN_APPLY_TOOL_NAME
   ) {
     return false;
   }
   if (toolName === DESIGN_APPLY_TOOL_NAME) {
-    return normalizeDesignApplyToolInput(input) !== undefined;
+    return DesignApplyContract.parse(input).ok;
   }
-  return isInternalDesignApplyToolInput(input);
+  return DesignApplyContract.parse(input, { internal: true }).ok;
 }
