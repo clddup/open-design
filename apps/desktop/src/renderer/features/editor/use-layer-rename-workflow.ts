@@ -11,7 +11,7 @@ import {
 } from "@opendesign/editor-runtime";
 import { useCallback, useState } from "react";
 import type { MessageKey, MessageParameters } from "@/shared/i18n/messages";
-import { createComponentInspectorContext } from "../editor-workbench/component-inspector-context";
+import { createComponentInspectorContext } from "./component-inspector-context";
 import type { LayerActionResult, LayerRenameTarget } from "./types";
 
 type Translate = (key: MessageKey, parameters?: MessageParameters) => string;

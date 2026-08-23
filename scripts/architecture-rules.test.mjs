@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 
 import {
   assertAcyclicGraph,
+  featureOwnershipViolation,
   isAliasedImport,
   packageExportAllowsSpecifier,
   packageRoot,
@@ -107,6 +108,40 @@ describe("architecture source rules", () => {
     assert.throws(
       () => assertAcyclicGraph(graph, "desktop source dependency"),
       /desktop source dependency cycle/u,
+    );
+  });
+
+  it("enforces governed feature ownership through public entries", () => {
+    const policy = {
+      compositionFeature: "editor-workbench",
+      governedFeatures: ["canvas", "editor", "workbench"],
+    };
+    assert.match(
+      featureOwnershipViolation({
+        ...policy,
+        sourceFeature: "canvas",
+        targetFeature: "editor-workbench",
+        targetPath: "components/Canvas.tsx",
+      }),
+      /cannot depend/u,
+    );
+    assert.match(
+      featureOwnershipViolation({
+        ...policy,
+        sourceFeature: "editor-workbench",
+        targetFeature: "canvas",
+        targetPath: "components/Canvas.tsx",
+      }),
+      /public entry/u,
+    );
+    assert.equal(
+      featureOwnershipViolation({
+        ...policy,
+        sourceFeature: "editor-workbench",
+        targetFeature: "canvas",
+        targetPath: "index.ts",
+      }),
+      null,
     );
   });
 

@@ -24,7 +24,7 @@ import { Button, Icon, IconButton, type IconName } from "@opendesign/ui";
 import type { DesignImageEditAction } from "@/shared/desktop-api";
 import type { MessageKey } from "@/shared/i18n/messages";
 import { useI18n } from "../../../../i18n";
-import type { UpdatePropertiesPatch } from "../../../editor/types";
+import type { UpdatePropertiesPatch } from "../../../editor";
 import type { StyleActions } from "../../hooks/use-style-actions";
 import type { ProjectLibraryActions } from "../../hooks/use-project-library-actions";
 import styles from "../PropertiesPanel.module.scss";
@@ -33,10 +33,8 @@ import {
   PaintAndEffectsSections,
 } from "./AppearanceSections";
 import { AutoLayoutSection } from "./AutoLayoutSection";
-import {
-  ComponentSection,
-  type ComponentInspectorContext,
-} from "./ComponentSection";
+import { ComponentSection } from "./ComponentSection";
+import type { ComponentInspectorContext } from "../../../editor";
 import { ImageSection } from "./ImageSection";
 import { LayoutGuidesSection } from "./LayoutGuidesSection";
 import { TypographySection } from "./TypographySection";

@@ -6,8 +6,11 @@ import { ResizeHandle, useMessage } from "@opendesign/ui";
 import { useCallback, useRef, type CSSProperties, type ReactNode } from "react";
 import type { ThemePreference } from "@/shared/desktop-api";
 import { AgentTimeline } from "../agent-conversation/components/AgentTimeline";
-import { Canvas } from "./components/Canvas";
-import { CanvasSelectionActions } from "./components/CanvasSelectionActions";
+import {
+  Canvas,
+  CanvasSelectionActions,
+  useCanvasWorkspaceController,
+} from "../canvas";
 import { DesignFileTabs } from "./components/DesignFileTabs";
 import { LeftSidebar } from "./components/LeftSidebar";
 import { PropertiesPanel } from "./components/PropertiesPanel";
@@ -19,7 +22,10 @@ import { UtilityDock } from "./components/UtilityDock";
 import {
   canAddSelectionToVariantSet,
   createComponentInspectorContext,
-} from "./component-inspector-context";
+  layoutInspectorMode,
+  useLayerCommandController,
+  useLayerRenameWorkflow,
+} from "../editor";
 import {
   useEditorRuntime,
   useEditorSnapshot,
@@ -36,15 +42,11 @@ import type { AppNavigationCoordinator } from "../../router/app-navigation-coord
 import type { useAgentConversationRuntime } from "../agent-conversation/use-agent-conversation-runtime";
 import type { useConversationLifecycleState } from "../agent-conversation/use-conversation-lifecycle-state";
 import type { useConversationNavigationController } from "../agent-conversation/use-conversation-navigation-controller";
-import { useCanvasWorkspaceController } from "../canvas/use-canvas-workspace-controller";
-import { layoutInspectorMode } from "../editor/auto-layout-shortcut";
-import { useLayerCommandController } from "../editor/use-layer-command-controller";
-import { useLayerRenameWorkflow } from "../editor/use-layer-rename-workflow";
 import { useImageEditWorkflow } from "../image/use-image-edit-workflow";
 import { useImportExportWorkflow } from "../import-export/use-import-export-workflow";
 import type { useProjectNavigationController } from "../project/use-project-navigation-controller";
 import type { useProjectWorkspaceState } from "../project/use-project-workspace-state";
-import { useWorkbenchLayoutController } from "../workbench/use-workbench-layout-controller";
+import { useWorkbenchLayoutController } from "../workbench";
 
 export type EditorWorkbenchFeatureProps = {
   activeProject:

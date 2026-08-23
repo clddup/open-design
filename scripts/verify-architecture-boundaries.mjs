@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   assertAcyclicGraph,
+  featureOwnershipViolation,
   isAliasedImport,
   packageExportAllowsSpecifier,
   packageRoot,
@@ -32,6 +33,7 @@ const manifestByName = new Map(
 await verifyDesktopAliasConfig();
 await verifyDesktopProcesses();
 await verifyDesktopSourceGraph();
+await verifyRendererFeatureOwnership();
 await verifyWorkspacePackages();
 
 process.stdout.write(
@@ -115,6 +117,41 @@ async function verifyDesktopSourceGraph() {
     assertAcyclicGraph(graph, "desktop source dependency");
   } catch (error) {
     fail(relativeCycleMessage(error));
+  }
+}
+
+async function verifyRendererFeatureOwnership() {
+  const featureRoot = resolve(root, "apps/desktop/src/renderer/features");
+  const files = await sourceFiles(featureRoot);
+  const fileSet = new Set(files);
+  for (const file of files) {
+    const sourceFeature = relativeFeaturePath(featureRoot, file)[0];
+    for (const { specifier } of sourceImports(
+      await readFile(file, "utf8"),
+      file,
+    )) {
+      const target = resolveSourceImport(
+        file,
+        specifier,
+        fileSet,
+        desktopSourceAliases,
+      );
+      if (!target || !pathIsWithin(featureRoot, target)) continue;
+      const [targetFeature, ...targetSegments] = relativeFeaturePath(
+        featureRoot,
+        target,
+      );
+      const violation = featureOwnershipViolation({
+        compositionFeature: "editor-workbench",
+        governedFeatures: ["canvas", "editor", "workbench"],
+        sourceFeature,
+        targetFeature,
+        targetPath: targetSegments.join("/"),
+      });
+      if (violation) {
+        fail(`${relativeWorkspacePath(root, file)} ${violation}: ${specifier}`);
+      }
+    }
   }
 }
 
@@ -241,6 +278,10 @@ function desktopSourceTarget(file, specifier) {
 
 function isDesktopSourceAlias(specifier) {
   return isAliasedImport(specifier, desktopSourceAliases);
+}
+
+function relativeFeaturePath(featureRoot, file) {
+  return relativeWorkspacePath(featureRoot, file).split("/");
 }
 
 function classifiedWorkspacePackages() {

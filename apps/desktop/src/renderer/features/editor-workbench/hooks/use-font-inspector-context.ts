@@ -14,7 +14,7 @@ import {
 import { useMemo } from "react";
 import type { MessageKey, MessageParameters } from "@/shared/i18n/messages";
 import type { FontInspectorContext } from "../components/properties/TypographySection";
-import type { ApplyEditorCommands } from "../../editor/use-editor-command-controller";
+import type { ApplyEditorCommands } from "../../editor";
 import type { FontBinaryRuntime } from "./use-font-binary-runtime";
 
 type Translate = (key: MessageKey, parameters?: MessageParameters) => string;

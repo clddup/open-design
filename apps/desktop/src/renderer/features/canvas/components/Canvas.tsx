@@ -76,14 +76,14 @@ import {
 } from "react";
 import type { MessageKey, MessageParameters } from "@/shared/i18n/messages";
 import { useI18n } from "../../../i18n";
-import { generationRevealFromEditorEvent } from "../../canvas/generation-presentation";
+import { generationRevealFromEditorEvent } from "../generation-presentation";
 import {
   agentRunPhaseDetailKey,
   agentRunPhaseTitleKey,
   type AgentRunExperience,
 } from "../../agent-conversation/agent-run-experience";
-import { commitCanvasOperation } from "../../editor/canvas-operation-commit";
-import type { ResizeFrameHandler } from "../../editor/canvas-responsive-resize";
+import { commitCanvasOperation } from "../canvas-operation-commit";
+import type { ResizeFrameHandler } from "../canvas-responsive-resize";
 import { isTool } from "../../../state/editor";
 import { DESIGN_ASSET_DRAG_MIME } from "../../design-tools/design-assets";
 import { composeTextRunLayoutProviders } from "../../../services/text/text-run-provider-fallback";

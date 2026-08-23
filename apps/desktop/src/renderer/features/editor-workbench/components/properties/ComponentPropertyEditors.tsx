@@ -16,7 +16,7 @@ import type {
   ComponentInspectorPropertyDefinition,
   ComponentInspectorPropertyValue,
   ComponentInspectorSource,
-} from "./ComponentSection";
+} from "../../../editor";
 import { Field, TextAreaField } from "./controls";
 import { SlotPropertyEditor } from "./SlotPropertyEditor";
 import { moveOrderedItem, PropertyOrderButtons } from "./PropertyOrderButtons";

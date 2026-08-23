@@ -12,7 +12,7 @@ import { Button } from "@opendesign/ui";
 import { useEffect, useState } from "react";
 import { useI18n } from "../../../../i18n";
 import type { FontBinaryImportState } from "../../hooks/use-font-binary-runtime";
-import type { UpdatePropertiesPatch } from "../../../editor/types";
+import type { UpdatePropertiesPatch } from "../../../editor";
 import styles from "../PropertiesPanel.module.scss";
 import {
   Field,

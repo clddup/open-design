@@ -1,7 +1,9 @@
 import type { EditorRuntime } from "@opendesign/editor-runtime";
 import type { MessageKey, MessageParameters } from "@/shared/i18n/messages";
-import { useEditorCommandController } from "../../editor/use-editor-command-controller";
-import { usePageCommandController } from "../../editor/use-page-command-controller";
+import {
+  useEditorCommandController,
+  usePageCommandController,
+} from "../../editor";
 import { useVariableActions } from "./use-variable-actions";
 import { useStyleActions } from "./use-style-actions";
 

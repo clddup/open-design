@@ -1,25 +1,7 @@
 import { Icon } from "@opendesign/ui";
 import { useI18n } from "../../../../i18n";
+import type { ComponentInspectorVariantSet } from "../../../editor";
 import styles from "../PropertiesPanel.module.scss";
-
-export type ComponentInspectorVariantSet = {
-  id: string;
-  isDefault: boolean;
-  isRoot: boolean;
-  name: string;
-  properties: Readonly<Record<string, string>>;
-  variantCount: number;
-  propertyOrder: readonly string[];
-  propertyDefinitions: Readonly<
-    Record<string, { defaultValue: string; variantOptions: readonly string[] }>
-  >;
-  members: readonly {
-    componentId: string;
-    name: string;
-    rootNodeId: string;
-    properties: Readonly<Record<string, string>>;
-  }[];
-};
 
 export function ComponentIdentitySummary({
   componentName,

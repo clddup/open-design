@@ -67,9 +67,9 @@
         "automated": [
           "packages/editor-runtime/src/index.test.ts",
           "packages/editor-runtime/src/page-operations.test.ts",
-          "apps/desktop/src/renderer/workspace-runtime.test.ts",
-          "apps/desktop/src/renderer/components/LeftSidebar.test.tsx",
-          "apps/desktop/src/renderer/design-tool-execution.test.ts",
+          "apps/desktop/src/renderer/state/workspace-runtime.test.ts",
+          "apps/desktop/src/renderer/features/editor-workbench/components/LeftSidebar.test.tsx",
+          "apps/desktop/src/renderer/features/design-tools/design-tool-execution.test.ts",
           "packages/editor-runtime/src/professional-fixtures.test.ts",
           "apps/desktop/src/main/project/project-host.test.ts"
         ],
@@ -111,7 +111,7 @@
           "packages/leafer-engine/src/adapter.test.ts",
           "packages/leafer-engine/src/vector-selection-transform.test.ts",
           "apps/desktop/src/renderer/App.test.tsx",
-          "apps/desktop/src/renderer/components/LeftSidebar.test.tsx"
+          "apps/desktop/src/renderer/features/editor-workbench/components/LeftSidebar.test.tsx"
         ],
         "manual": []
       },
@@ -152,9 +152,9 @@
           "packages/editor-runtime/src/layer-operations.test.ts",
           "packages/editor-runtime/src/professional-fixtures.test.ts",
           "apps/desktop/src/shared/design-agent-tools.test.ts",
-          "apps/desktop/src/renderer/design-tool-execution.test.ts",
+          "apps/desktop/src/renderer/features/design-tools/design-tool-execution.test.ts",
           "apps/desktop/src/renderer/App.test.tsx",
-          "apps/desktop/src/renderer/components/LeftSidebar.test.tsx"
+          "apps/desktop/src/renderer/features/editor-workbench/components/LeftSidebar.test.tsx"
         ],
         "manual": []
       },
@@ -197,9 +197,9 @@
           "packages/geometry-service/src/arrangement.test.ts",
           "packages/editor-runtime/src/arrange-operations.test.ts",
           "apps/desktop/src/shared/design-agent-tools.test.ts",
-          "apps/desktop/src/renderer/design-tool-execution.test.ts",
+          "apps/desktop/src/renderer/features/design-tools/design-tool-execution.test.ts",
           "apps/desktop/src/renderer/App.test.tsx",
-          "apps/desktop/src/renderer/components/PropertiesPanel.test.tsx"
+          "apps/desktop/src/renderer/features/editor-workbench/components/PropertiesPanel.test.tsx"
         ],
         "manual": []
       },
@@ -270,7 +270,7 @@
           "packages/import-export-service/src/svg-editable-vector.test.ts",
           "packages/import-export-service/src/svg.test.ts",
           "apps/desktop/src/shared/design-agent-tools.test.ts",
-          "apps/desktop/src/renderer/design-tool-execution.test.ts",
+          "apps/desktop/src/renderer/features/design-tools/design-tool-execution.test.ts",
           "apps/desktop/src/renderer/App.test.tsx",
           "packages/editor-runtime/src/diagnostics.test.ts",
           "packages/editor-runtime/src/professional-fixtures.test.ts"
@@ -330,7 +330,7 @@
           "packages/import-export-service/src/svg.test.ts",
           "apps/desktop/src/shared/design-agent-tools.test.ts",
           "apps/desktop/src/renderer/App.test.tsx",
-          "apps/desktop/src/renderer/components/PropertiesPanel.test.tsx"
+          "apps/desktop/src/renderer/features/editor-workbench/components/PropertiesPanel.test.tsx"
         ],
         "manual": []
       },
@@ -395,7 +395,7 @@
           "packages/leafer-engine/src/adapter.test.ts",
           "apps/desktop/src/shared/design-agent-tools.test.ts",
           "apps/desktop/src/renderer/App.test.tsx",
-          "apps/desktop/src/renderer/components/PropertiesPanel.test.tsx"
+          "apps/desktop/src/renderer/features/editor-workbench/components/PropertiesPanel.test.tsx"
         ],
         "manual": []
       },
@@ -442,7 +442,7 @@
           "packages/leafer-engine/src/adapter.test.ts",
           "packages/leafer-engine/src/vector-selection-transform.test.ts",
           "apps/desktop/src/renderer/App.test.tsx",
-          "apps/desktop/src/renderer/design-tool-execution.test.ts",
+          "apps/desktop/src/renderer/features/design-tools/design-tool-execution.test.ts",
           "apps/desktop/src/shared/design-agent-tools.test.ts",
           "packages/import-export-service/src/svg-editable-vector.test.ts"
         ],
@@ -494,9 +494,9 @@
           "packages/leafer-engine/src/mapping.test.ts",
           "packages/leafer-engine/src/professional-fixtures.test.ts",
           "packages/leafer-engine/src/adapter.test.ts",
-          "apps/desktop/src/renderer/components/LeftSidebar.test.tsx",
+          "apps/desktop/src/renderer/features/editor-workbench/components/LeftSidebar.test.tsx",
           "apps/desktop/src/shared/design-agent-tools.test.ts",
-          "apps/desktop/src/renderer/design-tool-execution.test.ts",
+          "apps/desktop/src/renderer/features/design-tools/design-tool-execution.test.ts",
           "apps/desktop/src/renderer/App.test.tsx"
         ],
         "manual": []
@@ -547,8 +547,8 @@
           "packages/leafer-engine/src/professional-fixtures.test.ts",
           "packages/editor-runtime/src/layer-operations.test.ts",
           "apps/desktop/src/renderer/App.test.tsx",
-          "apps/desktop/src/renderer/design-tool-execution.test.ts",
-          "apps/desktop/src/renderer/components/LeftSidebar.test.tsx",
+          "apps/desktop/src/renderer/features/design-tools/design-tool-execution.test.ts",
+          "apps/desktop/src/renderer/features/editor-workbench/components/LeftSidebar.test.tsx",
           "packages/editor-runtime/src/diagnostics.test.ts",
           "packages/editor-runtime/src/professional-fixtures.test.ts",
           "packages/import-export-service/src/svg.test.ts"
@@ -594,9 +594,9 @@
         "automated": [
           "apps/desktop/src/main/model/image-generation-host.test.ts",
           "apps/desktop/src/main/agent/agent-attachment-host.test.ts",
-          "apps/desktop/src/renderer/design-tool-execution.test.ts",
-          "apps/desktop/src/renderer/design-assets.test.ts",
-          "apps/desktop/src/renderer/components/LeftSidebar.test.tsx",
+          "apps/desktop/src/renderer/features/design-tools/design-tool-execution.test.ts",
+          "apps/desktop/src/renderer/features/design-tools/design-assets.test.ts",
+          "apps/desktop/src/renderer/features/editor-workbench/components/LeftSidebar.test.tsx",
           "apps/desktop/src/renderer/App.test.tsx",
           "packages/editor-runtime/src/image-operations.test.ts",
           "packages/editor-runtime/src/style-operations.test.ts",
@@ -647,7 +647,7 @@
           "packages/leafer-engine/src/mapping.test.ts",
           "packages/leafer-engine/src/adapter.test.ts",
           "apps/desktop/src/shared/design-agent-tools.test.ts",
-          "apps/desktop/src/renderer/design-tool-execution.test.ts",
+          "apps/desktop/src/renderer/features/design-tools/design-tool-execution.test.ts",
           "apps/desktop/src/renderer/App.test.tsx"
         ],
         "manual": []
@@ -690,7 +690,7 @@
           "apps/desktop/src/shared/desktop-api.test.ts",
           "apps/desktop/src/shared/design-agent-tools.test.ts",
           "apps/desktop/src/shared/design-tool-bridge.test.ts",
-          "apps/desktop/src/renderer/design-tool-execution.test.ts",
+          "apps/desktop/src/renderer/features/design-tools/design-tool-execution.test.ts",
           "apps/desktop/src/renderer/App.test.tsx",
           "packages/editor-runtime/src/image-operations.test.ts",
           "packages/image-service/src/index.test.ts"
@@ -742,15 +742,15 @@
           "packages/leafer-engine/src/professional-fixtures.test.ts",
           "packages/leafer-engine/src/mapping.test.ts",
           "apps/desktop/src/renderer/App.test.tsx",
-          "apps/desktop/src/renderer/components/PropertiesPanel.test.tsx",
+          "apps/desktop/src/renderer/features/editor-workbench/components/PropertiesPanel.test.tsx",
           "apps/desktop/src/shared/design-agent-tools.test.ts",
           "packages/editor-runtime/src/diagnostics.test.ts",
           "packages/editor-runtime/src/text-layout.test.ts",
           "packages/editor-runtime/src/professional-fixtures.test.ts",
           "packages/import-export-service/src/svg.test.ts",
           "packages/text-service/src/index.test.ts",
-          "apps/desktop/src/renderer/workspace-runtime.test.ts",
-          "apps/desktop/src/renderer/design-tool-execution.test.ts"
+          "apps/desktop/src/renderer/state/workspace-runtime.test.ts",
+          "apps/desktop/src/renderer/features/design-tools/design-tool-execution.test.ts"
         ],
         "manual": []
       },
@@ -803,8 +803,8 @@
           "packages/import-export-service/src/svg.test.ts",
           "packages/figma-interop/src/index.test.ts",
           "apps/desktop/src/shared/design-agent-tools.test.ts",
-          "apps/desktop/src/renderer/components/PropertiesPanel.test.tsx",
-          "apps/desktop/src/renderer/text-run-provider-fallback.test.ts",
+          "apps/desktop/src/renderer/features/editor-workbench/components/PropertiesPanel.test.tsx",
+          "apps/desktop/src/renderer/services/text/text-run-provider-fallback.test.ts",
           "apps/desktop/src/main/font/font-binary-host.test.ts",
           "apps/desktop/src/main/font/font-binary-ipc.test.ts"
         ],
@@ -851,9 +851,9 @@
           "packages/editor-runtime/src/frame-layout-operations.test.ts",
           "packages/editor-runtime/src/layer-operations.test.ts",
           "apps/desktop/src/shared/design-agent-tools.test.ts",
-          "apps/desktop/src/renderer/design-tool-execution.test.ts",
+          "apps/desktop/src/renderer/features/design-tools/design-tool-execution.test.ts",
           "apps/desktop/src/renderer/features/editor/editor-command-controllers.test.tsx",
-          "apps/desktop/src/renderer/components/PropertiesPanel.test.tsx",
+          "apps/desktop/src/renderer/features/editor-workbench/components/PropertiesPanel.test.tsx",
           "apps/desktop/src/renderer/App.test.tsx"
         ],
         "manual": []
@@ -899,12 +899,12 @@
           "packages/editor-runtime/src/text-layout.test.ts",
           "packages/figma-interop/src/index.test.ts",
           "apps/desktop/src/shared/design-agent-tools.test.ts",
-          "apps/desktop/src/renderer/design-tool-execution.test.ts",
+          "apps/desktop/src/renderer/features/design-tools/design-tool-execution.test.ts",
           "apps/desktop/src/renderer/features/editor/editor-command-controllers.test.tsx",
           "apps/desktop/src/renderer/features/editor/auto-layout-shortcut.test.ts",
           "apps/desktop/src/renderer/features/editor/editor-command-controllers.test.tsx",
-          "apps/desktop/src/renderer/features/editor/canvas-operation-commit.test.ts",
-          "apps/desktop/src/renderer/components/PropertiesPanel.test.tsx",
+          "apps/desktop/src/renderer/features/canvas/canvas-operation-commit.test.ts",
+          "apps/desktop/src/renderer/features/editor-workbench/components/PropertiesPanel.test.tsx",
           "apps/desktop/src/renderer/App.test.tsx",
           "packages/leafer-engine/src/adapter.test.ts"
         ],
@@ -960,10 +960,10 @@
           "packages/leafer-engine/src/text-quality-inspection.test.ts",
           "packages/leafer-engine/src/adapter.test.ts",
           "apps/desktop/src/shared/design-agent-tools.test.ts",
-          "apps/desktop/src/renderer/design-tool-execution.test.ts",
-          "apps/desktop/src/renderer/project-autosave.test.ts",
-          "apps/desktop/src/renderer/components/PropertiesPanel.test.tsx",
-          "apps/desktop/src/renderer/components/LeftSidebar.test.tsx"
+          "apps/desktop/src/renderer/features/design-tools/design-tool-execution.test.ts",
+          "apps/desktop/src/renderer/features/project/project-autosave.test.ts",
+          "apps/desktop/src/renderer/features/editor-workbench/components/PropertiesPanel.test.tsx",
+          "apps/desktop/src/renderer/features/editor-workbench/components/LeftSidebar.test.tsx"
         ],
         "manual": []
       },
@@ -1021,12 +1021,12 @@
           "packages/leafer-engine/src/component-projection.test.ts",
           "packages/leafer-engine/src/adapter.test.ts",
           "apps/desktop/src/shared/design-variable-tool.test.ts",
-          "apps/desktop/src/renderer/design-tool-execution.test.ts",
-          "apps/desktop/src/renderer/design-variable-inspection.test.ts",
-          "apps/desktop/src/renderer/components/VariablesPanel.test.tsx",
-          "apps/desktop/src/renderer/components/properties/VariableSection.test.tsx",
-          "apps/desktop/src/renderer/components/ProjectLibrariesSection.test.tsx",
-          "apps/desktop/src/renderer/use-project-library-actions.test.tsx",
+          "apps/desktop/src/renderer/features/design-tools/design-tool-execution.test.ts",
+          "apps/desktop/src/renderer/features/design-tools/design-variable-inspection.test.ts",
+          "apps/desktop/src/renderer/features/editor-workbench/components/VariablesPanel.test.tsx",
+          "apps/desktop/src/renderer/features/editor-workbench/components/properties/VariableSection.test.tsx",
+          "apps/desktop/src/renderer/features/editor-workbench/components/ProjectLibrariesSection.test.tsx",
+          "apps/desktop/src/renderer/features/editor-workbench/hooks/use-project-library-actions.test.tsx",
           "apps/desktop/src/main/project/project-host.test.ts"
         ],
         "manual": []
@@ -1082,12 +1082,12 @@
           "packages/leafer-engine/src/style-projection.test.ts",
           "packages/leafer-engine/src/component-projection.test.ts",
           "apps/desktop/src/shared/design-style-tool.test.ts",
-          "apps/desktop/src/renderer/design-style-tool-execution.test.ts",
-          "apps/desktop/src/renderer/components/LocalStylesPanel.test.tsx",
-          "apps/desktop/src/renderer/components/ProjectLibrariesSection.test.tsx",
-          "apps/desktop/src/renderer/use-project-library-actions.test.tsx",
+          "apps/desktop/src/renderer/features/design-tools/design-style-tool-execution.test.ts",
+          "apps/desktop/src/renderer/features/editor-workbench/components/LocalStylesPanel.test.tsx",
+          "apps/desktop/src/renderer/features/editor-workbench/components/ProjectLibrariesSection.test.tsx",
+          "apps/desktop/src/renderer/features/editor-workbench/hooks/use-project-library-actions.test.tsx",
           "apps/desktop/src/main/project/project-host.test.ts",
-          "apps/desktop/src/renderer/components/PropertiesPanel.test.tsx"
+          "apps/desktop/src/renderer/features/editor-workbench/components/PropertiesPanel.test.tsx"
         ],
         "manual": []
       },
@@ -1143,12 +1143,12 @@
           "apps/desktop/src/main/svg/svg-file-ipc.test.ts",
           "apps/desktop/src/main/application-menu.test.ts",
           "apps/desktop/src/main/packaging-config.test.ts",
-          "apps/desktop/src/renderer/svg-interchange.test.ts",
-          "apps/desktop/src/renderer/components/Titlebar.test.tsx",
-          "apps/desktop/src/renderer/components/PropertiesPanel.test.tsx",
+          "apps/desktop/src/renderer/features/import-export/svg-interchange.test.ts",
+          "apps/desktop/src/renderer/features/editor-workbench/components/Titlebar.test.tsx",
+          "apps/desktop/src/renderer/features/editor-workbench/components/PropertiesPanel.test.tsx",
           "apps/desktop/src/renderer/App.test.tsx",
           "apps/desktop/src/shared/design-agent-tools.test.ts",
-          "apps/desktop/src/renderer/design-tool-execution.test.ts",
+          "apps/desktop/src/renderer/features/design-tools/design-tool-execution.test.ts",
           "apps/desktop/src/main/agent/agent-svg-export-host.test.ts",
           "apps/desktop/src/main/agent/agent-attachment-host.test.ts",
           "apps/desktop/src/main/agent/agent-reference-host.test.ts",
@@ -1206,15 +1206,15 @@
           "packages/import-export-service/src/stored-export.test.ts",
           "packages/leafer-engine/src/slice-overlay.test.ts",
           "packages/leafer-engine/src/adapter.test.ts",
-          "apps/desktop/src/renderer/raster-export.test.ts",
+          "apps/desktop/src/renderer/features/import-export/raster-export.test.ts",
           "apps/desktop/src/main/raster/raster-file-service.test.ts",
           "apps/desktop/src/main/raster/raster-file-ipc.test.ts",
           "apps/desktop/src/shared/desktop-api.test.ts",
           "apps/desktop/src/shared/design-agent-tools.test.ts",
           "apps/desktop/src/shared/design-tool-bridge.test.ts",
-          "apps/desktop/src/renderer/design-tool-execution.test.ts",
+          "apps/desktop/src/renderer/features/design-tools/design-tool-execution.test.ts",
           "apps/desktop/src/main/agent/agent-raster-export-host.test.ts",
-          "apps/desktop/src/renderer/components/PropertiesPanel.test.tsx",
+          "apps/desktop/src/renderer/features/editor-workbench/components/PropertiesPanel.test.tsx",
           "apps/desktop/src/renderer/App.test.tsx"
         ],
         "manual": []

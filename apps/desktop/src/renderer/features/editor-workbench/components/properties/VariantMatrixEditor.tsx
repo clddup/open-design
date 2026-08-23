@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useI18n } from "../../../../i18n";
 import panelStyles from "../PropertiesPanel.module.scss";
 import styles from "./VariantMatrixEditor.module.scss";
-import type { ComponentInspectorVariantSet } from "./ComponentIdentitySummary";
+import type { ComponentInspectorVariantSet } from "../../../editor";
 import { Field } from "./controls";
 import { moveOrderedItem, PropertyOrderButtons } from "./PropertyOrderButtons";
 

@@ -127,6 +127,29 @@ export function pathIsWithin(root, target) {
   );
 }
 
+export function featureOwnershipViolation({
+  compositionFeature,
+  governedFeatures,
+  sourceFeature,
+  targetFeature,
+  targetPath,
+}) {
+  const governed = new Set(governedFeatures);
+  if (governed.has(sourceFeature) && targetFeature === compositionFeature) {
+    return `${sourceFeature} cannot depend on its ${compositionFeature} composition layer`;
+  }
+  if (
+    sourceFeature !== targetFeature &&
+    governed.has(targetFeature) &&
+    (sourceFeature === compositionFeature || governed.has(sourceFeature)) &&
+    targetPath !== "index.ts" &&
+    targetPath !== "index.tsx"
+  ) {
+    return `${sourceFeature} must consume ${targetFeature} through its public entry`;
+  }
+  return null;
+}
+
 export function assertAcyclicGraph(graph, label = "source dependency") {
   const visited = new Set();
   const active = new Set();

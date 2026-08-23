@@ -1,7 +1,6 @@
 import type {
   BlendMode,
   ComponentPropertyAssignment,
-  ComponentPropertyDefinition,
   ComponentPropertyType,
   ComponentOverridePatch,
   DesignNode,
@@ -9,9 +8,7 @@ import type {
   InstanceSwapPreferredValue,
   MaskMode,
   SlotSettings,
-  VariantPropertyDefinition,
 } from "@opendesign/design-contracts";
-import type { ResolvedComponentSlot } from "@opendesign/component-service";
 import { Button, Icon } from "@opendesign/ui";
 import { useEffect, useState } from "react";
 import type { MessageKey } from "@/shared/i18n/messages";
@@ -35,46 +32,17 @@ import {
   maskModes,
   maskModeLabelKeys,
 } from "./PaintEffectEditors";
-import {
-  ComponentIdentitySummary,
-  type ComponentInspectorVariantSet,
-} from "./ComponentIdentitySummary";
+import { ComponentIdentitySummary } from "./ComponentIdentitySummary";
+import type {
+  ComponentInspectorContext,
+  ComponentInspectorOption,
+  ComponentInspectorSource,
+} from "../../../editor";
 import { VariantMatrixEditor } from "./VariantMatrixEditor";
 import {
   ComponentPropertyAuthoring,
   ComponentPropertyValues,
 } from "./ComponentPropertyEditors";
-
-export interface ComponentInspectorSource {
-  node: DesignNode;
-  overridden: boolean;
-  sourcePath: readonly string[];
-}
-
-export interface ComponentInspectorOption {
-  id: string;
-  name: string;
-}
-
-export interface ComponentInspectorPreferredValueOption {
-  key: string;
-  name: string;
-  type: InstanceSwapPreferredValue["type"];
-}
-
-export interface ComponentInspectorPropertyDefinition {
-  definition: ComponentPropertyDefinition;
-  propertyName: string;
-  sourceNodeIds: readonly string[];
-}
-
-export interface ComponentInspectorPropertyValue {
-  assigned: boolean;
-  definition: ComponentPropertyDefinition | VariantPropertyDefinition;
-  propertyName: string;
-  value: ComponentPropertyAssignment;
-  slot?: ResolvedComponentSlot;
-}
 
 const nodeKindKeys: Record<DesignNode["kind"], MessageKey> = {
   frame: "node.frame",
@@ -405,19 +373,6 @@ function ComponentOverrideEditor({
     </div>
   );
 }
-
-export type ComponentInspectorContext = {
-  activeSourcePath?: readonly string[];
-  availableComponents: readonly ComponentInspectorOption[];
-  availableSlotPreferredValues: readonly ComponentInspectorPreferredValueOption[];
-  componentName: string;
-  componentProperties: readonly ComponentInspectorPropertyValue[];
-  componentPropertyDefinitions: readonly ComponentInspectorPropertyDefinition[];
-  isMain: boolean;
-  overrideCount: number;
-  sourceNodes: readonly ComponentInspectorSource[];
-  variantSet?: ComponentInspectorVariantSet;
-};
 
 export function ComponentSection({
   componentContext,

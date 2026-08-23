@@ -4,11 +4,78 @@ import {
   resolveComponentInstance,
 } from "@opendesign/component-service";
 import type {
+  ComponentPropertyAssignment,
+  ComponentPropertyDefinition,
   ComponentSelectionTarget,
   DesignDocument,
   DesignNode,
+  InstanceSwapPreferredValue,
+  VariantPropertyDefinition,
 } from "@opendesign/design-contracts";
-import type { ComponentInspectorContext } from "./components/properties/ComponentSection";
+import type { ResolvedComponentSlot } from "@opendesign/component-service";
+
+export interface ComponentInspectorSource {
+  node: DesignNode;
+  overridden: boolean;
+  sourcePath: readonly string[];
+}
+
+export interface ComponentInspectorOption {
+  id: string;
+  name: string;
+}
+
+export interface ComponentInspectorPreferredValueOption {
+  key: string;
+  name: string;
+  type: InstanceSwapPreferredValue["type"];
+}
+
+export interface ComponentInspectorPropertyDefinition {
+  definition: ComponentPropertyDefinition;
+  propertyName: string;
+  sourceNodeIds: readonly string[];
+}
+
+export interface ComponentInspectorPropertyValue {
+  assigned: boolean;
+  definition: ComponentPropertyDefinition | VariantPropertyDefinition;
+  propertyName: string;
+  value: ComponentPropertyAssignment;
+  slot?: ResolvedComponentSlot;
+}
+
+export type ComponentInspectorVariantSet = {
+  id: string;
+  isDefault: boolean;
+  isRoot: boolean;
+  name: string;
+  properties: Readonly<Record<string, string>>;
+  variantCount: number;
+  propertyOrder: readonly string[];
+  propertyDefinitions: Readonly<
+    Record<string, { defaultValue: string; variantOptions: readonly string[] }>
+  >;
+  members: readonly {
+    componentId: string;
+    name: string;
+    rootNodeId: string;
+    properties: Readonly<Record<string, string>>;
+  }[];
+};
+
+export type ComponentInspectorContext = {
+  activeSourcePath?: readonly string[];
+  availableComponents: readonly ComponentInspectorOption[];
+  availableSlotPreferredValues: readonly ComponentInspectorPreferredValueOption[];
+  componentName: string;
+  componentProperties: readonly ComponentInspectorPropertyValue[];
+  componentPropertyDefinitions: readonly ComponentInspectorPropertyDefinition[];
+  isMain: boolean;
+  overrideCount: number;
+  sourceNodes: readonly ComponentInspectorSource[];
+  variantSet?: ComponentInspectorVariantSet;
+};
 
 export function createComponentInspectorContext(
   document: DesignDocument,
