@@ -101,7 +101,6 @@ import {
 } from "./media-input-ipc";
 import { StandaloneDesignFileIpcHost } from "./standalone-design-file-ipc";
 import { IpcRegistrationScope } from "./ipc-registration-scope";
-import { configureFixtureSmoke } from "./professional-fixture-smoke";
 import type { RendererDesignCaptureTarget } from "../shared/design-tool-bridge";
 import { registerRendererDesignToolIpc } from "./agent/renderer-design-tool-ipc";
 import { channels } from "../shared/desktop-api";
@@ -166,7 +165,6 @@ const designGenerationPerformance = new DesignGenerationPerformanceTracker();
 app.setName("OpenDesign");
 if (process.platform === "win32") app.setAppUserModelId("design.open.app");
 
-const fixtureSmoke = configureFixtureSmoke(app, process.env, homedir());
 const getApplicationIconPath = () =>
   resolveApplicationIconPath({
     appPath: app.getAppPath(),
@@ -184,7 +182,7 @@ const desktopWindowHost = new DesktopWindowHost({
   openExternal: (url) => shell.openExternal(url),
   packagedRendererPath: join(__dirname, "../renderer/index.html"),
   preloadPath: join(__dirname, "../preload/index.cjs"),
-  showWindow: (window) => fixtureSmoke.show(window),
+  showWindow: (window) => window.show(),
 });
 
 const agentHost = new AgentHost();
@@ -664,9 +662,6 @@ function registerIpc(fontBinaryService: FontBinaryMainService): () => void {
       platform: process.platform,
       version: app.getVersion(),
     }));
-    fixtureSmoke.register(ipc, assertMainRenderer, () =>
-      desktopWindowHost.current(),
-    );
     agentIpcRouter.register({
       ipc,
       assertRenderer: (event, message) =>
@@ -697,8 +692,7 @@ async function startDesktopApplication(
 ): Promise<void> {
   if (
     process.platform === "darwin" &&
-    process.env.OPENDESIGN_AGENT_SMOKE !== "1" &&
-    !fixtureSmoke.active
+    process.env.OPENDESIGN_AGENT_SMOKE !== "1"
   ) {
     app.dock?.setIcon(getApplicationIconPath());
   }
@@ -777,11 +771,10 @@ async function startDesktopApplication(
     return;
   }
 
-  fixtureSmoke.startTimeout();
   startup.defer("Main service references", () => clearMainServices());
 
   const workspaceDatabase = await prepareGlobalWorkspaceDatabase(
-    fixtureSmoke.home,
+    homedir(),
     app.getPath("userData"),
   );
   diagnosticHost.initialize(
@@ -801,15 +794,15 @@ async function startDesktopApplication(
     if (workspaceStore === openedWorkspaceStore) workspaceStore = null;
   });
   agentAttachmentHost = new AgentAttachmentHost(
-    fixtureSmoke.path(".opendesign", "attachments"),
+    join(homedir(), ".opendesign", "attachments"),
   );
   const fontBinaryService = new FontBinaryMainService(
-    fixtureSmoke.path(".opendesign", "fonts"),
+    join(homedir(), ".opendesign", "fonts"),
   );
   agentReferenceHost = new AgentReferenceHost(agentAttachmentHost);
   const agentSessionStoreBinding = new AgentSessionStoreBinding(
     agentHost,
-    fixtureSmoke.path(".opendesign", "sessions", "events.jsonl"),
+    join(homedir(), ".opendesign", "sessions", "events.jsonl"),
   );
   const agentSessionStore = agentSessionStoreBinding.store;
   const persistedLocale = workspaceStore.getPreference("locale");
@@ -1861,10 +1854,8 @@ async function startDesktopApplication(
   }
   const disposeIpc = registerIpc(fontBinaryService);
   startup.defer("IPC registrations", disposeIpc);
-  if (!fixtureSmoke.active) {
-    startup.defer("Agent process", () => agentHost.stop());
-    void agentHost.start().catch(() => undefined);
-  }
+  startup.defer("Agent process", () => agentHost.stop());
+  void agentHost.start().catch(() => undefined);
   await desktopWindowHost.createAndLoad();
   startup.defer("desktop window", () => desktopWindowHost.dispose());
   const activate = () => desktopWindowHost.activate();

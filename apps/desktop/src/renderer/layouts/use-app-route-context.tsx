@@ -12,7 +12,6 @@ import { useProjectNavigationController } from "../features/project/use-project-
 import { useProjectWorkspaceState } from "../features/project/use-project-workspace-state";
 import { useDiagnosticNotificationsController } from "../features/diagnostics/use-diagnostic-notifications-controller";
 import { useRendererDesignToolHost } from "../features/design-tools/use-renderer-design-tool-host";
-import { useProfessionalFixtureSmoke } from "../testing/professional-fixture-smoke/use-professional-fixture-smoke";
 import { useFontBinaryRuntime } from "../features/editor-workbench/hooks/use-font-binary-runtime";
 import { AppNavigationCoordinator } from "../router/app-navigation-coordinator";
 import { appDestination, appRoute } from "../router/app-route";
@@ -98,16 +97,6 @@ export function useAppRouteContext() {
   } = conversationLifecycle;
   const { dismiss: dismissDiagnostic, events: diagnosticEvents } =
     useDiagnosticNotificationsController();
-  useProfessionalFixtureSmoke({
-    activatePage,
-    desktop: window.desktop,
-    replaceDocument,
-    setView: () =>
-      navigator.navigate({
-        kind: "editor",
-        fileKey: workspace.getSnapshot().activeFileKey,
-      }),
-  });
   const fontBinaryRuntime = useFontBinaryRuntime();
   useRendererDesignToolHost(
     workspace,

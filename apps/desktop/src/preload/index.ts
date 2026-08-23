@@ -125,11 +125,6 @@ import {
   type RendererDesignToolRequest,
   type RendererDesignToolResponse,
 } from "../shared/design-tool-bridge";
-import {
-  isProfessionalFixtureSmokeBootstrap,
-  isProfessionalFixtureSmokeResult,
-  type ProfessionalFixtureSmokeResult,
-} from "../shared/professional-fixture-smoke";
 
 type Guard<T> = (value: unknown) => value is T;
 
@@ -149,27 +144,6 @@ function validateArray<T>(
 }
 
 const desktopApi: DesktopApi = Object.freeze({
-  getProfessionalFixtureSmoke: async () => {
-    const result: unknown = await ipcRenderer.invoke(
-      channels.professionalFixtureSmokeGet,
-    );
-    if (result === null) return null;
-    return validate(
-      result,
-      isProfessionalFixtureSmokeBootstrap,
-      "Invalid professional fixture smoke bootstrap",
-    );
-  },
-  reportProfessionalFixtureSmoke: async (
-    result: ProfessionalFixtureSmokeResult,
-  ) => {
-    validate(
-      result,
-      isProfessionalFixtureSmokeResult,
-      "Invalid professional fixture smoke result",
-    );
-    await ipcRenderer.invoke(channels.professionalFixtureSmokeReport, result);
-  },
   getPlatformInfo: () => ipcRenderer.invoke(channels.platformInfo),
   getPendingDiagnostics: async () => {
     const result: unknown = await ipcRenderer.invoke(
