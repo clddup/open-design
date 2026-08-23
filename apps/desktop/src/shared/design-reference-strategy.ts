@@ -34,7 +34,7 @@ const IMAGE_ATTACHMENT_ID_PATTERN = /^image_[a-f0-9]{64}$/;
 export const DESIGN_REFERENCE_STRATEGY_SCHEMA = {
   type: "object",
   description:
-    "Classify each Run image once; at most two style/composition/brand references may be active.",
+    "Declare only current-Run images intentionally used as references or content; undeclared images are ignored and at most two style/composition/brand references may be active.",
   properties: {
     synthesis: { type: "string", minLength: 12, maxLength: 1_000 },
     references: {

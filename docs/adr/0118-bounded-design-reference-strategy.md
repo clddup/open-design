@@ -1,6 +1,6 @@
 # ADR-0118：有界 Design Reference Strategy
 
-- 状态：Accepted
+- 状态：Accepted；“全部 Run 图片必须分类”的门禁已由 ADR-0146 取代
 - 日期：2026-08-21
 - DesignDocument：不变（`1.36.0`）
 - Design Plan：v1 增加可选 `referenceStrategy`

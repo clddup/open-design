@@ -831,22 +831,126 @@ describe("GlobalTaskCoordinator", () => {
     });
   });
 
-  it("requires every Run image to receive one bounded reference decision", async () => {
+  it("lets a later Run edit an existing design while feedback screenshots default to ignored", async () => {
     const { store, host, file, opened, pageId } = await setup();
+    const document = withExistingArtboard(opened.document, pageId);
+    document.revision = 2;
     const coordinator = new GlobalTaskCoordinator(host, store);
-    const runId = "run_reference_strategy";
-    const attachmentId = `image_${"b".repeat(64)}`;
+    const previousAttachmentId = `image_${"a".repeat(64)}`;
+    await coordinator.registerRun({
+      type: "run.start",
+      runId: "run_previous_design",
+      sessionId: "conversation_mobile",
+      prompt: "Create the initial design",
+      attachments: [
+        {
+          attachmentId: previousAttachmentId,
+          name: "previous-reference.png",
+          mimeType: "image/png",
+          byteSize: 4_000,
+        },
+      ],
+      documentId: file.documentId,
+      revision: 1,
+      modelSelection,
+      scope: { kind: "page", pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page", pageId },
+    });
+    const runId = "run_continue_design";
+    const feedbackScreenshotId = `image_${"b".repeat(64)}`;
     await coordinator.registerRun({
       type: "run.start",
       runId,
       sessionId: "conversation_mobile",
-      prompt: "Use the attached image as visual direction for this interface",
+      prompt: "Fix the spacing issue shown in the attached screenshot",
+      attachments: [
+        {
+          attachmentId: feedbackScreenshotId,
+          name: "feedback.png",
+          mimeType: "image/png",
+          byteSize: 6_000,
+        },
+      ],
+      documentId: file.documentId,
+      revision: document.revision,
+      modelSelection,
+      scope: { kind: "page", pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page", pageId },
+    });
+    const context = {
+      runId,
+      sessionId: "conversation_mobile",
+      documentId: file.documentId,
+      revision: document.revision,
+      scope: { kind: "page" as const, pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page" as const, pageId },
+    };
+    coordinator.recordDocumentInspection(
+      context,
+      inspectionResult(document, pageId),
+    );
+    const plan = existingArtboardPlan(pageId);
+    expect(() =>
+      coordinator.registerDesignPlan(context, {
+        ...plan,
+        referenceStrategy: {
+          synthesis: "Do not reuse a temporary reference from an earlier Run.",
+          references: [
+            {
+              attachmentId: previousAttachmentId,
+              decision: "style-reference",
+              application:
+                "Reuse visual decisions from the previous temporary image.",
+              preserve: ["restrained contrast"],
+              avoid: ["literal copying"],
+            },
+          ],
+        },
+      }),
+    ).toThrow("design_workflow.reference_strategy_invalid");
+    expect(() => coordinator.registerDesignPlan(context, plan)).not.toThrow();
+    const update = insertExistingChild(
+      pageId,
+      "existing_nested_frame",
+      "workspace_navigation",
+    );
+    const authorization = coordinator.assertDesignPlanForApply(context, update);
+    coordinator.recordDesignApplyCompleted(
+      runId,
+      update,
+      authorization,
+      document.revision + 1,
+    );
+    expect(coordinator.getDeliveryLedger(runId)).toMatchObject({
+      targets: [{ targetId: "workspace", status: "drafted" }],
+    });
+    store.close();
+  });
+
+  it("uses only the explicitly selected subset of current Run images as references", async () => {
+    const { store, host, file, opened, pageId } = await setup();
+    const coordinator = new GlobalTaskCoordinator(host, store);
+    const runId = "run_reference_strategy";
+    const attachmentId = `image_${"b".repeat(64)}`;
+    const feedbackScreenshotId = `image_${"c".repeat(64)}`;
+    await coordinator.registerRun({
+      type: "run.start",
+      runId,
+      sessionId: "conversation_mobile",
+      prompt:
+        "Use the first image as visual direction; the second only reports a problem",
       attachments: [
         {
           attachmentId,
           name: "reference.png",
           mimeType: "image/png",
           byteSize: 4_000,
+        },
+        {
+          attachmentId: feedbackScreenshotId,
+          name: "feedback.png",
+          mimeType: "image/png",
+          byteSize: 5_000,
         },
       ],
       documentId: file.documentId,
@@ -868,28 +972,6 @@ describe("GlobalTaskCoordinator", () => {
       inspectionResult(opened.document, pageId),
     );
     const basePlan = qualityProfilePlan(pageId);
-    expect(() => coordinator.registerDesignPlan(context, basePlan)).toThrow(
-      "design_workflow.reference_strategy_required",
-    );
-    expect(() =>
-      coordinator.registerDesignPlan(context, {
-        ...basePlan,
-        referenceStrategy: {
-          synthesis:
-            "Use the authorized reference only for transferable visual decisions.",
-          references: [
-            {
-              attachmentId: `image_${"c".repeat(64)}`,
-              decision: "style-reference",
-              application:
-                "Transfer restrained contrast without copying the original subject.",
-              preserve: ["restrained contrast"],
-              avoid: ["literal copying"],
-            },
-          ],
-        },
-      }),
-    ).toThrow("design_workflow.reference_strategy_invalid");
 
     const plan: DesignPlanToolInput = {
       ...basePlan,

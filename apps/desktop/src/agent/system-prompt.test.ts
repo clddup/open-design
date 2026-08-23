@@ -212,7 +212,10 @@ describe("OpenDesign Agent system prompt", () => {
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain("signature motif");
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
-      "referenceStrategy is mandatory",
+      "Undeclared attachments default to ignored",
+    );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "document assets addressed by stable assetId",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain("reference-adherence");
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(

@@ -480,7 +480,7 @@ export class GlobalTaskCoordinator {
         );
       }
     }
-    assertReferenceStrategyMatchesRun(
+    assertDeclaredReferencesAuthorizedForRun(
       designPlanReferenceStrategy(plan),
       binding.imageAttachments,
     );
@@ -2464,30 +2464,28 @@ function assertDeliveryAcceptsMaterialWrites(state: DesignWorkflowState): void {
   }
 }
 
-function assertReferenceStrategyMatchesRun(
+function assertDeclaredReferencesAuthorizedForRun(
   strategy: DesignReferenceStrategy | undefined,
   attachments: readonly AgentImageAttachment[],
 ): void {
-  if (attachments.length > 0 && strategy === undefined) {
-    throw new Error(
-      "design_workflow.reference_strategy_required: Classify every attached image as a style, composition, brand, content, or ignored reference before writing the design",
-    );
-  }
+  if (strategy === undefined) return;
   const authorized = new Set(
     attachments.map((attachment) => attachment.attachmentId),
   );
-  const declared = new Set(
-    strategy?.references.map((reference) => reference.attachmentId) ?? [],
-  );
-  const unknown = [...declared].find(
-    (attachmentId) => !authorized.has(attachmentId),
-  );
-  const missing = [...authorized].find(
-    (attachmentId) => !declared.has(attachmentId),
-  );
-  if (unknown || missing || declared.size !== authorized.size) {
+  const declared = new Set<string>();
+  const invalid = strategy.references.find((reference) => {
+    if (
+      declared.has(reference.attachmentId) ||
+      !authorized.has(reference.attachmentId)
+    ) {
+      return true;
+    }
+    declared.add(reference.attachmentId);
+    return false;
+  });
+  if (invalid) {
     throw new Error(
-      "design_workflow.reference_strategy_invalid: referenceStrategy must classify every image authorized for this Run exactly once and must not name images from another Run",
+      "design_workflow.reference_strategy_invalid: Every image explicitly declared in referenceStrategy must be authorized for the current Run and may be declared at most once",
     );
   }
 }
