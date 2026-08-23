@@ -4,7 +4,7 @@ import type {
   SlotSettings,
 } from "@opendesign/design-contracts";
 import { useI18n } from "../../../../i18n";
-import type { ComponentInspectorPreferredValueOption } from "../../../editor";
+import type { ComponentInspectorPreferredValueOption } from "@/renderer/features/editor";
 import { Field, TextAreaField } from "./controls";
 import styles from "./SlotPropertyEditor.module.scss";
 

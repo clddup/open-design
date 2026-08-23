@@ -1,8 +1,8 @@
 import { useOutletContext } from "react-router-dom";
-import type { AppRouteContext } from "../../router/route-context";
-import { SettingsPage as SettingsView } from "./SettingsView";
+import { SettingsFeature } from "@/renderer/features/settings";
+import type { AppRouteContext } from "@/renderer/router/route-context";
 
 export function SettingsPage() {
   const { settings } = useOutletContext<AppRouteContext>();
-  return <SettingsView {...settings} />;
+  return <SettingsFeature {...settings} />;
 }

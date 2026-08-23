@@ -3,7 +3,7 @@ import type { MessageKey, MessageParameters } from "@/shared/i18n/messages";
 import {
   useEditorCommandController,
   usePageCommandController,
-} from "../../editor";
+} from "@/renderer/features/editor";
 import { useVariableActions } from "./use-variable-actions";
 import { useStyleActions } from "./use-style-actions";
 

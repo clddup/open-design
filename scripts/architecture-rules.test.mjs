@@ -143,6 +143,25 @@ describe("architecture source rules", () => {
       }),
       null,
     );
+    assert.match(
+      featureOwnershipViolation({
+        ...policy,
+        sourceFeature: null,
+        targetFeature: "canvas",
+        targetPath: "components/Canvas.tsx",
+      }),
+      /public entry/u,
+    );
+    assert.match(
+      featureOwnershipViolation({
+        ...policy,
+        sourceFeature: "editor-workbench",
+        specifier: "../canvas",
+        targetFeature: "canvas",
+        targetPath: "index.ts",
+      }),
+      /source alias/u,
+    );
   });
 
   it("reports a concrete source cycle", () => {

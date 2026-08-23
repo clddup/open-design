@@ -37,7 +37,7 @@ import type {
   ComponentInspectorContext,
   ComponentInspectorOption,
   ComponentInspectorSource,
-} from "../../../editor";
+} from "@/renderer/features/editor";
 import { VariantMatrixEditor } from "./VariantMatrixEditor";
 import {
   ComponentPropertyAuthoring,

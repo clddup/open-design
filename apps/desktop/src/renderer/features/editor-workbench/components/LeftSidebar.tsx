@@ -32,9 +32,9 @@ import type {
   LayerReparentRequest,
   LayerReparentResult,
   PageActionResult,
-} from "../../editor";
+} from "@/renderer/features/editor";
 import { useI18n } from "../../../i18n";
-import type { LayerHoverTarget } from "../../canvas";
+import type { LayerHoverTarget } from "@/renderer/features/canvas";
 import type { SidebarTab } from "../../../state/editor";
 import type { ProjectLibraryActions } from "../hooks/use-project-library-actions";
 import { AssetsPanel } from "./AssetsPanel";

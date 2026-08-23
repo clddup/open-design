@@ -8,7 +8,7 @@ import type {
 } from "@opendesign/design-contracts";
 import { Icon } from "@opendesign/ui";
 import { useI18n } from "../../../../i18n";
-import type { UpdatePropertiesPatch } from "../../../editor";
+import type { UpdatePropertiesPatch } from "@/renderer/features/editor";
 import styles from "../PropertiesPanel.module.scss";
 import { Field, Section, commitNumber, cx, formatNumber } from "./controls";
 import {

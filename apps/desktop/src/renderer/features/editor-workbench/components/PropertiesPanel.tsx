@@ -26,7 +26,7 @@ import {
 import { Icon } from "@opendesign/ui";
 import type { DesignImageEditAction } from "@/shared/desktop-api";
 import { useI18n } from "../../../i18n";
-import type { UpdatePropertiesPatch } from "../../editor";
+import type { UpdatePropertiesPatch } from "@/renderer/features/editor";
 import type { StyleActions } from "../hooks/use-style-actions";
 import type { ProjectLibraryActions } from "../hooks/use-project-library-actions";
 import type {
@@ -40,7 +40,7 @@ import {
   type ComponentInspectorContext,
   type ComponentInspectorOption,
   type ComponentInspectorSource,
-} from "../../editor";
+} from "@/renderer/features/editor";
 import {
   ExportSection,
   SvgFidelityReport,

@@ -27,9 +27,9 @@ import { createWelcomeDocument } from "@opendesign/editor-runtime";
 import { describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "../../../i18n";
 import { PropertiesPanel } from "./PropertiesPanel";
-import type { ComponentInspectorContext } from "../../editor";
+import type { ComponentInspectorContext } from "@/renderer/features/editor";
 import type { SvgInterchangeFeedback } from "../../import-export/types";
-import type { UpdatePropertiesPatch } from "../../editor";
+import type { UpdatePropertiesPatch } from "@/renderer/features/editor";
 import type { FontInspectorContext } from "./properties/TypographySection";
 
 function renderPanel(

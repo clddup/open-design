@@ -131,6 +131,7 @@ export function featureOwnershipViolation({
   compositionFeature,
   governedFeatures,
   sourceFeature,
+  specifier,
   targetFeature,
   targetPath,
 }) {
@@ -141,11 +142,17 @@ export function featureOwnershipViolation({
   if (
     sourceFeature !== targetFeature &&
     governed.has(targetFeature) &&
-    (sourceFeature === compositionFeature || governed.has(sourceFeature)) &&
     targetPath !== "index.ts" &&
     targetPath !== "index.tsx"
   ) {
     return `${sourceFeature} must consume ${targetFeature} through its public entry`;
+  }
+  if (
+    sourceFeature !== targetFeature &&
+    governed.has(targetFeature) &&
+    specifier?.startsWith(".")
+  ) {
+    return `${sourceFeature ?? "renderer"} must consume ${targetFeature} through the configured source alias`;
   }
   return null;
 }

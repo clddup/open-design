@@ -121,12 +121,18 @@ async function verifyDesktopSourceGraph() {
 }
 
 async function verifyRendererFeatureOwnership() {
+  const rendererRoot = resolve(root, "apps/desktop/src/renderer");
   const featureRoot = resolve(root, "apps/desktop/src/renderer/features");
-  const files = await sourceFiles(featureRoot);
+  const files = await sourceFiles(rendererRoot);
   const fileSet = new Set(files);
+  const featureGraph = new Map();
   for (const file of files) {
-    const sourceFeature = relativeFeaturePath(featureRoot, file)[0];
-    for (const { specifier } of sourceImports(
+    const sourcePath = relativeFeaturePath(rendererRoot, file);
+    const sourceFeature = sourcePath[0] === "features" ? sourcePath[1] : null;
+    if (sourceFeature && !featureGraph.has(sourceFeature)) {
+      featureGraph.set(sourceFeature, new Set());
+    }
+    for (const { specifier, typeOnly } of sourceImports(
       await readFile(file, "utf8"),
       file,
     )) {
@@ -141,10 +147,14 @@ async function verifyRendererFeatureOwnership() {
         featureRoot,
         target,
       );
+      if (sourceFeature && sourceFeature !== targetFeature && !typeOnly) {
+        featureGraph.get(sourceFeature).add(targetFeature);
+      }
       const violation = featureOwnershipViolation({
         compositionFeature: "editor-workbench",
-        governedFeatures: ["canvas", "editor", "workbench"],
+        governedFeatures: ["canvas", "editor", "settings", "workbench"],
         sourceFeature,
+        specifier,
         targetFeature,
         targetPath: targetSegments.join("/"),
       });
@@ -152,6 +162,11 @@ async function verifyRendererFeatureOwnership() {
         fail(`${relativeWorkspacePath(root, file)} ${violation}: ${specifier}`);
       }
     }
+  }
+  try {
+    assertAcyclicGraph(featureGraph, "renderer feature dependency");
+  } catch (error) {
+    fail(relativeCycleMessage(error));
   }
 }
 

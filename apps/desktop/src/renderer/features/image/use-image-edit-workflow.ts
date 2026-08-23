@@ -20,7 +20,7 @@ import type {
   DesignImageEditRequest,
 } from "@/shared/desktop-api";
 import type { MessageKey, MessageParameters } from "@/shared/i18n/messages";
-import type { ApplyEditorCommands } from "../editor/use-editor-command-controller";
+import type { ApplyEditorCommands } from "@/renderer/features/editor";
 
 type Translate = (key: MessageKey, parameters?: MessageParameters) => string;
 

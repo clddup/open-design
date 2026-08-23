@@ -3,7 +3,7 @@ import type { AgentTimelineProps } from "../features/agent-conversation/componen
 import type { EditorWorkbenchFeatureProps } from "../features/editor-workbench/EditorWorkbenchFeature";
 import type { ConversationHomeProps } from "../pages/Conversation/ConversationHome";
 import type { ProjectHomeProps } from "../pages/Project/ProjectHome";
-import type { SettingsPageProps } from "../pages/Settings/SettingsView";
+import type { SettingsFeatureProps } from "@/renderer/features/settings";
 import type { WorkspaceHomeProps } from "../pages/Workspace/WorkspaceHome";
 import type { AppDestination } from "./app-route";
 
@@ -20,6 +20,6 @@ export type AppRouteContext = {
     notifications: ReactNode;
   };
   project: ProjectHomeProps | null;
-  settings: SettingsPageProps;
+  settings: SettingsFeatureProps;
   workspace: WorkspaceHomeProps;
 };

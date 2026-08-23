@@ -1,6 +1,6 @@
 import { Icon } from "@opendesign/ui";
 import { useI18n } from "../../../../i18n";
-import type { ComponentInspectorVariantSet } from "../../../editor";
+import type { ComponentInspectorVariantSet } from "@/renderer/features/editor";
 import styles from "../PropertiesPanel.module.scss";
 
 export function ComponentIdentitySummary({

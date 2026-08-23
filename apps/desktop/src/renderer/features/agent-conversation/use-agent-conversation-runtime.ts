@@ -27,7 +27,7 @@ import {
   generationActivityFromAcceptedPlan,
   generationActivityMessageKey,
   projectGenerationPlanPresentationEvent,
-} from "../canvas/generation-presentation";
+} from "@/renderer/features/canvas";
 import type {
   WorkspaceRuntime,
   WorkspaceSnapshot,

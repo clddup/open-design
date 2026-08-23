@@ -1,7 +1,7 @@
 import { useRef, type KeyboardEvent, type ReactNode } from "react";
 import { Icon } from "@opendesign/ui";
 import { useI18n } from "../../../i18n";
-import type { UtilityDockTab } from "../../workbench";
+import type { UtilityDockTab } from "@/renderer/features/workbench";
 import styles from "./UtilityDock.module.scss";
 
 const tabs: readonly UtilityDockTab[] = ["agent", "properties"];

@@ -7,10 +7,14 @@ import { useCallback, useRef, type CSSProperties, type ReactNode } from "react";
 import type { ThemePreference } from "@/shared/desktop-api";
 import { AgentTimeline } from "../agent-conversation/components/AgentTimeline";
 import {
+  agentRunPhaseDetailKey,
+  agentRunPhaseTitleKey,
+} from "../agent-conversation/agent-run-experience";
+import {
   Canvas,
   CanvasSelectionActions,
   useCanvasWorkspaceController,
-} from "../canvas";
+} from "@/renderer/features/canvas";
 import { DesignFileTabs } from "./components/DesignFileTabs";
 import { LeftSidebar } from "./components/LeftSidebar";
 import { PropertiesPanel } from "./components/PropertiesPanel";
@@ -25,7 +29,7 @@ import {
   layoutInspectorMode,
   useLayerCommandController,
   useLayerRenameWorkflow,
-} from "../editor";
+} from "@/renderer/features/editor";
 import {
   useEditorRuntime,
   useEditorSnapshot,
@@ -46,7 +50,7 @@ import { useImageEditWorkflow } from "../image/use-image-edit-workflow";
 import { useImportExportWorkflow } from "../import-export/use-import-export-workflow";
 import type { useProjectNavigationController } from "../project/use-project-navigation-controller";
 import type { useProjectWorkspaceState } from "../project/use-project-workspace-state";
-import { useWorkbenchLayoutController } from "../workbench";
+import { useWorkbenchLayoutController } from "@/renderer/features/workbench";
 
 export type EditorWorkbenchFeatureProps = {
   activeProject:
@@ -587,7 +591,21 @@ export function EditorWorkbenchFeature({
             />
             <Canvas
               activeAgentRunId={activeCanvasAgentRunId}
-              agentRunExperience={activeCanvasRunExperience ?? undefined}
+              agentRunStatus={
+                activeCanvasRunExperience?.active
+                  ? {
+                      detail: t(
+                        agentRunPhaseDetailKey(activeCanvasRunExperience.phase),
+                      ),
+                      hasCanvasChanges:
+                        activeCanvasRunExperience.hasCanvasChanges,
+                      phase: activeCanvasRunExperience.phase,
+                      title: t(
+                        agentRunPhaseTitleKey(activeCanvasRunExperience.phase),
+                      ),
+                    }
+                  : undefined
+              }
               activePageId={activePageId}
               generationActivity={generationActivity}
               layerHoverTarget={layerHoverTarget ?? undefined}

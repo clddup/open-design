@@ -8,8 +8,8 @@ import type {
   ModelProviderCatalog,
   SaveModelProviderProfileRequest,
 } from "@/shared/desktop-api";
-import { I18nProvider } from "../../i18n";
-import { SettingsPage } from "./SettingsView";
+import { I18nProvider } from "@/renderer/i18n";
+import { SettingsFeature } from "./SettingsFeature";
 
 const emptyCatalog: ModelProviderCatalog = { version: 3, providers: [] };
 const configuredCatalog: ModelProviderCatalog = {
@@ -122,7 +122,7 @@ function renderSettings() {
   render(
     <TooltipProvider delayDuration={0}>
       <I18nProvider initialLocale="en">
-        <SettingsPage
+        <SettingsFeature
           onClose={onClose}
           onThemeChange={vi.fn()}
           platform="darwin"
@@ -140,7 +140,7 @@ async function openNewProvider(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getAllByRole("button", { name: "Add provider" })[0]);
 }
 
-describe("SettingsPage", () => {
+describe("SettingsFeature", () => {
   it("keeps global image generation out of conversation Provider settings", async () => {
     const user = userEvent.setup();
     renderSettings();

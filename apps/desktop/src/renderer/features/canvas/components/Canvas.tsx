@@ -77,11 +77,6 @@ import {
 import type { MessageKey, MessageParameters } from "@/shared/i18n/messages";
 import { useI18n } from "../../../i18n";
 import { generationRevealFromEditorEvent } from "../generation-presentation";
-import {
-  agentRunPhaseDetailKey,
-  agentRunPhaseTitleKey,
-  type AgentRunExperience,
-} from "../../agent-conversation/agent-run-experience";
 import { commitCanvasOperation } from "../canvas-operation-commit";
 import type { ResizeFrameHandler } from "../canvas-responsive-resize";
 import { isTool } from "../../../state/editor";
@@ -96,7 +91,7 @@ import { ImageExpandOverlay } from "./ImageExpandOverlay";
 
 export function Canvas({
   activeAgentRunId,
-  agentRunExperience,
+  agentRunStatus,
   activePageId,
   generationActivity,
   harfBuzzTextRunLayoutProvider,
@@ -120,7 +115,12 @@ export function Canvas({
   showAgentRunStatus,
 }: {
   activeAgentRunId: string | null;
-  agentRunExperience?: AgentRunExperience;
+  agentRunStatus?: {
+    detail: string;
+    hasCanvasChanges: boolean;
+    phase: string;
+    title: string;
+  };
   activePageId: string;
   generationActivity?: LeaferGenerationActivity;
   harfBuzzTextRunLayoutProvider?: TextRunLayoutProvider<LeaferTextRunStyle>;
@@ -1397,23 +1397,21 @@ export function Canvas({
           {generationActivity.label}
         </span>
       )}
-      {showAgentRunStatus && agentRunExperience?.active && (
+      {showAgentRunStatus && agentRunStatus && (
         <div
           aria-label={t("agent.runStatus")}
           className={styles.agentRunStatus}
           data-canvas-agent-status=""
           data-canvas-changed={
-            agentRunExperience.hasCanvasChanges ? "true" : "false"
+            agentRunStatus.hasCanvasChanges ? "true" : "false"
           }
-          data-phase={agentRunExperience.phase}
+          data-phase={agentRunStatus.phase}
           role="status"
         >
           <span aria-hidden="true" className={styles.agentRunMark} />
           <span>
-            <strong>
-              {t(agentRunPhaseTitleKey(agentRunExperience.phase))}
-            </strong>
-            <small>{t(agentRunPhaseDetailKey(agentRunExperience.phase))}</small>
+            <strong>{agentRunStatus.title}</strong>
+            <small>{agentRunStatus.detail}</small>
           </span>
         </div>
       )}
