@@ -12,7 +12,7 @@ import { useProjectNavigationController } from "../features/project/use-project-
 import { useProjectWorkspaceState } from "../features/project/use-project-workspace-state";
 import { useDiagnosticNotificationsController } from "../features/diagnostics/use-diagnostic-notifications-controller";
 import { useRendererDesignToolHost } from "../features/design-tools/use-renderer-design-tool-host";
-import { useProfessionalFixtureSmoke } from "../features/fixture-smoke/use-professional-fixture-smoke";
+import { useProfessionalFixtureSmoke } from "../testing/professional-fixture-smoke/use-professional-fixture-smoke";
 import { useFontBinaryRuntime } from "../features/editor-workbench/hooks/use-font-binary-runtime";
 import { AppNavigationCoordinator } from "../router/app-navigation-coordinator";
 import { appDestination, appRoute } from "../router/app-route";
