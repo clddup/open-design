@@ -8,7 +8,7 @@ import {
   DESIGN_VARIABLE_TOOL_NAME,
   isDesignStyleToolInput,
   isDesignVariableToolInput,
-} from "../../shared/design-agent-tools.js";
+} from "@/shared/design-agent-tools.js";
 import type { GlobalTaskCoordinator } from "./global-task-coordinator.js";
 
 export async function handleDesignSystemTool(input: {

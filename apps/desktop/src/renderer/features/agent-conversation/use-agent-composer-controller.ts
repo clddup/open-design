@@ -8,7 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import type {
   AgentAttachmentSelection,
   ModelProviderCatalog,
-} from "../../../shared/desktop-api";
+} from "@/shared/desktop-api";
 import { isImageAttachment, toAgentAttachment } from "./attachment-format";
 import {
   firstValidSelection,

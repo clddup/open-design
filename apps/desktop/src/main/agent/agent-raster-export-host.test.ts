@@ -1,6 +1,6 @@
 import type { TrustedToolContext } from "@opendesign/agent-contracts";
 import { describe, expect, it, vi } from "vitest";
-import { EXPORT_RASTER_TOOL_NAME } from "../../shared/design-agent-tools.js";
+import { EXPORT_RASTER_TOOL_NAME } from "@/shared/design-agent-tools.js";
 import { AgentRasterExportHost } from "./agent-raster-export-host.js";
 
 const input = {

@@ -10,7 +10,7 @@ import {
   isAgentSvgImportResult,
   isImportSvgToolInput,
   type InternalImportSvgToolInput,
-} from "../../shared/design-agent-tools";
+} from "@/shared/design-agent-tools";
 
 interface RendererSvgImportPort {
   execute(

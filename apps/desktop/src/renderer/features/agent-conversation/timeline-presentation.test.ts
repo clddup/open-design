@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   DESIGN_CHECKPOINT_TOOL_NAME,
   DESIGN_COMPONENT_TOOL_NAME,
-} from "../../../shared/design-agent-tools.js";
+} from "@/shared/design-agent-tools.js";
 import {
   friendlyAgentError,
   isNativeDesignTool,

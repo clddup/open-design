@@ -8,7 +8,7 @@ import {
   modelBridgeResponseId,
   modelBridgeResponseValidationError,
   type ModelBridgeRequest,
-} from "../shared/model-bridge.js";
+} from "@/shared/model-bridge.js";
 
 interface ParentPortLike {
   postMessage(message: unknown): void;

@@ -3,7 +3,7 @@ import type {
   ModelProfile,
   ModelProviderCatalog,
   ModelProviderProfile,
-} from "../../../shared/desktop-api";
+} from "@/shared/desktop-api";
 
 export interface ComposerModelOption {
   label: string;

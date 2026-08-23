@@ -15,7 +15,7 @@ import {
   INTERNAL_IMPORT_SVG_TOOL_NAME,
   INTERNAL_UPDATE_IMAGE_TOOL_NAME,
   validateDesignAgentToolInput,
-} from "../shared/design-agent-tools.js";
+} from "@/shared/design-agent-tools.js";
 
 const request: AgentRunRequest = {
   runId: "run_production_tools",

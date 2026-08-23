@@ -4,7 +4,7 @@ import type {
 } from "@opendesign/design-contracts";
 import { ResizeHandle, useMessage } from "@opendesign/ui";
 import { useCallback, useRef, type CSSProperties, type ReactNode } from "react";
-import type { ThemePreference } from "../../../shared/desktop-api";
+import type { ThemePreference } from "@/shared/desktop-api";
 import { AgentTimeline } from "../agent-conversation/components/AgentTimeline";
 import { Canvas } from "./components/Canvas";
 import { CanvasSelectionActions } from "./components/CanvasSelectionActions";

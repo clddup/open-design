@@ -7,7 +7,7 @@ import {
   EXPORT_RASTER_TOOL_NAME,
   isExportRasterToolInput,
   isPreparedAgentRasterExport,
-} from "../../shared/design-agent-tools.js";
+} from "@/shared/design-agent-tools.js";
 import type { RasterFileService } from "../raster/raster-file-service.js";
 import type { RendererDesignToolHost } from "./renderer-design-tool-host.js";
 

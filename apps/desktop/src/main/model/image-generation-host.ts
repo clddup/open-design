@@ -1,7 +1,7 @@
 import type {
   GlobalImageGenerationSettings,
   SaveGlobalImageGenerationSettingsRequest,
-} from "../../shared/desktop-api";
+} from "@/shared/desktop-api";
 import {
   isImageLightingPreset,
   type ImageLightingPreset,
@@ -11,13 +11,13 @@ import {
   isGlobalImageGenerationSettings,
   isSaveGlobalImageGenerationSettingsRequest,
   normalizeProviderBaseUrl,
-} from "../../shared/desktop-api";
+} from "@/shared/desktop-api";
 import type {
   GenerateImageToolInput,
   ImageGenerationOutputFormat,
   ImageGenerationQuality,
   ImageGenerationSize,
-} from "../../shared/design-agent-tools";
+} from "@/shared/design-agent-tools";
 import { resolveImageUpscaleSize } from "@opendesign/image-service";
 import type { WorkspaceStore } from "../project/workspace-store";
 import {

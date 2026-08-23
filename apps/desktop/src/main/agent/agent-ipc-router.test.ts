@@ -1,7 +1,7 @@
 import type { AgentEvent, AgentRequest } from "@opendesign/agent-contracts";
 import type { IpcMainInvokeEvent } from "electron";
 import { describe, expect, it, vi } from "vitest";
-import { channels } from "../../shared/desktop-api.js";
+import { channels } from "@/shared/desktop-api.js";
 import type { AgentHost, AgentHostListener } from "./agent-host.js";
 import { AgentIpcRouter, type AgentIpcRegistrar } from "./agent-ipc-router.js";
 import type { AgentRunCoordinator } from "./agent-run-coordinator.js";

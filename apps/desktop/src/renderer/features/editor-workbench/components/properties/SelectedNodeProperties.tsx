@@ -21,8 +21,8 @@ import type {
   VariableBindingTarget,
 } from "@opendesign/design-contracts";
 import { Button, Icon, IconButton, type IconName } from "@opendesign/ui";
-import type { DesignImageEditAction } from "../../../../../shared/desktop-api";
-import type { MessageKey } from "../../../../../shared/i18n/messages";
+import type { DesignImageEditAction } from "@/shared/desktop-api";
+import type { MessageKey } from "@/shared/i18n/messages";
 import { useI18n } from "../../../../i18n";
 import type { UpdatePropertiesPatch } from "../../../editor/types";
 import type { StyleActions } from "../../hooks/use-style-actions";

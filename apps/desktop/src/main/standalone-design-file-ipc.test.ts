@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import { join, win32 } from "node:path";
 import type { BrowserWindow, IpcMainInvokeEvent } from "electron";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { channels } from "../shared/desktop-api.js";
+import { channels } from "@/shared/desktop-api.js";
 import {
   resolveDesignFileSavePath,
   StandaloneDesignFileIpcHost,

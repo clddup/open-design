@@ -9,7 +9,7 @@ import {
   IconButton,
   type IconName,
 } from "@opendesign/ui";
-import type { MessageKey } from "../../../../shared/i18n/messages";
+import type { MessageKey } from "@/shared/i18n/messages";
 import { useI18n } from "../../../i18n";
 import type { Tool } from "../../../state/editor";
 import styles from "./Toolbar.module.scss";

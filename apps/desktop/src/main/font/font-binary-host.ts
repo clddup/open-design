@@ -4,7 +4,7 @@ import { basename, extname, join } from "node:path";
 import type {
   FontBinaryDescriptor,
   FontBinaryPayload,
-} from "../../shared/desktop-api.js";
+} from "@/shared/desktop-api.js";
 
 export const MAX_FONT_BINARY_BYTES = 32 * 1024 * 1024;
 const fontIdPattern = /^font_([a-f0-9]{64})$/;

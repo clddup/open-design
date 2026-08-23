@@ -9,12 +9,12 @@ import {
   designPlanComponentStrategy,
   designPlanLogoExploration,
   type DesignPlanToolInput,
-} from "../../shared/design-agent-tools.js";
-import { isAgentDesignIdAllocation } from "../../shared/design-id-allocation.js";
+} from "@/shared/design-agent-tools.js";
+import { isAgentDesignIdAllocation } from "@/shared/design-id-allocation.js";
 import {
   isDesignSystemComponentCatalog,
   type DesignSystemComponentCatalogEntry,
-} from "../../shared/design-system-component-catalog.js";
+} from "@/shared/design-system-component-catalog.js";
 import {
   inspectedNodeBelongsToPage,
   type DesignDeliveryTargetState,

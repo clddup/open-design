@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import type { ThemePreference } from "../../shared/desktop-api";
+import type { ThemePreference } from "@/shared/desktop-api";
 import { ConversationDeleteDialog } from "../features/agent-conversation/components/ConversationDeleteDialog";
 import { DiagnosticNotifications } from "../features/diagnostics/components/DiagnosticNotifications";
 import { useEditorRuntime, useEditorSnapshot } from "../state/editor-runtime";

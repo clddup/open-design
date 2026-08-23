@@ -19,7 +19,7 @@ import {
   isProjectLibraryCatalog,
   type ProjectLibraryCatalog,
   type ProjectLibraryCatalogEntry,
-} from "../../shared/project-library-contract.js";
+} from "@/shared/project-library-contract.js";
 import {
   lstat,
   mkdir,
@@ -41,7 +41,7 @@ import {
   sep,
 } from "node:path";
 import type { WorkspaceStore } from "./workspace-store.js";
-import { createStarterProjectFiles } from "../../shared/project/starter-project.js";
+import { createStarterProjectFiles } from "@/shared/project/starter-project.js";
 
 export const PROJECT_MANIFEST_NAME = "opendesign.project.json";
 export const PROJECT_SAVE_JOURNAL_NAME = ".opendesign-save-journal.json";

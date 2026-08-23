@@ -20,7 +20,7 @@ import {
   type ProviderConnectionResult,
   type SaveModelProviderProfileRequest,
   type TestModelProviderConnectionRequest,
-} from "../../shared/desktop-api";
+} from "@/shared/desktop-api";
 import type { WorkspaceStore } from "../project/workspace-store";
 import { createHash } from "node:crypto";
 import {

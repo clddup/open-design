@@ -10,7 +10,7 @@ import {
   type SessionStoreBridgeRequest,
   type SessionStoreBridgeResponse,
   type SessionStoreOperation,
-} from "../shared/session-store-bridge.js";
+} from "@/shared/session-store-bridge.js";
 
 interface ParentPortLike {
   postMessage(message: unknown): void;

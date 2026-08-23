@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DESIGN_CAPABILITIES_TOOL_NAME } from "../shared/design-agent-tools";
+import { DESIGN_CAPABILITIES_TOOL_NAME } from "@/shared/design-agent-tools";
 import { ParentDesignToolExecutor } from "./parent-design-tool-executor";
 
 describe("ParentDesignToolExecutor", () => {

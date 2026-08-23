@@ -4,9 +4,12 @@ import { describe, it } from "node:test";
 
 import {
   assertAcyclicGraph,
+  isAliasedImport,
   packageExportAllowsSpecifier,
   packageRoot,
+  pathIsWithin,
   processImportViolation,
+  resolveAliasedImport,
   resolveSourceImport,
   sourceImports,
 } from "./architecture-rules.mjs";
@@ -37,6 +40,73 @@ describe("architecture source rules", () => {
     assert.equal(
       resolveSourceImport(importer, "../shared/bridge.js", new Set([target])),
       target,
+    );
+  });
+
+  it("resolves configured source aliases without treating them as packages", () => {
+    const importer = resolve("workspace", "src", "renderer", "index.ts");
+    const sourceRoot = resolve("workspace", "src");
+    const target = resolve(sourceRoot, "shared", "bridge.ts");
+    assert.equal(
+      resolveSourceImport(importer, "@/shared/bridge.js", new Set([target]), {
+        "@": sourceRoot,
+      }),
+      target,
+    );
+    assert.equal(
+      isAliasedImport("@/shared/bridge.js", { "@": sourceRoot }),
+      true,
+    );
+    assert.equal(
+      isAliasedImport("@opendesign/design-contracts", { "@": sourceRoot }),
+      false,
+    );
+    assert.equal(
+      resolveAliasedImport("@/../package.json", { "@": sourceRoot }),
+      null,
+    );
+  });
+
+  it("keeps aliased process boundaries and runtime cycles enforceable", () => {
+    const sourceRoot = resolve("workspace", "src");
+    const renderer = resolve(sourceRoot, "renderer", "feature.ts");
+    const main = resolve(sourceRoot, "main", "host.ts");
+    const aliases = { "@": sourceRoot };
+    assert.equal(
+      pathIsWithin(
+        resolve(sourceRoot, "main"),
+        resolveAliasedImport("@/main/host.js", aliases),
+      ),
+      true,
+    );
+
+    const graph = new Map([
+      [
+        renderer,
+        new Set([
+          resolveSourceImport(
+            renderer,
+            "@/main/host.js",
+            new Set([main]),
+            aliases,
+          ),
+        ]),
+      ],
+      [
+        main,
+        new Set([
+          resolveSourceImport(
+            main,
+            "@/renderer/feature.js",
+            new Set([renderer]),
+            aliases,
+          ),
+        ]),
+      ],
+    ]);
+    assert.throws(
+      () => assertAcyclicGraph(graph, "desktop source dependency"),
+      /desktop source dependency cycle/u,
     );
   });
 

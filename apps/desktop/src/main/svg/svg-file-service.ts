@@ -15,7 +15,7 @@ import {
   isSaveSvgFileRequest,
   type OpenSvgFile,
   type SaveSvgFileResult,
-} from "../../shared/desktop-api.js";
+} from "@/shared/desktop-api.js";
 
 const SVG_FILE_EXTENSION = ".svg";
 

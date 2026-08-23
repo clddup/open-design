@@ -7,12 +7,12 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { DEFAULT_APP_LOCALE, type AppLocale } from "../../shared/i18n/locale";
+import { DEFAULT_APP_LOCALE, type AppLocale } from "@/shared/i18n/locale";
 import {
   translate,
   type MessageKey,
   type MessageParameters,
-} from "../../shared/i18n/messages";
+} from "@/shared/i18n/messages";
 
 type Translate = (key: MessageKey, parameters?: MessageParameters) => string;
 

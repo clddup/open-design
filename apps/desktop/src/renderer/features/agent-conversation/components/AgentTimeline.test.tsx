@@ -6,7 +6,7 @@ import type {
   SessionTimelineItem,
 } from "@opendesign/agent-contracts";
 import { describe, expect, it, vi } from "vitest";
-import type { DesktopApi } from "../../../../shared/desktop-api";
+import type { DesktopApi } from "@/shared/desktop-api";
 import { AgentTimeline } from "./AgentTimeline";
 
 const now = "2026-08-08T12:00:00.000Z";

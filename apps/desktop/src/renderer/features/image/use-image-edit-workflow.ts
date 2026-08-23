@@ -18,11 +18,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   DesignImageEditAction,
   DesignImageEditRequest,
-} from "../../../shared/desktop-api";
-import type {
-  MessageKey,
-  MessageParameters,
-} from "../../../shared/i18n/messages";
+} from "@/shared/desktop-api";
+import type { MessageKey, MessageParameters } from "@/shared/i18n/messages";
 import type { ApplyEditorCommands } from "../editor/use-editor-command-controller";
 
 type Translate = (key: MessageKey, parameters?: MessageParameters) => string;

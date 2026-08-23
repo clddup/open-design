@@ -12,11 +12,8 @@ import {
   IconButton,
 } from "@opendesign/ui";
 import { useState } from "react";
-import type {
-  RecentProject,
-  ThemePreference,
-} from "../../../shared/desktop-api";
-import type { MessageKey } from "../../../shared/i18n/messages";
+import type { RecentProject, ThemePreference } from "@/shared/desktop-api";
+import type { MessageKey } from "@/shared/i18n/messages";
 import { HomeTitlebar } from "../../components/app-window/HomeTitlebar";
 import homeStyles from "../../components/app-window/HomeSurface.module.scss";
 import { ConversationActions } from "../../features/agent-conversation/components/ConversationActions";

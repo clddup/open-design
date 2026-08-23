@@ -101,11 +101,11 @@ import {
 } from "./media-input-ipc";
 import { StandaloneDesignFileIpcHost } from "./standalone-design-file-ipc";
 import { IpcRegistrationScope } from "./ipc-registration-scope";
-import type { RendererDesignCaptureTarget } from "../shared/design-tool-bridge";
+import type { RendererDesignCaptureTarget } from "@/shared/design-tool-bridge";
 import { registerRendererDesignToolIpc } from "./agent/renderer-design-tool-ipc";
-import { channels } from "../shared/desktop-api";
+import { channels } from "@/shared/desktop-api";
 import { handleDesignSystemTool } from "./agent/design-system-tool-handler.js";
-import { translate } from "../shared/i18n/messages";
+import { translate } from "@/shared/i18n/messages";
 import {
   DESIGN_APPLY_TOOL_NAME,
   DESIGN_ARRANGE_TOOL_NAME,
@@ -155,7 +155,7 @@ import {
   type DesignHierarchyToolInput,
   type DesignVisualReviewToolInput,
   type DesignVectorToolInput,
-} from "../shared/design-agent-tools";
+} from "@/shared/design-agent-tools";
 import {
   componentToolIsMaterialWrite,
   materialTargetRefsForComponentTool,

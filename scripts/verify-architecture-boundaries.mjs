@@ -1,12 +1,15 @@
 import { readdir, readFile, stat } from "node:fs/promises";
-import { dirname, extname, join, resolve, sep } from "node:path";
+import { dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
   assertAcyclicGraph,
+  isAliasedImport,
   packageExportAllowsSpecifier,
   packageRoot,
+  pathIsWithin,
   processImportViolation,
+  resolveAliasedImport,
   resolveSourceImport,
   sourceImports,
 } from "./architecture-rules.mjs";
@@ -14,11 +17,19 @@ import { relativeWorkspacePath } from "./workspace-path.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const policy = await json("scripts/architecture-policy.json");
+const desktopSourceAliasConfig = await json("apps/desktop/source-aliases.json");
+const desktopSourceAliases = Object.fromEntries(
+  Object.entries(desktopSourceAliasConfig).map(([alias, path]) => [
+    alias,
+    resolve(root, "apps/desktop", path),
+  ]),
+);
 const manifests = await workspaceManifests();
 const manifestByName = new Map(
   manifests.map((manifest) => [manifest.name, manifest]),
 );
 
+await verifyDesktopAliasConfig();
 await verifyDesktopProcesses();
 await verifyDesktopSourceGraph();
 await verifyWorkspacePackages();
@@ -27,6 +38,22 @@ process.stdout.write(
   "Architecture source, package, and Electron process boundaries are current.\n",
 );
 
+async function verifyDesktopAliasConfig() {
+  const tsconfig = await json("apps/desktop/tsconfig.json");
+  const paths = tsconfig.compilerOptions?.paths ?? {};
+  const expectedPaths = Object.fromEntries(
+    Object.entries(desktopSourceAliasConfig).map(([alias, path]) => [
+      `${alias}/*`,
+      [`${path}/*`],
+    ]),
+  );
+  if (stableJson(paths) !== stableJson(expectedPaths)) {
+    fail(
+      "apps/desktop/tsconfig.json source paths must exactly match apps/desktop/source-aliases.json",
+    );
+  }
+}
+
 async function verifyDesktopProcesses() {
   for (const [layerName, layerPolicy] of Object.entries(policy.desktopLayers)) {
     const files = await sourceFiles(resolve(root, layerPolicy.root));
@@ -34,8 +61,14 @@ async function verifyDesktopProcesses() {
       const imports = sourceImports(await readFile(file, "utf8"), file);
       for (const dependency of imports) {
         const { specifier } = dependency;
-        if (specifier.startsWith(".")) {
-          assertAllowedRelativeLayer(layerName, layerPolicy, file, specifier);
+        const sourceTarget = desktopSourceTarget(file, specifier);
+        if (isAliasedImport(specifier, desktopSourceAliases) && !sourceTarget) {
+          fail(
+            `${relativeWorkspacePath(root, file)} has source alias outside its configured root: ${specifier}`,
+          );
+        }
+        if (sourceTarget) {
+          assertAllowedSourceLayer(layerName, layerPolicy, file, sourceTarget);
           continue;
         }
         const violation = processImportViolation(dependency, layerPolicy);
@@ -60,8 +93,13 @@ async function verifyDesktopSourceGraph() {
       file,
     )) {
       if (typeOnly) continue;
-      if (!specifier.startsWith(".")) continue;
-      const target = resolveSourceImport(file, specifier, fileSet);
+      if (!desktopSourceTarget(file, specifier)) continue;
+      const target = resolveSourceImport(
+        file,
+        specifier,
+        fileSet,
+        desktopSourceAliases,
+      );
       if (target) {
         graph.get(file).add(target);
         continue;
@@ -132,7 +170,13 @@ async function verifyManifestImports(manifest) {
       await readFile(file, "utf8"),
       file,
     )) {
-      if (specifier.startsWith(".")) continue;
+      if (
+        specifier.startsWith(".") ||
+        (manifest.name === "@opendesign/desktop" &&
+          isDesktopSourceAlias(specifier))
+      ) {
+        continue;
+      }
       const dependency = packageRoot(specifier);
       if (
         dependency.startsWith("node:") ||
@@ -177,19 +221,26 @@ async function verifyManifestImports(manifest) {
   }
 }
 
-function assertAllowedRelativeLayer(layerName, layerPolicy, file, specifier) {
-  const target = resolve(dirname(file), specifier);
+function assertAllowedSourceLayer(layerName, layerPolicy, file, target) {
   for (const forbiddenLayer of layerPolicy.forbiddenRelativeLayers ?? []) {
     const forbiddenRoot = resolve(root, "apps/desktop/src", forbiddenLayer);
-    if (
-      target === forbiddenRoot ||
-      target.startsWith(`${forbiddenRoot}${sep}`)
-    ) {
+    if (pathIsWithin(forbiddenRoot, target)) {
       fail(
         `${relativeWorkspacePath(root, file)} crosses ${layerName} → ${forbiddenLayer}`,
       );
     }
   }
+}
+
+function desktopSourceTarget(file, specifier) {
+  if (specifier.startsWith(".")) {
+    return resolve(dirname(file), specifier);
+  }
+  return resolveAliasedImport(specifier, desktopSourceAliases);
+}
+
+function isDesktopSourceAlias(specifier) {
+  return isAliasedImport(specifier, desktopSourceAliases);
 }
 
 function classifiedWorkspacePackages() {
@@ -277,4 +328,15 @@ async function json(path) {
 
 function fail(message) {
   throw new Error(`Architecture boundary violation: ${message}`);
+}
+
+function stableJson(value) {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${stableJson(value[key])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
 }

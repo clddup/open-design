@@ -37,7 +37,7 @@ import {
   READ_IMAGE_TOOL_NAME,
   type DesignPlanToolInput,
   UPDATE_IMAGE_TOOL_NAME,
-} from "../../../shared/design-agent-tools";
+} from "@/shared/design-agent-tools";
 
 export interface AcceptedGenerationPlan {
   id: string;

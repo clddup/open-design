@@ -1,5 +1,12 @@
 import ts from "typescript";
-import { dirname, extname, resolve } from "node:path";
+import {
+  dirname,
+  extname,
+  isAbsolute,
+  relative,
+  resolve,
+  sep,
+} from "node:path";
 
 export function sourceImports(source, fileName = "source.ts") {
   const syntax = fileName.endsWith(".tsx")
@@ -68,9 +75,17 @@ export function processImportViolation(dependency, policy) {
     : `imports package ${packageName} outside the process allowlist`;
 }
 
-export function resolveSourceImport(importer, specifier, sourcePaths) {
-  if (!specifier.startsWith(".")) return null;
-  const target = resolve(dirname(importer), stripQuery(specifier));
+export function resolveSourceImport(
+  importer,
+  specifier,
+  sourcePaths,
+  aliases = {},
+) {
+  const cleanSpecifier = stripQuery(specifier);
+  const target = cleanSpecifier.startsWith(".")
+    ? resolve(dirname(importer), cleanSpecifier)
+    : resolveAliasedImport(cleanSpecifier, aliases);
+  if (!target) return null;
   const candidates = [target];
   const extension = extname(target);
   if ([".js", ".jsx", ".mjs", ".cjs"].includes(extension)) {
@@ -85,6 +100,31 @@ export function resolveSourceImport(importer, specifier, sourcePaths) {
     );
   }
   return candidates.find((candidate) => sourcePaths.has(candidate)) ?? null;
+}
+
+export function resolveAliasedImport(specifier, aliases) {
+  for (const [alias, root] of Object.entries(aliases)) {
+    if (specifier === alias) return resolve(root);
+    if (specifier.startsWith(`${alias}/`)) {
+      const target = resolve(root, specifier.slice(alias.length + 1));
+      return pathIsWithin(root, target) ? target : null;
+    }
+  }
+  return null;
+}
+
+export function isAliasedImport(specifier, aliases) {
+  return Object.keys(aliases).some(
+    (alias) => specifier === alias || specifier.startsWith(`${alias}/`),
+  );
+}
+
+export function pathIsWithin(root, target) {
+  const path = relative(resolve(root), resolve(target));
+  return (
+    path === "" ||
+    (path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path))
+  );
 }
 
 export function assertAcyclicGraph(graph, label = "source dependency") {

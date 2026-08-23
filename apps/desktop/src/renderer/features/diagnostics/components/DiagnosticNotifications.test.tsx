@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { TooltipProvider } from "@opendesign/ui";
 import { describe, expect, it, vi } from "vitest";
-import type { DiagnosticEvent } from "../../../../shared/diagnostics";
+import type { DiagnosticEvent } from "@/shared/diagnostics";
 import { I18nProvider } from "../../../i18n";
 import { DiagnosticNotifications } from "./DiagnosticNotifications";
 

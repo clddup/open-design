@@ -1,5 +1,5 @@
 import type { NodeKind } from "@opendesign/design-contracts";
-import type { MessageKey } from "../../../../shared/i18n/messages";
+import type { MessageKey } from "@/shared/i18n/messages";
 import { useI18n } from "../../../i18n";
 import styles from "./Statusbar.module.scss";
 

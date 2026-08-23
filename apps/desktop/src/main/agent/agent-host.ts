@@ -26,15 +26,15 @@ import {
   modelBridgeRequestId,
   modelBridgeRequestValidationError,
   type ModelBridgeResponse,
-} from "../../shared/model-bridge";
-import { validateDesignAgentToolInput } from "../../shared/design-agent-tools";
+} from "@/shared/model-bridge";
+import { validateDesignAgentToolInput } from "@/shared/design-agent-tools";
 import {
   isSessionStoreBridgeRequest,
   sessionStoreBridgeRequestId,
   sessionStoreBridgeRequestOperation,
   type SessionStoreBridgeRequest,
   type SessionStoreBridgeResponse,
-} from "../../shared/session-store-bridge";
+} from "@/shared/session-store-bridge";
 import { trustedDesignWorkflowFailure } from "./design-workflow-failure";
 import { AgentSupervisor } from "./agent-supervisor";
 

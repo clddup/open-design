@@ -8,7 +8,7 @@ import {
   type TextRunLayoutStyle,
 } from "@opendesign/text-service";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { FontBinaryDescriptor } from "../../../../shared/desktop-api";
+import type { FontBinaryDescriptor } from "@/shared/desktop-api";
 
 export type FontBinaryImportState =
   | { status: "idle" }

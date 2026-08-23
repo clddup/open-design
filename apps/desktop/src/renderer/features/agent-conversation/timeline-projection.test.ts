@@ -3,7 +3,7 @@ import type {
   SessionTimelineItem,
 } from "@opendesign/agent-contracts";
 import { describe, expect, it } from "vitest";
-import { translate } from "../../../shared/i18n/messages";
+import { translate } from "@/shared/i18n/messages";
 import { projectAgentTimeline } from "./timeline-projection";
 
 const continuation = {

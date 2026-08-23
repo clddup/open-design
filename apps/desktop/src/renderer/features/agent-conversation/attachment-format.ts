@@ -1,5 +1,5 @@
 import type { AgentAttachment } from "@opendesign/agent-contracts";
-import type { AgentAttachmentSelection } from "../../../shared/desktop-api";
+import type { AgentAttachmentSelection } from "@/shared/desktop-api";
 
 export function toAgentAttachment(
   selection: AgentAttachmentSelection,

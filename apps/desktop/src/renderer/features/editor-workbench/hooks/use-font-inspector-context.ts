@@ -12,10 +12,7 @@ import {
   type TextFontDescriptor,
 } from "@opendesign/text-service";
 import { useMemo } from "react";
-import type {
-  MessageKey,
-  MessageParameters,
-} from "../../../../shared/i18n/messages";
+import type { MessageKey, MessageParameters } from "@/shared/i18n/messages";
 import type { FontInspectorContext } from "../components/properties/TypographySection";
 import type { ApplyEditorCommands } from "../../editor/use-editor-command-controller";
 import type { FontBinaryRuntime } from "./use-font-binary-runtime";

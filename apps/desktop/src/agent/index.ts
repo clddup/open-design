@@ -11,7 +11,7 @@ import { ParentDesignToolExecutor } from "./parent-design-tool-executor.js";
 import {
   DESIGN_AGENT_TOOL_SPECS,
   validateDesignAgentToolInput,
-} from "../shared/design-agent-tools.js";
+} from "@/shared/design-agent-tools.js";
 import {
   agentSystemPromptForRequest,
   designThinkingLevelForRequest,

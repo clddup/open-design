@@ -12,7 +12,7 @@ import {
   type DesktopWindowIpcRegistrar,
   resolveApplicationIconPath,
 } from "./desktop-window-host.js";
-import { channels } from "../shared/desktop-api.js";
+import { channels } from "@/shared/desktop-api.js";
 
 describe("DesktopWindowHost", () => {
   it("creates one secure desktop workbench and loads the development renderer", () => {

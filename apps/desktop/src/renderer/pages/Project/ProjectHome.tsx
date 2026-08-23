@@ -4,7 +4,7 @@ import type {
 } from "@opendesign/workspace-contracts";
 import { Button, Icon, IconButton } from "@opendesign/ui";
 import { useState, type FormEvent } from "react";
-import type { ThemePreference } from "../../../shared/desktop-api";
+import type { ThemePreference } from "@/shared/desktop-api";
 import { HomeTitlebar } from "../../components/app-window/HomeTitlebar";
 import homeStyles from "../../components/app-window/HomeSurface.module.scss";
 import { ConversationActions } from "../../features/agent-conversation/components/ConversationActions";

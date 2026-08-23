@@ -7,7 +7,7 @@ import type {
   Paint,
 } from "@opendesign/design-contracts";
 import { Icon } from "@opendesign/ui";
-import type { MessageKey } from "../../../../../shared/i18n/messages";
+import type { MessageKey } from "@/shared/i18n/messages";
 import { useI18n } from "../../../../i18n";
 import styles from "../PropertiesPanel.module.scss";
 import {

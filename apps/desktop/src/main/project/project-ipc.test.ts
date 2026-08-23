@@ -11,7 +11,7 @@ import { mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { createStarterProjectFiles } from "../../shared/project/starter-project.js";
+import { createStarterProjectFiles } from "@/shared/project/starter-project.js";
 import { ProjectHost } from "./project-host.js";
 import { ProjectIpcService } from "./project-ipc.js";
 import { WorkspaceStore } from "./workspace-store.js";

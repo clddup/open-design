@@ -15,8 +15,8 @@ import {
   type DesignPlanTarget,
   type DesignPlanToolInput,
   type DesignVisualReviewToolInput,
-} from "../../shared/design-agent-tools.js";
-import type { DesignSystemComponentCatalogEntry } from "../../shared/design-system-component-catalog.js";
+} from "@/shared/design-agent-tools.js";
+import type { DesignSystemComponentCatalogEntry } from "@/shared/design-system-component-catalog.js";
 
 export type InspectedHierarchy = {
   catalogComponentsById: Map<string, DesignSystemComponentCatalogEntry>;

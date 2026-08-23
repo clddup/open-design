@@ -39,7 +39,7 @@ import {
   EXPORT_SVG_TOOL_NAME,
   GENERATE_IMAGE_TOOL_NAME,
   validateDesignAgentToolInput,
-} from "../shared/design-agent-tools";
+} from "@/shared/design-agent-tools";
 import {
   newDesignSystemPromptForRequest,
   OPENDESIGN_AGENT_SYSTEM_PROMPT,

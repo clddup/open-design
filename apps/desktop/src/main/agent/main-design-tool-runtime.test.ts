@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   DESIGN_INSPECT_TOOL_NAME,
   PAGE_STRUCTURE_ACCESS_TOOL_NAME,
-} from "../../shared/design-agent-tools.js";
+} from "@/shared/design-agent-tools.js";
 import {
   MainDesignToolRuntime,
   mainDesignToolAuditDiagnostic,

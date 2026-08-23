@@ -1,8 +1,8 @@
-import { formatDiagnosticReport } from "../../../../shared/diagnostics";
-import type { DiagnosticEvent } from "../../../../shared/diagnostics";
+import { formatDiagnosticReport } from "@/shared/diagnostics";
+import type { DiagnosticEvent } from "@/shared/diagnostics";
 import { Button, IconButton } from "@opendesign/ui";
 import { useEffect, useState } from "react";
-import type { MessageKey } from "../../../../shared/i18n/messages";
+import type { MessageKey } from "@/shared/i18n/messages";
 import { useI18n } from "../../../i18n";
 import styles from "./DiagnosticNotifications.module.scss";
 

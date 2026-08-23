@@ -2,10 +2,7 @@ import type { AgentAttachment } from "@opendesign/agent-contracts";
 import type { DesignAsset } from "@opendesign/design-contracts";
 import type { BrowserWindow, IpcMainInvokeEvent } from "electron";
 import { describe, expect, it, vi } from "vitest";
-import {
-  channels,
-  type DesignImageEditRequest,
-} from "../shared/desktop-api.js";
+import { channels, type DesignImageEditRequest } from "@/shared/desktop-api.js";
 import {
   MediaInputIpcHost,
   type DesignImageEditOutput,

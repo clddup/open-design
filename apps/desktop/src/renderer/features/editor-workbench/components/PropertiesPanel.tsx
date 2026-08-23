@@ -24,7 +24,7 @@ import {
   type ArrangementSelectionMetrics,
 } from "@opendesign/editor-runtime";
 import { Icon } from "@opendesign/ui";
-import type { DesignImageEditAction } from "../../../../shared/desktop-api";
+import type { DesignImageEditAction } from "@/shared/desktop-api";
 import { useI18n } from "../../../i18n";
 import type { UpdatePropertiesPatch } from "../../editor/types";
 import type { StyleActions } from "../hooks/use-style-actions";

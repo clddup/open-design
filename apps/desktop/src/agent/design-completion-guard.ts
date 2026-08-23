@@ -25,7 +25,7 @@ import {
   IMPORT_SVG_TOOL_NAME,
   PLACE_IMAGE_TOOL_NAME,
   UPDATE_IMAGE_TOOL_NAME,
-} from "../shared/design-agent-tools.js";
+} from "@/shared/design-agent-tools.js";
 
 export function reviewDesignCompletion(
   context: AgentCompletionContext,

@@ -42,8 +42,8 @@ import {
   type PlannedDesignRebaseGuard,
   type PlaceableRasterAssetRole,
   type RasterAssetRole,
-} from "../../shared/design-agent-tools.js";
-import type { RendererDesignCaptureTarget } from "../../shared/design-tool-bridge.js";
+} from "@/shared/design-agent-tools.js";
+import type { RendererDesignCaptureTarget } from "@/shared/design-tool-bridge.js";
 import {
   registerDesignWorkflowPlan,
   reconcileEstablishedArtboardDescendants,

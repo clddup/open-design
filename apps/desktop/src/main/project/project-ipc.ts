@@ -11,7 +11,7 @@ import {
   isProjectDesignFileRequest,
   isRenameProjectDesignFileRequest,
   isSaveProjectDesignFileRequest,
-} from "../../shared/desktop-api.js";
+} from "@/shared/desktop-api.js";
 import {
   isListProjectLibrariesRequest,
   isPublishProjectLibraryRequest,
@@ -19,8 +19,8 @@ import {
   isSetProjectLibraryEnabledRequest,
   isSetProjectLibraryUpdateAcceptedRequest,
   isSetProjectLibraryUpdateIgnoredRequest,
-} from "../../shared/project-library-contract.js";
-import { createStarterProjectFiles } from "../../shared/project/starter-project.js";
+} from "@/shared/project-library-contract.js";
+import { createStarterProjectFiles } from "@/shared/project/starter-project.js";
 import { ProjectHostError, type ProjectHost } from "./project-host.js";
 import type { WorkspaceStore } from "./workspace-store.js";
 

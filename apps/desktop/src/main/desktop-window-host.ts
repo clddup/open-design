@@ -10,7 +10,7 @@ import {
   channels,
   isWindowAction,
   type WindowAction,
-} from "../shared/desktop-api.js";
+} from "@/shared/desktop-api.js";
 import {
   isAllowedRendererNavigation,
   isExternalHttpUrl,

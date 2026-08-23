@@ -1,8 +1,5 @@
 import type { AgentAttachment } from "@opendesign/agent-contracts";
-import type {
-  MessageKey,
-  MessageParameters,
-} from "../../../shared/i18n/messages";
+import type { MessageKey, MessageParameters } from "@/shared/i18n/messages";
 
 export type Translate = (
   key: MessageKey,

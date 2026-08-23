@@ -7,7 +7,7 @@ import type { ModelSelection } from "@opendesign/model-gateway";
 import type { ConversationDescriptor } from "@opendesign/workspace-contracts";
 import { Button, DesktopSelect, Icon, IconButton } from "@opendesign/ui";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { PAGE_STRUCTURE_ACCESS_TOOL_NAME } from "../../../../shared/design-agent-tools";
+import { PAGE_STRUCTURE_ACCESS_TOOL_NAME } from "@/shared/design-agent-tools";
 import { formatBytes, isImageAttachment } from "../attachment-format";
 import {
   projectAgentTimeline,

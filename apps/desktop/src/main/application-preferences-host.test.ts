@@ -1,6 +1,6 @@
 import type { IpcMainInvokeEvent } from "electron";
 import { describe, expect, it, vi } from "vitest";
-import { channels } from "../shared/desktop-api.js";
+import { channels } from "@/shared/desktop-api.js";
 import {
   ApplicationPreferencesHost,
   type ApplicationPreferencesIpcRegistrar,

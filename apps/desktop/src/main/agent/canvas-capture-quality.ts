@@ -4,7 +4,7 @@ import {
   isDesignLayoutQualityReport,
   type DesignLayoutQualityReport,
 } from "@opendesign/editor-runtime";
-import type { RendererDesignCaptureTarget } from "../../shared/design-tool-bridge.js";
+import type { RendererDesignCaptureTarget } from "@/shared/design-tool-bridge.js";
 
 export function requireCanvasCaptureLayoutQuality(
   result: TrustedToolResult,

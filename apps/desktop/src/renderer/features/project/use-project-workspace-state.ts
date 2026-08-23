@@ -1,13 +1,7 @@
 import type { ProjectManifest } from "@opendesign/workspace-contracts";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type {
-  ProjectDesignFile,
-  RecentProject,
-} from "../../../shared/desktop-api";
-import type {
-  MessageKey,
-  MessageParameters,
-} from "../../../shared/i18n/messages";
+import type { ProjectDesignFile, RecentProject } from "@/shared/desktop-api";
+import type { MessageKey, MessageParameters } from "@/shared/i18n/messages";
 import { reportRendererError } from "../diagnostics/diagnostics";
 import {
   ProjectAutosaveCoordinator,

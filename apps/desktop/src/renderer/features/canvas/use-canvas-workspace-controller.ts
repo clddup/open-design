@@ -15,10 +15,7 @@ import type {
 } from "@opendesign/leafer-engine";
 import type { TextLayoutProvider } from "@opendesign/text-service";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type {
-  MessageKey,
-  MessageParameters,
-} from "../../../shared/i18n/messages";
+import type { MessageKey, MessageParameters } from "@/shared/i18n/messages";
 import type { LayerHoverTarget } from "../editor-workbench/layer-hover-target";
 import type { Tool } from "../../state/editor";
 import type { WorkspaceRuntime } from "../../state/workspace-runtime";

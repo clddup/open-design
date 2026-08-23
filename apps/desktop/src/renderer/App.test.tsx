@@ -49,15 +49,15 @@ import * as designCapture from "./features/design-tools/design-capture";
 import * as rasterExport from "./features/import-export/raster-export";
 import * as svgInterchange from "./features/import-export/svg-interchange";
 import type { SuccessfulSvgImportResult } from "./features/import-export/svg-interchange-contract";
-import type { RendererDesignToolRequest } from "../shared/design-tool-bridge";
+import type { RendererDesignToolRequest } from "@/shared/design-tool-bridge";
 import type { TextLayoutRequest } from "@opendesign/text-service";
-import type { ProjectDesignFile } from "../shared/desktop-api";
-import type { DiagnosticEvent } from "../shared/diagnostics";
+import type { ProjectDesignFile } from "@/shared/desktop-api";
+import type { DiagnosticEvent } from "@/shared/diagnostics";
 import {
   DESIGN_PLAN_TOOL_NAME,
   PAGE_STRUCTURE_ACCESS_TOOL_NAME,
   type DesignPlanToolInput,
-} from "../shared/design-agent-tools";
+} from "@/shared/design-agent-tools";
 
 const leaferHarness = vi.hoisted(() => ({
   callbacks: null as LeaferEngineCallbacks | null,

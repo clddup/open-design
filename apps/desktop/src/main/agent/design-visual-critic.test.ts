@@ -4,7 +4,7 @@ import type {
   ModelRequest,
 } from "@opendesign/model-gateway";
 import { describe, expect, it } from "vitest";
-import type { DesignPlanToolInput } from "../../shared/design-agent-tools.js";
+import type { DesignPlanToolInput } from "@/shared/design-agent-tools.js";
 import {
   type DesignVisualCriticContext,
   requireDesignVisualCriticAttachment,

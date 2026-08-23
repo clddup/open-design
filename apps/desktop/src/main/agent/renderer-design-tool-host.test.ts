@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { isRendererDesignToolRequest } from "../../shared/design-tool-bridge";
+import { isRendererDesignToolRequest } from "@/shared/design-tool-bridge";
 import { RendererDesignToolHost } from "./renderer-design-tool-host";
 
 describe("RendererDesignToolHost", () => {

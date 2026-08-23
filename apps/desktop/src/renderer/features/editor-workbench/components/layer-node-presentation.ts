@@ -1,6 +1,6 @@
 import type { NodeKind } from "@opendesign/design-contracts";
 import type { IconName } from "@opendesign/ui";
-import type { MessageKey } from "../../../../shared/i18n/messages";
+import type { MessageKey } from "@/shared/i18n/messages";
 
 export const layerNodeIcons: Record<NodeKind, IconName> = {
   frame: "lucide:frame",

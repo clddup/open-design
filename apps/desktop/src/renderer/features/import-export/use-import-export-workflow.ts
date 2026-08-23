@@ -9,10 +9,7 @@ import type { LeaferTextRunStyle } from "@opendesign/leafer-engine";
 import type { TextRunLayoutProvider } from "@opendesign/text-service";
 import type { AppMessageApi } from "@opendesign/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type {
-  MessageKey,
-  MessageParameters,
-} from "../../../shared/i18n/messages";
+import type { MessageKey, MessageParameters } from "@/shared/i18n/messages";
 import type { SvgWorkerExportSettings } from "./svg-interchange-contract";
 import {
   captureSvgImportTarget,

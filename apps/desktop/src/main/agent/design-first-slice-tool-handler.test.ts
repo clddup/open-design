@@ -6,7 +6,7 @@ import {
   DESIGN_FIRST_SLICE_TOOL_NAME,
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
   type DesignFirstSliceToolInput,
-} from "../../shared/design-agent-tools.js";
+} from "@/shared/design-agent-tools.js";
 import { handleDesignFirstSliceTool } from "./design-first-slice-tool-handler.js";
 
 const context = {

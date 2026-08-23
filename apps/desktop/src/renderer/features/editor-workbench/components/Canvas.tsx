@@ -34,7 +34,7 @@ import {
 } from "@opendesign/image-service";
 import { navigateComponentSelection } from "@opendesign/component-service";
 import { Icon } from "@opendesign/ui";
-import type { DesignImageEditAction } from "../../../../shared/desktop-api";
+import type { DesignImageEditAction } from "@/shared/desktop-api";
 import { IMAGE_EDIT_PROGRESS_LABEL_KEYS } from "../../design-tools/design-assets";
 import {
   createLeaferEngineAdapter,
@@ -74,10 +74,7 @@ import {
   type MouseEvent,
   type ReactNode,
 } from "react";
-import type {
-  MessageKey,
-  MessageParameters,
-} from "../../../../shared/i18n/messages";
+import type { MessageKey, MessageParameters } from "@/shared/i18n/messages";
 import { useI18n } from "../../../i18n";
 import { generationRevealFromEditorEvent } from "../../canvas/generation-presentation";
 import {

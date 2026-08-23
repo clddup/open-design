@@ -2,7 +2,7 @@ import type { AgentEvent } from "@opendesign/agent-contracts";
 import type {
   DiagnosticContext,
   DiagnosticInput,
-} from "../../shared/diagnostics.js";
+} from "@/shared/diagnostics.js";
 
 export function reportAgentDiagnostic(
   event: AgentEvent,

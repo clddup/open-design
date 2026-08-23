@@ -2,7 +2,7 @@ import type { SessionStore } from "@opendesign/session-store";
 import type {
   SessionStoreBridgeRequest,
   SessionStoreBridgeResponse,
-} from "../../shared/session-store-bridge.js";
+} from "@/shared/session-store-bridge.js";
 
 type SuccessfulSessionStoreResponse = Extract<
   SessionStoreBridgeResponse,

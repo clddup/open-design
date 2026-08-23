@@ -4,10 +4,7 @@ import {
   EditorRuntime,
 } from "@opendesign/editor-runtime";
 import { describe, expect, it, vi } from "vitest";
-import type {
-  MessageKey,
-  MessageParameters,
-} from "../../../shared/i18n/messages";
+import type { MessageKey, MessageParameters } from "@/shared/i18n/messages";
 import { useEditorCommandController } from "./use-editor-command-controller";
 import { useLayerCommandController } from "./use-layer-command-controller";
 import { usePageCommandController } from "./use-page-command-controller";

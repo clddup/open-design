@@ -1,5 +1,5 @@
 import type { IpcMainInvokeEvent } from "electron";
-import { channels, isFontBinaryReadRequest } from "../../shared/desktop-api.js";
+import { channels, isFontBinaryReadRequest } from "@/shared/desktop-api.js";
 import type { FontBinaryHost } from "./font-binary-host.js";
 
 type Handler = (event: IpcMainInvokeEvent, ...args: unknown[]) => unknown;

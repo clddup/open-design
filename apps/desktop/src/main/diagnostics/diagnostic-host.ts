@@ -1,12 +1,6 @@
 import type { IpcMainInvokeEvent } from "electron";
-import {
-  channels,
-  isRendererDiagnosticReport,
-} from "../../shared/desktop-api.js";
-import type {
-  DiagnosticEvent,
-  DiagnosticInput,
-} from "../../shared/diagnostics.js";
+import { channels, isRendererDiagnosticReport } from "@/shared/desktop-api.js";
+import type { DiagnosticEvent, DiagnosticInput } from "@/shared/diagnostics.js";
 import type { DiagnosticLog } from "./diagnostic-log.js";
 
 type DiagnosticIpcHandler = (

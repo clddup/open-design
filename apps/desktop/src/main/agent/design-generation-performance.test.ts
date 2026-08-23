@@ -8,7 +8,7 @@ import {
   DESIGN_CAPTURE_TOOL_NAME,
   DESIGN_PLAN_TOOL_NAME,
   DESIGN_REVIEW_TOOL_NAME,
-} from "../../shared/design-agent-tools";
+} from "@/shared/design-agent-tools";
 import { DesignGenerationPerformanceTracker } from "./design-generation-performance";
 
 const baseTime = Date.parse("2026-08-12T00:00:00.000Z");

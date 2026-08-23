@@ -7,8 +7,8 @@ import {
   DESIGN_CHECKPOINT_TOOL_NAME,
   DESIGN_FIRST_SLICE_TOOL_NAME,
   DESIGN_REVIEW_TOOL_NAME,
-} from "../../../shared/design-agent-tools";
-import type { MessageKey } from "../../../shared/i18n/messages";
+} from "@/shared/design-agent-tools";
+import type { MessageKey } from "@/shared/i18n/messages";
 import { latestDeliveryLedger } from "./timeline-design-delivery";
 
 export type AgentRunExperiencePhase =

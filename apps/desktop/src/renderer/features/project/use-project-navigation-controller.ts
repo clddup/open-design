@@ -5,14 +5,8 @@ import type {
   ProjectManifest,
 } from "@opendesign/workspace-contracts";
 import { useCallback, type Dispatch, type SetStateAction } from "react";
-import type {
-  MessageKey,
-  MessageParameters,
-} from "../../../shared/i18n/messages";
-import type {
-  ProjectDesignFile,
-  RecentProject,
-} from "../../../shared/desktop-api";
+import type { MessageKey, MessageParameters } from "@/shared/i18n/messages";
+import type { ProjectDesignFile, RecentProject } from "@/shared/desktop-api";
 import { LOCAL_PROJECT_ID } from "../../state/editor-runtime";
 import { reportRendererError } from "../diagnostics/diagnostics";
 import type { ProjectAutosaveCoordinator } from "./project-autosave";

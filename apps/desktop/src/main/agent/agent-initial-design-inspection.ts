@@ -7,7 +7,7 @@ import {
   type TrustedToolResult,
 } from "@opendesign/agent-contracts";
 import { projectToolResultForModel } from "@opendesign/agent-runtime";
-import { DESIGN_INSPECT_TOOL_NAME } from "../../shared/design-agent-tools.js";
+import { DESIGN_INSPECT_TOOL_NAME } from "@/shared/design-agent-tools.js";
 
 type RunStartRequest = Extract<AgentRequest, { type: "run.start" }>;
 

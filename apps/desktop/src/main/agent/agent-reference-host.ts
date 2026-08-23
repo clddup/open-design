@@ -9,7 +9,7 @@ import {
 } from "@opendesign/agent-contracts";
 import { basename, isAbsolute } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { ReadImageToolInput } from "../../shared/design-agent-tools";
+import type { ReadImageToolInput } from "@/shared/design-agent-tools";
 import type { AgentAttachmentHost } from "./agent-attachment-host";
 
 type RunStartRequest = Extract<AgentRequest, { type: "run.start" }>;

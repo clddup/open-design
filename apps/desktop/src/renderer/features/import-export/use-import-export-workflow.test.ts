@@ -5,7 +5,7 @@ import {
 } from "@opendesign/editor-runtime";
 import type { AppMessageApi } from "@opendesign/ui";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { DesktopApi } from "../../../shared/desktop-api";
+import type { DesktopApi } from "@/shared/desktop-api";
 import { exportDesignRaster } from "./raster-export";
 import { useImportExportWorkflow } from "./use-import-export-workflow";
 

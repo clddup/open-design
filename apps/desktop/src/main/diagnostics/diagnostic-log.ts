@@ -5,7 +5,7 @@ import {
   DIAGNOSTIC_EVENT_VERSION,
   type DiagnosticEvent,
   type DiagnosticInput,
-} from "../../shared/diagnostics";
+} from "@/shared/diagnostics";
 
 export type DiagnosticLogOptions = {
   appVersion: string;

@@ -1,4 +1,4 @@
-import { createStarterProjectFiles } from "../../shared/project/starter-project.js";
+import { createStarterProjectFiles } from "@/shared/project/starter-project.js";
 import {
   BUILTIN_GRAPHIC_DESIGN_SKILL_REFS,
   BUILTIN_UI_DESIGN_SKILL_REFS,
@@ -20,8 +20,8 @@ import type {
   DesignApplyToolInput,
   DesignPlanTarget,
   DesignPlanToolInput,
-} from "../../shared/design-agent-tools.js";
-import { createAgentDesignIdAllocation } from "../../shared/design-id-allocation.js";
+} from "@/shared/design-agent-tools.js";
+import { createAgentDesignIdAllocation } from "@/shared/design-id-allocation.js";
 
 const modelSelection = {
   providerId: "provider_1",

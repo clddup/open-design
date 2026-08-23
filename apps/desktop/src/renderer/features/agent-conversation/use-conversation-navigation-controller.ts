@@ -4,10 +4,7 @@ import type {
   ProjectManifest,
 } from "@opendesign/workspace-contracts";
 import { useCallback, type Dispatch, type SetStateAction } from "react";
-import type {
-  MessageKey,
-  MessageParameters,
-} from "../../../shared/i18n/messages";
+import type { MessageKey, MessageParameters } from "@/shared/i18n/messages";
 import { reportRendererError } from "../diagnostics/diagnostics";
 import type {
   AppNavigationTransition,

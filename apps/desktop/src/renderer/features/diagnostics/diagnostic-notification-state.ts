@@ -1,4 +1,4 @@
-import type { DiagnosticEvent } from "../../../shared/diagnostics";
+import type { DiagnosticEvent } from "@/shared/diagnostics";
 
 export const MAX_DIAGNOSTIC_NOTIFICATIONS = 4;
 

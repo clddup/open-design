@@ -6,7 +6,7 @@ import {
   Icon,
   IconButton,
 } from "@opendesign/ui";
-import type { ThemePreference } from "../../../../shared/desktop-api";
+import type { ThemePreference } from "@/shared/desktop-api";
 import { WindowControls } from "../../../components/app-window/WindowControls";
 import { useI18n } from "../../../i18n";
 import styles from "./Titlebar.module.scss";

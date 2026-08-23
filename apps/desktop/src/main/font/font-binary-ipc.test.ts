@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { channels } from "../../shared/desktop-api";
+import { channels } from "@/shared/desktop-api";
 import {
   registerFontBinaryIpc,
   type FontBinaryIpcRegistrar,

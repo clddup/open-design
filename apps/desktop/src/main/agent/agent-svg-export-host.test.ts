@@ -4,7 +4,7 @@ import type {
   TrustedToolResult,
 } from "@opendesign/agent-contracts";
 import { describe, expect, it, vi } from "vitest";
-import { EXPORT_SVG_TOOL_NAME } from "../../shared/design-agent-tools";
+import { EXPORT_SVG_TOOL_NAME } from "@/shared/design-agent-tools";
 import { AgentSvgExportHost } from "./agent-svg-export-host";
 
 const context: TrustedToolContext = {

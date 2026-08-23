@@ -1,6 +1,6 @@
 import type { DesignDocument } from "@opendesign/design-contracts";
 import type { EditorRuntime } from "@opendesign/editor-runtime";
-import type { ProjectDesignFile } from "../../../shared/desktop-api";
+import type { ProjectDesignFile } from "@/shared/desktop-api";
 
 export interface ProjectAutosaveTarget {
   designFileId: string;

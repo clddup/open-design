@@ -19,8 +19,8 @@ import type {
   SaveModelProviderProfileRequest,
   SaveGlobalImageGenerationSettingsRequest,
   ThemePreference,
-} from "../../../shared/desktop-api";
-import type { AppLocale } from "../../../shared/i18n/locale";
+} from "@/shared/desktop-api";
+import type { AppLocale } from "@/shared/i18n/locale";
 import { HomeTitlebar } from "../../components/app-window/HomeTitlebar";
 import { useI18n } from "../../i18n";
 import formStyles from "./SettingsForms.module.scss";

@@ -1,9 +1,6 @@
 import type { ConversationDescriptor } from "@opendesign/workspace-contracts";
 import { useCallback, useEffect, useState } from "react";
-import type {
-  MessageKey,
-  MessageParameters,
-} from "../../../shared/i18n/messages";
+import type { MessageKey, MessageParameters } from "@/shared/i18n/messages";
 import { reportRendererError } from "../diagnostics/diagnostics";
 
 type Translate = (key: MessageKey, parameters?: MessageParameters) => string;

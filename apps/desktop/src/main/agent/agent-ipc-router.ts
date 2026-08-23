@@ -4,8 +4,8 @@ import {
   type AgentRequest,
 } from "@opendesign/agent-contracts";
 import type { IpcMainInvokeEvent } from "electron";
-import { channels } from "../../shared/desktop-api.js";
-import type { DiagnosticContext } from "../../shared/diagnostics.js";
+import { channels } from "@/shared/desktop-api.js";
+import type { DiagnosticContext } from "@/shared/diagnostics.js";
 import { handleAgentApprovalRequest } from "./agent-approval-handler.js";
 import type { AgentHost } from "./agent-host.js";
 import type { AgentRunCoordinator } from "./agent-run-coordinator.js";

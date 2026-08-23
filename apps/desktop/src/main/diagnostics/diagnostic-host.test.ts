@@ -1,11 +1,11 @@
 import type { IpcMainInvokeEvent } from "electron";
 import { describe, expect, it, vi } from "vitest";
-import { channels } from "../../shared/desktop-api.js";
+import { channels } from "@/shared/desktop-api.js";
 import {
   DIAGNOSTIC_EVENT_VERSION,
   type DiagnosticEvent,
   type DiagnosticInput,
-} from "../../shared/diagnostics.js";
+} from "@/shared/diagnostics.js";
 import {
   DiagnosticHost,
   type DiagnosticIpcRegistrar,

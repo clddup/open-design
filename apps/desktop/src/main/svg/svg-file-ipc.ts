@@ -1,5 +1,5 @@
 import type { IpcMainInvokeEvent } from "electron";
-import { channels } from "../../shared/desktop-api.js";
+import { channels } from "@/shared/desktop-api.js";
 import type { SvgFileService } from "./svg-file-service.js";
 
 export type SvgFileIpcHandler = (

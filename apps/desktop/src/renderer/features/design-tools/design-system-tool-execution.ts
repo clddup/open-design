@@ -10,11 +10,11 @@ import {
   DESIGN_VARIABLE_TOOL_NAME,
   isDesignStyleToolInput,
   isDesignVariableToolInput,
-} from "../../../shared/design-agent-tools";
+} from "@/shared/design-agent-tools";
 import type {
   RendererDesignToolRequest,
   RendererDesignToolResponse,
-} from "../../../shared/design-tool-bridge";
+} from "@/shared/design-tool-bridge";
 import { executeDesignStyleTool } from "./design-style-tool-execution";
 import { executeDesignVariableTool } from "./design-variable-tool-execution";
 

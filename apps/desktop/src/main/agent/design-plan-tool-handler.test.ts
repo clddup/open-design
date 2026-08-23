@@ -5,7 +5,7 @@ import {
   DESIGN_PLAN_TOOL_NAME,
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
   type DesignPlanToolInput,
-} from "../../shared/design-agent-tools.js";
+} from "@/shared/design-agent-tools.js";
 import { handleDesignPlanTool } from "./design-plan-tool-handler.js";
 
 const plan: DesignPlanToolInput = {

@@ -112,8 +112,8 @@ import {
   type SaveRasterFileResult,
   type ThemePreference,
   type WindowAction,
-} from "../shared/desktop-api";
-import type { AppLocale } from "../shared/i18n/locale";
+} from "@/shared/desktop-api";
+import type { AppLocale } from "@/shared/i18n/locale";
 import {
   isRendererDesignToolCancel,
   isRendererDesignToolProgress,
@@ -124,7 +124,7 @@ import {
   type RendererDesignToolProgress,
   type RendererDesignToolRequest,
   type RendererDesignToolResponse,
-} from "../shared/design-tool-bridge";
+} from "@/shared/design-tool-bridge";
 
 type Guard<T> = (value: unknown) => value is T;
 

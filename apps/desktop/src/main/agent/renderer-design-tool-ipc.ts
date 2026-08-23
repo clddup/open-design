@@ -2,8 +2,8 @@ import type { IpcMainInvokeEvent } from "electron";
 import {
   isRendererDesignToolProgress,
   isRendererDesignToolResponse,
-} from "../../shared/design-tool-bridge.js";
-import { channels } from "../../shared/desktop-api.js";
+} from "@/shared/design-tool-bridge.js";
+import { channels } from "@/shared/desktop-api.js";
 import type { RendererDesignToolHost } from "./renderer-design-tool-host.js";
 
 type RendererDesignToolIpcHandler = (

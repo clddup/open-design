@@ -32,10 +32,7 @@ import {
   type LayerRenameInput,
 } from "@opendesign/editor-runtime";
 import { useCallback, useMemo } from "react";
-import type {
-  MessageKey,
-  MessageParameters,
-} from "../../../shared/i18n/messages";
+import type { MessageKey, MessageParameters } from "@/shared/i18n/messages";
 import type {
   LayerActionResult,
   LayerReparentRequest,

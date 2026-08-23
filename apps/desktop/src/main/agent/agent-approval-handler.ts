@@ -2,7 +2,7 @@ import type { AgentRequest } from "@opendesign/agent-contracts";
 import {
   PAGE_STRUCTURE_ACCESS_TOOL_NAME,
   isPageStructureAccessToolInput,
-} from "../../shared/design-agent-tools.js";
+} from "@/shared/design-agent-tools.js";
 import type { AgentHost } from "./agent-host.js";
 import type { GlobalTaskCoordinator } from "./global-task-coordinator.js";
 

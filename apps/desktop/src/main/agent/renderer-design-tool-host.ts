@@ -11,7 +11,7 @@ import type {
   RendererDesignToolProgress,
   RendererDesignToolRequest,
   RendererDesignToolResponse,
-} from "../../shared/design-tool-bridge";
+} from "@/shared/design-tool-bridge";
 
 type PendingRequest = {
   context: TrustedToolContext;

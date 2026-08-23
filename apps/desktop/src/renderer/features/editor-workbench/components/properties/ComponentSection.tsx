@@ -14,7 +14,7 @@ import type {
 import type { ResolvedComponentSlot } from "@opendesign/component-service";
 import { Button, Icon } from "@opendesign/ui";
 import { useEffect, useState } from "react";
-import type { MessageKey } from "../../../../../shared/i18n/messages";
+import type { MessageKey } from "@/shared/i18n/messages";
 import { useI18n } from "../../../../i18n";
 import styles from "../PropertiesPanel.module.scss";
 import {

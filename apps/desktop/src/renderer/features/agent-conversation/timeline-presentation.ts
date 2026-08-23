@@ -4,9 +4,9 @@ import type {
   AssistantTimelineBlock,
 } from "@opendesign/agent-contracts";
 import type { DesignDeliveryStatus } from "@opendesign/workspace-contracts";
-import type { AppLocale } from "../../../shared/i18n/locale";
-import type { MessageKey } from "../../../shared/i18n/messages";
-import { classifyDesignWorkflowFailure } from "../../../shared/design-workflow-failure-classification";
+import type { AppLocale } from "@/shared/i18n/locale";
+import type { MessageKey } from "@/shared/i18n/messages";
+import { classifyDesignWorkflowFailure } from "@/shared/design-workflow-failure-classification";
 import {
   DESIGN_APPLY_TOOL_NAME,
   DESIGN_ARRANGE_TOOL_NAME,
@@ -21,7 +21,7 @@ import {
   DESIGN_PLAN_TOOL_NAME,
   DESIGN_REVIEW_TOOL_NAME,
   PAGE_STRUCTURE_ACCESS_TOOL_NAME,
-} from "../../../shared/design-agent-tools";
+} from "@/shared/design-agent-tools";
 import type { AgentTimelineItem, Translate } from "./timeline-types";
 
 export function eventTime(

@@ -8,8 +8,8 @@ import type {
   DesignPlanToolInput,
   DesignVisualCriterion,
   DesignVisualReviewToolInput,
-} from "../../shared/design-agent-tools.js";
-import { activeVisualReferenceIds } from "../../shared/design-agent-tools.js";
+} from "@/shared/design-agent-tools.js";
+import { activeVisualReferenceIds } from "@/shared/design-agent-tools.js";
 
 const GENERIC_CRITERIA = [
   "visual-thesis",

@@ -7,7 +7,7 @@ import {
   EXPORT_SVG_TOOL_NAME,
   isExportSvgToolInput,
   isPreparedAgentSvgExport,
-} from "../../shared/design-agent-tools";
+} from "@/shared/design-agent-tools";
 import type { SvgFileService } from "../svg/svg-file-service";
 
 interface RendererSvgExportPort {

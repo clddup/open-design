@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ConversationDescriptor } from "@opendesign/workspace-contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { DesktopApi } from "../../../shared/desktop-api";
+import type { DesktopApi } from "@/shared/desktop-api";
 import { AppNavigationCoordinator } from "../../router/app-navigation-coordinator";
 import { useConversationLifecycleState } from "./use-conversation-lifecycle-state";
 import { useConversationNavigationController } from "./use-conversation-navigation-controller";

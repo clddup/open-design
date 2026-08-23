@@ -20,9 +20,9 @@ import {
   isSaveDesignFileRequest,
   type OpenDesignFile,
   type SaveDesignFileResult,
-} from "../shared/desktop-api.js";
-import type { AppLocale } from "../shared/i18n/locale.js";
-import { translate } from "../shared/i18n/messages.js";
+} from "@/shared/desktop-api.js";
+import type { AppLocale } from "@/shared/i18n/locale.js";
+import { translate } from "@/shared/i18n/messages.js";
 
 const DESIGN_FILE_EXTENSION = ".opendesign";
 const MAX_DESIGN_FILE_BYTES = 64 * 1024 * 1024;

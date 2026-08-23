@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { DesktopApi } from "../../../shared/desktop-api";
-import type { DiagnosticEvent } from "../../../shared/diagnostics";
+import type { DesktopApi } from "@/shared/desktop-api";
+import type { DiagnosticEvent } from "@/shared/diagnostics";
 import { useDiagnosticNotificationsController } from "./use-diagnostic-notifications-controller";
 
 afterEach(() => {

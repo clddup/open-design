@@ -7,7 +7,7 @@ import {
   type ProviderConnectionResult,
   type SaveGlobalImageGenerationSettingsRequest,
   type SaveModelProviderProfileRequest,
-} from "../../shared/desktop-api.js";
+} from "@/shared/desktop-api.js";
 import {
   registerModelServiceIpc,
   type ModelServiceIpcRegistrar,

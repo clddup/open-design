@@ -6,6 +6,7 @@ import electron, {
 } from "vite-plugin-electron/multi-env";
 import OfflineIconify from "unplugin-offline-iconify/vite";
 import { electronBytecode } from "./build/bytecode-plugin.ts";
+import { desktopSourceAliases } from "./build/source-paths.ts";
 
 const root = import.meta.dirname;
 const startDesktop: NonNullable<MultiEnvElectronOptions["onstart"]> = async ({
@@ -18,6 +19,7 @@ export default defineConfig(({ mode }) => {
   const protectedBuild = mode === "protected";
   return {
     root: resolve(root, "src/renderer"),
+    resolve: { alias: desktopSourceAliases },
     plugins: [
       OfflineIconify({
         cwd: resolve(root, "../.."),

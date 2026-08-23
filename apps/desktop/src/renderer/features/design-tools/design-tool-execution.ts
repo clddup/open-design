@@ -77,13 +77,13 @@ import {
   type DesignFontToolInput,
   type DesignPageToolInput,
   type DesignTextRangeToolInput,
-} from "../../../shared/design-agent-tools";
-import { createAgentDesignIdAllocation } from "../../../shared/design-id-allocation";
+} from "@/shared/design-agent-tools";
+import { createAgentDesignIdAllocation } from "@/shared/design-id-allocation";
 import type {
   RendererDesignToolProgressPhase,
   RendererDesignToolRequest,
   RendererDesignToolResponse,
-} from "../../../shared/design-tool-bridge";
+} from "@/shared/design-tool-bridge";
 import { exportDesignRaster } from "../import-export/raster-export";
 import {
   runSvgExportInWorker,

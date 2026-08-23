@@ -7,7 +7,7 @@ import type {
   SaveGlobalImageGenerationSettingsRequest,
   ModelProviderCatalog,
   SaveModelProviderProfileRequest,
-} from "../../../shared/desktop-api";
+} from "@/shared/desktop-api";
 import { I18nProvider } from "../../i18n";
 import { SettingsPage } from "./SettingsView";
 

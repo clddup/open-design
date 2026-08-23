@@ -9,10 +9,10 @@ import {
   DESIGN_INSPECT_TOOL_NAME,
   DESIGN_PLAN_TOOL_NAME,
   DESIGN_REVIEW_TOOL_NAME,
-} from "../../shared/design-agent-tools.js";
+} from "@/shared/design-agent-tools.js";
 import type { RendererDesignToolPerformanceSample } from "./renderer-design-tool-host.js";
 import type { ModelProviderPerformanceSample } from "../model/model-provider-stream.js";
-import type { DiagnosticInput } from "../../shared/diagnostics.js";
+import type { DiagnosticInput } from "@/shared/diagnostics.js";
 
 const MAX_ACTIVE_RUNS = 64;
 const MAX_TRACKED_TOOL_CALLS = 512;

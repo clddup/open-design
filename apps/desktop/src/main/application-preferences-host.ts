@@ -4,8 +4,8 @@ import {
   isLocalePreference,
   isThemePreference,
   type ThemePreference,
-} from "../shared/desktop-api.js";
-import { DEFAULT_APP_LOCALE, type AppLocale } from "../shared/i18n/locale.js";
+} from "@/shared/desktop-api.js";
+import { DEFAULT_APP_LOCALE, type AppLocale } from "@/shared/i18n/locale.js";
 
 type ApplicationPreferencesIpcHandler = (
   event: IpcMainInvokeEvent,

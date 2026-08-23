@@ -10,12 +10,12 @@ import {
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
   isDesignApplyToolInput,
   isInternalDesignApplyToolInput,
-} from "../../../shared/design-agent-tools";
+} from "@/shared/design-agent-tools";
 import type {
   RendererDesignToolProgressPhase,
   RendererDesignToolRequest,
   RendererDesignToolResponse,
-} from "../../../shared/design-tool-bridge";
+} from "@/shared/design-tool-bridge";
 import {
   throwIfAgentGenerationAborted,
   waitForCanvasPaint,

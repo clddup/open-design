@@ -22,10 +22,7 @@ import {
   type EditorRuntime,
 } from "@opendesign/editor-runtime";
 import { useCallback, useEffect } from "react";
-import type {
-  MessageKey,
-  MessageParameters,
-} from "../../../shared/i18n/messages";
+import type { MessageKey, MessageParameters } from "@/shared/i18n/messages";
 import type { UpdatePropertiesPatch } from "./types";
 import { autoLayoutShortcutRequest } from "./auto-layout-shortcut";
 

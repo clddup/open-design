@@ -1,4 +1,4 @@
-import type { DesignComponentToolInput } from "../../shared/design-agent-tools";
+import type { DesignComponentToolInput } from "@/shared/design-agent-tools";
 
 export function materialTargetRefsForComponentTool(
   input: DesignComponentToolInput,

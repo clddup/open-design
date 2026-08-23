@@ -1,6 +1,6 @@
 import { Button, IconButton } from "@opendesign/ui";
 import type { ReactNode } from "react";
-import type { ThemePreference } from "../../../shared/desktop-api";
+import type { ThemePreference } from "@/shared/desktop-api";
 import { HomeTitlebar } from "../../components/app-window/HomeTitlebar";
 import { useI18n } from "../../i18n";
 import styles from "./ConversationHome.module.scss";

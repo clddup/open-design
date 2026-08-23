@@ -2,7 +2,7 @@ import type {
   AgentEvent,
   SessionTimelineItem,
 } from "@opendesign/agent-contracts";
-import type { AppLocale } from "../../../shared/i18n/locale";
+import type { AppLocale } from "@/shared/i18n/locale";
 import {
   parseCommittedDesignStep,
   projectDurableDesignSteps,

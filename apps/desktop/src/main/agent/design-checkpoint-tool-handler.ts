@@ -10,7 +10,7 @@ import {
   normalizeDesignCheckpointToolInput,
   type DesignApplyToolInput,
   type DesignCheckpointToolInput,
-} from "../../shared/design-agent-tools.js";
+} from "@/shared/design-agent-tools.js";
 
 type ReportProgress = (message: string, progress: number) => void;
 

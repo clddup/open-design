@@ -8,7 +8,7 @@ import {
   IMPORT_SVG_TOOL_NAME,
   INTERNAL_IMPORT_SVG_TOOL_NAME,
   type InternalImportSvgToolInput,
-} from "../../shared/design-agent-tools";
+} from "@/shared/design-agent-tools";
 import { AgentSvgImportHost } from "./agent-svg-import-host";
 
 const attachmentId = `svg_${"a".repeat(64)}`;

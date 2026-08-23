@@ -11,7 +11,7 @@ import {
   logoBriefRequiresExploration,
   normalizeDesignApplyToolInput,
   normalizeDesignFirstSliceToolInput,
-} from "../../shared/design-agent-tools.js";
+} from "@/shared/design-agent-tools.js";
 import type { GlobalTaskCoordinator } from "./global-task-coordinator.js";
 import type { RendererDesignToolHost } from "./renderer-design-tool-host.js";
 

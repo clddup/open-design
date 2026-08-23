@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { SaveModelProviderProfileRequest } from "../../shared/desktop-api";
+import type { SaveModelProviderProfileRequest } from "@/shared/desktop-api";
 import { WorkspaceStore } from "../project/workspace-store";
 import type {
   CanonicalStreamEvent,

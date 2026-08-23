@@ -11,8 +11,8 @@ import {
 import { getImageAssetFamily } from "@opendesign/editor-runtime";
 import { Button, DropdownMenu, DropdownMenuItem, Icon } from "@opendesign/ui";
 import { useEffect, useId, useState, type KeyboardEvent } from "react";
-import type { DesignImageEditAction } from "../../../../../shared/desktop-api";
-import type { MessageKey } from "../../../../../shared/i18n/messages";
+import type { DesignImageEditAction } from "@/shared/desktop-api";
+import type { MessageKey } from "@/shared/i18n/messages";
 import { useI18n } from "../../../../i18n";
 import {
   IMAGE_DERIVATION_OPERATION_LABEL_KEYS,

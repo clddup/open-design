@@ -6,7 +6,7 @@ import {
   isSaveModelProviderProfileRequest,
   isTestModelProviderConnectionRequest,
   type ModelProviderCatalog,
-} from "../../shared/desktop-api.js";
+} from "@/shared/desktop-api.js";
 import type { ImageGenerationHost } from "./image-generation-host.js";
 import type { ModelProviderHost } from "./model-provider-host.js";
 

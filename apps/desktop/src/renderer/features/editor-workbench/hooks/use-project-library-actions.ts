@@ -15,12 +15,9 @@ import {
 import type {
   ProjectLibraryCatalog,
   ProjectLibraryCatalogEntry,
-} from "../../../../shared/desktop-api";
+} from "@/shared/desktop-api";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type {
-  MessageKey,
-  MessageParameters,
-} from "../../../../shared/i18n/messages";
+import type { MessageKey, MessageParameters } from "@/shared/i18n/messages";
 import type { AssetActionResult } from "../../design-tools/design-assets";
 
 type Translate = (key: MessageKey, parameters?: MessageParameters) => string;

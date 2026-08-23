@@ -14,7 +14,7 @@ import {
   DESIGN_CHECKPOINT_TOOL_NAME,
   DESIGN_PLAN_TOOL_NAME,
   type DesignPlanToolInput,
-} from "../../../shared/design-agent-tools";
+} from "@/shared/design-agent-tools";
 import {
   EMPTY_GENERATION_PLAN_PRESENTATION_STATE,
   generationActivityFromAcceptedPlan,

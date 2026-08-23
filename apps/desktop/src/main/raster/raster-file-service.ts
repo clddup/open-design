@@ -14,7 +14,7 @@ import {
 import {
   isSaveRasterFileRequest,
   type SaveRasterFileResult,
-} from "../../shared/desktop-api.js";
+} from "@/shared/desktop-api.js";
 
 export interface RasterPathOperations {
   basename(path: string): string;

@@ -18,7 +18,7 @@ import {
   DESIGN_REVIEW_TOOL_NAME,
   READ_IMAGE_TOOL_NAME,
   validateDesignAgentToolInput,
-} from "../../shared/design-agent-tools.js";
+} from "@/shared/design-agent-tools.js";
 
 export interface MainDesignToolDispatcher {
   (

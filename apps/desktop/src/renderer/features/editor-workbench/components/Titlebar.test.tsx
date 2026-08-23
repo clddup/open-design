@@ -3,7 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { DesktopApi } from "../../../../shared/desktop-api";
+import type { DesktopApi } from "@/shared/desktop-api";
 import { I18nProvider } from "../../../i18n";
 import { Titlebar } from "./Titlebar";
 

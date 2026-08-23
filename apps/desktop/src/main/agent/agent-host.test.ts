@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AGENT_PROTOCOL_VERSION } from "@opendesign/agent-contracts";
-import type { SessionStoreBridgeRequest } from "../../shared/session-store-bridge";
+import type { SessionStoreBridgeRequest } from "@/shared/session-store-bridge";
 import {
   AgentHost,
   createAgentEnvironment,

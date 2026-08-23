@@ -18,7 +18,7 @@ import {
   IMPORT_SVG_TOOL_NAME,
   PLACE_IMAGE_TOOL_NAME,
   UPDATE_IMAGE_TOOL_NAME,
-} from "../shared/design-agent-tools";
+} from "@/shared/design-agent-tools";
 import { reviewDesignCompletion } from "./design-completion-guard";
 
 const materialWrite: AgentToolCallRecord = {

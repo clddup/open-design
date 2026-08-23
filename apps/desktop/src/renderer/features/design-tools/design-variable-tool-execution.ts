@@ -5,8 +5,8 @@ import type {
   DesignTransaction,
 } from "@opendesign/design-contracts";
 import type { EditorRuntime } from "@opendesign/editor-runtime";
-import type { DesignVariableToolInput } from "../../../shared/design-variable-tool";
-import type { RendererDesignToolResponse } from "../../../shared/design-tool-bridge";
+import type { DesignVariableToolInput } from "@/shared/design-variable-tool";
+import type { RendererDesignToolResponse } from "@/shared/design-tool-bridge";
 import { planDesignVariableTool } from "./design-variable-tool-plan";
 
 export function executeDesignVariableTool({

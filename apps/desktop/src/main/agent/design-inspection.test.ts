@@ -6,12 +6,12 @@ import {
 import type {
   DesignPlanTarget,
   DesignPlanToolInput,
-} from "../../shared/design-agent-tools.js";
+} from "@/shared/design-agent-tools.js";
 import {
   assertDeliveryTargetStructure,
   parseInspectedHierarchy,
 } from "./design-inspection.js";
-import { createAgentDesignIdAllocation } from "../../shared/design-id-allocation.js";
+import { createAgentDesignIdAllocation } from "@/shared/design-id-allocation.js";
 import type {
   DesignDeliveryTargetState,
   InspectedHierarchy,

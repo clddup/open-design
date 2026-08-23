@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type {
   DesignPlanToolInput,
   DesignVisualReviewToolInput,
-} from "../../shared/design-agent-tools.js";
+} from "@/shared/design-agent-tools.js";
 import {
   registerDesignWorkflowPlan,
   type DesignDeliveryTargetState,

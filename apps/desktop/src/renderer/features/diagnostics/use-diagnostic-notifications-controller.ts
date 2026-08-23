@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { DiagnosticEvent } from "../../../shared/diagnostics";
+import type { DiagnosticEvent } from "@/shared/diagnostics";
 import { mergeDiagnosticNotifications } from "./diagnostic-notification-state";
 
 export function useDiagnosticNotificationsController() {

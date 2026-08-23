@@ -20,9 +20,9 @@ import {
   type DesignImageAreaSelection,
   type DesignImageEditRequest,
   type DesignImageExpansion,
-} from "../shared/desktop-api.js";
-import type { AppLocale } from "../shared/i18n/locale.js";
-import { translate } from "../shared/i18n/messages.js";
+} from "@/shared/desktop-api.js";
+import type { AppLocale } from "@/shared/i18n/locale.js";
+import { translate } from "@/shared/i18n/messages.js";
 import type { AgentAttachmentHost } from "./agent/agent-attachment-host.js";
 
 type MediaAttachmentHost = Pick<
