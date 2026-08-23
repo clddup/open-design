@@ -1,6 +1,6 @@
 # ADR-0144：单一来源的工具契约验证
 
-- 状态：Accepted，first-slice、node apply、Design Plan 与 Checkpoint 已实施，其余契约分阶段实施
+- 状态：Accepted，first-slice、node apply、Design Plan、Checkpoint 与图片获取已实施，其余契约分阶段实施
 - 日期：2026-08-23
 - 首个迁移对象：compact first-slice
 - 关联：ADR-0018、ADR-0100、ADR-0103、ADR-0141、ADR-0143
@@ -77,12 +77,14 @@ Design Plan 已完成第三个迁移切片：`DesignPlanContract.parse(input, co
 
 Design Checkpoint 已完成第四个迁移切片：`DesignCheckpointContract.parse(input)` 以 action discriminant 直接选择 `apply-and-capture` 或 `refine-and-capture` 的真实 schema 分支；Provider、Pi、Main handler 与 Renderer Timeline 复用同一入口。顶层 schema 已验证完整嵌套 Apply 后，`DesignApplyContract` 只继续 canonicalization 和唯一 domain refinement，不再对相同结构重复遍历；嵌套错误保留 Apply 的稳定 code，并准确前缀为 `/apply` 或 `/refinement`。旧 `isDesignCheckpointToolInput / normalizeDesignCheckpointToolInput` 已删除。材料 apply 成功、capture 单独失败时保留已提交 revision 的现有恢复语义不变。
 
+图片获取已完成第五个迁移切片：`ReadImageContract.parse(input)` 与 `GenerateImageContract.parse(input)` 分别成为读取用户授权图片和调用全局生图模型的唯一输入入口，Provider、Pi、工具聚合校验与 Main 执行消费同一可执行 schema。旧 `isReadImageToolInput / isGenerateImageToolInput` 已删除。显式生成尺寸的每边 `256..4096`、最大 `4:1` 宽高比和 `16,777,216` 像素总面积仍由一个 domain refinement 负责，但准确限制同步进入模型可见 schema 描述；空白 prompt 在结构层直接拒绝，不再出现 Provider 合法、Runtime 才失败的隐藏规则。
+
 `ValidationIssue` 的稳定 `code/path/expected/actual/recovery` 通过 `tool-validation` failure details 进入 Agent event、journal 和 Timeline；这种参数修正使用 `correct-and-retry`，不冒充需要文档 inspection 的事务错误。Design transaction 仍保留独立 `inspect-and-revise` 恢复语义。
 
-Visual Review、图片、导入导出、结构、Page、Component、Style、Variable 等其余 Agent tools 与 IPC/持久化契约尚未迁移，不得据此宣称全仓已实现单一验证入口。
+Visual Review、图片放置/更新/编辑、导入导出、结构、Page、Component、Style、Variable 等其余 Agent tools 与 IPC/持久化契约尚未迁移，不得据此宣称全仓已实现单一验证入口。
 
 ## 后果
 
 - 不重写 pi-agent-core 已有的循环或 TypeBox 参数验证；OpenDesign 只增加产品 domain refinement 和边界 issue adapter。
 - 首个迁移会删除较多手写代码并改变测试入口，属于允许的破坏性开发更新。
-- 在迁移完成前，新增 first-slice、node apply、Design Plan 或 Checkpoint 字段必须进入对应单一入口；不得继续扩展三套旧函数。
+- 在迁移完成前，新增 first-slice、node apply、Design Plan、Checkpoint、Read Image 或 Generate Image 字段必须进入对应单一入口；不得继续扩展三套旧函数。

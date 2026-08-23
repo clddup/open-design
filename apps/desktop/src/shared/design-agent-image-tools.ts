@@ -1,4 +1,5 @@
 import {
+  executableJsonSchema,
   isDesignAsset,
   isImageAssetDerivation,
   ImagePaintSchema,
@@ -6,19 +7,21 @@ import {
   isImagePaint,
   isImagePlacement,
   isImageLightingPreset,
+  schemaValidationIssues,
   type DesignAsset,
   type ImageFilters,
   type ImagePlacement,
   type ImageLightingPreset,
   type ImagePaint,
   type ImageAssetDerivation,
+  type TSchema,
 } from "@opendesign/design-contracts";
 import {
   isPlaceableRasterAssetRole,
-  isRasterAssetRole,
   type PlaceableRasterAssetRole,
   type RasterAssetRole,
 } from "./design-agent-plan-review";
+import type { ValidationIssue, ValidationResult } from "./contract-validation";
 import {
   exactKeys,
   finite,
@@ -281,19 +284,24 @@ export const DESIGN_IMAGE_PLACEMENT_SCHEMA = {
   ],
 } as const;
 
-export const READ_IMAGE_TOOL_INPUT_SCHEMA = {
+export const READ_IMAGE_TOOL_INPUT_SCHEMA = executableJsonSchema({
   type: "object",
   properties: {
     source: { type: "string", minLength: 1, maxLength: 4_096 },
   },
   required: ["source"],
   additionalProperties: false,
-} as const;
+});
 
-export const GENERATE_IMAGE_TOOL_INPUT_SCHEMA = {
+export const GENERATE_IMAGE_TOOL_INPUT_SCHEMA = executableJsonSchema({
   type: "object",
   properties: {
-    prompt: { type: "string", minLength: 1, maxLength: 32_000 },
+    prompt: {
+      type: "string",
+      minLength: 1,
+      maxLength: 32_000,
+      pattern: "\\S",
+    },
     role: {
       enum: [
         "reference",
@@ -307,14 +315,14 @@ export const GENERATE_IMAGE_TOOL_INPUT_SCHEMA = {
       type: "string",
       pattern: "^(auto|[1-9][0-9]{2,3}x[1-9][0-9]{2,3})$",
       description:
-        "Output resolution. Popular values include 1024x1024, 1536x1024, 1024x1536, 2048x2048, 2048x1152, 3840x2160, 2160x3840, and auto.",
+        "Output resolution or auto. For explicit dimensions each edge must be 256..4096 px, aspect ratio at most 4:1, and total area at most 16,777,216 pixels. Popular values include 1024x1024, 1536x1024, 1024x1536, 2048x2048, 2048x1152, 3840x2160, and 2160x3840.",
     },
     quality: { enum: ["auto", "low", "medium", "high"] },
     outputFormat: { enum: ["png", "jpeg", "webp"] },
   },
   required: ["prompt", "role"],
   additionalProperties: false,
-} as const;
+});
 
 export const PLACE_IMAGE_TOOL_INPUT_SCHEMA = {
   type: "object",
@@ -598,42 +606,55 @@ export const EDIT_IMAGE_TOOL_INPUT_SCHEMA = {
   additionalProperties: false,
 } as const;
 
-export function isReadImageToolInput(
-  input: unknown,
-): input is ReadImageToolInput {
-  return (
-    isRecord(input) &&
-    typeof input.source === "string" &&
-    input.source.length > 0 &&
-    input.source.length <= 4_096 &&
-    exactKeys(input, ["source"])
+function parseReadImage(input: unknown): ValidationResult<ReadImageToolInput> {
+  const issues = imageToolSchemaIssues(
+    READ_IMAGE_TOOL_INPUT_SCHEMA,
+    input,
+    "read_image.schema_invalid",
+    "Read Image",
   );
+  return issues.length > 0
+    ? { ok: false, issues }
+    : { ok: true, value: structuredClone(input as ReadImageToolInput) };
 }
 
-export function isGenerateImageToolInput(
+export const ReadImageContract = {
+  schema: READ_IMAGE_TOOL_INPUT_SCHEMA,
+  parse: parseReadImage,
+  issues: (input: unknown): ValidationIssue[] => {
+    const result = parseReadImage(input);
+    return result.ok ? [] : result.issues;
+  },
+} as const;
+
+function parseGenerateImage(
   input: unknown,
-): input is GenerateImageToolInput {
-  if (!isRecord(input)) return false;
-  return (
-    typeof input.prompt === "string" &&
-    input.prompt.trim().length > 0 &&
-    input.prompt.length <= 32_000 &&
-    isRasterAssetRole(input.role) &&
-    (input.size === undefined || isImageGenerationSize(input.size)) &&
-    (input.quality === undefined ||
-      input.quality === "auto" ||
-      input.quality === "low" ||
-      input.quality === "medium" ||
-      input.quality === "high") &&
-    (input.outputFormat === undefined ||
-      input.outputFormat === "png" ||
-      input.outputFormat === "jpeg" ||
-      input.outputFormat === "webp") &&
-    Object.keys(input).every((key) =>
-      ["prompt", "role", "size", "quality", "outputFormat"].includes(key),
-    )
+): ValidationResult<GenerateImageToolInput> {
+  const structureIssues = imageToolSchemaIssues(
+    GENERATE_IMAGE_TOOL_INPUT_SCHEMA,
+    input,
+    "generate_image.schema_invalid",
+    "Generate Image",
   );
+  if (structureIssues.length > 0) {
+    return { ok: false, issues: structureIssues };
+  }
+
+  const value = input as GenerateImageToolInput;
+  const sizeIssue = explicitImageGenerationSizeIssue(value.size);
+  return sizeIssue
+    ? { ok: false, issues: [sizeIssue] }
+    : { ok: true, value: structuredClone(value) };
 }
+
+export const GenerateImageContract = {
+  schema: GENERATE_IMAGE_TOOL_INPUT_SCHEMA,
+  parse: parseGenerateImage,
+  issues: (input: unknown): ValidationIssue[] => {
+    const result = parseGenerateImage(input);
+    return result.ok ? [] : result.issues;
+  },
+} as const;
 
 export function isPlaceImageToolInput(
   input: unknown,
@@ -1188,21 +1209,52 @@ function isBoundedEmbeddedImageAsset(value: unknown): value is DesignAsset {
   );
 }
 
-function isImageGenerationSize(value: unknown): value is ImageGenerationSize {
-  if (value === "auto") return true;
-  if (typeof value !== "string") return false;
+function explicitImageGenerationSizeIssue(
+  value: ImageGenerationSize | undefined,
+): ValidationIssue | undefined {
+  if (value === undefined || value === "auto") return undefined;
   const match = /^(\d{3,4})x(\d{3,4})$/.exec(value);
   const width = Number(match?.[1]);
   const height = Number(match?.[2]);
   if (!match || !Number.isInteger(width) || !Number.isInteger(height)) {
-    return false;
+    return imageGenerationSizeIssue(value);
   }
   const longEdge = Math.max(width, height);
   const shortEdge = Math.min(width, height);
-  return (
-    shortEdge >= 256 &&
+  return shortEdge >= 256 &&
     longEdge <= 4_096 &&
     longEdge / shortEdge <= 4 &&
     width * height <= 16_777_216
-  );
+    ? undefined
+    : imageGenerationSizeIssue(value);
+}
+
+function imageGenerationSizeIssue(actual: string): ValidationIssue {
+  return {
+    code: "generate_image.size_out_of_bounds",
+    path: "/size",
+    message:
+      "Explicit image dimensions must keep each edge within 256..4096 px, aspect ratio within 4:1, and total area within 16,777,216 pixels",
+    expected:
+      "256..4096 px per edge; aspect ratio <= 4:1; area <= 16,777,216 px",
+    actual,
+    recovery:
+      "Choose a supported explicit size or use auto, then submit one revised call.",
+  };
+}
+
+function imageToolSchemaIssues(
+  schema: TSchema,
+  input: unknown,
+  code: string,
+  subject: string,
+): ValidationIssue[] {
+  return schemaValidationIssues(schema, input)
+    .slice(0, 64)
+    .map((issue) => ({
+      code,
+      path: issue.path || "/",
+      message: issue.message,
+      recovery: `Correct the reported ${subject} field and submit one revised call; do not repeat unchanged arguments.`,
+    }));
 }

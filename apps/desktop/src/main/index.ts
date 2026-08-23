@@ -130,6 +130,8 @@ import {
   INTERNAL_READ_IMAGE_SOURCE_TOOL_NAME,
   GENERATE_IMAGE_TOOL_NAME,
   DesignApplyContract,
+  GenerateImageContract,
+  ReadImageContract,
   isDesignComponentToolInput,
   isDesignFontToolInput,
   isDesignTextRangeToolInput,
@@ -137,13 +139,11 @@ import {
   isDesignVectorToolInput,
   isPageStructureAccessToolInput,
   normalizeDesignVisualReviewToolInput,
-  isGenerateImageToolInput,
   isEditImageToolInput,
   isExportSvgToolInput,
   isExportRasterToolInput,
   isImportSvgToolInput,
   isPlaceImageToolInput,
-  isReadImageToolInput,
   isUpdateImageToolInput,
   isPreparedImageEditSource,
   INTERNAL_UPDATE_IMAGE_TOOL_NAME,
@@ -156,6 +156,7 @@ import {
   type DesignVisualReviewToolInput,
   type DesignVectorToolInput,
 } from "@/shared/design-agent-tools";
+import { formatValidationFailure } from "@/shared/contract-validation.js";
 import {
   componentToolIsMaterialWrite,
   materialTargetRefsForComponentTool,
@@ -1143,25 +1144,31 @@ async function startDesktopApplication(
         return withDesignDelivery(result, context.runId);
       }
       if (call.toolName === READ_IMAGE_TOOL_NAME) {
-        if (!isReadImageToolInput(call.input)) {
-          throw new TypeError("Invalid read image tool input");
+        const parsed = ReadImageContract.parse(call.input);
+        if (!parsed.ok) {
+          throw new TypeError(
+            formatValidationFailure("opendesign_read_image", parsed.issues),
+          );
         }
         return await requireAgentReferenceHost().readImage(
-          call.input,
+          parsed.value,
           context,
           signal,
         );
       }
       if (call.toolName === GENERATE_IMAGE_TOOL_NAME) {
-        if (!isGenerateImageToolInput(call.input)) {
-          throw new TypeError("Invalid generate image tool input");
+        const parsed = GenerateImageContract.parse(call.input);
+        if (!parsed.ok) {
+          throw new TypeError(
+            formatValidationFailure("opendesign_generate_image", parsed.issues),
+          );
         }
         globalTaskCoordinator.assertDesignPlanForRaster(
           context,
-          call.input.role,
+          parsed.value.role,
         );
         const generated = await requireImageGenerationHost().generateImage(
-          call.input,
+          parsed.value,
           signal,
         );
         const attachment = await requireAgentAttachmentHost().importImageBytes(
@@ -1180,7 +1187,7 @@ async function startDesktopApplication(
         globalTaskCoordinator.recordGeneratedRaster(
           context,
           authorized.attachmentId,
-          call.input.role,
+          parsed.value.role,
         );
         const intrinsic = nativeImage
           .createFromBuffer(Buffer.from(generated.bytes))
@@ -1216,7 +1223,7 @@ async function startDesktopApplication(
                   },
                   extensions: {
                     attachmentId: authorized.attachmentId,
-                    designRole: call.input.role,
+                    designRole: parsed.value.role,
                     generatedBy: "opendesign-agent",
                     staged: true,
                   },
@@ -1236,7 +1243,7 @@ async function startDesktopApplication(
               : {}),
             size: generated.size,
             quality: generated.quality,
-            role: call.input.role,
+            role: parsed.value.role,
             outputFormat: generated.outputFormat,
             attachment: authorized,
             attachments: [authorized],
@@ -1245,7 +1252,7 @@ async function startDesktopApplication(
               name: authorized.name,
               mimeType: authorized.mimeType,
               size: { width: intrinsic.width, height: intrinsic.height },
-              role: call.input.role,
+              role: parsed.value.role,
               scope: "design-file",
             },
           },

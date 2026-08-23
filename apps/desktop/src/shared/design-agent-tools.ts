@@ -48,12 +48,13 @@ import {
   UPDATE_IMAGE_TOOL_NAME,
 } from "./design-agent-tool-names";
 import {
+  GenerateImageContract,
   GENERATE_IMAGE_TOOL_INPUT_SCHEMA,
   EDIT_IMAGE_TOOL_INPUT_SCHEMA,
   PLACE_IMAGE_TOOL_INPUT_SCHEMA,
   READ_IMAGE_TOOL_INPUT_SCHEMA,
+  ReadImageContract,
   UPDATE_IMAGE_TOOL_INPUT_SCHEMA,
-  isGenerateImageToolInput,
   isEditImageToolInput,
   isInternalReadImageSourceToolInput,
   isInternalUpdateImageToolInput,
@@ -207,16 +208,16 @@ export type {
 export {
   DESIGN_IMAGE_PLACEMENT_SCHEMA,
   EDIT_IMAGE_TOOL_INPUT_SCHEMA,
+  GenerateImageContract,
   GENERATE_IMAGE_TOOL_INPUT_SCHEMA,
   PLACE_IMAGE_TOOL_INPUT_SCHEMA,
+  ReadImageContract,
   READ_IMAGE_TOOL_INPUT_SCHEMA,
   UPDATE_IMAGE_TOOL_INPUT_SCHEMA,
   isEditImageToolInput,
-  isGenerateImageToolInput,
   isInternalReadImageSourceToolInput,
   isInternalUpdateImageToolInput,
   isPlaceImageToolInput,
-  isReadImageToolInput,
   isPreparedImageEditSource,
   isUpdateImageToolInput,
 } from "./design-agent-image-tools";
@@ -394,6 +395,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     inputSchema: READ_IMAGE_TOOL_INPUT_SCHEMA,
     risk: "read" as const,
     approval: "never" as const,
+    validateInputIssues: ReadImageContract.issues,
   },
   {
     name: GENERATE_IMAGE_TOOL_NAME,
@@ -406,6 +408,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     inputSchema: GENERATE_IMAGE_TOOL_INPUT_SCHEMA,
     risk: "external" as const,
     approval: "never" as const,
+    validateInputIssues: GenerateImageContract.issues,
   },
   {
     name: PLACE_IMAGE_TOOL_NAME,
@@ -648,16 +651,10 @@ export function validateDesignAgentToolInput(
     return DesignCheckpointContract.parse(input).ok;
   }
   if (toolName === READ_IMAGE_TOOL_NAME) {
-    return (
-      isRecord(input) &&
-      typeof input.source === "string" &&
-      input.source.length > 0 &&
-      input.source.length <= 4_096 &&
-      Object.keys(input).every((key) => key === "source")
-    );
+    return ReadImageContract.parse(input).ok;
   }
   if (toolName === GENERATE_IMAGE_TOOL_NAME) {
-    return isGenerateImageToolInput(input);
+    return GenerateImageContract.parse(input).ok;
   }
   if (toolName === PLACE_IMAGE_TOOL_NAME) return isPlaceImageToolInput(input);
   if (toolName === UPDATE_IMAGE_TOOL_NAME) return isUpdateImageToolInput(input);
