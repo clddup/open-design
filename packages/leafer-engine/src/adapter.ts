@@ -4,7 +4,6 @@ import type {
   DesignDocument,
   Point,
   SelectionState,
-  Transform,
   VectorPointMode,
   ViewportState,
 } from "@opendesign/design-contracts";
@@ -32,7 +31,6 @@ import {
   projectDesignPageIncrementally,
   projectResolvedBooleanGeometry,
   type LeaferElementSpec,
-  type LeaferElementTag,
   type LeaferSceneProjection,
 } from "./mapping.js";
 import {
@@ -60,7 +58,6 @@ import {
   projectTextRunProjection,
   textRunProjectionNodeIds,
 } from "./text-run-projection.js";
-import { materializeLeaferTextData } from "./text-truncation.js";
 import { exportLeaferCapture } from "./capture-export.js";
 import {
   createProjectionExportTarget,
@@ -104,6 +101,7 @@ import { ImageCropController } from "./image-crop-controller.js";
 import { PenToolController } from "./pen-tool-controller.js";
 import { VectorEditController } from "./vector-edit-controller.js";
 import { asLeaferEvent } from "./pointer-event.js";
+import { SceneReconciler } from "./scene-reconciler.js";
 
 type LeaferModule = typeof LeaferEditorModule;
 type LeaferApp = InstanceType<LeaferModule["App"]>;
@@ -189,10 +187,10 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   readonly #directTransformController: DirectTransformController;
   readonly #imageCropController: ImageCropController;
   readonly #penToolController: PenToolController;
+  readonly #scene: SceneReconciler;
   readonly #textEditDomController: TextEditDomController<LeaferElement>;
   readonly #textRunEditor: TextRunEditController<LeaferElement>;
   readonly #vectorEditController: VectorEditController;
-  readonly #elements = new Map<string, LeaferElement>();
   readonly #loadVectorGeometryProvider: () => Promise<VectorGeometryProvider>;
   #baseProjection: LeaferSceneProjection | null = null;
   #booleanNodeIds = new Set<string>();
@@ -202,7 +200,6 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   #geometryLoadPromise: Promise<void> | null = null;
   #disposed = false;
   #input: LeaferEngineSyncInput | null = null;
-  #projection: LeaferSceneProjection | null = null;
   #synchronizing = false;
   #viewportFrame: number | null = null;
   #editorFrame: number | null = null;
@@ -262,7 +259,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       editor: {
         beforeEditInner: ({ target }) =>
           this.#textRunEditor.beforeEditInner(
-            this.#projectionId(target as LeaferElement),
+            this.#scene.projectionId(target as LeaferElement),
           ),
         editSize: "size",
         multipleSelect: true,
@@ -290,6 +287,22 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       },
     });
     this.#editor = this.#app.editor as LeaferEditor;
+    this.#scene = new SceneReconciler({
+      editor: this.#editor,
+      leafer,
+      onWarning: (warning) => this.#callbacks.onWarning?.(warning),
+      onWarningsChange: (warnings) =>
+        this.#callbacks.onWarningsChange?.(warnings),
+      root: this.#app.tree as unknown as LeaferGroup,
+      scheduleEditorRefresh: (request) =>
+        this.#scheduleEditorRefresh({
+          ...(request.nodeBounds
+            ? { nodeBounds: new Set(request.nodeBounds) }
+            : {}),
+          ...(request.treeBounds ? { treeBounds: true } : {}),
+        }),
+      selectionNodeIds: () => this.#input?.selection.nodeIds ?? [],
+    });
     // World-space editing presentation belongs to Leafer's built-in editor sky.
     // The sky is the same viewport plane used by selection chrome, so a pan or
     // zoom cannot advance the document and overlays on independently scheduled
@@ -298,7 +311,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     this.#vectorEditController = new VectorEditController({
       callbacks: this.#callbacks,
       current: () => ({ disposed: this.#disposed }),
-      element: (nodeId) => this.#elements.get(nodeId),
+      element: (nodeId) => this.#scene.element(nodeId),
       finishNodePresentation: (nodeId) => {
         this.#finishGenerationRevealNode(nodeId);
         this.#finishGenerationTweenNode(nodeId, true);
@@ -326,15 +339,15 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     });
     this.#textRunEditor = new TextRunEditController({
       applySpecData: (element, spec, overrides) =>
-        this.#applyElementSpecData(element, spec, overrides),
+        this.#scene.applySpecData(element, spec, overrides),
       current: () => ({
         baseProjection: this.#baseProjection,
         document: this.#input?.document ?? null,
-        projection: this.#projection,
+        projection: this.#scene.projection,
       }),
-      element: (projectionId) => this.#elements.get(projectionId),
+      element: (projectionId) => this.#scene.element(projectionId),
       openProxy: (projectionId) => {
-        const proxy = this.#elements.get(projectionId);
+        const proxy = this.#scene.element(projectionId);
         if (proxy && !this.#disposed) this.#editor.openInnerEditor(proxy, true);
       },
       readText: (element) => readElementText(element),
@@ -347,7 +360,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     this.#textEditDomController = new TextEditDomController({
       currentDocument: () => this.#input?.document ?? null,
       editor: this.#textRunEditor,
-      element: (nodeId) => this.#elements.get(nodeId),
+      element: (nodeId) => this.#scene.element(nodeId),
       publish: (selection) =>
         this.#callbacks.onTextRangeSelectionChange?.(selection),
       report: (error) => this.#report(error),
@@ -357,14 +370,14 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     });
     this.#imageCropController = new ImageCropController({
       applySpecData: (element, spec) =>
-        this.#applyElementSpecData(element, spec),
+        this.#scene.applySpecData(element, spec),
       current: () => ({
         baseProjection: this.#baseProjection,
         disposed: this.#disposed,
         input: this.#input,
-        projection: this.#projection,
+        projection: this.#scene.projection,
       }),
-      element: (nodeId) => this.#elements.get(nodeId),
+      element: (nodeId) => this.#scene.element(nodeId),
       finishNodePresentation: (nodeId) => {
         this.#finishGenerationRevealNode(nodeId);
         this.#finishGenerationTweenNode(nodeId, true);
@@ -384,9 +397,9 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       current: () => ({
         disposed: this.#disposed,
         input: this.#input,
-        projection: this.#projection,
+        projection: this.#scene.projection,
       }),
-      element: (nodeId) => this.#elements.get(nodeId),
+      element: (nodeId) => this.#scene.element(nodeId),
       leafer,
       nodeId: (element) => this.#nodeId(element),
       onCreate: (request) => this.#callbacks.onCreate(request),
@@ -400,7 +413,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         input: this.#input,
       }),
       editor: this.#editor,
-      element: (nodeId) => this.#elements.get(nodeId),
+      element: (nodeId) => this.#scene.element(nodeId),
       leafer,
       nodeId: (element) => this.#nodeId(element),
       scheduleEditorRefresh: () => this.#scheduleEditorRefresh(),
@@ -415,11 +428,11 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       current: () => ({
         disposed: this.#disposed,
         input: this.#input,
-        projection: this.#projection,
+        projection: this.#scene.projection,
         synchronizing: this.#synchronizing,
       }),
       editor: this.#editor,
-      element: (nodeId) => this.#elements.get(nodeId),
+      element: (nodeId) => this.#scene.element(nodeId),
       finishNodePresentation: (nodeId) => {
         this.#finishGenerationRevealNode(nodeId);
         this.#finishGenerationTweenNode(nodeId, true);
@@ -434,9 +447,9 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       current: () => ({
         disposed: this.#disposed,
         input: this.#input,
-        projection: this.#projection,
+        projection: this.#scene.projection,
       }),
-      element: (nodeId) => this.#elements.get(nodeId),
+      element: (nodeId) => this.#scene.element(nodeId),
       leafer,
       nodeId: (element) => this.#nodeId(element),
       onCreate: (request) => this.#callbacks.onCreateVector(request),
@@ -606,7 +619,8 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
           );
           const starts = new Map<string, GenerationTweenEndpoint>();
           for (const nodeId of changedNodeIds) {
-            const previousSpec = this.#projection?.elementsById.get(nodeId);
+            const previousSpec =
+              this.#scene.projection?.elementsById.get(nodeId);
             const nextSpec = projection.elementsById.get(nodeId);
             const canRetarget =
               requestedTweenNodeIds.has(nodeId) &&
@@ -681,9 +695,9 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         ) {
           this.#editor.hoverTarget = null as never;
         }
-        this.#reconcile(projection);
+        this.#scene.reconcile(projection);
       } else if (editScopeChanged && this.#baseProjection) {
-        this.#reconcile(
+        this.#scene.reconcile(
           this.#projectScene(
             this.#baseProjection,
             undefined,
@@ -836,7 +850,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     window.removeEventListener("keyup", this.#onWindowKeyUp, true);
     this.#host.removeEventListener("contextlost", this.#onContextLost, true);
     this.#app.destroy();
-    this.#elements.clear();
+    this.#scene.dispose();
   }
 
   finishGenerationPresentation(): void {
@@ -961,7 +975,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       const nodeId = element && this.#nodeId(element as LeaferElement);
       if (
         nodeId &&
-        element === this.#elements.get(nodeId) &&
+        element === this.#scene.element(nodeId) &&
         this.#textRunEditor.begin(nodeId)
       ) {
         this.#finishGenerationRevealNode(nodeId);
@@ -1043,136 +1057,6 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     window.addEventListener("keydown", this.#onWindowKeyDown, true);
     window.addEventListener("keyup", this.#onWindowKeyUp, true);
     this.#host.addEventListener("contextlost", this.#onContextLost, true);
-  }
-
-  #reconcile(
-    projection: LeaferSceneProjection,
-    options: { reapplyAll?: boolean } = {},
-  ): void {
-    const previous = this.#projection;
-    const changedNodeIds = new Set<string>();
-    const parentsToAttach = new Set<string | null>();
-    const reapplyAll = options.reapplyAll === true;
-    projection.warnings.forEach((warning) =>
-      this.#callbacks.onWarning?.(warning),
-    );
-    this.#callbacks.onWarningsChange?.(projection.warnings);
-
-    const candidateNodeIds =
-      projection.affectedNodeIds ?? this.#elements.keys();
-    for (const nodeId of candidateNodeIds) {
-      const element = this.#elements.get(nodeId);
-      if (!element) continue;
-      if (projection.elementsById.has(nodeId)) continue;
-      changedNodeIds.add(nodeId);
-      parentsToAttach.add(previous?.elementsById.get(nodeId)?.parentId ?? null);
-      if (this.#editor.hasItem(element)) this.#editor.removeItem(element);
-      element.remove();
-      element.destroy();
-      this.#elements.delete(nodeId);
-    }
-
-    const candidateSpecs: LeaferElementSpec[] = [];
-    if (projection.affectedNodeIds) {
-      projection.affectedNodeIds.forEach((nodeId) => {
-        const spec = projection.elementsById.get(nodeId);
-        if (spec) candidateSpecs.push(spec);
-      });
-    } else {
-      candidateSpecs.push(...projection.elementsById.values());
-    }
-    for (const spec of candidateSpecs) {
-      const previousSpec = previous?.elementsById.get(spec.id);
-      let existing = this.#elements.get(spec.id);
-      let replaced = false;
-      if (existing && this.#tag(existing) !== spec.tag) {
-        if (this.#editor.hasItem(existing)) this.#editor.removeItem(existing);
-        existing.remove();
-        existing.destroy();
-        this.#elements.delete(spec.id);
-        existing = undefined;
-        replaced = true;
-      }
-      const created = existing === undefined;
-      const element = existing ?? this.#createElement(spec.tag);
-      this.#elements.set(spec.id, element);
-      const dataChanged =
-        reapplyAll ||
-        created ||
-        previousSpec?.textMaxLines !== spec.textMaxLines ||
-        !sameProjectionValue(previousSpec?.data, spec.data);
-      const transformChanged =
-        reapplyAll ||
-        created ||
-        !previousSpec ||
-        !sameTransform(previousSpec.transform, spec.transform);
-      const parentChanged =
-        !previousSpec || previousSpec.parentId !== spec.parentId;
-      const childrenChanged =
-        !previousSpec || !sameStringList(previousSpec.childIds, spec.childIds);
-      if (dataChanged) {
-        this.#applyElementSpecData(element, spec);
-      }
-      if (transformChanged)
-        element.setTransform(transformToAffine(spec.transform));
-      if (dataChanged || transformChanged || parentChanged || replaced) {
-        changedNodeIds.add(spec.id);
-      }
-      if (parentChanged || created || replaced) {
-        parentsToAttach.add(previousSpec?.parentId ?? null);
-        parentsToAttach.add(spec.parentId);
-      }
-      if (childrenChanged || created || replaced || reapplyAll) {
-        parentsToAttach.add(spec.id);
-      }
-    }
-
-    const attachChildren = (
-      parent: LeaferGroup,
-      childIds: readonly string[],
-    ) => {
-      childIds.forEach((childId, index) => {
-        const child = this.#elements.get(childId);
-        if (!child) return;
-        if (child.parent !== parent || parent.children[index] !== child) {
-          parent.addAt(child, index);
-        }
-      });
-    };
-    if (
-      reapplyAll ||
-      !previous ||
-      !sameStringList(previous.rootIds, projection.rootIds)
-    ) {
-      parentsToAttach.add(null);
-    }
-    this.#projection = projection;
-    for (const parentId of parentsToAttach) {
-      if (parentId === null) {
-        attachChildren(
-          this.#app.tree as unknown as LeaferGroup,
-          projection.rootIds,
-        );
-        continue;
-      }
-      const spec = projection.elementsById.get(parentId);
-      const element = this.#elements.get(parentId);
-      if (spec && element && "children" in element) {
-        attachChildren(element as LeaferGroup, spec.childIds);
-      }
-    }
-    if (reapplyAll || !previous) {
-      this.#scheduleEditorRefresh({ treeBounds: true });
-    } else {
-      const selectionBounds = this.#selectionBoundsAffected(
-        changedNodeIds,
-        previous,
-        projection,
-      );
-      if (selectionBounds.size > 0) {
-        this.#scheduleEditorRefresh({ nodeBounds: selectionBounds });
-      }
-    }
   }
 
   #projectBooleanGeometry(
@@ -1265,7 +1149,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
           : {},
       ),
       this.#input?.textRunProjection,
-      this.#projection,
+      this.#scene.projection,
     );
   }
 
@@ -1313,69 +1197,13 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         base,
         new Set(this.#booleanNodeIds),
       );
-      this.#reconcile(projection);
+      this.#scene.reconcile(projection);
       this.#syncSelection(input.selection);
     } catch (error) {
       this.#report(error);
     } finally {
       this.#synchronizing = false;
     }
-  }
-
-  #selectionBoundsAffected(
-    changedNodeIds: ReadonlySet<string>,
-    previous: LeaferSceneProjection,
-    projection: LeaferSceneProjection,
-  ): Set<string> {
-    const selection = this.#input?.selection.nodeIds;
-    if (!selection || changedNodeIds.size === 0 || selection.length === 0)
-      return new Set();
-    const affectedSelection = new Set<string>();
-    const selectedNodeIds = new Set(selection);
-    for (const selectedNodeId of selectedNodeIds) {
-      if (
-        lineage(selectedNodeId, previous).some((nodeId) =>
-          changedNodeIds.has(nodeId),
-        ) ||
-        lineage(selectedNodeId, projection).some((nodeId) =>
-          changedNodeIds.has(nodeId),
-        )
-      ) {
-        affectedSelection.add(selectedNodeId);
-      }
-    }
-    for (const changedNodeId of changedNodeIds) {
-      for (const nodeId of [
-        ...lineage(changedNodeId, previous),
-        ...lineage(changedNodeId, projection),
-      ]) {
-        if (selectedNodeIds.has(nodeId)) affectedSelection.add(nodeId);
-      }
-    }
-    return affectedSelection;
-  }
-
-  #createElement(tag: LeaferElementTag): LeaferElement {
-    const Constructor = this.#leafer[tag] as new (
-      data?: Record<string, unknown>,
-    ) => LeaferElement;
-    return new Constructor();
-  }
-
-  #applyElementSpecData(
-    element: LeaferElement,
-    spec: LeaferElementSpec,
-    overrides: Record<string, unknown> = {},
-  ): void {
-    const data =
-      spec.tag === "Text"
-        ? materializeLeaferTextData(this.#leafer, spec.data, spec.textMaxLines)
-        : spec.data;
-    element.set({ ...data, ...overrides });
-  }
-
-  #tag(element: LeaferElement): string {
-    return (element as LeaferElement & { tag?: string }).tag ?? "";
   }
 
   #syncTool(tool: LeaferCanvasTool): void {
@@ -1434,13 +1262,15 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
 
   #syncLayerHover(target: LeaferLayerHoverTarget | undefined): void {
     const input = this.#input;
-    const projection = this.#projection;
+    const projection = this.#scene.projection;
     const element = target?.componentTarget
       ? this.#componentTargetElement(target.componentTarget)
       : target
-        ? this.#elements.get(target.nodeId)
+        ? this.#scene.element(target.nodeId)
         : undefined;
-    const projectionId = element ? this.#projectionId(element) : undefined;
+    const projectionId = element
+      ? this.#scene.projectionId(element)
+      : undefined;
     const visible =
       projection && projectionId
         ? lineage(projectionId, projection).every(
@@ -1526,7 +1356,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       if (target) return [target];
     }
     return selection.nodeIds.flatMap((nodeId) => {
-      const element = this.#elements.get(nodeId);
+      const element = this.#scene.element(nodeId);
       return element ? [element] : [];
     });
   }
@@ -1580,7 +1410,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         },
       );
       this.#synchronizing = true;
-      this.#reconcile(
+      this.#scene.reconcile(
         projectBooleanEditScope(
           projection,
           previewDocument,
@@ -1603,13 +1433,14 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   }
 
   #selectedComponentTarget(): ComponentSelectionTarget | undefined {
-    if (this.#editor.list.length === 0 || !this.#projection) return undefined;
+    if (this.#editor.list.length === 0 || !this.#scene.projection)
+      return undefined;
     const targets = new Map<string, ComponentSelectionTarget>();
     for (const candidate of this.#editor.list) {
       const element = candidate as LeaferElement;
-      const projectionId = this.#projectionId(element);
+      const projectionId = this.#scene.projectionId(element);
       const metadata = projectionId
-        ? this.#projection.elementsById.get(projectionId)?.data.data
+        ? this.#scene.projection.elementsById.get(projectionId)?.data.data
         : undefined;
       if (!metadata || typeof metadata !== "object") continue;
       const value = (metadata as Record<string, unknown>)
@@ -1641,7 +1472,8 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     target: ComponentSelectionTarget,
   ): LeaferElement | undefined {
     const targetPath = componentSourcePathKey(target.sourcePath);
-    for (const [projectionId, spec] of this.#projection?.elementsById ?? []) {
+    for (const [projectionId, spec] of this.#scene.projection?.elementsById ??
+      []) {
       const metadata = spec.data.data;
       if (!metadata || typeof metadata !== "object") continue;
       const value = (metadata as Record<string, unknown>)
@@ -1654,7 +1486,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         isStringArray(sourcePath) &&
         componentSourcePathKey(sourcePath) === targetPath
       ) {
-        return this.#elements.get(projectionId);
+        return this.#scene.element(projectionId);
       }
     }
     return undefined;
@@ -2102,10 +1934,10 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       }
     }
     const nodeIds = reveal.nodeIds.filter((nodeId) => {
-      const spec = this.#projection?.elementsById.get(nodeId);
+      const spec = this.#scene.projection?.elementsById.get(nodeId);
       const opacity = spec?.data.opacity;
       return (
-        this.#elements.has(nodeId) &&
+        this.#scene.has(nodeId) &&
         spec?.data.visible !== false &&
         (typeof opacity !== "number" || opacity > 0)
       );
@@ -2171,8 +2003,8 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         }
       | undefined;
     for (const [nodeId, item] of this.#generationReveals) {
-      const element = this.#elements.get(nodeId);
-      const spec = this.#projection?.elementsById.get(nodeId);
+      const element = this.#scene.element(nodeId);
+      const spec = this.#scene.projection?.elementsById.get(nodeId);
       if (!element || !spec) {
         this.#generationReveals.delete(nodeId);
         continue;
@@ -2230,21 +2062,21 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   }
 
   #setGenerationRevealOpacity(nodeId: string, opacity: number): void {
-    const element = this.#elements.get(nodeId);
+    const element = this.#scene.element(nodeId);
     if (!element || nearlyEqual(element.opacity ?? 1, opacity)) return;
     element.opacity = opacity;
   }
 
   #restoreGenerationRevealNode(nodeId: string): void {
     const opacity = projectionOpacity(
-      this.#projection?.elementsById.get(nodeId)?.data.opacity,
+      this.#scene.projection?.elementsById.get(nodeId)?.data.opacity,
     );
     this.#setGenerationRevealOpacity(nodeId, opacity);
   }
 
   #finishGenerationRevealNode(nodeId: string): void {
     if (!this.#generationReveals.delete(nodeId)) return;
-    const element = this.#elements.get(nodeId);
+    const element = this.#scene.element(nodeId);
     this.#restoreGenerationRevealNode(nodeId);
     if (element && this.#generationRevealStroker.target === element) {
       this.#generationRevealStroker.target = null as never;
@@ -2258,12 +2090,13 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     tweenStarts?: ReadonlyMap<string, GenerationTweenEndpoint>,
   ): void {
     const requested = reveal.tweenNodeIds ?? [];
-    if (requested.length === 0 || !tweenStarts || !this.#projection) return;
+    if (requested.length === 0 || !tweenStarts || !this.#scene.projection)
+      return;
     const selectedNodeIds = new Set(this.#input?.selection.nodeIds ?? []);
     const candidates = requested.flatMap((nodeId, order) => {
       const start = tweenStarts.get(nodeId);
-      const target = this.#projection?.elementsById.get(nodeId);
-      const element = this.#elements.get(nodeId);
+      const target = this.#scene.projection?.elementsById.get(nodeId);
+      const element = this.#scene.element(nodeId);
       const disappearing =
         target?.data.visible === false && start?.data.visible !== false;
       if (
@@ -2312,14 +2145,14 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         this.#applyGenerationTweenFrame(element, current);
       });
     const animatedNodeIds = new Set(this.#generationTweens.keys());
-    const selectionBounds = this.#selectionBoundsAffected(
+    const selectionBounds = this.#scene.selectionBoundsAffected(
       animatedNodeIds,
-      this.#projection,
-      this.#projection,
+      this.#scene.projection,
+      this.#scene.projection,
     );
     if (selectionBounds.size > 0) {
       for (const nodeId of selectionBounds) {
-        this.#elements.get(nodeId)?.forceUpdate("bounds");
+        this.#scene.element(nodeId)?.forceUpdate("bounds");
       }
       this.#editor.update();
     }
@@ -2342,8 +2175,8 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     if (this.#generationTweens.size === 0) return;
     const changedNodeIds = new Set<string>();
     for (const [nodeId, active] of this.#generationTweens) {
-      const element = this.#elements.get(nodeId);
-      const target = this.#projection?.elementsById.get(nodeId);
+      const element = this.#scene.element(nodeId);
+      const target = this.#scene.projection?.elementsById.get(nodeId);
       if (!element || !target) {
         this.#generationTweens.delete(nodeId);
         continue;
@@ -2357,16 +2190,16 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         this.#generationTweens.delete(nodeId);
       }
     }
-    const projection = this.#projection;
+    const projection = this.#scene.projection;
     if (projection && changedNodeIds.size > 0) {
-      const selectionBounds = this.#selectionBoundsAffected(
+      const selectionBounds = this.#scene.selectionBoundsAffected(
         changedNodeIds,
         projection,
         projection,
       );
       if (selectionBounds.size > 0) {
         for (const nodeId of selectionBounds) {
-          this.#elements.get(nodeId)?.forceUpdate("bounds");
+          this.#scene.element(nodeId)?.forceUpdate("bounds");
         }
         this.#editor.update();
       }
@@ -2414,8 +2247,8 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   }
 
   #restoreGenerationTweenNode(nodeId: string): void {
-    const element = this.#elements.get(nodeId);
-    const target = this.#projection?.elementsById.get(nodeId);
+    const element = this.#scene.element(nodeId);
+    const target = this.#scene.projection?.elementsById.get(nodeId);
     if (!element || !target) return;
     element.set(target.data);
     element.setTransform(transformToAffine(target.transform));
@@ -2430,16 +2263,16 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   }
 
   #refreshGenerationTweenSelection(nodeIds: ReadonlySet<string>): void {
-    const projection = this.#projection;
+    const projection = this.#scene.projection;
     if (!projection || nodeIds.size === 0) return;
-    const selectionBounds = this.#selectionBoundsAffected(
+    const selectionBounds = this.#scene.selectionBoundsAffected(
       nodeIds,
       projection,
       projection,
     );
     if (selectionBounds.size === 0) return;
     for (const nodeId of selectionBounds) {
-      this.#elements.get(nodeId)?.forceUpdate("bounds");
+      this.#scene.element(nodeId)?.forceUpdate("bounds");
     }
     this.#editor.update();
   }
@@ -2519,7 +2352,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
           this.#app.tree.forceUpdate("bounds");
         } else {
           refreshNodeBounds.forEach((nodeId) =>
-            this.#elements.get(nodeId)?.forceUpdate("bounds"),
+            this.#scene.element(nodeId)?.forceUpdate("bounds"),
           );
         }
         this.#editor.update();
@@ -2551,7 +2384,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     try {
       const base = projectDesignPage(this.#input.document, this.#input.pageId);
       this.#baseProjection = base;
-      this.#reconcile(this.#projectScene(base), {
+      this.#scene.reconcile(this.#projectScene(base), {
         reapplyAll: true,
       });
       this.#syncViewport(this.#input.viewport);
@@ -2565,7 +2398,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   }
 
   #projectionExportTarget(request: ProjectionExportRequest) {
-    const projection = this.#projection;
+    const projection = this.#scene.projection;
     if (!projection) return null;
     return createProjectionExportTarget<LeaferElement>(projection, request, {
       addAt: (parent, child, index) => {
@@ -2575,8 +2408,8 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         }
         Reflect.apply(addAt, parent, [child, index]);
       },
-      applyData: (element, spec) => this.#applyElementSpecData(element, spec),
-      create: (tag) => this.#createElement(tag),
+      applyData: (element, spec) => this.#scene.applySpecData(element, spec),
+      create: (tag) => this.#scene.createElement(tag),
       createWrapper: () =>
         new this.#leafer.Group({
           editable: false,
@@ -2589,8 +2422,8 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   }
 
   #captureFrameElement(nodeId: string): LeaferElement {
-    const spec = this.#projection?.elementsById.get(nodeId);
-    const element = this.#elements.get(nodeId);
+    const spec = this.#scene.projection?.elementsById.get(nodeId);
+    const element = this.#scene.element(nodeId);
     if (!spec || spec.kind !== "frame" || !element) {
       throw new Error(`Leafer capture Frame is unavailable: ${nodeId}`);
     }
@@ -2598,8 +2431,8 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   }
 
   #exportElement(nodeId: string): LeaferElement {
-    const spec = this.#projection?.elementsById.get(nodeId);
-    const element = this.#elements.get(nodeId);
+    const spec = this.#scene.projection?.elementsById.get(nodeId);
+    const element = this.#scene.element(nodeId);
     if (!spec || !element) {
       throw new Error(`Leafer raster export layer is unavailable: ${nodeId}`);
     }
@@ -2607,18 +2440,11 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   }
 
   #nodeId(element: LeaferElement): string | undefined {
-    const projectionId = this.#projectionId(element);
+    const projectionId = this.#scene.projectionId(element);
     if (!projectionId) return undefined;
-    return this.#projection
-      ? projectionNodeId(this.#projection, projectionId)
+    return this.#scene.projection
+      ? projectionNodeId(this.#scene.projection, projectionId)
       : projectionId;
-  }
-
-  #projectionId(element: LeaferElement): string | undefined {
-    const id = element.id;
-    return typeof id === "string" && this.#elements.get(id) === element
-      ? id
-      : undefined;
   }
 
   #onWindowKeyDown = (event: KeyboardEvent) => {
@@ -2778,46 +2604,10 @@ function nearlyEqual(left: number, right: number): boolean {
   return Math.abs(left - right) <= MATRIX_EPSILON;
 }
 
-function sameTransform(left: Transform, right: Transform): boolean {
-  return left.every((value, index) => nearlyEqual(value, right[index] ?? 0));
-}
-
 function sameStringList(left: readonly string[], right: readonly string[]) {
   return (
     left.length === right.length &&
     left.every((value, index) => value === right[index])
-  );
-}
-
-function sameProjectionValue(left: unknown, right: unknown): boolean {
-  if (Object.is(left, right)) return true;
-  if (Array.isArray(left) || Array.isArray(right)) {
-    return (
-      Array.isArray(left) &&
-      Array.isArray(right) &&
-      left.length === right.length &&
-      left.every((value, index) => sameProjectionValue(value, right[index]))
-    );
-  }
-  if (
-    left === null ||
-    right === null ||
-    typeof left !== "object" ||
-    typeof right !== "object"
-  ) {
-    return false;
-  }
-  const leftRecord = left as Record<string, unknown>;
-  const rightRecord = right as Record<string, unknown>;
-  const leftKeys = Object.keys(leftRecord);
-  const rightKeys = Object.keys(rightRecord);
-  return (
-    leftKeys.length === rightKeys.length &&
-    leftKeys.every(
-      (key) =>
-        Object.hasOwn(rightRecord, key) &&
-        sameProjectionValue(leftRecord[key], rightRecord[key]),
-    )
   );
 }
 

@@ -4672,6 +4672,81 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
+  it("replaces a changed Leafer tag and reparents the stable projection identity", async () => {
+    const adapter = await createLeaferEngineAdapter(
+      createHost(),
+      createCallbacks(),
+    );
+    const first = createInput();
+    adapter.sync(first);
+    flushAnimationFrames();
+    const app = leaferHarness.app;
+    const original = app && findElement(app.tree, "feature_one");
+    const source = first.document.nodesById.feature_one;
+    const frame = first.document.nodesById.frame_welcome;
+    if (
+      !app ||
+      !(original instanceof FakeRect) ||
+      source?.kind !== "rectangle" ||
+      frame?.kind !== "frame"
+    ) {
+      throw new Error("Missing reconcile replacement fixture");
+    }
+
+    const document = structuredClone(first.document);
+    document.revision += 1;
+    const nextFrame = document.nodesById.frame_welcome;
+    if (nextFrame?.kind !== "frame") throw new Error("Missing next Frame");
+    const replacement = {
+      ...structuredClone(source),
+      kind: "ellipse" as const,
+      name: "Reparented ellipse",
+      parentId: null,
+    };
+    document.nodesById[replacement.id] = replacement;
+    nextFrame.childIds = nextFrame.childIds.filter(
+      (nodeId) => nodeId !== replacement.id,
+    );
+    document.pagesById.page_welcome?.rootNodeIds.push(replacement.id);
+    adapter.sync({
+      ...first,
+      document,
+      changes: {
+        documentId: document.documentId,
+        fromRevision: first.document.revision,
+        toRevision: document.revision,
+        addedNodeIds: [],
+        changedNodeIds: [replacement.id, nextFrame.id],
+        removedNodeIds: [],
+        changes: [
+          {
+            type: "updated",
+            nodeId: replacement.id,
+            before: source,
+            after: replacement,
+            changedFields: ["kind", "name", "parentId"],
+          },
+          {
+            type: "updated",
+            nodeId: nextFrame.id,
+            before: frame,
+            after: nextFrame,
+            changedFields: ["childIds"],
+          },
+        ],
+      },
+    });
+    flushAnimationFrames();
+
+    const projected = findElement(app.tree, replacement.id);
+    expect(projected).toBeInstanceOf(FakeEllipse);
+    expect(projected).not.toBe(original);
+    expect(projected?.parent).toBe(app.tree);
+    expect(original.destroy).toHaveBeenCalledTimes(1);
+    expect(app.editor.list).toEqual([projected]);
+    adapter.dispose();
+  });
+
   it("creates directed Line and Arrow requests without losing reverse drag direction", async () => {
     const onCreate = vi.fn(() => true);
     const adapter = await createLeaferEngineAdapter(createHost(), {
