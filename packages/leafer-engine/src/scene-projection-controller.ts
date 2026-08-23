@@ -47,16 +47,27 @@ export class SceneProjectionController {
   readonly #loadVectorGeometryProvider: () => Promise<VectorGeometryProvider>;
   readonly #options: SceneProjectionControllerOptions;
   #baseProjection: LeaferSceneProjection | null = null;
+  #baseIdentity: {
+    documentId: string;
+    pageId: string;
+    revision: number;
+  } | null = null;
   #booleanNodeIds = new Set<string>();
   #booleanResolver: BooleanGeometryResolver | null = null;
   #geometryLoadError: Error | null = null;
   #geometryLoadGeneration = 0;
   #geometryLoadPromise: Promise<void> | null = null;
+  readonly #disposedPromise: Promise<void>;
+  #resolveDisposed: (() => void) | null = null;
+  #refreshError: Error | null = null;
 
   constructor(options: SceneProjectionControllerOptions) {
     this.#options = options;
     this.#loadVectorGeometryProvider =
       options.loadVectorGeometryProvider ?? loadBrowserVectorGeometryProvider;
+    this.#disposedPromise = new Promise((resolve) => {
+      this.#resolveDisposed = resolve;
+    });
   }
 
   get baseProjection(): LeaferSceneProjection | null {
@@ -71,20 +82,33 @@ export class SceneProjectionController {
     previous: LeaferEngineSyncInput | null,
     input: LeaferEngineSyncInput,
     documentSceneChanged: boolean,
+    options: { forceFull?: boolean } = {},
   ): LeaferSceneProjection {
-    const base = documentSceneChanged
-      ? previous && this.#baseProjection && input.changes
-        ? projectDesignPageIncrementally(
-            this.#baseProjection,
-            input.document,
-            input.pageId,
-            input.changes,
-          )
-        : projectDesignPage(input.document, input.pageId)
-      : (this.#baseProjection ??
-        projectDesignPage(input.document, input.pageId));
-    this.#baseProjection = base;
-    return base;
+    return options.forceFull === true
+      ? projectDesignPage(input.document, input.pageId)
+      : documentSceneChanged
+        ? previous && this.#baseProjection && input.changes
+          ? projectDesignPageIncrementally(
+              this.#baseProjection,
+              input.document,
+              input.pageId,
+              input.changes,
+            )
+          : projectDesignPage(input.document, input.pageId)
+        : (this.#baseProjection ??
+          projectDesignPage(input.document, input.pageId));
+  }
+
+  commitApplied(
+    input: LeaferEngineSyncInput,
+    base?: LeaferSceneProjection,
+  ): void {
+    if (base) {
+      this.#baseProjection = base;
+      this.#baseIdentity = inputIdentity(input);
+      this.#booleanNodeIds = collectBooleanNodeIds(base);
+    }
+    this.#refreshError = null;
   }
 
   project(
@@ -115,9 +139,7 @@ export class SceneProjectionController {
   }
 
   rebuild(input: LeaferEngineSyncInput): LeaferSceneProjection {
-    const base = projectDesignPage(input.document, input.pageId);
-    this.#baseProjection = base;
-    return this.project(input, base);
+    return projectDesignPage(input.document, input.pageId);
   }
 
   previewBooleanTransform(
@@ -175,6 +197,16 @@ export class SceneProjectionController {
   retry(): boolean {
     const current = this.#options.current();
     if (
+      !current.disposed &&
+      this.#refreshError &&
+      this.#booleanResolver &&
+      this.#booleanNodeIds.size > 0
+    ) {
+      this.#refreshError = null;
+      this.#refresh();
+      return true;
+    }
+    if (
       current.disposed ||
       !this.#geometryLoadError ||
       this.#booleanNodeIds.size === 0
@@ -188,17 +220,23 @@ export class SceneProjectionController {
   }
 
   async settlePendingGeometry(): Promise<void> {
-    if (this.#geometryLoadPromise) await this.#geometryLoadPromise;
+    const pending = this.#geometryLoadPromise;
+    if (pending) await Promise.race([pending, this.#disposedPromise]);
+    if (this.#refreshError) throw this.#refreshError;
   }
 
   dispose(): void {
     this.#geometryLoadGeneration += 1;
+    this.#resolveDisposed?.();
+    this.#resolveDisposed = null;
     this.#geometryLoadPromise = null;
     this.#booleanResolver?.clear();
     this.#booleanResolver = null;
     this.#baseProjection = null;
+    this.#baseIdentity = null;
     this.#booleanNodeIds.clear();
     this.#geometryLoadError = null;
+    this.#refreshError = null;
   }
 
   #projectBooleanGeometry(
@@ -212,7 +250,6 @@ export class SceneProjectionController {
         (nodeId) => !currentBooleanIds.has(nodeId),
       ),
     );
-    this.#booleanNodeIds = currentBooleanIds;
     if (currentBooleanIds.size === 0) {
       return removedBooleanIds.size === 0
         ? base
@@ -316,7 +353,14 @@ export class SceneProjectionController {
     const current = this.#options.current();
     const input = current.input;
     const base = this.#baseProjection;
-    if (!base || !input || current.disposed) return;
+    if (
+      !base ||
+      !input ||
+      current.disposed ||
+      !sameInputIdentity(this.#baseIdentity, input)
+    ) {
+      return;
+    }
     try {
       this.#options.onAsyncProjection(
         this.project(input, base, {
@@ -324,10 +368,38 @@ export class SceneProjectionController {
         }),
         input,
       );
+      this.#refreshError = null;
     } catch (error) {
+      this.#refreshError =
+        error instanceof Error
+          ? error
+          : new Error("Asynchronous scene projection failed");
       this.#options.report(error);
     }
   }
+}
+
+function inputIdentity(input: LeaferEngineSyncInput): {
+  documentId: string;
+  pageId: string;
+  revision: number;
+} {
+  return {
+    documentId: input.document.documentId,
+    pageId: input.pageId,
+    revision: input.document.revision,
+  };
+}
+
+function sameInputIdentity(
+  identity: ReturnType<typeof inputIdentity> | null,
+  input: LeaferEngineSyncInput,
+): boolean {
+  return (
+    identity?.documentId === input.document.documentId &&
+    identity.pageId === input.pageId &&
+    identity.revision === input.document.revision
+  );
 }
 
 async function loadBrowserVectorGeometryProvider(): Promise<VectorGeometryProvider> {

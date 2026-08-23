@@ -18,6 +18,7 @@ interface SceneReconcilerOptions {
   leafer: LeaferModule;
   onWarning(warning: LeaferSceneProjection["warnings"][number]): void;
   onWarningsChange(warnings: LeaferSceneProjection["warnings"]): void;
+  report(error: unknown): void;
   root: LeaferGroup;
   scheduleEditorRefresh(request: {
     nodeBounds?: ReadonlySet<string>;
@@ -95,8 +96,12 @@ export class SceneReconciler {
     const changedNodeIds = new Set<string>();
     const parentsToAttach = new Set<string | null>();
     const reapplyAll = options.reapplyAll === true;
-    projection.warnings.forEach((warning) => this.#options.onWarning(warning));
-    this.#options.onWarningsChange(projection.warnings);
+    for (const warning of projection.warnings) {
+      this.#publishObserver(() => this.#options.onWarning(warning));
+    }
+    this.#publishObserver(() =>
+      this.#options.onWarningsChange(projection.warnings),
+    );
 
     const candidateNodeIds =
       projection.affectedNodeIds ?? this.#elements.keys();
@@ -188,7 +193,6 @@ export class SceneReconciler {
     ) {
       parentsToAttach.add(null);
     }
-    this.#projection = projection;
     for (const parentId of parentsToAttach) {
       if (parentId === null) {
         attachChildren(this.#options.root, projection.rootIds);
@@ -200,6 +204,7 @@ export class SceneReconciler {
         attachChildren(element as LeaferGroup, spec.childIds);
       }
     }
+    this.#projection = projection;
     if (reapplyAll || !previous) {
       this.#options.scheduleEditorRefresh({ treeBounds: true });
       return;
@@ -244,6 +249,18 @@ export class SceneReconciler {
       }
     }
     return affectedSelection;
+  }
+
+  #publishObserver(publish: () => void): void {
+    try {
+      publish();
+    } catch (error) {
+      try {
+        this.#options.report(error);
+      } catch {
+        // Observer failures must never participate in scene reconciliation.
+      }
+    }
   }
 }
 

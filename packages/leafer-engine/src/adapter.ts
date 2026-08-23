@@ -66,6 +66,7 @@ import { asLeaferEvent } from "./pointer-event.js";
 import { SceneReconciler } from "./scene-reconciler.js";
 import { GenerationPresentationController } from "./generation-presentation-controller.js";
 import { SceneProjectionController } from "./scene-projection-controller.js";
+import { LeaferFrameScheduler } from "./frame-scheduler.js";
 
 type LeaferModule = typeof LeaferEditorModule;
 type LeaferApp = InstanceType<LeaferModule["App"]>;
@@ -111,16 +112,14 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   readonly #penToolController: PenToolController;
   readonly #scene: SceneReconciler;
   readonly #sceneProjection: SceneProjectionController;
+  readonly #frameScheduler: LeaferFrameScheduler;
   readonly #textEditDomController: TextEditDomController<LeaferElement>;
   readonly #textRunEditor: TextRunEditController<LeaferElement>;
   readonly #vectorEditController: VectorEditController;
   #disposed = false;
   #input: LeaferEngineSyncInput | null = null;
+  #projectionDirty = false;
   #synchronizing = false;
-  #viewportFrame: number | null = null;
-  #editorFrame: number | null = null;
-  #editorRefreshNeedsTreeBounds = false;
-  readonly #editorRefreshNodeBounds = new Set<string>();
 
   constructor(
     host: HTMLElement,
@@ -180,6 +179,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       onWarning: (warning) => this.#callbacks.onWarning?.(warning),
       onWarningsChange: (warnings) =>
         this.#callbacks.onWarningsChange?.(warnings),
+      report: (error) => this.#report(error),
       root: this.#app.tree as unknown as LeaferGroup,
       scheduleEditorRefresh: (request) =>
         this.#scheduleEditorRefresh({
@@ -203,13 +203,45 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         if (this.#disposed || this.#input !== input) return;
         this.#synchronizing = true;
         try {
-          this.#scene.reconcile(projection);
+          this.#scene.reconcile(projection, {
+            reapplyAll: this.#projectionDirty,
+          });
           this.#syncSelection(input.selection);
+          this.#sceneProjection.commitApplied(input);
+          this.#projectionDirty = false;
+        } catch (error) {
+          this.#projectionDirty = true;
+          try {
+            this.#restoreProjection();
+          } catch (recoveryError) {
+            if (recoveryError !== error) this.#report(recoveryError);
+          } finally {
+            this.#projectionDirty = true;
+          }
+          throw error;
         } finally {
           this.#synchronizing = false;
         }
       },
       report: (error) => this.#report(error),
+    });
+    this.#frameScheduler = new LeaferFrameScheduler({
+      isDisposed: () => this.#disposed,
+      onEditorRefresh: ({ nodeBounds, treeBounds }) => {
+        try {
+          if (treeBounds) {
+            this.#app.tree.forceUpdate("bounds");
+          } else {
+            nodeBounds.forEach((nodeId) =>
+              this.#scene.element(nodeId)?.forceUpdate("bounds"),
+            );
+          }
+          this.#editor.update();
+        } catch (error) {
+          this.#report(error);
+        }
+      },
+      onViewportFrame: () => this.#emitViewport(),
     });
     // World-space editing presentation belongs to Leafer's built-in editor sky.
     // The sky is the same viewport plane used by selection chrome, so a pan or
@@ -382,17 +414,20 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
 
   sync(input: LeaferEngineSyncInput): void {
     if (this.#disposed) return;
+    const forceFullProjection = this.#projectionDirty;
     const previous = this.#input;
     const identityChanged =
       !previous ||
       previous.document.documentId !== input.document.documentId ||
       previous.pageId !== input.pageId;
     const documentSceneChanged =
+      forceFullProjection ||
       identityChanged ||
       previous?.document.revision !== input.document.revision;
     const textRunProjectionChanged =
       previous?.textRunProjection !== input.textRunProjection;
-    const sceneChanged = documentSceneChanged || textRunProjectionChanged;
+    const sceneChanged =
+      forceFullProjection || documentSceneChanged || textRunProjectionChanged;
     this.#boxDrawController.syncInput(input);
     this.#boxSelectController.syncInput(input);
     this.#directTransformController.syncInput(input);
@@ -417,11 +452,13 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     }
     let generationTweenStarts:
       ReadonlyMap<string, GenerationTweenEndpoint> | undefined;
+    let baseProjectionToCommit: LeaferSceneProjection | undefined;
 
     this.#synchronizing = true;
     try {
       if (sceneChanged) {
         const contiguousChanges =
+          !forceFullProjection &&
           !identityChanged &&
           !textRunProjectionChanged &&
           previous &&
@@ -437,7 +474,9 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
           previous,
           input,
           documentSceneChanged,
+          { forceFull: forceFullProjection },
         );
+        baseProjectionToCommit = baseProjection;
         const projection = this.#sceneProjection.project(
           input,
           baseProjection,
@@ -537,7 +576,9 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         ) {
           this.#editor.hoverTarget = null as never;
         }
-        this.#scene.reconcile(projection);
+        this.#scene.reconcile(projection, {
+          reapplyAll: forceFullProjection,
+        });
       } else if (editScopeChanged && this.#sceneProjection.baseProjection) {
         this.#scene.reconcile(
           this.#sceneProjection.project(
@@ -570,13 +611,22 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         input.reducedMotion === true,
         generationTweenStarts,
       );
+      this.#sceneProjection.commitApplied(input, baseProjectionToCommit);
+      this.#projectionDirty = false;
     } catch (error) {
+      this.#projectionDirty = true;
       this.#boxDrawController.cancel();
       this.#boxSelectController.cancel();
       this.#directTransformController.cancel();
       this.#penToolController.abortSync();
       this.finishGenerationPresentation();
       this.#report(error);
+      try {
+        this.#restoreProjection();
+        this.#projectionDirty = false;
+      } catch (recoveryError) {
+        if (recoveryError !== error) this.#report(recoveryError);
+      }
     } finally {
       this.#synchronizing = false;
     }
@@ -662,12 +712,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     this.#vectorEditController.dispose();
     this.#imageCropController.dispose();
     this.#generationPresentation.dispose();
-    if (this.#viewportFrame !== null) cancelAnimationFrame(this.#viewportFrame);
-    if (this.#editorFrame !== null) cancelAnimationFrame(this.#editorFrame);
-    this.#viewportFrame = null;
-    this.#editorFrame = null;
-    this.#editorRefreshNeedsTreeBounds = false;
-    this.#editorRefreshNodeBounds.clear();
+    this.#frameScheduler.dispose();
     this.#editorOverlays.dispose();
     this.#layerHoverStroker.remove();
     this.#layerHoverStroker.destroy();
@@ -1013,6 +1058,15 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     try {
       this.#scene.reconcile(projection);
       this.#syncSelection(input.selection);
+    } catch (error) {
+      this.#projectionDirty = true;
+      this.#report(error);
+      try {
+        this.#restoreProjection();
+        this.#projectionDirty = false;
+      } catch (recoveryError) {
+        if (recoveryError !== error) this.#report(recoveryError);
+      }
     } finally {
       this.#synchronizing = false;
     }
@@ -1116,13 +1170,8 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   }
 
   #scheduleViewport(): void {
-    if (this.#synchronizing || this.#disposed || this.#viewportFrame !== null) {
-      return;
-    }
-    this.#viewportFrame = requestAnimationFrame(() => {
-      this.#viewportFrame = null;
-      this.#emitViewport();
-    });
+    if (this.#synchronizing) return;
+    this.#frameScheduler.scheduleViewport();
   }
 
   #scheduleEditorRefresh(
@@ -1131,33 +1180,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       treeBounds?: boolean;
     } = {},
   ): void {
-    this.#editorRefreshNeedsTreeBounds ||= options.treeBounds === true;
-    if (options.nodeBounds) {
-      for (const nodeId of options.nodeBounds) {
-        this.#editorRefreshNodeBounds.add(nodeId);
-      }
-    }
-    if (this.#disposed || this.#editorFrame !== null) return;
-    this.#editorFrame = requestAnimationFrame(() => {
-      this.#editorFrame = null;
-      if (this.#disposed) return;
-      try {
-        const refreshTreeBounds = this.#editorRefreshNeedsTreeBounds;
-        const refreshNodeBounds = [...this.#editorRefreshNodeBounds];
-        this.#editorRefreshNeedsTreeBounds = false;
-        this.#editorRefreshNodeBounds.clear();
-        if (refreshTreeBounds) {
-          this.#app.tree.forceUpdate("bounds");
-        } else {
-          refreshNodeBounds.forEach((nodeId) =>
-            this.#scene.element(nodeId)?.forceUpdate("bounds"),
-          );
-        }
-        this.#editor.update();
-      } catch (error) {
-        this.#report(error);
-      }
-    });
+    this.#frameScheduler.scheduleEditorRefresh(options);
   }
 
   #emitViewport(): void {
@@ -1180,9 +1203,12 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     if (!this.#input) return;
     this.#synchronizing = true;
     try {
-      this.#scene.reconcile(this.#sceneProjection.rebuild(this.#input), {
-        reapplyAll: true,
-      });
+      const baseProjection = this.#sceneProjection.rebuild(this.#input);
+      this.#scene.reconcile(
+        this.#sceneProjection.project(this.#input, baseProjection),
+        { reapplyAll: true },
+      );
+      this.#sceneProjection.commitApplied(this.#input, baseProjection);
       this.#syncViewport(this.#input.viewport);
       this.#syncSelection(this.#input.selection);
       this.#textRunEditor.syncPresentation();

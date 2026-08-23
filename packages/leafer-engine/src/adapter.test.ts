@@ -35,6 +35,8 @@ const leaferHarness = vi.hoisted(() => ({
   boxMatches: [] as FakeElement[],
   elements: [] as FakeElement[],
   failNextExport: false,
+  failReconcileCount: 0,
+  failReconcileSetCount: 0,
   windowListeners: new Map<string, Set<(event: KeyboardEvent) => void>>(),
   strokers: [] as FakeStroker[],
 }));
@@ -115,11 +117,19 @@ class FakeElement extends FakeEventTarget {
   }
 
   set(data: Record<string, unknown>): void {
+    if (leaferHarness.failReconcileSetCount > 0) {
+      leaferHarness.failReconcileSetCount -= 1;
+      throw new Error("Synthetic reconcile failure");
+    }
     this.setCalls += 1;
     Object.assign(this, data);
   }
 
   setTransform(transform: ReturnType<typeof identityMatrix>): void {
+    if (leaferHarness.failReconcileSetCount > 0) {
+      leaferHarness.failReconcileSetCount -= 1;
+      throw new Error("Synthetic reconcile failure");
+    }
     this.transformCalls += 1;
     this.localTransform = { ...transform };
   }
@@ -146,6 +156,10 @@ class FakeGroup extends FakeElement {
   children: FakeElement[] = [];
 
   addAt(child: FakeElement, index: number): void {
+    if (leaferHarness.failReconcileCount > 0) {
+      leaferHarness.failReconcileCount -= 1;
+      throw new Error("Synthetic reconcile failure");
+    }
     child.remove();
     child.parent = this;
     child.leafer = this.leafer;
@@ -500,6 +514,8 @@ describe("Leafer engine selection bounds synchronization", () => {
     leaferHarness.boxMatches = [];
     leaferHarness.elements = [];
     leaferHarness.failNextExport = false;
+    leaferHarness.failReconcileCount = 0;
+    leaferHarness.failReconcileSetCount = 0;
     leaferHarness.windowListeners.clear();
     leaferHarness.strokers = [];
     animationFrames.clear();
@@ -3948,6 +3964,214 @@ describe("Leafer engine selection bounds synchronization", () => {
     resolveProvider?.(fakeVectorGeometryProvider());
     await flushMicrotasks();
     expect(lateError).not.toHaveBeenCalled();
+  });
+
+  it("ends capture waiting for geometry when the adapter is disposed", async () => {
+    const pending = new Promise<VectorGeometryProvider>(() => undefined);
+    const adapter = await createLeaferEngineAdapter(
+      createHost(),
+      createCallbacks(),
+      { loadVectorGeometryProvider: () => pending },
+    );
+    const input = withBooleanFixture(createInput());
+    adapter.sync(input);
+
+    const capture = adapter.capture({ kind: "page", pageId: input.pageId });
+    adapter.dispose();
+
+    await expect(capture).rejects.toThrow(
+      "Leafer capture target changed during rendering",
+    );
+  });
+
+  it("retries an asynchronous Boolean projection after reconcile fails", async () => {
+    const onError = vi.fn();
+    const adapter = await createLeaferEngineAdapter(
+      createHost(),
+      { ...createCallbacks(), onError },
+      {
+        loadVectorGeometryProvider: () =>
+          Promise.resolve(fakeVectorGeometryProvider()),
+      },
+    );
+    const input = withBooleanFixture(createInput());
+    adapter.sync(input);
+    leaferHarness.failReconcileSetCount = 1;
+    await flushMicrotasks();
+
+    expect(onError).toHaveBeenCalledWith(
+      expect.objectContaining({ message: "Synthetic reconcile failure" }),
+    );
+    expect(adapter.retryBooleanGeometry()).toBe(true);
+    await flushMicrotasks();
+    flushAnimationFrames();
+    expect(
+      findElement(
+        leaferHarness.app!.tree,
+        booleanResultElementId("boolean_mark"),
+      ),
+    ).toBeInstanceOf(FakePath);
+    adapter.dispose();
+  });
+
+  it("does not publish an asynchronous projection from a stale committed base", async () => {
+    let resolveProvider:
+      ((provider: VectorGeometryProvider) => void) | undefined;
+    const provider = new Promise<VectorGeometryProvider>((resolve) => {
+      resolveProvider = resolve;
+    });
+    const adapter = await createLeaferEngineAdapter(
+      createHost(),
+      createCallbacks(),
+      { loadVectorGeometryProvider: () => provider },
+    );
+    const first = withBooleanFixture(createInput());
+    adapter.sync(first);
+    const source = first.document.nodesById.feature_one;
+    if (!source || source.kind !== "rectangle") {
+      throw new Error("Missing stale-base replacement source");
+    }
+    const document = structuredClone(first.document);
+    document.revision += 1;
+    const replacement = {
+      ...structuredClone(source),
+      kind: "ellipse" as const,
+    };
+    document.nodesById[replacement.id] = replacement;
+    const next = {
+      ...first,
+      changes: changedNodeSet(first.document, document, replacement.id, "kind"),
+      document,
+    };
+
+    leaferHarness.failReconcileCount = 2;
+    adapter.sync(next);
+    resolveProvider?.(fakeVectorGeometryProvider());
+    await flushMicrotasks();
+
+    adapter.sync(next);
+    expect(findElement(leaferHarness.app!.tree, replacement.id)).toBeInstanceOf(
+      FakeEllipse,
+    );
+    expect(
+      findElement(
+        leaferHarness.app!.tree,
+        booleanResultElementId("boolean_mark"),
+      ),
+    ).toBeInstanceOf(FakePath);
+    adapter.dispose();
+  });
+
+  it("isolates warning observers from scene reconciliation", async () => {
+    const observerError = new Error("Warning observer failed");
+    const onError = vi.fn();
+    const onWarning = vi.fn(() => {
+      throw observerError;
+    });
+    const onWarningsChange = vi.fn(() => {
+      throw observerError;
+    });
+    const adapter = await createLeaferEngineAdapter(
+      createHost(),
+      { ...createCallbacks(), onError, onWarning, onWarningsChange },
+      {
+        loadVectorGeometryProvider: () =>
+          Promise.reject(new Error("Geometry unavailable")),
+      },
+    );
+    const input = withBooleanFixture(createInput());
+
+    adapter.sync(input);
+    await flushMicrotasks();
+
+    expect(findElement(leaferHarness.app!.tree, "boolean_mark")).toBeInstanceOf(
+      FakeGroup,
+    );
+    expect(onWarning).toHaveBeenCalled();
+    expect(onWarningsChange).toHaveBeenCalled();
+    expect(onError).toHaveBeenCalledWith(observerError);
+    adapter.dispose();
+  });
+
+  it("forces a full retry when the same revision failed to reconcile", async () => {
+    const onError = vi.fn();
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onError,
+    });
+    const first = createInput();
+    adapter.sync(first);
+    const source = first.document.nodesById.feature_one;
+    if (!source || source.kind !== "rectangle") {
+      throw new Error("Missing replacement source");
+    }
+    const document = structuredClone(first.document);
+    document.revision += 1;
+    const replacement = {
+      ...structuredClone(source),
+      kind: "ellipse" as const,
+    };
+    document.nodesById[replacement.id] = replacement;
+    const next = {
+      ...first,
+      changes: changedNodeSet(first.document, document, replacement.id, "kind"),
+      document,
+    };
+
+    leaferHarness.failReconcileCount = 2;
+    adapter.sync(next);
+    expect(onError).toHaveBeenCalledWith(
+      expect.objectContaining({ message: "Synthetic reconcile failure" }),
+    );
+
+    adapter.sync(next);
+    expect(findElement(leaferHarness.app!.tree, replacement.id)).toBeInstanceOf(
+      FakeEllipse,
+    );
+    adapter.dispose();
+  });
+
+  it("contains Boolean preview reconcile errors and restores the authoritative scene", async () => {
+    const onError = vi.fn();
+    const adapter = await createLeaferEngineAdapter(
+      createHost(),
+      { ...createCallbacks(), onError },
+      {
+        loadVectorGeometryProvider: () =>
+          Promise.resolve(fakeVectorGeometryProvider()),
+      },
+    );
+    const input = withBooleanFixture(createInput());
+    const editing = {
+      ...input,
+      booleanEditScope: {
+        booleanId: "boolean_mark",
+        readOnly: false,
+        selectedOperandIds: ["boolean_base"],
+      },
+      selection: { nodeIds: ["boolean_base"], anchorNodeId: "boolean_base" },
+    };
+    adapter.sync(input);
+    await flushMicrotasks();
+    adapter.sync(editing);
+    flushAnimationFrames();
+    const app = leaferHarness.app!;
+    const base = findElement(app.tree, "boolean_base");
+    if (!base) throw new Error("Missing Boolean operand");
+    app.editor.target = [base];
+    app.editor.moving = true;
+    app.editor.editBox.dragging = true;
+    app.editor.emit("editor.before-move");
+    base.localTransform.e = 24;
+    leaferHarness.failReconcileSetCount = 1;
+
+    expect(() => app.editor.emit("editor.move")).not.toThrow();
+    flushAnimationFrames();
+    expect(onError).toHaveBeenCalledWith(
+      expect.objectContaining({ message: "Synthetic reconcile failure" }),
+    );
+    expect(findElement(app.tree, "boolean_base")?.localTransform.e).toBe(0);
+    adapter.dispose();
   });
 
   it("does not cancel a direct manipulation when a contiguous revision changes an unrelated node", async () => {
