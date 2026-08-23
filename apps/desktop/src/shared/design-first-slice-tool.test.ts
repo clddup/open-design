@@ -12,10 +12,7 @@ import {
   logoBriefRequiresExploration,
   type DesignFirstSliceToolInput,
 } from "./design-first-slice-tool";
-import {
-  DesignApplyContract,
-  isDesignPlanToolInput,
-} from "./design-agent-tools";
+import { DesignApplyContract, DesignPlanContract } from "./design-agent-tools";
 
 describe("compact first-slice tool", () => {
   it("keeps Provider schema budgets aligned with runtime validation", () => {
@@ -80,9 +77,10 @@ describe("compact first-slice tool", () => {
     });
     expect(
       normalized &&
-        isDesignPlanToolInput(
+        DesignPlanContract.parse(
           compileDesignFirstSliceToolInput(normalized).plan,
-        ),
+          { canonical: true },
+        ).ok,
     ).toBe(true);
   });
 
@@ -184,7 +182,9 @@ describe("compact first-slice tool", () => {
       ],
     };
     const compiled = compileDesignFirstSliceToolInput(input);
-    expect(isDesignPlanToolInput(compiled.plan)).toBe(true);
+    expect(
+      DesignPlanContract.parse(compiled.plan, { canonical: true }).ok,
+    ).toBe(true);
     expect(
       DesignApplyContract.parse(compiled.apply, {
         canonical: true,
@@ -381,7 +381,9 @@ describe("compact first-slice tool", () => {
     const firstDirection = aliasedPlan.logoExploration?.directions[0];
     if (!firstDirection) throw new Error("Expected compiled Logo exploration");
     firstDirection.monochromeNodeId = firstDirection.smallSizeNodeIds[0];
-    expect(isDesignPlanToolInput(aliasedPlan)).toBe(true);
+    expect(DesignPlanContract.parse(aliasedPlan, { canonical: true }).ok).toBe(
+      false,
+    );
 
     const duplicatePrinciple = structuredClone(modelInput) as {
       logoExploration?: NonNullable<

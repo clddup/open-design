@@ -8,7 +8,12 @@ export {
   type DesignTargetQualityProfile,
 } from "@opendesign/design-contracts";
 
-const ID_SCHEMA = { type: "string", minLength: 1, maxLength: 256 } as const;
+const ID_SCHEMA = {
+  type: "string",
+  minLength: 1,
+  maxLength: 256,
+  pattern: "^[^\\u0000-\\u001F\\u007F]+$",
+} as const;
 const INSET_SCHEMA = {
   type: "number",
   minimum: 0,
@@ -16,7 +21,7 @@ const INSET_SCHEMA = {
 } as const;
 
 export const DESIGN_TARGET_QUALITY_PROFILE_SCHEMA = {
-  oneOf: [
+  anyOf: [
     {
       type: "object",
       description:

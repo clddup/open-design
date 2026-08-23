@@ -34,11 +34,24 @@ export type DesignPlanComponentStrategy = {
   candidates: DesignPlanComponentCandidate[];
 };
 
+const ID_PATTERN = "^[^\\u0000-\\u001F\\u007F]+$";
+const NON_WHITESPACE_PATTERN = "\\S";
+
 const OCCURRENCE_SCHEMA = {
   type: "object",
   properties: {
-    targetId: { type: "string", minLength: 1, maxLength: 128 },
-    nodeId: { type: "string", minLength: 1, maxLength: 256 },
+    targetId: {
+      type: "string",
+      minLength: 1,
+      maxLength: 128,
+      pattern: ID_PATTERN,
+    },
+    nodeId: {
+      type: "string",
+      minLength: 1,
+      maxLength: 256,
+      pattern: ID_PATTERN,
+    },
   },
   required: ["targetId", "nodeId"],
   additionalProperties: false,
@@ -49,20 +62,45 @@ export const DESIGN_PLAN_COMPONENT_STRATEGY_SCHEMA = {
   description:
     "Explicit component judgment. Use reuse-component for a compatible componentId from inspection.document.componentCatalog, component when this delivery creates/owns the Main, and ordinary when linked reuse is not justified.",
   properties: {
-    summary: { type: "string", minLength: 12, maxLength: 1_000 },
+    summary: {
+      type: "string",
+      minLength: 12,
+      maxLength: 1_000,
+      pattern: NON_WHITESPACE_PATTERN,
+    },
     candidates: {
       type: "array",
       maxItems: 24,
       items: {
-        oneOf: [
+        anyOf: [
           {
             type: "object",
             properties: {
-              decisionId: { type: "string", minLength: 1, maxLength: 128 },
-              label: { type: "string", minLength: 1, maxLength: 256 },
+              decisionId: {
+                type: "string",
+                minLength: 1,
+                maxLength: 128,
+                pattern: ID_PATTERN,
+              },
+              label: {
+                type: "string",
+                minLength: 1,
+                maxLength: 256,
+                pattern: NON_WHITESPACE_PATTERN,
+              },
               decision: { const: "reuse-component" },
-              rationale: { type: "string", minLength: 12, maxLength: 500 },
-              componentId: { type: "string", minLength: 1, maxLength: 256 },
+              rationale: {
+                type: "string",
+                minLength: 12,
+                maxLength: 500,
+                pattern: NON_WHITESPACE_PATTERN,
+              },
+              componentId: {
+                type: "string",
+                minLength: 1,
+                maxLength: 256,
+                pattern: ID_PATTERN,
+              },
               instances: {
                 type: "array",
                 minItems: 1,
@@ -83,11 +121,31 @@ export const DESIGN_PLAN_COMPONENT_STRATEGY_SCHEMA = {
           {
             type: "object",
             properties: {
-              decisionId: { type: "string", minLength: 1, maxLength: 128 },
-              label: { type: "string", minLength: 1, maxLength: 256 },
+              decisionId: {
+                type: "string",
+                minLength: 1,
+                maxLength: 128,
+                pattern: ID_PATTERN,
+              },
+              label: {
+                type: "string",
+                minLength: 1,
+                maxLength: 256,
+                pattern: NON_WHITESPACE_PATTERN,
+              },
               decision: { const: "component" },
-              rationale: { type: "string", minLength: 12, maxLength: 500 },
-              componentId: { type: "string", minLength: 1, maxLength: 256 },
+              rationale: {
+                type: "string",
+                minLength: 12,
+                maxLength: 500,
+                pattern: NON_WHITESPACE_PATTERN,
+              },
+              componentId: {
+                type: "string",
+                minLength: 1,
+                maxLength: 256,
+                pattern: ID_PATTERN,
+              },
               main: {
                 ...OCCURRENCE_SCHEMA,
                 properties: {
@@ -116,10 +174,25 @@ export const DESIGN_PLAN_COMPONENT_STRATEGY_SCHEMA = {
           {
             type: "object",
             properties: {
-              decisionId: { type: "string", minLength: 1, maxLength: 128 },
-              label: { type: "string", minLength: 1, maxLength: 256 },
+              decisionId: {
+                type: "string",
+                minLength: 1,
+                maxLength: 128,
+                pattern: ID_PATTERN,
+              },
+              label: {
+                type: "string",
+                minLength: 1,
+                maxLength: 256,
+                pattern: NON_WHITESPACE_PATTERN,
+              },
               decision: { const: "ordinary" },
-              rationale: { type: "string", minLength: 12, maxLength: 500 },
+              rationale: {
+                type: "string",
+                minLength: 12,
+                maxLength: 500,
+                pattern: NON_WHITESPACE_PATTERN,
+              },
               occurrences: {
                 type: "array",
                 minItems: 1,
@@ -143,36 +216,6 @@ export const DESIGN_PLAN_COMPONENT_STRATEGY_SCHEMA = {
   required: ["summary", "candidates"],
   additionalProperties: false,
 } as const;
-
-export function isDesignPlanComponentStrategy(
-  value: unknown,
-  targetIds: readonly string[],
-): value is DesignPlanComponentStrategy {
-  if (!isRecord(value) || !text(value.summary, 12, 1_000)) return false;
-  if (!Array.isArray(value.candidates) || value.candidates.length > 24) {
-    return false;
-  }
-  const targetOrder = new Map(
-    targetIds.map((targetId, index) => [targetId, index]),
-  );
-  const decisionIds = new Set<string>();
-  const componentIds = new Set<string>();
-  const occurrenceNodeIds = new Set<string>();
-  for (const candidate of value.candidates) {
-    if (!isCandidate(candidate, targetOrder)) return false;
-    if (decisionIds.has(candidate.decisionId)) return false;
-    decisionIds.add(candidate.decisionId);
-    if (candidate.decision !== "ordinary") {
-      if (componentIds.has(candidate.componentId)) return false;
-      componentIds.add(candidate.componentId);
-    }
-    for (const occurrence of candidateOccurrences(candidate)) {
-      if (occurrenceNodeIds.has(occurrence.nodeId)) return false;
-      occurrenceNodeIds.add(occurrence.nodeId);
-    }
-  }
-  return exactKeys(value, ["summary", "candidates"]);
-}
 
 export function componentStrategyOccurrencesForTarget(
   strategy: DesignPlanComponentStrategy,
@@ -239,150 +282,4 @@ export function componentStrategyOccurrencesForTarget(
     );
   }
   return result;
-}
-
-function isCandidate(
-  value: unknown,
-  targetOrder: ReadonlyMap<string, number>,
-): value is DesignPlanComponentCandidate {
-  if (
-    !isRecord(value) ||
-    !safeId(value.decisionId, 128) ||
-    !text(value.label, 1, 256) ||
-    !text(value.rationale, 12, 500)
-  ) {
-    return false;
-  }
-  if (value.decision === "ordinary") {
-    return (
-      Array.isArray(value.occurrences) &&
-      value.occurrences.length >= 1 &&
-      value.occurrences.length <= 32 &&
-      value.occurrences.every((item) => isOccurrence(item, targetOrder)) &&
-      exactKeys(value, [
-        "decisionId",
-        "label",
-        "decision",
-        "rationale",
-        "occurrences",
-      ])
-    );
-  }
-  if (value.decision === "reuse-component") {
-    return (
-      safeId(value.componentId, 256) &&
-      Array.isArray(value.instances) &&
-      value.instances.length >= 1 &&
-      value.instances.length <= 32 &&
-      value.instances.every((item) => isOccurrence(item, targetOrder)) &&
-      exactKeys(value, [
-        "decisionId",
-        "label",
-        "decision",
-        "rationale",
-        "componentId",
-        "instances",
-      ])
-    );
-  }
-  if (
-    value.decision !== "component" ||
-    !safeId(value.componentId, 256) ||
-    !isMainOccurrence(value.main, targetOrder) ||
-    !Array.isArray(value.instances) ||
-    value.instances.length > 32 ||
-    !value.instances.every((item) => isOccurrence(item, targetOrder)) ||
-    !exactKeys(value, [
-      "decisionId",
-      "label",
-      "decision",
-      "rationale",
-      "componentId",
-      "main",
-      "instances",
-    ])
-  ) {
-    return false;
-  }
-  const mainIndex = targetOrder.get(value.main.targetId);
-  return value.instances.every(
-    (instance) =>
-      (targetOrder.get(instance.targetId) ?? -1) >= (mainIndex ?? 0),
-  );
-}
-
-function isOccurrence(
-  value: unknown,
-  targetOrder: ReadonlyMap<string, number>,
-): value is DesignPlanSemanticOccurrence {
-  return (
-    isOccurrenceFields(value, targetOrder) &&
-    exactKeys(value, ["targetId", "nodeId"])
-  );
-}
-
-function isMainOccurrence(
-  value: unknown,
-  targetOrder: ReadonlyMap<string, number>,
-): value is DesignPlanSemanticOccurrence & { mode: "create" | "existing" } {
-  return (
-    isOccurrenceFields(value, targetOrder) &&
-    (value.mode === "create" || value.mode === "existing") &&
-    exactKeys(value, ["mode", "targetId", "nodeId"])
-  );
-}
-
-function isOccurrenceFields(
-  value: unknown,
-  targetOrder: ReadonlyMap<string, number>,
-): value is Record<string, unknown> & DesignPlanSemanticOccurrence {
-  return (
-    isRecord(value) &&
-    safeId(value.targetId, 128) &&
-    targetOrder.has(value.targetId) &&
-    safeId(value.nodeId, 256)
-  );
-}
-
-function candidateOccurrences(
-  candidate: DesignPlanComponentCandidate,
-): DesignPlanSemanticOccurrence[] {
-  if (candidate.decision === "ordinary") return candidate.occurrences;
-  if (candidate.decision === "reuse-component") return candidate.instances;
-  return [candidate.main, ...candidate.instances];
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function text(
-  value: unknown,
-  minLength: number,
-  maxLength: number,
-): value is string {
-  return (
-    typeof value === "string" &&
-    value.trim().length >= minLength &&
-    value.length <= maxLength
-  );
-}
-
-function safeId(value: unknown, maxLength: number): value is string {
-  return (
-    typeof value === "string" &&
-    value.length >= 1 &&
-    value.length <= maxLength &&
-    ![...value].some((character) => {
-      const codePoint = character.codePointAt(0);
-      return codePoint !== undefined && (codePoint <= 31 || codePoint === 127);
-    })
-  );
-}
-
-function exactKeys(value: Record<string, unknown>, keys: readonly string[]) {
-  return (
-    Object.keys(value).length === keys.length &&
-    Object.keys(value).every((key) => keys.includes(key))
-  );
 }

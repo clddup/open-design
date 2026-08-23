@@ -9,9 +9,9 @@ import {
   isDesignArrangeToolInput,
 } from "./design-arrange-tool";
 import {
+  DesignPlanContract,
   DESIGN_PLAN_TOOL_INPUT_SCHEMA,
   DESIGN_VISUAL_REVIEW_TOOL_INPUT_SCHEMA,
-  normalizeDesignPlanToolInput,
   normalizeDesignVisualReviewToolInput,
 } from "./design-agent-plan-review";
 import { isRecord } from "./design-agent-validation";
@@ -106,7 +106,6 @@ export {
   designApplyRequiresPlan,
 } from "./design-apply-input";
 export { DESIGN_BOOTSTRAP_APPLY_INPUT_SCHEMA } from "./design-bootstrap-apply-schema";
-export { isDesignBriefFidelity } from "./design-brief-fidelity";
 export type { DesignBriefFidelity } from "./design-brief-fidelity";
 export {
   DESIGN_TARGET_QUALITY_PROFILE_SCHEMA,
@@ -143,15 +142,14 @@ export {
   isDesignArrangeToolInput,
 } from "./design-arrange-tool";
 export type { DesignArrangeToolInput } from "./design-arrange-tool";
+export { componentStrategyOccurrencesForTarget } from "./design-plan-component-strategy";
 export {
-  componentStrategyOccurrencesForTarget,
-  isDesignPlanComponentStrategy,
-} from "./design-plan-component-strategy";
-export {
+  DESIGN_PLAN_CANONICAL_INPUT_SCHEMA,
   DESIGN_LOGO_EXPLORATION_SCHEMA,
   DESIGN_PLAN_TOOL_INPUT_SCHEMA,
   DESIGN_VISUAL_CRITERIA,
   DESIGN_VISUAL_REVIEW_TOOL_INPUT_SCHEMA,
+  DesignPlanContract,
   designPlanBriefFidelity,
   designPlanComponentStrategy,
   designPlanDesignIntent,
@@ -159,16 +157,14 @@ export {
   designPlanReferenceStrategy,
   designPlanSkillRefs,
   designPlanTargets,
-  isDesignPlanToolInput,
-  isDesignLogoExploration,
   isDesignVisualReviewToolInput,
-  normalizeDesignPlanToolInput,
   normalizeDesignVisualReviewToolInput,
 } from "./design-agent-plan-review";
 export type {
   DesignDeliverable,
   DesignIntent,
   DesignLogoExploration,
+  DesignPlanContractContext,
   DesignPlanArtboard,
   DesignPlanComposition,
   DesignPlanRegion,
@@ -187,7 +183,6 @@ export {
   MAX_ACTIVE_VISUAL_REFERENCES,
   activeVisualReferenceIds,
   isActiveVisualReferenceDecision,
-  isDesignReferenceStrategy,
 } from "./design-reference-strategy";
 export type {
   DesignReferenceDecision,
@@ -371,6 +366,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     inputSchema: DESIGN_PLAN_TOOL_INPUT_SCHEMA,
     risk: "design_write" as const,
     approval: "never" as const,
+    validateInputIssues: DesignPlanContract.issues,
   },
   {
     name: DESIGN_REVIEW_TOOL_NAME,
@@ -643,7 +639,7 @@ export function validateDesignAgentToolInput(
     return isRecord(input) && Object.keys(input).length === 0;
   }
   if (toolName === DESIGN_PLAN_TOOL_NAME) {
-    return normalizeDesignPlanToolInput(input) !== undefined;
+    return DesignPlanContract.parse(input).ok;
   }
   if (toolName === DESIGN_REVIEW_TOOL_NAME) {
     return normalizeDesignVisualReviewToolInput(input) !== undefined;

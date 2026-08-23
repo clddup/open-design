@@ -4,10 +4,11 @@ import type {
   TrustedToolResult,
 } from "@opendesign/agent-contracts";
 import {
+  DesignPlanContract,
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
   designPlanTargets,
-  normalizeDesignPlanToolInput,
 } from "@/shared/design-agent-tools.js";
+import { formatValidationFailure } from "@/shared/contract-validation.js";
 import type { GlobalTaskCoordinator } from "./global-task-coordinator.js";
 import type { RendererDesignToolHost } from "./renderer-design-tool-host.js";
 
@@ -20,10 +21,13 @@ export async function handleDesignPlanTool(
   signal: AbortSignal,
   reportProgress?: (message: string, progress: number) => void,
 ): Promise<TrustedToolResult> {
-  const plan = normalizeDesignPlanToolInput(call.input);
-  if (!plan) {
-    throw new TypeError("Invalid design plan tool input");
+  const parsed = DesignPlanContract.parse(call.input);
+  if (!parsed.ok) {
+    throw new TypeError(
+      formatValidationFailure("opendesign_define_design_plan", parsed.issues),
+    );
   }
+  const plan = parsed.value;
   const registration = coordinator.registerDesignPlan(context, plan);
   const allocation = coordinator.createDesignPlanAllocation(context.runId);
   const allocated = allocation

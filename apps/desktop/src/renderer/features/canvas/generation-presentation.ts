@@ -28,11 +28,11 @@ import {
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
   INTERNAL_IMPORT_SVG_TOOL_NAME,
   INTERNAL_UPDATE_IMAGE_TOOL_NAME,
+  DesignPlanContract,
   designPlanTargets,
   compileDesignFirstSliceToolInput,
   FirstSliceContract,
   isDesignCheckpointToolInput,
-  isDesignPlanToolInput,
   PLACE_IMAGE_TOOL_NAME,
   READ_IMAGE_TOOL_NAME,
   type DesignPlanTarget,
@@ -125,8 +125,9 @@ export function projectGenerationPlanPresentationEvent(
       plan = parsed.ok
         ? compileDesignFirstSliceToolInput(parsed.value).plan
         : undefined;
-    } else if (isDesignPlanToolInput(event.input)) {
-      plan = event.input;
+    } else {
+      const parsed = DesignPlanContract.parse(event.input);
+      plan = parsed.ok ? parsed.value : undefined;
     }
     if (!plan) return state;
     const callId = generationPlanCallId(event.runId, event.toolCallId);
@@ -642,7 +643,8 @@ function acceptedGenerationPlan(
   plan: DesignPlanToolInput,
 ): DesignPlanToolInput | undefined {
   if (!isRecord(value)) return undefined;
-  const authoritative = isDesignPlanToolInput(value.plan) ? value.plan : plan;
+  const parsed = DesignPlanContract.parse(value.plan, { canonical: true });
+  const authoritative = parsed.ok ? parsed.value : plan;
   const common =
     value.ok === true &&
     (value.status === "accepted" ||

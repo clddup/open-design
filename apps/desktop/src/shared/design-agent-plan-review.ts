@@ -1,4 +1,9 @@
 import {
+  executableJsonSchema,
+  schemaValidationIssues,
+  type TSchema,
+} from "@opendesign/design-contracts";
+import {
   builtinDesignSkillRefsForDeliverable,
   BUILTIN_UI_DESIGN_SKILL_REFS,
   isBuiltinDesignSkillRefsForDeliverable,
@@ -7,34 +12,31 @@ import {
 } from "@opendesign/design-skills";
 import {
   DESIGN_BRIEF_FIDELITY_SCHEMA,
-  isDesignBriefFidelity,
   type DesignBriefFidelity,
 } from "./design-brief-fidelity";
 import {
-  componentStrategyOccurrencesForTarget,
   DESIGN_PLAN_COMPONENT_STRATEGY_SCHEMA,
-  isDesignPlanComponentStrategy,
   type DesignPlanComponentStrategy,
 } from "./design-plan-component-strategy";
 import {
   DESIGN_TARGET_QUALITY_PROFILE_SCHEMA,
-  isDesignTargetQualityProfile,
   type DesignTargetQualityProfile,
 } from "./design-plan-quality-profile";
 import {
+  isActiveVisualReferenceDecision,
+  MAX_ACTIVE_VISUAL_REFERENCES,
   DESIGN_REFERENCE_STRATEGY_SCHEMA,
-  isDesignReferenceStrategy,
   type DesignReferenceStrategy,
 } from "./design-reference-strategy";
 import {
-  boundedText,
+  type ValidationIssue,
+  type ValidationIssueValue,
+  type ValidationResult,
+} from "./contract-validation";
+import {
   boundedTextArray,
   exactKeys,
-  finite,
-  finiteBounded,
   isRecord,
-  positiveBounded,
-  safeId,
   substantiveReviewText,
 } from "./design-agent-validation";
 
@@ -215,7 +217,12 @@ const DESIGN_PLAN_ARTBOARD_SCHEMA = {
   type: "object",
   properties: {
     mode: { enum: ["create", "existing"] },
-    frameId: { type: "string", minLength: 1, maxLength: 256 },
+    frameId: {
+      type: "string",
+      minLength: 1,
+      maxLength: 256,
+      pattern: "^[^\\u0000-\\u001F\\u007F]+$",
+    },
     x: { type: "number", minimum: -1_000_000, maximum: 1_000_000 },
     y: { type: "number", minimum: -1_000_000, maximum: 1_000_000 },
     width: { type: "number", exclusiveMinimum: 0, maximum: 100_000 },
@@ -228,12 +235,22 @@ const DESIGN_PLAN_ARTBOARD_SCHEMA = {
 const DESIGN_PLAN_COMPOSITION_SCHEMA = {
   type: "object",
   properties: {
-    direction: { type: "string", minLength: 1, maxLength: 1_000 },
+    direction: {
+      type: "string",
+      minLength: 1,
+      maxLength: 1_000,
+      pattern: "\\S",
+    },
     hierarchy: {
       type: "array",
       minItems: 2,
       maxItems: 16,
-      items: { type: "string", minLength: 1, maxLength: 256 },
+      items: {
+        type: "string",
+        minLength: 1,
+        maxLength: 256,
+        pattern: "\\S",
+      },
     },
     regions: {
       type: "array",
@@ -244,12 +261,23 @@ const DESIGN_PLAN_COMPOSITION_SCHEMA = {
       items: {
         type: "object",
         properties: {
-          nodeId: { type: "string", minLength: 1, maxLength: 256 },
-          name: { type: "string", minLength: 1, maxLength: 128 },
+          nodeId: {
+            type: "string",
+            minLength: 1,
+            maxLength: 256,
+            pattern: "^[^\\u0000-\\u001F\\u007F]+$",
+          },
+          name: {
+            type: "string",
+            minLength: 1,
+            maxLength: 128,
+            pattern: "\\S",
+          },
           parentId: {
             type: "string",
             minLength: 1,
             maxLength: 256,
+            pattern: "^[^\\u0000-\\u001F\\u007F]+$",
             description:
               "Optional parent region ID. Omit for a top-level artboard region. Bounds are local to the declared parent.",
           },
@@ -278,10 +306,16 @@ const DESIGN_PLAN_COMPOSITION_SCHEMA = {
       type: "string",
       minLength: 1,
       maxLength: 1_000,
+      pattern: "\\S",
       description:
         "How native shapes, vectors, typography, and any raster imagery form one editable composition. State an intentional no-raster strategy when appropriate.",
     },
-    spacingRhythm: { type: "string", minLength: 1, maxLength: 500 },
+    spacingRhythm: {
+      type: "string",
+      minLength: 1,
+      maxLength: 500,
+      pattern: "\\S",
+    },
   },
   required: [
     "direction",
@@ -298,29 +332,64 @@ const DESIGN_PLAN_TARGET_BASE_SCHEMA = {
   description:
     "One required user-facing deliverable. Use exactly one target for a single requested design and one target per requested screen or asset for a set.",
   properties: {
-    targetId: { type: "string", minLength: 1, maxLength: 128 },
-    label: { type: "string", minLength: 1, maxLength: 256 },
-    pageId: { type: "string", minLength: 1, maxLength: 256 },
-    objective: { type: "string", minLength: 1, maxLength: 2_000 },
+    targetId: {
+      type: "string",
+      minLength: 1,
+      maxLength: 128,
+      pattern: "^[^\\u0000-\\u001F\\u007F]+$",
+    },
+    label: {
+      type: "string",
+      minLength: 1,
+      maxLength: 256,
+      pattern: "\\S",
+    },
+    pageId: {
+      type: "string",
+      minLength: 1,
+      maxLength: 256,
+      pattern: "^[^\\u0000-\\u001F\\u007F]+$",
+    },
+    objective: {
+      type: "string",
+      minLength: 1,
+      maxLength: 2_000,
+      pattern: "\\S",
+    },
     artboard: DESIGN_PLAN_ARTBOARD_SCHEMA,
     composition: DESIGN_PLAN_COMPOSITION_SCHEMA,
     editableLayers: {
       type: "array",
       minItems: 2,
       maxItems: 24,
-      items: { type: "string", minLength: 1, maxLength: 256 },
+      items: {
+        type: "string",
+        minLength: 1,
+        maxLength: 256,
+        pattern: "\\S",
+      },
     },
     implementationSteps: {
       type: "array",
       minItems: 2,
       maxItems: 16,
-      items: { type: "string", minLength: 1, maxLength: 500 },
+      items: {
+        type: "string",
+        minLength: 1,
+        maxLength: 500,
+        pattern: "\\S",
+      },
     },
     validationChecks: {
       type: "array",
       minItems: 2,
       maxItems: 16,
-      items: { type: "string", minLength: 1, maxLength: 500 },
+      items: {
+        type: "string",
+        minLength: 1,
+        maxLength: 500,
+        pattern: "\\S",
+      },
     },
   },
   required: [
@@ -349,28 +418,65 @@ const DESIGN_PLAN_TARGET_SCHEMA = {
 const DESIGN_INTENT_SCHEMA = {
   type: "object",
   properties: {
-    subject: { type: "string", minLength: 8, maxLength: 500 },
-    audience: { type: "string", minLength: 8, maxLength: 500 },
-    primaryJob: { type: "string", minLength: 8, maxLength: 500 },
-    visualThesis: { type: "string", minLength: 16, maxLength: 1_000 },
-    signatureMotif: { type: "string", minLength: 16, maxLength: 1_000 },
-    typographyLanguage: { type: "string", minLength: 12, maxLength: 1_000 },
+    subject: {
+      type: "string",
+      minLength: 8,
+      maxLength: 500,
+      pattern: "\\S",
+    },
+    audience: {
+      type: "string",
+      minLength: 8,
+      maxLength: 500,
+      pattern: "\\S",
+    },
+    primaryJob: {
+      type: "string",
+      minLength: 8,
+      maxLength: 500,
+      pattern: "\\S",
+    },
+    visualThesis: {
+      type: "string",
+      minLength: 16,
+      maxLength: 1_000,
+      pattern: "\\S",
+    },
+    signatureMotif: {
+      type: "string",
+      minLength: 16,
+      maxLength: 1_000,
+      pattern: "\\S",
+    },
+    typographyLanguage: {
+      type: "string",
+      minLength: 12,
+      maxLength: 1_000,
+      pattern: "\\S",
+    },
     colorMaterialLanguage: {
       type: "string",
       minLength: 12,
       maxLength: 1_000,
+      pattern: "\\S",
     },
     compositionTension: {
       type: "string",
       minLength: 12,
       maxLength: 1_000,
+      pattern: "\\S",
     },
     antiPatterns: {
       type: "array",
       minItems: 3,
       maxItems: 12,
       uniqueItems: true,
-      items: { type: "string", minLength: 8, maxLength: 256 },
+      items: {
+        type: "string",
+        minLength: 8,
+        maxLength: 256,
+        pattern: "\\S",
+      },
     },
   },
   required: [
@@ -392,7 +498,12 @@ export const DESIGN_LOGO_EXPLORATION_SCHEMA = {
   description:
     "Optional for a requested multi-direction Logo exploration. Three genuinely different concept directions with stable editable roots and rendered monochrome plus 32/24/16 px evidence. Each thesis states the relevant brand meaning; each constructionLogic names the visible geometric mechanism, memorable silhouette/counterform anchor, and feature that survives at 16 px. Cosmetic variants and caption-dependent arbitrary shapes are invalid.",
   properties: {
-    targetId: { type: "string", minLength: 1, maxLength: 128 },
+    targetId: {
+      type: "string",
+      minLength: 1,
+      maxLength: 128,
+      pattern: "^[^\\u0000-\\u001F\\u007F]+$",
+    },
     directions: {
       type: "array",
       minItems: 3,
@@ -400,19 +511,45 @@ export const DESIGN_LOGO_EXPLORATION_SCHEMA = {
       items: {
         type: "object",
         properties: {
-          conceptId: { type: "string", minLength: 1, maxLength: 128 },
-          label: { type: "string", minLength: 1, maxLength: 256 },
+          conceptId: {
+            type: "string",
+            minLength: 1,
+            maxLength: 128,
+            pattern: "^[^\\u0000-\\u001F\\u007F]+$",
+          },
+          label: {
+            type: "string",
+            minLength: 1,
+            maxLength: 256,
+            pattern: "\\S",
+          },
           principle: { enum: [...LOGO_CONCEPT_PRINCIPLES] },
-          thesis: { type: "string", minLength: 16, maxLength: 1_000 },
+          thesis: {
+            type: "string",
+            minLength: 16,
+            maxLength: 1_000,
+            pattern: "\\S",
+          },
           constructionLogic: {
             type: "string",
             minLength: 16,
             maxLength: 1_000,
+            pattern: "\\S",
             description:
               "Causal meaning-to-form mechanism, including the memorable silhouette or counterform anchor and what remains recognizable at 16 px.",
           },
-          rootNodeId: { type: "string", minLength: 1, maxLength: 256 },
-          monochromeNodeId: { type: "string", minLength: 1, maxLength: 256 },
+          rootNodeId: {
+            type: "string",
+            minLength: 1,
+            maxLength: 256,
+            pattern: "^[^\\u0000-\\u001F\\u007F]+$",
+          },
+          monochromeNodeId: {
+            type: "string",
+            minLength: 1,
+            maxLength: 256,
+            pattern: "^[^\\u0000-\\u001F\\u007F]+$",
+          },
           smallSizeNodeIds: {
             type: "array",
             minItems: 3,
@@ -420,7 +557,12 @@ export const DESIGN_LOGO_EXPLORATION_SCHEMA = {
             uniqueItems: true,
             description:
               "Stable evidence nodes ordered 32 px, 24 px, then 16 px.",
-            items: { type: "string", minLength: 1, maxLength: 256 },
+            items: {
+              type: "string",
+              minLength: 1,
+              maxLength: 256,
+              pattern: "^[^\\u0000-\\u001F\\u007F]+$",
+            },
           },
         },
         required: [
@@ -441,7 +583,7 @@ export const DESIGN_LOGO_EXPLORATION_SCHEMA = {
   additionalProperties: false,
 } as const;
 
-export const DESIGN_PLAN_TOOL_INPUT_SCHEMA = {
+const DESIGN_PLAN_MODEL_INPUT_JSON_SCHEMA = {
   type: "object",
   description:
     "Current executable delivery plan. targets must match the user's requested scope exactly. designIntent must commit to a subject-grounded visual thesis and signature motif before drawing. Main binds the exact locally loaded UI skill bundle. briefFidelity preserves requested and inspected product semantics without invented capabilities, componentStrategy explicitly judges reusable semantic objects, and every target declares an executable qualityProfile.",
@@ -458,7 +600,12 @@ export const DESIGN_PLAN_TOOL_INPUT_SCHEMA = {
         "other",
       ],
     },
-    objective: { type: "string", minLength: 1, maxLength: 2_000 },
+    objective: {
+      type: "string",
+      minLength: 1,
+      maxLength: 2_000,
+      pattern: "\\S",
+    },
     outputMode: { enum: ["editable-composition", "single-raster"] },
     targets: {
       type: "array",
@@ -473,30 +620,56 @@ export const DESIGN_PLAN_TOOL_INPUT_SCHEMA = {
           type: "array",
           minItems: 2,
           maxItems: 12,
-          items: { type: "string", minLength: 1, maxLength: 256 },
+          items: {
+            type: "string",
+            minLength: 1,
+            maxLength: 256,
+            pattern: "\\S",
+          },
         },
-        formLanguage: { type: "string", minLength: 1, maxLength: 1_000 },
+        formLanguage: {
+          type: "string",
+          minLength: 1,
+          maxLength: 1_000,
+          pattern: "\\S",
+        },
         palette: {
           type: "array",
           minItems: 1,
           maxItems: 12,
-          items: { type: "string", minLength: 1, maxLength: 128 },
+          items: {
+            type: "string",
+            minLength: 1,
+            maxLength: 128,
+            pattern: "\\S",
+          },
         },
         surfaceAndDepth: {
           type: "string",
           minLength: 1,
           maxLength: 1_000,
+          pattern: "\\S",
         },
         typography: {
           type: "array",
           minItems: 1,
           maxItems: 8,
-          items: { type: "string", minLength: 1, maxLength: 256 },
+          items: {
+            type: "string",
+            minLength: 1,
+            maxLength: 256,
+            pattern: "\\S",
+          },
         },
         effects: {
           type: "array",
           maxItems: 12,
-          items: { type: "string", minLength: 1, maxLength: 256 },
+          items: {
+            type: "string",
+            minLength: 1,
+            maxLength: 256,
+            pattern: "\\S",
+          },
         },
       },
       required: [
@@ -543,6 +716,7 @@ export const DESIGN_PLAN_TOOL_INPUT_SCHEMA = {
       type: "string",
       minLength: 1,
       maxLength: 200,
+      pattern: "\\S",
       description:
         "Allowed only for one target when the user explicitly requests a single flattened image.",
     },
@@ -561,6 +735,32 @@ export const DESIGN_PLAN_TOOL_INPUT_SCHEMA = {
   ],
   additionalProperties: false,
 } as const;
+
+export const DESIGN_PLAN_TOOL_INPUT_SCHEMA = executableJsonSchema(
+  DESIGN_PLAN_MODEL_INPUT_JSON_SCHEMA,
+);
+
+export const DESIGN_PLAN_CANONICAL_INPUT_SCHEMA = executableJsonSchema({
+  ...DESIGN_PLAN_MODEL_INPUT_JSON_SCHEMA,
+  properties: {
+    ...DESIGN_PLAN_MODEL_INPUT_JSON_SCHEMA.properties,
+    skillRefs: {
+      type: "array",
+      minItems: 1,
+      maxItems: 8,
+      uniqueItems: true,
+      items: {
+        type: "object",
+        properties: {
+          id: { type: "string", minLength: 1, maxLength: 128 },
+        },
+        required: ["id"],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: [...DESIGN_PLAN_MODEL_INPUT_JSON_SCHEMA.required, "skillRefs"],
+});
 
 export const DESIGN_VISUAL_REVIEW_TOOL_INPUT_SCHEMA = {
   type: "object",
@@ -622,141 +822,595 @@ export const DESIGN_VISUAL_REVIEW_TOOL_INPUT_SCHEMA = {
   additionalProperties: false,
 } as const;
 
-export function isDesignPlanToolInput(
+export type DesignPlanContractContext = { canonical?: boolean };
+
+function parseDesignPlan(
   input: unknown,
-): input is DesignPlanToolInput {
-  if (!isRecord(input)) return false;
-  if (
-    input.version !== 1 ||
-    !isDesignDeliverable(input.deliverable) ||
-    !boundedText(input.objective, 2_000) ||
-    (input.outputMode !== "editable-composition" &&
-      input.outputMode !== "single-raster") ||
-    !Array.isArray(input.targets) ||
-    input.targets.length < 1 ||
-    input.targets.length > 32 ||
-    !input.targets.every(isDesignPlanTarget) ||
-    !isDesignPlanVisualSystem(input.visualSystem) ||
-    !Array.isArray(input.rasterAssetRoles) ||
-    input.rasterAssetRoles.length > 5 ||
-    !input.rasterAssetRoles.every(isRasterAssetRole) ||
-    new Set(input.rasterAssetRoles).size !== input.rasterAssetRoles.length ||
-    !isDesignPlanComponentStrategy(
-      input.componentStrategy,
-      input.targets.map((target) => target.targetId),
-    ) ||
-    !isDesignBriefFidelity(input.briefFidelity) ||
-    !isDesignIntent(input.designIntent) ||
-    (input.referenceStrategy !== undefined &&
-      !isDesignReferenceStrategy(input.referenceStrategy)) ||
-    (input.logoOutputs !== undefined &&
-      (input.deliverable !== "logo" ||
-        !isDesignLogoOutputs(input.logoOutputs))) ||
-    !isBuiltinDesignSkillRefsForDeliverable(
-      input.deliverable,
-      input.skillRefs,
-    ) ||
-    !exactKeys(input, [
-      "version",
-      "deliverable",
-      "objective",
-      "outputMode",
-      "targets",
-      "visualSystem",
-      "rasterAssetRoles",
-      "componentStrategy",
-      "briefFidelity",
-      "designIntent",
-      "skillRefs",
-      ...(input.referenceStrategy === undefined ? [] : ["referenceStrategy"]),
-      ...(input.logoOutputs === undefined ? [] : ["logoOutputs"]),
-      ...(input.logoExploration === undefined ? [] : ["logoExploration"]),
-      ...(input.singleRasterEvidence === undefined
-        ? []
-        : ["singleRasterEvidence"]),
-    ])
-  ) {
-    return false;
-  }
-  const targets = input.targets;
-  const componentStrategy = input.componentStrategy;
-  if (
-    input.logoExploration !== undefined &&
-    (input.deliverable !== "logo" ||
-      !isDesignLogoExploration(input.logoExploration, targets))
-  ) {
-    return false;
-  }
-  if (
-    targets.some((target) =>
-      input.deliverable === "ui"
-        ? target.qualityProfile.kind !== "ui"
-        : target.qualityProfile.kind !== "graphic",
-    )
-  ) {
-    return false;
-  }
-  if (
-    new Set(targets.map((target) => target.targetId)).size !== targets.length ||
-    new Set(targets.map((target) => target.artboard.frameId)).size !==
-      targets.length ||
-    new Set(
-      targets.flatMap((target) =>
-        target.composition.regions.map((region) => region.nodeId),
-      ),
-    ).size !==
-      targets.reduce(
-        (count, target) => count + target.composition.regions.length,
-        0,
-      ) ||
-    targets.some((target) =>
-      targets.some(
-        (candidate) =>
-          candidate.targetId !== target.targetId &&
-          candidate.composition.regions.some(
-            (region) => region.nodeId === target.artboard.frameId,
-          ),
-      ),
-    )
-  ) {
-    return false;
-  }
-  if (
-    targets.some((target) =>
-      componentStrategyOccurrencesForTarget(
-        componentStrategy,
-        target.targetId,
-      ).some((occurrence) => occurrence.nodeId === target.artboard.frameId),
-    )
-  ) {
-    return false;
-  }
-  if (input.outputMode === "single-raster") {
-    return (
-      targets.length === 1 &&
-      boundedText(input.singleRasterEvidence, 200) &&
-      input.rasterAssetRoles.includes("final-single-image") &&
-      componentStrategy.candidates.length === 0
-    );
-  }
-  return (
-    input.singleRasterEvidence === undefined &&
-    !input.rasterAssetRoles.includes("final-single-image")
+  context: DesignPlanContractContext = {},
+): ValidationResult<DesignPlanToolInput> {
+  const canonicalInput = context.canonical === true;
+  const modelInput = canonicalInput ? input : removeModelSkillRefs(input);
+  const structureIssues = planSchemaIssues(
+    canonicalInput
+      ? DESIGN_PLAN_CANONICAL_INPUT_SCHEMA
+      : DESIGN_PLAN_TOOL_INPUT_SCHEMA,
+    modelInput,
+    canonicalInput
+      ? "design_plan.canonical_schema_invalid"
+      : "design_plan.schema_invalid",
   );
+  if (structureIssues.length > 0) {
+    return { ok: false, issues: structureIssues };
+  }
+
+  const value = canonicalInput
+    ? (structuredClone(modelInput) as DesignPlanToolInput)
+    : bindDesignPlanHostContext(
+        modelInput as Omit<DesignPlanToolInput, "skillRefs">,
+      );
+  const canonicalIssues = canonicalInput
+    ? []
+    : planSchemaIssues(
+        DESIGN_PLAN_CANONICAL_INPUT_SCHEMA,
+        value,
+        "design_plan.host_binding_invalid",
+      );
+  if (canonicalIssues.length > 0) {
+    return { ok: false, issues: canonicalIssues };
+  }
+
+  const domainIssues = refineDesignPlan(value);
+  return domainIssues.length > 0
+    ? { ok: false, issues: domainIssues }
+    : { ok: true, value: structuredClone(value) };
 }
 
-export function normalizeDesignPlanToolInput(
-  input: unknown,
-): DesignPlanToolInput | undefined {
-  if (!isRecord(input)) return undefined;
-  if (!isDesignDeliverable(input.deliverable)) return undefined;
-  const skillRefs = builtinDesignSkillRefsForDeliverable(input.deliverable);
+export const DesignPlanContract = {
+  schema: DESIGN_PLAN_TOOL_INPUT_SCHEMA,
+  canonicalSchema: DESIGN_PLAN_CANONICAL_INPUT_SCHEMA,
+  parse: parseDesignPlan,
+  issues: (
+    input: unknown,
+    context: DesignPlanContractContext = {},
+  ): ValidationIssue[] => {
+    const result = parseDesignPlan(input, context);
+    return result.ok ? [] : result.issues;
+  },
+} as const;
+
+function removeModelSkillRefs(input: unknown): unknown {
+  if (!isRecord(input)) return input;
   const modelInput = { ...input };
   delete modelInput.skillRefs;
-  const candidate = { ...modelInput, skillRefs };
-  return isDesignPlanToolInput(candidate)
-    ? structuredClone(candidate)
-    : undefined;
+  return modelInput;
+}
+
+function bindDesignPlanHostContext(
+  input: Omit<DesignPlanToolInput, "skillRefs">,
+): DesignPlanToolInput {
+  return {
+    ...structuredClone(input),
+    skillRefs: builtinDesignSkillRefsForDeliverable(input.deliverable),
+  };
+}
+
+function planSchemaIssues(
+  schema: TSchema,
+  value: unknown,
+  code: string,
+): ValidationIssue[] {
+  return schemaValidationIssues(schema, value)
+    .slice(0, 32)
+    .map((schemaIssue) => ({
+      code,
+      path: schemaIssue.path || "/",
+      message: schemaIssue.message,
+      recovery:
+        "Correct the reported Plan field and submit one revised call; do not repeat unchanged arguments.",
+    }));
+}
+
+function refineDesignPlan(input: DesignPlanToolInput): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+  if (
+    !isBuiltinDesignSkillRefsForDeliverable(input.deliverable, input.skillRefs)
+  ) {
+    issues.push(
+      planIssue(
+        "design_plan.host_skill_binding_invalid",
+        "/skillRefs",
+        "Host-bound design skills do not match the deliverable",
+      ),
+    );
+  }
+
+  refinePlanIntent(input.designIntent, issues);
+  const targetIds = new Map<string, string>();
+  const documentNodeIds = new Map<string, string>();
+  for (const [targetIndex, target] of input.targets.entries()) {
+    registerPlanId(
+      targetIds,
+      target.targetId,
+      `/targets/${targetIndex}/targetId`,
+      "design_plan.duplicate_target_id",
+      "Target ID",
+      issues,
+    );
+    registerPlanId(
+      documentNodeIds,
+      target.artboard.frameId,
+      `/targets/${targetIndex}/artboard/frameId`,
+      "design_plan.duplicate_document_node_id",
+      "Frame or region node ID",
+      issues,
+    );
+  }
+
+  for (const [targetIndex, target] of input.targets.entries()) {
+    refinePlanTarget(
+      input.deliverable,
+      target,
+      targetIndex,
+      documentNodeIds,
+      issues,
+    );
+  }
+  refinePlanComponentStrategy(
+    input.componentStrategy,
+    input.targets,
+    documentNodeIds,
+    issues,
+  );
+  refinePlanReferenceStrategy(input.referenceStrategy, issues);
+  refinePlanLogo(input, targetIds, issues);
+  refinePlanOutputMode(input, issues);
+  return issues;
+}
+
+function refinePlanIntent(
+  intent: DesignIntent,
+  issues: ValidationIssue[],
+): void {
+  for (const [field, value] of [
+    ["visualThesis", intent.visualThesis],
+    ["signatureMotif", intent.signatureMotif],
+    ["typographyLanguage", intent.typographyLanguage],
+    ["colorMaterialLanguage", intent.colorMaterialLanguage],
+    ["compositionTension", intent.compositionTension],
+  ] as const) {
+    if (!substantiveReviewText(value)) {
+      issues.push(
+        planIssue(
+          "design_plan.intent_not_substantive",
+          `/designIntent/${field}`,
+          `${field} must describe a concrete visible design decision`,
+        ),
+      );
+    }
+  }
+}
+
+function refinePlanTarget(
+  deliverable: DesignDeliverable,
+  target: DesignPlanTarget,
+  targetIndex: number,
+  documentNodeIds: Map<string, string>,
+  issues: ValidationIssue[],
+): void {
+  const expectedQualityKind = deliverable === "ui" ? "ui" : "graphic";
+  if (target.qualityProfile.kind !== expectedQualityKind) {
+    issues.push(
+      planIssue(
+        "design_plan.quality_profile_kind_mismatch",
+        `/targets/${targetIndex}/qualityProfile/kind`,
+        "Target quality profile does not match the Plan deliverable",
+        expectedQualityKind,
+        target.qualityProfile.kind,
+      ),
+    );
+  }
+  if (target.qualityProfile.kind === "ui") {
+    const horizontal =
+      target.qualityProfile.safeAreaInsets.left +
+      target.qualityProfile.safeAreaInsets.right;
+    const vertical =
+      target.qualityProfile.safeAreaInsets.top +
+      target.qualityProfile.safeAreaInsets.bottom;
+    if (horizontal >= target.artboard.width) {
+      issues.push(
+        planIssue(
+          "design_plan.safe_area_exceeds_artboard",
+          `/targets/${targetIndex}/qualityProfile/safeAreaInsets`,
+          "Horizontal safe-area insets must leave positive artboard content width",
+          `< ${target.artboard.width}`,
+          horizontal,
+        ),
+      );
+    }
+    if (vertical >= target.artboard.height) {
+      issues.push(
+        planIssue(
+          "design_plan.safe_area_exceeds_artboard",
+          `/targets/${targetIndex}/qualityProfile/safeAreaInsets`,
+          "Vertical safe-area insets must leave positive artboard content height",
+          `< ${target.artboard.height}`,
+          vertical,
+        ),
+      );
+    }
+  }
+
+  const localParents = new Map<string, { width: number; height: number }>([
+    [target.artboard.frameId, target.artboard],
+  ]);
+  for (const [regionIndex, region] of target.composition.regions.entries()) {
+    const path = `/targets/${targetIndex}/composition/regions/${regionIndex}`;
+    registerPlanId(
+      documentNodeIds,
+      region.nodeId,
+      `${path}/nodeId`,
+      "design_plan.duplicate_document_node_id",
+      "Frame or region node ID",
+      issues,
+    );
+    const parentId = region.parentId ?? target.artboard.frameId;
+    const parent = localParents.get(parentId);
+    if (!parent) {
+      issues.push(
+        planIssue(
+          "design_plan.region_parent_not_declared_first",
+          `${path}/parentId`,
+          "Region parent must be the target artboard or an earlier region in the same target",
+          "artboard frameId or earlier region nodeId",
+          parentId,
+        ),
+      );
+    } else if (
+      region.x + region.width > parent.width ||
+      region.y + region.height > parent.height
+    ) {
+      issues.push(
+        planIssue(
+          "design_plan.region_out_of_parent_bounds",
+          path,
+          "Region bounds must fit inside its parent-local bounds",
+          { width: parent.width, height: parent.height },
+          {
+            x: region.x,
+            y: region.y,
+            width: region.width,
+            height: region.height,
+          },
+        ),
+      );
+    }
+    if (!localParents.has(region.nodeId)) {
+      localParents.set(region.nodeId, region);
+    }
+  }
+}
+
+function refinePlanComponentStrategy(
+  strategy: DesignPlanComponentStrategy,
+  targets: readonly DesignPlanTarget[],
+  documentNodeIds: ReadonlyMap<string, string>,
+  issues: ValidationIssue[],
+): void {
+  const targetOrder = new Map(
+    targets.map((target, index) => [target.targetId, index]),
+  );
+  const decisionIds = new Map<string, string>();
+  const componentIds = new Map<string, string>();
+  const occurrenceNodeIds = new Map<string, string>();
+  for (const [candidateIndex, candidate] of strategy.candidates.entries()) {
+    const candidatePath = `/componentStrategy/candidates/${candidateIndex}`;
+    registerPlanId(
+      decisionIds,
+      candidate.decisionId,
+      `${candidatePath}/decisionId`,
+      "design_plan.duplicate_component_decision_id",
+      "Component decision ID",
+      issues,
+    );
+    if (candidate.decision !== "ordinary") {
+      registerPlanId(
+        componentIds,
+        candidate.componentId,
+        `${candidatePath}/componentId`,
+        "design_plan.duplicate_component_id",
+        "Component ID",
+        issues,
+      );
+    }
+    const occurrences =
+      candidate.decision === "ordinary"
+        ? candidate.occurrences.map((occurrence, index) => ({
+            occurrence,
+            path: `${candidatePath}/occurrences/${index}`,
+          }))
+        : candidate.decision === "reuse-component"
+          ? candidate.instances.map((occurrence, index) => ({
+              occurrence,
+              path: `${candidatePath}/instances/${index}`,
+            }))
+          : [
+              { occurrence: candidate.main, path: `${candidatePath}/main` },
+              ...candidate.instances.map((occurrence, index) => ({
+                occurrence,
+                path: `${candidatePath}/instances/${index}`,
+              })),
+            ];
+    for (const { occurrence, path } of occurrences) {
+      if (!targetOrder.has(occurrence.targetId)) {
+        issues.push(
+          planIssue(
+            "design_plan.component_target_unknown",
+            `${path}/targetId`,
+            "Component occurrence must reference a declared Plan target",
+            [...targetOrder.keys()],
+            occurrence.targetId,
+          ),
+        );
+      }
+      registerPlanId(
+        occurrenceNodeIds,
+        occurrence.nodeId,
+        `${path}/nodeId`,
+        "design_plan.duplicate_component_occurrence_node_id",
+        "Component occurrence node ID",
+        issues,
+      );
+      if (documentNodeIds.has(occurrence.nodeId)) {
+        issues.push(
+          planIssue(
+            "design_plan.component_occurrence_reuses_container_id",
+            `${path}/nodeId`,
+            "Component occurrence cannot reuse a delivery Frame or planned region ID",
+            "a unique semantic node ID",
+            occurrence.nodeId,
+          ),
+        );
+      }
+    }
+    if (candidate.decision === "component") {
+      const mainIndex = targetOrder.get(candidate.main.targetId);
+      if (mainIndex !== undefined) {
+        for (const [instanceIndex, instance] of candidate.instances.entries()) {
+          const instanceTargetIndex = targetOrder.get(instance.targetId);
+          if (
+            instanceTargetIndex !== undefined &&
+            instanceTargetIndex < mainIndex
+          ) {
+            issues.push(
+              planIssue(
+                "design_plan.component_instance_precedes_main",
+                `${candidatePath}/instances/${instanceIndex}/targetId`,
+                "A newly created Component Main must be declared no later than its Instances",
+                `target index >= ${mainIndex}`,
+                instanceTargetIndex,
+              ),
+            );
+          }
+        }
+      }
+    }
+  }
+}
+
+function refinePlanReferenceStrategy(
+  strategy: DesignReferenceStrategy | undefined,
+  issues: ValidationIssue[],
+): void {
+  if (!strategy) return;
+  const attachmentIds = new Map<string, string>();
+  let activeReferences = 0;
+  for (const [referenceIndex, reference] of strategy.references.entries()) {
+    registerPlanId(
+      attachmentIds,
+      reference.attachmentId,
+      `/referenceStrategy/references/${referenceIndex}/attachmentId`,
+      "design_plan.duplicate_reference_attachment",
+      "Reference attachment ID",
+      issues,
+    );
+    if (isActiveVisualReferenceDecision(reference.decision)) {
+      activeReferences += 1;
+    }
+  }
+  if (activeReferences > MAX_ACTIVE_VISUAL_REFERENCES) {
+    issues.push(
+      planIssue(
+        "design_plan.active_reference_limit_exceeded",
+        "/referenceStrategy/references",
+        "Too many active visual references",
+        MAX_ACTIVE_VISUAL_REFERENCES,
+        activeReferences,
+      ),
+    );
+  }
+}
+
+function refinePlanLogo(
+  input: DesignPlanToolInput,
+  targetIds: ReadonlyMap<string, string>,
+  issues: ValidationIssue[],
+): void {
+  if (input.logoOutputs !== undefined && input.deliverable !== "logo") {
+    issues.push(
+      planIssue(
+        "design_plan.logo_outputs_wrong_deliverable",
+        "/logoOutputs",
+        "Logo outputs are only valid for a logo deliverable",
+        "logo",
+        input.deliverable,
+      ),
+    );
+  }
+  const exploration = input.logoExploration;
+  if (!exploration) return;
+  if (input.deliverable !== "logo") {
+    issues.push(
+      planIssue(
+        "design_plan.logo_exploration_wrong_deliverable",
+        "/logoExploration",
+        "Logo exploration is only valid for a logo deliverable",
+        "logo",
+        input.deliverable,
+      ),
+    );
+  }
+  if (!targetIds.has(exploration.targetId)) {
+    issues.push(
+      planIssue(
+        "design_plan.logo_exploration_target_unknown",
+        "/logoExploration/targetId",
+        "Logo exploration must reference a declared target",
+        [...targetIds.keys()],
+        exploration.targetId,
+      ),
+    );
+  }
+  const principles = new Map<string, string>();
+  const semanticAndEvidenceIds = new Map<string, string>();
+  for (const [directionIndex, direction] of exploration.directions.entries()) {
+    const path = `/logoExploration/directions/${directionIndex}`;
+    registerPlanId(
+      principles,
+      direction.principle,
+      `${path}/principle`,
+      "design_plan.duplicate_logo_principle",
+      "Logo concept principle",
+      issues,
+    );
+    for (const [field, id] of [
+      ["conceptId", direction.conceptId],
+      ["rootNodeId", direction.rootNodeId],
+      ["monochromeNodeId", direction.monochromeNodeId],
+      ...direction.smallSizeNodeIds.map(
+        (nodeId, index) => [`smallSizeNodeIds/${index}`, nodeId] as const,
+      ),
+    ] as const) {
+      registerPlanId(
+        semanticAndEvidenceIds,
+        id,
+        `${path}/${field}`,
+        "design_plan.duplicate_logo_semantic_or_evidence_id",
+        "Logo semantic or evidence ID",
+        issues,
+      );
+    }
+  }
+}
+
+function refinePlanOutputMode(
+  input: DesignPlanToolInput,
+  issues: ValidationIssue[],
+): void {
+  const finalRasterDeclared =
+    input.rasterAssetRoles.includes("final-single-image");
+  if (input.outputMode === "single-raster") {
+    if (input.targets.length !== 1) {
+      issues.push(
+        planIssue(
+          "design_plan.single_raster_target_count_invalid",
+          "/targets",
+          "Single-raster output requires exactly one delivery target",
+          1,
+          input.targets.length,
+        ),
+      );
+    }
+    if (!input.singleRasterEvidence) {
+      issues.push(
+        planIssue(
+          "design_plan.single_raster_evidence_required",
+          "/singleRasterEvidence",
+          "Single-raster output requires explicit user-request evidence",
+        ),
+      );
+    }
+    if (!finalRasterDeclared) {
+      issues.push(
+        planIssue(
+          "design_plan.single_raster_role_required",
+          "/rasterAssetRoles",
+          "Single-raster output requires the final-single-image role",
+        ),
+      );
+    }
+    if (input.componentStrategy.candidates.length > 0) {
+      issues.push(
+        planIssue(
+          "design_plan.single_raster_components_not_permitted",
+          "/componentStrategy/candidates",
+          "Single-raster output cannot declare editable Component candidates",
+          0,
+          input.componentStrategy.candidates.length,
+        ),
+      );
+    }
+    return;
+  }
+  if (input.singleRasterEvidence !== undefined) {
+    issues.push(
+      planIssue(
+        "design_plan.single_raster_evidence_not_permitted",
+        "/singleRasterEvidence",
+        "Editable composition cannot include single-raster evidence",
+      ),
+    );
+  }
+  if (finalRasterDeclared) {
+    issues.push(
+      planIssue(
+        "design_plan.final_single_image_role_not_permitted",
+        "/rasterAssetRoles",
+        "Editable composition cannot declare the final-single-image role",
+      ),
+    );
+  }
+}
+
+function registerPlanId(
+  seen: Map<string, string>,
+  id: string,
+  path: string,
+  code: string,
+  label: string,
+  issues: ValidationIssue[],
+): void {
+  const firstPath = seen.get(id);
+  if (firstPath) {
+    issues.push(
+      planIssue(
+        code,
+        path,
+        `${label} ${id} duplicates ${firstPath}`,
+        "unique ID",
+        id,
+      ),
+    );
+    return;
+  }
+  seen.set(id, path);
+}
+
+function planIssue(
+  code: string,
+  path: string,
+  message: string,
+  expected?: ValidationIssueValue,
+  actual?: ValidationIssueValue,
+): ValidationIssue {
+  return {
+    code,
+    path,
+    message,
+    ...(expected === undefined ? {} : { expected }),
+    ...(actual === undefined ? {} : { actual }),
+    recovery:
+      "Correct the reported Plan relationship and submit one revised call; do not repeat unchanged arguments.",
+  };
 }
 
 export function designPlanTargets(
@@ -891,290 +1545,4 @@ export function isPlaceableRasterAssetRole(
   value: unknown,
 ): value is PlaceableRasterAssetRole {
   return isRasterAssetRole(value) && value !== "reference";
-}
-
-function isDesignDeliverable(value: unknown): value is DesignDeliverable {
-  return (
-    value === "ui" ||
-    value === "poster" ||
-    value === "logo" ||
-    value === "brand-asset" ||
-    value === "illustration" ||
-    value === "presentation-visual" ||
-    value === "other"
-  );
-}
-
-function isDesignIntent(value: unknown): value is DesignIntent {
-  return (
-    isRecord(value) &&
-    boundedText(value.subject, 500) &&
-    value.subject.trim().length >= 8 &&
-    boundedText(value.audience, 500) &&
-    value.audience.trim().length >= 8 &&
-    boundedText(value.primaryJob, 500) &&
-    value.primaryJob.trim().length >= 8 &&
-    substantiveReviewText(value.visualThesis) &&
-    substantiveReviewText(value.signatureMotif) &&
-    substantiveReviewText(value.typographyLanguage) &&
-    substantiveReviewText(value.colorMaterialLanguage) &&
-    substantiveReviewText(value.compositionTension) &&
-    boundedTextArray(value.antiPatterns, 3, 12, 256) &&
-    value.antiPatterns.every((item) => item.trim().length >= 8) &&
-    new Set(value.antiPatterns).size === value.antiPatterns.length &&
-    exactKeys(value, [
-      "subject",
-      "audience",
-      "primaryJob",
-      "visualThesis",
-      "signatureMotif",
-      "typographyLanguage",
-      "colorMaterialLanguage",
-      "compositionTension",
-      "antiPatterns",
-    ])
-  );
-}
-
-export function isDesignLogoOutputs(
-  value: unknown,
-): value is DesignLogoOutput[] {
-  return (
-    Array.isArray(value) &&
-    value.length >= 1 &&
-    value.length <= DESIGN_LOGO_OUTPUTS.length &&
-    value.every((output) =>
-      DESIGN_LOGO_OUTPUTS.includes(output as DesignLogoOutput),
-    ) &&
-    new Set(value).size === value.length
-  );
-}
-
-export function isDesignLogoExploration(
-  value: unknown,
-  targets: readonly Pick<DesignPlanTarget, "targetId">[],
-): value is DesignLogoExploration {
-  if (
-    !isRecord(value) ||
-    !safeId(value.targetId) ||
-    !targets.some((target) => target.targetId === value.targetId) ||
-    !Array.isArray(value.directions) ||
-    value.directions.length !== 3 ||
-    !exactKeys(value, ["targetId", "directions"])
-  ) {
-    return false;
-  }
-  const semanticIds = new Set<string>();
-  const evidenceIds = new Set<string>();
-  const principles = new Set<string>();
-  for (const direction of value.directions) {
-    if (
-      !isRecord(direction) ||
-      !safeId(direction.conceptId) ||
-      !boundedText(direction.label, 256) ||
-      !LOGO_CONCEPT_PRINCIPLES.includes(
-        direction.principle as (typeof LOGO_CONCEPT_PRINCIPLES)[number],
-      ) ||
-      !substantiveReviewText(direction.thesis) ||
-      !substantiveReviewText(direction.constructionLogic) ||
-      !safeId(direction.rootNodeId) ||
-      !safeId(direction.monochromeNodeId) ||
-      !Array.isArray(direction.smallSizeNodeIds) ||
-      direction.smallSizeNodeIds.length !== 3 ||
-      !direction.smallSizeNodeIds.every((nodeId) => safeId(nodeId)) ||
-      new Set(direction.smallSizeNodeIds).size !== 3 ||
-      !exactKeys(direction, [
-        "conceptId",
-        "label",
-        "principle",
-        "thesis",
-        "constructionLogic",
-        "rootNodeId",
-        "monochromeNodeId",
-        "smallSizeNodeIds",
-      ])
-    ) {
-      return false;
-    }
-    const principle = String(direction.principle);
-    if (principles.has(principle)) return false;
-    principles.add(principle);
-    for (const id of [direction.conceptId, direction.rootNodeId]) {
-      if (semanticIds.has(id) || evidenceIds.has(id)) return false;
-      semanticIds.add(id);
-    }
-    const directionEvidenceIds = new Set([
-      direction.monochromeNodeId,
-      ...direction.smallSizeNodeIds,
-    ]);
-    for (const id of directionEvidenceIds) {
-      if (semanticIds.has(id) || evidenceIds.has(id)) return false;
-      evidenceIds.add(id);
-    }
-  }
-  return true;
-}
-
-function isDesignPlanTarget(value: unknown): value is DesignPlanTarget {
-  if (!isRecord(value)) return false;
-  const artboard = value.artboard;
-  const composition = value.composition;
-  return (
-    safeId(value.targetId) &&
-    boundedText(value.label, 256) &&
-    safeId(value.pageId) &&
-    boundedText(value.objective, 2_000) &&
-    isDesignPlanArtboard(artboard) &&
-    isRecord(composition) &&
-    boundedText(composition.direction, 1_000) &&
-    boundedTextArray(composition.hierarchy, 2, 16, 256) &&
-    Array.isArray(composition.regions) &&
-    composition.regions.length >= 1 &&
-    composition.regions.length <= 16 &&
-    composition.regions.every((region) =>
-      isDesignPlanRegion(region, artboard.width, artboard.height),
-    ) &&
-    hasValidDesignPlanRegionHierarchy(composition.regions, artboard) &&
-    !composition.regions.some(
-      (region) => isRecord(region) && region.nodeId === artboard.frameId,
-    ) &&
-    new Set(
-      composition.regions.flatMap((region) =>
-        isRecord(region) && typeof region.nodeId === "string"
-          ? [region.nodeId]
-          : [],
-      ),
-    ).size === composition.regions.length &&
-    boundedText(composition.assetIntegration, 1_000) &&
-    boundedText(composition.spacingRhythm, 500) &&
-    exactKeys(composition, [
-      "direction",
-      "hierarchy",
-      "regions",
-      "assetIntegration",
-      "spacingRhythm",
-    ]) &&
-    boundedTextArray(value.editableLayers, 2, 24, 256) &&
-    boundedTextArray(value.implementationSteps, 2, 16, 500) &&
-    boundedTextArray(value.validationChecks, 2, 16, 500) &&
-    isDesignTargetQualityProfile(value.qualityProfile, {
-      width: artboard.width,
-      height: artboard.height,
-    }) &&
-    exactKeys(value, [
-      "targetId",
-      "label",
-      "pageId",
-      "objective",
-      "artboard",
-      "composition",
-      "editableLayers",
-      "implementationSteps",
-      "validationChecks",
-      "qualityProfile",
-    ])
-  );
-}
-
-function isDesignPlanArtboard(value: unknown): value is DesignPlanArtboard {
-  return (
-    isRecord(value) &&
-    (value.mode === "create" || value.mode === "existing") &&
-    safeId(value.frameId) &&
-    finiteBounded(value.x, 1_000_000) &&
-    finiteBounded(value.y, 1_000_000) &&
-    positiveBounded(value.width, 100_000) &&
-    positiveBounded(value.height, 100_000) &&
-    exactKeys(value, ["mode", "frameId", "x", "y", "width", "height"])
-  );
-}
-
-function isDesignPlanVisualSystem(
-  value: unknown,
-): value is DesignPlanVisualSystem {
-  return (
-    isRecord(value) &&
-    boundedTextArray(value.avoidances, 2, 12, 256) &&
-    boundedText(value.formLanguage, 1_000) &&
-    boundedTextArray(value.palette, 1, 12, 128) &&
-    boundedText(value.surfaceAndDepth, 1_000) &&
-    boundedTextArray(value.typography, 1, 8, 256) &&
-    boundedTextArray(value.effects, 0, 12, 256) &&
-    exactKeys(value, [
-      "avoidances",
-      "formLanguage",
-      "palette",
-      "surfaceAndDepth",
-      "typography",
-      "effects",
-    ])
-  );
-}
-
-function isDesignPlanRegion(
-  value: unknown,
-  artboardWidth: number,
-  artboardHeight: number,
-): value is DesignPlanRegion {
-  return (
-    isRecord(value) &&
-    safeId(value.nodeId) &&
-    boundedText(value.name, 128) &&
-    isDesignPlanRegionRole(value.role) &&
-    finite(value.x) &&
-    finite(value.y) &&
-    value.x >= 0 &&
-    value.y >= 0 &&
-    positiveBounded(value.width, 100_000) &&
-    positiveBounded(value.height, 100_000) &&
-    value.x + value.width <= artboardWidth &&
-    value.y + value.height <= artboardHeight &&
-    (value.parentId === undefined || safeId(value.parentId)) &&
-    exactKeys(value, [
-      "nodeId",
-      "name",
-      "role",
-      ...(value.parentId === undefined ? [] : ["parentId"]),
-      "x",
-      "y",
-      "width",
-      "height",
-    ])
-  );
-}
-
-function hasValidDesignPlanRegionHierarchy(
-  regions: readonly DesignPlanRegion[],
-  artboard: DesignPlanArtboard,
-): boolean {
-  const seen = new Map<string, { width: number; height: number }>([
-    [artboard.frameId, artboard],
-  ]);
-  for (const region of regions) {
-    const parentId = region.parentId ?? artboard.frameId;
-    const parent = seen.get(parentId);
-    if (
-      !parent ||
-      seen.has(region.nodeId) ||
-      region.x + region.width > parent.width ||
-      region.y + region.height > parent.height
-    ) {
-      return false;
-    }
-    seen.set(region.nodeId, region);
-  }
-  return true;
-}
-
-function isDesignPlanRegionRole(value: unknown): value is DesignPlanRegionRole {
-  return (
-    value === "structure" ||
-    value === "content" ||
-    value === "typography" ||
-    value === "media" ||
-    value === "graphic" ||
-    value === "decoration" ||
-    value === "interaction" ||
-    value === "other"
-  );
 }

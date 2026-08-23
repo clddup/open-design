@@ -9,6 +9,7 @@ const FIDELITY_ITEM_SCHEMA = {
   type: "string",
   minLength: 1,
   maxLength: 500,
+  pattern: "\\S",
 } as const;
 
 export const DESIGN_BRIEF_FIDELITY_SCHEMA = {
@@ -47,51 +48,3 @@ export const DESIGN_BRIEF_FIDELITY_SCHEMA = {
   ],
   additionalProperties: false,
 } as const;
-
-export function isDesignBriefFidelity(
-  value: unknown,
-): value is DesignBriefFidelity {
-  if (!isRecord(value)) return false;
-  return (
-    boundedTextArray(value.requiredContent, 1, 24) &&
-    boundedTextArray(value.preservedSemantics, 0, 24) &&
-    boundedTextArray(value.prohibitedAdditions, 1, 24) &&
-    boundedTextArray(value.assumptions, 0, 12) &&
-    exactKeys(value, [
-      "requiredContent",
-      "preservedSemantics",
-      "prohibitedAdditions",
-      "assumptions",
-    ])
-  );
-}
-
-function boundedTextArray(
-  value: unknown,
-  minimum: number,
-  maximum: number,
-): value is string[] {
-  return (
-    Array.isArray(value) &&
-    value.length >= minimum &&
-    value.length <= maximum &&
-    value.every(
-      (item) =>
-        typeof item === "string" &&
-        item.trim().length > 0 &&
-        item.length <= 500,
-    )
-  );
-}
-
-function exactKeys(value: Record<string, unknown>, keys: string[]): boolean {
-  const actual = Object.keys(value).sort();
-  return (
-    actual.length === keys.length &&
-    actual.every((key, index) => key === [...keys].sort()[index])
-  );
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}

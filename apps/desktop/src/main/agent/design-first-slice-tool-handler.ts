@@ -6,10 +6,10 @@ import type {
 import {
   compileDesignFirstSliceToolInput,
   DesignApplyContract,
+  DesignPlanContract,
   designPlanTargets,
   FirstSliceContract,
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
-  isDesignPlanToolInput,
   logoBriefRequiresExploration,
 } from "@/shared/design-agent-tools.js";
 import { formatValidationFailure } from "@/shared/contract-validation.js";
@@ -45,7 +45,7 @@ export async function handleDesignFirstSliceTool(
     );
   }
   const compiled = compileDesignFirstSliceToolInput(input);
-  if (!isDesignPlanToolInput(compiled.plan)) {
+  if (!DesignPlanContract.parse(compiled.plan, { canonical: true }).ok) {
     throw new TypeError("Compiled first-slice plan is invalid");
   }
   const parsedApply = DesignApplyContract.parse(compiled.apply, {

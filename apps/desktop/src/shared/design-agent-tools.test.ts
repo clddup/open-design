@@ -28,12 +28,12 @@ import {
   PLACE_IMAGE_TOOL_NAME,
   UPDATE_IMAGE_TOOL_NAME,
   DesignApplyContract,
+  DesignPlanContract,
   explainInvalidDesignComponentToolInput,
   FirstSliceContract,
   isAgentSvgImportResult,
   isPreparedAgentSvgExport,
   isPreparedAgentRasterExport,
-  normalizeDesignPlanToolInput,
   normalizeDesignVisualReviewToolInput,
   normalizeDesignPageToolInput,
   validateDesignAgentToolInput,
@@ -41,6 +41,14 @@ import {
 
 function parsedApply(input: unknown) {
   const result = DesignApplyContract.parse(input);
+  if (!result.ok) {
+    throw new Error(JSON.stringify(result.issues));
+  }
+  return result.value;
+}
+
+function parsedPlan(input: unknown) {
+  const result = DesignPlanContract.parse(input);
   if (!result.ok) {
     throw new Error(JSON.stringify(result.issues));
   }
@@ -1137,6 +1145,10 @@ describe("design Agent tool contract", () => {
         },
       },
     });
+    expect(planSpec).toHaveProperty(
+      "validateInputIssues",
+      DesignPlanContract.issues,
+    );
     expect(JSON.stringify(planSpec?.inputSchema)).toContain(
       '"safeAreaNodeIds"',
     );
@@ -1149,7 +1161,7 @@ describe("design Agent tool contract", () => {
     expect(validateDesignAgentToolInput(DESIGN_PLAN_TOOL_NAME, modelPlan)).toBe(
       true,
     );
-    expect(normalizeDesignPlanToolInput(modelPlan)?.skillRefs).toEqual(
+    expect(parsedPlan(modelPlan).skillRefs).toEqual(
       BUILTIN_UI_DESIGN_SKILL_REFS,
     );
     expect(validateDesignAgentToolInput(DESIGN_PLAN_TOOL_NAME, plan)).toBe(
@@ -1260,10 +1272,10 @@ describe("design Agent tool contract", () => {
       }),
     ).toBe(true);
     expect(
-      normalizeDesignPlanToolInput({
+      parsedPlan({
         ...plan,
         skillRefs: plan.skillRefs.slice(1),
-      })?.skillRefs,
+      }).skillRefs,
     ).toEqual(BUILTIN_UI_DESIGN_SKILL_REFS);
     expect(
       validateDesignAgentToolInput(DESIGN_PLAN_TOOL_NAME, {

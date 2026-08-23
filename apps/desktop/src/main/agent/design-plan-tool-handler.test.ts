@@ -212,6 +212,32 @@ describe("handleDesignPlanTool", () => {
     ).rejects.toThrow("revision conflict");
     expect(coordinator.recordDesignPlanAllocated).not.toHaveBeenCalled();
   });
+
+  it("returns structured Plan field issues before registration", async () => {
+    const invalid = structuredClone(plan) as DesignPlanToolInput & {
+      unexpectedField?: string;
+    };
+    invalid.unexpectedField = "not allowed";
+    const coordinator = {
+      registerDesignPlan: vi.fn(),
+    };
+
+    await expect(
+      handleDesignPlanTool(
+        coordinator as never,
+        { execute: vi.fn() } as never,
+        {
+          toolCallId: "tool_plan_invalid",
+          toolName: DESIGN_PLAN_TOOL_NAME,
+          input: invalid,
+        },
+        context,
+        context,
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow("design_plan.schema_invalid");
+    expect(coordinator.registerDesignPlan).not.toHaveBeenCalled();
+  });
 });
 
 function target(targetId: string, label: string, frameId: string, x: number) {
