@@ -367,6 +367,28 @@ const DESIGN_INTENT_SCHEMA = Type.Object(
     subject: textSchema(8, 200),
     audience: textSchema(8, 200),
     primaryJob: textSchema(8, 240),
+    calibration: Type.Object(
+      {
+        surfaceMode: Type.Union([
+          Type.Literal("persuade"),
+          Type.Literal("operate"),
+          Type.Literal("read"),
+          Type.Literal("experience"),
+          Type.Literal("graphic"),
+        ]),
+        expressiveness: Type.Union([
+          Type.Literal("restrained"),
+          Type.Literal("balanced"),
+          Type.Literal("expressive"),
+        ]),
+        density: Type.Union([
+          Type.Literal("airy"),
+          Type.Literal("balanced"),
+          Type.Literal("dense"),
+        ]),
+      },
+      CLOSED,
+    ),
     visualThesis: textSchema(16, 320),
     signatureMotif: textSchema(16, 320),
     typographyLanguage: textSchema(12, 240),

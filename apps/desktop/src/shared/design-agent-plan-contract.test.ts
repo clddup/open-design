@@ -25,6 +25,11 @@ describe("DesignPlanContract", () => {
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) throw new Error(JSON.stringify(parsed.issues));
     expect(parsed.value.skillRefs).toEqual(BUILTIN_UI_DESIGN_SKILL_REFS);
+    expect(parsed.value.designIntent.calibration).toEqual({
+      surfaceMode: "operate",
+      expressiveness: "restrained",
+      density: "balanced",
+    });
     expect(
       schemaValidationIssues(DESIGN_PLAN_CANONICAL_INPUT_SCHEMA, parsed.value),
     ).toHaveLength(0);
@@ -51,6 +56,35 @@ describe("DesignPlanContract", () => {
           issue.path.includes("/targets/0/qualityProfile"),
       ),
     ).toBe(true);
+  });
+
+  it("rejects a graphic surface mode for UI at the calibrated domain boundary", () => {
+    const input = planInput();
+    input.designIntent.calibration.surfaceMode = "graphic";
+    const result = DesignPlanContract.parse(input);
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("Expected UI surface mode failure");
+    expect(result.issues).toContainEqual(
+      expect.objectContaining({
+        code: "design_plan.ui_surface_mode_invalid",
+        path: "/designIntent/calibration/surfaceMode",
+      }),
+    );
+  });
+
+  it("rejects a UI surface mode for a non-UI delivery", () => {
+    const input = planInput();
+    input.deliverable = "poster";
+    input.targets[0].qualityProfile = { kind: "graphic" };
+    const result = DesignPlanContract.parse(input);
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("Expected graphic surface mode failure");
+    expect(result.issues).toContainEqual(
+      expect.objectContaining({
+        code: "design_plan.graphic_surface_mode_invalid",
+        path: "/designIntent/calibration/surfaceMode",
+      }),
+    );
   });
 
   it("reports parent-local region overflow with a stable path", () => {
@@ -257,6 +291,11 @@ function planInput(): Omit<DesignPlanToolInput, "skillRefs"> {
       subject: "A focused authentication gateway for OpenDesign",
       audience: "Design professionals returning to active project work",
       primaryJob: "Authenticate quickly and continue the current workspace",
+      calibration: {
+        surfaceMode: "operate",
+        expressiveness: "restrained",
+        density: "balanced",
+      },
       visualThesis:
         "A calm editorial gateway makes security feel precise rather than bureaucratic.",
       signatureMotif:

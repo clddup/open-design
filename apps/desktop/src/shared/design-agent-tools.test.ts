@@ -1081,6 +1081,11 @@ describe("design Agent tool contract", () => {
         audience: "Operations teams monitoring time-sensitive product signals",
         primaryJob:
           "Identify the most important change and act without losing context",
+        calibration: {
+          surfaceMode: "operate",
+          expressiveness: "balanced",
+          density: "dense",
+        },
         visualThesis:
           "A precise signal room uses directional data bands and controlled density instead of a generic dashboard grid.",
         signatureMotif:

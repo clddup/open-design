@@ -48,6 +48,16 @@ describe("compact first-slice tool", () => {
     );
     expect(properties.designIntent.properties.visualThesis.maxLength).toBe(320);
     expect(properties.designIntent.properties.antiPatterns.maxItems).toBe(5);
+    expect(
+      JSON.stringify(
+        properties.designIntent.properties.calibration.properties.surfaceMode,
+      ),
+    ).toContain('"operate"');
+    expect(
+      JSON.stringify(
+        properties.designIntent.properties.calibration.properties.surfaceMode,
+      ),
+    ).toContain('"graphic"');
     expect(properties.targets.items.properties.layout.maxLength).toBe(320);
     expect(properties.visualSystem.properties.typography.maxItems).toBe(4);
     expect(DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA.required).toEqual([
@@ -79,6 +89,11 @@ describe("compact first-slice tool", () => {
     expect(normalized?.designIntent.visualThesis).toBe(
       fixture().designIntent.visualThesis,
     );
+    expect(normalized?.designIntent.calibration).toEqual({
+      surfaceMode: "operate",
+      expressiveness: "expressive",
+      density: "balanced",
+    });
     expect(normalized?.briefFidelity.requiredContent).toEqual([
       "Create Home and Profile screens",
     ]);
@@ -116,6 +131,39 @@ describe("compact first-slice tool", () => {
           path: "/designIntent",
         }),
       ]),
+    );
+  });
+
+  it("rejects a UI first slice classified as graphic", () => {
+    const input = fixture();
+    input.designIntent.calibration.surfaceMode = "graphic";
+    const modelInput = providerInput(input);
+    const result = FirstSliceContract.parse(modelInput);
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("Expected UI calibration failure");
+    expect(result.issues).toContainEqual(
+      expect.objectContaining({
+        code: "first_slice.ui_surface_mode_invalid",
+        path: "/designIntent/calibration/surfaceMode",
+      }),
+    );
+  });
+
+  it("rejects a non-UI first slice classified as a UI surface", () => {
+    const input = fixture();
+    input.deliverable = "poster";
+    input.targets = input.targets.map((target) => ({
+      ...target,
+      qualityProfile: { kind: "graphic" },
+    }));
+    const result = FirstSliceContract.parse(providerInput(input));
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("Expected graphic calibration failure");
+    expect(result.issues).toContainEqual(
+      expect.objectContaining({
+        code: "first_slice.graphic_surface_mode_invalid",
+        path: "/designIntent/calibration/surfaceMode",
+      }),
     );
   });
 
@@ -348,6 +396,7 @@ describe("compact first-slice tool", () => {
   it("binds graphic judgment skills and raster evidence roles for a poster", () => {
     const input = fixture();
     input.deliverable = "poster";
+    input.designIntent.calibration.surfaceMode = "graphic";
     input.targets = input.targets.map((target) => ({
       ...target,
       qualityProfile: { kind: "graphic" },
@@ -369,6 +418,7 @@ describe("compact first-slice tool", () => {
   it("validates requested Logo exploration and also accepts one focused Logo/Icon", () => {
     const input = fixture();
     input.deliverable = "logo";
+    input.designIntent.calibration.surfaceMode = "graphic";
     input.logoOutputs = ["symbol", "app-icon"];
     input.targets = input.targets.map((target) => ({
       ...target,
@@ -850,6 +900,11 @@ export function fixture(): DesignFirstSliceToolInput {
       subject: "A mobile product for maintaining creative momentum",
       audience: "Independent designers managing focused daily work",
       primaryJob: "See the next meaningful task and continue it immediately",
+      calibration: {
+        surfaceMode: "operate",
+        expressiveness: "expressive",
+        density: "balanced",
+      },
       visualThesis:
         "Momentum is expressed as a directional editorial system rather than a generic mobile card stack.",
       signatureMotif:

@@ -7234,6 +7234,11 @@ function rendererGenerationPlan(): DesignPlanToolInput {
       subject: "An editorial poster for a focused product launch",
       audience: "Design-aware launch viewers",
       primaryJob: "Recognize the launch identity and message immediately",
+      calibration: {
+        surfaceMode: "graphic",
+        expressiveness: "expressive",
+        density: "balanced",
+      },
       visualThesis:
         "An asymmetric editorial collision makes the launch message memorable.",
       signatureMotif:

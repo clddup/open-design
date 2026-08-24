@@ -47,6 +47,9 @@ describe("OpenDesign Agent system prompt", () => {
       "one or more meaningful editable regions",
     );
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
+      "surfaceMode/expressiveness/density",
+    );
+    expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
       "logoExploration is mandatory in this call",
     );
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(

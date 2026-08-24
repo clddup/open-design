@@ -521,6 +521,11 @@ function logoPlan(): DesignPlanToolInput {
       subject: "OpenDesign AI-native professional design platform",
       audience: "Professional designers using a desktop design tool",
       primaryJob: "Recognize OpenDesign at app-icon and wordmark sizes",
+      calibration: {
+        surfaceMode: "graphic",
+        expressiveness: "balanced",
+        density: "airy",
+      },
       visualThesis: "Open structure becomes a precise ownable contour",
       signatureMotif: "One open counterform creates the identifying gesture",
       typographyLanguage: "Restrained wordmark with optical edits",

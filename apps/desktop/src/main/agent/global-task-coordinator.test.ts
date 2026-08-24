@@ -123,6 +123,11 @@ const designPlan: DesignPlanToolInput = {
     subject: "A desktop workspace for focused product operations",
     audience: "Product operators managing dense day-to-day decisions",
     primaryJob: "See the primary work state and act without losing context",
+    calibration: {
+      surfaceMode: "operate",
+      expressiveness: "restrained",
+      density: "dense",
+    },
     visualThesis:
       "A precise signal workspace makes operational hierarchy visible without a generic card dashboard.",
     signatureMotif:
@@ -329,6 +334,11 @@ function multiTargetPlan(pageId: string): DesignPlanToolInput {
       subject: "A mobile product for focused creative work",
       audience: "Independent designers continuing time-sensitive work",
       primaryJob: "Recognize the next task and continue it immediately",
+      calibration: {
+        surfaceMode: "operate",
+        expressiveness: "balanced",
+        density: "balanced",
+      },
       visualThesis:
         "A directional editorial field expresses momentum instead of a generic mobile card stack.",
       signatureMotif:
@@ -1054,6 +1064,13 @@ describe("GlobalTaskCoordinator", () => {
     const plan: DesignPlanToolInput = {
       ...uiPlan,
       deliverable: "poster",
+      designIntent: {
+        ...uiPlan.designIntent,
+        calibration: {
+          ...uiPlan.designIntent.calibration,
+          surfaceMode: "graphic",
+        },
+      },
       rasterAssetRoles: ["hero"],
       skillRefs: BUILTIN_GRAPHIC_DESIGN_SKILL_REFS.map((reference) => ({
         ...reference,
@@ -1738,6 +1755,13 @@ describe("GlobalTaskCoordinator", () => {
     const plan: DesignPlanToolInput = {
       ...designPlanForPage(pageId),
       deliverable: "brand-asset",
+      designIntent: {
+        ...designPlanForPage(pageId).designIntent,
+        calibration: {
+          ...designPlanForPage(pageId).designIntent.calibration,
+          surfaceMode: "graphic",
+        },
+      },
       rasterAssetRoles: [],
       skillRefs: BUILTIN_GRAPHIC_DESIGN_SKILL_REFS.map((reference) => ({
         ...reference,
@@ -1836,6 +1860,13 @@ describe("GlobalTaskCoordinator", () => {
     const plan: DesignPlanToolInput = {
       ...designPlanForPage(pageId),
       deliverable: "brand-asset",
+      designIntent: {
+        ...designPlanForPage(pageId).designIntent,
+        calibration: {
+          ...designPlanForPage(pageId).designIntent.calibration,
+          surfaceMode: "graphic",
+        },
+      },
       rasterAssetRoles: [],
       skillRefs: BUILTIN_GRAPHIC_DESIGN_SKILL_REFS.map((reference) => ({
         ...reference,
@@ -2136,6 +2167,13 @@ describe("GlobalTaskCoordinator", () => {
     const plan: DesignPlanToolInput = {
       ...designPlanForPage(pageId),
       deliverable: "logo",
+      designIntent: {
+        ...designPlanForPage(pageId).designIntent,
+        calibration: {
+          ...designPlanForPage(pageId).designIntent.calibration,
+          surfaceMode: "graphic",
+        },
+      },
       rasterAssetRoles: [],
       logoOutputs: ["symbol"],
       skillRefs: BUILTIN_GRAPHIC_DESIGN_SKILL_REFS.map((reference) => ({

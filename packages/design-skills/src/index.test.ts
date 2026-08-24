@@ -68,6 +68,9 @@ describe("built-in design skills", () => {
     expect(uiPlanning).toContain('id="ui-ux-structure"');
     expect(uiPlanning).toContain("a design tool's landing page is persuade");
     expect(uiPlanning).toContain("familiar affordances, scan speed");
+    expect(uiPlanning).toContain("designIntent.calibration.surfaceMode");
+    expect(uiPlanning).toContain("expressiveness");
+    expect(uiPlanning).toContain("density");
     expect(uiPlanning).not.toContain('id="graphic-visual-direction"');
 
     const logoReview =

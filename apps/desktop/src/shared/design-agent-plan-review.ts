@@ -122,6 +122,11 @@ export type DesignIntent = {
   subject: string;
   audience: string;
   primaryJob: string;
+  calibration: {
+    surfaceMode: "persuade" | "operate" | "read" | "experience" | "graphic";
+    expressiveness: "restrained" | "balanced" | "expressive";
+    density: "airy" | "balanced" | "dense";
+  };
   visualThesis: string;
   signatureMotif: string;
   typographyLanguage: string;
@@ -436,6 +441,20 @@ const DESIGN_INTENT_SCHEMA = {
       maxLength: 500,
       pattern: "\\S",
     },
+    calibration: {
+      type: "object",
+      properties: {
+        surfaceMode: {
+          enum: ["persuade", "operate", "read", "experience", "graphic"],
+        },
+        expressiveness: {
+          enum: ["restrained", "balanced", "expressive"],
+        },
+        density: { enum: ["airy", "balanced", "dense"] },
+      },
+      required: ["surfaceMode", "expressiveness", "density"],
+      additionalProperties: false,
+    },
     visualThesis: {
       type: "string",
       minLength: 16,
@@ -483,6 +502,7 @@ const DESIGN_INTENT_SCHEMA = {
     "subject",
     "audience",
     "primaryJob",
+    "calibration",
     "visualThesis",
     "signatureMotif",
     "typographyLanguage",
@@ -925,6 +945,30 @@ function refineDesignPlan(input: DesignPlanToolInput): ValidationIssue[] {
   }
 
   refinePlanIntent(input.designIntent, issues);
+  if (
+    input.deliverable === "ui" &&
+    input.designIntent.calibration.surfaceMode === "graphic"
+  ) {
+    issues.push(
+      planIssue(
+        "design_plan.ui_surface_mode_invalid",
+        "/designIntent/calibration/surfaceMode",
+        "UI delivery must classify the surface as persuade, operate, read, or experience",
+      ),
+    );
+  }
+  if (
+    input.deliverable !== "ui" &&
+    input.designIntent.calibration.surfaceMode !== "graphic"
+  ) {
+    issues.push(
+      planIssue(
+        "design_plan.graphic_surface_mode_invalid",
+        "/designIntent/calibration/surfaceMode",
+        "Non-UI delivery must use the graphic surface mode",
+      ),
+    );
+  }
   const targetIds = new Map<string, string>();
   const documentNodeIds = new Map<string, string>();
   for (const [targetIndex, target] of input.targets.entries()) {

@@ -416,6 +416,11 @@ function plan(): DesignPlanToolInput {
       subject: "An existing mobile product home for focused creative work",
       audience: "Independent designers continuing time-sensitive work",
       primaryJob: "Recognize the next task and continue it immediately",
+      calibration: {
+        surfaceMode: "operate",
+        expressiveness: "balanced",
+        density: "balanced",
+      },
       visualThesis:
         "A directional editorial field expresses momentum instead of a generic card stack.",
       signatureMotif:

@@ -9,6 +9,8 @@ Use this skill only for `deliverable=ui`. It changes design judgment, never tool
 
 Before drawing, name the subject, audience, primary job, and one visual thesis. The thesis must connect the product's subject to a memorable visual idea; style labels such as “modern”, “premium”, “dark”, or “cool” are not a thesis.
 
+Set calibration from task frequency, information load, audience, brand posture, viewport, and mood: expressiveness is `restrained|balanced|expressive`, density is `airy|balanced|dense`. Do not choose the middle pair merely because the brief is ambiguous.
+
 Commit to one signature motif that can be seen in the first meaningful slice. It may be a distinctive silhouette, spatial rule, type treatment, material behavior, data expression, or interaction surface. It must support the product rather than decorate an otherwise generic template.
 
 When image references are attached, classify their role before drawing. A style reference contributes transferable color, type, material, and edge behavior; a composition reference contributes hierarchy, scale, crop, and negative-space relationships; a brand reference contributes supplied identity constraints. Extract a small set of explicit decisions and explicit avoidances. Do not copy the reference's product semantics, literal layout, text, subject, or brand mark, and do not place a reference image unless it is separately classified as a content asset.
@@ -29,6 +31,7 @@ Test the direction before drawing:
 - If brand copy and accent color were removed, composition, silhouette, typography, or material behavior should still carry a recognizable point of view.
 - The first slice should establish a dominant field, an actionable core, and at least one crafted relationship between them; a small generic card floating in unused space is not enough.
 - Microcopy, hairlines, tracking, and decorative metadata cannot carry the concept by themselves.
+- Composition, type scale, spacing, and visible information must agree with calibration; an expressive/airy direction rendered as a uniform card grid is invalid.
 
 Avoid default AI output: centered card-on-background login screens, purple-on-white gradients, repeated same-radius cards, icon tiles above every heading, evenly distributed accent colors, placeholder dashboards, and decoration unrelated to the subject. Dark backgrounds with cyan circuit lines, concentric scanner rings, HUD micro-labels, or generic “secure channel” copy are also templates unless the actual product context makes them necessary and the composition remains distinctive without them. Minimalism is valid only when proportion, typography, spacing, and material precision carry a recognizable point of view.
 

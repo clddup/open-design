@@ -7,7 +7,7 @@ description: Turn a UI brief into a usable task hierarchy, semantic structure, s
 
 Use this skill only for `deliverable=ui`. Preserve the user's product semantics and do not invent features to make a screen look richer.
 
-Define the primary user job and classify the current surface by success: `persuade` for deciding, `operate` for completing a task, `read` for understanding, or `experience` when the work leads. Classify the surface, not the product: a design tool's landing page is persuade; its editor is operate. Arrange information in task order and expose the primary action, current state, navigation context, and recovery without forcing recall.
+Define the primary user job and classify the current surface by success: `persuade` for deciding, `operate` for completing a task, `read` for understanding, or `experience` when the work leads. Record that exact choice in `designIntent.calibration.surfaceMode`; UI must never use `graphic`. Classify the surface, not the product: a design tool's landing page is persuade; its editor is operate. Arrange information in task order and expose the primary action, current state, navigation context, and recovery without forcing recall.
 
 Operate favors familiar affordances, scan speed, stable density, complete states, keyboard/focus behavior, and restrained state motion. Persuade needs a clear argument and relevant subject evidence. Read prioritizes navigation, measure, and comprehension. Experience lets the artifact lead without losing orientation. Product character comes from precise details, not unfamiliar controls.
 

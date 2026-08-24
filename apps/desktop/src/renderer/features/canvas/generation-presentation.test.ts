@@ -99,6 +99,11 @@ const generationPlan = {
     subject: "An editorial poster for a focused product launch",
     audience: "Design-aware viewers encountering the launch campaign",
     primaryJob: "Recognize the launch identity and key message immediately",
+    calibration: {
+      surfaceMode: "graphic",
+      expressiveness: "expressive",
+      density: "balanced",
+    },
     visualThesis:
       "An asymmetric editorial collision turns the launch message into a memorable visual event.",
     signatureMotif:

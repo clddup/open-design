@@ -222,6 +222,7 @@ describe("handleDesignFirstSliceTool", () => {
   it("rejects a one-direction compact Logo call when the authoritative brief requests three", async () => {
     const input = firstSliceInput();
     input.deliverable = "logo";
+    input.designIntent.calibration.surfaceMode = "graphic";
     input.targets = input.targets.map((target) => ({
       ...target,
       qualityProfile: { kind: "graphic" },
@@ -293,21 +294,11 @@ function firstSliceModelInput(
   input: DesignFirstSliceToolInput,
 ): Record<string, unknown> {
   const value = structuredClone(input) as unknown as Record<string, unknown>;
-  for (const key of [
-    "designIntent",
-    "skillRefs",
-    "briefFidelity",
-    "visualSystem",
-    "rasterAssetRoles",
-    "referenceStrategy",
-    "semanticObjects",
-  ]) {
+  for (const key of ["skillRefs", "briefFidelity", "referenceStrategy"]) {
     Reflect.deleteProperty(value, key);
   }
   for (const target of value.targets as Array<Record<string, unknown>>) {
-    for (const key of ["objective", "layout", "spacing", "qualityProfile"]) {
-      Reflect.deleteProperty(target, key);
-    }
+    Reflect.deleteProperty(target, "qualityProfile");
   }
   return value;
 }
@@ -321,6 +312,11 @@ function firstSliceInput(): DesignFirstSliceToolInput {
       subject: "A mobile product home for focused creative work",
       audience: "Independent designers continuing time-sensitive work",
       primaryJob: "Recognize the next task and continue it immediately",
+      calibration: {
+        surfaceMode: "operate",
+        expressiveness: "expressive",
+        density: "balanced",
+      },
       visualThesis:
         "A directional editorial field expresses momentum instead of a generic mobile card stack.",
       signatureMotif:

@@ -40,6 +40,11 @@ const plan: DesignPlanToolInput = {
     subject: "A mobile product for focused creative work",
     audience: "Independent designers continuing time-sensitive work",
     primaryJob: "Recognize the next task and continue it immediately",
+    calibration: {
+      surfaceMode: "operate",
+      expressiveness: "balanced",
+      density: "balanced",
+    },
     visualThesis:
       "A directional editorial field expresses momentum instead of a generic card stack.",
     signatureMotif:

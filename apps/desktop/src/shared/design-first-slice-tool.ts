@@ -389,6 +389,30 @@ function refineFirstSlice(
       ),
     );
   }
+  if (
+    input.deliverable === "ui" &&
+    input.designIntent.calibration.surfaceMode === "graphic"
+  ) {
+    issues.push(
+      issue(
+        "first_slice.ui_surface_mode_invalid",
+        "/designIntent/calibration/surfaceMode",
+        "UI delivery must classify the surface as persuade, operate, read, or experience",
+      ),
+    );
+  }
+  if (
+    input.deliverable !== "ui" &&
+    input.designIntent.calibration.surfaceMode !== "graphic"
+  ) {
+    issues.push(
+      issue(
+        "first_slice.graphic_surface_mode_invalid",
+        "/designIntent/calibration/surfaceMode",
+        "Non-UI delivery must use the graphic surface mode",
+      ),
+    );
+  }
   if (input.logoOutputs && input.deliverable !== "logo") {
     issues.push(
       issue(
