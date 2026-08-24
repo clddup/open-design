@@ -26,6 +26,11 @@ const source: RunStartRequest = {
   modelSelection: { providerId: "provider_1", modelId: "model_1" },
 };
 
+const trustedSource: RunStartRequest = {
+  ...source,
+  deliveryScopeReview: "direct",
+};
+
 describe("AgentRunCoordinator", () => {
   it("owns registration, preflight, reference and conversation leases", async () => {
     const fixture = setup();
@@ -39,15 +44,17 @@ describe("AgentRunCoordinator", () => {
     await fixture.coordinator.handleRequest(source);
 
     expect(fixture.globalTaskCoordinator.registerRun).toHaveBeenCalledWith(
-      source,
+      trustedSource,
     );
     expect(fixture.prepareInitialDesignInspection).toHaveBeenCalledWith(
-      source,
+      trustedSource,
       expect.any(AbortSignal),
     );
-    expect(fixture.referenceHost.registerRun).toHaveBeenCalledWith(source);
+    expect(fixture.referenceHost.registerRun).toHaveBeenCalledWith(
+      trustedSource,
+    );
     expect(fixture.send).toHaveBeenCalledWith({
-      ...source,
+      ...trustedSource,
       initialDesignInspection: inspection,
       modelContext: { contextWindow: 200_000, maxOutputTokens: 16_384 },
     });
