@@ -133,6 +133,7 @@ import {
   GENERATE_IMAGE_TOOL_NAME,
   DesignApplyContract,
   DeliveryScopeContract,
+  DesignVisualReviewContract,
   EditImageContract,
   GenerateImageContract,
   PlaceImageContract,
@@ -144,7 +145,6 @@ import {
   normalizeDesignPageToolInput,
   isDesignVectorToolInput,
   isPageStructureAccessToolInput,
-  normalizeDesignVisualReviewToolInput,
   isExportSvgToolInput,
   isExportRasterToolInput,
   isImportSvgToolInput,
@@ -1098,11 +1098,16 @@ async function startDesktopApplication(
         );
       }
       if (call.toolName === DESIGN_REVIEW_TOOL_NAME) {
-        const review = normalizeDesignVisualReviewToolInput(call.input);
-        if (!review) {
-          throw new TypeError("Invalid visual review tool input");
+        const parsed = DesignVisualReviewContract.parse(call.input, {
+          skillRefs:
+            globalTaskCoordinator.resolveVisualReviewSkillRefs(context),
+        });
+        if (!parsed.ok) {
+          throw new TypeError(
+            formatValidationFailure("Visual Review", parsed.issues),
+          );
         }
-        return recordVisualReview(review);
+        return recordVisualReview(parsed.value);
       }
       if (call.toolName === EXPORT_SVG_TOOL_NAME) {
         if (!isExportSvgToolInput(call.input)) {

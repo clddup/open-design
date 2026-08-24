@@ -1114,12 +1114,24 @@ describe("GlobalTaskCoordinator", () => {
         plan.targets[0].artboard.frameId,
       ),
     ).not.toThrow();
+    expect(coordinator.resolveVisualReviewSkillRefs(context)).toEqual(
+      BUILTIN_GRAPHIC_DESIGN_SKILL_REFS,
+    );
 
     expect(() =>
       coordinator.registerVisualReview(context, visualReview),
+    ).toThrow("design_workflow.visual_review_skill_binding_invalid");
+    expect(() =>
+      coordinator.registerVisualReview(context, {
+        ...visualReview,
+        skillRefs: coordinator.resolveVisualReviewSkillRefs(context),
+      }),
     ).not.toThrow();
     expect(() =>
-      coordinator.registerVisualReview(context, visualReview),
+      coordinator.registerVisualReview(context, {
+        ...visualReview,
+        skillRefs: coordinator.resolveVisualReviewSkillRefs(context),
+      }),
     ).toThrow("design_workflow.capture_required");
     store.close();
   });

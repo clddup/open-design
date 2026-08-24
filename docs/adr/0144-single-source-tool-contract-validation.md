@@ -1,6 +1,6 @@
 # ADR-0144：单一来源的工具契约验证
 
-- 状态：Accepted，first-slice、node apply、Design Plan、Checkpoint、图片获取与公开图片操作已实施，其余契约分阶段实施
+- 状态：Accepted，first-slice、node apply、Design Plan、Visual Review、Checkpoint、图片获取与公开图片操作已实施，其余契约分阶段实施
 - 日期：2026-08-23
 - 首个迁移对象：compact first-slice
 - 关联：ADR-0018、ADR-0100、ADR-0103、ADR-0141、ADR-0143
@@ -81,12 +81,14 @@ Design Checkpoint 已完成第四个迁移切片：`DesignCheckpointContract.par
 
 公开图片操作已完成第六个迁移切片：`PlaceImageContract / UpdateImageContract / EditImageContract` 分别以一个可执行 schema 同时服务 Provider、Pi、工具聚合校验和 Main 执行。placement 与 filters 直接复用 `DesignDocument` 的权威 `ImagePlacementSchema / ImageFiltersSchema / ImagePaintSchema`；action discriminant 选择放置来源、非破坏更新或 AI 派生编辑的准确分支，未知/串用字段返回真实字段路径。旧 `isPlaceImageToolInput / isUpdateImageToolInput / isEditImageToolInput` 已删除。只有“扩图至少一个边大于零”保留为单一跨字段 refinement；Run attachment 授权、Design File asset、Page/Mutation Target、source-family stale guard 和事务 invariant 继续分别由 Main 与 EditorRuntime 拥有。Figma 兼容边界保持 asset/paint 与 placement/filter 语义；OpenDesign 的去背、扩图、重打光等 AI 能力继续作为带 provenance 的资产派生，不伪装成 Figma 原生文档字段。通用 `contractSchemaIssues` 会去除 union/intersection 的重复根错误并按字段路径去重，Pi、journal、diagnostic 与 Timeline 因此只收到可操作 issue。
 
+Visual Review 已完成第七个迁移切片：`DesignVisualReviewContract` 以同一模型 schema 服务 Provider/Pi，并以 canonical schema 验证进入交付 ledger 的完整 Review。模型无权提交 `skillRefs`；Main 从当前 active Plan 读取真实 UI/Graphic/Logo review refs 后一次绑定，不再先默认 UI 再由 Coordinator 覆盖。十项摘要、九项 criterion evidence 与 refinement 先经过结构 schema，再由一个 refinement 拒绝泛化赞美或不可执行文本并返回 `/hierarchy`、`/criteria/visual-thesis`、`/refinements/0` 等准确路径。旧 `isDesignVisualReviewToolInput / normalizeDesignVisualReviewToolInput` 已删除；legacy recovery tool 与 stateless independent Critic 的 ledger 输出都经过 canonical contract。Review 继续属于 Run/交付证据，不进入 DesignDocument、画布 revision 或 Figma 兼容节点协议。
+
 `ValidationIssue` 的稳定 `code/path/expected/actual/recovery` 通过 `tool-validation` failure details 进入 Agent event、journal 和 Timeline；这种参数修正使用 `correct-and-retry`，不冒充需要文档 inspection 的事务错误。Design transaction 仍保留独立 `inspect-and-revise` 恢复语义。
 
-Visual Review、导入导出、结构、Page、Component、Style、Variable 等其余 Agent tools，以及公开图片工具之后的 trusted internal Renderer bridge、IPC 与持久化契约尚未迁移，不得据此宣称全仓已实现单一验证入口。
+导入导出、结构、Page、Component、Style、Variable 等其余 Agent tools，以及公开图片工具之后的 trusted internal Renderer bridge、IPC 与持久化契约尚未迁移，不得据此宣称全仓已实现单一验证入口。
 
 ## 后果
 
 - 不重写 pi-agent-core 已有的循环或 TypeBox 参数验证；OpenDesign 只增加产品 domain refinement 和边界 issue adapter。
 - 首个迁移会删除较多手写代码并改变测试入口，属于允许的破坏性开发更新。
-- 在迁移完成前，新增 first-slice、node apply、Design Plan、Checkpoint、Read/Generate/Place/Update/Edit Image 字段必须进入对应单一入口；不得继续扩展三套旧函数。
+- 在迁移完成前，新增 first-slice、node apply、Design Plan、Visual Review、Checkpoint、Read/Generate/Place/Update/Edit Image 字段必须进入对应单一入口；不得继续扩展三套旧函数。

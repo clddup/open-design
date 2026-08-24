@@ -15,9 +15,9 @@ import {
 } from "./design-arrange-tool";
 import {
   DesignPlanContract,
+  DesignVisualReviewContract,
   DESIGN_PLAN_TOOL_INPUT_SCHEMA,
   DESIGN_VISUAL_REVIEW_TOOL_INPUT_SCHEMA,
-  normalizeDesignVisualReviewToolInput,
 } from "./design-agent-plan-review";
 import { isRecord } from "./design-agent-validation";
 import {
@@ -160,8 +160,10 @@ export {
   DESIGN_LOGO_EXPLORATION_SCHEMA,
   DESIGN_PLAN_TOOL_INPUT_SCHEMA,
   DESIGN_VISUAL_CRITERIA,
+  DESIGN_VISUAL_REVIEW_CANONICAL_INPUT_SCHEMA,
   DESIGN_VISUAL_REVIEW_TOOL_INPUT_SCHEMA,
   DesignPlanContract,
+  DesignVisualReviewContract,
   designPlanBriefFidelity,
   designPlanComponentStrategy,
   designPlanDesignIntent,
@@ -169,8 +171,6 @@ export {
   designPlanReferenceStrategy,
   designPlanSkillRefs,
   designPlanTargets,
-  isDesignVisualReviewToolInput,
-  normalizeDesignVisualReviewToolInput,
 } from "./design-agent-plan-review";
 export type {
   DesignDeliverable,
@@ -185,6 +185,8 @@ export type {
   DesignPlanToolInput,
   DesignPlanVisualSystem,
   DesignVisualCriterion,
+  DesignVisualReviewContractContext,
+  DesignVisualReviewModelInput,
   DesignVisualReviewToolInput,
   PlaceableRasterAssetRole,
   RasterAssetRole,
@@ -407,6 +409,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     inputSchema: DESIGN_VISUAL_REVIEW_TOOL_INPUT_SCHEMA,
     risk: "read" as const,
     approval: "never" as const,
+    validateInputIssues: DesignVisualReviewContract.issues,
   },
   {
     name: DESIGN_CHECKPOINT_TOOL_NAME,
@@ -682,7 +685,7 @@ export function validateDesignAgentToolInput(
     return DesignPlanContract.parse(input).ok;
   }
   if (toolName === DESIGN_REVIEW_TOOL_NAME) {
-    return normalizeDesignVisualReviewToolInput(input) !== undefined;
+    return DesignVisualReviewContract.issues(input).length === 0;
   }
   if (toolName === DESIGN_CHECKPOINT_TOOL_NAME) {
     return DesignCheckpointContract.parse(input).ok;

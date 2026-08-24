@@ -5,7 +5,6 @@ import {
 } from "@opendesign/design-contracts";
 import {
   builtinDesignSkillRefsForDeliverable,
-  BUILTIN_UI_DESIGN_SKILL_REFS,
   isBuiltinDesignSkillRefsForDeliverable,
   isKnownBuiltinDesignSkillRefs,
   type BuiltinDesignSkillRef,
@@ -29,16 +28,12 @@ import {
   type DesignReferenceStrategy,
 } from "./design-reference-strategy";
 import {
+  contractSchemaIssues,
   type ValidationIssue,
   type ValidationIssueValue,
   type ValidationResult,
 } from "./contract-validation";
-import {
-  boundedTextArray,
-  exactKeys,
-  isRecord,
-  substantiveReviewText,
-} from "./design-agent-validation";
+import { isRecord, substantiveReviewText } from "./design-agent-validation";
 
 export type DesignDeliverable =
   | "ui"
@@ -217,6 +212,11 @@ export type DesignVisualReviewToolInput = {
   failedCriteria: readonly DesignVisualCriterion[];
   refinements: string[];
 };
+
+export type DesignVisualReviewModelInput = Omit<
+  DesignVisualReviewToolInput,
+  "skillRefs"
+>;
 
 const DESIGN_PLAN_ARTBOARD_SCHEMA = {
   type: "object",
@@ -760,50 +760,59 @@ export const DESIGN_PLAN_TOOL_INPUT_SCHEMA = executableJsonSchema(
   DESIGN_PLAN_MODEL_INPUT_JSON_SCHEMA,
 );
 
+const DESIGN_SKILL_REFS_SCHEMA = {
+  type: "array",
+  minItems: 1,
+  maxItems: 8,
+  uniqueItems: true,
+  items: {
+    type: "object",
+    properties: {
+      id: { type: "string", minLength: 1, maxLength: 128 },
+    },
+    required: ["id"],
+    additionalProperties: false,
+  },
+} as const;
+
 export const DESIGN_PLAN_CANONICAL_INPUT_SCHEMA = executableJsonSchema({
   ...DESIGN_PLAN_MODEL_INPUT_JSON_SCHEMA,
   properties: {
     ...DESIGN_PLAN_MODEL_INPUT_JSON_SCHEMA.properties,
-    skillRefs: {
-      type: "array",
-      minItems: 1,
-      maxItems: 8,
-      uniqueItems: true,
-      items: {
-        type: "object",
-        properties: {
-          id: { type: "string", minLength: 1, maxLength: 128 },
-        },
-        required: ["id"],
-        additionalProperties: false,
-      },
-    },
+    skillRefs: DESIGN_SKILL_REFS_SCHEMA,
   },
   required: [...DESIGN_PLAN_MODEL_INPUT_JSON_SCHEMA.required, "skillRefs"],
 });
 
-export const DESIGN_VISUAL_REVIEW_TOOL_INPUT_SCHEMA = {
+const REVIEW_TEXT_SCHEMA = {
+  type: "string",
+  minLength: 12,
+  maxLength: 1_000,
+  pattern: "\\S",
+} as const;
+
+const DESIGN_VISUAL_REVIEW_MODEL_INPUT_JSON_SCHEMA = {
   type: "object",
   description:
     "Current concrete critique of the most recent rendered capture. Evaluate every non-compensating visual criterion against the active deliverable-scoped Plan and host-bound critic revision. Every field must identify what the image actually shows and refinements must be actionable edits, not generic praise.",
   properties: {
     version: { const: 1 },
-    briefFidelity: { type: "string", minLength: 12, maxLength: 1_000 },
-    distinctiveness: { type: "string", minLength: 12, maxLength: 1_000 },
-    signatureMotif: { type: "string", minLength: 12, maxLength: 1_000 },
-    composition: { type: "string", minLength: 12, maxLength: 1_000 },
-    hierarchy: { type: "string", minLength: 12, maxLength: 1_000 },
-    typography: { type: "string", minLength: 12, maxLength: 1_000 },
-    assetIntegration: { type: "string", minLength: 12, maxLength: 1_000 },
-    formAndSurface: { type: "string", minLength: 12, maxLength: 1_000 },
-    effects: { type: "string", minLength: 12, maxLength: 1_000 },
-    antiTemplate: { type: "string", minLength: 12, maxLength: 1_000 },
+    briefFidelity: REVIEW_TEXT_SCHEMA,
+    distinctiveness: REVIEW_TEXT_SCHEMA,
+    signatureMotif: REVIEW_TEXT_SCHEMA,
+    composition: REVIEW_TEXT_SCHEMA,
+    hierarchy: REVIEW_TEXT_SCHEMA,
+    typography: REVIEW_TEXT_SCHEMA,
+    assetIntegration: REVIEW_TEXT_SCHEMA,
+    formAndSurface: REVIEW_TEXT_SCHEMA,
+    effects: REVIEW_TEXT_SCHEMA,
+    antiTemplate: REVIEW_TEXT_SCHEMA,
     criteria: {
       type: "object",
       properties: Object.fromEntries(
         DESIGN_VISUAL_CRITERIA.map((criterion) => [
           criterion,
-          { type: "string", minLength: 12, maxLength: 1_000 },
+          REVIEW_TEXT_SCHEMA,
         ]),
       ),
       required: [...DESIGN_VISUAL_CRITERIA],
@@ -820,7 +829,12 @@ export const DESIGN_VISUAL_REVIEW_TOOL_INPUT_SCHEMA = {
       type: "array",
       minItems: 2,
       maxItems: 12,
-      items: { type: "string", minLength: 8, maxLength: 500 },
+      items: {
+        type: "string",
+        minLength: 8,
+        maxLength: 500,
+        pattern: "\\S",
+      },
     },
   },
   required: [
@@ -841,6 +855,24 @@ export const DESIGN_VISUAL_REVIEW_TOOL_INPUT_SCHEMA = {
   ],
   additionalProperties: false,
 } as const;
+
+export const DESIGN_VISUAL_REVIEW_TOOL_INPUT_SCHEMA = executableJsonSchema(
+  DESIGN_VISUAL_REVIEW_MODEL_INPUT_JSON_SCHEMA,
+);
+
+export const DESIGN_VISUAL_REVIEW_CANONICAL_INPUT_SCHEMA = executableJsonSchema(
+  {
+    ...DESIGN_VISUAL_REVIEW_MODEL_INPUT_JSON_SCHEMA,
+    properties: {
+      ...DESIGN_VISUAL_REVIEW_MODEL_INPUT_JSON_SCHEMA.properties,
+      skillRefs: DESIGN_SKILL_REFS_SCHEMA,
+    },
+    required: [
+      ...DESIGN_VISUAL_REVIEW_MODEL_INPUT_JSON_SCHEMA.required,
+      "skillRefs",
+    ],
+  },
+);
 
 export type DesignPlanContractContext = { canonical?: boolean };
 
@@ -1503,76 +1535,168 @@ export function designPlanLogoExploration(
     : structuredClone(plan.logoExploration);
 }
 
-export function isDesignVisualReviewToolInput(
+export type DesignVisualReviewContractContext = {
+  canonical?: boolean;
+  skillRefs?: readonly BuiltinDesignSkillRef[];
+};
+
+const DESIGN_VISUAL_REVIEW_TEXT_FIELDS = [
+  "briefFidelity",
+  "distinctiveness",
+  "signatureMotif",
+  "composition",
+  "hierarchy",
+  "typography",
+  "assetIntegration",
+  "formAndSurface",
+  "effects",
+  "antiTemplate",
+] as const satisfies readonly (keyof DesignVisualReviewModelInput)[];
+
+function parseDesignVisualReviewModel(
   input: unknown,
-): input is DesignVisualReviewToolInput {
-  if (!isRecord(input)) return false;
-  const criteria = input.criteria;
-  if (
-    input.version !== 1 ||
-    !isKnownBuiltinDesignSkillRefs(input.skillRefs) ||
-    !substantiveReviewText(input.briefFidelity) ||
-    !substantiveReviewText(input.distinctiveness) ||
-    !substantiveReviewText(input.signatureMotif) ||
-    !substantiveReviewText(input.composition) ||
-    !substantiveReviewText(input.hierarchy) ||
-    !substantiveReviewText(input.typography) ||
-    !substantiveReviewText(input.assetIntegration) ||
-    !substantiveReviewText(input.formAndSurface) ||
-    !substantiveReviewText(input.effects) ||
-    !substantiveReviewText(input.antiTemplate) ||
-    !isRecord(criteria) ||
-    !DESIGN_VISUAL_CRITERIA.every((criterion) =>
-      substantiveReviewText(criteria[criterion]),
-    ) ||
-    !exactKeys(criteria, DESIGN_VISUAL_CRITERIA) ||
-    !Array.isArray(input.failedCriteria) ||
-    input.failedCriteria.length < 2 ||
-    input.failedCriteria.length > DESIGN_VISUAL_CRITERIA.length ||
-    !input.failedCriteria.every((criterion) =>
-      DESIGN_VISUAL_CRITERIA.includes(criterion as DesignVisualCriterion),
-    ) ||
-    new Set(input.failedCriteria).size !== input.failedCriteria.length ||
-    !boundedTextArray(input.refinements, 2, 12, 500) ||
-    !input.refinements.every((item) => item.trim().length >= 8)
-  ) {
-    return false;
+): ValidationResult<DesignVisualReviewModelInput> {
+  const modelInput = removeModelSkillRefs(input);
+  const structureIssues = contractSchemaIssues(
+    DESIGN_VISUAL_REVIEW_TOOL_INPUT_SCHEMA,
+    modelInput,
+    {
+      code: "design_visual_review.schema_invalid",
+      subject: "Visual Review",
+      maximum: 32,
+    },
+  );
+  if (structureIssues.length > 0) {
+    return { ok: false, issues: structureIssues };
   }
-  return exactKeys(input, [
-    "version",
-    "skillRefs",
-    "briefFidelity",
-    "distinctiveness",
-    "signatureMotif",
-    "composition",
-    "hierarchy",
-    "typography",
-    "assetIntegration",
-    "formAndSurface",
-    "effects",
-    "antiTemplate",
-    "criteria",
-    "failedCriteria",
-    "refinements",
-  ]);
+  const value = modelInput as DesignVisualReviewModelInput;
+  const domainIssues = refineDesignVisualReview(value);
+  return domainIssues.length > 0
+    ? { ok: false, issues: domainIssues }
+    : { ok: true, value: structuredClone(value) };
 }
 
-export function normalizeDesignVisualReviewToolInput(
+function parseDesignVisualReview(
   input: unknown,
-): DesignVisualReviewToolInput | undefined {
-  if (!isRecord(input)) return undefined;
-  const candidate =
-    input.skillRefs === undefined
-      ? {
-          ...input,
-          skillRefs: BUILTIN_UI_DESIGN_SKILL_REFS.map((reference) => ({
-            ...reference,
-          })),
-        }
-      : input;
-  return isDesignVisualReviewToolInput(candidate)
-    ? structuredClone(candidate)
-    : undefined;
+  context: DesignVisualReviewContractContext = {},
+): ValidationResult<DesignVisualReviewToolInput> {
+  if (context.canonical === true) {
+    const structureIssues = contractSchemaIssues(
+      DESIGN_VISUAL_REVIEW_CANONICAL_INPUT_SCHEMA,
+      input,
+      {
+        code: "design_visual_review.canonical_schema_invalid",
+        subject: "canonical Visual Review",
+        maximum: 32,
+      },
+    );
+    if (structureIssues.length > 0) {
+      return { ok: false, issues: structureIssues };
+    }
+    const value = input as DesignVisualReviewToolInput;
+    const domainIssues = refineDesignVisualReview(value);
+    if (!isKnownBuiltinDesignSkillRefs(value.skillRefs)) {
+      domainIssues.push(
+        visualReviewIssue(
+          "design_visual_review.skill_refs_invalid",
+          "/skillRefs",
+          "Visual Review skill refs must identify current built-in review methods",
+        ),
+      );
+    }
+    return domainIssues.length > 0
+      ? { ok: false, issues: domainIssues }
+      : { ok: true, value: structuredClone(value) };
+  }
+
+  const parsed = parseDesignVisualReviewModel(input);
+  if (!parsed.ok) return parsed;
+  if (
+    context.skillRefs === undefined ||
+    !isKnownBuiltinDesignSkillRefs(context.skillRefs)
+  ) {
+    return {
+      ok: false,
+      issues: [
+        visualReviewIssue(
+          "design_visual_review.host_skill_binding_invalid",
+          "/skillRefs",
+          "The trusted host must bind review skills from the active Design Plan",
+        ),
+      ],
+    };
+  }
+  return {
+    ok: true,
+    value: {
+      ...parsed.value,
+      skillRefs: structuredClone([...context.skillRefs]),
+    },
+  };
+}
+
+export const DesignVisualReviewContract = {
+  schema: DESIGN_VISUAL_REVIEW_TOOL_INPUT_SCHEMA,
+  canonicalSchema: DESIGN_VISUAL_REVIEW_CANONICAL_INPUT_SCHEMA,
+  parse: parseDesignVisualReview,
+  issues: (input: unknown): ValidationIssue[] => {
+    const result = parseDesignVisualReviewModel(input);
+    return result.ok ? [] : result.issues;
+  },
+} as const;
+
+function refineDesignVisualReview(
+  input: DesignVisualReviewModelInput | DesignVisualReviewToolInput,
+): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+  for (const field of DESIGN_VISUAL_REVIEW_TEXT_FIELDS) {
+    if (!substantiveReviewText(input[field])) {
+      issues.push(
+        visualReviewIssue(
+          "design_visual_review.evidence_not_substantive",
+          `/${field}`,
+          "Review evidence must describe concrete visible evidence rather than generic praise",
+        ),
+      );
+    }
+  }
+  for (const criterion of DESIGN_VISUAL_CRITERIA) {
+    if (!substantiveReviewText(input.criteria[criterion])) {
+      issues.push(
+        visualReviewIssue(
+          "design_visual_review.criterion_not_substantive",
+          `/criteria/${criterion}`,
+          "Criterion evidence must describe what the capture visibly proves or fails",
+        ),
+      );
+    }
+  }
+  input.refinements.forEach((refinement, index) => {
+    if (refinement.trim().length < 8) {
+      issues.push(
+        visualReviewIssue(
+          "design_visual_review.refinement_not_actionable",
+          `/refinements/${index}`,
+          "Refinement must name a concrete design change",
+        ),
+      );
+    }
+  });
+  return issues;
+}
+
+function visualReviewIssue(
+  code: string,
+  path: string,
+  message: string,
+): ValidationIssue {
+  return {
+    code,
+    path,
+    message,
+    recovery:
+      "Revise the reported review field using exact capture evidence and submit one corrected review.",
+  };
 }
 
 export function isRasterAssetRole(value: unknown): value is RasterAssetRole {

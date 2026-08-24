@@ -1050,6 +1050,11 @@ export class GlobalTaskCoordinator {
     review: DesignVisualReviewToolInput,
   ): void {
     const state = this.#requireDesignPlan(context);
+    if (!sameValue(review.skillRefs, state.plan.skillRefs)) {
+      throw new Error(
+        "design_workflow.visual_review_skill_binding_invalid: Visual Review skills do not match the active Design Plan",
+      );
+    }
     const target = firstTargetWithStatus(state, "captured");
     if (!target) {
       if (
@@ -1081,10 +1086,7 @@ export class GlobalTaskCoordinator {
         "design_workflow.capture_revision_invalid: The latest rendered capture predates the latest material design revision; capture the current canvas again before recording the review",
       );
     }
-    target.lastReview = {
-      ...structuredClone(review),
-      skillRefs: structuredClone(state.plan.skillRefs),
-    };
+    target.lastReview = structuredClone(review);
     target.reviewedCaptureCount = target.captureCount;
     target.reviewedCaptureRevision = target.lastCaptureRevision;
     target.delivery = {
@@ -1093,6 +1095,12 @@ export class GlobalTaskCoordinator {
       reviewRevision: target.lastCaptureRevision,
     };
     this.#persistDelivery(context.runId, state);
+  }
+
+  resolveVisualReviewSkillRefs(
+    context: TrustedToolContext,
+  ): DesignPlanToolInput["skillRefs"] {
+    return structuredClone(this.#requireDesignPlan(context).plan.skillRefs);
   }
 
   assertVisualReviewBeforeWrite(context: TrustedToolContext): void {

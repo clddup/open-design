@@ -9,7 +9,11 @@ import type {
   DesignVisualCriterion,
   DesignVisualReviewToolInput,
 } from "@/shared/design-agent-tools.js";
-import { activeVisualReferenceIds } from "@/shared/design-agent-tools.js";
+import {
+  activeVisualReferenceIds,
+  DesignVisualReviewContract,
+} from "@/shared/design-agent-tools.js";
+import { formatValidationFailure } from "@/shared/contract-validation.js";
 
 const GENERIC_CRITERIA = [
   "visual-thesis",
@@ -445,7 +449,7 @@ function toLedgerVisualReview(
         `Strengthen ${id} using the visible critic evidence`,
     ),
   ]).slice(0, 12);
-  return {
+  const candidate: DesignVisualReviewToolInput = {
     version: 1,
     skillRefs: structuredClone(plan.skillRefs),
     briefFidelity: generic["subject-specificity"],
@@ -462,6 +466,15 @@ function toLedgerVisualReview(
     failedCriteria: lowest,
     refinements: reviewRefinements,
   };
+  const parsed = DesignVisualReviewContract.parse(candidate, {
+    canonical: true,
+  });
+  if (!parsed.ok) {
+    throw new TypeError(
+      formatValidationFailure("independent Visual Review", parsed.issues),
+    );
+  }
+  return parsed.value;
 }
 
 function uniqueText(values: readonly string[]): string[] {

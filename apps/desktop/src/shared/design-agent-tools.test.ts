@@ -30,12 +30,12 @@ import {
   DesignApplyContract,
   DesignCheckpointContract,
   DesignPlanContract,
+  DesignVisualReviewContract,
   explainInvalidDesignComponentToolInput,
   FirstSliceContract,
   isAgentSvgImportResult,
   isPreparedAgentSvgExport,
   isPreparedAgentRasterExport,
-  normalizeDesignVisualReviewToolInput,
   normalizeDesignPageToolInput,
   validateDesignAgentToolInput,
 } from "./design-agent-tools";
@@ -1348,9 +1348,12 @@ describe("design Agent tool contract", () => {
     expect(
       validateDesignAgentToolInput(DESIGN_REVIEW_TOOL_NAME, modelReview),
     ).toBe(true);
-    expect(
-      normalizeDesignVisualReviewToolInput(modelReview)?.skillRefs,
-    ).toEqual(BUILTIN_UI_DESIGN_SKILL_REFS);
+    const parsedReview = DesignVisualReviewContract.parse(modelReview, {
+      skillRefs: BUILTIN_UI_DESIGN_SKILL_REFS,
+    });
+    expect(parsedReview.ok && parsedReview.value.skillRefs).toEqual(
+      BUILTIN_UI_DESIGN_SKILL_REFS,
+    );
     expect(
       validateDesignAgentToolInput(DESIGN_REVIEW_TOOL_NAME, {
         ...review,
