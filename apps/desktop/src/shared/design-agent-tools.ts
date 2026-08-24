@@ -77,10 +77,10 @@ import {
   isInternalImportSvgToolInput,
 } from "./design-agent-import-export-tools";
 import {
+  DesignHierarchyContract,
+  DesignVectorContract,
   DESIGN_HIERARCHY_TOOL_INPUT_SCHEMA,
   DESIGN_VECTOR_TOOL_INPUT_SCHEMA,
-  isDesignHierarchyToolInput,
-  isDesignVectorToolInput,
 } from "./design-agent-structure-tools";
 import {
   DESIGN_APPLY_TOOL_INPUT_SCHEMA,
@@ -263,10 +263,10 @@ export type {
   PreparedAgentSvgExport,
 } from "./design-agent-import-export-tools";
 export {
+  DesignHierarchyContract,
+  DesignVectorContract,
   DESIGN_HIERARCHY_TOOL_INPUT_SCHEMA,
   DESIGN_VECTOR_TOOL_INPUT_SCHEMA,
-  isDesignHierarchyToolInput,
-  isDesignVectorToolInput,
 } from "./design-agent-structure-tools";
 export type {
   DesignHierarchyToolInput,
@@ -523,6 +523,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     inputSchema: DESIGN_HIERARCHY_TOOL_INPUT_SCHEMA,
     risk: "design_write" as const,
     approval: "never" as const,
+    validateInputIssues: DesignHierarchyContract.issues,
   },
   {
     name: DESIGN_ARRANGE_TOOL_NAME,
@@ -547,6 +548,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     inputSchema: DESIGN_VECTOR_TOOL_INPUT_SCHEMA,
     risk: "design_write" as const,
     approval: "never" as const,
+    validateInputIssues: DesignVectorContract.issues,
   },
   {
     name: DESIGN_COMPONENT_TOOL_NAME,
@@ -717,13 +719,13 @@ export function validateDesignAgentToolInput(
     return isInternalReadImageSourceToolInput(input);
   }
   if (toolName === DESIGN_HIERARCHY_TOOL_NAME) {
-    return isDesignHierarchyToolInput(input);
+    return DesignHierarchyContract.parse(input).ok;
   }
   if (toolName === DESIGN_ARRANGE_TOOL_NAME) {
     return isDesignArrangeToolInput(input);
   }
   if (toolName === DESIGN_VECTOR_TOOL_NAME) {
-    return isDesignVectorToolInput(input);
+    return DesignVectorContract.parse(input).ok;
   }
   if (toolName === DESIGN_FONT_TOOL_NAME) {
     return isDesignFontToolInput(input);

@@ -61,12 +61,12 @@ import {
   INTERNAL_UPDATE_IMAGE_TOOL_NAME,
   DesignApplyContract,
   DesignComponentContract,
+  DesignHierarchyContract,
   DesignPageContract,
+  DesignVectorContract,
   isDesignArrangeToolInput,
   isDesignFontToolInput,
-  isDesignHierarchyToolInput,
   isDesignTextRangeToolInput,
-  isDesignVectorToolInput,
   isExportSvgToolInput,
   isExportRasterToolInput,
   isInternalImportSvgToolInput,
@@ -771,11 +771,14 @@ async function executeDesignToolRequestUnsafe(
     };
   }
 
-  if (
-    request.call.toolName === DESIGN_HIERARCHY_TOOL_NAME &&
-    isDesignHierarchyToolInput(request.call.input)
-  ) {
-    const input = request.call.input;
+  if (request.call.toolName === DESIGN_HIERARCHY_TOOL_NAME) {
+    const parsed = DesignHierarchyContract.parse(request.call.input);
+    if (!parsed.ok) {
+      throw new TypeError(
+        "Renderer received invalid canonical Hierarchy input",
+      );
+    }
+    const input = parsed.value;
     assertPageWithinMutationTarget(
       input.pageId,
       request.context.mutationTarget,
@@ -1150,11 +1153,12 @@ async function executeDesignToolRequestUnsafe(
     };
   }
 
-  if (
-    request.call.toolName === DESIGN_VECTOR_TOOL_NAME &&
-    isDesignVectorToolInput(request.call.input)
-  ) {
-    const input = request.call.input;
+  if (request.call.toolName === DESIGN_VECTOR_TOOL_NAME) {
+    const parsed = DesignVectorContract.parse(request.call.input);
+    if (!parsed.ok) {
+      throw new TypeError("Renderer received invalid canonical Vector input");
+    }
+    const input = parsed.value;
     assertPageWithinMutationTarget(
       input.pageId,
       request.context.mutationTarget,

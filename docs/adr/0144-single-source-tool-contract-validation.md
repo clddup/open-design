@@ -1,6 +1,6 @@
 # ADR-0144：单一来源的工具契约验证
 
-- 状态：Accepted，first-slice、node apply、Design Plan、Visual Review、Checkpoint、图片获取、公开图片操作、Page、Component、Style 与 Variable 工具已实施，其余契约分阶段实施
+- 状态：Accepted，first-slice、node apply、Design Plan、Visual Review、Checkpoint、图片获取、公开图片操作、Page、Component、Style、Variable、Hierarchy 与 Vector 工具已实施，其余契约分阶段实施
 - 日期：2026-08-23
 - 首个迁移对象：compact first-slice
 - 关联：ADR-0018、ADR-0100、ADR-0103、ADR-0141、ADR-0143
@@ -89,12 +89,14 @@ Component 工具已完成第九个迁移切片：`DesignComponentContract` 以�
 
 Style 与 Variable 工具已完成第十个设计系统迁移切片：`DesignStyleContract / DesignVariableContract` 分别以一个 action-aware executable schema 覆盖六类 Shared Style 操作与十二类 Collection/Mode/Variable/Binding 操作，Provider、Pi、工具聚合、Main policy/execution 与 Renderer canonical bridge 不再维护另一套结构判断。Style reference field 直接复用 `StyleReferenceTargetSchema`，Variable value、resolved type、scope 与 binding target 直接复用 `DesignDocument` 的权威 schema；CUSTOM_CUBIC_BEZIER/CUSTOM_SPRING 等完整 Variable value 因此不再出现 Runtime 接受而 Provider schema 未声明的漂移。空 metadata/update、串用 action 字段和未闭合 target 在 Provider 前置结构层返回准确路径；Contract 只保留 Variable map key 的同值边界 refinement 与 replacement mode 不得等于被删 mode 两项判断，现有 collection、mode、alias、type、consumer 与 revision 关系继续由 Main/EditorRuntime 当前文档 guard 拥有。通用 schema error 展开会递归跟随 nested `type` discriminant，自定义 easing 缺字段不再退化为首个 primitive union 错误；action branch 使用顶层权威字段约束加紧凑闭合分支，避免 expanded Provider surface 重复展开完整 Variable value。旧 `isDesignStyleToolInput / isDesignVariableToolInput` 及其 `record/id/text/exact/switch` 遍历已删除。语义继续对齐 Figma Plugin API 的 [local Paint/Text/Effect/Grid Styles](https://developers.figma.com/docs/plugins/api/figma/)、[Variable Collections、typed values 与 aliases](https://developers.figma.com/docs/plugins/api/figma-variables/)、[property binding](https://developers.figma.com/docs/plugins/working-with-variables/) 和 [picker scope vocabulary](https://developers.figma.com/docs/plugins/api/VariableScope/)；OpenDesign 的稳定 ID、Page capability、preview/apply、单 undo 与跨文件 Library 仍由自身事务模型拥有。
 
+Hierarchy 与 Vector 工具已完成第十一个结构编辑迁移切片：原混合 types、Provider guidance schema 与约 250 行 `isDesignHierarchyToolInput / isDesignVectorToolInput / exactKeys` 的 746 行文件拆为 type、executable schema 和 Contract 三个明确模块。`DesignHierarchyContract` 覆盖 Group/Ungroup、sibling Mask、Boolean group、reorder 与 reparent 十个闭合 action；`DesignVectorContract` 覆盖 open/close/reverse、connect/disconnect、单层/跨层 vertex transform 和三类 Cut 九个闭合 action。Provider、Pi、工具聚合、Main policy/execution 与 Renderer canonical bridge 现在消费同一 action branch，旧“Provider 只给宽泛字段、Runtime 另行校验 action-specific shape”的双事实已删除；Main 也不再跳过 Hierarchy 输入校验后直接强转 material target。Vector topology ID 直接复用文档权威 `VectorGeometryIdSchema`；nested `at.kind` 错误会定位到真实 `segmentId/t`、`vertexId` 或未知 `/at/kind`。跨层 target node 唯一性与 16,384 vertex 总预算是仅存的两个 domain refinements，外层数组不再用泛化 `uniqueItems` 抢先覆盖稳定 node path；Page、revision、locked、same-parent、mask source、Boolean operand、拓扑与几何歧义继续由 Main/EditorRuntime/Geometry Service 当前文档层拥有。语义参照 Figma 的 [GroupNode](https://developers.figma.com/docs/plugins/api/GroupNode/)、[BooleanOperationNode](https://developers.figma.com/docs/plugins/api/BooleanOperationNode/) 与 [VectorNetwork](https://developers.figma.com/docs/plugins/api/VectorNetwork/)；OpenDesign 继续额外拥有稳定 topology ID、事务 preview/apply、单次 undo 和受控多层宿主几何规划。
+
 `ValidationIssue` 的稳定 `code/path/expected/actual/recovery` 通过 `tool-validation` failure details 进入 Agent event、journal 和 Timeline；这种参数修正使用 `correct-and-retry`，不冒充需要文档 inspection 的事务错误。Design transaction 仍保留独立 `inspect-and-revise` 恢复语义。
 
-导入导出、结构、Arrange、文字/字体等其余 Agent tools，以及已迁移公开工具之后的其他 trusted internal Renderer bridge、IPC 与持久化契约尚未迁移，不得据此宣称全仓已实现单一验证入口。
+导入导出、Arrange、文字/字体等其余 Agent tools，以及已迁移公开工具之后的其他 trusted internal Renderer bridge、IPC 与持久化契约尚未迁移，不得据此宣称全仓已实现单一验证入口。
 
 ## 后果
 
 - 不重写 pi-agent-core 已有的循环或 TypeBox 参数验证；OpenDesign 只增加产品 domain refinement 和边界 issue adapter。
 - 首个迁移会删除较多手写代码并改变测试入口，属于允许的破坏性开发更新。
-- 在迁移完成前，新增 first-slice、node apply、Design Plan、Visual Review、Checkpoint、Read/Generate/Place/Update/Edit Image、Page Structure/Page Lifecycle、Component、Style 与 Variable 字段必须进入对应单一入口；不得继续扩展三套旧函数。
+- 在迁移完成前，新增 first-slice、node apply、Design Plan、Visual Review、Checkpoint、Read/Generate/Place/Update/Edit Image、Page Structure/Page Lifecycle、Component、Style、Variable、Hierarchy 与 Vector 字段必须进入对应单一入口；不得继续扩展三套旧函数。

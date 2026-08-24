@@ -106,6 +106,7 @@ import type { RendererDesignCaptureTarget } from "@/shared/design-tool-bridge";
 import { registerRendererDesignToolIpc } from "./agent/renderer-design-tool-ipc";
 import { channels } from "@/shared/desktop-api";
 import { handleDesignSystemTool } from "./agent/design-system-tool-handler.js";
+import { handleDesignStructureTool } from "./agent/design-structure-tool-handler.js";
 import { translate } from "@/shared/i18n/messages";
 import {
   DESIGN_APPLY_TOOL_NAME,
@@ -115,12 +116,10 @@ import {
   DESIGN_COMPONENT_TOOL_NAME,
   DESIGN_DELIVERY_SCOPE_TOOL_NAME,
   DESIGN_FONT_TOOL_NAME,
-  DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
   DESIGN_FIRST_SLICE_TOOL_NAME,
   DESIGN_PAGE_TOOL_NAME,
   DESIGN_TEXT_RANGE_TOOL_NAME,
-  DESIGN_VECTOR_TOOL_NAME,
   PAGE_STRUCTURE_ACCESS_TOOL_NAME,
   DESIGN_PLAN_TOOL_NAME,
   DESIGN_REVIEW_TOOL_NAME,
@@ -144,7 +143,6 @@ import {
   UpdateImageContract,
   isDesignFontToolInput,
   isDesignTextRangeToolInput,
-  isDesignVectorToolInput,
   isExportSvgToolInput,
   isExportRasterToolInput,
   isImportSvgToolInput,
@@ -155,9 +153,7 @@ import {
   UPDATE_IMAGE_TOOL_NAME,
   type DesignArrangeToolInput,
   type DesignApplyToolInput,
-  type DesignHierarchyToolInput,
   type DesignVisualReviewToolInput,
-  type DesignVectorToolInput,
 } from "@/shared/design-agent-tools";
 import { formatValidationFailure } from "@/shared/contract-validation.js";
 import {
@@ -1769,40 +1765,28 @@ async function startDesktopApplication(
         withDelivery: withDesignDelivery,
       });
       if (designSystemResult) return designSystemResult;
-      if (
-        call.toolName === DESIGN_HIERARCHY_TOOL_NAME ||
-        call.toolName === DESIGN_ARRANGE_TOOL_NAME ||
-        call.toolName === DESIGN_VECTOR_TOOL_NAME
-      ) {
-        if (
-          call.toolName === DESIGN_VECTOR_TOOL_NAME &&
-          !isDesignVectorToolInput(call.input)
-        ) {
-          throw new TypeError("Invalid vector edit tool input");
-        }
+      const designStructureResult = await handleDesignStructureTool({
+        call,
+        context,
+        coordinator: globalTaskCoordinator,
+        execute: executeRendererTool,
+        withDelivery: withDesignDelivery,
+      });
+      if (designStructureResult) return designStructureResult;
+      if (call.toolName === DESIGN_ARRANGE_TOOL_NAME) {
+        const arrangeInput = call.input as DesignArrangeToolInput;
         globalTaskCoordinator.assertVisualReviewBeforeWrite(context);
-        const targetRefs = materialTargetRefsForStructuredTool(
-          call.input as
-            | DesignHierarchyToolInput
-            | DesignArrangeToolInput
-            | DesignVectorToolInput,
-        );
+        const nodeIds = materialTargetIdsForArrangeTool(arrangeInput);
         const targetIds = globalTaskCoordinator.resolveMaterialTargetIds(
           context,
-          targetRefs.nodeIds,
-          targetRefs.parentId,
+          nodeIds,
         );
         const result = await executeRendererTool(call);
         globalTaskCoordinator.recordMaterialDesignWriteCompleted(
           context.runId,
           targetIds,
           result.designRevision?.revision,
-          createdNodeIdsForStructuredTool(
-            call.input as
-              | DesignHierarchyToolInput
-              | DesignArrangeToolInput
-              | DesignVectorToolInput,
-          ),
+          [],
         );
         return withDesignDelivery(result, context.runId);
       }
@@ -1967,34 +1951,12 @@ function isRecordValue(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-function materialTargetRefsForStructuredTool(
-  input:
-    DesignHierarchyToolInput | DesignArrangeToolInput | DesignVectorToolInput,
-): { nodeIds: string[]; parentId?: string | null } {
-  if ("nodeId" in input) return { nodeIds: [input.nodeId] };
-  if ("frameId" in input) return { nodeIds: [input.frameId] };
-  if ("nodeIds" in input) {
-    return {
-      nodeIds: [...input.nodeIds],
-      ...(input.action === "reparent" ? { parentId: input.parentId } : {}),
-    };
-  }
-  if ("targets" in input) {
-    return { nodeIds: input.targets.map((target) => target.nodeId) };
-  }
-  if ("maskNodeId" in input) return { nodeIds: [input.maskNodeId] };
-  if ("groupId" in input) return { nodeIds: [input.groupId] };
-  return { nodeIds: [input.booleanId] };
-}
-
-function createdNodeIdsForStructuredTool(
-  input:
-    DesignHierarchyToolInput | DesignArrangeToolInput | DesignVectorToolInput,
+function materialTargetIdsForArrangeTool(
+  input: DesignArrangeToolInput,
 ): string[] {
-  if (input.action === "group") return [input.groupId];
-  if (input.action === "create-mask") return [input.groupId];
-  if (input.action === "create-boolean") return [input.booleanId];
-  return [];
+  if ("nodeId" in input) return [input.nodeId];
+  if ("frameId" in input) return [input.frameId];
+  return [...input.nodeIds];
 }
 
 function importedNodeIdsFromResult(result: TrustedToolResult): string[] {

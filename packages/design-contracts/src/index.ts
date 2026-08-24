@@ -2623,6 +2623,18 @@ function actionableSchemaErrors(error: NestedSchemaError): NestedSchemaError[] {
     error.value !== null &&
     !Array.isArray(error.value)
   ) {
+    const unknownDiscriminant = unknownSchemaDiscriminant(
+      variants,
+      error.value as Record<string, unknown>,
+    );
+    if (unknownDiscriminant) {
+      const path = `${error.path}/${escapeSchemaPointer(unknownDiscriminant)}`;
+      const discriminatorIssues = branches
+        .flat()
+        .filter((issue) => issue.path === path);
+      if (discriminatorIssues.length > 0)
+        return discriminatorIssues.slice(0, 1);
+    }
     return (
       branches
         .filter((branch) => branch.length > 0)
@@ -2630,6 +2642,32 @@ function actionableSchemaErrors(error: NestedSchemaError): NestedSchemaError[] {
     );
   }
   return [error];
+}
+
+function unknownSchemaDiscriminant(
+  variants: readonly TSchema[],
+  value: Record<string, unknown>,
+): string | null {
+  if (variants.length < 2) return null;
+  const firstProperties = (
+    variants[0] as { properties?: Record<string, unknown> } | undefined
+  )?.properties;
+  if (!firstProperties) return null;
+  for (const key of Object.keys(firstProperties)) {
+    if (!Object.hasOwn(value, key)) continue;
+    const expected = variants.map((variant) => {
+      const properties = (variant as { properties?: Record<string, unknown> })
+        .properties;
+      return (properties?.[key] as { const?: unknown } | undefined)?.const;
+    });
+    if (expected.some((candidate) => candidate === undefined)) continue;
+    if (!expected.includes(value[key])) return key;
+  }
+  return null;
+}
+
+function escapeSchemaPointer(value: string): string {
+  return value.replaceAll("~", "~0").replaceAll("/", "~1");
 }
 
 function schemaDiscriminatorMatches(

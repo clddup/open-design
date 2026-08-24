@@ -113,7 +113,7 @@ function plannedInsertRequest(nodeId: string): RendererDesignToolRequest {
 }
 
 describe("Renderer design tool scope", () => {
-  it("fails closed on invalid canonical Style and Variable bridge inputs", async () => {
+  it("fails closed on invalid canonical design-system and structure bridge inputs", async () => {
     const runtime = new EditorRuntime(createWelcomeDocument());
     const request = (
       toolName: string,
@@ -150,6 +150,32 @@ describe("Renderer design tool scope", () => {
         "page_welcome",
       ),
     ).rejects.toThrow("invalid canonical Variable input");
+    await expect(
+      executeDesignToolRequest(
+        request(DESIGN_HIERARCHY_TOOL_NAME, {
+          action: "group",
+          label: "Invalid group",
+          pageId: "page_welcome",
+          nodeIds: ["feature_one", "feature_two"],
+        }),
+        runtime,
+        "page_welcome",
+      ),
+    ).rejects.toThrow("invalid canonical Hierarchy input");
+    await expect(
+      executeDesignToolRequest(
+        request(DESIGN_VECTOR_TOOL_NAME, {
+          action: "cut-path",
+          label: "Invalid cut",
+          pageId: "page_welcome",
+          nodeId: "feature_one",
+          pathId: "path_one",
+          at: { kind: "segment", segmentId: "segment_one" },
+        }),
+        runtime,
+        "page_welcome",
+      ),
+    ).rejects.toThrow("invalid canonical Vector input");
     expect(runtime.getSnapshot().document.revision).toBe(0);
   });
 
