@@ -132,19 +132,19 @@ import {
   INTERNAL_READ_IMAGE_SOURCE_TOOL_NAME,
   GENERATE_IMAGE_TOOL_NAME,
   DesignApplyContract,
+  DesignPageContract,
   DeliveryScopeContract,
   DesignVisualReviewContract,
   EditImageContract,
   GenerateImageContract,
+  PageStructureAccessContract,
   PlaceImageContract,
   ReadImageContract,
   UpdateImageContract,
   isDesignComponentToolInput,
   isDesignFontToolInput,
   isDesignTextRangeToolInput,
-  normalizeDesignPageToolInput,
   isDesignVectorToolInput,
-  isPageStructureAccessToolInput,
   isExportSvgToolInput,
   isExportRasterToolInput,
   isImportSvgToolInput,
@@ -1021,8 +1021,11 @@ async function startDesktopApplication(
         };
       };
       if (call.toolName === PAGE_STRUCTURE_ACCESS_TOOL_NAME) {
-        if (!isPageStructureAccessToolInput(call.input)) {
-          throw new TypeError("Invalid Page structure access input");
+        const parsed = PageStructureAccessContract.parse(call.input);
+        if (!parsed.ok) {
+          throw new TypeError(
+            formatValidationFailure("Page Structure Access", parsed.issues),
+          );
         }
         if (!globalTaskCoordinator.hasPageStructureAccess(context.runId)) {
           throw new Error(
@@ -1036,7 +1039,7 @@ async function startDesktopApplication(
             capability: "page-structure",
             scope: "current-design-file",
             expires: "run-end",
-            actions: call.input.actions,
+            actions: parsed.value.actions,
           },
         };
       }
@@ -1683,10 +1686,11 @@ async function startDesktopApplication(
         return withDesignDelivery(result, context.runId);
       }
       if (call.toolName === DESIGN_PAGE_TOOL_NAME) {
-        const normalizedPageInput = normalizeDesignPageToolInput(call.input);
-        if (!normalizedPageInput) {
-          throw new TypeError("Invalid Page tool input");
+        const parsed = DesignPageContract.parse(call.input);
+        if (!parsed.ok) {
+          throw new TypeError(formatValidationFailure("Page", parsed.issues));
         }
+        const normalizedPageInput = parsed.value;
         globalTaskCoordinator.assertPageToolAccess(
           context,
           normalizedPageInput,
@@ -1827,17 +1831,16 @@ async function startDesktopApplication(
             false)
         );
       }
-      if (
-        call.toolName !== PAGE_STRUCTURE_ACCESS_TOOL_NAME ||
-        !isPageStructureAccessToolInput(call.input)
-      ) {
+      if (call.toolName !== PAGE_STRUCTURE_ACCESS_TOOL_NAME) {
         return true;
       }
+      const parsed = PageStructureAccessContract.parse(call.input);
+      if (!parsed.ok) return true;
       return (
         globalTaskCoordinator?.hasPageStructureAuthorization(
           context.runId,
           call.toolCallId,
-          call.input.actions,
+          parsed.value.actions,
         ) ?? false
       );
     },

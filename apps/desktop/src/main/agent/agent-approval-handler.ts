@@ -2,8 +2,8 @@ import type { AgentRequest } from "@opendesign/agent-contracts";
 import {
   DeliveryScopeContract,
   DESIGN_DELIVERY_SCOPE_TOOL_NAME,
+  PageStructureAccessContract,
   PAGE_STRUCTURE_ACCESS_TOOL_NAME,
-  isPageStructureAccessToolInput,
 } from "@/shared/design-agent-tools.js";
 import type { AgentHost } from "./agent-host.js";
 import type { GlobalTaskCoordinator } from "./global-task-coordinator.js";
@@ -17,11 +17,12 @@ export function handleAgentApprovalRequest(
 ): void {
   const { agentHost, globalTaskCoordinator } = dependencies;
   const pending = agentHost.prepareApprovalResolution(request);
-  const pageStructureInput =
-    pending.toolName === PAGE_STRUCTURE_ACCESS_TOOL_NAME &&
-    isPageStructureAccessToolInput(pending.input)
-      ? pending.input
+  const pageStructureResult =
+    pending.toolName === PAGE_STRUCTURE_ACCESS_TOOL_NAME
+      ? PageStructureAccessContract.parse(pending.input)
       : undefined;
+  const pageStructureInput =
+    pageStructureResult?.ok === true ? pageStructureResult.value : undefined;
   const deliveryScopeResult =
     pending.toolName === DESIGN_DELIVERY_SCOPE_TOOL_NAME
       ? DeliveryScopeContract.parse(pending.input)

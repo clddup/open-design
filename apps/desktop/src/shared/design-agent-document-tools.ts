@@ -1,18 +1,20 @@
 import {
+  executableJsonSchema,
   isDesignOperation,
   type DesignOperation,
   type TextFontDescriptor,
 } from "@opendesign/design-contracts";
 import {
-  boundedText,
   exactKeys,
   isRecord,
-  onlyKeys,
-  optionalIndex,
   safeId,
   safeLabel,
-  safePageName,
 } from "./design-agent-validation";
+import {
+  contractSchemaIssues,
+  type ValidationIssue,
+  type ValidationResult,
+} from "./contract-validation";
 export {
   DESIGN_FONT_TOOL_INPUT_SCHEMA,
   DESIGN_TEXT_RANGE_TOOL_INPUT_SCHEMA,
@@ -176,114 +178,7 @@ function isTextFontDescriptor(value: unknown): value is TextFontDescriptor {
   );
 }
 
-export function isDesignPageToolInput(
-  input: unknown,
-): input is DesignPageToolInput {
-  if (!isRecord(input) || !safeLabel(input.label)) return false;
-  if (input.action === "create") {
-    return (
-      safePageName(input.name) &&
-      optionalIndex(input.index) &&
-      onlyKeys(input, ["action", "label", "name", "index"])
-    );
-  }
-  if (input.action === "rename") {
-    return (
-      safeId(input.pageId) &&
-      safePageName(input.name) &&
-      onlyKeys(input, ["action", "label", "pageId", "name"])
-    );
-  }
-  if (input.action === "duplicate") {
-    return (
-      safeId(input.pageId) &&
-      (input.name === undefined || safePageName(input.name)) &&
-      optionalIndex(input.index) &&
-      onlyKeys(input, ["action", "label", "pageId", "name", "index"])
-    );
-  }
-  if (input.action === "reorder") {
-    return (
-      safeId(input.pageId) &&
-      Number.isInteger(input.index) &&
-      Number(input.index) >= 0 &&
-      onlyKeys(input, ["action", "label", "pageId", "index"])
-    );
-  }
-  return (
-    (input.action === "clear" || input.action === "delete") &&
-    safeId(input.pageId) &&
-    onlyKeys(input, ["action", "label", "pageId"])
-  );
-}
-
-export function normalizeDesignPageToolInput(
-  input: unknown,
-): DesignPageToolInput | undefined {
-  if (!isRecord(input) || !safeLabel(input.label)) return undefined;
-  if (input.action === "create") {
-    if (
-      !safePageName(input.name) ||
-      !optionalIndex(input.index) ||
-      (input.pageId !== undefined && !safeId(input.pageId)) ||
-      !onlyKeys(input, ["action", "label", "name", "index", "pageId"])
-    ) {
-      return undefined;
-    }
-    return {
-      action: "create",
-      label: input.label,
-      name: input.name,
-      ...(typeof input.index === "number" ? { index: input.index } : {}),
-    };
-  }
-  if (input.action === "rename") {
-    if (
-      !safeId(input.pageId) ||
-      !safePageName(input.name) ||
-      !optionalIndex(input.index) ||
-      !onlyKeys(input, ["action", "label", "pageId", "name", "index"])
-    ) {
-      return undefined;
-    }
-    return {
-      action: "rename",
-      label: input.label,
-      pageId: input.pageId,
-      name: input.name,
-    };
-  }
-  return isDesignPageToolInput(input) ? input : undefined;
-}
-
-export function isPageStructureAccessToolInput(
-  input: unknown,
-): input is PageStructureAccessToolInput {
-  const actions = new Set<PageStructureAccessAction>([
-    "create-page",
-    "duplicate-page",
-    "reorder-pages",
-    "delete-page",
-    "cross-page-edit",
-  ]);
-  return (
-    isRecord(input) &&
-    Array.isArray(input.actions) &&
-    input.actions.length > 0 &&
-    input.actions.length <= actions.size &&
-    input.actions.every(
-      (action): action is PageStructureAccessAction =>
-        typeof action === "string" &&
-        actions.has(action as PageStructureAccessAction),
-    ) &&
-    new Set(input.actions).size === input.actions.length &&
-    boundedText(input.reason, 500) &&
-    input.reason.length >= 8 &&
-    exactKeys(input, ["actions", "reason"])
-  );
-}
-
-export const PAGE_STRUCTURE_ACCESS_TOOL_INPUT_SCHEMA = {
+export const PAGE_STRUCTURE_ACCESS_TOOL_INPUT_SCHEMA = executableJsonSchema({
   type: "object",
   properties: {
     actions: {
@@ -301,74 +196,164 @@ export const PAGE_STRUCTURE_ACCESS_TOOL_INPUT_SCHEMA = {
         ],
       },
     },
-    reason: { type: "string", minLength: 8, maxLength: 500 },
+    reason: {
+      type: "string",
+      minLength: 8,
+      maxLength: 500,
+      pattern: "\\S",
+    },
   },
   required: ["actions", "reason"],
   additionalProperties: false,
+});
+
+const PAGE_TOOL_LABEL_SCHEMA = {
+  type: "string",
+  minLength: 1,
+  maxLength: 256,
+  pattern: "\\S",
 } as const;
 
-export const DESIGN_PAGE_TOOL_INPUT_SCHEMA = {
+const PAGE_TOOL_ID_SCHEMA = {
+  type: "string",
+  minLength: 1,
+  maxLength: 256,
+} as const;
+
+const PAGE_NAME_SCHEMA = {
+  type: "string",
+  minLength: 1,
+  maxLength: 256,
+  pattern: "^(?=.*\\S)[^\\u0000-\\u001F\\u007F-\\u009F]+$",
+  description:
+    "Visible Page name without control characters; whitespace-only names are invalid.",
+} as const;
+
+const PAGE_TOOL_COMMON_PROPERTIES = {
+  label: PAGE_TOOL_LABEL_SCHEMA,
+} as const;
+
+const PAGE_TOOL_REQUIRED = ["action", "label"] as const;
+
+export const DESIGN_PAGE_TOOL_INPUT_SCHEMA = executableJsonSchema({
   type: "object",
   properties: {
+    ...PAGE_TOOL_COMMON_PROPERTIES,
     action: {
       enum: ["create", "rename", "duplicate", "reorder", "clear", "delete"],
     },
-    label: { type: "string", minLength: 1, maxLength: 256 },
-    pageId: { type: "string", minLength: 1, maxLength: 256 },
-    name: { type: "string", minLength: 1, maxLength: 256 },
+    pageId: PAGE_TOOL_ID_SCHEMA,
+    name: PAGE_NAME_SCHEMA,
     index: { type: "integer", minimum: 0 },
   },
-  oneOf: [
+  required: PAGE_TOOL_REQUIRED,
+  anyOf: [
     {
+      type: "object",
       properties: {
+        ...PAGE_TOOL_COMMON_PROPERTIES,
         action: { const: "create" },
-        label: { type: "string", minLength: 1, maxLength: 256 },
-        name: { type: "string", minLength: 1, maxLength: 256 },
+        name: PAGE_NAME_SCHEMA,
         index: { type: "integer", minimum: 0 },
       },
-      required: ["action", "label", "name"],
+      required: [...PAGE_TOOL_REQUIRED, "name"],
       additionalProperties: false,
     },
     {
+      type: "object",
       properties: {
+        ...PAGE_TOOL_COMMON_PROPERTIES,
         action: { const: "rename" },
-        label: { type: "string", minLength: 1, maxLength: 256 },
-        pageId: { type: "string", minLength: 1, maxLength: 256 },
-        name: { type: "string", minLength: 1, maxLength: 256 },
+        pageId: PAGE_TOOL_ID_SCHEMA,
+        name: PAGE_NAME_SCHEMA,
       },
-      required: ["action", "label", "pageId", "name"],
+      required: [...PAGE_TOOL_REQUIRED, "pageId", "name"],
       additionalProperties: false,
     },
     {
+      type: "object",
       properties: {
+        ...PAGE_TOOL_COMMON_PROPERTIES,
         action: { const: "duplicate" },
-        label: { type: "string", minLength: 1, maxLength: 256 },
-        pageId: { type: "string", minLength: 1, maxLength: 256 },
-        name: { type: "string", minLength: 1, maxLength: 256 },
+        pageId: PAGE_TOOL_ID_SCHEMA,
+        name: PAGE_NAME_SCHEMA,
         index: { type: "integer", minimum: 0 },
       },
-      required: ["action", "label", "pageId"],
+      required: [...PAGE_TOOL_REQUIRED, "pageId"],
       additionalProperties: false,
     },
     {
+      type: "object",
       properties: {
+        ...PAGE_TOOL_COMMON_PROPERTIES,
         action: { const: "reorder" },
-        label: { type: "string", minLength: 1, maxLength: 256 },
-        pageId: { type: "string", minLength: 1, maxLength: 256 },
+        pageId: PAGE_TOOL_ID_SCHEMA,
         index: { type: "integer", minimum: 0 },
       },
-      required: ["action", "label", "pageId", "index"],
+      required: [...PAGE_TOOL_REQUIRED, "pageId", "index"],
       additionalProperties: false,
     },
     ...(["clear", "delete"] as const).map((action) => ({
+      type: "object" as const,
       properties: {
+        ...PAGE_TOOL_COMMON_PROPERTIES,
         action: { const: action },
-        label: { type: "string", minLength: 1, maxLength: 256 },
-        pageId: { type: "string", minLength: 1, maxLength: 256 },
+        pageId: PAGE_TOOL_ID_SCHEMA,
       },
-      required: ["action", "label", "pageId"],
+      required: [...PAGE_TOOL_REQUIRED, "pageId"],
       additionalProperties: false,
     })),
   ],
   additionalProperties: false,
+});
+
+function parsePageStructureAccess(
+  input: unknown,
+): ValidationResult<PageStructureAccessToolInput> {
+  const issues = contractSchemaIssues(
+    PAGE_STRUCTURE_ACCESS_TOOL_INPUT_SCHEMA,
+    input,
+    {
+      code: "page_structure_access.schema_invalid",
+      subject: "Page Structure Access",
+      maximum: 16,
+    },
+  );
+  return issues.length > 0
+    ? { ok: false, issues }
+    : {
+        ok: true,
+        value: structuredClone(input as PageStructureAccessToolInput),
+      };
+}
+
+export const PageStructureAccessContract = {
+  schema: PAGE_STRUCTURE_ACCESS_TOOL_INPUT_SCHEMA,
+  parse: parsePageStructureAccess,
+  issues: (input: unknown): ValidationIssue[] => {
+    const result = parsePageStructureAccess(input);
+    return result.ok ? [] : result.issues;
+  },
+} as const;
+
+function parseDesignPage(
+  input: unknown,
+): ValidationResult<DesignPageToolInput> {
+  const issues = contractSchemaIssues(DESIGN_PAGE_TOOL_INPUT_SCHEMA, input, {
+    code: "design_page.schema_invalid",
+    subject: "Page",
+    maximum: 16,
+  });
+  return issues.length > 0
+    ? { ok: false, issues }
+    : { ok: true, value: structuredClone(input as DesignPageToolInput) };
+}
+
+export const DesignPageContract = {
+  schema: DESIGN_PAGE_TOOL_INPUT_SCHEMA,
+  parse: parseDesignPage,
+  issues: (input: unknown): ValidationIssue[] => {
+    const result = parseDesignPage(input);
+    return result.ok ? [] : result.issues;
+  },
 } as const;

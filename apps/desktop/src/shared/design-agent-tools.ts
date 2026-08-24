@@ -89,12 +89,12 @@ import {
 } from "./design-agent-operation-schemas";
 import { DESIGN_COMPONENT_TOOL_INPUT_SCHEMA } from "./design-component-tool-schema";
 import {
+  DesignPageContract,
   DESIGN_PAGE_TOOL_INPUT_SCHEMA,
+  PageStructureAccessContract,
   PAGE_STRUCTURE_ACCESS_TOOL_INPUT_SCHEMA,
   isDesignFontToolInput,
   isDesignTextRangeToolInput,
-  isPageStructureAccessToolInput,
-  normalizeDesignPageToolInput,
 } from "./design-agent-document-tools";
 import {
   DesignCheckpointContract,
@@ -285,13 +285,12 @@ export {
 } from "./design-agent-operation-schemas";
 export { DESIGN_COMPONENT_TOOL_INPUT_SCHEMA } from "./design-component-tool-schema";
 export {
+  DesignPageContract,
   DESIGN_PAGE_TOOL_INPUT_SCHEMA,
+  PageStructureAccessContract,
   PAGE_STRUCTURE_ACCESS_TOOL_INPUT_SCHEMA,
   isDesignFontToolInput,
-  isDesignPageToolInput,
   isDesignTextRangeToolInput,
-  isPageStructureAccessToolInput,
-  normalizeDesignPageToolInput,
 } from "./design-agent-document-tools";
 export type {
   DesignFontToolInput,
@@ -606,6 +605,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
       summary:
         "This task is requesting temporary access to create, duplicate, reorder, delete, or edit across Pages in the bound Design File. Access expires when the task ends.",
     },
+    validateInputIssues: PageStructureAccessContract.issues,
   },
   {
     name: DESIGN_PAGE_TOOL_NAME,
@@ -618,6 +618,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     inputSchema: DESIGN_PAGE_TOOL_INPUT_SCHEMA,
     risk: "design_write" as const,
     approval: "never" as const,
+    validateInputIssues: DesignPageContract.issues,
   },
   {
     name: DESIGN_TEXT_RANGE_TOOL_NAME,
@@ -735,7 +736,7 @@ export function validateDesignAgentToolInput(
     return isDesignTextRangeToolInput(input);
   }
   if (toolName === DESIGN_PAGE_TOOL_NAME) {
-    return normalizeDesignPageToolInput(input) !== undefined;
+    return DesignPageContract.parse(input).ok;
   }
   if (toolName === DESIGN_COMPONENT_TOOL_NAME) {
     return isDesignComponentToolInput(input);
@@ -747,7 +748,7 @@ export function validateDesignAgentToolInput(
     return isDesignStyleToolInput(input);
   }
   if (toolName === PAGE_STRUCTURE_ACCESS_TOOL_NAME) {
-    return isPageStructureAccessToolInput(input);
+    return PageStructureAccessContract.parse(input).ok;
   }
   if (
     toolName !== DESIGN_APPLY_TOOL_NAME &&

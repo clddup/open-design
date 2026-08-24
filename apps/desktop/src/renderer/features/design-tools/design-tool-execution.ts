@@ -60,11 +60,11 @@ import {
   INTERNAL_READ_IMAGE_SOURCE_TOOL_NAME,
   INTERNAL_UPDATE_IMAGE_TOOL_NAME,
   DesignApplyContract,
+  DesignPageContract,
   isDesignArrangeToolInput,
   isDesignComponentToolInput,
   isDesignFontToolInput,
   isDesignHierarchyToolInput,
-  isDesignPageToolInput,
   isDesignTextRangeToolInput,
   isDesignVectorToolInput,
   isExportSvgToolInput,
@@ -458,11 +458,12 @@ async function executeDesignToolRequestUnsafe(
     });
   }
 
-  if (
-    request.call.toolName === DESIGN_PAGE_TOOL_NAME &&
-    isDesignPageToolInput(request.call.input)
-  ) {
-    const input = request.call.input;
+  if (request.call.toolName === DESIGN_PAGE_TOOL_NAME) {
+    const parsed = DesignPageContract.parse(request.call.input);
+    if (!parsed.ok) {
+      throw new TypeError("Renderer received invalid canonical Page input");
+    }
+    const input = parsed.value;
     assertPageToolMutationTarget(input, request.context.mutationTarget);
     throwIfAgentGenerationAborted(options.signal);
     const safeToolCallId =
