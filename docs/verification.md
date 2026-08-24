@@ -1,10 +1,10 @@
 # OpenDesign 验证状态
 
-- 日期：2026-08-22
+- 日期：2026-08-24
 
 - 环境基线：Node.js 24.14.0、pnpm 10.32.1、Electron 43.3.0、Vite 8.2.1
 - 文档协议：`DesignDocument 1.44.0`
-- Agent 协议：`3.11.0`
+- Agent 协议：`3.12.0`
 - Geometry Service：`contract v13`
 - Text Layout Service：`contract v4`
 - Text Range Service：`contract v1`（DesignDocument rich-text runs 已接入）

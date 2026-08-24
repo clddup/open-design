@@ -951,6 +951,51 @@ describe("OpenDesign Pi tool adapter", () => {
     });
   });
 
+  it("uses input-aware approval copy and stops a denied plan confirmation", async () => {
+    const approvalTool: AgentToolDefinition = {
+      ...moveTool,
+      approval: "required",
+      approvalDenial: "cancel-run",
+      approvalPrompt: (input, request) => ({
+        title: `Confirm ${(input as { dx: number }).dx} targets`,
+        summary: `Review ${request.prompt}`,
+      }),
+    };
+    const result = await runPiToolLoop({
+      gateway: new RecordingGateway(
+        new MockModelGateway({
+          blocks: [
+            {
+              id: "scope_review",
+              type: "tool_call",
+              toolCallId: "scope_review_1",
+              name: approvalTool.name,
+              input: { dx: 4 },
+            },
+          ],
+          stopReason: "tool_use",
+        }),
+      ),
+      definitions: [approvalTool],
+      toolExecutor: neverToolExecutor(),
+      approvalPort: {
+        requestApproval: () => Promise.resolve("deny"),
+      },
+    });
+
+    expect(result.events).toContainEqual(
+      expect.objectContaining({
+        type: "approval.requested",
+        title: "Confirm 4 targets",
+        summary: "Review Move the layer",
+      }),
+    );
+    expect(result.events.at(-1)).toMatchObject({
+      type: "run.completed",
+      stopReason: "cancelled",
+    });
+  });
+
   it("reuses one allowed Run-scoped approval for later calls in the same Run", async () => {
     const approvalTool: AgentToolDefinition = {
       ...moveTool,

@@ -8,6 +8,7 @@ import type { AgentContinuationScheduler } from "./agent-continuation-scheduler.
 import type { AgentHost } from "./agent-host.js";
 import type { AgentReferenceHost } from "./agent-reference-host.js";
 import type { GlobalTaskCoordinator } from "./global-task-coordinator.js";
+import { resolveDeliveryScopeReview } from "./delivery-scope-review-policy.js";
 
 type RunStartRequest = Extract<AgentRequest, { type: "run.start" }>;
 
@@ -37,6 +38,9 @@ export async function handleAgentRunControlRequest(
     }
     if (request.initialDesignInspection !== undefined) {
       throw new TypeError("Renderer cannot supply initial design inspection");
+    }
+    if (request.deliveryScopeReview !== undefined) {
+      throw new TypeError("Renderer cannot supply delivery scope policy");
     }
     if (request.continuation === undefined) {
       for (const runId of dependencies.continuationScheduler.supersedeAutomaticContinuations(
@@ -80,9 +84,13 @@ export async function startAgentRun(
     modelProviderHost,
     referenceHost,
   } = dependencies;
-  continuationScheduler.registerRun(request);
+  const trustedRequest: RunStartRequest = {
+    ...request,
+    deliveryScopeReview: resolveDeliveryScopeReview(request),
+  };
+  continuationScheduler.registerRun(trustedRequest);
   try {
-    await globalTaskCoordinator.registerRun(request);
+    await globalTaskCoordinator.registerRun(trustedRequest);
     if (continuationScheduler.isCancellationRequested(request.runId)) {
       globalTaskCoordinator.handleAgentEvent(cancelledRun(request.runId));
       continuationScheduler.forgetRun(request.runId);
@@ -98,7 +106,7 @@ export async function startAgentRun(
         } else {
           initialDesignInspection =
             await dependencies.prepareInitialDesignInspection(
-              request,
+              trustedRequest,
               controller.signal,
             );
         }
@@ -116,10 +124,10 @@ export async function startAgentRun(
       continuationScheduler.forgetRun(request.runId);
       return false;
     }
-    referenceHost.registerRun(request);
+    referenceHost.registerRun(trustedRequest);
     conversationIdByRunId.set(request.runId, request.sessionId);
     agentHost.send({
-      ...request,
+      ...trustedRequest,
       ...(initialDesignInspection === undefined
         ? {}
         : { initialDesignInspection }),

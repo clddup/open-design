@@ -28,12 +28,14 @@ import type { ProjectHost } from "../project/project-host.js";
 import type { WorkspaceStore } from "../project/workspace-store.js";
 import {
   DESIGN_ARRANGE_TOOL_NAME,
+  designPlanBriefFidelity,
   designApplyRequiresPlan,
   activeVisualReferenceIds,
   designPlanComponentStrategy,
   designPlanReferenceStrategy,
   designPlanTargets,
   type DesignApplyToolInput,
+  type DesignDeliveryScope,
   type DesignComponentToolInput,
   type DesignPlanTarget,
   type DesignPlanToolInput,
@@ -115,6 +117,7 @@ export class GlobalTaskCoordinator {
       generationMode: DesignGenerationMode;
       modelSelection: ModelSelection;
       imageAttachments: AgentImageAttachment[];
+      deliveryScopeReview: "direct" | "required";
     }
   >();
   readonly #designPlansByRunId = new Map<string, DesignWorkflowState>();
@@ -132,6 +135,15 @@ export class GlobalTaskCoordinator {
       completedActions: Set<string>;
     }
   >();
+  readonly #deliveryScopeAuthorizationsByRunId = new Map<
+    string,
+    {
+      approvalId: string;
+      toolCallId: string;
+      scope: DesignDeliveryScope;
+    }
+  >();
+  readonly #deliveryScopesByRunId = new Map<string, DesignDeliveryScope>();
 
   constructor(
     private readonly projectHost: ProjectHost,
@@ -238,6 +250,7 @@ export class GlobalTaskCoordinator {
       scope: structuredClone(request.scope),
       mutationTarget: structuredClone(request.mutationTarget),
       generationMode: request.generationMode ?? "thorough",
+      deliveryScopeReview: request.deliveryScopeReview ?? "direct",
       prompt: request.prompt,
       modelSelection: structuredClone(request.modelSelection),
       imageAttachments: (request.attachments ?? [])
@@ -272,6 +285,83 @@ export class GlobalTaskCoordinator {
     const binding = this.#toolBindingsByRunId.get(context.runId);
     if (!binding) throw new Error("Design brief requires an active Run");
     return binding.prompt;
+  }
+
+  grantDeliveryScopeAuthorization(
+    runId: string,
+    approvalId: string,
+    toolCallId: string,
+    scope: DesignDeliveryScope,
+  ): void {
+    if (!this.#toolBindingsByRunId.has(runId)) {
+      throw new Error("Delivery scope approval requires an active Run");
+    }
+    this.#deliveryScopeAuthorizationsByRunId.set(runId, {
+      approvalId,
+      toolCallId,
+      scope: structuredClone(scope),
+    });
+  }
+
+  revokeDeliveryScopeAuthorization(runId: string, approvalId: string): void {
+    if (
+      this.#deliveryScopeAuthorizationsByRunId.get(runId)?.approvalId ===
+      approvalId
+    ) {
+      this.#deliveryScopeAuthorizationsByRunId.delete(runId);
+    }
+  }
+
+  hasDeliveryScopeAuthorization(
+    runId: string,
+    toolCallId: string,
+    scope: DesignDeliveryScope,
+  ): boolean {
+    const authorization = this.#deliveryScopeAuthorizationsByRunId.get(runId);
+    return (
+      authorization?.toolCallId === toolCallId &&
+      sameValue(authorization.scope, scope)
+    );
+  }
+
+  recordDeliveryScopeReviewed(
+    context: TrustedToolContext,
+    toolCallId: string,
+    scope: DesignDeliveryScope,
+  ): DesignDeliveryScope {
+    this.assertDesignToolContext(context);
+    if (this.#deliveryScopesByRunId.has(context.runId)) {
+      throw new Error(
+        "design_workflow.delivery_scope_already_reviewed: Delivery scope is already confirmed for this Run; start a new user-directed Run to revise it",
+      );
+    }
+    if (!this.hasDeliveryScopeAuthorization(context.runId, toolCallId, scope)) {
+      throw new Error(
+        "design_workflow.delivery_scope_approval_required: The delivery plan must be approved by the user before execution",
+      );
+    }
+    if (this.#designPlansByRunId.has(context.runId)) {
+      throw new Error(
+        "design_workflow.delivery_scope_late: Review delivery scope before defining an executable design Plan or writing canvas content",
+      );
+    }
+    const accepted = structuredClone(scope);
+    this.#deliveryScopesByRunId.set(context.runId, accepted);
+    this.#deliveryScopeAuthorizationsByRunId.delete(context.runId);
+    return structuredClone(accepted);
+  }
+
+  assertDeliveryScopeReviewed(context: TrustedToolContext): void {
+    this.assertDesignToolContext(context);
+    const binding = this.#toolBindingsByRunId.get(context.runId);
+    if (
+      binding?.deliveryScopeReview === "required" &&
+      !this.#deliveryScopesByRunId.has(context.runId)
+    ) {
+      throw new Error(
+        "design_workflow.delivery_scope_review_required: This broad brief requires a user-confirmed delivery plan before Page creation, executable planning, or canvas writes",
+      );
+    }
   }
 
   grantPageStructureAccess(
@@ -346,6 +436,7 @@ export class GlobalTaskCoordinator {
     input: { action: string; pageId?: string },
   ): void {
     this.assertDesignToolContext(context);
+    this.assertDeliveryScopeReviewed(context);
     const binding = this.#toolBindingsByRunId.get(context.runId);
     if (!binding) throw new Error("Page tool requires an active Run");
     if (
@@ -437,6 +528,12 @@ export class GlobalTaskCoordinator {
     const binding = this.#toolBindingsByRunId.get(context.runId);
     if (!binding) throw new Error("Design plan requires an active Run");
     const targets = designPlanTargets(plan);
+    assertPlanMatchesReviewedScope(
+      binding.deliveryScopeReview,
+      this.#deliveryScopesByRunId.get(context.runId),
+      plan,
+      targets,
+    );
     const pageAccess = this.#pageStructureAccessByRunId.get(context.runId);
     if (
       pageAccess?.actions.has("create-page") &&
@@ -1543,6 +1640,8 @@ export class GlobalTaskCoordinator {
         this.#generatedRasterRolesByRunId.delete(runId);
         this.#inspectionsByRunId.delete(runId);
         this.#pageStructureAccessByRunId.delete(runId);
+        this.#deliveryScopeAuthorizationsByRunId.delete(runId);
+        this.#deliveryScopesByRunId.delete(runId);
       }
       return;
     }
@@ -1569,6 +1668,8 @@ export class GlobalTaskCoordinator {
       this.#generatedRasterRolesByRunId.delete(runId);
       this.#inspectionsByRunId.delete(runId);
       this.#pageStructureAccessByRunId.delete(runId);
+      this.#deliveryScopeAuthorizationsByRunId.delete(runId);
+      this.#deliveryScopesByRunId.delete(runId);
     }
   }
 
@@ -1586,6 +1687,8 @@ export class GlobalTaskCoordinator {
       this.#generatedRasterRolesByRunId.delete(runId);
       this.#inspectionsByRunId.delete(runId);
       this.#pageStructureAccessByRunId.delete(runId);
+      this.#deliveryScopeAuthorizationsByRunId.delete(runId);
+      this.#deliveryScopesByRunId.delete(runId);
       this.#touchConversation(task.conversationId, timestamp);
     }
   }
@@ -2580,6 +2683,89 @@ function sameScope(left: SelectionScope, right: SelectionScope): boolean {
       (nodeId, index) => nodeId === right.selectedNodeIds[index],
     )
   );
+}
+
+function assertPlanMatchesReviewedScope(
+  reviewMode: "direct" | "required",
+  scope: DesignDeliveryScope | undefined,
+  plan: DesignPlanToolInput,
+  targets: readonly DesignPlanTarget[],
+): void {
+  if (scope === undefined) {
+    if (reviewMode === "required") {
+      throw new Error(
+        "design_workflow.delivery_scope_review_required: This broad brief requires a user-confirmed delivery plan before Page creation, executable planning, or canvas writes",
+      );
+    }
+    return;
+  }
+  const mismatch = (message: string): never => {
+    throw new Error(
+      `design_workflow.delivery_scope_mismatch: ${message}. Preserve the user-confirmed delivery targets exactly; ask for a revised confirmation instead of silently shrinking or expanding scope`,
+    );
+  };
+  if (plan.deliverable !== scope.deliverable) {
+    mismatch(
+      `Deliverable ${plan.deliverable} does not match confirmed ${scope.deliverable}`,
+    );
+  }
+  if (plan.objective !== scope.objective) {
+    mismatch(
+      "Executable Plan objective does not match the confirmed objective",
+    );
+  }
+  if (targets.length !== scope.targets.length) {
+    mismatch(
+      `Executable Plan has ${targets.length} targets but ${scope.targets.length} were confirmed`,
+    );
+  }
+  for (const [index, confirmed] of scope.targets.entries()) {
+    const target = targets[index];
+    if (
+      !target ||
+      target.targetId !== confirmed.targetId ||
+      target.label !== confirmed.label ||
+      target.objective !== confirmed.objective
+    ) {
+      mismatch(`Target ${index + 1} does not match ${confirmed.label}`);
+    }
+  }
+  const pageIds = new Set(targets.map((target) => target.pageId));
+  if (
+    scope.pageStrategy === "separate-pages" &&
+    pageIds.size !== targets.length
+  ) {
+    mismatch("Confirmed separate-page targets do not use distinct Pages");
+  }
+  if (scope.pageStrategy === "current-page-artboards" && pageIds.size !== 1) {
+    mismatch("Confirmed current-Page artboards were spread across Pages");
+  }
+  const fidelity = designPlanBriefFidelity(plan);
+  if (!fidelity) mismatch("Executable Plan is missing brief fidelity");
+  const required = new Set(fidelity.requiredContent);
+  for (const content of scope.targets.flatMap(
+    (target) => target.requiredContent,
+  )) {
+    if (!required.has(content)) {
+      mismatch(`Confirmed required content ${content} is missing`);
+    }
+  }
+  const prohibited = new Set(fidelity.prohibitedAdditions);
+  for (const exclusion of scope.exclusions) {
+    if (!prohibited.has(exclusion)) {
+      mismatch(`Confirmed exclusion ${exclusion} is missing`);
+    }
+  }
+  const assumptions = new Set(fidelity.assumptions);
+  for (const assumption of scope.assumptions) {
+    if (!assumptions.has(assumption)) {
+      mismatch(`Confirmed assumption ${assumption} is missing`);
+    }
+  }
+}
+
+function sameValue(left: unknown, right: unknown): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
 }
 
 function nodeBelongsToPage(

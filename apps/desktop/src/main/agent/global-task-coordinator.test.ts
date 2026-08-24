@@ -2607,6 +2607,94 @@ describe("GlobalTaskCoordinator", () => {
     store.close();
   });
 
+  it("binds an approved broad-brief scope to the executable target ledger", async () => {
+    const { store, host, file, opened, pageId } = await setup();
+    const coordinator = new GlobalTaskCoordinator(host, store);
+    await coordinator.registerRun({
+      type: "run.start",
+      runId: "run_reviewed_scope",
+      sessionId: "conversation_mobile",
+      prompt: "Design the complete Home and Profile product brief",
+      documentId: file.documentId,
+      revision: opened.document.revision,
+      modelSelection,
+      generationMode: "fast",
+      deliveryScopeReview: "required",
+      scope: { kind: "page", pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page", pageId },
+    });
+    const context = {
+      runId: "run_reviewed_scope",
+      sessionId: "conversation_mobile",
+      documentId: file.documentId,
+      revision: opened.document.revision,
+      scope: { kind: "page" as const, pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page" as const, pageId },
+    };
+    coordinator.recordDocumentInspection(
+      context,
+      inspectionResult(opened.document, pageId),
+    );
+    const plan = multiTargetPlan(pageId);
+    expect(() => coordinator.registerDesignPlan(context, plan)).toThrow(
+      "delivery_scope_review_required",
+    );
+
+    const reviewedScope = {
+      version: 1 as const,
+      deliverable: plan.deliverable,
+      objective: plan.objective,
+      pageStrategy: "current-page-artboards" as const,
+      targets: plan.targets.map((target) => ({
+        targetId: target.targetId,
+        label: target.label,
+        objective: target.objective,
+        requiredContent: ["Home and Profile screens"],
+      })),
+      exclusions: ["No unrequested product capability"],
+      assumptions: ["Use an iOS safe area"],
+    };
+    coordinator.grantDeliveryScopeAuthorization(
+      context.runId,
+      "approval_scope",
+      "scope_call",
+      reviewedScope,
+    );
+    coordinator.recordDeliveryScopeReviewed(
+      context,
+      "scope_call",
+      reviewedScope,
+    );
+    expect(
+      coordinator.hasDeliveryScopeAuthorization(
+        context.runId,
+        "scope_call",
+        reviewedScope,
+      ),
+    ).toBe(false);
+    expect(() =>
+      coordinator.recordDeliveryScopeReviewed(
+        context,
+        "scope_call",
+        reviewedScope,
+      ),
+    ).toThrow("delivery_scope_already_reviewed");
+    expect(() =>
+      coordinator.registerDesignPlan(context, {
+        ...plan,
+        targets: plan.targets.slice(0, 1),
+      }),
+    ).toThrow("delivery_scope_mismatch");
+    expect(coordinator.registerDesignPlan(context, plan)).toMatchObject({
+      status: "accepted",
+      planRevision: 1,
+    });
+    expect(coordinator.getDeliveryLedger(context.runId)?.targets).toHaveLength(
+      2,
+    );
+    store.close();
+  });
+
   it("versions plan amendments while preserving material target identities", async () => {
     const { store, host, file, opened, pageId } = await setup();
     const coordinator = new GlobalTaskCoordinator(host, store);

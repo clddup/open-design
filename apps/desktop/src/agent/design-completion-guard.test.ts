@@ -8,6 +8,7 @@ import {
   DESIGN_ARRANGE_TOOL_NAME,
   DESIGN_CAPTURE_TOOL_NAME,
   DESIGN_CHECKPOINT_TOOL_NAME,
+  DESIGN_DELIVERY_SCOPE_TOOL_NAME,
   DESIGN_FIRST_SLICE_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
@@ -48,6 +49,18 @@ const inspection: AgentToolCallRecord = {
   input: {},
   status: "completed",
   revision: 4,
+};
+
+const deliveryScope: AgentToolCallRecord = {
+  toolCallId: "scope_1",
+  toolName: DESIGN_DELIVERY_SCOPE_TOOL_NAME,
+  input: {},
+  status: "completed",
+  result: {
+    deliveryScope: {
+      targets: [{ targetId: "target_home" }, { targetId: "target_profile" }],
+    },
+  },
 };
 
 const firstCapture: AgentToolCallRecord = {
@@ -187,6 +200,41 @@ function deliveryResult(profileStatus: "pending" | "verified") {
 describe("design completion guard", () => {
   it("allows non-material conversations to finish normally", () => {
     expect(reviewDesignCompletion(context([]))).toEqual({ allow: true });
+  });
+
+  it("requires and enforces a user-confirmed scope for a broad brief", () => {
+    const missing = reviewDesignCompletion(
+      context([], undefined, { deliveryScopeReview: "required" }),
+    );
+    expect(missing.allow).toBe(false);
+    if (missing.allow) throw new Error("Expected delivery scope review");
+    expect(missing.message).toContain("opendesign_review_delivery_scope");
+
+    const allTargetsVerified = {
+      ...finalCapture,
+      toolCallId: "capture_scope_verified",
+      result: deliveryResult("verified"),
+    };
+    expect(
+      reviewDesignCompletion(
+        context([deliveryScope, allTargetsVerified], undefined, {
+          deliveryScopeReview: "required",
+        }),
+      ),
+    ).toEqual({ allow: true });
+
+    const reducedScope = structuredClone(deliveryScope);
+    reducedScope.result = {
+      deliveryScope: { targets: [{ targetId: "target_home" }] },
+    };
+    const mismatch = reviewDesignCompletion(
+      context([reducedScope, allTargetsVerified], undefined, {
+        deliveryScopeReview: "required",
+      }),
+    );
+    expect(mismatch.allow).toBe(false);
+    if (mismatch.allow) throw new Error("Expected scope/ledger mismatch");
+    expect(mismatch.message).toContain("does not match");
   });
 
   it("rejects a completion claim when planning never produced a design write", () => {

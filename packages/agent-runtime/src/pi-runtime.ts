@@ -21,6 +21,7 @@ import {
 import { PiRunEventAdapter } from "./pi-run-event-adapter.js";
 import { normalizeSessionHistory } from "./session-history.js";
 import {
+  deliveryScopeReviewToolDefinitions,
   disclosedToolDefinitions,
   isSafeModelDisclosure,
 } from "./tool-disclosure.js";
@@ -126,13 +127,19 @@ export class OpenDesignPiRuntime {
       );
       const toolDefinitions = await this.#loadSafeTools();
       const initialModelToolSurface = resolveInitialModelToolSurface(request);
-      const initialToolDefinitions = disclosedToolDefinitions(
-        toolDefinitions,
+      const initialPhase =
         request.initialDesignInspection === undefined
           ? "bootstrap"
-          : "host-inspected",
-        { surface: initialModelToolSurface },
-      );
+          : "host-inspected";
+      const initialToolDefinitions =
+        request.deliveryScopeReview === "required"
+          ? deliveryScopeReviewToolDefinitions(toolDefinitions, initialPhase, {
+              surface: initialModelToolSurface,
+            })
+          : disclosedToolDefinitions(toolDefinitions, initialPhase, {
+              surface: initialModelToolSurface,
+              deliveryScopeReview: "direct",
+            });
       const systemPrompt =
         (initialModelToolSurface === "new-design"
           ? (this.options.newDesignSystemPromptForRequest?.(request) ??
@@ -306,7 +313,12 @@ function isSafeToolDefinition(tool: AgentToolDefinition): boolean {
       tool.approvalScope === "call" ||
       tool.approvalScope === "run") &&
     !(tool.approvalScope === "run" && tool.approval !== "required") &&
+    (tool.approvalDenial === undefined ||
+      tool.approvalDenial === "continue" ||
+      tool.approvalDenial === "cancel-run") &&
+    !(tool.approvalDenial === "cancel-run" && tool.approval !== "required") &&
     (tool.approvalPrompt === undefined ||
+      typeof tool.approvalPrompt === "function" ||
       (typeof tool.approvalPrompt.title === "string" &&
         typeof tool.approvalPrompt.summary === "string" &&
         tool.approvalPrompt.title.length > 0 &&

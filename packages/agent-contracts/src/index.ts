@@ -3,7 +3,7 @@ import { Value } from "@sinclair/typebox/value";
 import { AgentContinuationSchemas } from "./continuation.js";
 export type { AgentRunContinuation } from "./continuation.js";
 
-export const AGENT_PROTOCOL_VERSION = "3.11.0" as const;
+export const AGENT_PROTOCOL_VERSION = "3.12.0" as const;
 export const MAX_SELECTED_NODE_IDS = 512;
 export const MAX_INITIAL_DESIGN_INSPECTION_CHARACTERS = 60_000;
 export const MAX_AGENT_ATTACHMENTS = 6;
@@ -19,6 +19,10 @@ const RevisionSchema = Type.Integer({ minimum: 0 });
 const SequenceSchema = Type.Integer({ minimum: 1 });
 const ProgressSchema = Type.Number({ minimum: 0, maximum: 1 });
 const EmptyObjectSchema = Type.Object({}, { additionalProperties: false });
+const DeliveryScopeReviewSchema = Type.Union([
+  Type.Literal("direct"),
+  Type.Literal("required"),
+]);
 const FailureIssueScalarSchema = Type.Union([
   Type.String({ maxLength: 4_000 }),
   Type.Number(),
@@ -869,6 +873,7 @@ export const AgentRequestSchema = Type.Union([
       mutationTarget: DesignMutationTargetSchema,
       modelSelection: ModelSelectionSchema,
       generationMode: Type.Optional(DesignGenerationModeSchema),
+      deliveryScopeReview: Type.Optional(DeliveryScopeReviewSchema),
       modelContext: Type.Optional(AgentModelContextSchema),
       initialDesignInspection: Type.Optional(
         AgentInitialDesignInspectionSchema,
@@ -1083,6 +1088,7 @@ export type AssistantTimelineBlock = Static<
 export type SessionTimelineItem = Static<typeof SessionTimelineItemSchema>;
 export type AgentAttachment = Static<typeof AgentAttachmentSchema>;
 export type DesignGenerationMode = Static<typeof DesignGenerationModeSchema>;
+export type DeliveryScopeReview = Static<typeof DeliveryScopeReviewSchema>;
 export type AgentImageAttachment = Static<typeof AgentImageAttachmentSchema>;
 export type AgentDocumentAttachment = Static<
   typeof AgentDocumentAttachmentSchema

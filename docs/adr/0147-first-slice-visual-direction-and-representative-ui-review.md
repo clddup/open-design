@@ -52,7 +52,7 @@
 - 首轮固定 system + tool context 从约 30 KB 增至约 32.8 KB，测试保留 34 KB 的有界上限。增加的是模型必须作出的简短设计决策，不恢复完整 Plan-only turn，也不能为了旧任意字节线再次删除关键语义。
 - 新建 UI 的首个 target 增加一次独立 draft Critic 请求和中间一次真实 refinement，但首个材料 revision 仍先显示；refined capture 与后续 targets 不重复 Provider Critic。相比 draft/final 双 Critic 少一次最昂贵的串行 Provider 往返。
 - 本决策能阻止“结构合法即审美完成”，不能保证任意 Provider 都具有顶级品牌设计能力。固定 UI/Logo 盲评和打包产品 `T1/T2/T_all` 仍是最终证据。
-- 长 PRD 的范围遗漏仍是独立问题：completion guard 当前只能检查已注册 Plan target。用户可确认的 Delivery Plan / scope contract 后续单独解决，不能用本审美切片冒充范围完整性。
+- 长 PRD 的范围遗漏由 ADR-0148 的用户确认 Delivery Plan 单独解决；该范围门禁不能冒充审美质量，本决策也不能冒充完整交付范围。
 
 ## 验证
 

@@ -1,5 +1,10 @@
 import { DESIGN_BOOTSTRAP_APPLY_INPUT_SCHEMA } from "./design-bootstrap-apply-schema";
 import {
+  DeliveryScopeContract,
+  DESIGN_DELIVERY_SCOPE_TOOL_INPUT_SCHEMA,
+  deliveryScopeApprovalPrompt,
+} from "./design-delivery-scope";
+import {
   DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA,
   FirstSliceContract,
 } from "./design-first-slice-tool";
@@ -22,6 +27,7 @@ import {
   DESIGN_CAPTURE_TOOL_NAME,
   DESIGN_CHECKPOINT_TOOL_NAME,
   DESIGN_COMPONENT_TOOL_NAME,
+  DESIGN_DELIVERY_SCOPE_TOOL_NAME,
   DESIGN_FIRST_SLICE_TOOL_NAME,
   DESIGN_FONT_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
@@ -108,6 +114,11 @@ export {
 } from "./design-apply-input";
 export { DESIGN_BOOTSTRAP_APPLY_INPUT_SCHEMA } from "./design-bootstrap-apply-schema";
 export type { DesignBriefFidelity } from "./design-brief-fidelity";
+export {
+  DeliveryScopeContract,
+  DESIGN_DELIVERY_SCOPE_TOOL_INPUT_SCHEMA,
+} from "./design-delivery-scope";
+export type { DesignDeliveryScope } from "./design-delivery-scope";
 export {
   DESIGN_TARGET_QUALITY_PROFILE_SCHEMA,
   isDesignTargetQualityProfile,
@@ -294,6 +305,26 @@ export {
 export type { DesignCheckpointToolInput } from "./design-agent-checkpoint";
 export * from "./design-agent-tool-names";
 export const DESIGN_AGENT_TOOL_SPECS = [
+  {
+    name: DESIGN_DELIVERY_SCOPE_TOOL_NAME,
+    modelDisclosure: {
+      bootstrap: "available" as const,
+      beforePlan: "available" as const,
+      role: "plan" as const,
+      surfaces: ["general" as const, "new-design" as const],
+      whenDeliveryScopeReview: "required" as const,
+    },
+    description:
+      "For a broad product brief, document attachment, four-or-more deliverables, or a host-required scope review, propose the complete user-visible delivery plan before Page creation, design planning, or canvas writes. Each target must be one independently verifiable screen, flow, visual direction, or asset; do not collapse requested product areas into representative pages and do not split headings, cards, or decorative regions into targets. Include concise required content, exclusions, assumptions, and whether targets need separate Pages. The user sees the actual target list and must confirm it. A denial ends this Run without changing the canvas; submit a revised plan only after a new user message. Small focused requests execute directly and should not call this tool.",
+    inputSchema: DESIGN_DELIVERY_SCOPE_TOOL_INPUT_SCHEMA,
+    risk: "read" as const,
+    approval: "required" as const,
+    approvalScope: "call" as const,
+    approvalDenial: "cancel-run" as const,
+    approvalPrompt: deliveryScopeApprovalPrompt,
+    validateInputIssues: (input: unknown) =>
+      DeliveryScopeContract.issues(input),
+  },
   {
     name: DESIGN_FIRST_SLICE_TOOL_NAME,
     modelDisclosure: {
@@ -631,6 +662,9 @@ export function validateDesignAgentToolInput(
 ): boolean {
   if (toolName === DESIGN_FIRST_SLICE_TOOL_NAME) {
     return FirstSliceContract.parse(input).ok;
+  }
+  if (toolName === DESIGN_DELIVERY_SCOPE_TOOL_NAME) {
+    return DeliveryScopeContract.parse(input).ok;
   }
   if (toolName === DESIGN_CAPABILITIES_TOOL_NAME) {
     return isRecord(input) && Object.keys(input).length === 0;

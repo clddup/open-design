@@ -34,6 +34,7 @@ import {
 } from "./tool-execution-semantics.js";
 import { selectSafeDefinitions } from "./tool-definition-safety.js";
 import {
+  deliveryScopeReviewToolDefinitions,
   disclosedToolDefinitions,
   resolveModelToolDisclosurePhase,
 } from "./tool-disclosure.js";
@@ -139,6 +140,7 @@ export class OpenDesignPiToolAdapter {
   readonly #maxToolCalls: number;
   readonly #now: () => Date;
   readonly #records: AgentToolCallRecord[] = [];
+  readonly #scopeReviewTools: AgentTool[];
   readonly #runApprovals = new Set<string>();
   readonly #request: AgentRunRequest;
   readonly #safeDefinitions: readonly AgentToolDefinition[];
@@ -183,7 +185,10 @@ export class OpenDesignPiToolAdapter {
     this.#expandedTools = disclosedToolDefinitions(
       safeDefinitions,
       "expanded",
-      { surface: "general" },
+      {
+        surface: "general",
+        deliveryScopeReview: "direct",
+      },
     ).map((modelDefinition) => {
       const executionDefinition = this.#definitions.get(modelDefinition.name);
       if (executionDefinition === undefined) {
@@ -196,7 +201,10 @@ export class OpenDesignPiToolAdapter {
     this.#continuationTools = disclosedToolDefinitions(
       safeDefinitions,
       "continuation",
-      { surface: this.#initialModelToolSurface },
+      {
+        surface: this.#initialModelToolSurface,
+        deliveryScopeReview: "direct",
+      },
     ).map((modelDefinition) => {
       const executionDefinition = this.#definitions.get(modelDefinition.name);
       if (executionDefinition === undefined) {
@@ -209,7 +217,10 @@ export class OpenDesignPiToolAdapter {
     this.#bootstrapTools = disclosedToolDefinitions(
       safeDefinitions,
       "bootstrap",
-      { surface: this.#initialModelToolSurface },
+      {
+        surface: this.#initialModelToolSurface,
+        deliveryScopeReview: "direct",
+      },
     ).map((modelDefinition) => {
       const executionDefinition = this.#definitions.get(modelDefinition.name);
       if (executionDefinition === undefined) {
@@ -222,7 +233,10 @@ export class OpenDesignPiToolAdapter {
     this.#hostInspectedTools = disclosedToolDefinitions(
       safeDefinitions,
       "host-inspected",
-      { surface: this.#initialModelToolSurface },
+      {
+        surface: this.#initialModelToolSurface,
+        deliveryScopeReview: "direct",
+      },
     ).map((modelDefinition) => {
       const executionDefinition = this.#definitions.get(modelDefinition.name);
       if (executionDefinition === undefined) {
@@ -235,12 +249,28 @@ export class OpenDesignPiToolAdapter {
     this.#inspectedTools = disclosedToolDefinitions(
       safeDefinitions,
       "inspected",
-      { surface: this.#initialModelToolSurface },
+      {
+        surface: this.#initialModelToolSurface,
+        deliveryScopeReview: "direct",
+      },
     ).map((modelDefinition) => {
       const executionDefinition = this.#definitions.get(modelDefinition.name);
       if (executionDefinition === undefined) {
         throw new Error(
           `Inspected tool ${modelDefinition.name} is missing its trusted definition`,
+        );
+      }
+      return this.#createTool(executionDefinition, modelDefinition);
+    });
+    this.#scopeReviewTools = deliveryScopeReviewToolDefinitions(
+      safeDefinitions,
+      this.#initialInspection ? "host-inspected" : "bootstrap",
+      { surface: this.#initialModelToolSurface },
+    ).map((modelDefinition) => {
+      const executionDefinition = this.#definitions.get(modelDefinition.name);
+      if (executionDefinition === undefined) {
+        throw new Error(
+          `Scope review tool ${modelDefinition.name} is missing its trusted definition`,
         );
       }
       return this.#createTool(executionDefinition, modelDefinition);
@@ -264,6 +294,16 @@ export class OpenDesignPiToolAdapter {
   }
 
   get modelTools(): readonly AgentTool[] {
+    if (
+      this.#request.deliveryScopeReview === "required" &&
+      !this.#records.some(
+        (record) =>
+          this.#definitions.get(record.toolName)?.modelDisclosure
+            ?.whenDeliveryScopeReview === "required",
+      )
+    ) {
+      return this.#scopeReviewTools;
+    }
     const phase = resolveModelToolDisclosurePhase(
       this.#safeDefinitions,
       this.#records,
@@ -562,14 +602,19 @@ export class OpenDesignPiToolAdapter {
     }
 
     const approvalId = `${active.toolCallId}_approval`;
+    const prompt = resolveApprovalPrompt(
+      definition.approvalPrompt,
+      context.args,
+      this.#request,
+      definition.name,
+      definition.risk,
+    );
     const approval = {
       approvalId,
       toolCallId: active.toolCallId,
       toolName: active.toolName,
-      title: definition.approvalPrompt?.title ?? `Allow ${active.toolName}`,
-      summary:
-        definition.approvalPrompt?.summary ??
-        `Allow this ${definition.risk} tool for the current run scope.`,
+      title: prompt.title,
+      summary: prompt.summary,
       risk: definition.risk,
     } satisfies ApprovalRequest;
     await this.#lifecycle.approvalRequested(approval);
@@ -602,10 +647,14 @@ export class OpenDesignPiToolAdapter {
       );
     }
     if (decision === "deny") {
+      if (definition.approvalDenial === "cancel-run") {
+        this.#forcedStopReason = "cancelled";
+      }
       return this.#block(
         active.toolCallId,
         "approval_denied",
         "Host denied this tool call",
+        definition.approvalDenial === "cancel-run",
       );
     }
     if (definition.approvalScope === "run") {
@@ -1005,6 +1054,32 @@ function modelResultText(value: unknown): string {
 
 function modelFailureText(failure: TrustedToolFailure): string {
   return JSON.stringify({ ok: false, error: failure });
+}
+
+function resolveApprovalPrompt(
+  prompt: AgentToolDefinition["approvalPrompt"],
+  input: unknown,
+  request: Readonly<AgentRunRequest>,
+  toolName: string,
+  risk: ToolRisk,
+): { title: string; summary: string } {
+  const resolved =
+    typeof prompt === "function"
+      ? prompt(input, request)
+      : (prompt ?? {
+          title: `Allow ${toolName}`,
+          summary: `Allow this ${risk} tool for the current run scope.`,
+        });
+  if (
+    typeof resolved.title !== "string" ||
+    resolved.title.length < 1 ||
+    resolved.title.length > 2_000 ||
+    typeof resolved.summary !== "string" ||
+    resolved.summary.length > 20_000
+  ) {
+    throw new TypeError(`Tool ${toolName} produced an invalid approval prompt`);
+  }
+  return resolved;
 }
 
 function errorMessage(error: unknown): string {

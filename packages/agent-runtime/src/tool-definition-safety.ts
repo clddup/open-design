@@ -33,7 +33,13 @@ function isSafeDefinition(definition: AgentToolDefinition): boolean {
       definition.approvalScope === "run") &&
     (definition.approvalScope !== "run" ||
       definition.approval === "required") &&
+    (definition.approvalDenial === undefined ||
+      definition.approvalDenial === "continue" ||
+      definition.approvalDenial === "cancel-run") &&
+    (definition.approvalDenial !== "cancel-run" ||
+      definition.approval === "required") &&
     (prompt === undefined ||
+      typeof prompt === "function" ||
       (typeof prompt.title === "string" &&
         typeof prompt.summary === "string" &&
         prompt.title.length > 0 &&

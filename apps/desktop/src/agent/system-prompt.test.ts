@@ -102,6 +102,23 @@ describe("OpenDesign Agent system prompt", () => {
     expect(thorough).toContain("first meaningful real revision immediately");
   });
 
+  it("requires user-confirmed Delivery Plans only for host-selected broad briefs", () => {
+    const reviewed = agentSystemPromptForRequest({
+      prompt: "根据 PRD 设计完整产品",
+      deliveryScopeReview: "required",
+    });
+    expect(reviewed).toContain("REVIEW REQUIRED");
+    expect(reviewed).toContain("opendesign_review_delivery_scope");
+    expect(reviewed).toContain("Do not replace requested product areas");
+
+    const direct = newDesignSystemPromptForRequest({
+      prompt: "设计一个登录页面",
+      deliveryScopeReview: "direct",
+    });
+    expect(direct).toContain("delivery-scope policy: DIRECT");
+    expect(direct).toContain("do not add a planning approval step");
+  });
+
   it("binds visible design content to the user's language without translating brands", () => {
     expect(
       inferDesignContentLanguage(

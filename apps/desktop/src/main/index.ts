@@ -42,6 +42,7 @@ import { prepareInitialDesignInspection } from "./agent/agent-initial-design-ins
 import { AgentIpcRouter } from "./agent/agent-ipc-router";
 import { AgentRunCoordinator } from "./agent/agent-run-coordinator";
 import { handleDesignPlanTool } from "./agent/design-plan-tool-handler";
+import { handleDeliveryScopeTool } from "./agent/delivery-scope-tool-handler";
 import { handleDesignFirstSliceTool } from "./agent/design-first-slice-tool-handler";
 import {
   handleDesignCheckpointTool,
@@ -112,6 +113,7 @@ import {
   DESIGN_CAPTURE_TOOL_NAME,
   DESIGN_CHECKPOINT_TOOL_NAME,
   DESIGN_COMPONENT_TOOL_NAME,
+  DESIGN_DELIVERY_SCOPE_TOOL_NAME,
   DESIGN_FONT_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
@@ -130,6 +132,7 @@ import {
   INTERNAL_READ_IMAGE_SOURCE_TOOL_NAME,
   GENERATE_IMAGE_TOOL_NAME,
   DesignApplyContract,
+  DeliveryScopeContract,
   GenerateImageContract,
   ReadImageContract,
   isDesignComponentToolInput,
@@ -1026,6 +1029,7 @@ async function startDesktopApplication(
             "Page structure access was not approved for this Run",
           );
         }
+        globalTaskCoordinator.assertDeliveryScopeReviewed(context);
         return {
           content: {
             ok: true,
@@ -1035,6 +1039,9 @@ async function startDesktopApplication(
             actions: call.input.actions,
           },
         };
+      }
+      if (call.toolName === DESIGN_DELIVERY_SCOPE_TOOL_NAME) {
+        return handleDeliveryScopeTool(globalTaskCoordinator, call, context);
       }
       if (call.toolName === DESIGN_FIRST_SLICE_TOOL_NAME) {
         return await handleFirstSliceCheckpoint(
@@ -1797,6 +1804,18 @@ async function startDesktopApplication(
       return result;
     },
     isPreauthorized: (call, context) => {
+      if (call.toolName === DESIGN_DELIVERY_SCOPE_TOOL_NAME) {
+        const parsed = DeliveryScopeContract.parse(call.input);
+        return (
+          parsed.ok &&
+          (globalTaskCoordinator?.hasDeliveryScopeAuthorization(
+            context.runId,
+            call.toolCallId,
+            parsed.value,
+          ) ??
+            false)
+        );
+      }
       if (
         call.toolName !== PAGE_STRUCTURE_ACCESS_TOOL_NAME ||
         !isPageStructureAccessToolInput(call.input)

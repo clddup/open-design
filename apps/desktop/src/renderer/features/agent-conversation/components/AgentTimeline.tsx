@@ -7,7 +7,10 @@ import type { ModelSelection } from "@opendesign/model-gateway";
 import type { ConversationDescriptor } from "@opendesign/workspace-contracts";
 import { Button, DesktopSelect, Icon, IconButton } from "@opendesign/ui";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { PAGE_STRUCTURE_ACCESS_TOOL_NAME } from "@/shared/design-agent-tools";
+import {
+  DESIGN_DELIVERY_SCOPE_TOOL_NAME,
+  PAGE_STRUCTURE_ACCESS_TOOL_NAME,
+} from "@/shared/design-agent-tools";
 import { formatBytes, isImageAttachment } from "../attachment-format";
 import {
   projectAgentTimeline,
@@ -92,6 +95,66 @@ function ReasoningDisclosure({
       <p>{item.reasoning}</p>
       <small>{t("agent.reasoningSummaryNotice")}</small>
     </details>
+  );
+}
+
+function ApprovalCard({
+  approvalResourceName,
+  item,
+  onResolve,
+  resolving,
+  t,
+}: {
+  approvalResourceName?: string;
+  item: AgentTimelineItem;
+  onResolve: (decision: "allow_once" | "deny") => void;
+  resolving: boolean;
+  t: Translate;
+}) {
+  const pageStructure = item.toolName === PAGE_STRUCTURE_ACCESS_TOOL_NAME;
+  const deliveryScope = item.toolName === DESIGN_DELIVERY_SCOPE_TOOL_NAME;
+  const title = pageStructure
+    ? t("agent.pageStructureApprovalTitle", {
+        file: approvalResourceName ?? t("agent.currentDesignFile"),
+      })
+    : item.title;
+  return (
+    <div
+      aria-label={title}
+      className={cx(
+        styles.approval,
+        deliveryScope && styles.deliveryScopeApproval,
+      )}
+      role="group"
+    >
+      <span aria-hidden="true" className={styles.activityIndicator} />
+      <span className={styles.approvalCopy}>
+        <strong>{title}</strong>
+        <small>
+          {pageStructure ? t("agent.pageStructureApprovalDetail") : item.detail}
+        </small>
+      </span>
+      <span className={styles.approvalActions}>
+        <Button
+          disabled={resolving}
+          onClick={() => onResolve("deny")}
+          tone="quiet"
+        >
+          {t(deliveryScope ? "agent.deliveryPlanRevise" : "agent.approvalDeny")}
+        </Button>
+        <Button
+          disabled={resolving}
+          onClick={() => onResolve("allow_once")}
+          tone="primary"
+        >
+          {t(
+            deliveryScope
+              ? "agent.deliveryPlanConfirm"
+              : "agent.approvalAllowTask",
+          )}
+        </Button>
+      </span>
+    </div>
   );
 }
 
@@ -400,56 +463,15 @@ export function AgentTimeline({
                   item.toolCallId &&
                   item.runId &&
                   onResolveApproval ? (
-                  <div
-                    aria-label={
-                      item.toolName === PAGE_STRUCTURE_ACCESS_TOOL_NAME
-                        ? t("agent.pageStructureApprovalTitle", {
-                            file:
-                              approvalResourceName ??
-                              t("agent.currentDesignFile"),
-                          })
-                        : item.title
+                  <ApprovalCard
+                    approvalResourceName={approvalResourceName}
+                    item={item}
+                    onResolve={(decision) =>
+                      void resolveApproval(item, decision)
                     }
-                    className={styles.approval}
-                    role="group"
-                  >
-                    <span
-                      aria-hidden="true"
-                      className={styles.activityIndicator}
-                    />
-                    <span className={styles.approvalCopy}>
-                      <strong>
-                        {item.toolName === PAGE_STRUCTURE_ACCESS_TOOL_NAME
-                          ? t("agent.pageStructureApprovalTitle", {
-                              file:
-                                approvalResourceName ??
-                                t("agent.currentDesignFile"),
-                            })
-                          : item.title}
-                      </strong>
-                      <small>
-                        {item.toolName === PAGE_STRUCTURE_ACCESS_TOOL_NAME
-                          ? t("agent.pageStructureApprovalDetail")
-                          : item.detail}
-                      </small>
-                    </span>
-                    <span className={styles.approvalActions}>
-                      <Button
-                        disabled={resolvingApprovalId !== null}
-                        onClick={() => void resolveApproval(item, "deny")}
-                        tone="quiet"
-                      >
-                        {t("agent.approvalDeny")}
-                      </Button>
-                      <Button
-                        disabled={resolvingApprovalId !== null}
-                        onClick={() => void resolveApproval(item, "allow_once")}
-                        tone="primary"
-                      >
-                        {t("agent.approvalAllowTask")}
-                      </Button>
-                    </span>
-                  </div>
+                    resolving={resolvingApprovalId !== null}
+                    t={t}
+                  />
                 ) : (
                   <div className={styles.activity} title={item.time}>
                     <span

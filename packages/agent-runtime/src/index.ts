@@ -5,6 +5,7 @@ import {
   type AgentModelContext,
   type AgentToolFailureIssue,
   type DesignGenerationMode,
+  type DeliveryScopeReview,
   type AgentRunContinuation,
   type ApprovalDecision,
   type DesignMutationTarget,
@@ -48,6 +49,7 @@ export interface AgentRunRequest {
   mutationTarget: DesignMutationTarget;
   modelSelection: ModelSelection;
   generationMode?: DesignGenerationMode;
+  deliveryScopeReview?: DeliveryScopeReview;
   modelContext?: AgentModelContext;
   initialDesignInspection?: AgentInitialDesignInspection;
   continuation?: AgentRunContinuation;
@@ -91,12 +93,19 @@ export interface AgentToolDefinition extends CanonicalTool {
     surfaces?: readonly ModelToolSurface[];
     bootstrapDescription?: string;
     bootstrapInputSchema?: Record<string, unknown>;
+    whenDeliveryScopeReview?: "required";
   };
   approvalScope?: "call" | "run";
-  approvalPrompt?: {
-    title: string;
-    summary: string;
-  };
+  approvalDenial?: "continue" | "cancel-run";
+  approvalPrompt?:
+    | {
+        title: string;
+        summary: string;
+      }
+    | ((
+        input: unknown,
+        request: Readonly<AgentRunRequest>,
+      ) => { title: string; summary: string });
   validateInput(input: unknown): boolean;
   validateInputIssues?(input: unknown): readonly AgentToolFailureIssue[];
   explainInvalidInput?(input: unknown): string | undefined;

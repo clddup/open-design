@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   DESIGN_CHECKPOINT_TOOL_NAME,
   DESIGN_COMPONENT_TOOL_NAME,
+  DESIGN_DELIVERY_SCOPE_TOOL_NAME,
 } from "@/shared/design-agent-tools.js";
 import {
   friendlyAgentError,
@@ -33,6 +34,16 @@ describe("Agent component timeline presentation", () => {
     );
     expect(toolTitle(DESIGN_CHECKPOINT_TOOL_NAME, "done", t)).toBe(
       "agent.designCheckpointReady",
+    );
+  });
+
+  it("presents delivery scope review as a native planning step", () => {
+    expect(isNativeDesignTool(DESIGN_DELIVERY_SCOPE_TOOL_NAME)).toBe(true);
+    expect(toolTitle(DESIGN_DELIVERY_SCOPE_TOOL_NAME, "active", t)).toBe(
+      "agent.preparingDeliveryPlan",
+    );
+    expect(toolTitle(DESIGN_DELIVERY_SCOPE_TOOL_NAME, "done", t)).toBe(
+      "agent.deliveryPlanConfirmed",
     );
   });
 

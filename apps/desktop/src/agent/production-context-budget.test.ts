@@ -31,6 +31,7 @@ import {
   DESIGN_CAPABILITIES_TOOL_NAME,
   DESIGN_CAPTURE_TOOL_NAME,
   DESIGN_COMPONENT_TOOL_NAME,
+  DESIGN_DELIVERY_SCOPE_TOOL_NAME,
   DESIGN_FIRST_SLICE_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
   DESIGN_PAGE_TOOL_NAME,
@@ -57,6 +58,90 @@ class RecordingGateway implements ModelGateway {
 }
 
 describe("production Agent context budget", () => {
+  it("starts a broad host-inspected Run with only Delivery Plan review and recovery inspection", async () => {
+    const directory = await mkdtemp(
+      join(tmpdir(), "opendesign-delivery-scope-context-"),
+    );
+    try {
+      const gateway = new RecordingGateway(
+        new MockModelGateway("Delivery scope surface accepted"),
+      );
+      const runtime = new OpenDesignPiRuntime({
+        modelGateway: gateway,
+        sessionStore: new JsonlSessionStore(join(directory, "events.jsonl")),
+        systemPrompt: OPENDESIGN_AGENT_SYSTEM_PROMPT,
+        newDesignSystemPromptForRequest,
+        toolCatalog: {
+          listTools: () =>
+            DESIGN_AGENT_TOOL_SPECS.map((tool) => ({
+              ...tool,
+              inputSchema: tool.inputSchema as unknown as Record<
+                string,
+                unknown
+              >,
+              validateInput: (input: unknown) =>
+                validateDesignAgentToolInput(tool.name, input),
+            })),
+        },
+      });
+
+      const events: AgentEvent[] = [];
+      for await (const event of runtime.run({
+        runId: "run_delivery_scope_context",
+        sessionId: "conversation_delivery_scope_context",
+        prompt: "根据完整 PRD 设计 12 个产品页面",
+        documentId: "document_1",
+        revision: 3,
+        scope: { kind: "page", pageId: "page_1", selectedNodeIds: [] },
+        mutationTarget: { kind: "page", pageId: "page_1" },
+        deliveryScopeReview: "required",
+        modelSelection: {
+          providerId: "configured",
+          modelId: "design-model",
+          reasoningEffort: "medium",
+        },
+        modelContext: { contextWindow: 200_000, maxOutputTokens: 16_384 },
+        initialDesignInspection: {
+          version: 1,
+          observedRevision: 3,
+          content: JSON.stringify({
+            document: {
+              documentId: "document_1",
+              revision: 3,
+              pagesById: {
+                page_1: { id: "page_1", rootNodeIds: [] },
+              },
+              nodesById: {},
+            },
+          }),
+        },
+      })) {
+        events.push(event);
+      }
+
+      expect(events).not.toContainEqual(
+        expect.objectContaining({ type: "agent.error" }),
+      );
+      expect(gateway.requests).toHaveLength(1);
+      expect(gateway.requests[0]?.tools.map((tool) => tool.name)).toEqual([
+        DESIGN_DELIVERY_SCOPE_TOOL_NAME,
+        DESIGN_INSPECT_TOOL_NAME,
+      ]);
+      expect(gateway.requests[0]?.tools).not.toContainEqual(
+        expect.objectContaining({ name: DESIGN_FIRST_SLICE_TOOL_NAME }),
+      );
+      expect(gateway.requests[0]?.tools).not.toContainEqual(
+        expect.objectContaining({ name: DESIGN_APPLY_TOOL_NAME }),
+      );
+      expect(
+        (gateway.requests[0]?.system.length ?? 0) +
+          JSON.stringify(gateway.requests[0]?.tools).length,
+      ).toBeLessThan(34_000);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("starts a blank host-inspected Run with only the compact first-slice kernel and recovery inspection", async () => {
     const directory = await mkdtemp(
       join(tmpdir(), "opendesign-host-inspected-context-"),
@@ -224,7 +309,15 @@ describe("production Agent context budget", () => {
 
       expect(gateway.requests).toHaveLength(1);
       expect(gateway.requests[0]?.system).toBe(OPENDESIGN_AGENT_SYSTEM_PROMPT);
-      expect(gateway.requests[0]?.tools).toHaveLength(7);
+      expect(gateway.requests[0]?.tools).toContainEqual(
+        expect.objectContaining({ name: DESIGN_INSPECT_TOOL_NAME }),
+      );
+      expect(gateway.requests[0]?.tools).toContainEqual(
+        expect.objectContaining({ name: DESIGN_APPLY_TOOL_NAME }),
+      );
+      expect(gateway.requests[0]?.tools).not.toContainEqual(
+        expect.objectContaining({ name: DESIGN_DELIVERY_SCOPE_TOOL_NAME }),
+      );
       expect(gateway.requests[0]?.tools).not.toContainEqual(
         expect.objectContaining({ name: DESIGN_COMPONENT_TOOL_NAME }),
       );
@@ -407,8 +500,9 @@ describe("production Agent context budget", () => {
         events.push(event);
       }
 
-      expect(gateway.requests[0]?.tools).toHaveLength(7);
-      expect(gateway.requests[1]?.tools).toHaveLength(10);
+      expect(gateway.requests[0]?.tools).not.toContainEqual(
+        expect.objectContaining({ name: EXPORT_SVG_TOOL_NAME }),
+      );
       const inspectedNames = gateway.requests[1]?.tools.map(
         (tool) => tool.name,
       );
@@ -556,14 +650,27 @@ describe("production Agent context budget", () => {
       }
 
       expect(gateway.requests).toHaveLength(8);
-      expect(gateway.requests[0]?.tools).toHaveLength(7);
+      expect(gateway.requests[0]?.tools).toContainEqual(
+        expect.objectContaining({ name: DESIGN_INSPECT_TOOL_NAME }),
+      );
+      expect(gateway.requests[0]?.tools).not.toContainEqual(
+        expect.objectContaining({ name: DESIGN_DELIVERY_SCOPE_TOOL_NAME }),
+      );
       expect(
         gateway.requests
           .slice(1)
           .every(
             (request) =>
               request.system === OPENDESIGN_AGENT_SYSTEM_PROMPT &&
-              request.tools.length === 25,
+              request.tools.some(
+                (tool) => tool.name === DESIGN_CAPTURE_TOOL_NAME,
+              ) &&
+              request.tools.some(
+                (tool) => tool.name === DESIGN_PAGE_TOOL_NAME,
+              ) &&
+              !request.tools.some(
+                (tool) => tool.name === DESIGN_DELIVERY_SCOPE_TOOL_NAME,
+              ),
           ),
       ).toBe(true);
       expect(
@@ -628,14 +735,14 @@ describe("production Agent context budget", () => {
       const sessionStore = new JsonlSessionStore(
         join(directory, "events.jsonl"),
       );
-      const definitions: AgentToolDefinition[] = DESIGN_AGENT_TOOL_SPECS.map(
-        (tool) => ({
-          ...tool,
-          inputSchema: tool.inputSchema as unknown as Record<string, unknown>,
-          validateInput: (input: unknown) =>
-            validateDesignAgentToolInput(tool.name, input),
-        }),
-      );
+      const definitions: AgentToolDefinition[] = DESIGN_AGENT_TOOL_SPECS.filter(
+        (tool) => tool.name !== DESIGN_DELIVERY_SCOPE_TOOL_NAME,
+      ).map((tool) => ({
+        ...tool,
+        inputSchema: tool.inputSchema as unknown as Record<string, unknown>,
+        validateInput: (input: unknown) =>
+          validateDesignAgentToolInput(tool.name, input),
+      }));
       const request: AgentRunRequest = {
         runId: "run_pi_production_context_loop",
         sessionId: "conversation_pi_production_context_loop",
@@ -739,7 +846,12 @@ describe("production Agent context budget", () => {
         gateway.requests.every(
           (providerRequest) =>
             providerRequest.system === OPENDESIGN_AGENT_SYSTEM_PROMPT &&
-            providerRequest.tools.length === 26,
+            providerRequest.tools.some(
+              (tool) => tool.name === DESIGN_CAPTURE_TOOL_NAME,
+            ) &&
+            !providerRequest.tools.some(
+              (tool) => tool.name === DESIGN_DELIVERY_SCOPE_TOOL_NAME,
+            ),
         ),
       ).toBe(true);
       expect(

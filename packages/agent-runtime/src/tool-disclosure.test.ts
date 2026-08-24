@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { AgentToolDefinition } from "./index.js";
 import {
+  deliveryScopeReviewToolDefinitions,
   disclosedToolDefinitions,
   isSafeModelDisclosure,
   resolveModelToolDisclosurePhase,
@@ -191,6 +192,51 @@ describe("model tool disclosure", () => {
         { initialInspection: true },
       ),
     ).toBe("inspected");
+  });
+
+  it("shows scope review only before confirmation and restores the normal surface afterward", () => {
+    const scopeReview = {
+      ...definition,
+      name: "opendesign_review_delivery_scope",
+      modelDisclosure: {
+        bootstrap: "available" as const,
+        whenDeliveryScopeReview: "required" as const,
+        surfaces: ["general", "new-design"] as const,
+      },
+    };
+    const inspection = {
+      ...definition,
+      name: "opendesign_inspect_document",
+      modelDisclosure: {
+        bootstrap: "available" as const,
+        role: "inspection" as const,
+        surfaces: ["general", "new-design"] as const,
+      },
+    };
+    const firstSlice = {
+      ...definition,
+      name: "opendesign_generate_first_slice",
+      modelDisclosure: {
+        bootstrap: "available" as const,
+        role: "material-write" as const,
+        surfaces: ["new-design"] as const,
+      },
+    };
+
+    expect(
+      disclosedToolDefinitions(
+        [scopeReview, inspection, firstSlice],
+        "host-inspected",
+        { surface: "new-design", deliveryScopeReview: "direct" },
+      ).map((tool) => tool.name),
+    ).toEqual([inspection.name, firstSlice.name]);
+    expect(
+      deliveryScopeReviewToolDefinitions(
+        [scopeReview, inspection, firstSlice],
+        "host-inspected",
+        { surface: "new-design" },
+      ).map((tool) => tool.name),
+    ).toEqual([scopeReview.name, inspection.name]);
   });
 
   it("rejects malformed disclosure metadata at the catalog boundary", () => {

@@ -2105,6 +2105,53 @@ describe("AgentTimeline", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("shows the actual Delivery Plan with plan-specific confirmation actions", async () => {
+    const user = userEvent.setup();
+    const onResolveApproval = vi.fn().mockResolvedValue(true);
+    render(
+      <AgentTimeline
+        activeRunId="run_scope"
+        conversationId="conversation_1"
+        conversationTitle="Product brief"
+        error={null}
+        events={[
+          {
+            type: "tool.requested",
+            runId: "run_scope",
+            toolCallId: "tool_scope",
+            toolName: "opendesign_review_delivery_scope",
+            input: {},
+            risk: "read",
+          },
+          {
+            type: "approval.requested",
+            runId: "run_scope",
+            toolCallId: "tool_scope",
+            approvalId: "approval_scope",
+            title: "Confirm delivery plan (2)",
+            summary:
+              "1. Login — Complete account entry\n2. Home — Present the core product entry",
+          },
+        ]}
+        onResolveApproval={onResolveApproval}
+        onStop={vi.fn()}
+        onSubmit={vi.fn().mockResolvedValue(true)}
+        timeline={[]}
+      />,
+    );
+
+    expect(screen.getByText("Confirm delivery plan (2)")).toBeInTheDocument();
+    expect(screen.getByText(/1\. Login/)).toBeInTheDocument();
+    expect(screen.getByText(/2\. Home/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Revise plan" }));
+    expect(onResolveApproval).toHaveBeenCalledWith({
+      runId: "run_scope",
+      toolCallId: "tool_scope",
+      approvalId: "approval_scope",
+      decision: "deny",
+    });
+  });
+
   it("can deny active Page access and never operates an old Run approval", async () => {
     const user = userEvent.setup();
     const onResolveApproval = vi.fn().mockResolvedValue(true);

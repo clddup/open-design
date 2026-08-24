@@ -14,6 +14,7 @@ import {
   DESIGN_ARRANGE_TOOL_NAME,
   DESIGN_CAPTURE_TOOL_NAME,
   DESIGN_COMPONENT_TOOL_NAME,
+  DESIGN_DELIVERY_SCOPE_TOOL_NAME,
   DESIGN_FIRST_SLICE_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
@@ -31,6 +32,17 @@ export function reviewDesignCompletion(
   context: AgentCompletionContext,
 ): AgentCompletionDecision {
   if (hasSupersededDelivery(context.toolCalls)) return { allow: true };
+  const reviewedScope = latestReviewedDeliveryScope(context.toolCalls);
+  if (
+    context.request.deliveryScopeReview === "required" &&
+    reviewedScope === undefined
+  ) {
+    return {
+      allow: false,
+      message:
+        "This broad brief requires a user-confirmed Delivery Plan before execution. Call opendesign_review_delivery_scope with every independently verifiable deliverable from the full brief and attachments. Do not finish, create representative-only targets, or write the canvas before the user confirms the scope.",
+    };
+  }
   const unresolvedFailure = context.unresolvedDesignWriteFailure;
   if (unresolvedFailure) {
     if (unresolvedFailure.code === "invalid_tool_input") {
@@ -49,6 +61,16 @@ export function reviewDesignCompletion(
   }
   const delivery = latestDeliveryLedger(context.toolCalls);
   if (delivery) {
+    if (
+      reviewedScope &&
+      !deliveryMatchesReviewedScope(delivery, reviewedScope)
+    ) {
+      return {
+        allow: false,
+        message:
+          "The host delivery ledger does not match the user-confirmed Delivery Plan. Preserve every confirmed target ID and complete the missing targets instead of claiming completion from a smaller executable Plan.",
+      };
+    }
     const incomplete = delivery.targets.find(
       (target) => target.status !== "verified",
     );
@@ -170,6 +192,48 @@ export function reviewDesignCompletion(
   }
 
   return { allow: true };
+}
+
+function latestReviewedDeliveryScope(
+  toolCalls: readonly AgentToolCallRecord[],
+): { targets: Array<{ targetId: string }> } | undefined {
+  for (let index = toolCalls.length - 1; index >= 0; index -= 1) {
+    const call = toolCalls[index];
+    if (
+      call?.toolName !== DESIGN_DELIVERY_SCOPE_TOOL_NAME ||
+      !isRecord(call.result) ||
+      !isRecord(call.result.deliveryScope)
+    ) {
+      continue;
+    }
+    const targets = call.result.deliveryScope.targets;
+    if (
+      Array.isArray(targets) &&
+      targets.length > 0 &&
+      targets.every(
+        (target) => isRecord(target) && typeof target.targetId === "string",
+      )
+    ) {
+      return {
+        targets: targets.map((target) => ({
+          targetId: (target as { targetId: string }).targetId,
+        })),
+      };
+    }
+  }
+  return undefined;
+}
+
+function deliveryMatchesReviewedScope(
+  delivery: DesignDeliveryLedger,
+  scope: { targets: Array<{ targetId: string }> },
+): boolean {
+  return (
+    delivery.targets.length === scope.targets.length &&
+    scope.targets.every(
+      (target, index) => delivery.targets[index]?.targetId === target.targetId,
+    )
+  );
 }
 
 function latestDeliveryLedger(
@@ -316,6 +380,7 @@ function isSuccessfulDesignWrite(call: AgentToolCallRecord): boolean {
 
 function isPlanBearingCall(call: AgentToolCallRecord): boolean {
   return (
+    call.toolName === DESIGN_DELIVERY_SCOPE_TOOL_NAME ||
     call.toolName === DESIGN_PLAN_TOOL_NAME ||
     call.toolName === DESIGN_FIRST_SLICE_TOOL_NAME
   );

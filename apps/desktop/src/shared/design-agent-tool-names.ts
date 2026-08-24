@@ -2,6 +2,8 @@ export const DESIGN_CAPABILITIES_TOOL_NAME = "opendesign_get_capabilities";
 export const DESIGN_INSPECT_TOOL_NAME = "opendesign_inspect_document";
 export const DESIGN_CAPTURE_TOOL_NAME = "opendesign_capture_canvas";
 export const DESIGN_PLAN_TOOL_NAME = "opendesign_define_design_plan";
+export const DESIGN_DELIVERY_SCOPE_TOOL_NAME =
+  "opendesign_review_delivery_scope";
 export const DESIGN_FIRST_SLICE_TOOL_NAME = "opendesign_generate_first_slice";
 export const DESIGN_REVIEW_TOOL_NAME = "opendesign_record_visual_review";
 export const DESIGN_CHECKPOINT_TOOL_NAME = "opendesign_design_checkpoint";

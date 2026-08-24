@@ -15,13 +15,22 @@ export type ModelToolDisclosurePhase =
 export function disclosedToolDefinitions(
   definitions: readonly AgentToolDefinition[],
   phase: ModelToolDisclosurePhase,
-  options: { surface?: ModelToolSurface } = {},
+  options: {
+    surface?: ModelToolSurface;
+    deliveryScopeReview?: "direct" | "required";
+  } = {},
 ): AgentToolDefinition[] {
   const surface =
     phase === "expanded" || phase === "continuation"
       ? "general"
       : (options.surface ?? "general");
   const visibleDefinitions = definitions.filter((definition) => {
+    if (
+      definition.modelDisclosure?.whenDeliveryScopeReview === "required" &&
+      options.deliveryScopeReview !== "required"
+    ) {
+      return false;
+    }
     const surfaces = definition.modelDisclosure?.surfaces ?? ["general"];
     return surfaces.includes(surface);
   });
@@ -55,6 +64,21 @@ export function disclosedToolDefinitions(
       },
     ];
   });
+}
+
+export function deliveryScopeReviewToolDefinitions(
+  definitions: readonly AgentToolDefinition[],
+  phase: "bootstrap" | "host-inspected",
+  options: { surface?: ModelToolSurface } = {},
+): AgentToolDefinition[] {
+  return disclosedToolDefinitions(definitions, phase, {
+    ...options,
+    deliveryScopeReview: "required",
+  }).filter(
+    (definition) =>
+      definition.modelDisclosure?.whenDeliveryScopeReview === "required" ||
+      definition.modelDisclosure?.role === "inspection",
+  );
 }
 
 /**
@@ -149,6 +173,7 @@ export function isSafeModelDisclosure(
         "surfaces",
         "bootstrapDescription",
         "bootstrapInputSchema",
+        "whenDeliveryScopeReview",
       ].includes(key),
     )
   ) {
@@ -163,6 +188,12 @@ export function isSafeModelDisclosure(
       !disclosure.surfaces.every(
         (surface) => surface === "general" || surface === "new-design",
       ))
+  ) {
+    return false;
+  }
+  if (
+    disclosure.whenDeliveryScopeReview !== undefined &&
+    disclosure.whenDeliveryScopeReview !== "required"
   ) {
     return false;
   }

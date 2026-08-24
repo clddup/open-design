@@ -91,6 +91,7 @@ export const OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT = buildNewDesignSystemPrompt(
 export function newDesignSystemPromptForRequest(request: {
   prompt: string;
   generationMode?: "fast" | "thorough";
+  deliveryScopeReview?: "direct" | "required";
 }): string {
   const deliverable = inferNewDesignDeliverable(request.prompt);
   return [
@@ -100,6 +101,7 @@ export function newDesignSystemPromptForRequest(request: {
         : formatBuiltinDesignPlanningSkillBundleForDeliverable(deliverable),
     ),
     designContentLanguageInstruction(request.prompt),
+    deliveryScopeInstruction(request.deliveryScopeReview),
     generationModeInstruction(request.generationMode),
   ].join("\n\n");
 }
@@ -107,10 +109,12 @@ export function newDesignSystemPromptForRequest(request: {
 export function agentSystemPromptForRequest(request: {
   prompt: string;
   generationMode?: "fast" | "thorough";
+  deliveryScopeReview?: "direct" | "required";
 }): string {
   return [
     OPENDESIGN_AGENT_SYSTEM_PROMPT,
     designContentLanguageInstruction(request.prompt),
+    deliveryScopeInstruction(request.deliveryScopeReview),
     generationModeInstruction(request.generationMode),
   ].join("\n\n");
 }
@@ -163,6 +167,14 @@ function generationModeInstruction(
   return mode === "fast"
     ? "OpenDesign execution policy: ADAPTIVE. Produce the first meaningful real revision immediately. Do not add alternatives, screens, brand-system specimens, or elective refinements the user did not request. A clean exact-revision capture may complete ordinary explicit edits directly from trusted deterministic layout and structure verification. Logo and identity targets still use the returned bounded independent critic once and make one evidence-based refinement; do not add extra concept rounds beyond the user's requested scope."
     : "OpenDesign execution depth: THOROUGH. Still produce the first meaningful real revision immediately. Use the user's requested scope exactly, allow deliberate alternatives only when requested, and complete one evidence-based refinement before delivery. Never delay the first visible result to narrate or prebuild a full suite.";
+}
+
+function deliveryScopeInstruction(
+  mode: "direct" | "required" | undefined,
+): string {
+  return mode === "required"
+    ? "OpenDesign trusted delivery-scope policy: REVIEW REQUIRED. Before Page creation, opendesign_define_design_plan, opendesign_generate_first_slice, imagery, or any canvas write, call opendesign_review_delivery_scope with every independently verifiable deliverable found in the complete current brief and attachments. Do not replace requested product areas with a smaller representative sample. The user must see and confirm the actual target list. After confirmation, preserve its target IDs, labels, objectives, required content, exclusions, assumptions, and Page strategy exactly in the executable Plan. If the user declines, stop this Run without changing the canvas; wait for a new user message with revisions."
+    : "OpenDesign trusted delivery-scope policy: DIRECT. This focused request does not require a separate user-confirmed Delivery Plan. Execute it directly through the normal inspected design workflow; do not add a planning approval step.";
 }
 
 export const OPENDESIGN_AGENT_SYSTEM_PROMPT = `

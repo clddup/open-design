@@ -73,6 +73,7 @@ describe("Agent Run starter", () => {
     expect(started).toBe(true);
     expect(send).toHaveBeenCalledWith({
       ...source,
+      deliveryScopeReview: "direct",
       initialDesignInspection,
       modelContext: { contextWindow: 200_000, maxOutputTokens: 16_384 },
     });
@@ -101,6 +102,24 @@ describe("Agent Run starter", () => {
         },
       ),
     ).rejects.toThrow("Renderer cannot supply initial design inspection");
+  });
+
+  it("rejects a Renderer-forged delivery scope policy", async () => {
+    await expect(
+      handleAgentRunControlRequest(
+        { ...source, deliveryScopeReview: "direct" },
+        {
+          agentHost: {} as never,
+          continuationScheduler: {} as never,
+          conversationIdByRunId: new Map(),
+          initialInspectionControllers: new Map(),
+          globalTaskCoordinator: {} as never,
+          modelProviderHost: {} as never,
+          referenceHost: {} as never,
+          publish: vi.fn(),
+        },
+      ),
+    ).rejects.toThrow("Renderer cannot supply delivery scope policy");
   });
 
   it("cancels an automatic continuation before starting a new user Run", async () => {
