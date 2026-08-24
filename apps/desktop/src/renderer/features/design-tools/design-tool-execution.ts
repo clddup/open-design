@@ -60,9 +60,9 @@ import {
   INTERNAL_READ_IMAGE_SOURCE_TOOL_NAME,
   INTERNAL_UPDATE_IMAGE_TOOL_NAME,
   DesignApplyContract,
+  DesignComponentContract,
   DesignPageContract,
   isDesignArrangeToolInput,
-  isDesignComponentToolInput,
   isDesignFontToolInput,
   isDesignHierarchyToolInput,
   isDesignTextRangeToolInput,
@@ -224,11 +224,14 @@ async function executeDesignToolRequestUnsafe(
     };
   }
 
-  if (
-    request.call.toolName === DESIGN_COMPONENT_TOOL_NAME &&
-    isDesignComponentToolInput(request.call.input)
-  ) {
-    const input = request.call.input;
+  if (request.call.toolName === DESIGN_COMPONENT_TOOL_NAME) {
+    const parsed = DesignComponentContract.parse(request.call.input);
+    if (!parsed.ok) {
+      throw new TypeError(
+        "Renderer received invalid canonical Component input",
+      );
+    }
+    const input = parsed.value;
     if (document.revision !== request.context.revision) {
       throw new Error(
         `Component operation revision conflict: expected ${request.context.revision}, current ${document.revision}`,

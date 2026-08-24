@@ -132,6 +132,7 @@ import {
   INTERNAL_READ_IMAGE_SOURCE_TOOL_NAME,
   GENERATE_IMAGE_TOOL_NAME,
   DesignApplyContract,
+  DesignComponentContract,
   DesignPageContract,
   DeliveryScopeContract,
   DesignVisualReviewContract,
@@ -141,7 +142,6 @@ import {
   PlaceImageContract,
   ReadImageContract,
   UpdateImageContract,
-  isDesignComponentToolInput,
   isDesignFontToolInput,
   isDesignTextRangeToolInput,
   isDesignVectorToolInput,
@@ -1725,18 +1725,28 @@ async function startDesktopApplication(
         return result;
       }
       if (call.toolName === DESIGN_COMPONENT_TOOL_NAME) {
-        if (!isDesignComponentToolInput(call.input)) {
-          throw new TypeError("Invalid component tool input");
+        const parsed = DesignComponentContract.parse(call.input);
+        if (!parsed.ok) {
+          throw new TypeError(
+            formatValidationFailure("Component", parsed.issues),
+          );
         }
-        globalTaskCoordinator.assertComponentToolAccess(context, call.input);
+        const componentInput = parsed.value;
+        globalTaskCoordinator.assertComponentToolAccess(
+          context,
+          componentInput,
+        );
         globalTaskCoordinator.assertDocumentInspected(context);
-        const materialWrite = componentToolIsMaterialWrite(call.input);
+        const materialWrite = componentToolIsMaterialWrite(componentInput);
         if (materialWrite) {
           globalTaskCoordinator.assertVisualReviewBeforeWrite(context);
         }
-        const result = await executeRendererTool(call);
+        const result = await executeRendererTool({
+          ...call,
+          input: componentInput,
+        });
         if (!materialWrite) return result;
-        const targetRefs = materialTargetRefsForComponentTool(call.input);
+        const targetRefs = materialTargetRefsForComponentTool(componentInput);
         const targetIds =
           globalTaskCoordinator.resolveMaterialTargetIdsIfPlanned(
             context,

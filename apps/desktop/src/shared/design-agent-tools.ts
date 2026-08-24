@@ -100,10 +100,7 @@ import {
   DesignCheckpointContract,
   DESIGN_CHECKPOINT_TOOL_INPUT_SCHEMA,
 } from "./design-agent-checkpoint";
-import {
-  explainInvalidDesignComponentToolInput,
-  isDesignComponentToolInput,
-} from "./design-component-tool";
+import { DesignComponentContract } from "./design-component-tool";
 import { isDesignVariableToolInput } from "./design-variable-tool";
 import { DESIGN_VARIABLE_TOOL_INPUT_SCHEMA } from "./design-variable-tool-schema";
 import { isDesignStyleToolInput } from "./design-style-tool";
@@ -202,10 +199,7 @@ export type {
   DesignReferenceDecision,
   DesignReferenceStrategy,
 } from "./design-reference-strategy";
-export {
-  explainInvalidDesignComponentToolInput,
-  isDesignComponentToolInput,
-} from "./design-component-tool";
+export { DesignComponentContract } from "./design-component-tool";
 export type { DesignComponentToolInput } from "./design-component-tool";
 export { isDesignVariableToolInput } from "./design-variable-tool";
 export { DESIGN_VARIABLE_TOOL_INPUT_SCHEMA } from "./design-variable-tool-schema";
@@ -565,7 +559,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     inputSchema: DESIGN_COMPONENT_TOOL_INPUT_SCHEMA,
     risk: "design_write" as const,
     approval: "never" as const,
-    explainInvalidInput: explainInvalidDesignComponentToolInput,
+    validateInputIssues: DesignComponentContract.issues,
   },
   {
     name: DESIGN_VARIABLE_TOOL_NAME,
@@ -739,7 +733,7 @@ export function validateDesignAgentToolInput(
     return DesignPageContract.parse(input).ok;
   }
   if (toolName === DESIGN_COMPONENT_TOOL_NAME) {
-    return isDesignComponentToolInput(input);
+    return DesignComponentContract.parse(input).ok;
   }
   if (toolName === DESIGN_VARIABLE_TOOL_NAME) {
     return isDesignVariableToolInput(input);

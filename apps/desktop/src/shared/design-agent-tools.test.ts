@@ -29,10 +29,10 @@ import {
   UPDATE_IMAGE_TOOL_NAME,
   DesignApplyContract,
   DesignCheckpointContract,
+  DesignComponentContract,
   DesignPageContract,
   DesignPlanContract,
   DesignVisualReviewContract,
-  explainInvalidDesignComponentToolInput,
   FirstSliceContract,
   isAgentSvgImportResult,
   isPreparedAgentSvgExport,
@@ -80,8 +80,8 @@ describe("component tool recovery contract", () => {
     ).toBe(false);
   });
 
-  it("returns the exact create-component shape instead of a generic schema error", () => {
-    const explanation = explainInvalidDesignComponentToolInput({
+  it("returns exact create-component field paths from the single contract", () => {
+    const issues = DesignComponentContract.issues({
       action: "create-component",
       label: "Promote PanelHeader",
       pageId: "page_editor",
@@ -89,12 +89,22 @@ describe("component tool recovery contract", () => {
       componentId: "component-panel-header",
     });
 
-    expect(explanation).toContain("Missing fields: rootNodeId, name");
-    expect(explanation).toContain("Unexpected fields: nodeId");
-    expect(explanation).toContain(
-      '"rootNodeId":"<existing-frame-or-group-id>"',
+    expect(issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "design_component.schema_invalid",
+          path: "/rootNodeId",
+        }),
+        expect.objectContaining({
+          code: "design_component.schema_invalid",
+          path: "/name",
+        }),
+        expect.objectContaining({
+          code: "design_component.schema_invalid",
+          path: "/nodeId",
+        }),
+      ]),
     );
-    expect(explanation).toContain("without amending");
   });
 });
 

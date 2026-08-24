@@ -1,6 +1,6 @@
 # ADR-0144：单一来源的工具契约验证
 
-- 状态：Accepted，first-slice、node apply、Design Plan、Visual Review、Checkpoint、图片获取、公开图片操作与 Page 工具已实施，其余契约分阶段实施
+- 状态：Accepted，first-slice、node apply、Design Plan、Visual Review、Checkpoint、图片获取、公开图片操作、Page 与 Component 工具已实施，其余契约分阶段实施
 - 日期：2026-08-23
 - 首个迁移对象：compact first-slice
 - 关联：ADR-0018、ADR-0100、ADR-0103、ADR-0141、ADR-0143
@@ -85,12 +85,14 @@ Visual Review 已完成第七个迁移切片：`DesignVisualReviewContract` 以�
 
 Page 工具已完成第八个迁移切片：`PageStructureAccessContract / DesignPageContract` 分别成为 Run-scoped Page 结构授权请求与 Page 生命周期写入的唯一结构入口，同一个 action-discriminated 可执行 schema 服务 Provider、Pi、Main approval/preauthorization/execution 与 Renderer canonical bridge。`create / rename / duplicate / reorder / clear / delete` 只接受各自分支字段；Page ID 继续由宿主创建，模型在 `create` 中回抄 `pageId` 或在 `rename` 中夹带 `index` 会得到准确字段路径，而不再被 normalizer 静默删除。Page 名的非空、长度与控制字符边界进入公开 schema；授权 action 的枚举、去重和有界 reason 同样不再由手写遍历重复维护。旧 `isDesignPageToolInput / normalizeDesignPageToolInput / isPageStructureAccessToolInput` 已删除。Main 仍独立拥有当前 Design File、Run capability、approval identity、Mutation Target 与 revision guard；Renderer 只执行已经通过相同 canonical Contract 的请求，EditorRuntime 继续拥有最后一页删除、Page/node 引用、事务和 history invariant。
 
+Component 工具已完成第九个迁移切片：`DesignComponentContract` 以一个 action-aware 可执行 schema 覆盖 Main/Instance、Component Set/Variant matrix、BOOLEAN/TEXT/INSTANCE_SWAP/SLOT property、source-path override、detach 与 go-to-main 共 29 个 action，并同时服务 Provider、Pi、工具聚合、Main policy/execution 与 Renderer canonical bridge。每个 action 只接受自己的闭合字段集合；Component/root 数量与 Variant matrix member 对应、property type 与 preferred values 对应、Slot child-count 范围是仅存的三个跨字段 refinement。旧约 500 行 `isDesignComponentToolInput / explainInvalidDesignComponentToolInput` 与其 `exactKeys`/形状遍历已删除。Provider 原本不公开而 Runtime 暗中接受的 `set-override.patch.locked` 分叉也已关闭；人工 Instance 派生层 locked/visible 继续属于 Layer State 路径。该契约保持 Figma 的 Main→Instance 自动同步、Component Set、typed properties、preferred values、Slot settings、override 与 detach 语义；OpenDesign 额外保留稳定 ID、Page capability、revision、preview/apply 与单 undo 事务边界。Figma Plugin API 的 [`createComponentFromNode`](https://developers.figma.com/docs/plugins/api/properties/figma-createcomponentfromnode/)、[`combineAsVariants`](https://developers.figma.com/docs/plugins/api/properties/figma-combineasvariants/)、[`InstanceNode`](https://developers.figma.com/docs/plugins/api/InstanceNode/) 与 [`ComponentPropertyDefinitions`](https://developers.figma.com/docs/plugins/api/ComponentPropertyDefinitions/) 只作为公开语义参照，不成为第二份文档状态或私有格式依赖。
+
 `ValidationIssue` 的稳定 `code/path/expected/actual/recovery` 通过 `tool-validation` failure details 进入 Agent event、journal 和 Timeline；这种参数修正使用 `correct-and-retry`，不冒充需要文档 inspection 的事务错误。Design transaction 仍保留独立 `inspect-and-revise` 恢复语义。
 
-导入导出、结构、Component、Style、Variable 等其余 Agent tools，以及 Page/公开图片工具之后的其他 trusted internal Renderer bridge、IPC 与持久化契约尚未迁移，不得据此宣称全仓已实现单一验证入口。
+导入导出、结构、Style、Variable 等其余 Agent tools，以及 Page/Component/公开图片工具之后的其他 trusted internal Renderer bridge、IPC 与持久化契约尚未迁移，不得据此宣称全仓已实现单一验证入口。
 
 ## 后果
 
 - 不重写 pi-agent-core 已有的循环或 TypeBox 参数验证；OpenDesign 只增加产品 domain refinement 和边界 issue adapter。
 - 首个迁移会删除较多手写代码并改变测试入口，属于允许的破坏性开发更新。
-- 在迁移完成前，新增 first-slice、node apply、Design Plan、Visual Review、Checkpoint、Read/Generate/Place/Update/Edit Image、Page Structure/Page Lifecycle 字段必须进入对应单一入口；不得继续扩展三套旧函数。
+- 在迁移完成前，新增 first-slice、node apply、Design Plan、Visual Review、Checkpoint、Read/Generate/Place/Update/Edit Image、Page Structure/Page Lifecycle、Component 字段必须进入对应单一入口；不得继续扩展三套旧函数。
