@@ -54,18 +54,18 @@ import {
   UPDATE_IMAGE_TOOL_NAME,
 } from "./design-agent-tool-names";
 import {
+  EditImageContract,
   GenerateImageContract,
   GENERATE_IMAGE_TOOL_INPUT_SCHEMA,
   EDIT_IMAGE_TOOL_INPUT_SCHEMA,
+  PlaceImageContract,
   PLACE_IMAGE_TOOL_INPUT_SCHEMA,
   READ_IMAGE_TOOL_INPUT_SCHEMA,
   ReadImageContract,
+  UpdateImageContract,
   UPDATE_IMAGE_TOOL_INPUT_SCHEMA,
-  isEditImageToolInput,
   isInternalReadImageSourceToolInput,
   isInternalUpdateImageToolInput,
-  isPlaceImageToolInput,
-  isUpdateImageToolInput,
 } from "./design-agent-image-tools";
 import {
   EXPORT_RASTER_TOOL_INPUT_SCHEMA,
@@ -218,19 +218,19 @@ export type {
 } from "./design-plan-component-strategy";
 export {
   DESIGN_IMAGE_PLACEMENT_SCHEMA,
+  EditImageContract,
   EDIT_IMAGE_TOOL_INPUT_SCHEMA,
   GenerateImageContract,
   GENERATE_IMAGE_TOOL_INPUT_SCHEMA,
+  PlaceImageContract,
   PLACE_IMAGE_TOOL_INPUT_SCHEMA,
   ReadImageContract,
   READ_IMAGE_TOOL_INPUT_SCHEMA,
+  UpdateImageContract,
   UPDATE_IMAGE_TOOL_INPUT_SCHEMA,
-  isEditImageToolInput,
   isInternalReadImageSourceToolInput,
   isInternalUpdateImageToolInput,
-  isPlaceImageToolInput,
   isPreparedImageEditSource,
-  isUpdateImageToolInput,
 } from "./design-agent-image-tools";
 export type {
   EditImageToolInput,
@@ -452,6 +452,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     inputSchema: PLACE_IMAGE_TOOL_INPUT_SCHEMA,
     risk: "design_write" as const,
     approval: "never" as const,
+    validateInputIssues: PlaceImageContract.issues,
   },
   {
     name: UPDATE_IMAGE_TOOL_NAME,
@@ -464,6 +465,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     inputSchema: UPDATE_IMAGE_TOOL_INPUT_SCHEMA,
     risk: "design_write" as const,
     approval: "never" as const,
+    validateInputIssues: UpdateImageContract.issues,
   },
   {
     name: EDIT_IMAGE_TOOL_NAME,
@@ -476,6 +478,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     inputSchema: EDIT_IMAGE_TOOL_INPUT_SCHEMA,
     risk: "external" as const,
     approval: "never" as const,
+    validateInputIssues: EditImageContract.issues,
   },
   {
     name: IMPORT_SVG_TOOL_NAME,
@@ -690,9 +693,15 @@ export function validateDesignAgentToolInput(
   if (toolName === GENERATE_IMAGE_TOOL_NAME) {
     return GenerateImageContract.parse(input).ok;
   }
-  if (toolName === PLACE_IMAGE_TOOL_NAME) return isPlaceImageToolInput(input);
-  if (toolName === UPDATE_IMAGE_TOOL_NAME) return isUpdateImageToolInput(input);
-  if (toolName === EDIT_IMAGE_TOOL_NAME) return isEditImageToolInput(input);
+  if (toolName === PLACE_IMAGE_TOOL_NAME) {
+    return PlaceImageContract.parse(input).ok;
+  }
+  if (toolName === UPDATE_IMAGE_TOOL_NAME) {
+    return UpdateImageContract.parse(input).ok;
+  }
+  if (toolName === EDIT_IMAGE_TOOL_NAME) {
+    return EditImageContract.parse(input).ok;
+  }
   if (toolName === IMPORT_SVG_TOOL_NAME) return isImportSvgToolInput(input);
   if (toolName === EXPORT_SVG_TOOL_NAME) return isExportSvgToolInput(input);
   if (toolName === EXPORT_RASTER_TOOL_NAME) {

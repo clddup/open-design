@@ -2299,7 +2299,7 @@ describe("design Agent tool contract", () => {
     ).toBe(false);
   });
 
-  it("accepts versioned non-destructive placement when placing an image", () => {
+  it("accepts non-destructive placement with exactly one image source", () => {
     const input = {
       attachmentId: `image_${"a".repeat(64)}`,
       pageId: "page_1",
@@ -2321,16 +2321,26 @@ describe("design Agent tool contract", () => {
         flipVertical: false,
       },
     };
+    const persistentInput = {
+      assetId: `asset_${"b".repeat(64)}`,
+      pageId: input.pageId,
+      parentId: input.parentId,
+      index: input.index,
+      nodeId: input.nodeId,
+      name: input.name,
+      role: input.role,
+      x: input.x,
+      y: input.y,
+      width: input.width,
+      height: input.height,
+      placement: input.placement,
+    };
 
     expect(validateDesignAgentToolInput(PLACE_IMAGE_TOOL_NAME, input)).toBe(
       true,
     );
     expect(
-      validateDesignAgentToolInput(PLACE_IMAGE_TOOL_NAME, {
-        ...input,
-        attachmentId: undefined,
-        assetId: `asset_${"b".repeat(64)}`,
-      }),
+      validateDesignAgentToolInput(PLACE_IMAGE_TOOL_NAME, persistentInput),
     ).toBe(true);
     expect(
       validateDesignAgentToolInput(PLACE_IMAGE_TOOL_NAME, {
@@ -2340,9 +2350,7 @@ describe("design Agent tool contract", () => {
     ).toBe(false);
     expect(
       validateDesignAgentToolInput(PLACE_IMAGE_TOOL_NAME, {
-        ...input,
-        attachmentId: undefined,
-        assetId: `asset_${"b".repeat(64)}`,
+        ...persistentInput,
         width: undefined,
       }),
     ).toBe(false);

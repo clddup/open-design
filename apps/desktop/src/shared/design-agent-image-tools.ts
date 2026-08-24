@@ -2,12 +2,14 @@ import {
   executableJsonSchema,
   isDesignAsset,
   isImageAssetDerivation,
+  ImageFiltersSchema,
   ImagePaintSchema,
+  ImagePlacementSchema,
+  ImageLightingPresetSchema,
   isImageFilters,
   isImagePaint,
   isImagePlacement,
   isImageLightingPreset,
-  schemaValidationIssues,
   type DesignAsset,
   type ImageFilters,
   type ImagePlacement,
@@ -17,11 +19,14 @@ import {
   type TSchema,
 } from "@opendesign/design-contracts";
 import {
-  isPlaceableRasterAssetRole,
   type PlaceableRasterAssetRole,
   type RasterAssetRole,
 } from "./design-agent-plan-review";
-import type { ValidationIssue, ValidationResult } from "./contract-validation";
+import {
+  contractSchemaIssues,
+  type ValidationIssue,
+  type ValidationResult,
+} from "./contract-validation";
 import {
   exactKeys,
   finite,
@@ -238,51 +243,7 @@ const NORMALIZED_POINT_SCHEMA = {
   additionalProperties: false,
 } as const;
 
-export const DESIGN_IMAGE_PLACEMENT_SCHEMA = {
-  anyOf: [
-    {
-      type: "object",
-      properties: { mode: { const: "stretch" } },
-      required: ["mode"],
-      additionalProperties: false,
-    },
-    {
-      type: "object",
-      properties: { mode: { const: "fit" } },
-      required: ["mode"],
-      additionalProperties: false,
-    },
-    {
-      type: "object",
-      properties: {
-        mode: { const: "fill" },
-        focalPoint: NORMALIZED_POINT_SCHEMA,
-      },
-      required: ["mode", "focalPoint"],
-      additionalProperties: false,
-    },
-    {
-      type: "object",
-      properties: {
-        mode: { const: "crop" },
-        focalPoint: NORMALIZED_POINT_SCHEMA,
-        zoom: { type: "number", minimum: 1, maximum: 64 },
-        rotation: { type: "number", minimum: -360, maximum: 360 },
-        flipHorizontal: { type: "boolean" },
-        flipVertical: { type: "boolean" },
-      },
-      required: [
-        "mode",
-        "focalPoint",
-        "zoom",
-        "rotation",
-        "flipHorizontal",
-        "flipVertical",
-      ],
-      additionalProperties: false,
-    },
-  ],
-} as const;
+export const DESIGN_IMAGE_PLACEMENT_SCHEMA = ImagePlacementSchema;
 
 export const READ_IMAGE_TOOL_INPUT_SCHEMA = executableJsonSchema({
   type: "object",
@@ -324,49 +285,104 @@ export const GENERATE_IMAGE_TOOL_INPUT_SCHEMA = executableJsonSchema({
   additionalProperties: false,
 });
 
-export const PLACE_IMAGE_TOOL_INPUT_SCHEMA = {
+const IMAGE_TOOL_ID_SCHEMA = {
+  type: "string",
+  minLength: 1,
+  maxLength: 256,
+} as const;
+
+const IMAGE_TOOL_LABEL_SCHEMA = {
+  type: "string",
+  minLength: 1,
+  maxLength: 256,
+} as const;
+
+const IMAGE_ATTACHMENT_ID_SCHEMA = {
+  type: "string",
+  pattern: "^image_[a-f0-9]{64}$",
+} as const;
+
+const IMAGE_ASSET_ID_SCHEMA = {
+  type: "string",
+  pattern: "^asset_[a-f0-9]{64}$",
+} as const;
+
+const PLACE_IMAGE_COMMON_PROPERTIES = {
+  pageId: IMAGE_TOOL_ID_SCHEMA,
+  parentId: {
+    anyOf: [IMAGE_TOOL_ID_SCHEMA, { type: "null" }],
+  },
+  index: { type: "integer", minimum: 0 },
+  nodeId: IMAGE_TOOL_ID_SCHEMA,
+  name: IMAGE_TOOL_LABEL_SCHEMA,
+  role: {
+    enum: ["background", "hero", "supporting-content", "final-single-image"],
+  },
+  x: { type: "number" },
+  y: { type: "number" },
+  width: { type: "number", exclusiveMinimum: 0 },
+  height: { type: "number", exclusiveMinimum: 0 },
+  placement: DESIGN_IMAGE_PLACEMENT_SCHEMA,
+} as const;
+
+const PLACE_IMAGE_REQUIRED = [
+  "pageId",
+  "parentId",
+  "index",
+  "nodeId",
+  "name",
+  "role",
+  "x",
+  "y",
+] as const;
+
+export const PLACE_IMAGE_TOOL_INPUT_SCHEMA = executableJsonSchema({
   type: "object",
   properties: {
-    attachmentId: { type: "string", pattern: "^image_[a-f0-9]{64}$" },
+    ...PLACE_IMAGE_COMMON_PROPERTIES,
+    attachmentId: IMAGE_ATTACHMENT_ID_SCHEMA,
     assetId: {
-      type: "string",
-      pattern: "^asset_[a-f0-9]{64}$",
+      ...IMAGE_ASSET_ID_SCHEMA,
       description:
         "Persistent image asset in the current Design File. Use either assetId or attachmentId. Existing assets require explicit width and height from inspection metadata.",
     },
-    pageId: { type: "string", minLength: 1, maxLength: 256 },
-    parentId: {
-      anyOf: [
-        { type: "string", minLength: 1, maxLength: 256 },
-        { type: "null" },
-      ],
-    },
-    index: { type: "integer", minimum: 0 },
-    nodeId: { type: "string", minLength: 1, maxLength: 256 },
-    name: { type: "string", minLength: 1, maxLength: 256 },
-    role: {
-      enum: ["background", "hero", "supporting-content", "final-single-image"],
-    },
-    x: { type: "number" },
-    y: { type: "number" },
-    width: { type: "number", exclusiveMinimum: 0 },
-    height: { type: "number", exclusiveMinimum: 0 },
-    placement: DESIGN_IMAGE_PLACEMENT_SCHEMA,
   },
-  required: ["pageId", "parentId", "index", "nodeId", "name", "role", "x", "y"],
-  oneOf: [
-    { required: ["attachmentId"], not: { required: ["assetId"] } },
+  required: PLACE_IMAGE_REQUIRED,
+  anyOf: [
     {
-      required: ["assetId", "width", "height"],
-      not: { required: ["attachmentId"] },
+      type: "object",
+      properties: {
+        ...PLACE_IMAGE_COMMON_PROPERTIES,
+        attachmentId: IMAGE_ATTACHMENT_ID_SCHEMA,
+      },
+      required: [...PLACE_IMAGE_REQUIRED, "attachmentId"],
+      additionalProperties: false,
+    },
+    {
+      type: "object",
+      properties: {
+        ...PLACE_IMAGE_COMMON_PROPERTIES,
+        assetId: IMAGE_ASSET_ID_SCHEMA,
+      },
+      required: [...PLACE_IMAGE_REQUIRED, "assetId", "width", "height"],
+      additionalProperties: false,
     },
   ],
   additionalProperties: false,
+});
+
+const UPDATE_IMAGE_COMMON_PROPERTIES = {
+  label: IMAGE_TOOL_LABEL_SCHEMA,
+  pageId: IMAGE_TOOL_ID_SCHEMA,
+  nodeId: IMAGE_TOOL_ID_SCHEMA,
 } as const;
 
-export const UPDATE_IMAGE_TOOL_INPUT_SCHEMA = {
+const UPDATE_IMAGE_REQUIRED = ["action", "label", "pageId", "nodeId"] as const;
+
+export const UPDATE_IMAGE_TOOL_INPUT_SCHEMA = executableJsonSchema({
   type: "object",
   properties: {
+    ...UPDATE_IMAGE_COMMON_PROPERTIES,
     action: {
       enum: [
         "set-placement",
@@ -378,24 +394,16 @@ export const UPDATE_IMAGE_TOOL_INPUT_SCHEMA = {
       description:
         "set-placement targets an Image node; set-filters targets an Image node; set-paint-filters targets one exact image Fill/Stroke; replace-source requires attachmentId and may also provide placement; switch-source selects an existing inspected source-family asset and requires the expected current asset ID.",
     },
-    label: { type: "string", minLength: 1, maxLength: 256 },
-    pageId: { type: "string", minLength: 1, maxLength: 256 },
-    nodeId: { type: "string", minLength: 1, maxLength: 256 },
     attachmentId: {
-      type: "string",
-      pattern: "^image_[a-f0-9]{64}$",
+      ...IMAGE_ATTACHMENT_ID_SCHEMA,
       description: "Required only for replace-source.",
     },
     expectedAssetId: {
-      type: "string",
-      minLength: 1,
-      maxLength: 256,
+      ...IMAGE_TOOL_ID_SCHEMA,
       description: "Required only for switch-source.",
     },
     assetId: {
-      type: "string",
-      minLength: 1,
-      maxLength: 256,
+      ...IMAGE_TOOL_ID_SCHEMA,
       description: "Existing source-family asset required by switch-source.",
     },
     placement: {
@@ -404,19 +412,7 @@ export const UPDATE_IMAGE_TOOL_INPUT_SCHEMA = {
         "Required for set-placement and optional for replace-source.",
     },
     filters: {
-      type: "object",
-      properties: Object.fromEntries(
-        [
-          "exposure",
-          "contrast",
-          "saturation",
-          "temperature",
-          "tint",
-          "highlights",
-          "shadows",
-        ].map((key) => [key, { type: "number", minimum: -1, maximum: 1 }]),
-      ),
-      additionalProperties: false,
+      ...ImageFiltersSchema,
       description:
         "Sparse non-destructive image adjustments. Missing fields are neutral; pass an empty object to reset all adjustments.",
     },
@@ -424,13 +420,129 @@ export const UPDATE_IMAGE_TOOL_INPUT_SCHEMA = {
     paintIndex: { type: "integer", minimum: 0, maximum: 4_095 },
     expectedPaint: ImagePaintSchema,
   },
-  required: ["action", "label", "pageId", "nodeId"],
+  required: UPDATE_IMAGE_REQUIRED,
+  anyOf: [
+    {
+      type: "object",
+      properties: {
+        ...UPDATE_IMAGE_COMMON_PROPERTIES,
+        action: { const: "set-placement" },
+        placement: DESIGN_IMAGE_PLACEMENT_SCHEMA,
+      },
+      required: [...UPDATE_IMAGE_REQUIRED, "placement"],
+      additionalProperties: false,
+    },
+    {
+      type: "object",
+      properties: {
+        ...UPDATE_IMAGE_COMMON_PROPERTIES,
+        action: { const: "set-filters" },
+        filters: ImageFiltersSchema,
+      },
+      required: [...UPDATE_IMAGE_REQUIRED, "filters"],
+      additionalProperties: false,
+    },
+    {
+      type: "object",
+      properties: {
+        ...UPDATE_IMAGE_COMMON_PROPERTIES,
+        action: { const: "set-paint-filters" },
+        paintField: { enum: ["fills", "strokes"] },
+        paintIndex: { type: "integer", minimum: 0, maximum: 4_095 },
+        expectedPaint: ImagePaintSchema,
+        filters: ImageFiltersSchema,
+      },
+      required: [
+        ...UPDATE_IMAGE_REQUIRED,
+        "paintField",
+        "paintIndex",
+        "expectedPaint",
+        "filters",
+      ],
+      additionalProperties: false,
+    },
+    {
+      type: "object",
+      properties: {
+        ...UPDATE_IMAGE_COMMON_PROPERTIES,
+        action: { const: "replace-source" },
+        attachmentId: IMAGE_ATTACHMENT_ID_SCHEMA,
+        placement: DESIGN_IMAGE_PLACEMENT_SCHEMA,
+      },
+      required: [...UPDATE_IMAGE_REQUIRED, "attachmentId"],
+      additionalProperties: false,
+    },
+    {
+      type: "object",
+      properties: {
+        ...UPDATE_IMAGE_COMMON_PROPERTIES,
+        action: { const: "switch-source" },
+        expectedAssetId: IMAGE_TOOL_ID_SCHEMA,
+        assetId: IMAGE_TOOL_ID_SCHEMA,
+      },
+      required: [...UPDATE_IMAGE_REQUIRED, "expectedAssetId", "assetId"],
+      additionalProperties: false,
+    },
+  ],
   additionalProperties: false,
-} as const;
+});
 
-export const EDIT_IMAGE_TOOL_INPUT_SCHEMA = {
+const IMAGE_SELECTION_SCHEMA = {
   type: "object",
   properties: {
+    points: {
+      type: "array",
+      minItems: 3,
+      maxItems: 512,
+      items: NORMALIZED_POINT_SCHEMA,
+    },
+  },
+  required: ["points"],
+  additionalProperties: false,
+  description:
+    "Closed lasso polygon in normalized source-image coordinates from current visual inspection.",
+} as const;
+
+const IMAGE_EXPANSION_SCHEMA = {
+  type: "object",
+  properties: {
+    top: { type: "number", minimum: 0, maximum: 1_000_000 },
+    right: { type: "number", minimum: 0, maximum: 1_000_000 },
+    bottom: { type: "number", minimum: 0, maximum: 1_000_000 },
+    left: { type: "number", minimum: 0, maximum: 1_000_000 },
+  },
+  required: ["top", "right", "bottom", "left"],
+  additionalProperties: false,
+  description:
+    "Outward expansion in Image node-local design units. At least one edge must be positive; each edge is limited by the current node size at execution.",
+} as const;
+
+const EDIT_IMAGE_COMMON_PROPERTIES = {
+  label: IMAGE_TOOL_LABEL_SCHEMA,
+  pageId: IMAGE_TOOL_ID_SCHEMA,
+  nodeId: IMAGE_TOOL_ID_SCHEMA,
+  expectedAssetId: IMAGE_TOOL_ID_SCHEMA,
+} as const;
+
+const EDIT_IMAGE_REQUIRED = [
+  "action",
+  "label",
+  "pageId",
+  "nodeId",
+  "expectedAssetId",
+] as const;
+
+const IMAGE_EDIT_PROMPT_SCHEMA = {
+  type: "string",
+  minLength: 1,
+  maxLength: 32_000,
+  pattern: "\\S",
+} as const;
+
+export const EDIT_IMAGE_TOOL_INPUT_SCHEMA = executableJsonSchema({
+  type: "object",
+  properties: {
+    ...EDIT_IMAGE_COMMON_PROPERTIES,
     action: {
       enum: [
         "remove-background",
@@ -443,168 +555,105 @@ export const EDIT_IMAGE_TOOL_INPUT_SCHEMA = {
         "upscale",
       ],
     },
-    label: { type: "string", minLength: 1, maxLength: 256 },
-    pageId: { type: "string", minLength: 1, maxLength: 256 },
-    nodeId: { type: "string", minLength: 1, maxLength: 256 },
-    expectedAssetId: { type: "string", minLength: 1, maxLength: 256 },
-    prompt: { type: "string", minLength: 1, maxLength: 32_000 },
+    prompt: IMAGE_EDIT_PROMPT_SCHEMA,
     lightingPreset: {
-      enum: [
-        "natural-soft",
-        "studio-softbox",
-        "golden-hour",
-        "moonlight",
-        "neon",
-      ],
+      ...ImageLightingPresetSchema,
       description:
         "Provider-independent lighting direction. The host adds the exact preservation prompt.",
     },
-    referenceAttachmentId: {
-      type: "string",
-      pattern: "^image_[a-f0-9]{64}$",
-    },
-    selection: {
-      type: "object",
-      properties: {
-        points: {
-          type: "array",
-          minItems: 3,
-          maxItems: 512,
-          items: NORMALIZED_POINT_SCHEMA,
-        },
-      },
-      required: ["points"],
-      additionalProperties: false,
-      description:
-        "Closed lasso polygon in normalized source-image coordinates from current visual inspection.",
-    },
+    referenceAttachmentId: IMAGE_ATTACHMENT_ID_SCHEMA,
+    selection: IMAGE_SELECTION_SCHEMA,
     resultNodeId: {
-      type: "string",
-      minLength: 1,
-      maxLength: 256,
+      ...IMAGE_TOOL_ID_SCHEMA,
       description: "Stable new Image layer ID required only by isolate-object.",
     },
-    expansion: {
-      type: "object",
-      properties: Object.fromEntries(
-        ["top", "right", "bottom", "left"].map((edge) => [
-          edge,
-          { type: "number", minimum: 0, maximum: 1_000_000 },
-        ]),
-      ),
-      required: ["top", "right", "bottom", "left"],
-      additionalProperties: false,
-      description:
-        "Outward expansion in Image node-local design units. At least one edge must be positive; each edge is limited by the current node size at execution.",
-    },
+    expansion: IMAGE_EXPANSION_SCHEMA,
   },
-  required: ["action", "label", "pageId", "nodeId", "expectedAssetId"],
-  oneOf: [
+  required: EDIT_IMAGE_REQUIRED,
+  anyOf: [
     {
-      properties: { action: { const: "remove-background" } },
-      not: {
-        anyOf: [
-          { required: ["prompt"] },
-          { required: ["lightingPreset"] },
-          { required: ["referenceAttachmentId"] },
-          { required: ["selection"] },
-          { required: ["resultNodeId"] },
-          { required: ["expansion"] },
-        ],
+      type: "object",
+      properties: {
+        ...EDIT_IMAGE_COMMON_PROPERTIES,
+        action: { const: "remove-background" },
       },
+      required: EDIT_IMAGE_REQUIRED,
+      additionalProperties: false,
     },
     {
-      properties: { action: { const: "replace-background" } },
-      required: ["prompt"],
-      not: {
-        anyOf: [
-          { required: ["lightingPreset"] },
-          { required: ["referenceAttachmentId"] },
-          { required: ["selection"] },
-          { required: ["resultNodeId"] },
-          { required: ["expansion"] },
-        ],
+      type: "object",
+      properties: {
+        ...EDIT_IMAGE_COMMON_PROPERTIES,
+        action: { const: "upscale" },
       },
+      required: EDIT_IMAGE_REQUIRED,
+      additionalProperties: false,
     },
     {
-      properties: { action: { const: "relight" } },
-      required: ["lightingPreset"],
-      not: {
-        anyOf: [
-          { required: ["prompt"] },
-          { required: ["referenceAttachmentId"] },
-          { required: ["selection"] },
-          { required: ["resultNodeId"] },
-          { required: ["expansion"] },
-        ],
+      type: "object",
+      properties: {
+        ...EDIT_IMAGE_COMMON_PROPERTIES,
+        action: { const: "replace-background" },
+        prompt: IMAGE_EDIT_PROMPT_SCHEMA,
       },
+      required: [...EDIT_IMAGE_REQUIRED, "prompt"],
+      additionalProperties: false,
     },
     {
-      properties: { action: { const: "prompt-edit" } },
-      required: ["prompt"],
-      not: {
-        anyOf: [
-          { required: ["lightingPreset"] },
-          { required: ["selection"] },
-          { required: ["resultNodeId"] },
-          { required: ["expansion"] },
-        ],
+      type: "object",
+      properties: {
+        ...EDIT_IMAGE_COMMON_PROPERTIES,
+        action: { const: "relight" },
+        lightingPreset: ImageLightingPresetSchema,
       },
+      required: [...EDIT_IMAGE_REQUIRED, "lightingPreset"],
+      additionalProperties: false,
     },
     {
-      properties: { action: { const: "erase-object" } },
-      required: ["selection"],
-      not: {
-        anyOf: [
-          { required: ["prompt"] },
-          { required: ["lightingPreset"] },
-          { required: ["referenceAttachmentId"] },
-          { required: ["resultNodeId"] },
-          { required: ["expansion"] },
-        ],
+      type: "object",
+      properties: {
+        ...EDIT_IMAGE_COMMON_PROPERTIES,
+        action: { const: "prompt-edit" },
+        prompt: IMAGE_EDIT_PROMPT_SCHEMA,
+        referenceAttachmentId: IMAGE_ATTACHMENT_ID_SCHEMA,
       },
+      required: [...EDIT_IMAGE_REQUIRED, "prompt"],
+      additionalProperties: false,
     },
     {
-      properties: { action: { const: "isolate-object" } },
-      required: ["selection", "resultNodeId"],
-      not: {
-        anyOf: [
-          { required: ["prompt"] },
-          { required: ["lightingPreset"] },
-          { required: ["referenceAttachmentId"] },
-          { required: ["expansion"] },
-        ],
+      type: "object",
+      properties: {
+        ...EDIT_IMAGE_COMMON_PROPERTIES,
+        action: { const: "erase-object" },
+        selection: IMAGE_SELECTION_SCHEMA,
       },
+      required: [...EDIT_IMAGE_REQUIRED, "selection"],
+      additionalProperties: false,
     },
     {
-      properties: { action: { const: "expand" } },
-      required: ["expansion"],
-      not: {
-        anyOf: [
-          { required: ["prompt"] },
-          { required: ["lightingPreset"] },
-          { required: ["referenceAttachmentId"] },
-          { required: ["selection"] },
-          { required: ["resultNodeId"] },
-        ],
+      type: "object",
+      properties: {
+        ...EDIT_IMAGE_COMMON_PROPERTIES,
+        action: { const: "isolate-object" },
+        selection: IMAGE_SELECTION_SCHEMA,
+        resultNodeId: IMAGE_TOOL_ID_SCHEMA,
       },
+      required: [...EDIT_IMAGE_REQUIRED, "selection", "resultNodeId"],
+      additionalProperties: false,
     },
     {
-      properties: { action: { const: "upscale" } },
-      not: {
-        anyOf: [
-          { required: ["prompt"] },
-          { required: ["lightingPreset"] },
-          { required: ["referenceAttachmentId"] },
-          { required: ["selection"] },
-          { required: ["resultNodeId"] },
-          { required: ["expansion"] },
-        ],
+      type: "object",
+      properties: {
+        ...EDIT_IMAGE_COMMON_PROPERTIES,
+        action: { const: "expand" },
+        expansion: IMAGE_EXPANSION_SCHEMA,
       },
+      required: [...EDIT_IMAGE_REQUIRED, "expansion"],
+      additionalProperties: false,
     },
   ],
   additionalProperties: false,
-} as const;
+});
 
 function parseReadImage(input: unknown): ValidationResult<ReadImageToolInput> {
   const issues = imageToolSchemaIssues(
@@ -656,218 +705,94 @@ export const GenerateImageContract = {
   },
 } as const;
 
-export function isPlaceImageToolInput(
+function parsePlaceImage(
   input: unknown,
-): input is PlaceImageToolInput {
-  if (!isRecord(input)) return false;
-  const attachmentSource =
-    typeof input.attachmentId === "string" &&
-    /^image_[a-f0-9]{64}$/.test(input.attachmentId) &&
-    input.assetId === undefined;
-  const assetSource =
-    typeof input.assetId === "string" &&
-    /^asset_[a-f0-9]{64}$/.test(input.assetId) &&
-    input.attachmentId === undefined &&
-    positive(input.width) &&
-    positive(input.height);
-  return (
-    (attachmentSource || assetSource) &&
-    safeId(input.pageId) &&
-    (input.parentId === null || safeId(input.parentId)) &&
-    Number.isInteger(input.index) &&
-    Number(input.index) >= 0 &&
-    safeId(input.nodeId) &&
-    typeof input.name === "string" &&
-    input.name.length > 0 &&
-    input.name.length <= 256 &&
-    isPlaceableRasterAssetRole(input.role) &&
-    finite(input.x) &&
-    finite(input.y) &&
-    (input.width === undefined || positive(input.width)) &&
-    (input.height === undefined || positive(input.height)) &&
-    (input.placement === undefined || isImagePlacement(input.placement)) &&
-    Object.keys(input).every((key) =>
-      [
-        "attachmentId",
-        "assetId",
-        "pageId",
-        "parentId",
-        "index",
-        "nodeId",
-        "name",
-        "role",
-        "x",
-        "y",
-        "width",
-        "height",
-        "placement",
-      ].includes(key),
-    )
+): ValidationResult<PlaceImageToolInput> {
+  const issues = imageToolSchemaIssues(
+    PLACE_IMAGE_TOOL_INPUT_SCHEMA,
+    input,
+    "place_image.schema_invalid",
+    "Place Image",
   );
+  return issues.length > 0
+    ? { ok: false, issues }
+    : { ok: true, value: structuredClone(input as PlaceImageToolInput) };
 }
 
-export function isUpdateImageToolInput(
+export const PlaceImageContract = {
+  schema: PLACE_IMAGE_TOOL_INPUT_SCHEMA,
+  parse: parsePlaceImage,
+  issues: (input: unknown): ValidationIssue[] => {
+    const result = parsePlaceImage(input);
+    return result.ok ? [] : result.issues;
+  },
+} as const;
+
+function parseUpdateImage(
   input: unknown,
-): input is UpdateImageToolInput {
-  if (!isRecord(input) || !hasCommonUpdateFields(input)) return false;
-  if (input.action === "set-placement") {
-    return (
-      isImagePlacement(input.placement) &&
-      exactKeys(input, ["action", "label", "pageId", "nodeId", "placement"])
-    );
-  }
-  if (input.action === "set-filters") {
-    return (
-      isImageFilters(input.filters) &&
-      exactKeys(input, ["action", "label", "pageId", "nodeId", "filters"])
-    );
-  }
-  if (input.action === "set-paint-filters") {
-    return (
-      (input.paintField === "fills" || input.paintField === "strokes") &&
-      Number.isInteger(input.paintIndex) &&
-      Number(input.paintIndex) >= 0 &&
-      Number(input.paintIndex) <= 4_095 &&
-      isImagePaint(input.expectedPaint) &&
-      isImageFilters(input.filters) &&
-      exactKeys(input, [
-        "action",
-        "label",
-        "pageId",
-        "nodeId",
-        "paintField",
-        "paintIndex",
-        "expectedPaint",
-        "filters",
-      ])
-    );
-  }
-  if (input.action === "switch-source") {
-    return (
-      safeId(input.expectedAssetId) &&
-      safeId(input.assetId) &&
-      exactKeys(input, [
-        "action",
-        "label",
-        "pageId",
-        "nodeId",
-        "expectedAssetId",
-        "assetId",
-      ])
-    );
-  }
-  return (
-    input.action === "replace-source" &&
-    typeof input.attachmentId === "string" &&
-    /^image_[a-f0-9]{64}$/.test(input.attachmentId) &&
-    (input.placement === undefined || isImagePlacement(input.placement)) &&
-    exactKeys(input, [
-      "action",
-      "label",
-      "pageId",
-      "nodeId",
-      "attachmentId",
-      ...(input.placement === undefined ? [] : ["placement"]),
-    ])
+): ValidationResult<UpdateImageToolInput> {
+  const issues = imageToolSchemaIssues(
+    UPDATE_IMAGE_TOOL_INPUT_SCHEMA,
+    input,
+    "update_image.schema_invalid",
+    "Update Image",
   );
+  return issues.length > 0
+    ? { ok: false, issues }
+    : { ok: true, value: structuredClone(input as UpdateImageToolInput) };
 }
 
-export function isEditImageToolInput(
-  input: unknown,
-): input is EditImageToolInput {
+export const UpdateImageContract = {
+  schema: UPDATE_IMAGE_TOOL_INPUT_SCHEMA,
+  parse: parseUpdateImage,
+  issues: (input: unknown): ValidationIssue[] => {
+    const result = parseUpdateImage(input);
+    return result.ok ? [] : result.issues;
+  },
+} as const;
+
+function parseEditImage(input: unknown): ValidationResult<EditImageToolInput> {
+  const structureIssues = imageToolSchemaIssues(
+    EDIT_IMAGE_TOOL_INPUT_SCHEMA,
+    input,
+    "edit_image.schema_invalid",
+    "Edit Image",
+  );
+  if (structureIssues.length > 0) {
+    return { ok: false, issues: structureIssues };
+  }
+
+  const value = input as EditImageToolInput;
   if (
-    !isRecord(input) ||
-    !hasCommonUpdateFields(input) ||
-    !safeId(input.expectedAssetId)
+    value.action === "expand" &&
+    Object.values(value.expansion).every((edge) => edge === 0)
   ) {
-    return false;
+    return {
+      ok: false,
+      issues: [
+        {
+          code: "edit_image.expansion_empty",
+          path: "/expansion",
+          message: "At least one expansion edge must be greater than zero",
+          expected: "top, right, bottom, or left > 0",
+          recovery:
+            "Set the intended outward edge in node-local design units and submit one revised call.",
+        },
+      ],
+    };
   }
-  if (input.action === "remove-background" || input.action === "upscale") {
-    return exactKeys(input, [
-      "action",
-      "label",
-      "pageId",
-      "nodeId",
-      "expectedAssetId",
-    ]);
-  }
-  if (input.action === "replace-background") {
-    return (
-      typeof input.prompt === "string" &&
-      input.prompt.trim().length > 0 &&
-      input.prompt.length <= 32_000 &&
-      exactKeys(input, [
-        "action",
-        "label",
-        "pageId",
-        "nodeId",
-        "expectedAssetId",
-        "prompt",
-      ])
-    );
-  }
-  if (input.action === "relight") {
-    return (
-      isImageLightingPreset(input.lightingPreset) &&
-      exactKeys(input, [
-        "action",
-        "label",
-        "pageId",
-        "nodeId",
-        "expectedAssetId",
-        "lightingPreset",
-      ])
-    );
-  }
-  if (input.action === "erase-object" || input.action === "isolate-object") {
-    return (
-      isImageAreaSelection(input.selection) &&
-      (input.action !== "isolate-object" || safeId(input.resultNodeId)) &&
-      exactKeys(input, [
-        "action",
-        "label",
-        "pageId",
-        "nodeId",
-        "expectedAssetId",
-        "selection",
-        ...(input.action === "isolate-object" ? ["resultNodeId"] : []),
-      ])
-    );
-  }
-  if (input.action === "expand") {
-    return (
-      isImageExpansion(input.expansion) &&
-      exactKeys(input, [
-        "action",
-        "label",
-        "pageId",
-        "nodeId",
-        "expectedAssetId",
-        "expansion",
-      ])
-    );
-  }
-  return (
-    input.action === "prompt-edit" &&
-    typeof input.prompt === "string" &&
-    input.prompt.trim().length > 0 &&
-    input.prompt.length <= 32_000 &&
-    (input.referenceAttachmentId === undefined ||
-      (typeof input.referenceAttachmentId === "string" &&
-        /^image_[a-f0-9]{64}$/.test(input.referenceAttachmentId))) &&
-    exactKeys(input, [
-      "action",
-      "label",
-      "pageId",
-      "nodeId",
-      "expectedAssetId",
-      "prompt",
-      ...(input.referenceAttachmentId === undefined
-        ? []
-        : ["referenceAttachmentId"]),
-    ])
-  );
+
+  return { ok: true, value: structuredClone(value) };
 }
+
+export const EditImageContract = {
+  schema: EDIT_IMAGE_TOOL_INPUT_SCHEMA,
+  parse: parseEditImage,
+  issues: (input: unknown): ValidationIssue[] => {
+    const result = parseEditImage(input);
+    return result.ok ? [] : result.issues;
+  },
+} as const;
 
 export function isInternalReadImageSourceToolInput(
   input: unknown,
@@ -1133,27 +1058,6 @@ export function isInternalUpdateImageToolInput(
   );
 }
 
-function isImageAreaSelection(value: unknown): value is ImageAreaSelection {
-  return (
-    isRecord(value) &&
-    Array.isArray(value.points) &&
-    value.points.length >= 3 &&
-    value.points.length <= 512 &&
-    value.points.every(
-      (point) =>
-        isRecord(point) &&
-        finite(point.x) &&
-        point.x >= 0 &&
-        point.x <= 1 &&
-        finite(point.y) &&
-        point.y >= 0 &&
-        point.y <= 1 &&
-        exactKeys(point, ["x", "y"]),
-    ) &&
-    exactKeys(value, ["points"])
-  );
-}
-
 function isImageExpansion(value: unknown): value is ImageExpansion {
   if (
     !isRecord(value) ||
@@ -1249,12 +1153,5 @@ function imageToolSchemaIssues(
   code: string,
   subject: string,
 ): ValidationIssue[] {
-  return schemaValidationIssues(schema, input)
-    .slice(0, 64)
-    .map((issue) => ({
-      code,
-      path: issue.path || "/",
-      message: issue.message,
-      recovery: `Correct the reported ${subject} field and submit one revised call; do not repeat unchanged arguments.`,
-    }));
+  return contractSchemaIssues(schema, input, { code, subject });
 }

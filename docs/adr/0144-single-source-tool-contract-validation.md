@@ -1,6 +1,6 @@
 # ADR-0144：单一来源的工具契约验证
 
-- 状态：Accepted，first-slice、node apply、Design Plan、Checkpoint 与图片获取已实施，其余契约分阶段实施
+- 状态：Accepted，first-slice、node apply、Design Plan、Checkpoint、图片获取与公开图片操作已实施，其余契约分阶段实施
 - 日期：2026-08-23
 - 首个迁移对象：compact first-slice
 - 关联：ADR-0018、ADR-0100、ADR-0103、ADR-0141、ADR-0143
@@ -79,12 +79,14 @@ Design Checkpoint 已完成第四个迁移切片：`DesignCheckpointContract.par
 
 图片获取已完成第五个迁移切片：`ReadImageContract.parse(input)` 与 `GenerateImageContract.parse(input)` 分别成为读取用户授权图片和调用全局生图模型的唯一输入入口，Provider、Pi、工具聚合校验与 Main 执行消费同一可执行 schema。旧 `isReadImageToolInput / isGenerateImageToolInput` 已删除。显式生成尺寸的每边 `256..4096`、最大 `4:1` 宽高比和 `16,777,216` 像素总面积仍由一个 domain refinement 负责，但准确限制同步进入模型可见 schema 描述；空白 prompt 在结构层直接拒绝，不再出现 Provider 合法、Runtime 才失败的隐藏规则。
 
+公开图片操作已完成第六个迁移切片：`PlaceImageContract / UpdateImageContract / EditImageContract` 分别以一个可执行 schema 同时服务 Provider、Pi、工具聚合校验和 Main 执行。placement 与 filters 直接复用 `DesignDocument` 的权威 `ImagePlacementSchema / ImageFiltersSchema / ImagePaintSchema`；action discriminant 选择放置来源、非破坏更新或 AI 派生编辑的准确分支，未知/串用字段返回真实字段路径。旧 `isPlaceImageToolInput / isUpdateImageToolInput / isEditImageToolInput` 已删除。只有“扩图至少一个边大于零”保留为单一跨字段 refinement；Run attachment 授权、Design File asset、Page/Mutation Target、source-family stale guard 和事务 invariant 继续分别由 Main 与 EditorRuntime 拥有。Figma 兼容边界保持 asset/paint 与 placement/filter 语义；OpenDesign 的去背、扩图、重打光等 AI 能力继续作为带 provenance 的资产派生，不伪装成 Figma 原生文档字段。通用 `contractSchemaIssues` 会去除 union/intersection 的重复根错误并按字段路径去重，Pi、journal、diagnostic 与 Timeline 因此只收到可操作 issue。
+
 `ValidationIssue` 的稳定 `code/path/expected/actual/recovery` 通过 `tool-validation` failure details 进入 Agent event、journal 和 Timeline；这种参数修正使用 `correct-and-retry`，不冒充需要文档 inspection 的事务错误。Design transaction 仍保留独立 `inspect-and-revise` 恢复语义。
 
-Visual Review、图片放置/更新/编辑、导入导出、结构、Page、Component、Style、Variable 等其余 Agent tools 与 IPC/持久化契约尚未迁移，不得据此宣称全仓已实现单一验证入口。
+Visual Review、导入导出、结构、Page、Component、Style、Variable 等其余 Agent tools，以及公开图片工具之后的 trusted internal Renderer bridge、IPC 与持久化契约尚未迁移，不得据此宣称全仓已实现单一验证入口。
 
 ## 后果
 
 - 不重写 pi-agent-core 已有的循环或 TypeBox 参数验证；OpenDesign 只增加产品 domain refinement 和边界 issue adapter。
 - 首个迁移会删除较多手写代码并改变测试入口，属于允许的破坏性开发更新。
-- 在迁移完成前，新增 first-slice、node apply、Design Plan、Checkpoint、Read Image 或 Generate Image 字段必须进入对应单一入口；不得继续扩展三套旧函数。
+- 在迁移完成前，新增 first-slice、node apply、Design Plan、Checkpoint、Read/Generate/Place/Update/Edit Image 字段必须进入对应单一入口；不得继续扩展三套旧函数。

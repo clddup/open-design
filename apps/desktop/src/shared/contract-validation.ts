@@ -1,4 +1,8 @@
 import type { AgentToolFailureIssue } from "@opendesign/agent-contracts";
+import {
+  schemaValidationIssues,
+  type TSchema,
+} from "@opendesign/design-contracts";
 
 export type ValidationIssue = AgentToolFailureIssue & { code: string };
 export type ValidationIssueValue = NonNullable<
@@ -7,6 +11,35 @@ export type ValidationIssueValue = NonNullable<
 
 export type ValidationResult<T> =
   { ok: true; value: T } | { ok: false; issues: ValidationIssue[] };
+
+export function contractSchemaIssues(
+  schema: TSchema,
+  input: unknown,
+  options: {
+    code: string;
+    subject: string;
+    maximum?: number;
+  },
+): ValidationIssue[] {
+  const raw = schemaValidationIssues(schema, input);
+  const hasSpecificPath = raw.some((issue) => issue.path.length > 0);
+  const seenPaths = new Set<string>();
+  const issues: ValidationIssue[] = [];
+  for (const issue of raw) {
+    const path = issue.path || "/";
+    if (hasSpecificPath && path === "/") continue;
+    if (seenPaths.has(path)) continue;
+    seenPaths.add(path);
+    issues.push({
+      code: options.code,
+      path,
+      message: issue.message,
+      recovery: `Correct the reported ${options.subject} field and submit one revised call; do not repeat unchanged arguments.`,
+    });
+    if (issues.length >= (options.maximum ?? 64)) break;
+  }
+  return issues;
+}
 
 export function formatValidationFailure(
   subject: string,

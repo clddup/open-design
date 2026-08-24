@@ -133,8 +133,11 @@ import {
   GENERATE_IMAGE_TOOL_NAME,
   DesignApplyContract,
   DeliveryScopeContract,
+  EditImageContract,
   GenerateImageContract,
+  PlaceImageContract,
   ReadImageContract,
+  UpdateImageContract,
   isDesignComponentToolInput,
   isDesignFontToolInput,
   isDesignTextRangeToolInput,
@@ -142,12 +145,9 @@ import {
   isDesignVectorToolInput,
   isPageStructureAccessToolInput,
   normalizeDesignVisualReviewToolInput,
-  isEditImageToolInput,
   isExportSvgToolInput,
   isExportRasterToolInput,
   isImportSvgToolInput,
-  isPlaceImageToolInput,
-  isUpdateImageToolInput,
   isPreparedImageEditSource,
   INTERNAL_UPDATE_IMAGE_TOOL_NAME,
   PLACE_IMAGE_TOOL_NAME,
@@ -1269,33 +1269,37 @@ async function startDesktopApplication(
         };
       }
       if (call.toolName === PLACE_IMAGE_TOOL_NAME) {
-        if (!isPlaceImageToolInput(call.input)) {
-          throw new TypeError("Invalid place image tool input");
+        const parsed = PlaceImageContract.parse(call.input);
+        if (!parsed.ok) {
+          throw new TypeError(
+            formatValidationFailure("Place Image", parsed.issues),
+          );
         }
+        const input = parsed.value;
         const attachmentId =
-          "attachmentId" in call.input && call.input.attachmentId !== undefined
+          "attachmentId" in input && input.attachmentId !== undefined
             ? requireAgentReferenceHost().hasAuthorizedImage(
-                call.input.attachmentId,
+                input.attachmentId,
                 context,
               )
-              ? call.input.attachmentId
+              ? input.attachmentId
               : globalTaskCoordinator.resolveGeneratedRasterAttachmentId(
                   context,
-                  call.input.attachmentId,
-                  call.input.role,
+                  input.attachmentId,
+                  input.role,
                 )
             : undefined;
         globalTaskCoordinator.assertDesignPlanForImagePlacement(
           context,
-          call.input.role,
-          call.input.parentId,
+          input.role,
+          input.parentId,
           attachmentId,
-          call.input.nodeId,
+          input.nodeId,
         );
         const targetIds = globalTaskCoordinator.resolveMaterialTargetIds(
           context,
           [],
-          call.input.parentId,
+          input.parentId,
         );
         const image = attachmentId
           ? await requireAgentReferenceHost().materializeImage(
@@ -1309,9 +1313,7 @@ async function startDesktopApplication(
               .getSize()
           : undefined;
         const persistentAssetInput =
-          "assetId" in call.input && call.input.assetId !== undefined
-            ? call.input
-            : undefined;
+          "assetId" in input && input.assetId !== undefined ? input : undefined;
         const intrinsicWidth = Math.max(
           1,
           intrinsic?.width ?? persistentAssetInput?.width ?? 1,
@@ -1321,14 +1323,14 @@ async function startDesktopApplication(
           intrinsic?.height ?? persistentAssetInput?.height ?? 1,
         );
         const width =
-          call.input.width ??
-          (call.input.height
-            ? (call.input.height * intrinsicWidth) / intrinsicHeight
+          input.width ??
+          (input.height
+            ? (input.height * intrinsicWidth) / intrinsicHeight
             : intrinsicWidth);
         const height =
-          call.input.height ??
-          (call.input.width
-            ? (call.input.width * intrinsicHeight) / intrinsicWidth
+          input.height ??
+          (input.width
+            ? (input.width * intrinsicHeight) / intrinsicWidth
             : intrinsicHeight);
         const assetId = persistentAssetInput
           ? persistentAssetInput.assetId
@@ -1353,7 +1355,7 @@ async function startDesktopApplication(
                   },
                   extensions: {
                     attachmentId: image.attachment.attachmentId,
-                    designRole: call.input.role,
+                    designRole: input.role,
                   },
                 },
               },
@@ -1363,37 +1365,37 @@ async function startDesktopApplication(
           ...call,
           toolName: INTERNAL_DESIGN_APPLY_TOOL_NAME,
           input: {
-            label: `Place ${call.input.name}`,
+            label: `Place ${input.name}`,
             commands: [
               ...assetCommand,
               {
                 commandId: `${call.toolCallId}_node`,
                 type: "insert_element",
-                pageId: call.input.pageId,
-                parentId: call.input.parentId,
-                index: call.input.index,
+                pageId: input.pageId,
+                parentId: input.parentId,
+                index: input.index,
                 node: {
-                  id: call.input.nodeId,
+                  id: input.nodeId,
                   kind: "image",
-                  name: call.input.name,
-                  parentId: call.input.parentId,
+                  name: input.name,
+                  parentId: input.parentId,
                   childIds: [],
                   visible: true,
                   locked: false,
-                  transform: [1, 0, 0, 1, call.input.x, call.input.y],
+                  transform: [1, 0, 0, 1, input.x, input.y],
                   size: { width, height },
                   exportSettings: [],
                   opacity: 1,
                   properties: {
                     assetId,
-                    placement: call.input.placement ?? {
+                    placement: input.placement ?? {
                       mode: "fill",
                       focalPoint: { x: 0.5, y: 0.5 },
                     },
-                    altText: call.input.name,
+                    altText: input.name,
                     cornerRadius: 0,
                   },
-                  extensions: { designRole: call.input.role },
+                  extensions: { designRole: input.role },
                 },
               },
             ],
@@ -1403,17 +1405,21 @@ async function startDesktopApplication(
           context.runId,
           targetIds,
           result.designRevision?.revision,
-          [call.input.nodeId],
+          [input.nodeId],
         );
         return withDesignDelivery(result, context.runId);
       }
       if (call.toolName === UPDATE_IMAGE_TOOL_NAME) {
-        if (!isUpdateImageToolInput(call.input)) {
-          throw new TypeError("Invalid update image tool input");
+        const parsed = UpdateImageContract.parse(call.input);
+        if (!parsed.ok) {
+          throw new TypeError(
+            formatValidationFailure("Update Image", parsed.issues),
+          );
         }
+        const input = parsed.value;
         if (
           executionContext.mutationTarget.kind === "page" &&
-          executionContext.mutationTarget.pageId !== call.input.pageId
+          executionContext.mutationTarget.pageId !== input.pageId
         ) {
           throw new Error(
             "Image update targets a Page outside the active mutation target",
@@ -1422,11 +1428,11 @@ async function startDesktopApplication(
         globalTaskCoordinator.assertVisualReviewBeforeWrite(context);
         const targetIds = globalTaskCoordinator.resolveMaterialTargetIds(
           context,
-          [call.input.nodeId],
+          [input.nodeId],
         );
-        if (call.input.action === "replace-source") {
+        if (input.action === "replace-source") {
           const image = await requireAgentReferenceHost().materializeImage(
-            call.input.attachmentId,
+            input.attachmentId,
             context,
           );
           const intrinsic = nativeImage
@@ -1442,9 +1448,9 @@ async function startDesktopApplication(
             toolName: INTERNAL_UPDATE_IMAGE_TOOL_NAME,
             input: {
               action: "replace-source",
-              label: call.input.label,
-              pageId: call.input.pageId,
-              nodeId: call.input.nodeId,
+              label: input.label,
+              pageId: input.pageId,
+              nodeId: input.nodeId,
               asset: {
                 id: assetId,
                 kind: "image",
@@ -1457,9 +1463,9 @@ async function startDesktopApplication(
                   importedBy: "agent-image-update",
                 },
               },
-              ...(call.input.placement === undefined
+              ...(input.placement === undefined
                 ? {}
-                : { placement: call.input.placement }),
+                : { placement: input.placement }),
             },
           });
           globalTaskCoordinator.recordMaterialDesignWriteCompleted(
@@ -1472,7 +1478,7 @@ async function startDesktopApplication(
         const result = await executeRendererTool({
           ...call,
           toolName: INTERNAL_UPDATE_IMAGE_TOOL_NAME,
-          input: call.input,
+          input,
         });
         globalTaskCoordinator.recordMaterialDesignWriteCompleted(
           context.runId,
@@ -1482,12 +1488,16 @@ async function startDesktopApplication(
         return withDesignDelivery(result, context.runId);
       }
       if (call.toolName === EDIT_IMAGE_TOOL_NAME) {
-        if (!isEditImageToolInput(call.input)) {
-          throw new TypeError("Invalid edit image tool input");
+        const parsed = EditImageContract.parse(call.input);
+        if (!parsed.ok) {
+          throw new TypeError(
+            formatValidationFailure("Edit Image", parsed.issues),
+          );
         }
+        const input = parsed.value;
         if (
           executionContext.mutationTarget.kind === "page" &&
-          executionContext.mutationTarget.pageId !== call.input.pageId
+          executionContext.mutationTarget.pageId !== input.pageId
         ) {
           throw new Error(
             "Image edit targets a Page outside the active mutation target",
@@ -1497,16 +1507,16 @@ async function startDesktopApplication(
         globalTaskCoordinator.assertVisualReviewBeforeWrite(context);
         const targetIds = globalTaskCoordinator.resolveMaterialTargetIds(
           context,
-          [call.input.nodeId],
+          [input.nodeId],
         );
         const prepared = await executeRendererTool({
           ...call,
           toolCallId: `${call.toolCallId}_read_source`.slice(0, 256),
           toolName: INTERNAL_READ_IMAGE_SOURCE_TOOL_NAME,
           input: {
-            pageId: call.input.pageId,
-            nodeId: call.input.nodeId,
-            expectedAssetId: call.input.expectedAssetId,
+            pageId: input.pageId,
+            nodeId: input.nodeId,
+            expectedAssetId: input.expectedAssetId,
           },
         });
         if (!isPreparedImageEditSource(prepared.content)) {
@@ -1516,53 +1526,51 @@ async function startDesktopApplication(
         }
         const source = prepared.content.asset;
         const reference =
-          call.input.action === "prompt-edit" &&
-          call.input.referenceAttachmentId
+          input.action === "prompt-edit" && input.referenceAttachmentId
             ? await materializeAgentImageAsset(
-                call.input.referenceAttachmentId,
+                input.referenceAttachmentId,
                 context,
                 "agent-image-edit-reference",
               )
             : undefined;
         const derived = await editDesignImageAsset(
-          call.input.action === "remove-background" ||
-            call.input.action === "upscale"
+          input.action === "remove-background" || input.action === "upscale"
             ? {
-                action: call.input.action,
+                action: input.action,
                 source,
                 importedBy: "agent-image-edit",
               }
-            : call.input.action === "prompt-edit" ||
-                call.input.action === "replace-background"
+            : input.action === "prompt-edit" ||
+                input.action === "replace-background"
               ? {
-                  action: call.input.action,
+                  action: input.action,
                   source,
-                  prompt: call.input.prompt,
+                  prompt: input.prompt,
                   ...(reference === undefined
                     ? {}
                     : { references: [reference] }),
                   importedBy: "agent-image-edit",
                 }
-              : call.input.action === "relight"
+              : input.action === "relight"
                 ? {
-                    action: call.input.action,
+                    action: input.action,
                     source,
-                    lightingPreset: call.input.lightingPreset,
+                    lightingPreset: input.lightingPreset,
                     importedBy: "agent-image-edit",
                   }
-                : call.input.action === "expand"
+                : input.action === "expand"
                   ? {
-                      action: call.input.action,
+                      action: input.action,
                       source,
-                      expansion: call.input.expansion,
+                      expansion: input.expansion,
                       placement: prepared.content.placement,
                       targetSize: prepared.content.targetSize,
                       importedBy: "agent-image-edit",
                     }
                   : {
-                      action: call.input.action,
+                      action: input.action,
                       source,
-                      selection: call.input.selection,
+                      selection: input.selection,
                       importedBy: "agent-image-edit",
                     },
           signal,
@@ -1573,25 +1581,25 @@ async function startDesktopApplication(
           toolName: INTERNAL_UPDATE_IMAGE_TOOL_NAME,
           input: {
             action:
-              call.input.action === "isolate-object"
+              input.action === "isolate-object"
                 ? "derive-layer"
-                : call.input.action === "expand"
+                : input.action === "expand"
                   ? "expand-source"
-                  : call.input.action === "upscale"
+                  : input.action === "upscale"
                     ? "upscale-source"
                     : "derive-source",
-            label: call.input.label,
-            pageId: call.input.pageId,
-            nodeId: call.input.nodeId,
-            expectedAssetId: call.input.expectedAssetId,
-            ...(call.input.action === "expand"
+            label: input.label,
+            pageId: input.pageId,
+            nodeId: input.nodeId,
+            expectedAssetId: input.expectedAssetId,
+            ...(input.action === "expand"
               ? {
                   expectedPlacement: prepared.content.placement,
                   expectedTargetSize: prepared.content.targetSize,
-                  expansion: call.input.expansion,
+                  expansion: input.expansion,
                 }
               : {}),
-            ...(call.input.action === "upscale"
+            ...(input.action === "upscale"
               ? (() => {
                   if (!source.size || !derived.asset.size) {
                     throw new TypeError(
@@ -1606,9 +1614,9 @@ async function startDesktopApplication(
               : {}),
             asset: derived.asset,
             derivation: derived.derivation,
-            ...(call.input.action === "isolate-object"
+            ...(input.action === "isolate-object"
               ? {
-                  resultNodeId: call.input.resultNodeId,
+                  resultNodeId: input.resultNodeId,
                   resultNodeName: "Isolated object",
                 }
               : {}),
@@ -1621,9 +1629,7 @@ async function startDesktopApplication(
           context.runId,
           targetIds,
           result.designRevision?.revision,
-          call.input.action === "isolate-object"
-            ? [call.input.resultNodeId]
-            : undefined,
+          input.action === "isolate-object" ? [input.resultNodeId] : undefined,
         );
         return withDesignDelivery(result, context.runId);
       }
