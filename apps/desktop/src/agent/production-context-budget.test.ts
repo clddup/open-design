@@ -148,7 +148,7 @@ describe("production Agent context budget", () => {
       expect(
         (gateway.requests[0]?.system.length ?? 0) +
           JSON.stringify(gateway.requests[0]?.tools).length,
-      ).toBeLessThan(30_000);
+      ).toBeLessThan(34_000);
       expect(gateway.requests[0]?.tools).not.toContainEqual(
         expect.objectContaining({ name: GENERATE_IMAGE_TOOL_NAME }),
       );

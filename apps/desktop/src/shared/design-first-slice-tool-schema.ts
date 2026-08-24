@@ -218,10 +218,17 @@ const TARGET_MODEL_SCHEMA = Type.Object(
     targetId: idSchema(128),
     label: idSchema(),
     pageId: idSchema(),
+    objective: textSchema(8, 500),
     frame: FRAME_SCHEMA,
+    layout: textSchema(12, 320),
+    spacing: textSchema(8, 160),
     regions: Type.Array(REGION_SCHEMA, { minItems: 1, maxItems: 12 }),
   },
-  CLOSED,
+  {
+    ...CLOSED,
+    description:
+      "Concise target job and spatial strategy. Describe the target once; do not justify individual primitives.",
+  },
 );
 
 const GRAPHIC_QUALITY_PROFILE_SCHEMA = Type.Object(
@@ -357,21 +364,25 @@ const LOGO_EXPLORATION_SCHEMA = Type.Object(
 
 const DESIGN_INTENT_SCHEMA = Type.Object(
   {
-    subject: textSchema(8, 500),
-    audience: textSchema(8, 500),
-    primaryJob: textSchema(8, 500),
-    visualThesis: textSchema(16, 1_000),
-    signatureMotif: textSchema(16, 1_000),
-    typographyLanguage: textSchema(12, 1_000),
-    colorMaterialLanguage: textSchema(12, 1_000),
-    compositionTension: textSchema(12, 1_000),
-    antiPatterns: Type.Array(textSchema(8, 256), {
+    subject: textSchema(8, 200),
+    audience: textSchema(8, 200),
+    primaryJob: textSchema(8, 240),
+    visualThesis: textSchema(16, 320),
+    signatureMotif: textSchema(16, 320),
+    typographyLanguage: textSchema(12, 240),
+    colorMaterialLanguage: textSchema(12, 240),
+    compositionTension: textSchema(12, 240),
+    antiPatterns: Type.Array(textSchema(8, 160), {
       minItems: 3,
-      maxItems: 12,
+      maxItems: 5,
       uniqueItems: true,
     }),
   },
-  CLOSED,
+  {
+    ...CLOSED,
+    description:
+      "One concise brief-specific visual direction for the delivery, not a per-element rationale or user-facing design essay.",
+  },
 );
 
 const FIDELITY_ITEM_SCHEMA = textSchema(1, 500);
@@ -393,13 +404,17 @@ const BRIEF_FIDELITY_SCHEMA = Type.Object(
 
 const VISUAL_SYSTEM_SCHEMA = Type.Object(
   {
-    formLanguage: textSchema(1, 1_000),
-    palette: Type.Array(textSchema(1, 128), { minItems: 1, maxItems: 12 }),
-    surfaceAndDepth: textSchema(1, 1_000),
-    typography: Type.Array(textSchema(1, 256), { minItems: 1, maxItems: 8 }),
-    effects: Type.Optional(Type.Array(textSchema(1, 256), { maxItems: 12 })),
+    formLanguage: textSchema(1, 320),
+    palette: Type.Array(textSchema(1, 128), { minItems: 1, maxItems: 8 }),
+    surfaceAndDepth: textSchema(1, 320),
+    typography: Type.Array(textSchema(1, 160), { minItems: 1, maxItems: 4 }),
+    effects: Type.Optional(Type.Array(textSchema(1, 160), { maxItems: 6 })),
   },
-  CLOSED,
+  {
+    ...CLOSED,
+    description:
+      "Compact executable visual tokens and relationships. Keep only decisions that affect the first real slice.",
+  },
 );
 
 const RASTER_ASSET_ROLES_SCHEMA = Type.Array(
@@ -498,7 +513,13 @@ export const DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA = Type.Object(
     version: Type.Literal(1),
     deliverable: DELIVERABLE_SCHEMA,
     objective: textSchema(1, 2_000),
+    designIntent: DESIGN_INTENT_SCHEMA,
     targets: Type.Array(TARGET_MODEL_SCHEMA, { minItems: 1, maxItems: 32 }),
+    visualSystem: VISUAL_SYSTEM_SCHEMA,
+    rasterAssetRoles: RASTER_ASSET_ROLES_SCHEMA,
+    semanticObjects: Type.Optional(
+      Type.Array(SEMANTIC_OBJECT_SCHEMA, { maxItems: 24 }),
+    ),
     logoOutputs: Type.Optional(LOGO_OUTPUTS_SCHEMA),
     logoExploration: Type.Optional(LOGO_EXPLORATION_SCHEMA),
     firstSlice: FIRST_SLICE_SCHEMA,
@@ -506,7 +527,7 @@ export const DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA = Type.Object(
   {
     ...CLOSED,
     description:
-      "Real artboard roots and one editable first slice. Main binds host-owned skills, brief fidelity, planning metadata, and quality defaults before domain refinement.",
+      "Real artboard roots and one editable first slice. In this same call, provide one concise brief-specific direction, target job/layout, visual system, image roles, and reusable semantic objects; never explain every primitive. Main binds host-owned skills, complete brief fidelity, and quality defaults before domain refinement.",
   },
 );
 

@@ -278,7 +278,7 @@ function bindFirstSliceHostContext(
   const objective = input.objective.trim();
   return {
     ...input,
-    designIntent: defaultDesignIntent(input.deliverable, objective),
+    designIntent: structuredClone(input.designIntent),
     skillRefs: builtinDesignSkillRefsForDeliverable(input.deliverable),
     briefFidelity: defaultBriefFidelity(
       context.authoritativePrompt ?? objective,
@@ -286,8 +286,11 @@ function bindFirstSliceHostContext(
     targets: input.targets.map((target) =>
       bindFirstSliceTarget(target, input.deliverable),
     ),
-    visualSystem: deriveVisualSystem(input.firstSlice),
-    rasterAssetRoles: [],
+    visualSystem: structuredClone(input.visualSystem),
+    rasterAssetRoles: [...input.rasterAssetRoles],
+    ...(input.semanticObjects === undefined
+      ? {}
+      : { semanticObjects: structuredClone(input.semanticObjects) }),
   };
 }
 
@@ -298,11 +301,6 @@ function bindFirstSliceTarget(
   const safeNodeId = target.regions[0]?.nodeId ?? "";
   return {
     ...target,
-    objective: `Complete ${target.label} as requested`,
-    layout:
-      "Use one clear visual hierarchy inside the declared delivery frame.",
-    spacing:
-      "Use a consistent spacing rhythm derived from the visible composition.",
     qualityProfile:
       deliverable === "ui"
         ? {
@@ -314,38 +312,6 @@ function bindFirstSliceTarget(
             hitNodeIds: [],
           }
         : { kind: "graphic" },
-  };
-}
-
-function defaultDesignIntent(
-  deliverable: DesignFirstSliceToolInput["deliverable"],
-  objective: string,
-): DesignIntent {
-  return {
-    subject: boundedDefaultText(
-      `Requested ${deliverable} design: ${objective || "visible editable design"}`,
-      500,
-    ),
-    audience: "The people addressed by the current user request",
-    primaryJob: boundedDefaultText(
-      objective || "Deliver the requested visual result clearly",
-      500,
-    ),
-    visualThesis:
-      "The visible first slice establishes a deliberate hierarchy before secondary detail is added.",
-    signatureMotif:
-      "The strongest editable form and its surrounding negative space carry the visual identity.",
-    typographyLanguage:
-      "Typography follows the hierarchy visible in the submitted editable slice.",
-    colorMaterialLanguage:
-      "Color and material decisions come from the submitted editable slice and user brief.",
-    compositionTension:
-      "Scale, alignment, and negative space create a clear primary visual focus.",
-    antiPatterns: [
-      "Do not replace hierarchy with repeated generic cards",
-      "Do not add decoration without a compositional purpose",
-      "Do not invent content or product capabilities outside the request",
-    ],
   };
 }
 
@@ -390,43 +356,6 @@ function chunkRequiredContent(value: string): string[] {
   }
   if (current) chunks.push(current);
   return chunks.slice(0, 24);
-}
-
-function deriveVisualSystem(
-  firstSlice: DesignFirstSliceModelInput["firstSlice"],
-): DesignFirstSliceToolInput["visualSystem"] {
-  const colors: string[] = [];
-  const typography: string[] = [];
-  for (const stage of firstSlice.stages) {
-    for (const element of stage.elements) {
-      for (const paint of [
-        "fill" in element ? element.fill : undefined,
-        "stroke" in element ? element.stroke : undefined,
-      ]) {
-        if (paint) colors.push(paint.color);
-      }
-      if (element.kind === "text") {
-        colors.push(element.text.color);
-        typography.push(
-          `${element.text.fontFamily} ${element.text.fontStyleName}`,
-        );
-      }
-    }
-  }
-  const palette = uniqueText(colors).slice(0, 12);
-  const typefaces = uniqueText(typography).slice(0, 8);
-  return {
-    formLanguage:
-      "Use the editable geometry and hierarchy established by the first visible slice.",
-    palette: palette.length > 0 ? palette : ["#111111", "#FFFFFF"],
-    surfaceAndDepth:
-      "Depth follows explicit fills, strokes, clipping, and overlap in the editable composition.",
-    typography:
-      typefaces.length > 0
-        ? typefaces
-        : ["Use a resolvable system typeface with clear hierarchy"],
-    effects: [],
-  };
 }
 
 function schemaIssues(
@@ -1013,13 +942,4 @@ function parentChainReaches(
     current = parentById.get(current);
   }
   return false;
-}
-
-function uniqueText(values: string[]): string[] {
-  return [...new Set(values.filter((value) => value.trim().length > 0))];
-}
-
-function boundedDefaultText(value: string, maximum: number): string {
-  const trimmed = value.trim();
-  return (trimmed || "Requested visual deliverable").slice(0, maximum);
 }

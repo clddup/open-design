@@ -1914,6 +1914,198 @@ describe("GlobalTaskCoordinator", () => {
     store.close();
   });
 
+  it("reviews the first new fast UI target once before reusing its visual system", async () => {
+    const { store, host, file, opened, pageId } = await setup();
+    const coordinator = new GlobalTaskCoordinator(host, store);
+    await coordinator.registerRun({
+      type: "run.start",
+      runId: "run_fast_ui_visual_system",
+      sessionId: "conversation_mobile",
+      prompt:
+        "Design the Home and Profile screens with a distinctive visual system",
+      documentId: file.documentId,
+      revision: opened.document.revision,
+      modelSelection,
+      generationMode: "fast",
+      scope: { kind: "page", pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page", pageId },
+    });
+    const context = {
+      runId: "run_fast_ui_visual_system",
+      sessionId: "conversation_mobile",
+      documentId: file.documentId,
+      revision: opened.document.revision,
+      scope: { kind: "page" as const, pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page" as const, pageId },
+    };
+    coordinator.recordDocumentInspection(
+      context,
+      inspectionResult(opened.document, pageId),
+    );
+    const plan = multiTargetPlan(pageId);
+    const home = plan.targets[0];
+    const profile = plan.targets[1];
+    if (!home || !profile) throw new Error("Fast UI fixture is incomplete");
+    coordinator.registerDesignPlan(context, plan);
+    const allocation = coordinator.createDesignPlanAllocation(context.runId);
+    coordinator.recordDesignPlanAllocated(
+      context.runId,
+      allocation?.targetIds ?? [],
+      1,
+    );
+
+    const homeDraft = draftTargets(pageId, [home]);
+    const homeAuthorization = coordinator.assertDesignPlanForApply(
+      context,
+      homeDraft,
+    );
+    coordinator.recordDesignApplyCompleted(
+      context.runId,
+      homeAuthorization?.input ?? homeDraft,
+      homeAuthorization,
+      2,
+    );
+    const draftedHome = withDraftedTargets(opened.document, pageId, [home], 2);
+    coordinator.recordDocumentInspection(
+      context,
+      inspectionResult(draftedHome, pageId),
+    );
+    const homeLayout = diagnoseDesignTargetLayout(
+      draftedHome,
+      pageId,
+      home.artboard.frameId,
+      home.qualityProfile,
+    );
+    expect(
+      coordinator.resolveVisualCriticContext(context, 2, {
+        attachmentId: "capture_fast_ui_home",
+        byteSize: 12_000,
+        mimeType: "image/jpeg",
+        name: "home.jpg",
+      }),
+    ).toMatchObject({
+      generationMode: "fast",
+      phase: "draft",
+      target: { targetId: home.targetId },
+    });
+    expect(() =>
+      coordinator.recordCanvasCapture(context, 2, homeLayout),
+    ).toThrow("design_workflow.visual_critic_unavailable");
+    expect(
+      coordinator.recordCanvasCapture(
+        context,
+        2,
+        homeLayout,
+        independentCritic(2, false),
+      ),
+    ).toMatchObject({
+      deliveryTargetId: home.targetId,
+      nextAction: "refine-independent-critic-findings",
+      critic: { passed: false },
+    });
+
+    const homeRefinement: DesignApplyToolInput = {
+      label: "Refine the reviewed Home visual system",
+      commands: [
+        {
+          commandId: "refine_fast_ui_home",
+          type: "update_properties",
+          nodeId: `${home.artboard.frameId}_content_material`,
+          opacity: 0.98,
+        },
+      ],
+    };
+    const refinementAuthorization = coordinator.assertDesignPlanForApply(
+      context,
+      homeRefinement,
+    );
+    coordinator.recordDesignApplyCompleted(
+      context.runId,
+      homeRefinement,
+      refinementAuthorization,
+      3,
+    );
+    const refinedHome = structuredClone(draftedHome);
+    refinedHome.revision = 3;
+    coordinator.recordDocumentInspection(
+      context,
+      inspectionResult(refinedHome, pageId),
+    );
+    expect(
+      coordinator.resolveVisualCriticContext(context, 3, {
+        attachmentId: "capture_fast_ui_home_refined",
+        byteSize: 12_000,
+        mimeType: "image/jpeg",
+        name: "home-refined.jpg",
+      }),
+    ).toBeNull();
+    expect(
+      coordinator.recordCanvasCapture(
+        context,
+        3,
+        diagnoseDesignTargetLayout(
+          refinedHome,
+          pageId,
+          home.artboard.frameId,
+          home.qualityProfile,
+        ),
+      ),
+    ).toMatchObject({
+      deliveryTargetId: home.targetId,
+      nextAction: "continue-next-target",
+      verification: "deterministic-fast-delivery",
+      verified: true,
+    });
+
+    const profileDraft = draftTargets(pageId, [profile]);
+    const profileAuthorization = coordinator.assertDesignPlanForApply(
+      context,
+      profileDraft,
+    );
+    coordinator.recordDesignApplyCompleted(
+      context.runId,
+      profileAuthorization?.input ?? profileDraft,
+      profileAuthorization,
+      4,
+    );
+    const draftedDelivery = withDraftedTargets(
+      opened.document,
+      pageId,
+      plan.targets,
+      4,
+    );
+    coordinator.recordDocumentInspection(
+      context,
+      inspectionResult(draftedDelivery, pageId),
+    );
+    expect(
+      coordinator.resolveVisualCriticContext(context, 4, {
+        attachmentId: "capture_fast_ui_profile",
+        byteSize: 12_000,
+        mimeType: "image/jpeg",
+        name: "profile.jpg",
+      }),
+    ).toBeNull();
+    expect(
+      coordinator.recordCanvasCapture(
+        context,
+        4,
+        diagnoseDesignTargetLayout(
+          draftedDelivery,
+          pageId,
+          profile.artboard.frameId,
+          profile.qualityProfile,
+        ),
+      ),
+    ).toMatchObject({
+      deliveryTargetId: profile.targetId,
+      nextAction: "complete-delivery",
+      verification: "deterministic-fast-delivery",
+      verified: true,
+    });
+    store.close();
+  });
+
   it("keeps a bounded visual critic for fast Logo work and binds repeated command Pages to the registered Run", async () => {
     const { store, host, file, opened, pageId } = await setup();
     const coordinator = new GlobalTaskCoordinator(host, store);

@@ -1,6 +1,7 @@
 # ADR-0122：首个真实画面优先于协议回抄
 
 - 状态：Accepted
+- 部分取代：ADR-0147 已恢复同一次 first-slice 调用中的模型视觉方向，并停止由宿主从已画元素反推理由；本 ADR 的 host-state 路由、首个真实 revision 优先和不恢复 Plan-only 往返继续有效
 - 日期：2026-08-21
 - DesignDocument：不变
 - Design Plan / delivery ledger：内部契约不变

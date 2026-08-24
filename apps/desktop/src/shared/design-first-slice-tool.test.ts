@@ -21,16 +21,19 @@ describe("compact first-slice tool", () => {
     expect(Object.keys(properties).sort()).toEqual(
       [
         "deliverable",
+        "designIntent",
         "firstSlice",
         "logoExploration",
         "logoOutputs",
         "objective",
+        "rasterAssetRoles",
+        "semanticObjects",
         "targets",
         "version",
+        "visualSystem",
       ].sort(),
     );
     expect(JSON.stringify(properties)).not.toContain('"qualityProfile"');
-    expect(JSON.stringify(properties)).not.toContain('"designIntent"');
     expect(JSON.stringify(properties)).not.toContain('"briefFidelity"');
     expect(JSON.stringify(properties)).not.toContain('"skillRefs"');
     expect(
@@ -40,11 +43,21 @@ describe("compact first-slice tool", () => {
     expect(properties.firstSlice.properties.stages.description).toContain(
       "total across all stages",
     );
+    expect(properties.designIntent.description).toContain(
+      "not a per-element rationale",
+    );
+    expect(properties.designIntent.properties.visualThesis.maxLength).toBe(320);
+    expect(properties.designIntent.properties.antiPatterns.maxItems).toBe(5);
+    expect(properties.targets.items.properties.layout.maxLength).toBe(320);
+    expect(properties.visualSystem.properties.typography.maxItems).toBe(4);
     expect(DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA.required).toEqual([
       "version",
       "deliverable",
       "objective",
+      "designIntent",
       "targets",
+      "visualSystem",
+      "rasterAssetRoles",
       "firstSlice",
     ]);
     const valid = providerInput(fixture());
@@ -59,17 +72,22 @@ describe("compact first-slice tool", () => {
     expect(FirstSliceContract.parse(unexpected).ok).toBe(false);
   });
 
-  it("derives ordinary planning metadata instead of making the model repeat it before pixels", () => {
+  it("preserves the model's brief-specific direction while binding only trusted host metadata", () => {
     const modelInput = providerInput(fixture());
     const normalized = parsedFirstSlice(modelInput);
     expect(normalized).toBeDefined();
-    expect(normalized?.designIntent.visualThesis).toContain(
-      "visible first slice",
+    expect(normalized?.designIntent.visualThesis).toBe(
+      fixture().designIntent.visualThesis,
     );
     expect(normalized?.briefFidelity.requiredContent).toEqual([
       "Create Home and Profile screens",
     ]);
     expect(normalized?.visualSystem.palette).toContain("#0F172A");
+    expect(normalized?.targets[0]).toMatchObject({
+      objective: "A focused product overview",
+      layout: "Vertical mobile composition",
+      spacing: "8px base with 24px section rhythm",
+    });
     expect(normalized?.targets[0]?.qualityProfile).toMatchObject({
       kind: "ui",
       platform: "other",
@@ -82,6 +100,60 @@ describe("compact first-slice tool", () => {
           { canonical: true },
         ).ok,
     ).toBe(true);
+  });
+
+  it("rejects drawing without a prior concrete visual direction", () => {
+    const modelInput = providerInput(fixture());
+    Reflect.deleteProperty(modelInput, "designIntent");
+
+    const result = FirstSliceContract.parse(modelInput);
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("Expected missing design intent failure");
+    expect(result.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "first_slice.schema_invalid",
+          path: "/designIntent",
+        }),
+      ]),
+    );
+  });
+
+  it("carries image roles and reusable semantic objects into the executable Plan", () => {
+    const modelInput = providerInput(fixture());
+    modelInput.rasterAssetRoles = ["hero", "supporting-content"];
+    modelInput.semanticObjects = [
+      {
+        decisionId: "shared_navigation",
+        label: "Shared bottom navigation",
+        decision: "component",
+        componentId: "component_bottom_navigation",
+        main: { targetId: "home", nodeId: "home_bottom_navigation" },
+        instances: [
+          { targetId: "profile", nodeId: "profile_bottom_navigation" },
+        ],
+      },
+    ];
+
+    const normalized = parsedFirstSlice(modelInput);
+    expect(normalized?.rasterAssetRoles).toEqual([
+      "hero",
+      "supporting-content",
+    ]);
+    expect(normalized?.semanticObjects).toEqual(modelInput.semanticObjects);
+    expect(
+      normalized && compileDesignFirstSliceToolInput(normalized).plan,
+    ).toMatchObject({
+      rasterAssetRoles: ["hero", "supporting-content"],
+      componentStrategy: {
+        candidates: [
+          {
+            decision: "component",
+            componentId: "component_bottom_navigation",
+          },
+        ],
+      },
+    });
   });
 
   it("uses the element kind discriminator to report the concrete invalid field", () => {
@@ -748,21 +820,11 @@ function providerInput(
   input: DesignFirstSliceToolInput,
 ): Record<string, unknown> {
   const value = structuredClone(input) as unknown as Record<string, unknown>;
-  for (const key of [
-    "designIntent",
-    "skillRefs",
-    "briefFidelity",
-    "visualSystem",
-    "rasterAssetRoles",
-    "referenceStrategy",
-    "semanticObjects",
-  ]) {
+  for (const key of ["skillRefs", "briefFidelity", "referenceStrategy"]) {
     Reflect.deleteProperty(value, key);
   }
   for (const target of value.targets as Array<Record<string, unknown>>) {
-    for (const key of ["objective", "layout", "spacing", "qualityProfile"]) {
-      Reflect.deleteProperty(target, key);
-    }
+    Reflect.deleteProperty(target, "qualityProfile");
   }
   return value;
 }

@@ -707,12 +707,18 @@ export class GlobalTaskCoordinator {
     const generationMode = this.#toolBindingsByRunId.get(
       context.runId,
     )?.generationMode;
+    const fastVisualCriticRequired =
+      generationMode === "fast" && requiresFastDraftVisualCritic(state, target);
+    if (fastVisualCriticRequired && visualCritic === undefined) {
+      throw new Error(
+        "design_workflow.visual_critic_unavailable: This initial material capture requires one independent exact-revision visual critic before evidence-based refinement",
+      );
+    }
     if (
       generationMode === "fast" &&
       visualCritic === undefined &&
       (target.delivery.status === "drafted" ||
         target.delivery.status === "captured" ||
-        target.delivery.status === "reviewed" ||
         target.delivery.status === "refined")
     ) {
       const inspection = this.#inspectionsByRunId.get(context.runId);
@@ -909,7 +915,7 @@ export class GlobalTaskCoordinator {
       !target ||
       !binding ||
       (binding.generationMode === "fast" &&
-        state.plan.deliverable !== "logo") ||
+        !requiresFastDraftVisualCritic(state, target)) ||
       target.delivery.status === "pending" ||
       target.delivery.status === "allocated" ||
       target.delivery.status === "verified"
@@ -2454,6 +2460,29 @@ function nextIncompleteTarget(
   return state.targetOrder
     .map((targetId) => state.targetsById.get(targetId))
     .find((target) => target?.delivery.status !== "verified");
+}
+
+function requiresFastVisualCritic(
+  state: DesignWorkflowState,
+  target: DesignDeliveryTargetState,
+): boolean {
+  if (state.plan.deliverable === "logo") return true;
+  return (
+    state.plan.deliverable === "ui" &&
+    state.targetOrder[0] === target.delivery.targetId &&
+    target.planned.artboard.mode === "create"
+  );
+}
+
+function requiresFastDraftVisualCritic(
+  state: DesignWorkflowState,
+  target: DesignDeliveryTargetState,
+): boolean {
+  return (
+    requiresFastVisualCritic(state, target) &&
+    (target.delivery.status === "drafted" ||
+      target.delivery.status === "captured")
+  );
 }
 
 function assertDeliveryAcceptsMaterialWrites(state: DesignWorkflowState): void {
