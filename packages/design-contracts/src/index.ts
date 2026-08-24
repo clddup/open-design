@@ -2640,6 +2640,15 @@ function schemaDiscriminatorMatches(
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return false;
   }
+  const variants = (schema as { anyOf?: unknown }).anyOf;
+  if (Array.isArray(variants)) {
+    return variants.some(
+      (variant) =>
+        typeof variant === "object" &&
+        variant !== null &&
+        schemaDiscriminatorMatches(variant as TSchema, error),
+    );
+  }
   const properties = (schema as { properties?: Record<string, unknown> })
     .properties;
   if (!properties) return false;

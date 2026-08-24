@@ -6,10 +6,10 @@ import type {
 } from "@opendesign/design-contracts";
 import type { EditorRuntime } from "@opendesign/editor-runtime";
 import {
+  DesignStyleContract,
+  DesignVariableContract,
   DESIGN_STYLE_TOOL_NAME,
   DESIGN_VARIABLE_TOOL_NAME,
-  isDesignStyleToolInput,
-  isDesignVariableToolInput,
 } from "@/shared/design-agent-tools";
 import type {
   RendererDesignToolRequest,
@@ -33,15 +33,17 @@ export function executeDesignSystemToolRequest({
   ) => never;
 }): RendererDesignToolResponse | null {
   const { call, context } = request;
-  if (
-    call.toolName === DESIGN_VARIABLE_TOOL_NAME &&
-    isDesignVariableToolInput(call.input)
-  ) {
+  if (call.toolName === DESIGN_VARIABLE_TOOL_NAME) {
+    const parsed = DesignVariableContract.parse(call.input);
+    if (!parsed.ok) {
+      throw new TypeError("Renderer received invalid canonical Variable input");
+    }
+    const input = parsed.value;
     assertRevision(document, context.revision, "Variable");
-    assertPageTarget(call.input.pageId, context.mutationTarget, "Variable");
+    assertPageTarget(input.pageId, context.mutationTarget, "Variable");
     return executeDesignVariableTool({
       document,
-      input: call.input,
+      input,
       requestId: request.requestId,
       runtime,
       sessionId: context.sessionId,
@@ -49,13 +51,14 @@ export function executeDesignSystemToolRequest({
       toolCallId: call.toolCallId,
     });
   }
-  if (
-    call.toolName !== DESIGN_STYLE_TOOL_NAME ||
-    !isDesignStyleToolInput(call.input)
-  ) {
+  if (call.toolName !== DESIGN_STYLE_TOOL_NAME) {
     return null;
   }
-  const input = call.input;
+  const parsed = DesignStyleContract.parse(call.input);
+  if (!parsed.ok) {
+    throw new TypeError("Renderer received invalid canonical Style input");
+  }
+  const input = parsed.value;
   assertRevision(document, context.revision, "Style");
   assertPageTarget(input.pageId, context.mutationTarget, "Style");
   if (

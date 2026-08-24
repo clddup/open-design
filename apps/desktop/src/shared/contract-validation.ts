@@ -41,6 +41,33 @@ export function contractSchemaIssues(
   return issues;
 }
 
+export function contractDiscriminatedSchemaIssues(
+  schema: TSchema,
+  input: unknown,
+  discriminant: string,
+  options: {
+    code: string;
+    subject: string;
+    maximum?: number;
+  },
+): ValidationIssue[] {
+  if (isRecord(input)) {
+    const branch = discriminatedBranch(
+      schema,
+      discriminant,
+      input[discriminant],
+    );
+    if (branch) return contractSchemaIssues(schema, input, options);
+  }
+
+  const issues = contractSchemaIssues(schema, input, options);
+  const path = `/${escapePointer(discriminant)}`;
+  const discriminantIssues = issues.filter(
+    (issue) => issue.path === path || issue.path.startsWith(`${path}/`),
+  );
+  return discriminantIssues.length > 0 ? discriminantIssues : issues;
+}
+
 export function formatValidationFailure(
   subject: string,
   issues: readonly ValidationIssue[],
@@ -71,4 +98,30 @@ function boundedJson(value: unknown): string {
   } catch {
     return "[unserializable]";
   }
+}
+
+function discriminatedBranch(
+  schema: TSchema,
+  discriminant: string,
+  value: unknown,
+): TSchema | null {
+  const branches = (schema as { anyOf?: unknown }).anyOf;
+  if (!Array.isArray(branches)) return null;
+  for (const branch of branches) {
+    if (!isRecord(branch)) continue;
+    const properties = branch.properties;
+    if (!isRecord(properties)) continue;
+    const property = properties[discriminant];
+    if (!isRecord(property) || property.const !== value) continue;
+    return branch as TSchema;
+  }
+  return null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function escapePointer(value: string): string {
+  return value.replaceAll("~", "~0").replaceAll("/", "~1");
 }

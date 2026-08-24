@@ -148,6 +148,45 @@ describe("executable JSON Schema", () => {
       ]),
     );
   });
+
+  it("follows nested discriminants before choosing union errors", () => {
+    const schema = executableJsonSchema({
+      anyOf: [
+        { type: "boolean" },
+        {
+          anyOf: [
+            {
+              type: "object",
+              properties: {
+                type: { const: "CUSTOM" },
+                amount: { type: "number" },
+              },
+              required: ["type", "amount"],
+              additionalProperties: false,
+            },
+            {
+              type: "object",
+              properties: {
+                type: { const: "ALIAS" },
+                id: { type: "string" },
+              },
+              required: ["type", "id"],
+              additionalProperties: false,
+            },
+          ],
+        },
+      ],
+    } as const);
+
+    expect(schemaValidationIssues(schema, { type: "CUSTOM" })).toEqual(
+      expect.arrayContaining([expect.objectContaining({ path: "/amount" })]),
+    );
+    expect(schemaValidationIssues(schema, { type: "CUSTOM" })).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ message: "Expected boolean" }),
+      ]),
+    );
+  });
 });
 
 it("validates typed image asset derivation commands", () => {

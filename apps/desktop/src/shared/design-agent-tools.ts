@@ -101,9 +101,9 @@ import {
   DESIGN_CHECKPOINT_TOOL_INPUT_SCHEMA,
 } from "./design-agent-checkpoint";
 import { DesignComponentContract } from "./design-component-tool";
-import { isDesignVariableToolInput } from "./design-variable-tool";
+import { DesignVariableContract } from "./design-variable-tool";
 import { DESIGN_VARIABLE_TOOL_INPUT_SCHEMA } from "./design-variable-tool-schema";
-import { isDesignStyleToolInput } from "./design-style-tool";
+import { DesignStyleContract } from "./design-style-tool";
 import { DESIGN_STYLE_TOOL_INPUT_SCHEMA } from "./design-style-tool-schema";
 export {
   DesignApplyContract,
@@ -201,10 +201,10 @@ export type {
 } from "./design-reference-strategy";
 export { DesignComponentContract } from "./design-component-tool";
 export type { DesignComponentToolInput } from "./design-component-tool";
-export { isDesignVariableToolInput } from "./design-variable-tool";
+export { DesignVariableContract } from "./design-variable-tool";
 export { DESIGN_VARIABLE_TOOL_INPUT_SCHEMA } from "./design-variable-tool-schema";
 export type { DesignVariableToolInput } from "./design-variable-tool";
-export { isDesignStyleToolInput } from "./design-style-tool";
+export { DesignStyleContract } from "./design-style-tool";
 export { DESIGN_STYLE_TOOL_INPUT_SCHEMA } from "./design-style-tool-schema";
 export type { DesignStyleToolInput } from "./design-style-tool";
 export type {
@@ -572,6 +572,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     inputSchema: DESIGN_VARIABLE_TOOL_INPUT_SCHEMA,
     risk: "design_write" as const,
     approval: "never" as const,
+    validateInputIssues: DesignVariableContract.issues,
   },
   {
     name: DESIGN_STYLE_TOOL_NAME,
@@ -584,6 +585,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     inputSchema: DESIGN_STYLE_TOOL_INPUT_SCHEMA,
     risk: "design_write" as const,
     approval: "never" as const,
+    validateInputIssues: DesignStyleContract.issues,
   },
   {
     name: PAGE_STRUCTURE_ACCESS_TOOL_NAME,
@@ -736,10 +738,10 @@ export function validateDesignAgentToolInput(
     return DesignComponentContract.parse(input).ok;
   }
   if (toolName === DESIGN_VARIABLE_TOOL_NAME) {
-    return isDesignVariableToolInput(input);
+    return DesignVariableContract.parse(input).ok;
   }
   if (toolName === DESIGN_STYLE_TOOL_NAME) {
-    return isDesignStyleToolInput(input);
+    return DesignStyleContract.parse(input).ok;
   }
   if (toolName === PAGE_STRUCTURE_ACCESS_TOOL_NAME) {
     return PageStructureAccessContract.parse(input).ok;

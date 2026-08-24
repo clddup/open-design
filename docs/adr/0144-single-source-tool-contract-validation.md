@@ -1,6 +1,6 @@
 # ADR-0144：单一来源的工具契约验证
 
-- 状态：Accepted，first-slice、node apply、Design Plan、Visual Review、Checkpoint、图片获取、公开图片操作、Page 与 Component 工具已实施，其余契约分阶段实施
+- 状态：Accepted，first-slice、node apply、Design Plan、Visual Review、Checkpoint、图片获取、公开图片操作、Page、Component、Style 与 Variable 工具已实施，其余契约分阶段实施
 - 日期：2026-08-23
 - 首个迁移对象：compact first-slice
 - 关联：ADR-0018、ADR-0100、ADR-0103、ADR-0141、ADR-0143
@@ -87,12 +87,14 @@ Page 工具已完成第八个迁移切片：`PageStructureAccessContract / Desig
 
 Component 工具已完成第九个迁移切片：`DesignComponentContract` 以一个 action-aware 可执行 schema 覆盖 Main/Instance、Component Set/Variant matrix、BOOLEAN/TEXT/INSTANCE_SWAP/SLOT property、source-path override、detach 与 go-to-main 共 29 个 action，并同时服务 Provider、Pi、工具聚合、Main policy/execution 与 Renderer canonical bridge。每个 action 只接受自己的闭合字段集合；Component/root 数量与 Variant matrix member 对应、property type 与 preferred values 对应、Slot child-count 范围是仅存的三个跨字段 refinement。旧约 500 行 `isDesignComponentToolInput / explainInvalidDesignComponentToolInput` 与其 `exactKeys`/形状遍历已删除。Provider 原本不公开而 Runtime 暗中接受的 `set-override.patch.locked` 分叉也已关闭；人工 Instance 派生层 locked/visible 继续属于 Layer State 路径。该契约保持 Figma 的 Main→Instance 自动同步、Component Set、typed properties、preferred values、Slot settings、override 与 detach 语义；OpenDesign 额外保留稳定 ID、Page capability、revision、preview/apply 与单 undo 事务边界。Figma Plugin API 的 [`createComponentFromNode`](https://developers.figma.com/docs/plugins/api/properties/figma-createcomponentfromnode/)、[`combineAsVariants`](https://developers.figma.com/docs/plugins/api/properties/figma-combineasvariants/)、[`InstanceNode`](https://developers.figma.com/docs/plugins/api/InstanceNode/) 与 [`ComponentPropertyDefinitions`](https://developers.figma.com/docs/plugins/api/ComponentPropertyDefinitions/) 只作为公开语义参照，不成为第二份文档状态或私有格式依赖。
 
+Style 与 Variable 工具已完成第十个设计系统迁移切片：`DesignStyleContract / DesignVariableContract` 分别以一个 action-aware executable schema 覆盖六类 Shared Style 操作与十二类 Collection/Mode/Variable/Binding 操作，Provider、Pi、工具聚合、Main policy/execution 与 Renderer canonical bridge 不再维护另一套结构判断。Style reference field 直接复用 `StyleReferenceTargetSchema`，Variable value、resolved type、scope 与 binding target 直接复用 `DesignDocument` 的权威 schema；CUSTOM_CUBIC_BEZIER/CUSTOM_SPRING 等完整 Variable value 因此不再出现 Runtime 接受而 Provider schema 未声明的漂移。空 metadata/update、串用 action 字段和未闭合 target 在 Provider 前置结构层返回准确路径；Contract 只保留 Variable map key 的同值边界 refinement 与 replacement mode 不得等于被删 mode 两项判断，现有 collection、mode、alias、type、consumer 与 revision 关系继续由 Main/EditorRuntime 当前文档 guard 拥有。通用 schema error 展开会递归跟随 nested `type` discriminant，自定义 easing 缺字段不再退化为首个 primitive union 错误；action branch 使用顶层权威字段约束加紧凑闭合分支，避免 expanded Provider surface 重复展开完整 Variable value。旧 `isDesignStyleToolInput / isDesignVariableToolInput` 及其 `record/id/text/exact/switch` 遍历已删除。语义继续对齐 Figma Plugin API 的 [local Paint/Text/Effect/Grid Styles](https://developers.figma.com/docs/plugins/api/figma/)、[Variable Collections、typed values 与 aliases](https://developers.figma.com/docs/plugins/api/figma-variables/)、[property binding](https://developers.figma.com/docs/plugins/working-with-variables/) 和 [picker scope vocabulary](https://developers.figma.com/docs/plugins/api/VariableScope/)；OpenDesign 的稳定 ID、Page capability、preview/apply、单 undo 与跨文件 Library 仍由自身事务模型拥有。
+
 `ValidationIssue` 的稳定 `code/path/expected/actual/recovery` 通过 `tool-validation` failure details 进入 Agent event、journal 和 Timeline；这种参数修正使用 `correct-and-retry`，不冒充需要文档 inspection 的事务错误。Design transaction 仍保留独立 `inspect-and-revise` 恢复语义。
 
-导入导出、结构、Style、Variable 等其余 Agent tools，以及 Page/Component/公开图片工具之后的其他 trusted internal Renderer bridge、IPC 与持久化契约尚未迁移，不得据此宣称全仓已实现单一验证入口。
+导入导出、结构、Arrange、文字/字体等其余 Agent tools，以及已迁移公开工具之后的其他 trusted internal Renderer bridge、IPC 与持久化契约尚未迁移，不得据此宣称全仓已实现单一验证入口。
 
 ## 后果
 
 - 不重写 pi-agent-core 已有的循环或 TypeBox 参数验证；OpenDesign 只增加产品 domain refinement 和边界 issue adapter。
 - 首个迁移会删除较多手写代码并改变测试入口，属于允许的破坏性开发更新。
-- 在迁移完成前，新增 first-slice、node apply、Design Plan、Visual Review、Checkpoint、Read/Generate/Place/Update/Edit Image、Page Structure/Page Lifecycle、Component 字段必须进入对应单一入口；不得继续扩展三套旧函数。
+- 在迁移完成前，新增 first-slice、node apply、Design Plan、Visual Review、Checkpoint、Read/Generate/Place/Update/Edit Image、Page Structure/Page Lifecycle、Component、Style 与 Variable 字段必须进入对应单一入口；不得继续扩展三套旧函数。

@@ -19,6 +19,7 @@ import {
   EXPORT_SVG_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_PAGE_TOOL_NAME,
+  DESIGN_STYLE_TOOL_NAME,
   DESIGN_TEXT_RANGE_TOOL_NAME,
   DESIGN_VECTOR_TOOL_NAME,
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
@@ -112,6 +113,46 @@ function plannedInsertRequest(nodeId: string): RendererDesignToolRequest {
 }
 
 describe("Renderer design tool scope", () => {
+  it("fails closed on invalid canonical Style and Variable bridge inputs", async () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    const request = (
+      toolName: string,
+      input: Record<string, unknown>,
+    ): RendererDesignToolRequest => ({
+      requestId: `invalid_${toolName}`,
+      call: { toolCallId: `call_${toolName}`, toolName, input },
+      context: pageContext,
+    });
+
+    await expect(
+      executeDesignToolRequest(
+        request(DESIGN_STYLE_TOOL_NAME, {
+          action: "update-metadata",
+          label: "No metadata update",
+          pageId: "page_welcome",
+          styleId: "brand-primary",
+        }),
+        runtime,
+        "page_welcome",
+      ),
+    ).rejects.toThrow("invalid canonical Style input");
+    await expect(
+      executeDesignToolRequest(
+        request(DESIGN_VARIABLE_TOOL_NAME, {
+          action: "set-mode",
+          label: "Invalid target",
+          pageId: "page_welcome",
+          target: { kind: "node", nodeId: "title_welcome" },
+          collectionId: "theme",
+          modeId: "dark",
+        }),
+        runtime,
+        "page_welcome",
+      ),
+    ).rejects.toThrow("invalid canonical Variable input");
+    expect(runtime.getSnapshot().document.revision).toBe(0);
+  });
+
   it("applies scoped Agent font replacement through the shared reflow transaction", async () => {
     const runtime = new EditorRuntime(createWelcomeDocument(), {
       textLayoutProvider: {

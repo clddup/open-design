@@ -4,11 +4,12 @@ import type {
   TrustedToolResult,
 } from "@opendesign/agent-contracts";
 import {
+  DesignStyleContract,
+  DesignVariableContract,
   DESIGN_STYLE_TOOL_NAME,
   DESIGN_VARIABLE_TOOL_NAME,
-  isDesignStyleToolInput,
-  isDesignVariableToolInput,
 } from "@/shared/design-agent-tools.js";
+import { formatValidationFailure } from "@/shared/contract-validation.js";
 import type { GlobalTaskCoordinator } from "./global-task-coordinator.js";
 
 export async function handleDesignSystemTool(input: {
@@ -18,27 +19,33 @@ export async function handleDesignSystemTool(input: {
   execute: (call: ToolCallRequest) => Promise<TrustedToolResult>;
   withDelivery: (result: TrustedToolResult, runId: string) => TrustedToolResult;
 }): Promise<TrustedToolResult | null> {
-  const { call, context, coordinator } = input;
+  const { context, coordinator } = input;
+  let call = input.call;
   let materialNodeIds: string[];
   if (call.toolName === DESIGN_VARIABLE_TOOL_NAME) {
-    if (!isDesignVariableToolInput(call.input)) {
-      throw new TypeError("Invalid Variables tool input");
+    const parsed = DesignVariableContract.parse(call.input);
+    if (!parsed.ok) {
+      throw new TypeError(formatValidationFailure("Variable", parsed.issues));
     }
+    call = { ...call, input: parsed.value };
     materialNodeIds =
-      call.input.action === "set-binding"
-        ? [call.input.target.nodeId]
-        : call.input.action === "set-mode" && call.input.target.kind === "node"
-          ? [call.input.target.id]
+      parsed.value.action === "set-binding"
+        ? [parsed.value.target.nodeId]
+        : parsed.value.action === "set-mode" &&
+            parsed.value.target.kind === "node"
+          ? [parsed.value.target.id]
           : [];
   } else if (call.toolName === DESIGN_STYLE_TOOL_NAME) {
-    if (!isDesignStyleToolInput(call.input)) {
-      throw new TypeError("Invalid Styles tool input");
+    const parsed = DesignStyleContract.parse(call.input);
+    if (!parsed.ok) {
+      throw new TypeError(formatValidationFailure("Style", parsed.issues));
     }
+    call = { ...call, input: parsed.value };
     materialNodeIds =
-      call.input.action === "create-from-node" ||
-      call.input.action === "update-from-node" ||
-      call.input.action === "set-reference"
-        ? [call.input.nodeId]
+      parsed.value.action === "create-from-node" ||
+      parsed.value.action === "update-from-node" ||
+      parsed.value.action === "set-reference"
+        ? [parsed.value.nodeId]
         : [];
   } else return null;
 
