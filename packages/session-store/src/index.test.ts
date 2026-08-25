@@ -143,6 +143,7 @@ async function expectRecoveredTimeline(store: SessionStore): Promise<void> {
     transactionId: "transaction_1",
   });
   expect(timeline.find((item) => item.type === "run")).toMatchObject({
+    sequence: 9,
     status: "completed",
     stopReason: "complete",
   });
@@ -233,6 +234,7 @@ describe("session journal recovery", () => {
     expect(timeline.find((item) => item.type === "run")).toMatchObject({
       type: "run",
       runId: "run_1",
+      sequence: 4,
       status: "error",
       finishedAt: "2026-08-10T01:00:00.000Z",
       stopReason: "error",

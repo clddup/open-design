@@ -18,6 +18,10 @@ import {
 } from "../timeline-projection";
 import { friendlyAgentError } from "../timeline-presentation";
 import { projectAgentRunExperience } from "../agent-run-experience";
+import {
+  groupAgentTimelineItems,
+  type AgentTimelineRenderEntry,
+} from "../timeline-grouping";
 import type { AgentTimelineItem, Translate } from "../timeline-types";
 import { useAgentComposerController } from "../use-agent-composer-controller";
 import { useI18n } from "../../../i18n";
@@ -100,6 +104,48 @@ function ReasoningDisclosure({
       </summary>
       <p>{item.reasoning}</p>
       <small>{t("agent.reasoningSummaryNotice")}</small>
+    </details>
+  );
+}
+
+function ToolGroupDisclosure({
+  group,
+}: {
+  group: Extract<AgentTimelineRenderEntry, { type: "tool-group" }>;
+}) {
+  const [open, setOpen] = useState(group.state === "active");
+  useEffect(() => {
+    setOpen(group.state === "active");
+  }, [group.state]);
+  return (
+    <details
+      className={styles.toolGroup}
+      data-agent-tool-group=""
+      onToggle={(event) => setOpen(event.currentTarget.open)}
+      open={open}
+    >
+      <summary>
+        <span aria-hidden="true" className={styles.reasoningChevron}>
+          ›
+        </span>
+        <span>{group.title}</span>
+      </summary>
+      <div className={styles.toolGroupItems}>
+        {group.items.map((item) => (
+          <div
+            className={cx(styles.toolGroupItem, itemStateStyles[item.state])}
+            data-state={item.state}
+            key={item.id}
+            title={item.time}
+          >
+            <span aria-hidden="true" className={styles.activityIndicator} />
+            <span className={styles.activityCopy}>
+              <strong>{item.title}</strong>
+              {item.detail && <small>{item.detail}</small>}
+            </span>
+          </div>
+        ))}
+      </div>
     </details>
   );
 }
@@ -216,6 +262,7 @@ export function AgentTimeline({
     timeline,
     t,
   });
+  const renderEntries = groupAgentTimelineItems(items, t);
   const runExperience = projectAgentRunExperience({
     activeRunId,
     events,
@@ -387,7 +434,9 @@ export function AgentTimeline({
             />
           )}
         </div>
-        {runExperience && <AgentRunStatus experience={runExperience} t={t} />}
+        {runExperience?.active && (
+          <AgentRunStatus experience={runExperience} t={t} />
+        )}
         <ol
           aria-live="polite"
           className={styles.thread}
@@ -417,85 +466,106 @@ export function AgentTimeline({
               </small>
             </li>
           ) : (
-            items.map((item) => (
-              <li
-                className={cx(
-                  styles.item,
-                  itemStateStyles[item.state],
-                  item.kind ? itemKindStyles[item.kind] : null,
-                  item.historical && styles.itemHistorical,
-                )}
-                data-agent-item=""
-                data-historical={item.historical ? "true" : "false"}
-                data-kind={item.kind ?? "activity"}
-                data-state={item.state}
-                key={item.id}
-              >
-                {item.kind === "reasoning" ? (
-                  <ReasoningDisclosure item={item} t={t} />
-                ) : item.kind === "user" || item.kind === "assistant" ? (
-                  <article
-                    className={styles.message}
-                    data-agent-message=""
-                    title={item.time}
+            renderEntries.map((entry) => {
+              if (entry.type === "tool-group") {
+                return (
+                  <li
+                    className={cx(
+                      styles.item,
+                      entry.state === "active"
+                        ? styles.itemActive
+                        : styles.itemDone,
+                    )}
+                    data-agent-item=""
+                    data-kind="tool-group"
+                    data-state={entry.state}
+                    key={entry.id}
                   >
-                    {(item.detail || item.state === "active") &&
-                      (item.kind === "assistant" ? (
-                        <AgentMessageMarkdown
-                          content={item.detail ?? ""}
-                          streaming={item.state === "active"}
+                    <ToolGroupDisclosure group={entry} />
+                  </li>
+                );
+              }
+              const item = entry.item;
+              return (
+                <li
+                  className={cx(
+                    styles.item,
+                    itemStateStyles[item.state],
+                    item.kind ? itemKindStyles[item.kind] : null,
+                    item.historical && styles.itemHistorical,
+                  )}
+                  data-agent-item=""
+                  data-historical={item.historical ? "true" : "false"}
+                  data-kind={item.kind ?? "activity"}
+                  data-state={item.state}
+                  key={item.id}
+                >
+                  {item.kind === "reasoning" ? (
+                    <ReasoningDisclosure item={item} t={t} />
+                  ) : item.kind === "user" || item.kind === "assistant" ? (
+                    <article
+                      className={styles.message}
+                      data-agent-message=""
+                      title={item.time}
+                    >
+                      {(item.detail || item.state === "active") &&
+                        (item.kind === "assistant" ? (
+                          <AgentMessageMarkdown
+                            content={item.detail ?? ""}
+                            streaming={item.state === "active"}
+                          />
+                        ) : (
+                          <p>{item.detail}</p>
+                        ))}
+                      {item.kind === "assistant" && (
+                        <ReasoningDisclosure
+                          item={{
+                            ...item,
+                            title:
+                              item.reasoningCount && item.reasoningCount > 1
+                                ? t("agent.modelThinkingSummaryCount", {
+                                    count: item.reasoningCount,
+                                  })
+                                : t("agent.modelThinkingSummary"),
+                          }}
+                          t={t}
                         />
-                      ) : (
-                        <p>{item.detail}</p>
-                      ))}
-                    {item.kind === "assistant" && (
-                      <ReasoningDisclosure
-                        item={{
-                          ...item,
-                          title:
-                            item.reasoningCount && item.reasoningCount > 1
-                              ? t("agent.modelThinkingSummaryCount", {
-                                  count: item.reasoningCount,
-                                })
-                              : t("agent.modelThinkingSummary"),
-                        }}
-                        t={t}
-                      />
-                    )}
-                    {item.attachments && item.attachments.length > 0 && (
-                      <TimelineAttachments attachments={item.attachments} />
-                    )}
-                  </article>
-                ) : item.kind === "approval" &&
-                  item.state === "queued" &&
-                  item.runId === activeRunId &&
-                  item.approvalId &&
-                  item.toolCallId &&
-                  item.runId &&
-                  onResolveApproval ? (
-                  <ApprovalCard
-                    approvalResourceName={approvalResourceName}
-                    item={item}
-                    onResolve={(decision) =>
-                      void resolveApproval(item, decision)
-                    }
-                    resolving={resolvingApprovalId !== null}
-                    t={t}
-                  />
-                ) : (
-                  <div className={styles.activity} title={item.time}>
-                    <span
-                      aria-hidden="true"
-                      className={styles.activityIndicator}
+                      )}
+                      {item.attachments && item.attachments.length > 0 && (
+                        <TimelineAttachments attachments={item.attachments} />
+                      )}
+                    </article>
+                  ) : item.kind === "approval" &&
+                    item.state === "queued" &&
+                    item.runId === activeRunId &&
+                    item.approvalId &&
+                    item.toolCallId &&
+                    item.runId &&
+                    onResolveApproval ? (
+                    <ApprovalCard
+                      approvalResourceName={approvalResourceName}
+                      item={item}
+                      onResolve={(decision) =>
+                        void resolveApproval(item, decision)
+                      }
+                      resolving={resolvingApprovalId !== null}
+                      t={t}
                     />
-                    <span className={styles.activityCopy}>
-                      <strong>{item.title}</strong>
-                      {item.detail && <small>{item.detail}</small>}
-                    </span>
-                  </div>
-                )}
-              </li>
-            ))
+                  ) : (
+                    <div className={styles.activity} title={item.time}>
+                      <span
+                        aria-hidden="true"
+                        className={styles.activityIndicator}
+                      />
+                      <span className={styles.activityCopy}>
+                        <strong>{item.title}</strong>
+                        {item.detail && <small>{item.detail}</small>}
+                      </span>
+                    </div>
+                  )}
+                </li>
+              );
+            })
           )}
         </ol>
         <AgentComposer

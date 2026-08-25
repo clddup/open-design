@@ -223,6 +223,60 @@
   transition: transform 120ms ease;
 }
 
+.toolGroup {
+  width: 100%;
+  min-width: 0;
+  padding: 2px 3px;
+  color: var(--ui-text-faint);
+
+  > summary {
+    display: flex;
+    min-width: 0;
+    cursor: pointer;
+    align-items: center;
+    gap: 5px;
+    font-size: 9px;
+    font-weight: 600;
+    list-style: none;
+    user-select: none;
+
+    &::-webkit-details-marker {
+      display: none;
+    }
+
+    &:hover {
+      color: var(--ui-text-muted);
+    }
+
+    &:focus-visible {
+      border-radius: 3px;
+      outline: 1px solid var(--ui-accent);
+      outline-offset: 2px;
+    }
+  }
+
+  &[open] > summary .reasoningChevron {
+    transform: rotate(90deg);
+  }
+}
+
+.toolGroupItems {
+  display: grid;
+  gap: 3px;
+  margin: 6px 0 0 13px;
+  padding-left: 7px;
+  border-left: 1px solid var(--ui-border-subtle);
+}
+
+.toolGroupItem {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 8px minmax(0, 1fr);
+  align-items: start;
+  gap: 7px;
+  padding: 2px 0;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .reasoningChevron {
     transition: none;

@@ -1410,15 +1410,24 @@ describe("AgentTimeline", () => {
     expect(
       screen.getByText("I will build the editable shell first."),
     ).toBeInTheDocument();
-    const disclosure = screen
-      .getByText("Model thinking summary · 2 updates")
-      .closest("details");
-    expect(disclosure).not.toHaveAttribute("open");
+    const summaries = screen.getAllByText("Model thinking summary");
+    const disclosures = summaries.map((summary) => summary.closest("details"));
+    expect(disclosures[0]).not.toHaveAttribute("open");
+    expect(disclosures[1]).not.toHaveAttribute("open");
     expect(container.querySelectorAll("[data-agent-reasoning]")).toHaveLength(
-      1,
+      2,
     );
-    fireEvent.click(screen.getByText("Model thinking summary · 2 updates"));
-    expect(disclosure).toHaveAttribute("open");
+    fireEvent.click(summaries[1]);
+    expect(disclosures[1]).toHaveAttribute("open");
+    const timelineItems = container.querySelectorAll("[data-agent-item]");
+    expect(timelineItems[0]).toHaveTextContent(
+      "I will build the editable shell first.",
+    );
+    expect(timelineItems[1]).toHaveTextContent("Planning internal");
+    expect(timelineItems[2]).toHaveTextContent(
+      "Checking spacing and hierarchy",
+    );
+    expect(timelineItems[3]).toHaveTextContent("Canvas updated");
     expect(container).toHaveTextContent("Planning internal");
     expect(container).toHaveTextContent("Checking spacing and hierarchy");
     expect(container).toHaveTextContent(
@@ -1426,6 +1435,100 @@ describe("AgentTimeline", () => {
     );
     expect(container).not.toHaveTextContent("revision");
     expect(container).not.toHaveTextContent("Response completed");
+  });
+
+  it("folds adjacent completed tools in place without hiding their details", () => {
+    const timeline: SessionTimelineItem[] = [
+      {
+        itemId: "message:before_tools",
+        sessionId: "conversation_1",
+        runId: "run_tools",
+        sequence: 1,
+        createdAt: now,
+        updatedAt: now,
+        type: "assistant.message",
+        messageId: "before_tools",
+        blocks: [
+          {
+            blockId: "before_tools_text",
+            type: "text",
+            text: "先读取并整理画布。",
+          },
+        ],
+      },
+      {
+        itemId: "tool:inspect",
+        sessionId: "conversation_1",
+        runId: "run_tools",
+        sequence: 2,
+        createdAt: now,
+        updatedAt: now,
+        type: "tool",
+        toolCallId: "inspect",
+        toolName: "opendesign_inspect_document",
+        input: {},
+        risk: "read",
+        status: "completed",
+        result: {},
+      },
+      {
+        itemId: "tool:plan",
+        sessionId: "conversation_1",
+        runId: "run_tools",
+        sequence: 3,
+        createdAt: now,
+        updatedAt: now,
+        type: "tool",
+        toolCallId: "plan",
+        toolName: "opendesign_define_design_plan",
+        input: {},
+        risk: "design_write",
+        status: "completed",
+        result: {},
+      },
+      {
+        itemId: "message:after_tools",
+        sessionId: "conversation_1",
+        runId: "run_tools",
+        sequence: 4,
+        createdAt: now,
+        updatedAt: now,
+        type: "assistant.message",
+        messageId: "after_tools",
+        blocks: [
+          {
+            blockId: "after_tools_text",
+            type: "text",
+            text: "接下来开始设计。",
+          },
+        ],
+      },
+    ];
+
+    const { container } = render(
+      <AgentTimeline
+        activeRunId={null}
+        conversationId="conversation_1"
+        conversationTitle="Conversation"
+        error={null}
+        events={[]}
+        onStop={vi.fn()}
+        onSubmit={vi.fn().mockResolvedValue(true)}
+        timeline={timeline}
+      />,
+    );
+
+    const group = container.querySelector("[data-agent-tool-group]");
+    expect(group).not.toHaveAttribute("open");
+    expect(screen.getByText("Ran 2 operations")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Ran 2 operations"));
+    expect(group).toHaveAttribute("open");
+    expect(group).toHaveTextContent("Canvas read");
+    expect(group).toHaveTextContent("Design plan ready");
+    const timelineItems = container.querySelectorAll("[data-agent-item]");
+    expect(timelineItems[0]).toHaveTextContent("先读取并整理画布。");
+    expect(timelineItems[1]).toHaveAttribute("data-kind", "tool-group");
+    expect(timelineItems[2]).toHaveTextContent("接下来开始设计。");
   });
 
   it("does not repeat a run-bound Agent error below the timeline", () => {

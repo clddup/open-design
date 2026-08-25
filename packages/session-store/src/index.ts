@@ -515,6 +515,11 @@ export function projectTimeline(
       if (current?.type === "run") {
         items.set(key, {
           ...current,
+          // A Run timeline item represents its latest lifecycle fact. When the
+          // Run reaches a terminal state, its presentation order must follow
+          // that terminal journal event instead of retaining the start event's
+          // sequence and appearing to rewrite an earlier Conversation entry.
+          sequence: event.sequence,
           status: payload.status,
           updatedAt: event.createdAt,
           ...(payload.finishedAt === undefined

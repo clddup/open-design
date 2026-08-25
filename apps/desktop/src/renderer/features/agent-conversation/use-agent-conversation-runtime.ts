@@ -38,6 +38,7 @@ import {
   agentEventActivityAt,
   appendLiveAgentEvent,
   isDurableAgentCheckpoint,
+  mergeDurableTimeline,
   pruneLiveEventsCoveredByTimeline,
   selectionScope,
   touchConversationList,
@@ -286,12 +287,16 @@ export function useAgentConversationRuntime({
         setAgentByConversationId((current) =>
           updateConversationAgentState(current, event.sessionId, (previous) => {
             const activeRunId = previous.activeRunId;
+            const timeline = mergeDurableTimeline(
+              previous.timeline,
+              event.timeline,
+            );
             return {
               ...previous,
-              timeline: event.timeline,
+              timeline,
               events: pruneLiveEventsCoveredByTimeline(
                 previous.events,
-                event.timeline,
+                timeline,
                 activeRunId,
               ),
               error: null,

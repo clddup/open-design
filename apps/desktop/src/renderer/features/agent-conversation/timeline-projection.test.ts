@@ -15,6 +15,213 @@ const continuation = {
 };
 
 describe("Agent continuation timeline projection", () => {
+  it("keeps terminal failures at the end without duplicating one root cause", () => {
+    const runId = "run_terminal_order";
+    const startedAt = "2026-08-25T08:19:24.568Z";
+    const timeline: SessionTimelineItem[] = [
+      {
+        itemId: "message:user_terminal_order",
+        sessionId: "conversation_1",
+        runId,
+        sequence: 1,
+        createdAt: startedAt,
+        updatedAt: startedAt,
+        type: "user.message",
+        messageId: "user_terminal_order",
+        content: "设计完整小程序",
+        documentId: "document_1",
+        revision: 427,
+        scope: { kind: "page", pageId: "page_7", selectedNodeIds: [] },
+      },
+      {
+        itemId: "message:scope_confirmed",
+        sessionId: "conversation_1",
+        runId,
+        sequence: 3,
+        createdAt: "2026-08-25T08:20:20.982Z",
+        updatedAt: "2026-08-25T08:20:20.982Z",
+        type: "assistant.message",
+        messageId: "scope_confirmed",
+        blocks: [
+          {
+            blockId: "scope_confirmed_text",
+            type: "text",
+            text: "先确认交付范围，再开始设计。",
+          },
+        ],
+      },
+      {
+        itemId: "tool:invalid_scope",
+        sessionId: "conversation_1",
+        runId,
+        sequence: 5,
+        createdAt: "2026-08-25T08:20:21.083Z",
+        updatedAt: "2026-08-25T08:20:21.182Z",
+        type: "tool",
+        toolCallId: "invalid_scope",
+        toolName: "opendesign_review_delivery_scope",
+        input: {},
+        risk: "read",
+        status: "failed",
+        error: {
+          code: "invalid_tool_input",
+          message: "Delivery scope exceeded its executable fidelity budget",
+          recoverable: true,
+          retryable: false,
+        },
+      },
+      {
+        itemId: "message:plan_revised",
+        sessionId: "conversation_1",
+        runId,
+        sequence: 6,
+        createdAt: "2026-08-25T08:22:00.000Z",
+        updatedAt: "2026-08-25T08:22:00.000Z",
+        type: "assistant.message",
+        messageId: "plan_revised",
+        blocks: [
+          {
+            blockId: "plan_revised_text",
+            type: "text",
+            text: "已收敛交付范围。",
+          },
+        ],
+      },
+      {
+        itemId: "tool:terminal_plan",
+        sessionId: "conversation_1",
+        runId,
+        sequence: 17,
+        createdAt: "2026-08-25T08:30:47.099Z",
+        updatedAt: "2026-08-25T08:30:47.209Z",
+        type: "tool",
+        toolCallId: "terminal_plan",
+        toolName: "opendesign_define_design_plan",
+        input: {},
+        risk: "design_write",
+        status: "failed",
+        error: {
+          code: "tool_protocol_no_progress",
+          message: "Plan produced consecutive invalid tool calls",
+          recoverable: false,
+          retryable: false,
+        },
+      },
+      {
+        itemId: `run:${runId}`,
+        sessionId: "conversation_1",
+        runId,
+        sequence: 18,
+        createdAt: startedAt,
+        updatedAt: "2026-08-25T08:30:47.376Z",
+        type: "run",
+        status: "error",
+        startedAt,
+        finishedAt: "2026-08-25T08:30:47.376Z",
+        stopReason: "error",
+        failure: {
+          code: "tool_protocol_no_progress",
+          message: "Plan produced consecutive invalid tool calls",
+          retryable: false,
+        },
+      },
+    ];
+
+    const items = projectAgentTimeline({
+      activeRunId: null,
+      events: [],
+      locale: "zh-CN",
+      stoppingRunId: null,
+      timeline,
+      t: (key, parameters) => translate("zh-CN", key, parameters),
+    });
+
+    expect(items.map((item) => item.id)).toEqual([
+      "message:user_terminal_order",
+      "message:scope_confirmed",
+      `design-recovery:${runId}`,
+      "message:plan_revised",
+      `run:${runId}`,
+    ]);
+    expect(items.filter((item) => item.state === "error")).toEqual([
+      expect.objectContaining({
+        id: `run:${runId}`,
+        title: "当前模型无法执行这个设计工具",
+      }),
+    ]);
+    expect(
+      items.find((item) => item.id === `design-recovery:${runId}`),
+    ).toMatchObject({
+      order: 5,
+      state: "done",
+      title: "设计结构修正记录 · 1 次",
+    });
+  });
+
+  it("appends a live terminal result instead of rewriting the Run start", () => {
+    const runId = "run_live_terminal_order";
+    const failure = {
+      code: "tool_protocol_no_progress",
+      message: "Plan produced consecutive invalid tool calls",
+      retryable: false,
+    } as const;
+    const items = projectAgentTimeline({
+      activeRunId: null,
+      events: [
+        {
+          type: "run.started",
+          runId,
+          startedAt: "2026-08-25T08:19:24.568Z",
+        },
+        {
+          type: "message.completed",
+          runId,
+          messageId: "assistant_live",
+          blocks: [
+            {
+              blockId: "assistant_live_text",
+              type: "text",
+              text: "正在准备设计。",
+            },
+          ],
+        },
+        {
+          type: "tool.failed",
+          runId,
+          toolCallId: "terminal_live_tool",
+          ...failure,
+          recoverable: false,
+        },
+        {
+          type: "agent.error",
+          runId,
+          ...failure,
+          failure,
+        },
+        {
+          type: "run.completed",
+          runId,
+          finishedAt: "2026-08-25T08:30:47.376Z",
+          stopReason: "error",
+        },
+      ],
+      locale: "zh-CN",
+      stoppingRunId: null,
+      timeline: [],
+      t: (key, parameters) => translate("zh-CN", key, parameters),
+    });
+
+    expect(items.map((item) => item.id)).toEqual([
+      "message:assistant_live",
+      `run:${runId}`,
+    ]);
+    expect(items.at(-1)).toMatchObject({
+      kind: "run",
+      state: "error",
+      title: "当前模型无法执行这个设计工具",
+    });
+  });
+
   it("shows only the stopped Run outcome for cancellation cleanup failures", () => {
     const runId = "run_user_stopped";
     const items = projectAgentTimeline({
@@ -262,7 +469,7 @@ describe("Agent continuation timeline projection", () => {
     );
   });
 
-  it("projects one reasoning disclosure per Run without removing assistant text", () => {
+  it("keeps each reasoning summary beside the message that produced it", () => {
     const now = "2026-08-18T03:40:00.000Z";
     const runId = "run_reasoning";
     const timeline: SessionTimelineItem[] = [
@@ -336,8 +543,9 @@ describe("Agent continuation timeline projection", () => {
 
     expect(items.map((item) => item.id)).toEqual([
       "message:mixed",
-      `reasoning:${runId}`,
+      "reasoning:message:mixed",
       "tool:apply_shell",
+      "message:reasoning_only",
     ]);
     expect(items[0]).toMatchObject({
       kind: "assistant",
@@ -346,10 +554,15 @@ describe("Agent continuation timeline projection", () => {
     expect(items[0]?.reasoning).toBeUndefined();
     expect(items[1]).toMatchObject({
       kind: "reasoning",
-      reasoningCount: 2,
-      title: "模型思考摘要 · 2 条",
-      reasoning:
-        "Planning the first editable structure\n\nChecking hierarchy and spacing",
+      reasoningCount: 1,
+      title: "模型思考摘要",
+      reasoning: "Planning the first editable structure",
+    });
+    expect(items[3]).toMatchObject({
+      kind: "reasoning",
+      reasoningCount: 1,
+      title: "模型思考摘要",
+      reasoning: "Checking hierarchy and spacing",
     });
   });
 

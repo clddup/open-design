@@ -22,6 +22,8 @@ export interface AgentTimelineItem {
   routine?: boolean;
   recoverableFailure?: boolean;
   structuredFailure?: boolean;
+  failureCode?: string;
+  failureMessage?: string;
   order: number;
   approvalId?: string;
   toolCallId?: string;

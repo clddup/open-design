@@ -155,10 +155,19 @@ export function runFailurePresentation(
         ? t("agent.toolProtocolNoProgress")
         : failure.code === "design_recovery_no_progress"
           ? t("agent.designRecoveryNoProgress")
-          : failure.code === "provider_error" ||
-              failure.code === "provider_request_failed"
-            ? t("agent.providerConnectionInterrupted")
-            : t("agent.taskFailed");
+          : failure.code === "renderer_circuit_open"
+            ? t("agent.canvasCircuitOpen")
+            : failure.code === "renderer_first_response_timeout"
+              ? t("agent.canvasToolDidNotStart")
+              : failure.code === "renderer_idle_timeout" ||
+                  failure.code === "renderer_capture_timeout"
+                ? t("agent.canvasToolStalled")
+                : failure.code === "renderer_total_timeout"
+                  ? t("agent.canvasToolLimitReached")
+                  : failure.code === "provider_error" ||
+                      failure.code === "provider_request_failed"
+                    ? t("agent.providerConnectionInterrupted")
+                    : t("agent.taskFailed");
   const primary = timeout
     ? timeout.phase === "first-response"
       ? t("agent.timeoutFirstResponseDetail", {
@@ -175,7 +184,16 @@ export function runFailurePresentation(
       ? t("agent.toolProtocolNoProgressDetail")
       : failure.code === "design_recovery_no_progress"
         ? t("agent.designRecoveryNoProgressDetail")
-        : friendlyAgentError(failure.message || fallback, t);
+        : failure.code === "renderer_circuit_open"
+          ? t("agent.canvasCircuitOpenDetail")
+          : failure.code === "renderer_first_response_timeout"
+            ? t("agent.canvasToolFirstResponseTimeoutDetail")
+            : failure.code === "renderer_idle_timeout" ||
+                failure.code === "renderer_capture_timeout"
+              ? t("agent.canvasToolIdleTimeoutDetail")
+              : failure.code === "renderer_total_timeout"
+                ? t("agent.canvasToolTotalTimeoutDetail")
+                : friendlyAgentError(failure.message || fallback, t);
   const correlation = [
     failure.modelRequestId
       ? t("agent.modelRequestId", { id: failure.modelRequestId })

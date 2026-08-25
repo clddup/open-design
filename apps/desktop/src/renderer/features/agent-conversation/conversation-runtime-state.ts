@@ -128,6 +128,28 @@ export function appendLiveAgentEvent(
   return [...events, event];
 }
 
+export function mergeDurableTimeline(
+  current: readonly SessionTimelineItem[],
+  incoming: readonly SessionTimelineItem[],
+): SessionTimelineItem[] {
+  const merged = new Map(current.map((item) => [item.itemId, item]));
+  for (const item of incoming) {
+    const existing = merged.get(item.itemId);
+    if (
+      !existing ||
+      item.updatedAt > existing.updatedAt ||
+      (item.updatedAt === existing.updatedAt &&
+        item.sequence >= existing.sequence)
+    ) {
+      merged.set(item.itemId, item);
+    }
+  }
+  return [...merged.values()].sort(
+    (left, right) =>
+      left.sequence - right.sequence || left.itemId.localeCompare(right.itemId),
+  );
+}
+
 export function pruneLiveEventsCoveredByTimeline(
   events: readonly AgentEvent[],
   timeline: readonly SessionTimelineItem[],

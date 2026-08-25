@@ -5,6 +5,7 @@ import type {
 import { describe, expect, it } from "vitest";
 import {
   appendLiveAgentEvent,
+  mergeDurableTimeline,
   pruneLiveEventsCoveredByTimeline,
   touchConversationList,
 } from "./conversation-runtime-state";
@@ -127,5 +128,71 @@ describe("conversation runtime state", () => {
         "2026-08-22T00:30:00.000Z",
       ),
     ).toBe(conversations);
+  });
+
+  it("merges durable history monotonically instead of dropping newer messages", () => {
+    const older: Extract<SessionTimelineItem, { type: "assistant.message" }> = {
+      itemId: "message:older",
+      sessionId: "conversation_1",
+      runId: "run_1",
+      sequence: 1,
+      createdAt: "2026-08-25T08:00:00.000Z",
+      updatedAt: "2026-08-25T08:00:00.000Z",
+      type: "assistant.message",
+      messageId: "older",
+      blocks: [{ blockId: "older_text", type: "text", text: "先分析" }],
+    };
+    const current: SessionTimelineItem[] = [
+      older,
+      {
+        itemId: "message:newer",
+        sessionId: "conversation_1",
+        runId: "run_1",
+        sequence: 3,
+        createdAt: "2026-08-25T08:02:00.000Z",
+        updatedAt: "2026-08-25T08:02:00.000Z",
+        type: "assistant.message",
+        messageId: "newer",
+        blocks: [{ blockId: "newer_text", type: "text", text: "继续设计" }],
+      },
+    ];
+    const staleSnapshot: SessionTimelineItem[] = [
+      {
+        ...older,
+        updatedAt: "2026-08-25T07:59:00.000Z",
+        blocks: [{ blockId: "older_text", type: "text", text: "过期内容" }],
+      },
+    ];
+
+    expect(mergeDurableTimeline(current, staleSnapshot)).toEqual(current);
+  });
+
+  it("accepts a newer terminal lifecycle update for the same durable item", () => {
+    const started: SessionTimelineItem = {
+      itemId: "run:run_1",
+      sessionId: "conversation_1",
+      runId: "run_1",
+      sequence: 2,
+      createdAt: "2026-08-25T08:00:00.000Z",
+      updatedAt: "2026-08-25T08:00:00.000Z",
+      type: "run",
+      status: "started",
+      startedAt: "2026-08-25T08:00:00.000Z",
+    };
+    const terminal: SessionTimelineItem = {
+      ...started,
+      sequence: 8,
+      updatedAt: "2026-08-25T08:05:00.000Z",
+      status: "error",
+      finishedAt: "2026-08-25T08:05:00.000Z",
+      stopReason: "error",
+      failure: {
+        code: "tool_protocol_no_progress",
+        message: "Invalid tool calls",
+        retryable: false,
+      },
+    };
+
+    expect(mergeDurableTimeline([started], [terminal])).toEqual([terminal]);
   });
 });

@@ -91,7 +91,9 @@ export function projectAgentRunExperience(input: {
     );
   const hasCanvasChanges = allocatedTargetCount > 0 || hasRevision;
   const activeToolNames = activeTools(timelineForRun, eventsForRun);
-  const active = input.activeRunId !== null;
+  // A delayed activeRunId cleanup must not resurrect an in-progress status
+  // after a durable or live terminal event has already arrived.
+  const active = input.activeRunId !== null && terminal === undefined;
   const allVerified =
     targetStatuses.length > 0 && verifiedTargetCount === targetStatuses.length;
   const failed =

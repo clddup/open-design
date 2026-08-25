@@ -20,7 +20,7 @@ import {
   toolFailureTitle,
   toolTitle,
 } from "./timeline-presentation";
-import { mergeReasoningByRun } from "./timeline-reasoning";
+import { projectReasoningInPlace } from "./timeline-reasoning";
 import type { AgentTimelineItem, Translate } from "./timeline-types";
 export { latestDeliveryLedger } from "./timeline-design-delivery";
 export interface AgentTimelineProjectionInput {
@@ -119,7 +119,13 @@ export function projectAgentTimeline({
     }
     return item;
   });
-  const ordered = collapseRecoverableFailures(normalized, activeRunId, t)
+  const withoutTerminalDuplicates =
+    collapseTerminalFailureDuplicates(normalized);
+  const ordered = collapseRecoverableFailures(
+    withoutTerminalDuplicates,
+    activeRunId,
+    t,
+  )
     .filter((item) => !item.routine)
     .sort((left, right) => {
       const leftRunOrder = left.runId ? runOrder.get(left.runId) : undefined;
@@ -137,7 +143,7 @@ export function projectAgentTimeline({
       }
       return left.order - right.order || left.id.localeCompare(right.id);
     });
-  return mergeReasoningByRun(ordered, t);
+  return projectReasoningInPlace(ordered, t);
 }
 
 function collapseRecoverableFailures(
@@ -153,38 +159,94 @@ function collapseRecoverableFailures(
     failuresByRun.set(item.runId, failures);
   }
   const visible = items.filter((item) => !item.recoverableFailure);
-  if (!activeRunId) return visible;
-  const failures = failuresByRun.get(activeRunId);
-  if (!failures || failures.length === 0) return visible;
-  const orderedFailures = [...failures].sort(
-    (left, right) => left.order - right.order,
-  );
-  const lastFailure = orderedFailures.at(-1)!;
-  const recovered = items.some(
-    (item) =>
-      item.runId === activeRunId &&
-      item.order > lastFailure.order &&
-      ((item.kind === "tool" &&
-        item.state === "done" &&
-        /^r\d+$/.test(item.time)) ||
-        item.id.startsWith("design-step:") ||
-        item.id.startsWith("design-revision:")),
-  );
-  if (recovered) return visible;
-  const structuredFailure = orderedFailures.find(
-    (failure) => failure.structuredFailure && failure.detail,
-  );
-  visible.push({
-    id: `design-recovery:${activeRunId}`,
-    runId: activeRunId,
-    order: lastFailure.order,
-    state: "active",
-    kind: "system",
-    time: t("common.now"),
-    title: t("agent.correctingDesign", { count: orderedFailures.length }),
-    ...(structuredFailure?.detail ? { detail: structuredFailure.detail } : {}),
-  });
+  for (const [runId, failures] of failuresByRun) {
+    const orderedFailures = [...failures].sort(
+      (left, right) => left.order - right.order,
+    );
+    const firstFailure = orderedFailures[0];
+    const lastFailure = orderedFailures.at(-1);
+    const recovered = items.some(
+      (item) =>
+        item.runId === runId &&
+        item.order > lastFailure.order &&
+        ((item.kind === "tool" &&
+          item.state === "done" &&
+          /^r\d+$/.test(item.time)) ||
+          item.id.startsWith("design-step:") ||
+          item.id.startsWith("design-revision:")),
+    );
+    const terminal = items.some(
+      (item) =>
+        item.runId === runId && item.kind === "run" && item.state !== "active",
+    );
+    const active = runId === activeRunId && !recovered && !terminal;
+    const structuredFailure = orderedFailures.find(
+      (failure) => failure.structuredFailure && failure.detail,
+    );
+    visible.push({
+      id: `design-recovery:${runId}`,
+      runId,
+      // Keep the recovery record where its first event occurred. Later retries
+      // update this stable item instead of moving it through the Conversation.
+      order: firstFailure.order,
+      state: active ? "active" : "done",
+      kind: "system",
+      time: firstFailure.time,
+      title: active
+        ? t("agent.correctingDesign", { count: orderedFailures.length })
+        : recovered
+          ? t("agent.designCorrectionResolved", {
+              count: orderedFailures.length,
+            })
+          : t("agent.designCorrectionRecorded", {
+              count: orderedFailures.length,
+            }),
+      ...(structuredFailure?.detail
+        ? { detail: structuredFailure.detail }
+        : {}),
+    });
+  }
   return visible;
+}
+
+function collapseTerminalFailureDuplicates(
+  items: readonly AgentTimelineItem[],
+): AgentTimelineItem[] {
+  const terminalFailureByRun = new Map<
+    string,
+    { code: string; message: string }
+  >();
+  for (const item of items) {
+    if (
+      item.kind === "run" &&
+      item.state === "error" &&
+      item.runId &&
+      item.failureCode &&
+      item.failureMessage
+    ) {
+      terminalFailureByRun.set(item.runId, {
+        code: item.failureCode,
+        message: item.failureMessage,
+      });
+    }
+  }
+  return items.filter((item) => {
+    if (
+      item.kind !== "tool" ||
+      item.state !== "error" ||
+      item.recoverableFailure ||
+      !item.runId ||
+      !item.failureCode ||
+      !item.failureMessage
+    ) {
+      return true;
+    }
+    const terminal = terminalFailureByRun.get(item.runId);
+    return !(
+      terminal?.code === item.failureCode &&
+      terminal.message === item.failureMessage
+    );
+  });
 }
 
 function isDesignCorrectionFailure(code: string, message: string): boolean {
@@ -228,6 +290,15 @@ function projectDurableTimeline(
   const runsWithConcreteActivity = new Set(
     timeline.flatMap((item) =>
       item.runId && (item.type === "assistant.message" || item.type === "tool")
+        ? [item.runId]
+        : [],
+    ),
+  );
+  const runsWithCommittedDesign = new Set(
+    timeline.flatMap((item) =>
+      item.runId &&
+      (item.type === "design.revision" ||
+        (item.type === "tool" && item.revision !== undefined))
         ? [item.runId]
         : [],
     ),
@@ -322,6 +393,8 @@ function projectDurableTimeline(
           item.error?.recoverable === true &&
           isDesignCorrectionFailure(item.error.code, item.error.message),
         structuredFailure: item.error?.details !== undefined,
+        ...(item.error?.code ? { failureCode: item.error.code } : {}),
+        ...(item.error?.message ? { failureMessage: item.error.message } : {}),
         routine:
           routineRecoverableFailure ||
           ((state === "active" || state === "queued") &&
@@ -415,21 +488,33 @@ function projectDurableTimeline(
             : t("agent.workingDesign")
           : item.status === "completed"
             ? t("agent.taskCompleted")
-            : item.status === "cancelled"
-              ? t("agent.taskStopped")
-              : item.status === "budget"
-                ? t("agent.contextLimit")
-                : (failurePresentation?.title ?? t("agent.taskFailed")),
+            : item.status === "error" &&
+                item.failure === undefined &&
+                runsWithCommittedDesign.has(item.runId)
+              ? t("agent.runPhase.partial")
+              : item.status === "cancelled"
+                ? t("agent.taskStopped")
+                : item.status === "budget"
+                  ? t("agent.contextLimit")
+                  : (failurePresentation?.title ?? t("agent.taskFailed")),
       detail:
         item.status === "started"
           ? undefined
-          : item.status === "cancelled"
-            ? t("agent.requestCancelled")
-            : item.status === "budget"
-              ? t("agent.contextLimitDetail")
-              : item.status === "error"
-                ? (failurePresentation?.detail ?? t("agent.tryAgain"))
-                : undefined,
+          : item.status === "error" &&
+              item.failure === undefined &&
+              runsWithCommittedDesign.has(item.runId)
+            ? t("agent.runPhaseDetail.partial")
+            : item.status === "cancelled"
+              ? t("agent.requestCancelled")
+              : item.status === "budget"
+                ? t("agent.contextLimitDetail")
+                : item.status === "error"
+                  ? (failurePresentation?.detail ?? t("agent.tryAgain"))
+                  : undefined,
+      ...(item.failure?.code ? { failureCode: item.failure.code } : {}),
+      ...(item.failure?.message
+        ? { failureMessage: item.failure.message }
+        : {}),
     };
   });
 }
@@ -446,12 +531,13 @@ function projectLiveEvents(
     id: string,
     order: number,
     value: Omit<AgentTimelineItem, "id" | "order">,
+    replaceOrder = false,
   ) => {
     const existing = items.get(id);
     items.set(id, {
       ...existing,
       id,
-      order: existing?.order ?? order,
+      order: replaceOrder ? order : (existing?.order ?? order),
       ...value,
     });
   };
@@ -508,11 +594,14 @@ function projectLiveEvents(
         locale,
         t,
       );
-      updateEvent(
-        event.runId
-          ? `run:${event.runId}`
-          : `runtime:error:${event.requestId ?? event.code}`,
+      const id = event.runId
+        ? `run:${event.runId}`
+        : `runtime:error:${event.requestId ?? event.code}`;
+      update(
+        id,
+        order,
         {
+          ...(event.runId ? { runId: event.runId } : {}),
           routine: false,
           state: "error",
           kind: event.runId ? "run" : "system",
@@ -521,7 +610,12 @@ function projectLiveEvents(
           detail: event.runId
             ? failure.detail
             : friendlyAgentError(event.message, t),
+          ...(event.failure?.code
+            ? { failureCode: event.failure.code }
+            : { failureCode: event.code }),
+          failureMessage: event.failure?.message ?? event.message,
         },
+        Boolean(event.runId),
       );
     }
     if (event.type === "run.started") {
@@ -681,6 +775,8 @@ function projectLiveEvents(
           event.recoverable === true &&
           isDesignCorrectionFailure(event.code, event.message),
         structuredFailure: event.details !== undefined,
+        failureCode: event.code,
+        failureMessage: event.message,
         state: "error",
         kind: "tool",
         time: t("common.error"),
@@ -721,34 +817,63 @@ function projectLiveEvents(
     if (event.type === "run.completed") {
       finalizeRunActivity(event.runId);
       const existing = items.get(`run:${event.runId}`);
+      const terminalToolFailure = [...items.values()]
+        .filter(
+          (item) =>
+            item.runId === event.runId &&
+            item.kind === "tool" &&
+            item.state === "error" &&
+            !item.recoverableFailure,
+        )
+        .sort((left, right) => left.order - right.order)
+        .at(-1);
       const failed =
         event.stopReason === "error" || event.stopReason === "budget";
-      updateEvent(`run:${event.runId}`, {
-        state: failed ? "error" : "done",
-        kind: "run",
-        routine: event.stopReason === "complete",
-        time: eventTime(event.finishedAt, locale, t),
-        title:
-          event.stopReason === "complete"
-            ? t("agent.taskCompleted")
-            : event.stopReason === "cancelled"
-              ? t("agent.taskStopped")
-              : event.stopReason === "budget"
-                ? t("agent.contextLimit")
-                : existing?.state === "error"
-                  ? existing.title
-                  : t("agent.taskFailed"),
-        detail:
-          event.stopReason === "complete"
-            ? undefined
-            : event.stopReason === "cancelled"
-              ? t("agent.requestCancelled")
-              : event.stopReason === "budget"
-                ? t("agent.contextLimitDetail")
-                : existing?.state === "error"
-                  ? existing.detail
-                  : t("agent.tryAgain"),
-      });
+      update(
+        `run:${event.runId}`,
+        order,
+        {
+          runId: event.runId,
+          state: failed ? "error" : "done",
+          kind: "run",
+          routine: event.stopReason === "complete",
+          time: eventTime(event.finishedAt, locale, t),
+          title:
+            event.stopReason === "complete"
+              ? t("agent.taskCompleted")
+              : event.stopReason === "cancelled"
+                ? t("agent.taskStopped")
+                : event.stopReason === "budget"
+                  ? t("agent.contextLimit")
+                  : existing?.state === "error"
+                    ? existing.title
+                    : t("agent.taskFailed"),
+          detail:
+            event.stopReason === "complete"
+              ? undefined
+              : event.stopReason === "cancelled"
+                ? t("agent.requestCancelled")
+                : event.stopReason === "budget"
+                  ? t("agent.contextLimitDetail")
+                  : existing?.state === "error"
+                    ? existing.detail
+                    : t("agent.tryAgain"),
+          ...((existing?.failureCode ?? terminalToolFailure?.failureCode)
+            ? {
+                failureCode:
+                  existing?.failureCode ?? terminalToolFailure?.failureCode,
+              }
+            : {}),
+          ...((existing?.failureMessage ?? terminalToolFailure?.failureMessage)
+            ? {
+                failureMessage:
+                  existing?.failureMessage ??
+                  terminalToolFailure?.failureMessage,
+              }
+            : {}),
+        },
+        existing?.state !== "error",
+      );
     }
   });
   return [...items.values()];

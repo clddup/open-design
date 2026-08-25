@@ -1,34 +1,13 @@
 import type { AgentTimelineItem, Translate } from "./timeline-types";
 
-export function mergeReasoningByRun(
+export function projectReasoningInPlace(
   items: readonly AgentTimelineItem[],
   t: Translate,
 ): AgentTimelineItem[] {
-  const aggregates = new Map<
-    string,
-    {
-      anchorId: string;
-      count: number;
-      summaries: string[];
-      time: string;
-    }
-  >();
+  const projected: AgentTimelineItem[] = [];
   for (const item of items) {
-    if (!item.runId || !item.reasoning) continue;
-    const existing = aggregates.get(item.runId);
-    aggregates.set(item.runId, {
-      anchorId: existing?.anchorId ?? item.id,
-      count: (existing?.count ?? 0) + (item.reasoningCount ?? 1),
-      summaries: [...(existing?.summaries ?? []), item.reasoning],
-      time: item.time,
-    });
-  }
-
-  const merged: AgentTimelineItem[] = [];
-  for (const item of items) {
-    const aggregate = item.runId ? aggregates.get(item.runId) : undefined;
-    if (!aggregate || !item.reasoning) {
-      merged.push(item);
+    if (!item.reasoning) {
+      projected.push(item);
       continue;
     }
 
@@ -36,27 +15,26 @@ export function mergeReasoningByRun(
       const visibleItem = { ...item };
       delete visibleItem.reasoning;
       delete visibleItem.reasoningCount;
-      merged.push(visibleItem);
+      projected.push(visibleItem);
     }
 
-    if (item.id === aggregate.anchorId && item.runId) {
-      merged.push({
-        id: `reasoning:${item.runId}`,
-        runId: item.runId,
-        kind: "reasoning",
-        state: "done",
-        order: item.order,
-        time: aggregate.time,
-        title:
-          aggregate.count === 1
-            ? t("agent.modelThinkingSummary")
-            : t("agent.modelThinkingSummaryCount", {
-                count: aggregate.count,
-              }),
-        reasoning: aggregate.summaries.join("\n\n"),
-        reasoningCount: aggregate.count,
-      });
-    }
+    const count = item.reasoningCount ?? 1;
+    projected.push({
+      id: item.kind === "reasoning" ? item.id : `reasoning:${item.id}`,
+      ...(item.runId ? { runId: item.runId } : {}),
+      kind: "reasoning",
+      state: "done",
+      order: item.order,
+      time: item.time,
+      title:
+        count === 1
+          ? t("agent.modelThinkingSummary")
+          : t("agent.modelThinkingSummaryCount", {
+              count,
+            }),
+      reasoning: item.reasoning,
+      reasoningCount: count,
+    });
   }
-  return merged;
+  return projected;
 }
