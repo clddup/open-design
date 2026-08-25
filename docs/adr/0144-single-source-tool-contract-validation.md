@@ -95,12 +95,14 @@ Arrange 工具已完成第十二个布局编辑迁移切片：原 962 行混合 
 
 公开 SVG/Raster Import-Export 已完成第十三个文件交付迁移切片：`ImportSvgContract / ExportSvgContract / ExportRasterContract` 分别以同一 executable schema 服务 Provider、Pi、Main policy/host 与 Renderer canonical bridge；旧 `isImportSvgToolInput / isExportSvgToolInput / isExportRasterToolInput` 已删除。SVG import 只接受当前 Run 的内容寻址 attachment handle、明确 Page/parent/index 与 parent-local 坐标；公开输入不可能夹带 XML 或路径。SVG export 接受一个 Page 上 1..512 个稳定 root ID、portable suggested name、可选 layer ID 和 padding。Raster 以 `format` 闭合 PNG/JPEG/WebP 分支：公开 scale 明确为 1x/2x/3x 或固定 width/height，PNG 不接收 quality，JPEG 必须使用不透明颜色背景，WebP 保持 OpenDesign 扩展；Provider 与 Runtime 不再一个声明 `oneOf`、另一个暗中接受 64x scale。Portable file name 的 Windows reserved device name 是唯一 domain refinement，路径、控制字符、尾随点/空格已经进入结构 schema。Run attachment 授权、Page/selection-free target、exact revision、像素/字节预算、原生保存框、取消与事务仍分别由 Main、Renderer 和 Import-Export Service 拥有；trusted internal SVG materialization、prepared bytes/result validator 暂按后续 internal bridge 切片保留，不重新暴露给模型。公开 raster 的 format + SCALE/WIDTH/HEIGHT 语义参照 Figma [`ExportSettings`](https://developers.figma.com/docs/plugins/api/ExportSettings/)；OpenDesign 当前只实现其已声明的 PNG/JPEG/SVG 子集并额外提供 WebP，不把 PDF、Display P3、absolute bounds、overlapping content 或 outline-text 写成已完成。
 
+Text Range 与 Font 已完成第十四个文字编辑迁移切片：`DesignTextRangeContract / DesignFontContract` 分别成为富文本区间样式和显式字体 reflow/replace 的唯一公开输入入口。两者的 typography、paragraph、Paint、Style reference 与 font face shape 直接复用 `UpdateTextRangeStyleCommandSchema / TextFontDescriptorSchema`，不再在 Agent 层复制一套近似字段；Font 的 reflow/replace 是闭合 action 分支，Text Range 只保留 `end > start` 这一项跨字段 refinement。Provider、Pi、工具聚合、Main handler 与 Renderer canonical bridge 均显式 parse 同一 executable schema，旧 `isDesignFontToolInput / isDesignTextRangeToolInput / isTextFontDescriptor` 以及 `exactKeys` 结构遍历已删除。Main 继续拥有 inspect、active Page、planned target 与 review gate；Renderer/EditorRuntime 继续拥有 UTF-16/surrogate boundary、当前 Text 内容、Style 类型、font availability、locked/revision、layout、preview 与事务 invariant。该切片不把字体文件、shaping 或文档内部 run 校验混入模型输入契约。
+
 `ValidationIssue` 的稳定 `code/path/expected/actual/recovery` 通过 `tool-validation` failure details 进入 Agent event、journal 和 Timeline；这种参数修正使用 `correct-and-retry`，不冒充需要文档 inspection 的事务错误。Design transaction 仍保留独立 `inspect-and-revise` 恢复语义。
 
-文字/字体等其余 Agent tools，以及已迁移公开工具之后的 trusted internal Renderer bridge、IPC 与持久化契约尚未迁移，不得据此宣称全仓已实现单一验证入口。
+其余 Agent tools，以及已迁移公开工具之后的 trusted internal Renderer bridge、IPC 与持久化契约尚未迁移，不得据此宣称全仓已实现单一验证入口。
 
 ## 后果
 
 - 不重写 pi-agent-core 已有的循环或 TypeBox 参数验证；OpenDesign 只增加产品 domain refinement 和边界 issue adapter。
 - 首个迁移会删除较多手写代码并改变测试入口，属于允许的破坏性开发更新。
-- 在迁移完成前，新增 first-slice、node apply、Design Plan、Visual Review、Checkpoint、Read/Generate/Place/Update/Edit Image、Page Structure/Page Lifecycle、Component、Style、Variable、Hierarchy、Vector、Arrange 与公开 SVG/Raster Import-Export 字段必须进入对应单一入口；不得继续扩展三套旧函数。
+- 在迁移完成前，新增 first-slice、node apply、Design Plan、Visual Review、Checkpoint、Read/Generate/Place/Update/Edit Image、Page Structure/Page Lifecycle、Component、Style、Variable、Hierarchy、Vector、Arrange、公开 SVG/Raster Import-Export、Text Range 与 Font 字段必须进入对应单一入口；不得继续扩展三套旧函数。

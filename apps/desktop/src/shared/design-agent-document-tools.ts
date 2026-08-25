@@ -1,24 +1,9 @@
-import {
-  executableJsonSchema,
-  isDesignOperation,
-  type DesignOperation,
-  type TextFontDescriptor,
-} from "@opendesign/design-contracts";
-import {
-  exactKeys,
-  isRecord,
-  safeId,
-  safeLabel,
-} from "./design-agent-validation";
+import { executableJsonSchema } from "@opendesign/design-contracts";
 import {
   contractSchemaIssues,
   type ValidationIssue,
   type ValidationResult,
 } from "./contract-validation";
-export {
-  DESIGN_FONT_TOOL_INPUT_SCHEMA,
-  DESIGN_TEXT_RANGE_TOOL_INPUT_SCHEMA,
-} from "./design-agent-operation-schemas";
 
 export type DesignPageToolInput =
   | {
@@ -68,115 +53,6 @@ export type PageStructureAccessToolInput = {
   actions: PageStructureAccessAction[];
   reason: string;
 };
-
-export type DesignFontToolInput =
-  | {
-      action: "reflow";
-      label: string;
-      pageId: string;
-      nodeIds: string[];
-      expectedFont: TextFontDescriptor;
-    }
-  | {
-      action: "replace";
-      label: string;
-      pageId: string;
-      nodeIds: string[];
-      expectedFont: TextFontDescriptor;
-      replacementFont: TextFontDescriptor;
-    };
-
-export type DesignTextRangeToolInput = {
-  label: string;
-  pageId: string;
-  nodeId: string;
-  start: number;
-  end: number;
-  style: Extract<DesignOperation, { type: "update_text_range_style" }>["style"];
-};
-
-export function isDesignFontToolInput(
-  input: unknown,
-): input is DesignFontToolInput {
-  if (
-    !isRecord(input) ||
-    (input.action !== "reflow" && input.action !== "replace") ||
-    !safeLabel(input.label) ||
-    !safeId(input.pageId) ||
-    !Array.isArray(input.nodeIds) ||
-    input.nodeIds.length < 1 ||
-    input.nodeIds.length > 1_000 ||
-    !input.nodeIds.every(safeId) ||
-    new Set(input.nodeIds).size !== input.nodeIds.length ||
-    !isTextFontDescriptor(input.expectedFont)
-  ) {
-    return false;
-  }
-  if (input.action === "reflow") {
-    return exactKeys(input, [
-      "action",
-      "label",
-      "pageId",
-      "nodeIds",
-      "expectedFont",
-    ]);
-  }
-  return (
-    isTextFontDescriptor(input.replacementFont) &&
-    exactKeys(input, [
-      "action",
-      "label",
-      "pageId",
-      "nodeIds",
-      "expectedFont",
-      "replacementFont",
-    ])
-  );
-}
-
-export function isDesignTextRangeToolInput(
-  input: unknown,
-): input is DesignTextRangeToolInput {
-  if (
-    !isRecord(input) ||
-    !safeLabel(input.label) ||
-    !safeId(input.pageId) ||
-    !safeId(input.nodeId) ||
-    !Number.isSafeInteger(input.start) ||
-    !Number.isSafeInteger(input.end) ||
-    Number(input.start) < 0 ||
-    Number(input.end) <= Number(input.start) ||
-    !exactKeys(input, ["label", "pageId", "nodeId", "start", "end", "style"])
-  ) {
-    return false;
-  }
-  return isDesignOperation({
-    commandId: "validate_text_range",
-    type: "update_text_range_style",
-    nodeId: input.nodeId,
-    start: input.start,
-    end: input.end,
-    style: input.style,
-  });
-}
-
-function isTextFontDescriptor(value: unknown): value is TextFontDescriptor {
-  return (
-    isRecord(value) &&
-    typeof value.fontFamily === "string" &&
-    value.fontFamily.trim().length > 0 &&
-    value.fontFamily.length <= 4_096 &&
-    (value.fontStyleName === null ||
-      (typeof value.fontStyleName === "string" &&
-        value.fontStyleName.trim().length > 0 &&
-        value.fontStyleName.length <= 512)) &&
-    Number.isInteger(value.fontWeight) &&
-    Number(value.fontWeight) >= 1 &&
-    Number(value.fontWeight) <= 1_000 &&
-    (value.fontSlant === "normal" || value.fontSlant === "italic") &&
-    exactKeys(value, ["fontFamily", "fontStyleName", "fontWeight", "fontSlant"])
-  );
-}
 
 export const PAGE_STRUCTURE_ACCESS_TOOL_INPUT_SCHEMA = executableJsonSchema({
   type: "object",

@@ -82,19 +82,19 @@ import {
   DESIGN_HIERARCHY_TOOL_INPUT_SCHEMA,
   DESIGN_VECTOR_TOOL_INPUT_SCHEMA,
 } from "./design-agent-structure-tools";
+import { DESIGN_APPLY_TOOL_INPUT_SCHEMA } from "./design-agent-operation-schemas";
 import {
-  DESIGN_APPLY_TOOL_INPUT_SCHEMA,
+  DesignFontContract,
+  DesignTextRangeContract,
   DESIGN_FONT_TOOL_INPUT_SCHEMA,
   DESIGN_TEXT_RANGE_TOOL_INPUT_SCHEMA,
-} from "./design-agent-operation-schemas";
+} from "./design-agent-typography-tools";
 import { DESIGN_COMPONENT_TOOL_INPUT_SCHEMA } from "./design-component-tool-schema";
 import {
   DesignPageContract,
   DESIGN_PAGE_TOOL_INPUT_SCHEMA,
   PageStructureAccessContract,
   PAGE_STRUCTURE_ACCESS_TOOL_INPUT_SCHEMA,
-  isDesignFontToolInput,
-  isDesignTextRangeToolInput,
 } from "./design-agent-document-tools";
 import {
   DesignCheckpointContract,
@@ -273,24 +273,26 @@ export type {
   DesignHierarchyToolInput,
   DesignVectorToolInput,
 } from "./design-agent-structure-tools";
+export { DESIGN_APPLY_TOOL_INPUT_SCHEMA } from "./design-agent-operation-schemas";
 export {
-  DESIGN_APPLY_TOOL_INPUT_SCHEMA,
+  DesignFontContract,
+  DesignTextRangeContract,
   DESIGN_FONT_TOOL_INPUT_SCHEMA,
   DESIGN_TEXT_RANGE_TOOL_INPUT_SCHEMA,
-} from "./design-agent-operation-schemas";
+} from "./design-agent-typography-tools";
+export type {
+  DesignFontToolInput,
+  DesignTextRangeToolInput,
+} from "./design-agent-typography-tools";
 export { DESIGN_COMPONENT_TOOL_INPUT_SCHEMA } from "./design-component-tool-schema";
 export {
   DesignPageContract,
   DESIGN_PAGE_TOOL_INPUT_SCHEMA,
   PageStructureAccessContract,
   PAGE_STRUCTURE_ACCESS_TOOL_INPUT_SCHEMA,
-  isDesignFontToolInput,
-  isDesignTextRangeToolInput,
 } from "./design-agent-document-tools";
 export type {
-  DesignFontToolInput,
   DesignPageToolInput,
-  DesignTextRangeToolInput,
   PageStructureAccessAction,
   PageStructureAccessToolInput,
 } from "./design-agent-document-tools";
@@ -634,6 +636,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     inputSchema: DESIGN_TEXT_RANGE_TOOL_INPUT_SCHEMA,
     risk: "design_write" as const,
     approval: "never" as const,
+    validateInputIssues: DesignTextRangeContract.issues,
   },
   {
     name: DESIGN_FONT_TOOL_NAME,
@@ -646,6 +649,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     inputSchema: DESIGN_FONT_TOOL_INPUT_SCHEMA,
     risk: "design_write" as const,
     approval: "never" as const,
+    validateInputIssues: DesignFontContract.issues,
   },
   {
     name: DESIGN_APPLY_TOOL_NAME,
@@ -737,10 +741,10 @@ export function validateDesignAgentToolInput(
     return DesignVectorContract.parse(input).ok;
   }
   if (toolName === DESIGN_FONT_TOOL_NAME) {
-    return isDesignFontToolInput(input);
+    return DesignFontContract.parse(input).ok;
   }
   if (toolName === DESIGN_TEXT_RANGE_TOOL_NAME) {
-    return isDesignTextRangeToolInput(input);
+    return DesignTextRangeContract.parse(input).ok;
   }
   if (toolName === DESIGN_PAGE_TOOL_NAME) {
     return DesignPageContract.parse(input).ok;

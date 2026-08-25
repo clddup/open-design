@@ -108,6 +108,7 @@ import { channels } from "@/shared/desktop-api";
 import { handleDesignSystemTool } from "./agent/design-system-tool-handler.js";
 import { handleDesignStructureTool } from "./agent/design-structure-tool-handler.js";
 import { handleDesignArrangeTool } from "./agent/design-arrange-tool-handler.js";
+import { handleDesignTypographyTool } from "./agent/design-typography-tool-handler.js";
 import { translate } from "@/shared/i18n/messages";
 import {
   DESIGN_APPLY_TOOL_NAME,
@@ -115,11 +116,9 @@ import {
   DESIGN_CHECKPOINT_TOOL_NAME,
   DESIGN_COMPONENT_TOOL_NAME,
   DESIGN_DELIVERY_SCOPE_TOOL_NAME,
-  DESIGN_FONT_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
   DESIGN_FIRST_SLICE_TOOL_NAME,
   DESIGN_PAGE_TOOL_NAME,
-  DESIGN_TEXT_RANGE_TOOL_NAME,
   PAGE_STRUCTURE_ACCESS_TOOL_NAME,
   DESIGN_PLAN_TOOL_NAME,
   DESIGN_REVIEW_TOOL_NAME,
@@ -144,8 +143,6 @@ import {
   PlaceImageContract,
   ReadImageContract,
   UpdateImageContract,
-  isDesignFontToolInput,
-  isDesignTextRangeToolInput,
   isPreparedImageEditSource,
   INTERNAL_UPDATE_IMAGE_TOOL_NAME,
   PLACE_IMAGE_TOOL_NAME,
@@ -1652,43 +1649,14 @@ async function startDesktopApplication(
         }
         return await executeDesignApply(call, parsedInput.value);
       }
-      if (call.toolName === DESIGN_FONT_TOOL_NAME) {
-        if (!isDesignFontToolInput(call.input)) {
-          throw new TypeError("Invalid font tool input");
-        }
-        globalTaskCoordinator.assertDocumentInspected(context);
-        globalTaskCoordinator.assertVisualReviewBeforeWrite(context);
-        const targetIds =
-          globalTaskCoordinator.resolveMaterialTargetIdsIfPlanned(
-            context,
-            call.input.nodeIds,
-          );
-        const result = await executeRendererTool(call);
-        globalTaskCoordinator.recordMaterialDesignWriteCompleted(
-          context.runId,
-          targetIds,
-          result.designRevision?.revision,
-        );
-        return withDesignDelivery(result, context.runId);
-      }
-      if (call.toolName === DESIGN_TEXT_RANGE_TOOL_NAME) {
-        if (!isDesignTextRangeToolInput(call.input)) {
-          throw new TypeError("Invalid text range tool input");
-        }
-        globalTaskCoordinator.assertDocumentInspected(context);
-        globalTaskCoordinator.assertVisualReviewBeforeWrite(context);
-        const targetIds =
-          globalTaskCoordinator.resolveMaterialTargetIdsIfPlanned(context, [
-            call.input.nodeId,
-          ]);
-        const result = await executeRendererTool(call);
-        globalTaskCoordinator.recordMaterialDesignWriteCompleted(
-          context.runId,
-          targetIds,
-          result.designRevision?.revision,
-        );
-        return withDesignDelivery(result, context.runId);
-      }
+      const designTypographyResult = await handleDesignTypographyTool({
+        call,
+        context,
+        coordinator: globalTaskCoordinator,
+        execute: executeRendererTool,
+        withDelivery: withDesignDelivery,
+      });
+      if (designTypographyResult) return designTypographyResult;
       if (call.toolName === DESIGN_PAGE_TOOL_NAME) {
         const parsed = DesignPageContract.parse(call.input);
         if (!parsed.ok) {

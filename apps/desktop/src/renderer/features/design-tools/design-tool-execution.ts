@@ -62,13 +62,13 @@ import {
   DesignApplyContract,
   DesignArrangeContract,
   DesignComponentContract,
+  DesignFontContract,
   DesignHierarchyContract,
   DesignPageContract,
+  DesignTextRangeContract,
   DesignVectorContract,
   ExportRasterContract,
   ExportSvgContract,
-  isDesignFontToolInput,
-  isDesignTextRangeToolInput,
   isInternalImportSvgToolInput,
   isInternalReadImageSourceToolInput,
   isInternalUpdateImageToolInput,
@@ -351,11 +351,12 @@ async function executeDesignToolRequestUnsafe(
     }
   }
 
-  if (
-    request.call.toolName === DESIGN_FONT_TOOL_NAME &&
-    isDesignFontToolInput(request.call.input)
-  ) {
-    const input = request.call.input;
+  if (request.call.toolName === DESIGN_FONT_TOOL_NAME) {
+    const parsed = DesignFontContract.parse(request.call.input);
+    if (!parsed.ok) {
+      throw new TypeError("Renderer received invalid canonical Font input");
+    }
+    const input = parsed.value;
     assertPageWithinMutationTarget(
       input.pageId,
       request.context.mutationTarget,
@@ -405,11 +406,14 @@ async function executeDesignToolRequestUnsafe(
     });
   }
 
-  if (
-    request.call.toolName === DESIGN_TEXT_RANGE_TOOL_NAME &&
-    isDesignTextRangeToolInput(request.call.input)
-  ) {
-    const input = request.call.input;
+  if (request.call.toolName === DESIGN_TEXT_RANGE_TOOL_NAME) {
+    const parsed = DesignTextRangeContract.parse(request.call.input);
+    if (!parsed.ok) {
+      throw new TypeError(
+        "Renderer received invalid canonical Text Range input",
+      );
+    }
+    const input = parsed.value;
     assertPageWithinMutationTarget(
       input.pageId,
       request.context.mutationTarget,
