@@ -175,7 +175,17 @@ export function EditorWorkbenchFeature({
       t,
       transactionCounter,
     });
-  const { applyCommands, resizeFrame, updateNode } = editorCommands;
+  const { applyCommands, deleteGridTracks, resizeFrame, updateNode } =
+    editorCommands;
+  const deleteCanvasGridTracks = useCallback(
+    (
+      frameId: string,
+      revision: number,
+      axis: "rows" | "columns",
+      indices: readonly number[],
+    ) => deleteGridTracks(frameId, axis, indices, revision),
+    [deleteGridTracks],
+  );
   const {
     cancelSelectedImageEdit,
     imageEdit,
@@ -641,14 +651,7 @@ export function EditorWorkbenchFeature({
               }
               onTextRangeSelectionChange={setTextRangeSelection}
               harfBuzzTextRunLayoutProvider={fontBinaryRuntime.provider}
-              onDeleteGridTracks={(frameId, revision, axis, indices) =>
-                editorCommands.deleteGridTracks(
-                  frameId,
-                  axis,
-                  indices,
-                  revision,
-                )
-              }
+              onDeleteGridTracks={deleteCanvasGridTracks}
               onResizeFrame={resizeFrame}
               onReorderGridTracks={editorCommands.reorderGridTracks}
               onSetGridTracks={editorCommands.setGridTracks}
@@ -886,14 +889,7 @@ export function EditorWorkbenchFeature({
                 onSetConstraints={editorCommands.setNodeConstraints}
                 onSetLayoutPositioning={editorCommands.setNodeLayoutPositioning}
                 onSetFrameLayoutGuides={editorCommands.setFrameLayoutGuides}
-                onDeleteGridTracks={(frameId, axis, indices, revision) =>
-                  editorCommands.deleteGridTracks(
-                    frameId,
-                    axis,
-                    indices,
-                    revision,
-                  )
-                }
+                onDeleteGridTracks={deleteGridTracks}
                 onReorderGridTracks={editorCommands.reorderGridTracks}
                 onUpdate={(updates) => {
                   if (selectedNode) updateNode(selectedNode.id, updates);
