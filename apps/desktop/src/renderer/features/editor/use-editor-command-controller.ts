@@ -12,6 +12,7 @@ import type {
 } from "@opendesign/design-contracts";
 import {
   planDeleteGridTracks,
+  planMoveGridChildren,
   planSetFrameAutoLayout,
   planReorderGridTracks,
   planSetGridTracks,
@@ -24,7 +25,10 @@ import {
   planSetNodeConstraints,
   type EditorRuntime,
 } from "@opendesign/editor-runtime";
-import type { LeaferAutoLayoutSpacingChange } from "@opendesign/leafer-engine";
+import type {
+  LeaferAutoLayoutSpacingChange,
+  LeaferGridChildMoveRequest,
+} from "@opendesign/leafer-engine";
 import { useCallback, useEffect } from "react";
 import type { MessageKey, MessageParameters } from "@/shared/i18n/messages";
 import type { UpdatePropertiesPatch } from "./types";
@@ -190,6 +194,35 @@ export function useEditorCommandController({
         return false;
       }
       return applyCommands(t("history.reorderGridTracks"), plan.commands);
+    },
+    [applyCommands, runtime, setEditorError, t],
+  );
+
+  const moveGridChildren = useCallback(
+    (request: LeaferGridChildMoveRequest) => {
+      const current = runtime.getSnapshot().document;
+      if (current.revision !== request.expectedRevision) {
+        setEditorError(t("canvas.gridTrackStale"));
+        return false;
+      }
+      const plan = planMoveGridChildren(
+        current,
+        pageIdForNode(current, request.frameId),
+        request.frameId,
+        request.nodeIds,
+        request.anchorNodeId,
+        request.target,
+        `canvas_grid_child_move_${request.frameId}`,
+      );
+      if (!plan.ok) {
+        if (plan.code === "no-op") {
+          setEditorError(null);
+          return true;
+        }
+        setEditorError(plan.message);
+        return false;
+      }
+      return applyCommands(t("history.moveGridContent"), plan.commands);
     },
     [applyCommands, runtime, setEditorError, t],
   );
@@ -455,6 +488,7 @@ export function useEditorCommandController({
     adjustAutoLayoutSpacing,
     applyCommands,
     deleteGridTracks,
+    moveGridChildren,
     setGridTracks,
     resizeFrame,
     reorderGridTracks,

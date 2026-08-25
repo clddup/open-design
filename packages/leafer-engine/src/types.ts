@@ -135,6 +135,14 @@ export interface LeaferGridTrackInputRequest {
   }[];
 }
 
+export interface LeaferGridChildMoveRequest {
+  anchorNodeId: string;
+  expectedRevision: number;
+  frameId: string;
+  nodeIds: readonly string[];
+  target: { row: number; column: number };
+}
+
 export type LeaferAutoLayoutSpacingChange =
   | {
       kind: "padding";
@@ -204,6 +212,7 @@ export interface LeaferEngineCallbacks {
   onCreate(request: LeaferCreateRequest): boolean;
   onCreateVector(request: LeaferCreateVectorRequest): boolean;
   onError(error: Error): void;
+  onGridChildMove?(request: LeaferGridChildMoveRequest): boolean;
   onGridTrackDelete?(request: LeaferGridTrackDeleteRequest): boolean;
   onGridTrackReorder?(request: LeaferGridTrackReorderRequest): boolean;
   onGridTrackResize?(request: LeaferGridTrackResizeRequest): boolean;

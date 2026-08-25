@@ -390,8 +390,12 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       },
       hasComponentTarget: () => this.#selectedComponentTarget() !== undefined,
       nodeId: (element) => this.#nodeId(element),
+      onGridChildMove: (request) =>
+        this.#callbacks.onGridChildMove?.(request) ?? false,
       onOperations: (request) => this.#callbacks.onOperations(request),
       onPreviewBoolean: (states) => this.#previewBooleanTransform(states),
+      previewGridChildDrop: (frameId, point) =>
+        this.#editorOverlays.previewGridChildDrop(frameId, point),
       restoreProjection: () => this.#restoreProjection(),
     });
     this.#penToolController = new PenToolController({

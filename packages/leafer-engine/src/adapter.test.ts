@@ -1070,6 +1070,126 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
+  it("previews and commits a selected Grid child move as one exact-revision semantic request", async () => {
+    const onGridChildMove = vi.fn(() => true);
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onGridChildMove,
+    });
+    const input = withGridChildFixture(createInput());
+    adapter.sync(input);
+    flushAnimationFrames();
+    const app = leaferHarness.app;
+    const child = app && findElement(app.tree, "feature_one");
+    const drop = app && findElement(app.sky, "__opendesign_grid_child_drop__");
+    if (!app || !child || !drop) throw new Error("Missing Grid child fixture");
+
+    app.editor.target = [child];
+    app.editor.moving = true;
+    app.editor.editBox.dragging = true;
+    app.editor.emit("editor.before-move");
+    child.localTransform.e = 700;
+    app.editor.emit("editor.move");
+
+    expect(drop.visible).toBe(true);
+    expect(drop.x).toBe(152);
+    expect(drop.width).toBe(1_028);
+    app.editor.editBox.dragging = false;
+    app.editor.editBox.emit("drag.end");
+
+    expect(drop.visible).toBe(false);
+    expect(onGridChildMove).toHaveBeenCalledOnce();
+    expect(onGridChildMove).toHaveBeenCalledWith({
+      anchorNodeId: "feature_one",
+      expectedRevision: input.document.revision,
+      frameId: "frame_welcome",
+      nodeIds: ["feature_one"],
+      target: { row: 0, column: 1 },
+    });
+    adapter.dispose();
+  });
+
+  it("cancels a Grid child move on Escape without leaking preview or transform writes", async () => {
+    const onGridChildMove = vi.fn(() => true);
+    const onOperations = vi.fn(() => true);
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onGridChildMove,
+      onOperations,
+    });
+    const input = withGridChildFixture(createInput());
+    adapter.sync(input);
+    flushAnimationFrames();
+    const app = leaferHarness.app;
+    const child = app && findElement(app.tree, "feature_one");
+    const drop = app && findElement(app.sky, "__opendesign_grid_child_drop__");
+    if (!app || !child || !drop) throw new Error("Missing Grid child fixture");
+    const authoritativeX = child.localTransform.e;
+
+    app.editor.target = [child];
+    app.editor.moving = true;
+    app.editor.editBox.dragging = true;
+    app.editor.emit("editor.before-move");
+    child.localTransform.e = 700;
+    app.editor.emit("editor.move");
+    emitWindowKey("Escape");
+    app.editor.editBox.dragging = false;
+    app.editor.editBox.emit("drag.end");
+
+    expect(drop.visible).toBe(false);
+    expect(child.localTransform.e).toBe(authoritativeX);
+    expect(onGridChildMove).not.toHaveBeenCalled();
+    expect(onOperations).not.toHaveBeenCalled();
+    adapter.dispose();
+  });
+
+  it("keeps ordinary Grid Frame movement active while its track editor is visible", async () => {
+    const onOperations = vi.fn(() => true);
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onOperations,
+    });
+    const input = withGridFixture(createInput());
+    adapter.sync(input);
+    flushAnimationFrames();
+    const app = leaferHarness.app;
+    const frame = app && findElement(app.tree, "frame_welcome");
+    if (!app || !frame) throw new Error("Missing Grid Frame fixture");
+    const before = { ...frame.localTransform };
+    const targetX = frame.localTransform.e + 48;
+
+    app.editor.target = [frame];
+    app.editor.moving = true;
+    app.editor.editBox.dragging = true;
+    app.editor.emit("editor.before-move");
+    frame.localTransform.e = targetX;
+    app.editor.emit("editor.move");
+    adapter.sync(input);
+    app.editor.editBox.dragging = false;
+    app.editor.editBox.emit("drag.end");
+
+    expect(onOperations).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "move",
+        selectionNodeIds: ["frame_welcome"],
+        operations: [
+          expect.objectContaining({
+            nodeId: "frame_welcome",
+            transform: [
+              before.a,
+              before.b,
+              before.c,
+              before.d,
+              targetX,
+              before.f,
+            ],
+          }),
+        ],
+      }),
+    );
+    adapter.dispose();
+  });
+
   it("commits selected Auto Layout padding and gap canvas drags as semantic exact-revision requests", async () => {
     const onAutoLayoutSpacingCommit = vi.fn(() => true);
     const adapter = await createLeaferEngineAdapter(createHost(), {
@@ -7087,6 +7207,41 @@ function withGridFixture(input: LeaferEngineSyncInput): LeaferEngineSyncInput {
     gridEditorFrameId: frame.id,
     selection: { nodeIds: [frame.id], anchorNodeId: frame.id },
     tool: "select",
+  };
+}
+
+function withGridChildFixture(
+  input: LeaferEngineSyncInput,
+): LeaferEngineSyncInput {
+  const fixture = withGridFixture(input);
+  const document = structuredClone(fixture.document);
+  const frame = document.nodesById.frame_welcome;
+  if (frame?.kind !== "frame") throw new Error("Missing welcome Frame");
+  const grid = frame.properties.autoLayout;
+  if (!grid || grid.mode !== "grid") throw new Error("Missing Grid fixture");
+  grid.itemsPositioning = "manual";
+  const first = document.nodesById.feature_one;
+  const second = document.nodesById.feature_two;
+  if (!first || !second) throw new Error("Missing Grid child fixtures");
+  first.parentId = frame.id;
+  second.parentId = frame.id;
+  first.gridPlacement = {
+    row: 0,
+    column: 0,
+    rowSpan: 1,
+    columnSpan: 1,
+    horizontalAlign: "auto",
+    verticalAlign: "auto",
+  };
+  second.gridPlacement = {
+    ...first.gridPlacement,
+    column: 1,
+  };
+  return {
+    ...fixture,
+    document,
+    gridEditorFrameId: frame.id,
+    selection: { nodeIds: [first.id], anchorNodeId: first.id },
   };
 }
 

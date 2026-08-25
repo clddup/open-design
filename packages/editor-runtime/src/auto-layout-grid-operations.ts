@@ -7,13 +7,21 @@ import type {
   GridTrack,
 } from "@opendesign/design-contracts";
 import {
+  DEFAULT_AUTO_LAYOUT_FRAME_SIZING,
+  DEFAULT_LAYOUT_SIZING,
   MAX_GRID_TRACK_VALUE,
   MAX_TRANSACTION_COMMANDS,
 } from "@opendesign/design-contracts";
+import {
+  GRID_AUTO_LAYOUT_CONTRACT_VERSION,
+  solveGridAutoLayout,
+} from "@opendesign/layout-service";
 import type { AutoLayoutOperationPlan } from "./auto-layout-operations.js";
 import { planDeleteNodes } from "./deletion-operations.js";
 
 export type GridTrackAxis = "rows" | "columns";
+
+const MAX_GRID_CHILD_MOVE_SEARCH_CELLS = 65_536;
 
 export type GridTrackMovement = {
   from: number;
@@ -42,6 +50,16 @@ export type GridTrackUpdatePlan =
   | Extract<AutoLayoutOperationPlan, { ok: false }>;
 
 export type GridTrackResizePlan = GridTrackUpdatePlan;
+
+export type GridChildMovePlan =
+  | {
+      ok: true;
+      commands: DesignOperation[];
+      frameId: string;
+      nodeIds: string[];
+      target: { row: number; column: number };
+    }
+  | Extract<AutoLayoutOperationPlan, { ok: false }>;
 
 export type GridTrackDeletePlan =
   | {
@@ -548,6 +566,502 @@ export function planDeleteGridTracks(
     indices: selectedIndices,
     nodeIds: [frameId, ...frame.childIds],
   };
+}
+
+export function planMoveGridChildren(
+  document: DesignDocument,
+  pageId: string,
+  frameId: string,
+  nodeIds: readonly string[],
+  anchorNodeId: string,
+  target: { row: number; column: number },
+  commandPrefix: string,
+): GridChildMovePlan {
+  const frame = document.nodesById[frameId];
+  if (!frame) return failure("not-found", `Frame ${frameId} does not exist`);
+  if (
+    (frame.kind !== "frame" && frame.kind !== "slot") ||
+    !nodeBelongsToPage(document, pageId, frameId)
+  ) {
+    return failure(
+      "invalid-target",
+      `Target ${frameId} must be a Frame on Page ${pageId}`,
+    );
+  }
+  const grid = frame.properties.autoLayout;
+  if (!grid || grid.mode !== "grid") {
+    return failure(
+      "invalid-target",
+      `Frame ${frameId} does not use Grid Auto Layout`,
+    );
+  }
+  if (isEffectivelyLocked(document, frameId)) {
+    return failure("locked", "Locked Grid Frames cannot move cell contents");
+  }
+  if (
+    grid.rows.length * grid.columns.length >
+    MAX_GRID_CHILD_MOVE_SEARCH_CELLS
+  ) {
+    return failure(
+      "operation-limit",
+      "Grid is too large for bounded direct cell movement",
+    );
+  }
+  if (
+    !Number.isInteger(target.row) ||
+    !Number.isInteger(target.column) ||
+    target.row < 0 ||
+    target.column < 0 ||
+    target.row >= grid.rows.length ||
+    target.column >= grid.columns.length
+  ) {
+    return failure("invalid-target", "Grid child drop cell is out of range");
+  }
+
+  const selected = new Set(nodeIds);
+  const ordered = frame.childIds.filter((nodeId) => selected.has(nodeId));
+  if (
+    selected.size === 0 ||
+    ordered.length !== selected.size ||
+    !selected.has(anchorNodeId)
+  ) {
+    return failure(
+      "invalid-target",
+      "Grid child movement requires current direct children and an anchor",
+    );
+  }
+  for (const nodeId of ordered) {
+    const node = document.nodesById[nodeId];
+    if (
+      !node ||
+      !node.visible ||
+      node.parentId !== frameId ||
+      node.layoutPositioning === "absolute" ||
+      (grid.itemsPositioning === "manual" && !node.gridPlacement)
+    ) {
+      return failure(
+        "invalid-target",
+        `Layer ${nodeId} is not a visible Grid flow child`,
+      );
+    }
+    if (isEffectivelyLocked(document, nodeId)) {
+      return failure("locked", `Locked layer ${nodeId} cannot move`);
+    }
+  }
+
+  if (grid.itemsPositioning === "row-auto-flow") {
+    return planMoveAutomaticGridChildren(
+      document,
+      pageId,
+      frame,
+      grid,
+      ordered,
+      anchorNodeId,
+      target,
+      commandPrefix,
+    );
+  }
+  return planMoveManualGridChildren(
+    document,
+    frame,
+    ordered,
+    anchorNodeId,
+    target,
+    commandPrefix,
+  );
+}
+
+function planMoveAutomaticGridChildren(
+  document: DesignDocument,
+  pageId: string,
+  frame: Extract<DesignNode, { kind: "frame" | "slot" }>,
+  grid: Extract<AutoLayout, { mode: "grid" }>,
+  ordered: readonly string[],
+  anchorNodeId: string,
+  target: { row: number; column: number },
+  commandPrefix: string,
+): GridChildMovePlan {
+  const selected = new Set(ordered);
+  const flowChildren = frame.childIds.filter((nodeId) => {
+    const node = document.nodesById[nodeId];
+    return node?.visible === true && node.layoutPositioning !== "absolute";
+  });
+  const remaining = flowChildren.filter((nodeId) => !selected.has(nodeId));
+  const targetOrdinal = target.row * grid.columns.length + target.column;
+  const anchorOffset = ordered.indexOf(anchorNodeId);
+  const insertionIndex = Math.max(
+    0,
+    Math.min(targetOrdinal - anchorOffset, remaining.length),
+  );
+  const nextFlow = [
+    ...remaining.slice(0, insertionIndex),
+    ...ordered,
+    ...remaining.slice(insertionIndex),
+  ];
+  if (sameStringList(flowChildren, nextFlow)) {
+    return failure("no-op", "Grid children already occupy this flow position");
+  }
+
+  const preflight = solveGridAutoLayout({
+    version: GRID_AUTO_LAYOUT_CONTRACT_VERSION,
+    frame: frame.size,
+    frameSizing: grid.sizing ?? DEFAULT_AUTO_LAYOUT_FRAME_SIZING,
+    ...(frame.layoutLimits ? { frameLimits: frame.layoutLimits } : {}),
+    padding: grid.padding,
+    rowGap: grid.rowGap,
+    columnGap: grid.columnGap,
+    rows: grid.rows,
+    columns: grid.columns,
+    itemsPositioning: grid.itemsPositioning,
+    ...(grid.autoTracks ? { autoTracks: grid.autoTracks } : {}),
+    children: nextFlow.map((nodeId) => {
+      const node = document.nodesById[nodeId]!;
+      return {
+        id: node.id,
+        width: node.size.width,
+        height: node.size.height,
+        sizing: node.layoutSizing ?? DEFAULT_LAYOUT_SIZING,
+        ...(node.layoutLimits ? { limits: node.layoutLimits } : {}),
+        ...(node.gridPlacement ? { placement: node.gridPlacement } : {}),
+      };
+    }),
+  });
+  if (!preflight.ok) {
+    return failure(
+      "visual-fidelity",
+      `Grid content cannot use the requested flow order: ${preflight.message}`,
+    );
+  }
+
+  const flowSlots = new Set(flowChildren);
+  let nextFlowIndex = 0;
+  const desiredChildren = frame.childIds.map((nodeId) =>
+    flowSlots.has(nodeId) ? nextFlow[nextFlowIndex++]! : nodeId,
+  );
+  const working = [...frame.childIds];
+  const commands: DesignOperation[] = [];
+  const desiredIndexById = new Map(
+    desiredChildren.map((nodeId, index) => [nodeId, index] as const),
+  );
+  for (let index = 0; index < desiredChildren.length; index += 1) {
+    while (working[index] !== desiredChildren[index]) {
+      const desiredNodeId = desiredChildren[index]!;
+      const nodeId = flowSlots.has(desiredNodeId)
+        ? desiredNodeId
+        : working[index]!;
+      if (!flowSlots.has(nodeId)) {
+        return failure(
+          "visual-fidelity",
+          "Grid flow cannot preserve fixed layer slots",
+        );
+      }
+      const currentIndex = working.indexOf(nodeId);
+      const nextIndex = flowSlots.has(desiredNodeId)
+        ? index
+        : desiredIndexById.get(nodeId);
+      if (currentIndex < 0 || nextIndex === undefined) {
+        return failure("not-found", `Layer ${nodeId} does not exist`);
+      }
+      working.splice(currentIndex, 1);
+      working.splice(nextIndex, 0, nodeId);
+      commands.push({
+        commandId: `${commandPrefix}_move_${commands.length}`,
+        type: "move_element",
+        nodeId,
+        pageId,
+        parentId: frame.id,
+        index: nextIndex,
+      });
+      if (commands.length > MAX_TRANSACTION_COMMANDS) {
+        return failure(
+          "operation-limit",
+          `Moving Grid children exceeds the ${MAX_TRANSACTION_COMMANDS}-command transaction limit`,
+        );
+      }
+    }
+  }
+  if (commands.length === 0) {
+    return failure("no-op", "Grid children already use the requested order");
+  }
+  if (commands.length > MAX_TRANSACTION_COMMANDS) {
+    return failure(
+      "operation-limit",
+      `Moving Grid children exceeds the ${MAX_TRANSACTION_COMMANDS}-command transaction limit`,
+    );
+  }
+  return {
+    ok: true,
+    commands,
+    frameId: frame.id,
+    nodeIds: [...ordered],
+    target,
+  };
+}
+
+function planMoveManualGridChildren(
+  document: DesignDocument,
+  frame: Extract<DesignNode, { kind: "frame" | "slot" }>,
+  ordered: readonly string[],
+  anchorNodeId: string,
+  target: { row: number; column: number },
+  commandPrefix: string,
+): GridChildMovePlan {
+  const grid = frame.properties.autoLayout;
+  if (!grid || grid.mode !== "grid") {
+    return failure("invalid-target", "Grid Auto Layout is unavailable");
+  }
+  const anchor = document.nodesById[anchorNodeId]?.gridPlacement;
+  if (!anchor) return failure("not-found", "Grid move anchor is unavailable");
+  const rowOffset = target.row - anchor.row;
+  const columnOffset = target.column - anchor.column;
+  const selected = new Set(ordered);
+  const selectedPlacements = new Map<string, GridChildPlacement>();
+  for (const nodeId of ordered) {
+    const placement = document.nodesById[nodeId]!.gridPlacement!;
+    const shifted = {
+      ...placement,
+      row: placement.row + rowOffset,
+      column: placement.column + columnOffset,
+    };
+    if (!placementFitsGrid(shifted, grid.rows.length, grid.columns.length)) {
+      return failure(
+        "invalid-target",
+        `Moving ${nodeId} would extend outside the declared Grid tracks`,
+      );
+    }
+    if (
+      [...selectedPlacements.values()].some((candidate) =>
+        placementsOverlap(candidate, shifted),
+      )
+    ) {
+      return failure(
+        "visual-fidelity",
+        "Selected Grid children would overlap after this move",
+      );
+    }
+    selectedPlacements.set(nodeId, shifted);
+  }
+
+  const unselected = frame.childIds.flatMap((nodeId) => {
+    const node = document.nodesById[nodeId];
+    return node &&
+      !selected.has(nodeId) &&
+      node.visible &&
+      node.layoutPositioning !== "absolute" &&
+      node.gridPlacement
+      ? [{ nodeId, placement: node.gridPlacement }]
+      : [];
+  });
+  const collided = unselected.filter(({ placement }) =>
+    [...selectedPlacements.values()].some((candidate) =>
+      placementsOverlap(candidate, placement),
+    ),
+  );
+  for (const { nodeId } of collided) {
+    if (isEffectivelyLocked(document, nodeId)) {
+      return failure(
+        "locked",
+        `Locked layer ${nodeId} cannot be displaced from the target cell`,
+      );
+    }
+  }
+
+  const collidedIds = new Set(collided.map(({ nodeId }) => nodeId));
+  const occupied = unselected
+    .filter(({ nodeId }) => !collidedIds.has(nodeId))
+    .map(({ placement }) => placement);
+  occupied.push(...selectedPlacements.values());
+  const occupancy = createGridOccupancyIndex(occupied);
+  const displacedPlacements = new Map<string, GridChildPlacement>();
+  let rowCount = grid.rows.length;
+  for (const { nodeId, placement } of collided) {
+    const next = nearestAvailablePlacement(
+      placement,
+      occupancy,
+      4_096,
+      grid.columns.length,
+    );
+    if (!next) {
+      return failure(
+        "operation-limit",
+        `Grid has no available cell for displaced layer ${nodeId}`,
+      );
+    }
+    displacedPlacements.set(nodeId, next);
+    occupancy.add(next);
+    rowCount = Math.max(rowCount, next.row + next.rowSpan);
+  }
+
+  const placements = new Map([...selectedPlacements, ...displacedPlacements]);
+  if (
+    rowCount === grid.rows.length &&
+    [...placements].every(([nodeId, placement]) =>
+      samePlacement(document.nodesById[nodeId]!.gridPlacement!, placement),
+    )
+  ) {
+    return failure("no-op", "Grid children already occupy these cells");
+  }
+  const commands: DesignOperation[] = [];
+  if (rowCount > grid.rows.length) {
+    const template = grid.rows.at(-1)!;
+    commands.push({
+      commandId: `${commandPrefix}_rows`,
+      type: "update_properties",
+      nodeId: frame.id,
+      properties: {
+        autoLayout: {
+          ...grid,
+          rows: [
+            ...grid.rows,
+            ...Array.from({ length: rowCount - grid.rows.length }, () =>
+              structuredClone(template),
+            ),
+          ],
+        },
+      },
+    });
+  }
+  for (const [nodeId, placement] of placements) {
+    if (samePlacement(document.nodesById[nodeId]!.gridPlacement!, placement)) {
+      continue;
+    }
+    commands.push({
+      commandId: `${commandPrefix}_placement_${commands.length}`,
+      type: "update_properties",
+      nodeId,
+      gridPlacement: placement,
+    });
+  }
+  if (commands.length > MAX_TRANSACTION_COMMANDS) {
+    return failure(
+      "operation-limit",
+      `Moving Grid children exceeds the ${MAX_TRANSACTION_COMMANDS}-command transaction limit`,
+    );
+  }
+  return {
+    ok: true,
+    commands,
+    frameId: frame.id,
+    nodeIds: [...placements.keys()],
+    target,
+  };
+}
+
+function nearestAvailablePlacement(
+  source: GridChildPlacement,
+  occupied: GridOccupancyIndex,
+  rowCount: number,
+  columnCount: number,
+): GridChildPlacement | null {
+  if (source.rowSpan > rowCount || source.columnSpan > columnCount) return null;
+  const maxDistance = rowCount + columnCount;
+  let inspected = 0;
+  for (let distance = 0; distance <= maxDistance; distance += 1) {
+    for (let rowDelta = -distance; rowDelta <= distance; rowDelta += 1) {
+      const columnDistance = distance - Math.abs(rowDelta);
+      const columns =
+        columnDistance === 0
+          ? [source.column]
+          : [source.column - columnDistance, source.column + columnDistance];
+      for (const column of columns) {
+        const row = source.row + rowDelta;
+        if (
+          row < 0 ||
+          column < 0 ||
+          row + source.rowSpan > rowCount ||
+          column + source.columnSpan > columnCount
+        ) {
+          continue;
+        }
+        inspected += 1;
+        if (inspected > MAX_GRID_CHILD_MOVE_SEARCH_CELLS) return null;
+        const candidate = { ...source, row, column };
+        if (occupied.available(candidate)) return candidate;
+      }
+    }
+  }
+  return null;
+}
+
+interface GridOccupancyIndex {
+  add(placement: GridChildPlacement): void;
+  available(placement: GridChildPlacement): boolean;
+}
+
+function createGridOccupancyIndex(
+  placements: readonly GridChildPlacement[],
+): GridOccupancyIndex {
+  const rows = new Map<number, Array<{ start: number; end: number }>>();
+  const add = (placement: GridChildPlacement) => {
+    for (
+      let row = placement.row;
+      row < placement.row + placement.rowSpan;
+      row++
+    ) {
+      const intervals = rows.get(row) ?? [];
+      intervals.push({
+        start: placement.column,
+        end: placement.column + placement.columnSpan,
+      });
+      rows.set(row, intervals);
+    }
+  };
+  placements.forEach(add);
+  return {
+    add,
+    available: (placement) => {
+      const end = placement.column + placement.columnSpan;
+      for (
+        let row = placement.row;
+        row < placement.row + placement.rowSpan;
+        row += 1
+      ) {
+        if (
+          rows
+            .get(row)
+            ?.some(
+              (interval) =>
+                placement.column < interval.end && interval.start < end,
+            )
+        ) {
+          return false;
+        }
+      }
+      return true;
+    },
+  };
+}
+
+function placementFitsGrid(
+  placement: GridChildPlacement,
+  rowCount: number,
+  columnCount: number,
+): boolean {
+  return (
+    placement.row >= 0 &&
+    placement.column >= 0 &&
+    placement.row + placement.rowSpan <= rowCount &&
+    placement.column + placement.columnSpan <= columnCount
+  );
+}
+
+function placementsOverlap(
+  left: GridChildPlacement,
+  right: GridChildPlacement,
+): boolean {
+  return (
+    left.row < right.row + right.rowSpan &&
+    right.row < left.row + left.rowSpan &&
+    left.column < right.column + right.columnSpan &&
+    right.column < left.column + left.columnSpan
+  );
+}
+
+function sameStringList(left: readonly string[], right: readonly string[]) {
+  return (
+    left.length === right.length &&
+    left.every((value, index) => value === right[index])
+  );
 }
 
 function placementAfterTrackDeletion(

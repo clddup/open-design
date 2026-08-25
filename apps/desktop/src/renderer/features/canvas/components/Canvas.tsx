@@ -48,6 +48,7 @@ import {
   type LeaferEngineSyncInput,
   type LeaferFidelityWarning,
   type LeaferGenerationActivity,
+  type LeaferGridChildMoveRequest,
   type LeaferImageCropCommitRequest,
   type LeaferImageCropState,
   type LeaferOperationKind,
@@ -94,6 +95,7 @@ import { AutoLayoutSpacingInput } from "./AutoLayoutSpacingInput";
 import { GridTrackInput } from "./GridTrackInput";
 import { ImageExpandOverlay } from "./ImageExpandOverlay";
 import { useCanvasInlineEditors } from "../use-canvas-inline-editors";
+import { canvasGridEditorScope } from "../canvas-grid-editor-scope";
 
 export function Canvas({
   activeAgentRunId,
@@ -117,6 +119,7 @@ export function Canvas({
   onTextEditingStyleControllerChange,
   onTextRangeSelectionChange,
   onDeleteGridTracks,
+  onMoveGridChildren,
   onReorderGridTracks,
   onSetGridTracks,
   onResizeFrame,
@@ -186,6 +189,7 @@ export function Canvas({
     axis: "rows" | "columns",
     indices: readonly number[],
   ) => boolean;
+  onMoveGridChildren: (request: LeaferGridChildMoveRequest) => boolean;
   onSetGridTracks: (
     frameId: string,
     expectedRevision: number,
@@ -1137,6 +1141,7 @@ export function Canvas({
       },
       onImageCropCommit: applyImageCrop,
       onImageCropStateChange: setImageCropState,
+      onGridChildMove: onMoveGridChildren,
       onGridTrackReorder: ({ axis, frameId, fromIndices, insertionIndex }) =>
         onReorderGridTracks(frameId, axis, fromIndices, insertionIndex),
       onGridTrackDelete: ({ axis, expectedRevision, frameId, indices }) =>
@@ -1238,6 +1243,7 @@ export function Canvas({
     inlineEditors.openAutoLayoutSpacing,
     inlineEditors.openGridTrack,
     onImageCropControllerChange,
+    onMoveGridChildren,
     onDeleteGridTracks,
     onReorderGridTracks,
     onSetGridTracks,
@@ -1277,15 +1283,8 @@ export function Canvas({
         ?.kind === "frame"
         ? { layoutGuideFrameId: snapshot.state.selection.nodeIds[0] }
         : {}),
-      ...(tool === "select" &&
-      !snapshot.state.selection.componentTarget &&
-      snapshot.state.selection.nodeIds.length === 1 &&
-      snapshot.document.nodesById[snapshot.state.selection.nodeIds[0] ?? ""]
-        ?.kind === "frame"
-        ? {
-            autoLayoutSpacingFrameId: snapshot.state.selection.nodeIds[0],
-            gridEditorFrameId: snapshot.state.selection.nodeIds[0],
-          }
+      ...(tool === "select" && !snapshot.state.selection.componentTarget
+        ? canvasGridEditorScope(snapshot.document, snapshot.state.selection)
         : {}),
       reducedMotion,
       ...(richTextResolution

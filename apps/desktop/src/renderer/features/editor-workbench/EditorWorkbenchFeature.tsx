@@ -652,6 +652,7 @@ export function EditorWorkbenchFeature({
               onTextRangeSelectionChange={setTextRangeSelection}
               harfBuzzTextRunLayoutProvider={fontBinaryRuntime.provider}
               onDeleteGridTracks={deleteCanvasGridTracks}
+              onMoveGridChildren={editorCommands.moveGridChildren}
               onResizeFrame={resizeFrame}
               onReorderGridTracks={editorCommands.reorderGridTracks}
               onSetGridTracks={editorCommands.setGridTracks}

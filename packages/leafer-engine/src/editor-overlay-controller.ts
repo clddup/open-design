@@ -140,6 +140,14 @@ export class EditorOverlayController {
     return this.#gridEditor.handleKeyDown(event);
   }
 
+  previewGridChildDrop(
+    frameId: string,
+    point: { x: number; y: number } | null,
+  ): { row: number; column: number } | null {
+    const cell = this.#gridEditor.previewChildDrop(frameId, point);
+    return cell ? { row: cell.row, column: cell.column } : null;
+  }
+
   dispose(): void {
     this.#destroyElements(this.#guideElements);
     this.#destroyElements(this.#slotElements);

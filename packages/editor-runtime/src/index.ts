@@ -81,12 +81,14 @@ export {
 export { planSetNodeLayoutSizing } from "./auto-layout-sizing-operations.js";
 export {
   planResizeGridTrack,
+  planMoveGridChildren,
   planDeleteGridTracks,
   planReorderGridTracks,
   planSetGridTrack,
   planSetGridTracks,
   planSetNodeGridPlacement,
   type GridTrackAxis,
+  type GridChildMovePlan,
   type GridTrackDeletePlan,
   type GridTrackMovement,
   type GridTrackReorderPlan,

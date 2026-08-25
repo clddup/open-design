@@ -4,6 +4,7 @@ import {
   createGridEditorOverlayPlan,
   gridTrackReorderChangesOrder,
   gridTrackSelectionReorderChangesOrder,
+  nearestGridCell,
   nearestGridInsertionIndex,
 } from "./grid-editor-overlay.js";
 
@@ -97,6 +98,18 @@ describe("Grid editor overlay geometry", () => {
     expect(gridTrackSelectionReorderChangesOrder([1, 2], 3, 4)).toBe(false);
     expect(gridTrackSelectionReorderChangesOrder([1, 2], 4, 4)).toBe(true);
     expect(gridTrackSelectionReorderChangesOrder([2, 0], 4, 4)).toBe(true);
+  });
+
+  it("maps a Frame-local pointer to the nearest real Grid cell", () => {
+    const plan = createGridEditorOverlayPlan(gridDocument(), "frame_welcome");
+    expect(plan && nearestGridCell(plan, { x: 700, y: 180 })).toEqual({
+      column: 1,
+      height: 100,
+      row: 1,
+      width: 1_028,
+      x: 152,
+      y: 124,
+    });
   });
 
   it("keeps pathological track counts on the Inspector path", () => {

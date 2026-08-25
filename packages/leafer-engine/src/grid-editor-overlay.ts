@@ -51,6 +51,15 @@ export interface GridEditorOverlayPlan {
   transform: Transform;
 }
 
+export interface GridEditorCellSpec {
+  column: number;
+  height: number;
+  row: number;
+  width: number;
+  x: number;
+  y: number;
+}
+
 export function createGridEditorOverlayPlan(
   document: DesignDocument,
   frameId: string | undefined,
@@ -157,6 +166,40 @@ export function nearestGridInsertionIndex(
     }
   }
   return nearest?.index ?? 0;
+}
+
+export function nearestGridCell(
+  plan: GridEditorOverlayPlan,
+  point: { x: number; y: number },
+): GridEditorCellSpec | null {
+  const row = nearestTrack(plan.rows, point.y);
+  const column = nearestTrack(plan.columns, point.x);
+  if (!row || !column) return null;
+  return {
+    column: column.index,
+    height: row.resolvedSize,
+    row: row.index,
+    width: column.resolvedSize,
+    x: column.start,
+    y: row.start,
+  };
+}
+
+function nearestTrack(
+  tracks: readonly GridEditorTrackSpec[],
+  coordinate: number,
+): GridEditorTrackSpec | undefined {
+  let nearest = tracks[0];
+  for (const candidate of tracks.slice(1)) {
+    if (
+      !nearest ||
+      Math.abs(candidate.center - coordinate) <
+        Math.abs(nearest.center - coordinate)
+    ) {
+      nearest = candidate;
+    }
+  }
+  return nearest;
 }
 
 export function gridTrackReorderChangesOrder(

@@ -13,7 +13,9 @@ import {
   createGridEditorOverlayPlan,
   gridTrackSelectionReorderChangesOrder,
   nearestGridInsertionIndex,
+  nearestGridCell,
   type GridEditorAxis,
+  type GridEditorCellSpec,
   type GridEditorOverlayPlan,
   type GridEditorTrackSpec,
 } from "./grid-editor-overlay.js";
@@ -93,6 +95,7 @@ type GridTrackResizeHandler = (request: {
 const MATRIX_EPSILON = 0.000_001;
 const GRID_COLOR = "#6574ff";
 const GRID_GUIDE_COLOR = "rgba(101, 116, 255, 0.5)";
+const GRID_CHILD_DROP_FILL = "rgba(101, 116, 255, 0.14)";
 const GRID_HIT_FILL = "rgba(0, 0, 0, 0.001)";
 const PILL_HEIGHT = 18;
 const PILL_MIN_WIDTH = 22;
@@ -102,6 +105,8 @@ const RESIZE_HIT_SIZE = 8;
 const RESIZE_DRAG_THRESHOLD = 3;
 
 export class GridEditorOverlayController {
+  readonly #childDrop: LeaferElement;
+  #childDropCell: GridEditorCellSpec | null = null;
   #documentId: string | null = null;
   #drag: GridDragSession | null = null;
   #fingerprint: string | null = null;
@@ -161,7 +166,17 @@ export class GridEditorOverlayController {
       strokeCap: "round",
       visible: false,
     });
+    this.#childDrop = new this.#leafer.Rect({
+      editable: false,
+      fill: GRID_CHILD_DROP_FILL,
+      hittable: false,
+      id: "__opendesign_grid_child_drop__",
+      stroke: GRID_COLOR,
+      strokeAlign: "inside",
+      visible: false,
+    });
     this.#layer.add(this.#guide);
+    this.#layer.add(this.#childDrop);
     this.#layer.add(this.#indicator);
     this.#presentationRoot.addAt(this.#layer, options.layerIndex);
   }
@@ -204,11 +219,24 @@ export class GridEditorOverlayController {
     return true;
   }
 
+  previewChildDrop(
+    frameId: string,
+    point: { x: number; y: number } | null,
+  ): GridEditorCellSpec | null {
+    if (!this.#plan || this.#plan.frameId !== frameId) return null;
+    const cell = point ? nearestGridCell(this.#plan, point) : null;
+    this.#childDropCell = cell;
+    this.#syncChildDropAppearance();
+    return cell;
+  }
+
   dispose(): void {
     this.cancelDrag();
     this.#destroyTracks();
     this.#guide.remove();
     this.#guide.destroy();
+    this.#childDrop.remove();
+    this.#childDrop.destroy();
     this.#indicator.remove();
     this.#indicator.destroy();
     this.#layer.remove();
@@ -406,6 +434,14 @@ export class GridEditorOverlayController {
       this.cancelDrag();
     }
     if (
+      this.#childDropCell &&
+      (this.#documentId !== input.document.documentId ||
+        this.#revision !== input.document.revision ||
+        this.#plan?.frameId !== input.frameId)
+    ) {
+      this.#childDropCell = null;
+    }
+    if (
       this.#selection &&
       (this.#documentId !== input.document.documentId ||
         this.#selection.frameId !== input.frameId ||
@@ -423,6 +459,7 @@ export class GridEditorOverlayController {
       this.#destroyTracks();
       this.#guide.visible = false;
       this.#indicator.visible = false;
+      this.#childDrop.visible = false;
       this.#layer.visible = false;
       return;
     }
@@ -517,6 +554,23 @@ export class GridEditorOverlayController {
     }
     this.#syncTrackAppearance();
     this.#syncDragIndicator();
+    this.#syncChildDropAppearance();
+  }
+
+  #syncChildDropAppearance(): void {
+    const cell = this.#childDropCell;
+    if (!cell || !this.#plan) {
+      this.#childDrop.visible = false;
+      return;
+    }
+    this.#childDrop.set({
+      x: cell.x,
+      y: cell.y,
+      width: cell.width,
+      height: cell.height,
+      strokeWidth: 2 / this.#renderScale,
+      visible: true,
+    });
   }
 
   #createTrack(spec: GridEditorTrackSpec): GridTrackElements {

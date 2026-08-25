@@ -396,6 +396,92 @@ describe("editor command controllers", () => {
     );
   });
 
+  it("commits a canvas Grid child move at the exact revision as one reversible history entry", () => {
+    const document = structuredClone(createWelcomeDocument());
+    const frame = document.nodesById.frame_welcome;
+    const first = frame?.childIds[0]
+      ? document.nodesById[frame.childIds[0]]
+      : undefined;
+    const second = frame?.childIds[1]
+      ? document.nodesById[frame.childIds[1]]
+      : undefined;
+    if (frame?.kind !== "frame" || !first || !second) {
+      throw new Error("missing Grid fixture");
+    }
+    frame.size = { width: frame.childIds.length * 100, height: 100 };
+    frame.properties.autoLayout = {
+      mode: "grid",
+      padding: { top: 0, right: 0, bottom: 0, left: 0 },
+      rowGap: 0,
+      columnGap: 0,
+      rows: [{ type: "fixed", value: 100 }],
+      columns: frame.childIds.map(() => ({
+        type: "fixed" as const,
+        value: 100,
+      })),
+      itemsPositioning: "manual",
+    };
+    for (const [index, nodeId] of frame.childIds.entries()) {
+      const child = document.nodesById[nodeId];
+      if (!child) throw new Error("missing direct Grid child");
+      child.gridPlacement = {
+        row: 0,
+        column: index,
+        rowSpan: 1,
+        columnSpan: 1,
+        horizontalAlign: "auto",
+        verticalAlign: "auto",
+      };
+      delete child.constraints;
+    }
+    const runtime = new EditorRuntime(document);
+    const { result, setEditorError } = renderControllers(runtime);
+    let accepted = false;
+
+    act(() => {
+      accepted = result.current.editor.moveGridChildren({
+        anchorNodeId: first.id,
+        expectedRevision: 0,
+        frameId: frame.id,
+        nodeIds: [first.id],
+        target: { row: 0, column: 1 },
+      });
+    });
+
+    expect(accepted).toBe(true);
+    expect(runtime.getSnapshot().document.revision).toBe(1);
+    expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
+    expect(
+      runtime.getSnapshot().document.nodesById[first.id]?.gridPlacement,
+    ).toMatchObject({ row: 0, column: 1 });
+    expect(
+      runtime.getSnapshot().document.nodesById[second.id]?.gridPlacement,
+    ).toMatchObject({ row: 0, column: 0 });
+    expect(setEditorError).toHaveBeenLastCalledWith(null);
+
+    act(() => {
+      accepted = result.current.editor.moveGridChildren({
+        anchorNodeId: first.id,
+        expectedRevision: 0,
+        frameId: frame.id,
+        nodeIds: [first.id],
+        target: { row: 0, column: 0 },
+      });
+    });
+    expect(accepted).toBe(false);
+    expect(runtime.getSnapshot().document.revision).toBe(1);
+    expect(setEditorError).toHaveBeenLastCalledWith(
+      "中文:canvas.gridTrackStale",
+    );
+
+    act(() => {
+      runtime.undo();
+    });
+    expect(
+      runtime.getSnapshot().document.nodesById[first.id]?.gridPlacement,
+    ).toMatchObject({ row: 0, column: 0 });
+  });
+
   it("sizes selected Grid tracks at the exact canvas revision in one history entry", () => {
     const document = structuredClone(createWelcomeDocument());
     const frame = document.nodesById.frame_welcome;

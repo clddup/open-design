@@ -7,6 +7,7 @@ import type * as LeaferEditorModule from "leafer-editor";
 import type { LeaferElementSpec, LeaferSceneProjection } from "./mapping.js";
 import type {
   LeaferEngineSyncInput,
+  LeaferGridChildMoveRequest,
   LeaferOperationKind,
   LeaferOperationRequest,
 } from "./types.js";
@@ -29,6 +30,13 @@ interface DirectTransformSession {
   pageId: string;
   revision: number;
   selectionNodeIds: string[];
+  gridChildMove?: {
+    anchorNodeId: string;
+    frameId: string;
+    initialTarget: { row: number; column: number };
+    nodeIds: string[];
+    target: { row: number; column: number };
+  };
 }
 
 interface DirectTransformControllerOptions {
@@ -44,10 +52,15 @@ interface DirectTransformControllerOptions {
   finishNodePresentation: (nodeId: string) => void;
   hasComponentTarget: () => boolean;
   nodeId: (element: LeaferElement) => string | undefined;
+  onGridChildMove: (request: LeaferGridChildMoveRequest) => boolean;
   onOperations: (request: LeaferOperationRequest) => boolean;
   onPreviewBoolean: (
     states: ReadonlyMap<string, DirectTransformElementState>,
   ) => void;
+  previewGridChildDrop: (
+    frameId: string,
+    point: { x: number; y: number } | null,
+  ) => { row: number; column: number } | null;
   restoreProjection: () => void;
 }
 
@@ -79,6 +92,8 @@ export class DirectTransformController {
       identityChanged ||
       input.tool !== "select" ||
       input.vectorEditScope !== undefined ||
+      (session.gridChildMove !== undefined &&
+        session.gridChildMove.frameId !== input.gridEditorFrameId) ||
       !sameStringList(session.selectionNodeIds, input.selection.nodeIds)
     ) {
       this.cancel(!identityChanged);
@@ -101,6 +116,8 @@ export class DirectTransformController {
     if (
       sync.projectionContinuityLost ||
       (revisionChanged && !contiguousRevision) ||
+      (session.gridChildMove !== undefined &&
+        sync.changedNodeIds.has(session.gridChildMove.frameId)) ||
       [...session.before.keys()].some(invalidatesInteraction)
     ) {
       this.cancel(true);
@@ -129,6 +146,7 @@ export class DirectTransformController {
     const nodeIds = this.#selectedSubtreeIds();
     if (nodeIds.length === 0) return;
     nodeIds.forEach(this.#options.finishNodePresentation);
+    const gridChildMove = this.#gridChildMove(input);
     this.#session = {
       before: this.#capture(nodeIds),
       changed: false,
@@ -137,6 +155,7 @@ export class DirectTransformController {
       pageId: input.pageId,
       revision: input.document.revision,
       selectionNodeIds: this.#selectedNodeIds(),
+      ...(gridChildMove ? { gridChildMove } : {}),
     };
   }
 
@@ -150,6 +169,16 @@ export class DirectTransformController {
       return;
     }
     session.changed = true;
+    if (session.gridChildMove && session.kind === "move") {
+      const anchor = this.#options.element(session.gridChildMove.anchorNodeId);
+      if (anchor) {
+        session.gridChildMove.target =
+          this.#options.previewGridChildDrop(
+            session.gridChildMove.frameId,
+            elementCenter(anchor),
+          ) ?? session.gridChildMove.target;
+      }
+    }
     this.#schedulePreview();
     if (
       !this.#options.editor.editBox.dragging &&
@@ -167,7 +196,22 @@ export class DirectTransformController {
     if (!session || current.synchronizing || current.disposed) return false;
     this.#session = null;
     this.cancelPreview();
+    if (session.gridChildMove) {
+      this.#options.previewGridChildDrop(session.gridChildMove.frameId, null);
+    }
     if (!session.changed) return false;
+    if (session.gridChildMove && session.kind === "move") {
+      const move = session.gridChildMove;
+      this.#options.restoreProjection();
+      if (sameGridCell(move.initialTarget, move.target)) return false;
+      return this.#options.onGridChildMove({
+        anchorNodeId: move.anchorNodeId,
+        expectedRevision: session.revision,
+        frameId: move.frameId,
+        nodeIds: move.nodeIds,
+        target: move.target,
+      });
+    }
     const operations = this.#operationsFrom(session.before);
     if (operations.length === 0) return false;
     const accepted = this.#options.onOperations({
@@ -190,7 +234,11 @@ export class DirectTransformController {
   cancel(restore = false): boolean {
     this.cancelPreview();
     if (!this.#session) return false;
+    const gridChildMove = this.#session.gridChildMove;
     this.#session = null;
+    if (gridChildMove) {
+      this.#options.previewGridChildDrop(gridChildMove.frameId, null);
+    }
     if (restore && !this.#options.current().disposed) {
       this.#options.restoreProjection();
     }
@@ -224,6 +272,54 @@ export class DirectTransformController {
     if (this.#options.editor.skewing) return "skew";
     if (this.#options.editor.moving) return "move";
     return "transform";
+  }
+
+  #gridChildMove(
+    input: LeaferEngineSyncInput,
+  ): DirectTransformSession["gridChildMove"] {
+    const frameId = input.gridEditorFrameId;
+    const frame = frameId ? input.document.nodesById[frameId] : undefined;
+    const nodeIds = this.#selectedNodeIds();
+    const anchorNodeId = input.selection.anchorNodeId ?? nodeIds.at(-1);
+    if (
+      !frameId ||
+      !frame ||
+      (frame.kind !== "frame" && frame.kind !== "slot") ||
+      frame.properties.autoLayout?.mode !== "grid" ||
+      nodeIds.length === 0 ||
+      !anchorNodeId ||
+      !nodeIds.includes(anchorNodeId)
+    ) {
+      return undefined;
+    }
+    for (const nodeId of nodeIds) {
+      const node = input.document.nodesById[nodeId];
+      if (
+        !node ||
+        node.parentId !== frameId ||
+        !node.visible ||
+        node.layoutPositioning === "absolute" ||
+        !node.gridPlacement
+      ) {
+        return undefined;
+      }
+    }
+    const initialPlacement =
+      input.document.nodesById[anchorNodeId]?.gridPlacement;
+    if (!initialPlacement) return undefined;
+    return {
+      anchorNodeId,
+      frameId,
+      initialTarget: {
+        row: initialPlacement.row,
+        column: initialPlacement.column,
+      },
+      nodeIds,
+      target: {
+        row: initialPlacement.row,
+        column: initialPlacement.column,
+      },
+    };
   }
 
   #operationsFrom(
@@ -393,6 +489,21 @@ function readElementState(element: LeaferElement): DirectTransformElementState {
     },
     ...(linePoints ? { linePoints } : undefined),
   };
+}
+
+function elementCenter(element: LeaferElement): { x: number; y: number } {
+  const state = readElementState(element);
+  return {
+    x: state.transform[4] + state.size.width / 2,
+    y: state.transform[5] + state.size.height / 2,
+  };
+}
+
+function sameGridCell(
+  left: { row: number; column: number },
+  right: { row: number; column: number },
+): boolean {
+  return left.row === right.row && left.column === right.column;
 }
 
 function readLinePoints(
