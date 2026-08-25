@@ -83,7 +83,6 @@ export const agentConversationMessages = {
   "agent.addAttachments": "添加附件",
   "agent.removeAttachment": "移除 {{name}}",
   "agent.attachments": "附件",
-  "agent.attachmentsWillBeSent": "将向 {{model}} 发送 {{count}} 个附件。",
   "agent.modelNoImageInput": "当前模型不支持图片输入。",
   "agent.attachmentSelectionFailed": "无法添加附件",
   "agent.attachmentImportFailed": "无法导入粘贴的附件",

@@ -2457,6 +2457,9 @@ describe("AgentTimeline", () => {
     expect(
       await screen.findByRole("img", { name: "inspiration.png" }),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByText("1 attachment(s) will be sent to Vision model."),
+    ).not.toBeInTheDocument();
     await user.type(
       screen.getByLabelText("Continue the task"),
       "Use this visual direction",

@@ -281,12 +281,7 @@ export function AgentTimeline({
     (!submissionAvailable ? submissionBlockedMessage : undefined) ??
     (composer.hasImageAttachments && !composer.supportsImageInput
       ? t("agent.modelNoImageInput")
-      : composer.attachments.length > 0 && composer.selectedModelName
-        ? t("agent.attachmentsWillBeSent", {
-            count: composer.attachments.length,
-            model: composer.selectedModelName,
-          })
-        : undefined) ??
+      : undefined) ??
     standaloneAgentError ??
     (hasConversation
       ? composer.modelOptions.length === 0

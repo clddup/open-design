@@ -50,7 +50,6 @@ export interface AgentComposerController {
   prompt: string;
   removeAttachment: (attachmentId: string) => void;
   selectAttachments: () => Promise<void>;
-  selectedModelName: string | null;
   selectedModelReasoningEfforts: readonly NonNullable<
     ModelSelection["reasoningEffort"]
   >[];
@@ -379,7 +378,6 @@ export function useAgentComposerController({
         ),
       ),
     selectAttachments,
-    selectedModelName: selectedCatalogModel?.model.name ?? null,
     selectedModelReasoningEfforts:
       selectedCatalogModel?.model.reasoningEfforts ?? [],
     selectingAttachments,

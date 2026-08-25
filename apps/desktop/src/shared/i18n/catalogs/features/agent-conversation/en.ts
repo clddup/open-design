@@ -93,8 +93,6 @@ export const agentConversationMessages = {
   "agent.addAttachments": "Add attachments",
   "agent.removeAttachment": "Remove {{name}}",
   "agent.attachments": "Attachments",
-  "agent.attachmentsWillBeSent":
-    "{{count}} attachment(s) will be sent to {{model}}.",
   "agent.modelNoImageInput": "The selected model does not support images.",
   "agent.attachmentSelectionFailed": "Could not add the attachments",
   "agent.attachmentImportFailed": "Could not import the pasted attachments",
