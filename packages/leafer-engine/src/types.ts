@@ -121,6 +121,24 @@ export interface LeaferAutoLayoutSpacingCommitRequest {
   frameId: string;
 }
 
+export type LeaferAutoLayoutSpacingInputKind =
+  | "padding-top"
+  | "padding-right"
+  | "padding-bottom"
+  | "padding-left"
+  | "gap"
+  | "counter-gap";
+
+export interface LeaferAutoLayoutSpacingInputRequest {
+  clientPoint: Point;
+  expectedRevision: number;
+  frameId: string;
+  kind: LeaferAutoLayoutSpacingInputKind;
+  padding: { bottom: number; left: number; right: number; top: number };
+  paddingScope: "single" | "opposite" | "all";
+  value: number;
+}
+
 export interface LeaferVectorCutRequest {
   at: VectorCutLocation;
   nodeId: string;
@@ -152,6 +170,9 @@ export interface LeaferEngineCallbacks {
   onAutoLayoutSpacingCommit?(
     request: LeaferAutoLayoutSpacingCommitRequest,
   ): boolean;
+  onAutoLayoutSpacingInputRequest?(
+    request: LeaferAutoLayoutSpacingInputRequest,
+  ): void;
   onCreate(request: LeaferCreateRequest): boolean;
   onCreateVector(request: LeaferCreateVectorRequest): boolean;
   onError(error: Error): void;

@@ -23,7 +23,10 @@ import {
   type SliceOverlaySpec,
 } from "./slice-overlay.js";
 import type { LeaferEventLike } from "./pointer-event.js";
-import type { LeaferAutoLayoutSpacingCommitRequest } from "./types.js";
+import type {
+  LeaferAutoLayoutSpacingCommitRequest,
+  LeaferAutoLayoutSpacingInputRequest,
+} from "./types.js";
 
 type LeaferModule = typeof LeaferEditorModule;
 type LeaferElement = InstanceType<LeaferModule["UI"]>;
@@ -60,6 +63,9 @@ export class EditorOverlayController {
     onAutoLayoutSpacingCommit: (
       request: LeaferAutoLayoutSpacingCommitRequest,
     ) => boolean;
+    onAutoLayoutSpacingInputRequest: (
+      request: LeaferAutoLayoutSpacingInputRequest,
+    ) => void;
     onGridTrackReorder: (request: {
       axis: GridEditorAxis;
       frameId: string;
@@ -79,6 +85,7 @@ export class EditorOverlayController {
       layerIndex: 4,
       leafer: options.leafer,
       onCommit: options.onAutoLayoutSpacingCommit,
+      onInputRequest: options.onAutoLayoutSpacingInputRequest,
       presentationRoot: options.presentationRoot,
       viewportRoot: options.viewportRoot,
     });

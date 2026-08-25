@@ -278,6 +278,8 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       leafer,
       onAutoLayoutSpacingCommit: (request) =>
         this.#callbacks.onAutoLayoutSpacingCommit?.(request) ?? false,
+      onAutoLayoutSpacingInputRequest: (request) =>
+        this.#callbacks.onAutoLayoutSpacingInputRequest?.(request),
       onGridTrackReorder: (request) =>
         this.#callbacks.onGridTrackReorder?.(request) ?? false,
       presentationRoot: this.#generationPresentationRoot,

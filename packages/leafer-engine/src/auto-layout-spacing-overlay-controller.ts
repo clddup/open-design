@@ -1,16 +1,18 @@
 import type { DesignDocument } from "@opendesign/design-contracts";
 import type * as LeaferEditorModule from "leafer-editor";
 import { matrixRelativeToParent, transformToAffine } from "./affine.js";
+import { autoLayoutSpacingChangeFromInput } from "./auto-layout-spacing-input.js";
 import {
   createAutoLayoutSpacingOverlayPlan,
   type AutoLayoutSpacingHandleKind,
   type AutoLayoutSpacingHandleSpec,
   type AutoLayoutSpacingOverlayPlan,
 } from "./auto-layout-spacing-overlay.js";
-import type { LeaferEventLike } from "./pointer-event.js";
+import { eventClientPoint, type LeaferEventLike } from "./pointer-event.js";
 import type {
   LeaferAutoLayoutSpacingChange,
   LeaferAutoLayoutSpacingCommitRequest,
+  LeaferAutoLayoutSpacingInputRequest,
 } from "./types.js";
 
 type LeaferModule = typeof LeaferEditorModule;
@@ -30,8 +32,10 @@ interface SpacingDragSession {
   handleId: string;
   kind: AutoLayoutSpacingHandleKind;
   padding: AutoLayoutSpacingOverlayPlan["padding"];
+  startClientPoint: { x: number; y: number };
   startCoordinate: number;
   startValue: number;
+  moved: boolean;
 }
 
 const MATRIX_EPSILON = 0.000_001;
@@ -59,6 +63,9 @@ export class AutoLayoutSpacingOverlayController {
   readonly #onCommit: (
     request: LeaferAutoLayoutSpacingCommitRequest,
   ) => boolean;
+  readonly #onInputRequest: (
+    request: LeaferAutoLayoutSpacingInputRequest,
+  ) => void;
   readonly #pill: LeaferElement;
   readonly #pillLabel: LeaferElement;
   #plan: AutoLayoutSpacingOverlayPlan | null = null;
@@ -76,11 +83,13 @@ export class AutoLayoutSpacingOverlayController {
     layerIndex: number;
     leafer: LeaferModule;
     onCommit: (request: LeaferAutoLayoutSpacingCommitRequest) => boolean;
+    onInputRequest: (request: LeaferAutoLayoutSpacingInputRequest) => void;
     presentationRoot: LeaferGroup;
     viewportRoot: LeaferGroup;
   }) {
     this.#leafer = options.leafer;
     this.#onCommit = options.onCommit;
+    this.#onInputRequest = options.onInputRequest;
     this.#presentationRoot = options.presentationRoot;
     this.#viewportRoot = options.viewportRoot;
     this.#layer = new this.#leafer.Group({
@@ -166,8 +175,10 @@ export class AutoLayoutSpacingOverlayController {
       handleId: spec.id,
       kind: spec.kind,
       padding: { ...this.#plan.padding },
+      startClientPoint: eventClientPoint(event),
       startCoordinate: spec.axis === "x" ? point.x : point.y,
       startValue: spec.value,
+      moved: false,
     };
     this.#frameHovered = true;
     this.#previewPoint = { x: spec.x, y: spec.y };
@@ -209,6 +220,15 @@ export class AutoLayoutSpacingOverlayController {
       return true;
     }
     const point = event.getInnerPoint(this.#layer);
+    const clientPoint = eventClientPoint(event);
+    if (
+      Math.hypot(
+        clientPoint.x - drag.startClientPoint.x,
+        clientPoint.y - drag.startClientPoint.y,
+      ) >= 3
+    ) {
+      drag.moved = true;
+    }
     const coordinate = drag.axis === "x" ? point.x : point.y;
     const direction =
       drag.kind === "padding-right" || drag.kind === "padding-bottom" ? -1 : 1;
@@ -234,6 +254,18 @@ export class AutoLayoutSpacingOverlayController {
     if (!drag) return false;
     if (!event.isCancel) this.pointerMove(event);
     const change = this.#previewChange;
+    const inputRequest =
+      !event.isCancel && !drag.moved
+        ? {
+            clientPoint: eventClientPoint(event),
+            expectedRevision: drag.expectedRevision,
+            frameId: drag.frameId,
+            kind: drag.kind,
+            padding: { ...drag.padding },
+            paddingScope: paddingScope(event.altKey, event.shiftKey),
+            value: drag.startValue,
+          }
+        : null;
     const changed =
       change !== null &&
       this.#previewValue !== null &&
@@ -247,7 +279,8 @@ export class AutoLayoutSpacingOverlayController {
           }
         : null;
     this.cancelDrag();
-    if (!event.isCancel && request) this.#onCommit(request);
+    if (inputRequest) this.#onInputRequest(inputRequest);
+    else if (!event.isCancel && request) this.#onCommit(request);
     return true;
   }
 
@@ -443,28 +476,24 @@ function spacingChange(
   altKey: boolean,
   shiftKey: boolean,
 ): LeaferAutoLayoutSpacingChange {
-  if (drag.kind === "gap") return { kind: "gap", value };
-  if (drag.kind === "counter-gap") return { kind: "counter-gap", value };
-  const side = drag.kind.slice("padding-".length) as keyof typeof drag.padding;
-  const padding = { ...drag.padding, [side]: value };
-  if (altKey && shiftKey) {
-    padding.top = value;
-    padding.right = value;
-    padding.bottom = value;
-    padding.left = value;
-  } else if (altKey) {
-    padding[oppositeSide(side)] = value;
-  }
-  return { kind: "padding", value: padding };
+  const change = autoLayoutSpacingChangeFromInput(
+    {
+      kind: drag.kind,
+      padding: drag.padding,
+      paddingScope: paddingScope(altKey, shiftKey),
+    },
+    value,
+  );
+  if (!change) throw new TypeError("Auto Layout spacing preview is invalid");
+  return change;
 }
 
-function oppositeSide(
-  side: keyof SpacingDragSession["padding"],
-): keyof SpacingDragSession["padding"] {
-  if (side === "top") return "bottom";
-  if (side === "right") return "left";
-  if (side === "bottom") return "top";
-  return "right";
+function paddingScope(
+  altKey: boolean,
+  shiftKey: boolean,
+): LeaferAutoLayoutSpacingInputRequest["paddingScope"] {
+  if (altKey && shiftKey) return "all";
+  return altKey ? "opposite" : "single";
 }
 
 function bounded(value: number, minimum: number, maximum: number): number {

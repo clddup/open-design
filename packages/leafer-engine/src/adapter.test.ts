@@ -760,6 +760,48 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
+  it("requests one numeric input for an Auto Layout spacing handle click", async () => {
+    const onAutoLayoutSpacingCommit = vi.fn(() => true);
+    const onAutoLayoutSpacingInputRequest = vi.fn();
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onAutoLayoutSpacingCommit,
+      onAutoLayoutSpacingInputRequest,
+    });
+    const input = withAutoLayoutSpacingFixture(createInput());
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    const hit =
+      app &&
+      findElement(
+        app.sky,
+        "__opendesign_auto_layout_spacing_hit__:frame_welcome:padding-left",
+      );
+    if (!app || !hit) throw new Error("Missing padding control");
+
+    app.emit(
+      "pointer.down",
+      pointerEvent(12, 80, hit, { altKey: true, shiftKey: true }),
+    );
+    app.emit(
+      "pointer.up",
+      pointerEvent(12, 80, hit, { altKey: true, shiftKey: true }),
+    );
+
+    expect(onAutoLayoutSpacingInputRequest).toHaveBeenCalledOnce();
+    expect(onAutoLayoutSpacingInputRequest).toHaveBeenCalledWith({
+      clientPoint: { x: 12, y: 80 },
+      expectedRevision: input.document.revision,
+      frameId: "frame_welcome",
+      kind: "padding-left",
+      padding: { top: 16, right: 24, bottom: 20, left: 24 },
+      paddingScope: "all",
+      value: 24,
+    });
+    expect(onAutoLayoutSpacingCommit).not.toHaveBeenCalled();
+    adapter.dispose();
+  });
+
   it("cancels Auto Layout spacing drags on no-op, Escape, or a stale revision", async () => {
     const onAutoLayoutSpacingCommit = vi.fn(() => true);
     const adapter = await createLeaferEngineAdapter(createHost(), {

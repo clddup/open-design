@@ -33,12 +33,13 @@ OpenDesign 已能在 Inspector 和 Agent 中设置 Auto Layout padding、固定/
 - 所有值遵守当前非负、有界 Auto Layout 契约。
 - `primaryAlignment: space-between` 不显示固定主轴 gap 手柄；Wrap `counterAxisAlignContent: space-between` 不显示固定 counter gap 手柄。画布拖动不得静默把 Auto spacing 改成固定 spacing。
 - pointer cancel、Escape、选区/工具切换、document/revision 变化和无位移拖动都产生零写入。
+- 单击 spacing handle 在命中点附近打开紧凑数值输入；Enter 通过同一 semantic change 与 exact-revision commit，Escape/blur 关闭且零写入。`Option/Alt` 单击继续表示对边 padding，`Option/Alt + Shift` 表示四边 padding。
 
 拖动期间只更新可丢弃手柄与数值预览。pointer up 发出 `{ frameId, expectedRevision, semantic change }`，不传 child 坐标或 Leafer 对象。Renderer 再读取当前权威 Frame，校验 exact revision，并调用既有 `planSetFrameAutoLayout → EditorRuntime.apply`；成功只产生一个 revision 和一个 undo entry。
 
 ### 未纳入本切片
 
-Figma 的单击手柄数值输入、绑定 number variable 后的 detach 提示、旋转 Frame 手柄、Grid row/column gap 手柄、Smart Selection 普通对象间距/reflow 以及 Auto spacing 的 Between/Around/Evenly 扩展继续独立实现。它们不能通过复用当前拖动回调伪装完成。
+绑定 number variable 后的 detach 提示、旋转 Frame 手柄、Grid row/column gap 手柄、Smart Selection 普通对象间距/reflow 以及 Auto spacing 的 Between/Around/Evenly 扩展继续独立实现。它们不能通过复用当前拖动回调伪装完成。
 
 ## 后果
 
@@ -50,7 +51,7 @@ Figma 的单击手柄数值输入、绑定 number variable 后的 detach 提示�
 ## 验证
 
 - 纯几何测试覆盖 Horizontal、Vertical、Wrap、Grid padding、固定/自动 gap、锁定、旋转与不安全 child transform。
-- Leafer adapter 测试覆盖 editor-sky 投影、Shift big nudge、Alt 对边、Alt+Shift 四边、一次 semantic callback、Escape、no-op 和 stale revision。
+- Leafer adapter 测试覆盖 editor-sky 投影、Shift big nudge、Alt 对边、Alt+Shift 四边、click/drag 阈值、数值输入请求、一次 semantic callback、Escape、no-op 和 stale revision。
 - Renderer controller 测试覆盖 exact revision、单事务、单 undo、Runtime reflow 与过期请求零写入。
 
 ## 参考

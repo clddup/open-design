@@ -1,0 +1,35 @@
+.root {
+  position: absolute;
+  z-index: 6;
+  top: var(--spacing-input-y);
+  left: var(--spacing-input-x);
+  display: flex;
+  padding: 2px;
+  border: 1px solid var(--ui-accent);
+  border-radius: 5px;
+  background: var(--ui-surface-raised);
+  box-shadow: var(--ui-shadow-sm);
+  translate: 8px 8px;
+  pointer-events: auto;
+
+  input {
+    width: 64px;
+    height: 24px;
+    padding: 0 6px;
+    border: 0;
+    outline: 0;
+    color: var(--ui-text);
+    background: transparent;
+    font: inherit;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+    appearance: textfield;
+
+    &::-webkit-inner-spin-button,
+    &::-webkit-outer-spin-button {
+      margin: 0;
+      appearance: none;
+    }
+  }
+}

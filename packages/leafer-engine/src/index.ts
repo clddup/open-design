@@ -1,8 +1,11 @@
 export { createLeaferEngineAdapter } from "./adapter.js";
+export { autoLayoutSpacingChangeFromInput } from "./auto-layout-spacing-input.js";
 export type {
   LeaferBoxCreateTool,
   LeaferAutoLayoutSpacingChange,
   LeaferAutoLayoutSpacingCommitRequest,
+  LeaferAutoLayoutSpacingInputKind,
+  LeaferAutoLayoutSpacingInputRequest,
   LeaferCanvasTool,
   LeaferBooleanEditScope,
   LeaferCaptureResult,

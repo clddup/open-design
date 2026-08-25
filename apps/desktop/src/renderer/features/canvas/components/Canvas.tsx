@@ -41,6 +41,7 @@ import {
   resolveDesignTextRuns,
   type LeaferCreateRequest,
   type LeaferAutoLayoutSpacingChange,
+  type LeaferAutoLayoutSpacingInputRequest,
   type LeaferCreateVectorRequest,
   type LeaferEngineAdapter,
   type LeaferEngineSyncInput,
@@ -88,6 +89,10 @@ import {
   ImageAreaSelectionOverlay,
   type ImageAreaSelectionAction,
 } from "./ImageAreaSelectionOverlay";
+import {
+  AutoLayoutSpacingInput,
+  type CanvasAutoLayoutSpacingInput,
+} from "./AutoLayoutSpacingInput";
 import { ImageExpandOverlay } from "./ImageExpandOverlay";
 
 export function Canvas({
@@ -187,6 +192,8 @@ export function Canvas({
   );
   const [renderError, setRenderError] = useState<string | null>(null);
   const [assetDropActive, setAssetDropActive] = useState(false);
+  const [autoLayoutSpacingInput, setAutoLayoutSpacingInput] =
+    useState<CanvasAutoLayoutSpacingInput | null>(null);
   const [imageCropState, setImageCropState] =
     useState<LeaferImageCropState | null>(null);
   const [imageAreaSelection, setImageAreaSelection] = useState<{
@@ -286,6 +293,27 @@ export function Canvas({
       adapter.current?.finishGenerationPresentation();
     }
   }, [activeAgentRunId]);
+
+  useEffect(() => {
+    if (!autoLayoutSpacingInput) return;
+    const selectedFrameId =
+      snapshot.state.selection.nodeIds.length === 1 &&
+      !snapshot.state.selection.componentTarget
+        ? snapshot.state.selection.nodeIds[0]
+        : undefined;
+    if (
+      tool !== "select" ||
+      selectedFrameId !== autoLayoutSpacingInput.frameId ||
+      snapshot.document.revision !== autoLayoutSpacingInput.expectedRevision
+    ) {
+      setAutoLayoutSpacingInput(null);
+    }
+  }, [
+    autoLayoutSpacingInput,
+    snapshot.document.revision,
+    snapshot.state.selection,
+    tool,
+  ]);
 
   const startImageAreaSelection = useCallback(
     (nodeId: string) => {
@@ -1102,6 +1130,10 @@ export function Canvas({
     void createLeaferEngineAdapter(element, {
       onAutoLayoutSpacingCommit: ({ change, expectedRevision, frameId }) =>
         onAdjustAutoLayoutSpacing(frameId, expectedRevision, change),
+      onAutoLayoutSpacingInputRequest: (request) =>
+        setAutoLayoutSpacingInput(
+          canvasAutoLayoutSpacingInput(request, element),
+        ),
       onCreate: createNode,
       onCreateVector: createVectorNode,
       onError: (error) => {
@@ -1367,6 +1399,20 @@ export function Canvas({
           <Icon name="lucide:image" size={15} />
           {t("canvas.dropImageAsset")}
         </div>
+      )}
+      {autoLayoutSpacingInput && (
+        <AutoLayoutSpacingInput
+          label={t(autoLayoutSpacingInputLabel(autoLayoutSpacingInput.kind))}
+          onClose={() => setAutoLayoutSpacingInput(null)}
+          onCommit={(change) =>
+            onAdjustAutoLayoutSpacing(
+              autoLayoutSpacingInput.frameId,
+              autoLayoutSpacingInput.expectedRevision,
+              change,
+            )
+          }
+          request={autoLayoutSpacingInput}
+        />
       )}
       {imageAreaSelection &&
         (() => {
@@ -1840,6 +1886,42 @@ function operationLabel(
     case "transform":
       return t("canvas.transformLayers");
   }
+}
+
+function canvasAutoLayoutSpacingInput(
+  request: LeaferAutoLayoutSpacingInputRequest,
+  element: HTMLElement,
+): CanvasAutoLayoutSpacingInput {
+  const bounds = element.getBoundingClientRect();
+  const inputWidth = 84;
+  const inputHeight = 40;
+  return {
+    ...request,
+    canvasPoint: {
+      x: clamp(
+        request.clientPoint.x - bounds.left,
+        0,
+        Math.max(0, bounds.width - inputWidth),
+      ),
+      y: clamp(
+        request.clientPoint.y - bounds.top,
+        0,
+        Math.max(0, bounds.height - inputHeight),
+      ),
+    },
+  };
+}
+
+function autoLayoutSpacingInputLabel(
+  kind: LeaferAutoLayoutSpacingInputRequest["kind"],
+): MessageKey {
+  if (kind === "gap") return "properties.autoLayoutGap";
+  if (kind === "counter-gap") return "properties.autoLayoutCounterGap";
+  return `properties.padding.${kind.slice("padding-".length)}` as MessageKey;
+}
+
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.min(maximum, Math.max(minimum, value));
 }
 
 function createDesignNode(
