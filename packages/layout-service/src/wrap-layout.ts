@@ -1,4 +1,5 @@
 import { autoGap, clampLayoutExtent, resolveFrameExtent } from "./index.js";
+import { distributeBoundedFill } from "./fill-distribution.js";
 import type {
   AutoLayoutAlignment,
   ConstraintRect,
@@ -25,17 +26,21 @@ export function solveHorizontalWrap(
     return conflict("A wrapped Auto Layout Frame requires fixed width");
   }
   if (
-    request.children.some(
-      (child) =>
-        child.sizing.horizontal === "fill" || child.sizing.vertical === "fill",
-    )
+    request.frameSizing.vertical === "hug" &&
+    request.children.some((child) => child.sizing.vertical === "fill")
   ) {
-    return conflict("Wrapped Auto Layout v1 does not support Fill children");
+    return conflict("A hugged Auto Layout axis cannot contain a fill child");
   }
   const children = request.children.map((child) => ({
     ...child,
-    width: clampLayoutExtent(child.width, child.limits, "horizontal"),
-    height: clampLayoutExtent(child.height, child.limits, "vertical"),
+    width:
+      child.sizing.horizontal === "fill"
+        ? minimumExtent(child.limits?.minWidth, child.limits?.maxWidth)
+        : clampLayoutExtent(child.width, child.limits, "horizontal"),
+    height:
+      child.sizing.vertical === "fill"
+        ? minimumExtent(child.limits?.minHeight, child.limits?.maxHeight)
+        : clampLayoutExtent(child.height, child.limits, "vertical"),
   }));
   const frameWidth = resolveFrameExtent(
     request.frame.width,
@@ -49,7 +54,9 @@ export function solveHorizontalWrap(
   );
   const packedGap =
     request.primaryAlignment === "space-between" ? 0 : request.gap;
-  const rows = wrapRows(children, innerWidth, packedGap);
+  const rows = wrapRows(children, innerWidth, packedGap).map((row) =>
+    resolveRowMainAxis(row, innerWidth, packedGap),
+  );
   const rowHeightTotal = rows.reduce((sum, row) => sum + row.height, 0);
   const autoCounterGap =
     request.wrap.counterAxisAlignContent === "space-between";
@@ -70,6 +77,15 @@ export function solveHorizontalWrap(
   };
   const blockFree =
     frame.height - request.padding.top - request.padding.bottom - contentHeight;
+  const stretchRows =
+    !autoCounterGap &&
+    request.frameSizing.vertical === "fixed" &&
+    children.length > 0 &&
+    children.every((child) => child.sizing.vertical === "fill");
+  if (stretchRows) {
+    const stretch = Math.max(0, blockFree) / Math.max(1, rows.length);
+    for (const row of rows) row.height += stretch;
+  }
   const resolvedCounterGap = autoCounterGap
     ? request.frameSizing.vertical === "fixed"
       ? autoGap(blockFree, rows.length)
@@ -77,7 +93,9 @@ export function solveHorizontalWrap(
     : request.wrap.counterGap;
   let rowY =
     request.padding.top +
-    (autoCounterGap ? 0 : alignmentOffset(request.counterAlignment, blockFree));
+    (autoCounterGap || stretchRows
+      ? 0
+      : alignmentOffset(request.counterAlignment, blockFree));
   const placements: Array<ConstraintRect & { id: string }> = [];
   for (const row of rows) {
     const rowGap =
@@ -95,20 +113,60 @@ export function solveHorizontalWrap(
         ? 0
         : alignmentOffset(request.primaryAlignment, rowFree));
     for (const child of row.children) {
+      const childHeight =
+        child.sizing.vertical === "fill"
+          ? clampLayoutExtent(row.height, child.limits, "vertical")
+          : child.height;
       placements.push({
         id: child.id,
         x: childX,
         y:
           rowY +
-          alignmentOffset(request.counterAlignment, row.height - child.height),
+          alignmentOffset(request.counterAlignment, row.height - childHeight),
         width: child.width,
-        height: child.height,
+        height: childHeight,
       });
       childX += child.width + rowGap;
     }
     rowY += row.height + resolvedCounterGap;
   }
   return { ok: true, frame, placements };
+}
+
+function resolveRowMainAxis(
+  row: ResolvedRow,
+  innerWidth: number,
+  gap: number,
+): ResolvedRow {
+  const fillChildren = row.children.filter(
+    (child) => child.sizing.horizontal === "fill",
+  );
+  const fixedWidth = row.children.reduce(
+    (sum, child) =>
+      sum + (child.sizing.horizontal === "fill" ? 0 : child.width),
+    0,
+  );
+  const gapTotal = gap * Math.max(0, row.children.length - 1);
+  const fillWidths = distributeBoundedFill(
+    Math.max(0, innerWidth - fixedWidth - gapTotal),
+    fillChildren.map((child) => ({
+      id: child.id,
+      ...(child.limits ? { limits: child.limits } : {}),
+    })),
+    "horizontal",
+  );
+  const children = row.children.map((child) => ({
+    ...child,
+    width:
+      child.sizing.horizontal === "fill"
+        ? (fillWidths.get(child.id) ?? child.width)
+        : child.width,
+  }));
+  return {
+    children,
+    height: Math.max(0, ...children.map((child) => child.height)),
+    width: children.reduce((sum, child) => sum + child.width, 0) + gapTotal,
+  };
 }
 
 function wrapRows(
@@ -143,6 +201,13 @@ function alignmentOffset(
   if (alignment === "center") return available / 2;
   if (alignment === "end") return available;
   return 0;
+}
+
+function minimumExtent(
+  minimum: number | undefined,
+  maximum: number | undefined,
+): number {
+  return Math.min(maximum ?? Infinity, minimum ?? 0);
 }
 
 function conflict(message: string): LinearAutoLayoutResult {

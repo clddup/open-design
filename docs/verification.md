@@ -3,7 +3,7 @@
 - 日期：2026-08-25
 
 - 环境基线：Node.js 24.14.0、pnpm 10.32.1、Electron 43.3.0、Vite 8.2.1
-- 文档协议：`DesignDocument 1.45.0`
+- 文档协议：`DesignDocument 1.46.0`
 - Agent 协议：`3.12.0`
 - Geometry Service：`contract v13`
 - Text Layout Service：`contract v4`
@@ -12,7 +12,7 @@
 - Text List Service：`contract v1`（ordered/unordered、五级层级与 hanging marker 已接入）
 - Text Editing Session Service：`contract v2`（自动列表、光标输入样式、范围暂存与单事务提交已接入）
 - Text Run Layout Service：`contract v4`（native/HarfBuzz 列表生产投影已接入）
-- Layout Service：`contract v9`
+- Layout Service：`contract v10`
 - Agent Core：`@earendil-works/pi-agent-core 0.84.1`（production-entry-native-gate-pending）
 - 生产画布：`leafer-editor 2.2.9`
 
@@ -52,6 +52,8 @@ pnpm build
 - `DesignLayoutQualityReport v1` 纯函数测试覆盖 clipping 开关、隐藏后代、1%–25% 部分越界、至少 25% 大面积越界、完全越界、无效/错 Page Frame、报告运行时守卫和超过 128 个 issue 时失败关闭。Renderer capture 测试证明报告与同一不可变 document revision 生成；Main 边界拒绝缺失、畸形及 document/revision/Page/Frame 不匹配报告；多 target coordinator 测试证明跨 target 报告不能冒充当前 Frame，最终 error 保持 `refined`、修正后可恢复 `verified`，warning-only 不阻塞。报告不读取活动 viewport、selection 或截图像素。
 - Design Capability manifest 的严格字段、唯一 ID、六表面状态、证据派生与不可变快照；Agent system context 与只读 `get_capabilities` tool 读取同一 JSON。生成式帮助文档和发布摘要按需生成，不作为普通 push 的内容漂移门禁。
 - Horizontal Wrap 交叉轴自动分布专项覆盖 `DesignDocument 1.44.0 → 1.45.0` 视觉保持迁移、Layout Service contract 9 固定高度 wrapped rows `space-between`、Hug 高度零自由间距、非法枚举失败关闭、Runtime save/reopen 与 undo/redo、Inspector 固定/自动模式、Agent 权威 schema，以及 Figma Plugin API `counterAxisAlignContent/counterAxisSpacing` 公共字段往返。该确定性布局能力不增加 Provider 往返，也不冒充首稿审美质量或完整 Figma 文件导入导出。
+- Horizontal Wrap Fill child 专项覆盖 `DesignDocument 1.45.0 → 1.46.0` 无字段重写迁移、Layout Service contract 10 以 min-width 分行、逐 row bounded horizontal Fill、Vertical Fill row stretch、全部 Vertical Fill 时 AUTO track stretch、Hug 冲突失败关闭、Runtime typed sizing/limits、Inspector 两轴 Fill、Agent typed sizing，以及 Figma `layoutGrow/layoutAlign` child 字段往返。该求解不增加 Provider 往返；不同 row 不伪造共享列，固定列继续使用 Grid。
+- Professional fixtures 保留其作者 schema，Runtime/Leafer 测试经公共迁移入口重放到当前文档协议；普通 push 只验证旧文档能够迁移并保持编辑、历史与渲染行为，不因 schema、fixture 内容或文件数量变化设置同步门禁。该修正覆盖了 workflow `32815773549` 的四个失败根因。
 - `inspect_document` 不把 image asset 的 data URI 或外部 URI 放入模型上下文；Agent Runtime 会同时压缩当前轮和旧 journal 中意外出现的超长工具字段，避免图片文档在下一轮触发 `context_too_large`。
 - Agent Runtime 在完整 run 边界生成累计 `context.compacted` checkpoint，并在同一 Run 的每个 Provider turn 前重新预算；旧 assistant/tool 段超限时变成临时有界 checkpoint，当前用户原文和最近完整 tool call/result 段继续保留。测试覆盖原始 Timeline 不删除、checkpoint 范围单调增加、旧全文退出模型投影、第八轮自动恢复，以及单次当前输入或最小必要段仍超预算时才返回 `context_budget_exceeded`。模型投影同时限制超长单字段和超过 `50000` 字符的完整结构化工具结果，原始 journal 不丢失；预算错误按 system、tool schemas、Conversation/tool results 和 framing 分账。Main 从可信 Model Profile 注入窗口和输出预算；可信 token 预算存在时不会再被固定字符阈值误杀，缺少模型窗口时才使用字符保底；固定协议无法适配小窗口时返回独立的 `model_context_incompatible`。
 - Run 防失控预算现在分别限制 turn、tool call 和 Provider 实际 `usage.output`。重复发送的 input/context 由每轮 context window 与 compaction 约束，不再反复累计到生成预算；集成测试用连续两轮各 `180000` input token 证明 completion guard 仍可把未完成 delivery 继续到 complete，同时实际 output 超限仍返回 budget。Provider 返回的有界 `reasoning_summary` 会作为低权重“设计思路”进入 live/durable Timeline；省略或加密 reasoning 不会被推断为可见文本。
@@ -115,7 +117,7 @@ Composer 已取消用户可见的快速/精细模式，统一采用自适应执�
 
 ## 专业设计就绪度审计
 
-当前 `DesignCapabilityManifest v1` 记录 0 项完整可用、21 项降级可用和 1 项不可用能力；没有实机证据的能力不会标记为完整可用。`DesignDocument 1.45.0`、EditorRuntime、Geometry/Image/Text/Layout/Component/Variable/Style/Library service、Leafer adapter、Inspector 和 Agent tools 已打通正式矢量、文字、外观、图片、响应式布局、Component/Variant/Slot、Variables、Shared Styles、视觉复核和单目标 PNG/JPEG/WebP 导出基础路径。Image Service contract 8 专项证据覆盖 Image 节点与每项 Image Fill/Stroke 的七项 Figma-compatible 非破坏调整、单事务 Inspector/Agent、paint stale identity、保存重开/undo、来源替换保留、typed image derivation DAG、来源 family 恢复/删除、有界 Agent inspection、背景替换、typed 重打光、区域/扩图/分辨率目标、Figma Plugin API 内容 hash 行为，以及画布/capture/位图导出的同一分块 RGBA 投影。同 Project Library 专项证据覆盖 Component/Variant、Style-only 与 Variable-only 发布、hidden Style/Variable/alias dependency、显式启用、Local/Library 搜索、单事务 imported source/reference、更新接受、禁用保留、身份冲突、引用删除保护和 Agent 只读 inspection；standalone Image Paint Style 在独立 asset bundle 完成前失败关闭。真实字体跨平台栅格、连接/分支 network、standalone 跨文件 Image Paint Style asset bundle、SVG 位图嵌入、完整 Figma imageHash/transform 文件 adapter、带提示词的局部重绘/风格统一、大图按需加载、P3/ICC、custom list markers、高级 decoration、OpenType、variable axes、字体打包与授权迁移、更多 Variable/Style binding、Workspace/远端 Library、DTCG/REST/Plugin adapter、原生 IME/undo smoke、像素基线和双平台 GUI 仍未验收，因此相关能力保持 `degraded`。
+当前 `DesignCapabilityManifest v1` 记录 0 项完整可用、21 项降级可用和 1 项不可用能力；没有实机证据的能力不会标记为完整可用。`DesignDocument 1.46.0`、EditorRuntime、Geometry/Image/Text/Layout/Component/Variable/Style/Library service、Leafer adapter、Inspector 和 Agent tools 已打通正式矢量、文字、外观、图片、响应式布局、Component/Variant/Slot、Variables、Shared Styles、视觉复核和单目标 PNG/JPEG/WebP 导出基础路径。Image Service contract 8 专项证据覆盖 Image 节点与每项 Image Fill/Stroke 的七项 Figma-compatible 非破坏调整、单事务 Inspector/Agent、paint stale identity、保存重开/undo、来源替换保留、typed image derivation DAG、来源 family 恢复/删除、有界 Agent inspection、背景替换、typed 重打光、区域/扩图/分辨率目标、Figma Plugin API 内容 hash 行为，以及画布/capture/位图导出的同一分块 RGBA 投影。同 Project Library 专项证据覆盖 Component/Variant、Style-only 与 Variable-only 发布、hidden Style/Variable/alias dependency、显式启用、Local/Library 搜索、单事务 imported source/reference、更新接受、禁用保留、身份冲突、引用删除保护和 Agent 只读 inspection；standalone Image Paint Style 在独立 asset bundle 完成前失败关闭。真实字体跨平台栅格、连接/分支 network、standalone 跨文件 Image Paint Style asset bundle、SVG 位图嵌入、完整 Figma imageHash/transform 文件 adapter、带提示词的局部重绘/风格统一、大图按需加载、P3/ICC、custom list markers、高级 decoration、OpenType、variable axes、字体打包与授权迁移、更多 Variable/Style binding、Workspace/远端 Library、DTCG/REST/Plugin adapter、原生 IME/undo smoke、像素基线和双平台 GUI 仍未验收，因此相关能力保持 `degraded`。
 
 仓库当前由唯一 EditorRuntime 统一持有正式 Vector Network、Boolean、Text character/paragraph/list runs、Auto Size、Typography、Component Set/VARIANT/Slot、Variables、Shared Styles 与 imported Library sources。Geometry/Text/Layout/Component/Variable/Style/Library service 只提供窄契约、解析或事务计划，不保存第二份文档；Leafer/HarfBuzz exact-revision projection、人工 Inspector、Agent typed transaction、SVG 和位图继续复用同一权威事实。Slot-in-Slot 按 Figma 公开模型永久失败封闭；更多 Variable binding、Workspace/远端 Library、DTCG/REST/Plugin adapter、剩余 AI 图片编辑和双平台原生证据仍在后续路线图。
 

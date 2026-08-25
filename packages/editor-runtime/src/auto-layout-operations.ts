@@ -154,17 +154,6 @@ export function planSetFrameAutoLayout(
       const childSizing = child.layoutSizing ?? DEFAULT_LAYOUT_SIZING;
       if (
         child.visible &&
-        autoLayout.mode === "horizontal" &&
-        autoLayout.wrap &&
-        (childSizing.horizontal === "fill" || childSizing.vertical === "fill")
-      ) {
-        return failure(
-          "visual-fidelity",
-          `Wrapped Auto Layout v1 does not support Fill child ${childId}`,
-        );
-      }
-      if (
-        child.visible &&
         ((frameSizing.horizontal === "hug" &&
           childSizing.horizontal === "fill") ||
           (frameSizing.vertical === "hug" && childSizing.vertical === "fill"))

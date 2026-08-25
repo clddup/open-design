@@ -1,4 +1,5 @@
 import { solveHorizontalWrap } from "./wrap-layout.js";
+import { distributeBoundedFill } from "./fill-distribution.js";
 export {
   GRID_AUTO_LAYOUT_CONTRACT_VERSION,
   solveGridAutoLayout,
@@ -9,7 +10,7 @@ export {
 } from "./grid-layout.js";
 
 export const LAYOUT_SERVICE_CONTRACT_VERSION = 1 as const;
-export const AUTO_LAYOUT_SERVICE_CONTRACT_VERSION = 9 as const;
+export const AUTO_LAYOUT_SERVICE_CONTRACT_VERSION = 10 as const;
 
 export type HorizontalConstraint =
   "left" | "right" | "left-right" | "center" | "scale";
@@ -364,50 +365,6 @@ export function resolveFrameExtent(
   paddingMinimum: number,
 ): number {
   return Math.max(paddingMinimum, clampLayoutExtent(extent, limits, axis));
-}
-
-function distributeBoundedFill(
-  available: number,
-  children: Array<{ id: string; limits?: AutoLayoutLimits }>,
-  axis: "horizontal" | "vertical",
-): Map<string, number> {
-  const result = new Map<string, number>();
-  const pending = children.map((child) => {
-    const minimum =
-      axis === "horizontal" ? child.limits?.minWidth : child.limits?.minHeight;
-    const maximum =
-      axis === "horizontal" ? child.limits?.maxWidth : child.limits?.maxHeight;
-    return {
-      id: child.id,
-      minimum: minimum ?? 0,
-      maximum: maximum ?? Infinity,
-    };
-  });
-  let remaining = available;
-  while (pending.length > 0) {
-    const share = remaining / pending.length;
-    const upperBounded = pending.filter((child) => child.maximum < share);
-    if (upperBounded.length > 0) {
-      for (const child of upperBounded) {
-        result.set(child.id, child.maximum);
-        remaining -= child.maximum;
-        pending.splice(pending.indexOf(child), 1);
-      }
-      continue;
-    }
-    const lowerBounded = pending.filter((child) => child.minimum > share);
-    if (lowerBounded.length > 0) {
-      for (const child of lowerBounded) {
-        result.set(child.id, child.minimum);
-        remaining -= child.minimum;
-        pending.splice(pending.indexOf(child), 1);
-      }
-      continue;
-    }
-    for (const child of pending) result.set(child.id, Math.max(0, share));
-    break;
-  }
-  return result;
 }
 
 export function isLayoutConstraints(

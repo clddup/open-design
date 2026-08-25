@@ -189,17 +189,6 @@ export function validateNodeLayoutInvariants(
           message: "a child cannot fill an axis hugged by its parent Frame",
         });
       }
-      if (
-        node.visible &&
-        parentFlow.mode === "horizontal" &&
-        parentFlow.wrap &&
-        (childSizing.horizontal === "fill" || childSizing.vertical === "fill")
-      ) {
-        issues.push({
-          path: `/nodesById/${nodeId}/layoutSizing`,
-          message: "wrapped Auto Layout v1 does not support Fill children",
-        });
-      }
     }
     if (
       (node.kind === "group" || node.kind === "boolean") &&

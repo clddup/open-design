@@ -99,7 +99,7 @@ describe("Auto Layout editor shortcut", () => {
     };
     expect(
       layoutInspectorMode(document, document.nodesById.title_welcome),
-    ).toBe("wrap-sizing");
+    ).toBe("sizing");
     frame.properties.autoLayout = { mode: "none" };
     expect(
       canShowOrdinaryConstraints(document, document.nodesById.title_welcome),

@@ -20,6 +20,7 @@ import {
   IMAGE_ASSET_DERIVATIONS_DESIGN_SCHEMA_VERSION,
   IMAGE_BACKGROUND_REPLACEMENT_DESIGN_SCHEMA_VERSION,
   IMAGE_RELIGHTING_DESIGN_SCHEMA_VERSION,
+  AUTO_LAYOUT_WRAP_FILL_DESIGN_SCHEMA_VERSION,
   AUTO_LAYOUT_WRAP_DISTRIBUTION_DESIGN_SCHEMA_VERSION,
   FONT_FACE_IDENTITY_DESIGN_SCHEMA_VERSION,
   FIGMA_TEXT_LISTS_DESIGN_SCHEMA_VERSION,
@@ -317,8 +318,9 @@ it("keeps Auto Layout and Layout Guide schema milestones distinct", () => {
   expect(IMAGE_BACKGROUND_REPLACEMENT_DESIGN_SCHEMA_VERSION).toBe("1.43.0");
   expect(IMAGE_RELIGHTING_DESIGN_SCHEMA_VERSION).toBe("1.44.0");
   expect(AUTO_LAYOUT_WRAP_DISTRIBUTION_DESIGN_SCHEMA_VERSION).toBe("1.45.0");
+  expect(AUTO_LAYOUT_WRAP_FILL_DESIGN_SCHEMA_VERSION).toBe("1.46.0");
   expect(DESIGN_SCHEMA_VERSION).toBe(
-    AUTO_LAYOUT_WRAP_DISTRIBUTION_DESIGN_SCHEMA_VERSION,
+    AUTO_LAYOUT_WRAP_FILL_DESIGN_SCHEMA_VERSION,
   );
 });
 
@@ -369,6 +371,16 @@ it("migrates 1.44 documents without inventing wrapped row distribution", () => {
   expect(
     frame?.kind === "frame" ? frame.properties.autoLayout : undefined,
   ).not.toHaveProperty("wrap.counterAxisAlignContent");
+});
+
+it("migrates 1.45 documents without rewriting layout data for Wrap Fill", () => {
+  const source = textDocumentFixture();
+  source.schemaVersion =
+    AUTO_LAYOUT_WRAP_DISTRIBUTION_DESIGN_SCHEMA_VERSION as typeof source.schemaVersion;
+  const nodes = structuredClone(source.nodesById);
+  const migrated = migrateDesignDocument(source);
+  expect(migrated?.schemaVersion).toBe(DESIGN_SCHEMA_VERSION);
+  expect(migrated?.nodesById).toEqual(nodes);
 });
 
 it("migrates the previous image Paint document with empty image source history", () => {

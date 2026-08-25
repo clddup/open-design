@@ -21,8 +21,10 @@ import {
   toFigmaGridAutoLayout,
   toFigmaGridChild,
   toFigmaWrapAutoLayout,
+  toFigmaWrapChildLayout,
   fromFigmaGridAutoLayout,
   fromFigmaWrapAutoLayout,
+  fromFigmaWrapChildLayout,
   toFigmaImageFilters,
   fromFigmaImageFilters,
   toFigmaSharedStyleMetadata,
@@ -118,6 +120,24 @@ describe("Figma wrapped Auto Layout compatibility", () => {
         counterAlignment: "start",
       }),
     ).toBeNull();
+  });
+
+  it("round-trips Figma primary and counter-axis Fill child semantics", () => {
+    const figma = toFigmaWrapChildLayout({
+      horizontal: "fill",
+      vertical: "fill",
+    });
+    expect(figma).toEqual({ layoutGrow: 1, layoutAlign: "STRETCH" });
+    expect(fromFigmaWrapChildLayout(figma)).toEqual({
+      ok: true,
+      sizing: { horizontal: "fill", vertical: "fill" },
+    });
+    expect(
+      fromFigmaWrapChildLayout({ layoutGrow: 0.5, layoutAlign: "INHERIT" }),
+    ).toMatchObject({ ok: false });
+    expect(
+      fromFigmaWrapChildLayout({ layoutGrow: 0, layoutAlign: "CENTER" }),
+    ).toMatchObject({ ok: false });
   });
 });
 

@@ -8,6 +8,7 @@ import type {
   DesignNode,
   GridAutoLayout,
   GridTrack as OpenDesignGridTrack,
+  LayoutSizing,
   LinearAutoLayoutFlow,
   ImageFilters as OpenDesignImageFilters,
   Paint as OpenDesignPaint,
@@ -111,6 +112,14 @@ export type OpenDesignWrapResult =
       layout: Extract<LinearAutoLayoutFlow, { mode: "horizontal" }>;
     }
   | { ok: false; issues: readonly string[] };
+
+export type FigmaWrapChildLayout = Pick<
+  RectangleNode,
+  "layoutGrow" | "layoutAlign"
+>;
+
+export type OpenDesignWrapChildResult =
+  { ok: true; sizing: LayoutSizing } | { ok: false; issues: readonly string[] };
 
 export type FigmaGridChild = Pick<
   RectangleNode,
@@ -357,6 +366,35 @@ export function fromFigmaWrapAutoLayout(
             ? "space-between"
             : "auto",
       },
+    },
+  };
+}
+
+export function toFigmaWrapChildLayout(
+  sizing: LayoutSizing,
+): FigmaWrapChildLayout {
+  return {
+    layoutGrow: sizing.horizontal === "fill" ? 1 : 0,
+    layoutAlign: sizing.vertical === "fill" ? "STRETCH" : "INHERIT",
+  };
+}
+
+export function fromFigmaWrapChildLayout(
+  value: FigmaWrapChildLayout,
+): OpenDesignWrapChildResult {
+  const issues: string[] = [];
+  if (value.layoutGrow !== 0 && value.layoutGrow !== 1)
+    issues.push("Figma layoutGrow must be 0 or 1");
+  if (value.layoutAlign !== "INHERIT" && value.layoutAlign !== "STRETCH")
+    issues.push(
+      "Deprecated child-specific counter-axis alignment is not available in OpenDesign Wrap",
+    );
+  if (issues.length > 0) return { ok: false, issues };
+  return {
+    ok: true,
+    sizing: {
+      horizontal: value.layoutGrow === 1 ? "fill" : "fixed",
+      vertical: value.layoutAlign === "STRETCH" ? "fill" : "fixed",
     },
   };
 }

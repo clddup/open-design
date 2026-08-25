@@ -6372,6 +6372,72 @@ describe("Renderer semantic hierarchy tool", () => {
     expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
   });
 
+  it("uses typed Agent sizing to fill a child inside horizontal Wrap", async () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    const enabled = await executeDesignToolRequest(
+      {
+        requestId: "auto_layout_wrap_fill_enable",
+        call: {
+          toolCallId: "tool_auto_layout_wrap_fill_enable",
+          toolName: DESIGN_ARRANGE_TOOL_NAME,
+          input: {
+            action: "set-auto-layout",
+            label: "Wrap landing content",
+            pageId: "page_welcome",
+            frameId: "frame_welcome",
+            autoLayout: {
+              mode: "horizontal",
+              padding: { top: 24, right: 24, bottom: 24, left: 24 },
+              gap: 16,
+              primaryAlignment: "start",
+              counterAlignment: "start",
+              sizing: { horizontal: "fixed", vertical: "hug" },
+              wrap: { mode: "wrap", counterGap: 20 },
+            },
+          },
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(enabled.ok).toBe(true);
+    const filled = await executeDesignToolRequest(
+      {
+        requestId: "auto_layout_wrap_fill_child",
+        call: {
+          toolCallId: "tool_auto_layout_wrap_fill_child",
+          toolName: DESIGN_ARRANGE_TOOL_NAME,
+          input: {
+            action: "set-layout-sizing",
+            label: "Fill wrapped title row",
+            pageId: "page_welcome",
+            nodeId: "title_welcome",
+            sizing: { horizontal: "fill", vertical: "fixed" },
+          },
+        },
+        context: { ...pageContext, revision: 1 },
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(filled).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "set-layout-sizing",
+          revision: 2,
+          atomic: true,
+        },
+      },
+    });
+    expect(
+      runtime.getSnapshot().document.nodesById.title_welcome,
+    ).toMatchObject({
+      layoutSizing: { horizontal: "fill", vertical: "fixed" },
+    });
+  });
+
   it("creates automatic Grid rows and reorders them through one typed Agent transaction", async () => {
     const runtime = new EditorRuntime(createWelcomeDocument());
     const automatic = await executeDesignToolRequest(

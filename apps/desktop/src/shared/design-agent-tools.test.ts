@@ -3231,6 +3231,8 @@ describe("design Agent tool contract", () => {
     expect(arrange?.description).toContain("Auto Layout supports");
     expect(arrange?.description).toContain("Auto gap");
     expect(arrange?.description).toContain("counterAxisAlignContent");
+    expect(arrange?.description).toContain("Fill child's minimum width");
+    expect(arrange?.description).toContain("stretches rows");
     expect(arrange?.description).toContain("min/max clamping");
     expect(arrange?.description).toContain("absolute child");
     expect(

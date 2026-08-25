@@ -153,7 +153,7 @@ export function PropertiesPanel({
   canCombineVariants: boolean;
   canAddToVariantSet: boolean;
   canDelete: boolean;
-  layoutMode: "constraints" | "sizing" | "wrap-sizing" | "absolute" | null;
+  layoutMode: "constraints" | "sizing" | "absolute" | null;
   onArrange: (operation: ArrangeOperation) => void;
   onBooleanOperationChange: (operation: BooleanOperation) => void;
   onCreateComponent: () => void;
@@ -317,21 +317,15 @@ export function PropertiesPanel({
               node.kind !== "boolean"
             }
             layoutPositioningAvailable={
-              layoutMode === "sizing" ||
-              layoutMode === "wrap-sizing" ||
-              layoutMode === "absolute"
+              layoutMode === "sizing" || layoutMode === "absolute"
             }
             layoutPositioningConstraintsAvailable={
               node.kind !== "group" && node.kind !== "boolean"
             }
             layoutGuidesAvailable={node.kind === "frame"}
-            layoutSizingAvailable={
-              layoutMode === "sizing" || layoutMode === "wrap-sizing"
-            }
-            layoutSizingFillAvailable={layoutMode !== "wrap-sizing"}
+            layoutSizingAvailable={layoutMode === "sizing"}
             layoutLimitsAvailable={
               layoutMode === "sizing" ||
-              layoutMode === "wrap-sizing" ||
               ((node.kind === "frame" || node.kind === "slot") &&
                 node.properties.autoLayout !== undefined &&
                 node.properties.autoLayout.mode !== "none")

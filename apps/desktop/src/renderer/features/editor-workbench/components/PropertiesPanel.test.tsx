@@ -91,7 +91,7 @@ function renderPanel(
       },
     ) => void;
     onRemoveComponent?: () => void;
-    layoutMode?: "constraints" | "sizing" | "wrap-sizing" | "absolute" | null;
+    layoutMode?: "constraints" | "sizing" | "absolute" | null;
     onSetConstraints?: (nodeId: string, constraints: LayoutConstraints) => void;
     onSetLayoutPositioning?: (
       nodeId: string,
@@ -1286,7 +1286,7 @@ describe("PropertiesPanel SVG workflow", () => {
     renderPanel({
       node: { ...textNode, parentId: "frame_wrap" },
       selectionCount: 1,
-      layoutMode: "wrap-sizing",
+      layoutMode: "sizing",
       onUpdate,
     });
     expect(
@@ -1295,7 +1295,7 @@ describe("PropertiesPanel SVG workflow", () => {
     for (const option of screen.getAllByRole("option", {
       name: "Fill container",
     })) {
-      expect(option).toBeDisabled();
+      expect(option).toBeEnabled();
     }
   });
 

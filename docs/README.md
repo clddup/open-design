@@ -99,3 +99,4 @@
 | [0122](adr/0122-first-visible-delivery-over-protocol-prose.md)           | 已接受     | 首个真实画面优先、首轮协议收缩与快速审查有界化                     |
 | [0133](adr/0133-trusted-remove-background-image-editing.md)              | 已接受     | 全局图片服务、可信去背景与原子派生资源事务                         |
 | [0153](adr/0153-figma-wrap-counter-axis-distribution.md)                 | 已接受     | Figma-compatible Wrap 交叉轴自动分布                               |
+| [0154](adr/0154-figma-wrap-fill-children.md)                             | 已接受     | Figma-compatible Wrap Fill 子层                                    |

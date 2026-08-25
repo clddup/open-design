@@ -67,19 +67,10 @@ export function canShowAutoLayoutSizing(
 export function layoutInspectorMode(
   document: DesignDocument,
   node: DesignNode | undefined,
-): "constraints" | "sizing" | "wrap-sizing" | "absolute" | null {
+): "constraints" | "sizing" | "absolute" | null {
   if (node?.layoutPositioning === "absolute") return "absolute";
   if (canShowOrdinaryConstraints(document, node)) return "constraints";
-  if (canShowAutoLayoutSizing(document, node)) {
-    const parent = node?.parentId
-      ? document.nodesById[node.parentId]
-      : undefined;
-    return (parent?.kind === "frame" || parent?.kind === "slot") &&
-      parent.properties.autoLayout?.mode === "horizontal" &&
-      parent.properties.autoLayout.wrap?.mode === "wrap"
-      ? "wrap-sizing"
-      : "sizing";
-  }
+  if (canShowAutoLayoutSizing(document, node)) return "sizing";
   return null;
 }
 

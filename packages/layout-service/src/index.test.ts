@@ -598,7 +598,137 @@ describe("layout-service linear Auto Layout v6", () => {
     });
   });
 
-  it("rejects vertical wrap, Hug width, Fill children, and malformed counter gap", () => {
+  it("wraps from Fill minimums and distributes each row independently", () => {
+    expect(
+      solveLinearAutoLayout({
+        version: AUTO_LAYOUT_SERVICE_CONTRACT_VERSION,
+        direction: "horizontal",
+        frame: { width: 200, height: 120 },
+        padding: { top: 10, right: 10, bottom: 10, left: 10 },
+        gap: 10,
+        primaryAlignment: "start",
+        counterAlignment: "start",
+        frameSizing: fixedFrame,
+        wrap: { mode: "wrap", counterGap: 12 },
+        children: [
+          child("fixed", 80, 20),
+          {
+            ...child("fill-one", 1, 30, "fill"),
+            limits: { minWidth: 60 },
+          },
+          {
+            ...child("fill-two", 1, 40, "fill"),
+            limits: { minWidth: 60 },
+          },
+        ],
+      }),
+    ).toEqual({
+      ok: true,
+      frame: { width: 200, height: 120 },
+      placements: [
+        { id: "fixed", x: 10, y: 10, width: 80, height: 20 },
+        { id: "fill-one", x: 100, y: 10, width: 90, height: 30 },
+        { id: "fill-two", x: 10, y: 52, width: 180, height: 40 },
+      ],
+    });
+  });
+
+  it("redistributes wrapped Fill width after min and max bounds settle", () => {
+    expect(
+      solveLinearAutoLayout({
+        version: AUTO_LAYOUT_SERVICE_CONTRACT_VERSION,
+        direction: "horizontal",
+        frame: { width: 240, height: 80 },
+        padding: { top: 10, right: 10, bottom: 10, left: 10 },
+        gap: 10,
+        primaryAlignment: "start",
+        counterAlignment: "start",
+        frameSizing: fixedFrame,
+        wrap: { mode: "wrap", counterGap: 12 },
+        children: [
+          {
+            ...child("minimum", 1, 20, "fill"),
+            limits: { minWidth: 150 },
+          },
+          {
+            ...child("maximum", 1, 20, "fill"),
+            limits: { maxWidth: 50 },
+          },
+        ],
+      }),
+    ).toMatchObject({
+      ok: true,
+      placements: [
+        { id: "minimum", x: 10, width: 160 },
+        { id: "maximum", x: 180, width: 50 },
+      ],
+    });
+  });
+
+  it("stretches wrapped rows and their cross-axis Fill children", () => {
+    expect(
+      solveLinearAutoLayout({
+        version: AUTO_LAYOUT_SERVICE_CONTRACT_VERSION,
+        direction: "horizontal",
+        frame: { width: 140, height: 160 },
+        padding: { top: 10, right: 10, bottom: 10, left: 10 },
+        gap: 8,
+        primaryAlignment: "start",
+        counterAlignment: "center",
+        frameSizing: fixedFrame,
+        wrap: {
+          mode: "wrap",
+          counterGap: 10,
+          counterAxisAlignContent: "auto",
+        },
+        children: [
+          {
+            ...child("one", 70, 1, "fixed", "fill"),
+            limits: { minHeight: 20 },
+          },
+          {
+            ...child("two", 70, 1, "fixed", "fill"),
+            limits: { minHeight: 20 },
+          },
+        ],
+      }),
+    ).toEqual({
+      ok: true,
+      frame: { width: 140, height: 160 },
+      placements: [
+        { id: "one", x: 10, y: 10, width: 70, height: 65 },
+        { id: "two", x: 10, y: 85, width: 70, height: 65 },
+      ],
+    });
+  });
+
+  it("stretches one cross-axis Fill child only to its current row", () => {
+    expect(
+      solveLinearAutoLayout({
+        version: AUTO_LAYOUT_SERVICE_CONTRACT_VERSION,
+        direction: "horizontal",
+        frame: { width: 140, height: 100 },
+        padding: { top: 10, right: 10, bottom: 10, left: 10 },
+        gap: 8,
+        primaryAlignment: "start",
+        counterAlignment: "end",
+        frameSizing: fixedFrame,
+        wrap: { mode: "wrap", counterGap: 10 },
+        children: [
+          child("fixed", 50, 40),
+          child("fill", 50, 1, "fixed", "fill"),
+        ],
+      }),
+    ).toMatchObject({
+      ok: true,
+      placements: [
+        { id: "fixed", y: 50, height: 40 },
+        { id: "fill", y: 50, height: 40 },
+      ],
+    });
+  });
+
+  it("rejects vertical wrap, Hug width, cross-axis Fill in Hug height, and malformed counter gap", () => {
     const request = {
       version: AUTO_LAYOUT_SERVICE_CONTRACT_VERSION,
       direction: "horizontal" as const,
@@ -623,7 +753,8 @@ describe("layout-service linear Auto Layout v6", () => {
     expect(
       solveLinearAutoLayout({
         ...request,
-        children: [child("fill", 1, 20, "fill", "fixed")],
+        frameSizing: { horizontal: "fixed", vertical: "hug" },
+        children: [child("fill", 60, 20, "fixed", "fill")],
       }),
     ).toMatchObject({ ok: false, code: "sizing-conflict" });
     expect(

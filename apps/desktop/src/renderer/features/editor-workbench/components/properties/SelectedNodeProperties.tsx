@@ -108,7 +108,6 @@ export function SelectedNodeProperties({
   canDelete,
   constraintsAvailable,
   layoutSizingAvailable,
-  layoutSizingFillAvailable,
   layoutLimitsAvailable,
   layoutPositioningAvailable,
   layoutPositioningConstraintsAvailable,
@@ -182,7 +181,6 @@ export function SelectedNodeProperties({
   canDelete: boolean;
   constraintsAvailable: boolean;
   layoutSizingAvailable: boolean;
-  layoutSizingFillAvailable: boolean;
   layoutLimitsAvailable: boolean;
   layoutPositioningAvailable: boolean;
   layoutPositioningConstraintsAvailable: boolean;
@@ -818,9 +816,7 @@ export function SelectedNodeProperties({
                 value={node.layoutSizing?.horizontal ?? "fixed"}
               >
                 <option value="fixed">{t("properties.autoLayoutFixed")}</option>
-                <option disabled={!layoutSizingFillAvailable} value="fill">
-                  {t("properties.autoLayoutFill")}
-                </option>
+                <option value="fill">{t("properties.autoLayoutFill")}</option>
               </select>
             </label>
             <label className={styles.select}>
@@ -838,9 +834,7 @@ export function SelectedNodeProperties({
                 value={node.layoutSizing?.vertical ?? "fixed"}
               >
                 <option value="fixed">{t("properties.autoLayoutFixed")}</option>
-                <option disabled={!layoutSizingFillAvailable} value="fill">
-                  {t("properties.autoLayoutFill")}
-                </option>
+                <option value="fill">{t("properties.autoLayoutFill")}</option>
               </select>
             </label>
           </div>

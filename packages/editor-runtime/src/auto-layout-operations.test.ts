@@ -1031,7 +1031,7 @@ describe("linear Auto Layout Runtime", () => {
     expect(resolved.nodesById.frame?.size).toEqual({ width: 220, height: 139 });
   });
 
-  it("rejects Wrap with Hug width or visible Fill children before apply", () => {
+  it("rejects Wrap with Hug width but preserves visible Fill children", () => {
     const document = layoutDocument();
     expect(
       planSetFrameAutoLayout(
@@ -1045,19 +1045,39 @@ describe("linear Auto Layout Runtime", () => {
         "invalid_wrap_hug",
       ),
     ).toMatchObject({ ok: false, code: "visual-fidelity" });
-    document.nodesById.two!.layoutSizing = {
-      horizontal: "fill",
-      vertical: "fixed",
-    };
-    expect(
-      planSetFrameAutoLayout(
-        document,
-        "page_layout",
-        "frame",
-        wrapLayout(),
-        "invalid_wrap_fill",
-      ),
-    ).toMatchObject({ ok: false, code: "visual-fidelity" });
+    const runtime = new EditorRuntime(normalizeDesignDocument(document));
+    const enable = planSetFrameAutoLayout(
+      runtime.getSnapshot().document,
+      "page_layout",
+      "frame",
+      wrapLayout(),
+      "enable_wrap_fill",
+    );
+    if (!enable.ok) throw new Error(enable.message);
+    expect(runtime.apply(transaction(runtime, enable.commands)).ok).toBe(true);
+    const fill = planSetNodeLayoutSizing(
+      runtime.getSnapshot().document,
+      "page_layout",
+      "two",
+      { horizontal: "fill", vertical: "fixed" },
+      "wrap_fill",
+    );
+    if (!fill.ok) throw new Error(fill.message);
+    expect(runtime.apply(transaction(runtime, fill.commands)).ok).toBe(true);
+    const limits = planSetNodeLayoutLimits(
+      runtime.getSnapshot().document,
+      "page_layout",
+      "two",
+      { minWidth: 60 },
+      "wrap_fill_limits",
+    );
+    if (!limits.ok) throw new Error(limits.message);
+    expect(runtime.apply(transaction(runtime, limits.commands)).ok).toBe(true);
+    expect(runtime.getSnapshot().document.nodesById.two).toMatchObject({
+      size: { width: 230, height: 30 },
+      layoutSizing: { horizontal: "fill", vertical: "fixed" },
+      layoutLimits: { minWidth: 60 },
+    });
   });
 
   it("applies Frame and fixed-child limits with padding as the hard minimum", () => {
