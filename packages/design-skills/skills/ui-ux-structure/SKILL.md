@@ -7,13 +7,15 @@ description: Turn a UI brief into a usable task hierarchy, semantic structure, s
 
 Use this skill only for `deliverable=ui`. Preserve the user's product semantics and do not invent features to make a screen look richer.
 
-Define the primary user job and classify the current surface by success: `persuade` for deciding, `operate` for completing a task, `read` for understanding, or `experience` when the work leads. Record that exact choice in `designIntent.calibration.surfaceMode`; UI must never use `graphic`. Classify the surface, not the product: a design tool's landing page is persuade; its editor is operate. Arrange information in task order and expose the primary action, current state, navigation context, and recovery without forcing recall.
+Classify the current surface by success: `persuade` for deciding, `operate` for acting, `read` for understanding, or `experience` when the work leads. Record it in `designIntent.calibration.surfaceMode`; UI never uses `graphic`. Classify the surface, not the product: a design tool's landing page is persuade; its editor is operate. Order information by task and expose primary action, state, navigation, and recovery.
 
-Operate favors familiar affordances, scan speed, stable density, complete states, keyboard/focus behavior, and restrained state motion. Persuade needs a clear argument and relevant subject evidence. Read prioritizes navigation, measure, and comprehension. Experience lets the artifact lead without losing orientation. Product character comes from precise details, not unfamiliar controls.
+Operate favors familiar affordances, scan speed, states, focus, and restrained motion. Persuade needs an argument and subject evidence; read needs navigation and comprehension; experience lets the artifact lead without losing orientation. Character comes from precise details, not unfamiliar controls.
 
-Design for the delivery viewport, not enlarged editor zoom. At fit-to-artboard size, labels remain readable, controls do not become texture, realistic copy fits, and the task is not stranded in a small card amid decorative emptiness. Use progressive disclosure for secondary controls.
+Design at the delivery viewport, not editor zoom. At fit-to-artboard size, copy and controls remain readable, realistic content fits, and the task is not stranded in decorative emptiness. Progressively disclose secondary controls.
 
 Plan only relevant states—loading, empty, validation, error, success, disabled, selected, focus, or offline—and show recovery. A polished happy path alone is not complete UX evidence.
+
+Build each screen as an editable target-specific hierarchy; never fake rows, controls, navigation, or data with one multiline Text, spaces, or arrows. Use separate labels, controls, surfaces, and visuals. Capture it before authoring the next screen.
 
 Choose components for semantic reuse, stable identity, centralized updates, and controlled variation; repeated shapes are not automatically components. Preserve meaningful one-off groups. Inspect the current file's Components, Styles, and Variables before creating a parallel system. Reuse a catalog Component only when its semantic job and properties fit, then create a linked Instance; visual similarity alone is insufficient.
 

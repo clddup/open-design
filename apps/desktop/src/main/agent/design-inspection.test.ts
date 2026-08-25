@@ -204,6 +204,12 @@ describe("Agent design inspection component strategy", () => {
       ...requiredNode(copiedInstance, "navigation_profile_instance"),
       kind: "group",
       componentId: null,
+      childIds: ["profile_navigation_shape"],
+    });
+    copiedInstance.nodesById.set("profile_navigation_shape", {
+      ...requiredNode(copiedInstance, "hero_shape"),
+      id: "profile_navigation_shape",
+      parentId: "navigation_profile_instance",
     });
     expect(
       assertDeliveryTargetStructure(
@@ -239,6 +245,24 @@ describe("Agent design inspection component strategy", () => {
       ],
       blocking: false,
     });
+  });
+
+  it("rejects a new UI target flattened into one Text layer", () => {
+    const inspection = completeInspection();
+    const region = requiredNode(inspection, "region_home");
+    region.childIds = ["home_copy"];
+    for (const nodeId of [
+      "navigation_main",
+      "navigation_label",
+      "home_hero_group",
+      "hero_shape",
+    ]) {
+      inspection.nodesById.delete(nodeId);
+    }
+
+    expect(() =>
+      assertDeliveryTargetStructure(inspection, targetState(homeTarget), plan),
+    ).toThrow("design_workflow.ui_draft_structure_incomplete");
   });
 
   it("blocks final logo verification when a declared concept lacks real optical evidence", () => {

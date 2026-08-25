@@ -490,6 +490,65 @@ function draftTargets(
   };
 }
 
+function flattenedUiDraft(
+  pageId: string,
+  target: DesignPlanTarget,
+): DesignApplyToolInput {
+  return {
+    label: `Flatten ${target.label} into copy`,
+    commands: [
+      {
+        commandId: `insert_${target.artboard.frameId}_flattened_copy`,
+        type: "insert_element",
+        pageId,
+        parentId: target.artboard.frameId,
+        index: 0,
+        node: {
+          id: `${target.artboard.frameId}_flattened_copy`,
+          kind: "text",
+          name: "Flattened screen copy",
+          parentId: target.artboard.frameId,
+          childIds: [],
+          visible: true,
+          locked: false,
+          transform: [1, 0, 0, 1, 24, 96],
+          size: { width: 342, height: 700 },
+          exportSettings: [],
+          opacity: 1,
+          properties: {
+            fills: [{ type: "solid", color: "#101828", opacity: 1 }],
+            strokes: [],
+            strokeWidth: 0,
+            content:
+              "Home\nCurrent state     Continue →\nRecent work     Open →\nSettings     More →",
+            fontFamily: "Inter",
+            fontStyleName: "Regular",
+            fontSize: 16,
+            fontWeight: 400,
+            fontSlant: "normal",
+            lineHeight: 24,
+            letterSpacing: 0,
+            paragraphIndent: 0,
+            paragraphSpacing: 0,
+            listSpacing: 0,
+            hangingList: false,
+            textCase: "original",
+            textDecoration: "none",
+            textAlignHorizontal: "left",
+            textAlignVertical: "top",
+            textResize: "fixed",
+            textWrap: "word",
+            textOverflow: "visible",
+            textTruncation: "disabled",
+            maxLines: null,
+          },
+          extensions: {},
+        },
+      },
+    ],
+  };
+}
+
 function withDraftedTargets(
   source: DesignDocument,
   pageId: string,
@@ -1471,6 +1530,33 @@ describe("GlobalTaskCoordinator", () => {
             extensions: {},
           },
         },
+        {
+          commandId: "insert_signal_rail",
+          type: "insert_element",
+          pageId,
+          parentId: "workspace_artboard",
+          index: 1,
+          node: {
+            id: "workspace_signal_rail",
+            kind: "rectangle",
+            name: "Workspace signal rail",
+            parentId: "workspace_artboard",
+            childIds: [],
+            visible: true,
+            locked: false,
+            transform: [1, 0, 0, 1, 48, 104],
+            size: { width: 520, height: 8 },
+            exportSettings: [],
+            opacity: 1,
+            properties: {
+              fills: [{ type: "solid", color: "#2563eb", opacity: 1 }],
+              strokes: [],
+              strokeWidth: 0,
+              cornerRadius: 4,
+            },
+            extensions: {},
+          },
+        },
       ],
     };
     const misplacedDraft = structuredClone(plannedDraft);
@@ -2336,9 +2422,15 @@ describe("GlobalTaskCoordinator", () => {
     });
 
     const draft = draftTargets(pageId, plan.targets);
-    expect(coordinator.assertDesignPlanForApply(context, draft)).toMatchObject({
-      targetIds: ["target_home", "target_profile"],
-    });
+    expect(() => coordinator.assertDesignPlanForApply(context, draft)).toThrow(
+      "design_workflow.active_ui_target_required",
+    );
+    expect(() =>
+      coordinator.assertDesignPlanForApply(
+        context,
+        flattenedUiDraft(pageId, homeTarget),
+      ),
+    ).toThrow("design_workflow.ui_draft_structure_incomplete");
     const homeDraft = draftTargets(pageId, [homeTarget]);
     const draftAuthorization = coordinator.assertDesignPlanForApply(
       context,

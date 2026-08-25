@@ -1,6 +1,6 @@
 # ADR-0123：快速确定性交付与非阻断 target 顺序
 
-- 状态：Superseded by ADR-0127（非阻断 target 顺序仍有效；用户可选快速/精细与快速模式跳过 Logo Critic 的决策已取代）
+- 状态：Superseded by ADR-0127 与 ADR-0152（用户可选快速/精细及快速模式跳过 Logo Critic 的决策已由 ADR-0127 取代；UI target 顺序仅为建议已由 ADR-0152 取代）
 - 日期：2026-08-21
 - DesignDocument / transaction / revision：不变
 - Design Plan / delivery ledger：状态字段不变，`activeTargetId` 从写入门禁降为捕获与展示调度提示

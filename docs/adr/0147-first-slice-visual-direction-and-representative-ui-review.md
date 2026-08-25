@@ -1,6 +1,6 @@
 # ADR-0147：首切片视觉方向前置与代表 UI 审查
 
-状态：Accepted，取代 ADR-0122 中“由宿主从已画元素反推普通 design intent / visual system”的决策，并扩展 ADR-0127 的自适应 UI 质量路径。
+状态：Accepted，取代 ADR-0122 中“由宿主从已画元素反推普通 design intent / visual system”的决策，并扩展 ADR-0127 的自适应 UI 质量路径。ADR-0152 进一步要求后续 UI target 也保持可编辑的 target-specific hierarchy，不得把代表 target 的视觉系统降级为单 Text 占位结构。
 
 ## 背景
 

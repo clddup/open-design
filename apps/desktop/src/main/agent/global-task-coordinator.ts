@@ -1212,6 +1212,7 @@ export class GlobalTaskCoordinator {
         "Image placement requires the planned artboard Frame to be created first",
       );
     }
+    assertFocusedUiTargetWrites(state, [target.delivery.targetId]);
     if (
       parentId !== target.planned.artboard.frameId &&
       (parentId === null || !target.artboardDescendantIds.has(parentId))
@@ -1254,6 +1255,8 @@ export class GlobalTaskCoordinator {
         "Material design commands must target a declared delivery artboard",
       );
     }
+    assertFocusedUiTargetWrites(state, targetIds);
+    assertUiDraftIsNotFlattened(resolvedInput, state, targetIds);
     assertApplyUsesNewNodeIdNamespace(
       resolvedInput,
       this.#inspectionsByRunId.get(context.runId),
@@ -1352,6 +1355,8 @@ export class GlobalTaskCoordinator {
         "design_workflow.material_write_required: Compact first-slice input must create real editable content inside the first allocated target",
       );
     }
+    assertFocusedUiTargetWrites(state, targetIds);
+    assertUiDraftIsNotFlattened(resolvedInput, state, targetIds);
     assertApplyUsesNewNodeIdNamespace(
       resolvedInput,
       this.#inspectionsByRunId.get(context.runId),
@@ -1507,6 +1512,7 @@ export class GlobalTaskCoordinator {
       );
     }
     const targetIds = [...targets];
+    assertFocusedUiTargetWrites(state, targetIds);
     assertDeliveryAcceptsMaterialWrites(state);
     return targetIds;
   }
@@ -2592,6 +2598,76 @@ function assertDeliveryAcceptsMaterialWrites(state: DesignWorkflowState): void {
     throw new Error(
       "design_workflow.delivery_already_verified: Every planned target is already verified; amend the plan before applying more material changes",
     );
+  }
+}
+
+function assertFocusedUiTargetWrites(
+  state: DesignWorkflowState,
+  targetIds: readonly string[],
+): void {
+  if (state.plan.deliverable !== "ui" || targetIds.length === 0) return;
+  const activeTarget = nextIncompleteTarget(state);
+  if (!activeTarget) return;
+  if (
+    targetIds.length === 1 &&
+    activeTarget.delivery.targetId === targetIds[0]
+  ) {
+    return;
+  }
+  throw new Error(
+    `design_workflow.active_ui_target_required: Complete the current UI target ${activeTarget.delivery.targetId} before writing another artboard; create one target-specific editable hierarchy, capture it, and then continue to the next target instead of bulk-filling several screens`,
+  );
+}
+
+function assertUiDraftIsNotFlattened(
+  input: DesignApplyToolInput,
+  state: DesignWorkflowState,
+  targetIds: readonly string[],
+): void {
+  if (state.plan.deliverable !== "ui") return;
+  const insertedParents = new Map(
+    input.commands.flatMap((command) =>
+      command.type === "insert_element"
+        ? [[command.node.id, command.parentId] as const]
+        : [],
+    ),
+  );
+  for (const targetId of targetIds) {
+    const target = state.targetsById.get(targetId);
+    if (
+      !target ||
+      target.planned.artboard.mode !== "create" ||
+      (target.delivery.status !== "pending" &&
+        target.delivery.status !== "allocated")
+    ) {
+      continue;
+    }
+    const authoredLeaves = input.commands.filter(
+      (
+        command,
+      ): command is Extract<
+        DesignApplyToolInput["commands"][number],
+        { type: "insert_element" }
+      > =>
+        command.type === "insert_element" &&
+        command.node.kind !== "frame" &&
+        command.node.kind !== "group" &&
+        command.node.kind !== "slice" &&
+        parentChainReaches(
+          command.parentId,
+          target.planned.artboard.frameId,
+          insertedParents,
+          target.artboardDescendantIds,
+        ),
+    );
+    if (
+      authoredLeaves.length === 1 &&
+      authoredLeaves[0]?.node.kind === "text"
+    ) {
+      throw new Error(
+        `design_workflow.ui_draft_structure_incomplete: UI target ${targetId} cannot be flattened into one multiline Text layer; realize its planned hierarchy as separate editable labels, controls, content surfaces, and target-specific visual elements before committing the first draft`,
+      );
+    }
   }
 }
 

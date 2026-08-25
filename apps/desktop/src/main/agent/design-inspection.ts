@@ -236,8 +236,38 @@ export function assertDeliveryTargetStructure(
       );
     }
   }
+  assertUiTargetHasEditableComposition(inspection, target, plan);
   assertLogoExplorationEvidence(inspection, target, plan);
   return inspectDeclaredComponentStrategy(inspection, target, plan);
+}
+
+function assertUiTargetHasEditableComposition(
+  inspection: InspectedHierarchy,
+  target: DesignDeliveryTargetState,
+  plan: DesignPlanToolInput,
+): void {
+  if (plan.deliverable !== "ui" || target.planned.artboard.mode !== "create") {
+    return;
+  }
+  const pending = [target.planned.artboard.frameId];
+  const visited = new Set<string>();
+  const leafKinds: string[] = [];
+  while (pending.length > 0) {
+    const nodeId = pending.pop();
+    if (!nodeId || visited.has(nodeId)) continue;
+    visited.add(nodeId);
+    const node = inspection.nodesById.get(nodeId);
+    if (!node) continue;
+    if (node.kind === "frame" || node.kind === "group") {
+      pending.push(...node.childIds);
+      continue;
+    }
+    if (node.kind !== "slice") leafKinds.push(node.kind);
+  }
+  if (leafKinds.length !== 1 || leafKinds[0] !== "text") return;
+  throw new Error(
+    `design_workflow.ui_draft_structure_incomplete: UI target ${target.delivery.targetId} cannot be flattened into one Text layer; headings, controls, rows, navigation, data, and target-specific visual elements must remain separately editable`,
+  );
 }
 
 function assertLogoExplorationEvidence(
