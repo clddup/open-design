@@ -165,6 +165,7 @@ function collapseRecoverableFailures(
     );
     const firstFailure = orderedFailures[0];
     const lastFailure = orderedFailures.at(-1);
+    if (!firstFailure || !lastFailure) continue;
     const recovered = items.some(
       (item) =>
         item.runId === runId &&

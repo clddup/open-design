@@ -19,8 +19,15 @@ export function groupAgentTimelineItems(
 
   const flushTools = () => {
     if (tools.length === 1) {
-      entries.push({ type: "item", item: tools[0] });
+      const item = tools[0];
+      if (item) entries.push({ type: "item", item });
     } else if (tools.length > 1) {
+      const first = tools[0];
+      const last = tools.at(-1);
+      if (!first || !last) {
+        tools = [];
+        return;
+      }
       const state = tools.some((item) =>
         ["active", "queued", "stopping"].includes(item.state),
       )
@@ -28,7 +35,7 @@ export function groupAgentTimelineItems(
         : "done";
       entries.push({
         type: "tool-group",
-        id: `tool-group:${tools[0].id}:${tools.at(-1).id}`,
+        id: `tool-group:${first.id}:${last.id}`,
         items: tools,
         state,
         title: t(
