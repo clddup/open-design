@@ -446,6 +446,61 @@ describe("AgentTimeline", () => {
     expect(screen.queryByText("Live response")).not.toBeInTheDocument();
   });
 
+  it("renders completed assistant Markdown without executing HTML or loading remote images", () => {
+    const { container } = render(
+      <AgentTimeline
+        activeRunId={null}
+        conversationId="conversation_1"
+        conversationTitle="Conversation"
+        error={null}
+        events={[]}
+        onStop={vi.fn()}
+        onSubmit={vi.fn().mockResolvedValue(true)}
+        timeline={[
+          {
+            itemId: "message:markdown",
+            sessionId: "conversation_1",
+            runId: "run_markdown",
+            sequence: 1,
+            createdAt: now,
+            updatedAt: now,
+            type: "assistant.message",
+            messageId: "message_markdown",
+            blocks: [
+              {
+                blockId: "block_markdown",
+                type: "text",
+                text: [
+                  "**登录页**",
+                  "",
+                  "- 邮箱与密码",
+                  "- `记住登录`",
+                  "",
+                  "[外部链接](https://example.com)",
+                  "",
+                  "<script>window.compromised = true</script>",
+                  "",
+                  "![remote](https://example.com/tracker.png)",
+                ].join("\n"),
+              },
+            ],
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("登录页").tagName).toBe("STRONG");
+    expect(
+      container.querySelector("[data-agent-message-markdown] ul"),
+    ).toHaveTextContent("邮箱与密码");
+    expect(screen.getByText("记住登录").tagName).toBe("CODE");
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+    expect(container.querySelector("script")).toBeNull();
+    expect(container).not.toHaveTextContent("window.compromised");
+    expect(container).not.toHaveTextContent("**登录页**");
+  });
+
   it("keeps a live reply before the next optimistic user message", () => {
     const userMessage = (
       runId: string,
@@ -564,10 +619,8 @@ describe("AgentTimeline", () => {
     );
 
     expect(
-      container.querySelectorAll("[data-agent-message] p")[1],
-    ).toHaveTextContent(
-      "Complete opening paragraph. - First point - Final point",
-    );
+      container.querySelectorAll("[data-agent-message]")[1],
+    ).toHaveTextContent("Complete opening paragraph. First point Final point");
   });
 
   it("shows native design tools as one user-facing canvas activity", () => {
@@ -1935,7 +1988,7 @@ describe("AgentTimeline", () => {
     ).toBeInTheDocument();
     const caret = container.querySelector("[data-agent-caret]");
     expect(caret).toBeInTheDocument();
-    expect(caret?.parentElement?.tagName).toBe("P");
+    expect(caret?.parentElement).toHaveAttribute("data-agent-message-markdown");
     await user.click(screen.getByRole("button", { name: "Stop" }));
     expect(onStop).toHaveBeenCalledOnce();
     expect(screen.getByText("Stopping request")).toBeInTheDocument();

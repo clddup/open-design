@@ -8,7 +8,6 @@ const scope = () => ({
   version: 1 as const,
   deliverable: "ui" as const,
   objective: "Design the complete product experience",
-  pageStrategy: "separate-pages" as const,
   targets: [
     {
       targetId: "login",
@@ -49,6 +48,21 @@ describe("delivery scope contract", () => {
     );
   });
 
+  it("rejects Page organization as a delivery-scope concern", () => {
+    const parsed = DeliveryScopeContract.parse({
+      ...scope(),
+      pageStrategy: "separate-pages",
+    });
+    expect(parsed.ok).toBe(false);
+    if (parsed.ok) throw new Error("Expected Page strategy rejection");
+    expect(parsed.issues).toContainEqual(
+      expect.objectContaining({
+        code: "delivery_scope.schema_invalid",
+        path: "/pageStrategy",
+      }),
+    );
+  });
+
   it("projects the actual target list into the approval card", () => {
     expect(
       deliveryScopeApprovalPrompt(scope(), {
@@ -57,7 +71,25 @@ describe("delivery scope contract", () => {
     ).toEqual({
       title: "确认交付计划（2 项）",
       summary:
-        "1. 登录与注册 — 完成账户进入与注册流程\n2. 首页 — 呈现核心入口与当前状态\n\n本次不包含: 后台管理",
+        "将在当前 Page 创建 2 个画板。\n\n1. 登录与注册 — 完成账户进入与注册流程\n2. 首页 — 呈现核心入口与当前状态\n\n本次不包含: 后台管理",
     });
+  });
+
+  it("treats 24 delivery targets as artboards instead of Page requests", () => {
+    const broadScope = scope();
+    broadScope.targets = Array.from({ length: 24 }, (_, index) => ({
+      targetId: `screen-${index + 1}`,
+      label: `界面 ${index + 1}`,
+      objective: `完成产品界面 ${index + 1} 的完整设计`,
+      requiredContent: [`界面 ${index + 1} 的核心内容`],
+    }));
+
+    const parsed = DeliveryScopeContract.parse(broadScope);
+    expect(parsed.ok).toBe(true);
+    expect(
+      deliveryScopeApprovalPrompt(broadScope, {
+        prompt: "根据完整 PRD 设计 24 个界面",
+      }).summary,
+    ).toContain("将在当前 Page 创建 24 个画板。");
   });
 });

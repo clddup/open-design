@@ -11,5 +11,22 @@
 
 .group {
   display: flex;
+  align-items: center;
   gap: 1px;
+}
+
+.toolPicker {
+  display: flex;
+  align-items: center;
+  gap: 0;
+
+  > :global(.ui-icon-button:first-child) {
+    width: 24px;
+    border-radius: var(--ui-radius-sm) 2px 2px var(--ui-radius-sm);
+  }
+
+  > :global(.ui-icon-button:last-child) {
+    width: 14px;
+    border-radius: 2px var(--ui-radius-sm) var(--ui-radius-sm) 2px;
+  }
 }

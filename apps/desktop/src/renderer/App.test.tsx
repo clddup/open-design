@@ -415,6 +415,14 @@ function runtimeOutput() {
   return screen.getByLabelText("Runtime state");
 }
 
+async function chooseShapeTool(
+  user: ReturnType<typeof userEvent.setup>,
+  name: string,
+) {
+  await user.click(screen.getByRole("button", { name: "Shape tools" }));
+  await user.click(screen.getByRole("menuitem", { name }));
+}
+
 async function openWorkspaceProject(
   user: ReturnType<typeof userEvent.setup>,
   projectName: string | RegExp,
@@ -2078,6 +2086,12 @@ describe("App", () => {
     expect(
       screen.getByRole("button", { name: "Rectangle (R)" }),
     ).toHaveAttribute("aria-pressed", "true");
+    expect(
+      screen.queryByRole("button", { name: "Ellipse (O)" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Shape tools" }),
+    ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Pen (P)" }));
     expect(screen.getByRole("button", { name: "Pen (P)" })).toHaveAttribute(
       "aria-pressed",
@@ -2535,7 +2549,7 @@ describe("App", () => {
       Object.keys(runtime().getSnapshot().document.nodesById),
     );
 
-    await user.click(screen.getByRole("button", { name: "Line (L)" }));
+    await chooseShapeTool(user, "Line");
     expect(runtimeOutput()).toHaveAttribute("data-tool", "line");
     act(() => {
       leaferCallbacks().onCreate({
@@ -2696,7 +2710,7 @@ describe("App", () => {
       Object.keys(runtime().getSnapshot().document.nodesById),
     );
 
-    await user.click(screen.getByRole("button", { name: "Polygon" }));
+    await chooseShapeTool(user, "Polygon");
     expect(runtimeOutput()).toHaveAttribute("data-tool", "polygon");
     act(() => {
       leaferCallbacks().onCreate({
@@ -2723,7 +2737,7 @@ describe("App", () => {
     expect(snapshot.state.selection.nodeIds).toEqual([polygonId]);
     expect(snapshot.state.tool).toBe("select");
 
-    await user.click(screen.getByRole("button", { name: "Star" }));
+    await chooseShapeTool(user, "Star");
     act(() => {
       leaferCallbacks().onCreate({
         dragged: true,

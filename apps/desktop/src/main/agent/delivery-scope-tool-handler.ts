@@ -31,10 +31,7 @@ export function handleDeliveryScopeTool(
       ok: true,
       status: "confirmed",
       deliveryScope: scope,
-      nextAction:
-        scope.pageStrategy === "separate-pages" && scope.targets.length > 1
-          ? "request-page-structure-access"
-          : "define-executable-plan",
+      nextAction: "define-executable-plan",
     },
   };
 }

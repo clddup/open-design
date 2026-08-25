@@ -22,6 +22,7 @@ import type { AgentTimelineItem, Translate } from "../timeline-types";
 import { useAgentComposerController } from "../use-agent-composer-controller";
 import { useI18n } from "../../../i18n";
 import { AgentComposer } from "./AgentComposer";
+import { AgentMessageMarkdown } from "./AgentMessageMarkdown";
 import { AgentRunStatus } from "./AgentRunStatus";
 import { ConversationActions } from "./ConversationActions";
 import styles from "./AgentTimeline.module.scss";
@@ -438,19 +439,15 @@ export function AgentTimeline({
                     data-agent-message=""
                     title={item.time}
                   >
-                    {(item.detail || item.state === "active") && (
-                      <p>
-                        {item.detail}
-                        {item.kind === "assistant" &&
-                          item.state === "active" && (
-                            <span
-                              aria-hidden="true"
-                              className={styles.messageCaret}
-                              data-agent-caret=""
-                            />
-                          )}
-                      </p>
-                    )}
+                    {(item.detail || item.state === "active") &&
+                      (item.kind === "assistant" ? (
+                        <AgentMessageMarkdown
+                          content={item.detail ?? ""}
+                          streaming={item.state === "active"}
+                        />
+                      ) : (
+                        <p>{item.detail}</p>
+                      ))}
                     {item.kind === "assistant" && (
                       <ReasoningDisclosure
                         item={{

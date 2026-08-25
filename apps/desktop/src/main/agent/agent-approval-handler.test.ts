@@ -11,7 +11,6 @@ const scope: DesignDeliveryScope = {
   version: 1,
   deliverable: "ui",
   objective: "Design the complete product",
-  pageStrategy: "separate-pages",
   targets: [
     {
       targetId: "home",

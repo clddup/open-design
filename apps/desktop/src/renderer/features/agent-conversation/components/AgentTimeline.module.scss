@@ -148,7 +148,7 @@
   font-size: 11px;
   line-height: 1.58;
 
-  p {
+  > p {
     margin: 0;
     overflow-wrap: anywhere;
     white-space: pre-wrap;
@@ -226,22 +226,6 @@
 @media (prefers-reduced-motion: reduce) {
   .reasoningChevron {
     transition: none;
-  }
-}
-
-.messageCaret {
-  display: inline-block;
-  width: 5px;
-  height: 12px;
-  margin-left: 2px;
-  vertical-align: -2px;
-  background: var(--ui-accent);
-  animation: caret 900ms steps(1) infinite;
-}
-
-@keyframes caret {
-  50% {
-    opacity: 0;
   }
 }
 

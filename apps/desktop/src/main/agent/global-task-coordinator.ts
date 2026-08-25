@@ -28,7 +28,6 @@ import type { ProjectHost } from "../project/project-host.js";
 import type { WorkspaceStore } from "../project/workspace-store.js";
 import {
   DESIGN_ARRANGE_TOOL_NAME,
-  designPlanBriefFidelity,
   designApplyRequiresPlan,
   activeVisualReferenceIds,
   designPlanComponentStrategy,
@@ -527,26 +526,18 @@ export class GlobalTaskCoordinator {
     const existingPlan = this.#designPlansByRunId.get(context.runId);
     const binding = this.#toolBindingsByRunId.get(context.runId);
     if (!binding) throw new Error("Design plan requires an active Run");
-    const targets = designPlanTargets(plan);
-    assertPlanMatchesReviewedScope(
+    const executablePlan = bindPlanToReviewedScope(
       binding.deliveryScopeReview,
       this.#deliveryScopesByRunId.get(context.runId),
       plan,
-      targets,
     );
-    const pageAccess = this.#pageStructureAccessByRunId.get(context.runId);
-    if (
-      pageAccess?.actions.has("create-page") &&
-      !pageAccess.completedActions.has("create") &&
-      targets.length > 1 &&
-      new Set(targets.map((target) => target.pageId)).size === 1
-    ) {
-      throw new Error(
-        "design_workflow.page_creation_required: Create the approved Pages successfully, inspect the current Design File, and bind each requested Page target before defining a multi-target plan; do not replace separate Pages with Frames on one Page",
-      );
-    }
+    const targets = designPlanTargets(executablePlan);
     const recoverableDelivery = this.getRecoverableDelivery(context);
-    assertPlanUsesNewNodeIdNamespace(plan, inspection, recoverableDelivery);
+    assertPlanUsesNewNodeIdNamespace(
+      executablePlan,
+      inspection,
+      recoverableDelivery,
+    );
     if (
       binding.mutationTarget.kind === "page" &&
       !this.hasPageStructureAccess(context.runId)
@@ -565,8 +556,8 @@ export class GlobalTaskCoordinator {
         "Design plan target Page is missing from the current document inspection",
       );
     }
-    if (plan.outputMode === "single-raster") {
-      const evidence = plan.singleRasterEvidence;
+    if (executablePlan.outputMode === "single-raster") {
+      const evidence = executablePlan.singleRasterEvidence;
       if (
         !evidence ||
         !binding.prompt.includes(evidence) ||
@@ -578,13 +569,13 @@ export class GlobalTaskCoordinator {
       }
     }
     assertDeclaredReferencesAuthorizedForRun(
-      designPlanReferenceStrategy(plan),
+      designPlanReferenceStrategy(executablePlan),
       binding.imageAttachments,
     );
     const registration = registerDesignWorkflowPlan({
       existing: existingPlan,
       inspection,
-      plan,
+      plan: executablePlan,
       recoverableDelivery,
     });
     this.#designPlansByRunId.set(context.runId, registration.state);
@@ -592,7 +583,7 @@ export class GlobalTaskCoordinator {
       this.#generatedRasterRolesByRunId.get(context.runId) ??
       new Map<string, RasterAssetRole>();
     for (const [attachmentId, role] of generatedRoles) {
-      if (!plan.rasterAssetRoles.includes(role)) {
+      if (!executablePlan.rasterAssetRoles.includes(role)) {
         generatedRoles.delete(attachmentId);
       }
     }
@@ -2693,19 +2684,18 @@ function sameScope(left: SelectionScope, right: SelectionScope): boolean {
   );
 }
 
-function assertPlanMatchesReviewedScope(
+function bindPlanToReviewedScope(
   reviewMode: "direct" | "required",
   scope: DesignDeliveryScope | undefined,
   plan: DesignPlanToolInput,
-  targets: readonly DesignPlanTarget[],
-): void {
+): DesignPlanToolInput {
   if (scope === undefined) {
     if (reviewMode === "required") {
       throw new Error(
         "design_workflow.delivery_scope_review_required: This broad brief requires a user-confirmed delivery plan before Page creation, executable planning, or canvas writes",
       );
     }
-    return;
+    return plan;
   }
   const mismatch = (message: string): never => {
     throw new Error(
@@ -2717,11 +2707,7 @@ function assertPlanMatchesReviewedScope(
       `Deliverable ${plan.deliverable} does not match confirmed ${scope.deliverable}`,
     );
   }
-  if (plan.objective !== scope.objective) {
-    mismatch(
-      "Executable Plan objective does not match the confirmed objective",
-    );
-  }
+  const targets = designPlanTargets(plan);
   if (targets.length !== scope.targets.length) {
     mismatch(
       `Executable Plan has ${targets.length} targets but ${scope.targets.length} were confirmed`,
@@ -2729,47 +2715,30 @@ function assertPlanMatchesReviewedScope(
   }
   for (const [index, confirmed] of scope.targets.entries()) {
     const target = targets[index];
-    if (
-      !target ||
-      target.targetId !== confirmed.targetId ||
-      target.label !== confirmed.label ||
-      target.objective !== confirmed.objective
-    ) {
+    if (!target || target.targetId !== confirmed.targetId) {
       mismatch(`Target ${index + 1} does not match ${confirmed.label}`);
     }
   }
-  const pageIds = new Set(targets.map((target) => target.pageId));
-  if (
-    scope.pageStrategy === "separate-pages" &&
-    pageIds.size !== targets.length
-  ) {
-    mismatch("Confirmed separate-page targets do not use distinct Pages");
+  const bound = structuredClone(plan);
+  bound.objective = scope.objective;
+  for (const [index, confirmed] of scope.targets.entries()) {
+    const target = bound.targets[index];
+    if (!target) mismatch(`Target ${index + 1} is missing`);
+    target.label = confirmed.label;
+    target.objective = confirmed.objective;
   }
-  if (scope.pageStrategy === "current-page-artboards" && pageIds.size !== 1) {
-    mismatch("Confirmed current-Page artboards were spread across Pages");
-  }
-  const fidelity = designPlanBriefFidelity(plan);
-  if (!fidelity) mismatch("Executable Plan is missing brief fidelity");
-  const required = new Set(fidelity.requiredContent);
-  for (const content of scope.targets.flatMap(
-    (target) => target.requiredContent,
-  )) {
-    if (!required.has(content)) {
-      mismatch(`Confirmed required content ${content} is missing`);
-    }
-  }
-  const prohibited = new Set(fidelity.prohibitedAdditions);
-  for (const exclusion of scope.exclusions) {
-    if (!prohibited.has(exclusion)) {
-      mismatch(`Confirmed exclusion ${exclusion} is missing`);
-    }
-  }
-  const assumptions = new Set(fidelity.assumptions);
-  for (const assumption of scope.assumptions) {
-    if (!assumptions.has(assumption)) {
-      mismatch(`Confirmed assumption ${assumption} is missing`);
-    }
-  }
+  bound.briefFidelity = {
+    ...bound.briefFidelity,
+    requiredContent: scope.targets.flatMap((target) => target.requiredContent),
+    prohibitedAdditions: Array.from(
+      new Set([
+        ...bound.briefFidelity.prohibitedAdditions,
+        ...scope.exclusions,
+      ]),
+    ),
+    assumptions: [...scope.assumptions],
+  };
+  return bound;
 }
 
 function sameValue(left: unknown, right: unknown): boolean {

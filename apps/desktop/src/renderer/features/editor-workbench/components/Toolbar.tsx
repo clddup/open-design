@@ -9,6 +9,7 @@ import {
   IconButton,
   type IconName,
 } from "@opendesign/ui";
+import { useEffect, useState } from "react";
 import type { MessageKey } from "@/shared/i18n/messages";
 import { useI18n } from "../../../i18n";
 import type { Tool } from "../../../state/editor";
@@ -21,15 +22,19 @@ type ToolbarItem = {
   shortcut?: string;
 };
 
-const tools: ToolbarItem[] = [
-  {
-    id: "select",
-    label: "toolbar.select",
-    icon: "lucide:mouse-pointer-2",
-    shortcut: "V",
-  },
+const selectionTool: ToolbarItem = {
+  id: "select",
+  label: "toolbar.select",
+  icon: "lucide:mouse-pointer-2",
+  shortcut: "V",
+};
+
+const frameTools: ToolbarItem[] = [
   { id: "frame", label: "toolbar.frame", icon: "lucide:frame", shortcut: "F" },
   { id: "slice", label: "toolbar.slice", icon: "lucide:frame", shortcut: "S" },
+];
+
+const shapeTools: ToolbarItem[] = [
   {
     id: "rectangle",
     label: "toolbar.rectangle",
@@ -51,6 +56,9 @@ const tools: ToolbarItem[] = [
   },
   { id: "polygon", label: "toolbar.polygon", icon: "lucide:pentagon" },
   { id: "star", label: "toolbar.star", icon: "lucide:star" },
+];
+
+const directCreationTools: ToolbarItem[] = [
   {
     id: "pen",
     label: "toolbar.pen",
@@ -258,20 +266,118 @@ export function Toolbar({
         role="group"
         aria-label={t("toolbar.canvasTools")}
       >
-        {tools.map((item) => (
-          <IconButton
-            icon={item.icon}
+        <ToolButton
+          item={selectionTool}
+          onToolChange={onToolChange}
+          tool={tool}
+        />
+        <ToolPicker
+          defaultTool="frame"
+          items={frameTools}
+          label={t("toolbar.frameTools")}
+          onToolChange={onToolChange}
+          tool={tool}
+        />
+        <ToolPicker
+          defaultTool="rectangle"
+          items={shapeTools}
+          label={t("toolbar.shapeTools")}
+          onToolChange={onToolChange}
+          tool={tool}
+        />
+        {directCreationTools.map((item) => (
+          <ToolButton
+            item={item}
             key={item.id}
-            label={
-              item.shortcut
-                ? `${t(item.label)} (${item.shortcut})`
-                : t(item.label)
-            }
-            onClick={() => onToolChange(item.id)}
-            selected={tool === item.id}
+            onToolChange={onToolChange}
+            tool={tool}
           />
         ))}
       </div>
     </nav>
   );
+}
+
+function ToolButton({
+  item,
+  onToolChange,
+  tool,
+}: {
+  item: ToolbarItem;
+  onToolChange: (tool: Tool) => void;
+  tool: Tool;
+}) {
+  const { t } = useI18n();
+  return (
+    <IconButton
+      icon={item.icon}
+      label={toolLabel(item, t)}
+      onClick={() => onToolChange(item.id)}
+      selected={tool === item.id}
+    />
+  );
+}
+
+function ToolPicker({
+  defaultTool,
+  items,
+  label,
+  onToolChange,
+  tool,
+}: {
+  defaultTool: Tool;
+  items: readonly ToolbarItem[];
+  label: string;
+  onToolChange: (tool: Tool) => void;
+  tool: Tool;
+}) {
+  const { t } = useI18n();
+  const activeItem = items.find((item) => item.id === tool);
+  const [recentTool, setRecentTool] = useState<Tool>(defaultTool);
+
+  useEffect(() => {
+    if (activeItem) setRecentTool(activeItem.id);
+  }, [activeItem]);
+
+  const recentItem = items.find((item) => item.id === recentTool) ?? items[0];
+  if (!recentItem) return null;
+
+  const selectTool = (item: ToolbarItem) => {
+    setRecentTool(item.id);
+    onToolChange(item.id);
+  };
+
+  return (
+    <div aria-label={label} className={styles.toolPicker} role="group">
+      <IconButton
+        icon={recentItem.icon}
+        label={toolLabel(recentItem, t)}
+        onClick={() => selectTool(recentItem)}
+        selected={Boolean(activeItem)}
+      />
+      <DropdownMenu
+        contentProps={{ align: "start", alignOffset: -24 }}
+        icon={<Icon name="lucide:chevron-down" size={11} />}
+        label={label}
+      >
+        {items.map((item) => (
+          <DropdownMenuItem
+            icon={<Icon name={item.icon} />}
+            key={item.id}
+            onSelect={() => selectTool(item)}
+            shortcut={item.shortcut}
+          >
+            {t(item.label)}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenu>
+    </div>
+  );
+}
+
+function toolLabel(
+  item: ToolbarItem,
+  t: ReturnType<typeof useI18n>["t"],
+): string {
+  return item.shortcut ? `${t(item.label)} (${item.shortcut})` : t(item.label);
 }

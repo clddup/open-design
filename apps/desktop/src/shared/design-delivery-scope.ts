@@ -27,10 +27,6 @@ export const DESIGN_DELIVERY_SCOPE_TOOL_INPUT_SCHEMA = Type.Object(
     version: Type.Literal(1),
     deliverable: deliverableSchema,
     objective: text(1, 1_000),
-    pageStrategy: Type.Union([
-      Type.Literal("current-page-artboards"),
-      Type.Literal("separate-pages"),
-    ]),
     targets: Type.Array(
       Type.Object(
         {
@@ -63,7 +59,7 @@ export const DESIGN_DELIVERY_SCOPE_TOOL_INPUT_SCHEMA = Type.Object(
   {
     ...CLOSED,
     description:
-      "User-visible delivery scope for a broad brief. Each target is one independently verifiable deliverable, not a section, layer, or decorative variant.",
+      "User-visible delivery scope for a broad brief. Each target is one independently verifiable artboard deliverable, not a document Page, section, layer, or decorative variant. Delivery scope never grants or requests Page lifecycle changes.",
   },
 );
 
@@ -78,7 +74,6 @@ export type DesignDeliveryScope = {
     | "presentation-visual"
     | "other";
   objective: string;
-  pageStrategy: "current-page-artboards" | "separate-pages";
   targets: Array<{
     targetId: string;
     label: string;
@@ -138,11 +133,14 @@ export function deliveryScopeApprovalPrompt(
       : `\n\n${chinese ? "本次不包含" : "Not included"}: ${scope.exclusions.join(
           chinese ? "；" : "; ",
         )}`;
+  const organization = chinese
+    ? `将在当前 Page 创建 ${scope.targets.length} 个画板。`
+    : `${scope.targets.length} artboard${scope.targets.length === 1 ? "" : "s"} will be created on the current Page.`;
   return {
     title: chinese
       ? `确认交付计划（${scope.targets.length} 项）`
       : `Confirm delivery plan (${scope.targets.length})`,
-    summary: `${targets}${boundary}`.slice(0, 20_000),
+    summary: `${organization}\n\n${targets}${boundary}`.slice(0, 20_000),
   };
 }
 

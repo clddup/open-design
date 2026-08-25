@@ -1,0 +1,135 @@
+.root {
+  min-width: 0;
+  overflow-wrap: anywhere;
+
+  > :first-child {
+    margin-top: 0;
+  }
+
+  > :last-child:not(.caret) {
+    margin-bottom: 0;
+  }
+
+  &[data-streaming="true"] > :nth-last-child(2) {
+    display: inline;
+    margin-bottom: 0;
+  }
+
+  p {
+    margin: 0 0 8px;
+  }
+
+  strong {
+    color: var(--ui-text);
+    font-weight: 650;
+  }
+
+  ul,
+  ol {
+    margin: 4px 0 8px;
+    padding-left: 18px;
+  }
+
+  li {
+    padding-left: 1px;
+
+    + li {
+      margin-top: 2px;
+    }
+
+    > p {
+      margin: 0;
+    }
+  }
+
+  blockquote {
+    margin: 7px 0;
+    padding-left: 9px;
+    border-left: 2px solid var(--ui-border-strong);
+    color: var(--ui-text-muted);
+  }
+
+  code {
+    padding: 1px 4px;
+    border-radius: 3px;
+    color: var(--ui-text);
+    background: var(--ui-surface-sunken);
+    font-family: var(--ui-mono);
+    font-size: 0.92em;
+  }
+
+  pre {
+    max-width: 100%;
+    overflow: auto;
+    margin: 7px 0;
+    padding: 8px 9px;
+    border: 1px solid var(--ui-border-subtle);
+    border-radius: 5px;
+    background: var(--ui-surface-sunken);
+    scrollbar-width: thin;
+
+    code {
+      padding: 0;
+      background: transparent;
+      white-space: pre;
+    }
+  }
+
+  table {
+    display: block;
+    max-width: 100%;
+    overflow: auto;
+    margin: 7px 0;
+    border-collapse: collapse;
+    scrollbar-width: thin;
+  }
+
+  th,
+  td {
+    padding: 4px 6px;
+    border: 1px solid var(--ui-border);
+    text-align: left;
+    white-space: nowrap;
+  }
+
+  th {
+    color: var(--ui-text);
+    background: var(--ui-surface-sunken);
+    font-weight: 600;
+  }
+
+  hr {
+    margin: 9px 0;
+    border: 0;
+    border-top: 1px solid var(--ui-border);
+  }
+}
+
+.link {
+  color: var(--ui-accent-text);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
+  text-underline-offset: 2px;
+}
+
+.caret {
+  display: inline-block;
+  width: 5px;
+  height: 12px;
+  margin-left: 2px;
+  vertical-align: -2px;
+  background: var(--ui-accent);
+  animation: caret 900ms steps(1) infinite;
+}
+
+@keyframes caret {
+  50% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .caret {
+    animation: none;
+  }
+}

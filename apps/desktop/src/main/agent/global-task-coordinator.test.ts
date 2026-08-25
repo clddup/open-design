@@ -2686,6 +2686,38 @@ describe("GlobalTaskCoordinator", () => {
       inspectionResult(opened.document, pageId),
     );
     const plan = multiTargetPlan(pageId);
+    const targetTemplate = plan.targets[0];
+    if (!targetTemplate) throw new Error("Target template is missing");
+    plan.objective = "Design the complete 24-screen product suite";
+    plan.targets = Array.from({ length: 24 }, (_, index) => {
+      const frameId = `frame_screen_${index + 1}`;
+      return {
+        ...structuredClone(targetTemplate),
+        targetId: `target_screen_${index + 1}`,
+        label: `Screen ${index + 1}`,
+        objective: `Design product screen ${index + 1}`,
+        artboard: {
+          ...targetTemplate.artboard,
+          frameId,
+          x: 120 + (index % 6) * 438,
+          y: 80 + Math.floor(index / 6) * 892,
+        },
+        composition: {
+          ...structuredClone(targetTemplate.composition),
+          regions: targetTemplate.composition.regions.map((region) => ({
+            ...region,
+            nodeId: `${frameId}_content`,
+          })),
+        },
+        qualityProfile: {
+          ...structuredClone(targetTemplate.qualityProfile),
+          safeAreaNodeIds: [`${frameId}_content`],
+        },
+      };
+    });
+    plan.briefFidelity.requiredContent = plan.targets.map(
+      (_, index) => `Screen ${index + 1} content`,
+    );
     expect(() => coordinator.registerDesignPlan(context, plan)).toThrow(
       "delivery_scope_review_required",
     );
@@ -2694,12 +2726,11 @@ describe("GlobalTaskCoordinator", () => {
       version: 1 as const,
       deliverable: plan.deliverable,
       objective: plan.objective,
-      pageStrategy: "current-page-artboards" as const,
       targets: plan.targets.map((target) => ({
         targetId: target.targetId,
         label: target.label,
         objective: target.objective,
-        requiredContent: ["Home and Profile screens"],
+        requiredContent: [`${target.label} content`],
       })),
       exclusions: ["No unrequested product capability"],
       assumptions: ["Use an iOS safe area"],
@@ -2729,18 +2760,44 @@ describe("GlobalTaskCoordinator", () => {
         reviewedScope,
       ),
     ).toThrow("delivery_scope_already_reviewed");
+    plan.objective = "Paraphrased executable objective";
+    const firstPlanTarget = plan.targets[0];
+    if (!firstPlanTarget) throw new Error("First Plan target is missing");
+    firstPlanTarget.label = "Paraphrased first screen";
+    firstPlanTarget.objective = "Paraphrased first-screen objective";
+    plan.briefFidelity.requiredContent = ["Condensed suite requirements"];
+    plan.briefFidelity.prohibitedAdditions = [];
+    plan.briefFidelity.assumptions = [];
     expect(() =>
       coordinator.registerDesignPlan(context, {
         ...plan,
         targets: plan.targets.slice(0, 1),
       }),
     ).toThrow("delivery_scope_mismatch");
-    expect(coordinator.registerDesignPlan(context, plan)).toMatchObject({
+    const registration = coordinator.registerDesignPlan(context, plan);
+    expect(registration).toMatchObject({
       status: "accepted",
       planRevision: 1,
     });
-    expect(coordinator.getDeliveryLedger(context.runId)?.targets).toHaveLength(
-      2,
+    expect(registration.plan.objective).toBe(reviewedScope.objective);
+    expect(registration.plan.targets[0]).toMatchObject({
+      label: reviewedScope.targets[0]?.label,
+      objective: reviewedScope.targets[0]?.objective,
+    });
+    expect(registration.plan.briefFidelity).toMatchObject({
+      requiredContent: reviewedScope.targets.flatMap(
+        (target) => target.requiredContent,
+      ),
+      prohibitedAdditions: reviewedScope.exclusions,
+      assumptions: reviewedScope.assumptions,
+    });
+    const ledger = coordinator.getDeliveryLedger(context.runId);
+    expect(ledger?.targets).toHaveLength(24);
+    expect(ledger?.targets[0]).toMatchObject({
+      label: reviewedScope.targets[0]?.label,
+    });
+    expect(new Set(plan.targets.map((target) => target.pageId))).toEqual(
+      new Set([pageId]),
     );
     store.close();
   });
@@ -4090,7 +4147,7 @@ describe("GlobalTaskCoordinator", () => {
     );
     expect(() =>
       coordinator.registerDesignPlan(context, multiTargetPlan(pageId)),
-    ).toThrow("page_creation_required");
+    ).not.toThrow();
     coordinator.recordPageToolCompleted(context.runId, "create");
     expect(() =>
       coordinator.registerDesignPlan(context, crossPagePlan),
