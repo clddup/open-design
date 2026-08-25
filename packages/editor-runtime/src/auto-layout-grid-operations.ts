@@ -4,8 +4,12 @@ import type {
   DesignNode,
   DesignOperation,
   GridChildPlacement,
+  GridTrack,
 } from "@opendesign/design-contracts";
-import { MAX_TRANSACTION_COMMANDS } from "@opendesign/design-contracts";
+import {
+  MAX_GRID_TRACK_VALUE,
+  MAX_TRANSACTION_COMMANDS,
+} from "@opendesign/design-contracts";
 import type { AutoLayoutOperationPlan } from "./auto-layout-operations.js";
 
 export type GridTrackAxis = "rows" | "columns";
@@ -22,6 +26,16 @@ export type GridTrackReorderPlan =
       frameId: string;
       nodeIds: string[];
       movements: GridTrackMovement[];
+    }
+  | Extract<AutoLayoutOperationPlan, { ok: false }>;
+
+export type GridTrackResizePlan =
+  | {
+      ok: true;
+      commands: DesignOperation[];
+      frameId: string;
+      nodeIds: string[];
+      track: GridTrack;
     }
   | Extract<AutoLayoutOperationPlan, { ok: false }>;
 
@@ -258,6 +272,74 @@ export function planReorderGridTracks(
     frameId,
     nodeIds: [frameId, ...affectedNodeIds],
     movements,
+  };
+}
+
+export function planResizeGridTrack(
+  document: DesignDocument,
+  pageId: string,
+  frameId: string,
+  axis: GridTrackAxis,
+  index: number,
+  value: number,
+  commandPrefix: string,
+): GridTrackResizePlan {
+  const frame = document.nodesById[frameId];
+  if (!frame) return failure("not-found", `Frame ${frameId} does not exist`);
+  if (
+    (frame.kind !== "frame" && frame.kind !== "slot") ||
+    !nodeBelongsToPage(document, pageId, frameId)
+  )
+    return failure(
+      "invalid-target",
+      `Target ${frameId} must be a Frame on Page ${pageId}`,
+    );
+  const grid = frame.properties.autoLayout;
+  if (!grid || grid.mode !== "grid")
+    return failure(
+      "invalid-target",
+      `Frame ${frameId} does not use Grid Auto Layout`,
+    );
+  if (isEffectivelyLocked(document, frameId))
+    return failure("locked", "Locked Frames cannot resize Grid tracks");
+  const tracks = grid[axis];
+  if (!Number.isInteger(index) || index < 0 || index >= tracks.length)
+    return failure(
+      "invalid-target",
+      `Grid ${axis} resize index is outside the declared tracks`,
+    );
+  if (!Number.isFinite(value) || value < 0 || value > MAX_GRID_TRACK_VALUE)
+    return failure(
+      "invalid-target",
+      `Grid track size must be between 0 and ${MAX_GRID_TRACK_VALUE} pixels`,
+    );
+  const track: GridTrack = { type: "fixed", value };
+  const current = tracks[index];
+  if (current?.type === "fixed" && current.value === value)
+    return failure(
+      "no-op",
+      `Grid ${axis} track ${index + 1} is already ${value}px`,
+    );
+  const nextTracks = tracks.map((candidate, candidateIndex) =>
+    candidateIndex === index ? track : candidate,
+  );
+  const nextGrid: Extract<AutoLayout, { mode: "grid" }> = {
+    ...grid,
+    [axis]: nextTracks,
+  };
+  return {
+    ok: true,
+    commands: [
+      {
+        commandId: `${commandPrefix}_track`,
+        type: "update_properties",
+        nodeId: frameId,
+        properties: { autoLayout: nextGrid },
+      },
+    ],
+    frameId,
+    nodeIds: [frameId, ...frame.childIds],
+    track,
   };
 }
 

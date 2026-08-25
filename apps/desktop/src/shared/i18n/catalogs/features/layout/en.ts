@@ -5,10 +5,13 @@ export const layoutMessages = {
   "history.updateAutoLayoutSizing": "Update Auto Layout sizing",
   "history.updateAutoLayoutLimits": "Update Auto Layout limits",
   "history.reorderGridTracks": "Reorder Grid tracks",
+  "history.resizeGridTrack": "Resize Grid track",
   "history.updateLayoutPositioning": "Update layout positioning",
   "history.updateLayoutGuides": "Update layout guides",
   "canvas.autoLayoutSpacingStale":
     "The selected Auto Layout changed while spacing was being adjusted. Drag the current canvas handle again.",
+  "canvas.gridTrackStale":
+    "The selected Grid changed while its track was being resized. Drag the current track edge again.",
   "agent.canvasCircuitOpen": "Canvas renderer repeatedly stalled",
   "agent.canvasCircuitOpenDetail":
     "OpenDesign stopped this task after repeated canvas stalls. Committed design revisions were preserved; restart OpenDesign before retrying visual generation.",

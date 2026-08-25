@@ -117,6 +117,7 @@ export function Canvas({
   onTextEditingStyleControllerChange,
   onTextRangeSelectionChange,
   onReorderGridTracks,
+  onResizeGridTrack,
   onResizeFrame,
   selectionActions,
   showAgentRunStatus,
@@ -177,6 +178,13 @@ export function Canvas({
     axis: "rows" | "columns",
     fromIndices: readonly number[],
     insertionIndex: number,
+  ) => boolean;
+  onResizeGridTrack: (
+    frameId: string,
+    expectedRevision: number,
+    axis: "rows" | "columns",
+    index: number,
+    value: number,
   ) => boolean;
   onResizeFrame: ResizeFrameHandler;
   selectionActions?: ReactNode;
@@ -1144,6 +1152,8 @@ export function Canvas({
       onImageCropStateChange: setImageCropState,
       onGridTrackReorder: ({ axis, frameId, fromIndices, insertionIndex }) =>
         onReorderGridTracks(frameId, axis, fromIndices, insertionIndex),
+      onGridTrackResize: ({ axis, expectedRevision, frameId, index, value }) =>
+        onResizeGridTrack(frameId, expectedRevision, axis, index, value),
       onOperations: applyOperations,
       onSelectionChange: (nodeIds, anchorNodeId, componentTarget) => {
         runtime.setSelection(nodeIds, anchorNodeId, componentTarget);
@@ -1233,6 +1243,7 @@ export function Canvas({
     exitVectorEdit,
     onImageCropControllerChange,
     onReorderGridTracks,
+    onResizeGridTrack,
     onAdjustAutoLayoutSpacing,
     onTextLayoutProviderReady,
     onTextEditingStyleControllerChange,

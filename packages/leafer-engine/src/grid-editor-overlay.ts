@@ -2,6 +2,7 @@ import {
   DEFAULT_AUTO_LAYOUT_FRAME_SIZING,
   DEFAULT_LAYOUT_SIZING,
   type DesignDocument,
+  type GridTrack,
   type Transform,
 } from "@opendesign/design-contracts";
 import {
@@ -21,11 +22,13 @@ export type GridEditorAxis = "rows" | "columns";
 
 export interface GridEditorTrackSpec {
   axis: GridEditorAxis;
+  authoredTrack: GridTrack;
   center: number;
   end: number;
   id: string;
   index: number;
   label: string;
+  resolvedSize: number;
   start: number;
 }
 
@@ -108,6 +111,7 @@ export function createGridEditorOverlayPlan(
     frame.id,
     "rows",
     resolution.rowSizes,
+    resolution.rows,
     grid.padding.top,
     grid.rowGap,
   );
@@ -115,6 +119,7 @@ export function createGridEditorOverlayPlan(
     frame.id,
     "columns",
     resolution.columnSizes,
+    grid.columns,
     grid.padding.left,
     grid.columnGap,
   );
@@ -162,6 +167,7 @@ function createTrackSpecs(
   frameId: string,
   axis: GridEditorAxis,
   sizes: readonly number[],
+  tracks: readonly GridTrack[],
   origin: number,
   gap: number,
 ): GridEditorTrackSpec[] {
@@ -172,11 +178,13 @@ function createTrackSpecs(
     cursor = end + gap;
     return {
       axis,
+      authoredTrack: tracks[index]!,
       center: (start + end) / 2,
       end,
       id: `${frameId}:${axis}:${index}`,
       index,
       label: String(index + 1),
+      resolvedSize: size,
       start,
     };
   });

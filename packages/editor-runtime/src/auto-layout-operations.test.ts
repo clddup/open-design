@@ -10,6 +10,7 @@ import {
   EditorRuntime,
   createEmptyDesignDocument,
   normalizeDesignDocument,
+  planResizeGridTrack,
   planReorderGridTracks,
   planResizeFrameWithConstraints,
   planSetFrameAutoLayout,
@@ -1765,6 +1766,109 @@ describe("Grid Auto Layout Runtime", () => {
         [99],
         0,
         "invalid_reorder",
+      ),
+    ).toMatchObject({ ok: false, code: "invalid-target" });
+    expect(runtime.getSnapshot().document.revision).toBe(revision);
+  });
+
+  it.each([
+    ["fixed", { type: "fixed" as const, value: 100 }],
+    ["fill", { type: "fill" as const, value: 1 }],
+    ["hug", { type: "hug" as const }],
+  ])(
+    "resizes a %s Grid track to fixed pixels in one reversible transaction",
+    (_label, sourceTrack) => {
+      const document = layoutDocument();
+      const frame = document.nodesById.frame;
+      if (frame?.kind !== "frame") throw new Error("missing frame");
+      frame.size = { width: 600, height: 100 };
+      frame.properties.autoLayout = {
+        mode: "grid",
+        padding: { top: 0, right: 0, bottom: 0, left: 0 },
+        rowGap: 0,
+        columnGap: 0,
+        rows: [{ type: "fixed", value: 100 }],
+        columns: [sourceTrack, { type: "fixed", value: 100 }],
+        itemsPositioning: "row-auto-flow",
+      };
+      delete document.nodesById.one!.constraints;
+      const runtime = new EditorRuntime(normalizeDesignDocument(document));
+      const before = runtime.getSnapshot().document.revision;
+      const plan = planResizeGridTrack(
+        runtime.getSnapshot().document,
+        "page_layout",
+        "frame",
+        "columns",
+        0,
+        180,
+        "resize_column",
+      );
+      if (!plan.ok) throw new Error(plan.message);
+      expect(plan.track).toEqual({ type: "fixed", value: 180 });
+      expect(runtime.apply(transaction(runtime, plan.commands)).ok).toBe(true);
+      expect(runtime.getSnapshot().document.revision).toBe(before + 1);
+      expect(
+        frameAutoLayout(runtime.getSnapshot().document, "frame"),
+      ).toMatchObject({
+        columns: [
+          { type: "fixed", value: 180 },
+          { type: "fixed", value: 100 },
+        ],
+      });
+      expect(runtime.undo().ok).toBe(true);
+      expect(
+        frameAutoLayout(runtime.getSnapshot().document, "frame"),
+      ).toMatchObject({
+        columns: [sourceTrack, { type: "fixed", value: 100 }],
+      });
+      expect(runtime.redo().ok).toBe(true);
+      expect(
+        frameAutoLayout(runtime.getSnapshot().document, "frame"),
+      ).toMatchObject({
+        columns: [
+          { type: "fixed", value: 180 },
+          { type: "fixed", value: 100 },
+        ],
+      });
+    },
+  );
+
+  it("rejects stale Grid resize targets and no-op fixed values without a revision", () => {
+    const document = layoutDocument();
+    const frame = document.nodesById.frame;
+    if (frame?.kind !== "frame") throw new Error("missing frame");
+    frame.properties.autoLayout = {
+      mode: "grid",
+      padding: { top: 0, right: 0, bottom: 0, left: 0 },
+      rowGap: 0,
+      columnGap: 0,
+      rows: [{ type: "fixed", value: 100 }],
+      columns: [{ type: "fixed", value: 100 }],
+      itemsPositioning: "row-auto-flow",
+    };
+    delete document.nodesById.one!.constraints;
+    const runtime = new EditorRuntime(normalizeDesignDocument(document));
+    const revision = runtime.getSnapshot().document.revision;
+    expect(
+      planResizeGridTrack(
+        runtime.getSnapshot().document,
+        "page_layout",
+        "frame",
+        "columns",
+        0,
+        100,
+        "same",
+      ),
+    ).toMatchObject({ ok: false, code: "no-op" });
+    expect(
+      planResizeGridTrack(
+        runtime.getSnapshot().document,
+        "page_layout",
+        "frame",
+        "rows",
+        99,
+        200,
+        "invalid",
       ),
     ).toMatchObject({ ok: false, code: "invalid-target" });
     expect(runtime.getSnapshot().document.revision).toBe(revision);

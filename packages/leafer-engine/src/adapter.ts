@@ -282,6 +282,8 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         this.#callbacks.onAutoLayoutSpacingInputRequest?.(request),
       onGridTrackReorder: (request) =>
         this.#callbacks.onGridTrackReorder?.(request) ?? false,
+      onGridTrackResize: (request) =>
+        this.#callbacks.onGridTrackResize?.(request) ?? false,
       presentationRoot: this.#generationPresentationRoot,
       viewportRoot: this.#app.tree as unknown as LeaferGroup,
     });

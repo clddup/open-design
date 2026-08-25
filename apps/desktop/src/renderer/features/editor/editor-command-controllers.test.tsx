@@ -395,4 +395,59 @@ describe("editor command controllers", () => {
       beforeFrame,
     );
   });
+
+  it("resizes a Grid track at the exact canvas revision in one history entry", () => {
+    const document = structuredClone(createWelcomeDocument());
+    const frame = document.nodesById.frame_welcome;
+    if (frame?.kind !== "frame") throw new Error("missing Frame");
+    frame.properties.autoLayout = {
+      mode: "grid",
+      padding: { top: 0, right: 0, bottom: 0, left: 0 },
+      rowGap: 0,
+      columnGap: 8,
+      rows: [{ type: "fixed", value: 180 }],
+      columns: [{ type: "fill", value: 1 }, { type: "hug" }],
+      itemsPositioning: "row-auto-flow",
+      autoTracks: "rows",
+    };
+    const runtime = new EditorRuntime(document);
+    const { result, setEditorError } = renderControllers(runtime);
+    let accepted = false;
+
+    act(() => {
+      accepted = result.current.editor.resizeGridTrack(
+        frame.id,
+        0,
+        "columns",
+        0,
+        240,
+      );
+    });
+
+    expect(accepted).toBe(true);
+    expect(runtime.getSnapshot().document.revision).toBe(1);
+    expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
+    const resizedFrame = runtime.getSnapshot().document.nodesById.frame_welcome;
+    if (resizedFrame?.kind !== "frame") throw new Error("missing Frame");
+    expect(resizedFrame.properties.autoLayout).toMatchObject({
+      columns: [{ type: "fixed", value: 240 }, { type: "hug" }],
+    });
+    expect(setEditorError).toHaveBeenLastCalledWith(null);
+
+    act(() => {
+      accepted = result.current.editor.resizeGridTrack(
+        frame.id,
+        0,
+        "columns",
+        1,
+        100,
+      );
+    });
+    expect(accepted).toBe(false);
+    expect(runtime.getSnapshot().document.revision).toBe(1);
+    expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
+    expect(setEditorError).toHaveBeenLastCalledWith(
+      "中文:canvas.gridTrackStale",
+    );
+  });
 });

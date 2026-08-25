@@ -1,4 +1,7 @@
-import type { DesignDocument } from "@opendesign/design-contracts";
+import {
+  MAX_GRID_TRACK_VALUE,
+  type DesignDocument,
+} from "@opendesign/design-contracts";
 import type * as LeaferEditorModule from "leafer-editor";
 import {
   matrixRelativeToParent,
@@ -28,25 +31,50 @@ export interface GridEditorPointerEvent {
 }
 
 interface GridTrackElements {
-  hit: LeaferElement;
   label: LeaferElement;
   pill: LeaferElement;
+  reorderHit: LeaferElement;
+  resizeHit: LeaferElement;
 }
 
-interface GridDragSession {
+interface GridReorderDragSession {
   axis: GridEditorAxis;
   documentId: string;
   frameId: string;
   fromIndex: number;
   insertionIndex: number;
+  kind: "reorder";
   revision: number;
 }
+
+interface GridResizeDragSession {
+  axis: GridEditorAxis;
+  documentId: string;
+  frameId: string;
+  index: number;
+  initialPointerCoordinate: number;
+  kind: "resize";
+  moved: boolean;
+  revision: number;
+  start: number;
+  value: number;
+}
+
+type GridDragSession = GridReorderDragSession | GridResizeDragSession;
 
 type GridTrackReorderHandler = (request: {
   axis: GridEditorAxis;
   frameId: string;
   fromIndices: readonly number[];
   insertionIndex: number;
+}) => boolean;
+
+type GridTrackResizeHandler = (request: {
+  axis: GridEditorAxis;
+  expectedRevision: number;
+  frameId: string;
+  index: number;
+  value: number;
 }) => boolean;
 
 const MATRIX_EPSILON = 0.000_001;
@@ -57,20 +85,26 @@ const PILL_HEIGHT = 18;
 const PILL_MIN_WIDTH = 22;
 const PILL_OFFSET = 7;
 const HIT_PADDING = 5;
+const RESIZE_HIT_SIZE = 8;
+const RESIZE_DRAG_THRESHOLD = 3;
 
 export class GridEditorOverlayController {
   #documentId: string | null = null;
   #drag: GridDragSession | null = null;
   #fingerprint: string | null = null;
   readonly #guide: LeaferElement;
-  readonly #hitTracks = new WeakMap<object, GridEditorTrackSpec>();
+  readonly #reorderHitTracks = new WeakMap<object, GridEditorTrackSpec>();
+  readonly #resizeHitTracks = new WeakMap<object, GridEditorTrackSpec>();
   readonly #indicator: LeaferElement;
   readonly #layer: LeaferGroup;
   readonly #leafer: LeaferModule;
   readonly #onReorder: GridTrackReorderHandler;
+  readonly #onResize: GridTrackResizeHandler;
   #plan: GridEditorOverlayPlan | null = null;
   readonly #presentationRoot: LeaferGroup;
   #renderScale = 1;
+  #scaleX = 1;
+  #scaleY = 1;
   #revision: number | null = null;
   readonly #tracks = new Map<string, GridTrackElements>();
   readonly #viewportRoot: LeaferGroup;
@@ -79,11 +113,13 @@ export class GridEditorOverlayController {
     layerIndex: number;
     leafer: LeaferModule;
     onReorder: GridTrackReorderHandler;
+    onResize: GridTrackResizeHandler;
     presentationRoot: LeaferGroup;
     viewportRoot: LeaferGroup;
   }) {
     this.#leafer = options.leafer;
     this.#onReorder = options.onReorder;
+    this.#onResize = options.onResize;
     this.#presentationRoot = options.presentationRoot;
     this.#viewportRoot = options.viewportRoot;
     this.#layer = new this.#leafer.Group({
@@ -123,6 +159,7 @@ export class GridEditorOverlayController {
     this.#drag = null;
     this.#indicator.visible = false;
     this.#syncTrackAppearance();
+    this.syncViewport();
     return true;
   }
 
@@ -138,17 +175,49 @@ export class GridEditorOverlayController {
   }
 
   pointerDown(event: GridEditorPointerEvent): boolean {
-    const track =
+    const target =
       event.target && typeof event.target === "object"
-        ? this.#hitTracks.get(event.target)
+        ? event.target
         : undefined;
-    if (!track || !this.#plan || event.right || event.middle) return false;
+    const resizeTrack = target ? this.#resizeHitTracks.get(target) : undefined;
+    const reorderTrack = target
+      ? this.#reorderHitTracks.get(target)
+      : undefined;
+    if (
+      (!resizeTrack && !reorderTrack) ||
+      !this.#plan ||
+      event.right ||
+      event.middle
+    )
+      return false;
+    if (resizeTrack) {
+      const point = event.getInnerPoint(this.#layer);
+      const coordinate = resizeTrack.axis === "rows" ? point.y : point.x;
+      this.#drag = {
+        axis: resizeTrack.axis,
+        documentId: this.#documentId!,
+        frameId: this.#plan.frameId,
+        index: resizeTrack.index,
+        initialPointerCoordinate: coordinate,
+        kind: "resize",
+        moved: false,
+        revision: this.#revision!,
+        start: resizeTrack.start,
+        value: Math.round(resizeTrack.resolvedSize),
+      };
+      this.#indicator.visible = true;
+      this.#syncTrackAppearance();
+      this.syncViewport();
+      return true;
+    }
+    const track = reorderTrack!;
     this.#drag = {
       axis: track.axis,
       documentId: this.#documentId!,
       frameId: this.#plan.frameId,
       fromIndex: track.index,
       insertionIndex: track.index,
+      kind: "reorder",
       revision: this.#revision!,
     };
     this.#indicator.visible = false;
@@ -165,6 +234,23 @@ export class GridEditorOverlayController {
       return true;
     }
     const point = event.getInnerPoint(this.#layer);
+    if (drag.kind === "resize") {
+      const coordinate = drag.axis === "rows" ? point.y : point.x;
+      if (
+        Math.abs(coordinate - drag.initialPointerCoordinate) *
+          (drag.axis === "rows" ? this.#scaleY : this.#scaleX) >=
+        RESIZE_DRAG_THRESHOLD
+      ) {
+        drag.moved = true;
+      }
+      drag.value = Math.min(
+        MAX_GRID_TRACK_VALUE,
+        Math.max(0, Math.round(coordinate - drag.start)),
+      );
+      this.#syncTrackAppearance();
+      this.syncViewport();
+      return true;
+    }
     drag.insertionIndex = nearestGridInsertionIndex(
       plan,
       drag.axis,
@@ -180,6 +266,17 @@ export class GridEditorOverlayController {
     if (!event.isCancel) this.pointerMove(event);
     const current = this.#drag;
     this.cancelDrag();
+    if (current?.kind === "resize") {
+      if (event.isCancel || !current.moved) return true;
+      this.#onResize({
+        axis: current.axis,
+        expectedRevision: current.revision,
+        frameId: current.frameId,
+        index: current.index,
+        value: current.value,
+      });
+      return true;
+    }
     if (
       event.isCancel ||
       !current ||
@@ -244,6 +341,8 @@ export class GridEditorOverlayController {
     this.#layer.visible = true;
     const scaleX = Math.max(MATRIX_EPSILON, Math.hypot(desired.a, desired.b));
     const scaleY = Math.max(MATRIX_EPSILON, Math.hypot(desired.c, desired.d));
+    this.#scaleX = scaleX;
+    this.#scaleY = scaleY;
     this.#renderScale = Math.max(scaleX, scaleY);
     this.#guide.set({
       path: gridGuidePath(plan),
@@ -253,7 +352,8 @@ export class GridEditorOverlayController {
     for (const spec of [...plan.columns, ...plan.rows]) {
       const elements = this.#tracks.get(spec.id);
       if (!elements) continue;
-      const pillWidth = Math.max(PILL_MIN_WIDTH, spec.label.length * 7 + 10);
+      const label = this.#displayLabel(spec);
+      const pillWidth = Math.max(PILL_MIN_WIDTH, label.length * 7 + 10);
       const geometry =
         spec.axis === "columns"
           ? {
@@ -269,7 +369,7 @@ export class GridEditorOverlayController {
               height: PILL_HEIGHT / scaleY,
             };
       elements.pill.set({ ...geometry, cornerRadius: 4 / scaleX });
-      elements.hit.set({
+      elements.reorderHit.set({
         x: geometry.x - HIT_PADDING / scaleX,
         y: geometry.y - HIT_PADDING / scaleY,
         width: geometry.width + (HIT_PADDING * 2) / scaleX,
@@ -282,18 +382,43 @@ export class GridEditorOverlayController {
         height: geometry.height,
         fontSize: 10 / scaleY,
         lineHeight: 14 / scaleY,
+        text: label,
       });
+      elements.resizeHit.set(
+        spec.axis === "columns"
+          ? {
+              cursor: "col-resize",
+              height: plan.frameSize.height,
+              width: RESIZE_HIT_SIZE / scaleX,
+              x: spec.end - RESIZE_HIT_SIZE / scaleX / 2,
+              y: 0,
+            }
+          : {
+              cursor: "row-resize",
+              height: RESIZE_HIT_SIZE / scaleY,
+              width: plan.frameSize.width,
+              x: 0,
+              y: spec.end - RESIZE_HIT_SIZE / scaleY / 2,
+            },
+      );
     }
     this.#syncDragIndicator();
   }
 
   #createTrack(spec: GridEditorTrackSpec): GridTrackElements {
-    const hit = new this.#leafer.Rect({
+    const reorderHit = new this.#leafer.Rect({
       cursor: "grab",
       editable: false,
       fill: GRID_HIT_FILL,
       hittable: true,
       id: `__opendesign_grid_track_hit__:${spec.id}`,
+    }) as LeaferElement;
+    const resizeHit = new this.#leafer.Rect({
+      cursor: spec.axis === "columns" ? "col-resize" : "row-resize",
+      editable: false,
+      fill: GRID_HIT_FILL,
+      hittable: true,
+      id: `__opendesign_grid_track_resize_hit__:${spec.id}`,
     }) as LeaferElement;
     const pill = new this.#leafer.Rect({
       editable: false,
@@ -310,16 +435,23 @@ export class GridEditorOverlayController {
       textAlign: "center",
       verticalAlign: "middle",
     }) as LeaferElement;
-    this.#hitTracks.set(hit, spec);
+    this.#reorderHitTracks.set(reorderHit, spec);
+    this.#resizeHitTracks.set(resizeHit, spec);
     this.#layer.add(pill);
     this.#layer.add(label);
-    this.#layer.add(hit);
-    return { hit, label, pill };
+    this.#layer.add(reorderHit);
+    this.#layer.add(resizeHit);
+    return { label, pill, reorderHit, resizeHit };
   }
 
   #destroyTracks(): void {
     for (const elements of this.#tracks.values()) {
-      for (const element of [elements.hit, elements.label, elements.pill]) {
+      for (const element of [
+        elements.reorderHit,
+        elements.resizeHit,
+        elements.label,
+        elements.pill,
+      ]) {
         element.remove();
         element.destroy();
       }
@@ -334,14 +466,20 @@ export class GridEditorOverlayController {
       const existing = this.#tracks.get(spec.id);
       if (existing) {
         existing.label.set({ text: spec.label });
-        this.#hitTracks.set(existing.hit, spec);
+        this.#reorderHitTracks.set(existing.reorderHit, spec);
+        this.#resizeHitTracks.set(existing.resizeHit, spec);
       } else {
         this.#tracks.set(spec.id, this.#createTrack(spec));
       }
     }
     for (const [id, elements] of this.#tracks) {
       if (expected.has(id)) continue;
-      for (const element of [elements.hit, elements.label, elements.pill]) {
+      for (const element of [
+        elements.reorderHit,
+        elements.resizeHit,
+        elements.label,
+        elements.pill,
+      ]) {
         element.remove();
         element.destroy();
       }
@@ -355,6 +493,18 @@ export class GridEditorOverlayController {
     const plan = this.#plan;
     if (!drag || !plan) {
       this.#indicator.visible = false;
+      return;
+    }
+    if (drag.kind === "resize") {
+      const coordinate = drag.start + drag.value;
+      this.#indicator.set({
+        path:
+          drag.axis === "rows"
+            ? `M 0 ${coordinate} L ${plan.frameSize.width} ${coordinate}`
+            : `M ${coordinate} 0 L ${coordinate} ${plan.frameSize.height}`,
+        strokeWidth: 2 / this.#renderScale,
+        visible: true,
+      });
       return;
     }
     const insertion = (
@@ -379,13 +529,27 @@ export class GridEditorOverlayController {
 
   #syncTrackAppearance(): void {
     const drag = this.#drag;
+    const activeId = drag
+      ? `${drag.frameId}:${drag.axis}:${drag.kind === "reorder" ? drag.fromIndex : drag.index}`
+      : null;
     for (const [id, elements] of this.#tracks) {
-      const active =
-        drag && id === `${drag.frameId}:${drag.axis}:${drag.fromIndex}`;
-      elements.hit.set({ cursor: active ? "grabbing" : "grab" });
+      const active = id === activeId;
+      elements.reorderHit.set({
+        cursor: active && drag?.kind === "reorder" ? "grabbing" : "grab",
+      });
       elements.pill.set({ opacity: active ? 0.72 : 1 });
-      elements.label.set({ opacity: active ? 0.82 : 1 });
+      elements.label.set({ opacity: active ? 0.9 : 1 });
     }
+  }
+
+  #displayLabel(spec: GridEditorTrackSpec): string {
+    const drag = this.#drag;
+    return drag?.kind === "resize" &&
+      drag.frameId === this.#plan?.frameId &&
+      drag.axis === spec.axis &&
+      drag.index === spec.index
+      ? `${drag.value}px`
+      : spec.label;
   }
 }
 

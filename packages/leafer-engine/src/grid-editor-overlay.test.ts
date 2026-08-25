@@ -14,12 +14,40 @@ describe("Grid editor overlay geometry", () => {
     expect(plan).toMatchObject({
       frameId: "frame_welcome",
       rows: [
-        { index: 0, start: 16, end: 116, center: 66 },
-        { index: 1, start: 124, end: 224, center: 174 },
+        {
+          authoredTrack: { type: "fixed", value: 100 },
+          index: 0,
+          start: 16,
+          end: 116,
+          center: 66,
+          resolvedSize: 100,
+        },
+        {
+          authoredTrack: { type: "fixed", value: 100 },
+          index: 1,
+          start: 124,
+          end: 224,
+          center: 174,
+          resolvedSize: 100,
+        },
       ],
       columns: [
-        { index: 0, start: 20, end: 140, center: 80 },
-        { index: 1, start: 152, end: 1180, center: 666 },
+        {
+          authoredTrack: { type: "fixed", value: 120 },
+          index: 0,
+          start: 20,
+          end: 140,
+          center: 80,
+          resolvedSize: 120,
+        },
+        {
+          authoredTrack: { type: "fill", value: 1 },
+          index: 1,
+          start: 152,
+          end: 1180,
+          center: 666,
+          resolvedSize: 1028,
+        },
       ],
       rowInsertions: [
         { index: 0, coordinate: 16 },

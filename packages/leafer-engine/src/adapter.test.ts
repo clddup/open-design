@@ -706,6 +706,105 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
+  it("resizes a Grid track edge through one exact-revision semantic callback", async () => {
+    const onGridTrackResize = vi.fn(() => true);
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onGridTrackResize,
+    });
+    const input = withGridFixture(createInput());
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+    const hit = findElement(
+      app.sky,
+      "__opendesign_grid_track_resize_hit__:frame_welcome:columns:0",
+    );
+    if (!hit) throw new Error("Missing Grid column resize edge");
+    expect(findElement(app.tree, hit.id!)).toBeUndefined();
+
+    app.emit("pointer.down", pointerEvent(140, 80, hit));
+    app.emit("pointer.move", pointerEvent(220, 80, app.sky));
+    app.emit("pointer.up", pointerEvent(220, 80, app.sky));
+
+    expect(onGridTrackResize).toHaveBeenCalledTimes(1);
+    expect(onGridTrackResize).toHaveBeenCalledWith({
+      axis: "columns",
+      expectedRevision: input.document.revision,
+      frameId: "frame_welcome",
+      index: 0,
+      value: 200,
+    });
+
+    adapter.sync({
+      ...input,
+      viewport: { ...input.viewport, zoom: 2 },
+    });
+    expect(hit.width).toBe(4);
+    const rowHit = findElement(
+      app.sky,
+      "__opendesign_grid_track_resize_hit__:frame_welcome:rows:0",
+    );
+    if (!rowHit) throw new Error("Missing Grid row resize edge");
+    expect(rowHit.height).toBe(4);
+    app.emit("pointer.down", pointerEvent(80, 116, rowHit));
+    app.emit("pointer.move", pointerEvent(80, 166, app.sky));
+    app.emit("pointer.up", pointerEvent(80, 166, app.sky));
+    expect(onGridTrackResize).toHaveBeenCalledTimes(2);
+    expect(onGridTrackResize).toHaveBeenLastCalledWith({
+      axis: "rows",
+      expectedRevision: input.document.revision,
+      frameId: "frame_welcome",
+      index: 0,
+      value: 150,
+    });
+    adapter.dispose();
+  });
+
+  it("does not resize a Grid track on click, Escape, pointer cancel, or stale revision", async () => {
+    const onGridTrackResize = vi.fn(() => true);
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onGridTrackResize,
+    });
+    const input = withGridFixture(createInput());
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    const hit =
+      app &&
+      findElement(
+        app.sky,
+        "__opendesign_grid_track_resize_hit__:frame_welcome:rows:0",
+      );
+    if (!app || !hit) throw new Error("Missing Grid row resize edge");
+
+    app.emit("pointer.down", pointerEvent(80, 116, hit));
+    app.emit("pointer.up", pointerEvent(80, 116, hit));
+    expect(onGridTrackResize).not.toHaveBeenCalled();
+
+    app.emit("pointer.down", pointerEvent(80, 116, hit));
+    app.emit("pointer.move", pointerEvent(80, 180, app.sky));
+    emitWindowKey("Escape");
+    app.emit("pointer.up", pointerEvent(80, 180, app.sky));
+    expect(onGridTrackResize).not.toHaveBeenCalled();
+
+    app.emit("pointer.down", pointerEvent(80, 116, hit));
+    app.emit("pointer.move", {
+      ...pointerEvent(80, 180, app.sky),
+      isCancel: true,
+    });
+    app.emit("pointer.up", pointerEvent(80, 180, app.sky));
+    expect(onGridTrackResize).not.toHaveBeenCalled();
+
+    app.emit("pointer.down", pointerEvent(80, 116, hit));
+    const changed = structuredClone(input);
+    changed.document.revision += 1;
+    adapter.sync(changed);
+    app.emit("pointer.up", pointerEvent(80, 180, app.sky));
+    expect(onGridTrackResize).not.toHaveBeenCalled();
+    adapter.dispose();
+  });
+
   it("commits selected Auto Layout padding and gap canvas drags as semantic exact-revision requests", async () => {
     const onAutoLayoutSpacingCommit = vi.fn(() => true);
     const adapter = await createLeaferEngineAdapter(createHost(), {

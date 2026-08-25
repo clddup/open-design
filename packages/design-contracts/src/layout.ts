@@ -140,18 +140,23 @@ export const DEFAULT_LAYOUT_SIZING: LayoutSizing = Object.freeze({
   vertical: "fixed",
 });
 
+export const MAX_GRID_TRACK_VALUE = 1_000_000;
+
 export const GridTrackSchema = Type.Union([
   Type.Object(
     {
       type: Type.Literal("fixed"),
-      value: Type.Number({ minimum: 0, maximum: 1_000_000 }),
+      value: Type.Number({ minimum: 0, maximum: MAX_GRID_TRACK_VALUE }),
     },
     { additionalProperties: false },
   ),
   Type.Object(
     {
       type: Type.Literal("fill"),
-      value: Type.Number({ exclusiveMinimum: 0, maximum: 1_000_000 }),
+      value: Type.Number({
+        exclusiveMinimum: 0,
+        maximum: MAX_GRID_TRACK_VALUE,
+      }),
     },
     { additionalProperties: false },
   ),

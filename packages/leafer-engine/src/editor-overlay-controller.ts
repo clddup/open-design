@@ -72,6 +72,13 @@ export class EditorOverlayController {
       fromIndices: readonly number[];
       insertionIndex: number;
     }) => boolean;
+    onGridTrackResize: (request: {
+      axis: GridEditorAxis;
+      expectedRevision: number;
+      frameId: string;
+      index: number;
+      value: number;
+    }) => boolean;
     presentationRoot: LeaferGroup;
     viewportRoot: LeaferGroup;
   }) {
@@ -93,6 +100,7 @@ export class EditorOverlayController {
       layerIndex: 5,
       leafer: options.leafer,
       onReorder: options.onGridTrackReorder,
+      onResize: options.onGridTrackResize,
       presentationRoot: options.presentationRoot,
       viewportRoot: options.viewportRoot,
     });

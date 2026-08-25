@@ -107,6 +107,14 @@ export interface LeaferGridTrackReorderRequest {
   insertionIndex: number;
 }
 
+export interface LeaferGridTrackResizeRequest {
+  axis: "rows" | "columns";
+  expectedRevision: number;
+  frameId: string;
+  index: number;
+  value: number;
+}
+
 export type LeaferAutoLayoutSpacingChange =
   | {
       kind: "padding";
@@ -177,6 +185,7 @@ export interface LeaferEngineCallbacks {
   onCreateVector(request: LeaferCreateVectorRequest): boolean;
   onError(error: Error): void;
   onGridTrackReorder?(request: LeaferGridTrackReorderRequest): boolean;
+  onGridTrackResize?(request: LeaferGridTrackResizeRequest): boolean;
   onImageCropCommit?(request: LeaferImageCropCommitRequest): boolean;
   onImageCropStateChange?(state: LeaferImageCropState | null): void;
   onOperations(request: LeaferOperationRequest): boolean;
