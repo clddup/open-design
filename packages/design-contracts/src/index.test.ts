@@ -20,6 +20,7 @@ import {
   IMAGE_ASSET_DERIVATIONS_DESIGN_SCHEMA_VERSION,
   IMAGE_BACKGROUND_REPLACEMENT_DESIGN_SCHEMA_VERSION,
   IMAGE_RELIGHTING_DESIGN_SCHEMA_VERSION,
+  AUTO_LAYOUT_WRAP_DISTRIBUTION_DESIGN_SCHEMA_VERSION,
   FONT_FACE_IDENTITY_DESIGN_SCHEMA_VERSION,
   FIGMA_TEXT_LISTS_DESIGN_SCHEMA_VERSION,
   AUTO_LAYOUT_GRID_DESIGN_SCHEMA_VERSION,
@@ -315,7 +316,59 @@ it("keeps Auto Layout and Layout Guide schema milestones distinct", () => {
   expect(IMAGE_ASSET_DERIVATIONS_DESIGN_SCHEMA_VERSION).toBe("1.42.0");
   expect(IMAGE_BACKGROUND_REPLACEMENT_DESIGN_SCHEMA_VERSION).toBe("1.43.0");
   expect(IMAGE_RELIGHTING_DESIGN_SCHEMA_VERSION).toBe("1.44.0");
-  expect(DESIGN_SCHEMA_VERSION).toBe(IMAGE_RELIGHTING_DESIGN_SCHEMA_VERSION);
+  expect(AUTO_LAYOUT_WRAP_DISTRIBUTION_DESIGN_SCHEMA_VERSION).toBe("1.45.0");
+  expect(DESIGN_SCHEMA_VERSION).toBe(
+    AUTO_LAYOUT_WRAP_DISTRIBUTION_DESIGN_SCHEMA_VERSION,
+  );
+});
+
+it("migrates 1.44 documents without inventing wrapped row distribution", () => {
+  const source = textDocumentFixture();
+  source.schemaVersion =
+    IMAGE_RELIGHTING_DESIGN_SCHEMA_VERSION as typeof source.schemaVersion;
+  source.pagesById.page_1.rootNodeIds = ["frame_1"];
+  (source.nodesById.text_1 as { parentId: string | null }).parentId = "frame_1";
+  Object.assign(source.nodesById, {
+    frame_1: {
+      id: "frame_1",
+      kind: "frame",
+      name: "Wrapped tags",
+      parentId: null,
+      childIds: ["text_1"],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 0, 0],
+      size: { width: 320, height: 160 },
+      exportSettings: [],
+      opacity: 1,
+      properties: {
+        fills: [],
+        strokes: [],
+        strokeWidth: 0,
+        cornerRadius: 0,
+        clipsContent: true,
+        autoLayout: {
+          mode: "horizontal",
+          padding: { top: 8, right: 8, bottom: 8, left: 8 },
+          gap: 8,
+          primaryAlignment: "start",
+          counterAlignment: "start",
+          wrap: { mode: "wrap", counterGap: 12 },
+        },
+      },
+      extensions: {},
+    },
+  });
+  const migrated = migrateDesignDocument(source);
+  expect(migrated?.schemaVersion).toBe(DESIGN_SCHEMA_VERSION);
+  const frame = migrated?.nodesById.frame_1;
+  expect(frame?.kind).toBe("frame");
+  expect(
+    frame?.kind === "frame" ? frame.properties.autoLayout : undefined,
+  ).toMatchObject({ wrap: { mode: "wrap", counterGap: 12 } });
+  expect(
+    frame?.kind === "frame" ? frame.properties.autoLayout : undefined,
+  ).not.toHaveProperty("wrap.counterAxisAlignContent");
 });
 
 it("migrates the previous image Paint document with empty image source history", () => {

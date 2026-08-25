@@ -57,6 +57,7 @@ export const layoutMessages = {
   "properties.autoLayoutGapFixed": "Fixed",
   "properties.autoLayoutGapAuto": "Auto",
   "properties.autoLayoutCounterGap": "Vertical gap",
+  "properties.autoLayoutCounterGapMode": "Vertical gap mode",
   "properties.autoLayoutPrimary": "Primary axis",
   "properties.autoLayoutCounter": "Counter axis",
   "properties.autoLayoutStart": "Start",

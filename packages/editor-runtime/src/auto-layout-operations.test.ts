@@ -939,6 +939,35 @@ describe("linear Auto Layout Runtime", () => {
     ).toEqual(resolved);
   });
 
+  it("persists and reverses Figma-style automatic wrapped row distribution", () => {
+    const runtime = wrappedRuntime();
+    const nextLayout = wrapLayout();
+    if (!nextLayout.wrap) throw new Error("missing wrap");
+    nextLayout.wrap.counterAxisAlignContent = "space-between";
+    const plan = planSetFrameAutoLayout(
+      runtime.getSnapshot().document,
+      "page_layout",
+      "frame",
+      nextLayout,
+      "set_counter_distribution",
+    );
+    if (!plan.ok) throw new Error(plan.message);
+    expect(runtime.apply(transaction(runtime, plan.commands)).ok).toBe(true);
+    const applied = runtime.getSnapshot().document;
+    expect(
+      applied.nodesById.frame?.kind === "frame"
+        ? applied.nodesById.frame.properties.autoLayout
+        : undefined,
+    ).toMatchObject({
+      wrap: { counterAxisAlignContent: "space-between" },
+    });
+    expect(runtime.undo().ok).toBe(true);
+    expect(runtime.redo().ok).toBe(true);
+    expect(
+      normalizeDesignDocument(JSON.parse(JSON.stringify(applied))),
+    ).toEqual(applied);
+  });
+
   it("propagates wrapped Hug height into a nested Hug ancestor", () => {
     const document = layoutDocument();
     const outer = document.nodesById.frame;
@@ -1672,7 +1701,7 @@ function wrappedRuntime(): EditorRuntime {
   return runtime;
 }
 
-function wrapLayout(): AutoLayoutFlow {
+function wrapLayout(): Extract<AutoLayoutFlow, { mode: "horizontal" }> {
   return {
     mode: "horizontal",
     padding: { top: 10, right: 10, bottom: 10, left: 10 },

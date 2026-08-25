@@ -541,6 +541,63 @@ describe("layout-service linear Auto Layout v6", () => {
     });
   });
 
+  it("distributes wrapped rows across fixed counter-axis space", () => {
+    expect(
+      solveLinearAutoLayout({
+        version: AUTO_LAYOUT_SERVICE_CONTRACT_VERSION,
+        direction: "horizontal",
+        frame: { width: 140, height: 160 },
+        padding: { top: 10, right: 10, bottom: 10, left: 10 },
+        gap: 8,
+        primaryAlignment: "start",
+        counterAlignment: "center",
+        frameSizing: fixedFrame,
+        wrap: {
+          mode: "wrap",
+          counterGap: 6,
+          counterAxisAlignContent: "space-between",
+        },
+        children: [child("one", 60, 20), child("two", 60, 30)],
+      }),
+    ).toEqual({
+      ok: true,
+      frame: { width: 140, height: 160 },
+      placements: [
+        { id: "one", x: 10, y: 10, width: 60, height: 20 },
+        { id: "two", x: 10, y: 120, width: 60, height: 30 },
+      ],
+    });
+  });
+
+  it("collapses automatic counter-axis distribution in a hugged Frame", () => {
+    expect(
+      solveLinearAutoLayout({
+        version: AUTO_LAYOUT_SERVICE_CONTRACT_VERSION,
+        direction: "horizontal",
+        frame: { width: 140, height: 160 },
+        padding: { top: 10, right: 10, bottom: 10, left: 10 },
+        gap: 8,
+        primaryAlignment: "start",
+        counterAlignment: "start",
+        frameSizing: { horizontal: "fixed", vertical: "hug" },
+        frameLimits: { minHeight: 120 },
+        wrap: {
+          mode: "wrap",
+          counterGap: 6,
+          counterAxisAlignContent: "space-between",
+        },
+        children: [child("one", 60, 20), child("two", 60, 30)],
+      }),
+    ).toMatchObject({
+      ok: true,
+      frame: { width: 140, height: 120 },
+      placements: [
+        { id: "one", y: 10 },
+        { id: "two", y: 30 },
+      ],
+    });
+  });
+
   it("rejects vertical wrap, Hug width, Fill children, and malformed counter gap", () => {
     const request = {
       version: AUTO_LAYOUT_SERVICE_CONTRACT_VERSION,
@@ -573,6 +630,16 @@ describe("layout-service linear Auto Layout v6", () => {
       solveLinearAutoLayout({
         ...request,
         wrap: { mode: "wrap", counterGap: -1 },
+      }),
+    ).toMatchObject({ ok: false, code: "invalid-input" });
+    expect(
+      solveLinearAutoLayout({
+        ...request,
+        wrap: {
+          mode: "wrap",
+          counterGap: 8,
+          counterAxisAlignContent: "space-evenly" as "auto",
+        },
       }),
     ).toMatchObject({ ok: false, code: "invalid-input" });
   });

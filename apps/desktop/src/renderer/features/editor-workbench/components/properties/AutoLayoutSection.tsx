@@ -56,6 +56,8 @@ export function AutoLayoutSection({
   const horizontalFlow = linearFlow?.mode === "horizontal" ? linearFlow : null;
   const wrapEnabled = horizontalFlow?.wrap?.mode === "wrap";
   const autoGap = linearFlow?.primaryAlignment === "space-between";
+  const autoCounterGap =
+    horizontalFlow?.wrap?.counterAxisAlignContent === "space-between";
   return (
     <Section title={t("properties.autoLayout")}>
       <div className={styles.stack}>
@@ -123,6 +125,7 @@ export function AutoLayoutSection({
                         wrap: {
                           mode: "wrap",
                           counterGap: horizontalFlow.gap,
+                          counterAxisAlignContent: "auto",
                         },
                       });
                       return;
@@ -232,25 +235,71 @@ export function AutoLayoutSection({
                 value={autoGap ? "" : formatNumber(linearFlow.gap)}
               />
               {horizontalFlow?.wrap && (
-                <Field
-                  accessibleLabel={t("properties.autoLayoutCounterGap")}
-                  label={t("properties.autoLayoutCounterGap")}
-                  min={0}
-                  onCommit={(value) =>
-                    commitNumber(
-                      value,
-                      horizontalFlow.wrap?.counterGap ?? horizontalFlow.gap,
-                      (counterGap) =>
+                <>
+                  <label className={styles.select}>
+                    <span>{t("properties.autoLayoutCounterGapMode")}</span>
+                    <select
+                      aria-label={t("properties.autoLayoutCounterGapMode")}
+                      onChange={(event) =>
                         onChange({
                           ...horizontalFlow,
-                          wrap: { mode: "wrap", counterGap },
-                        }),
-                      { min: 0 },
-                    )
-                  }
-                  type="number"
-                  value={formatNumber(horizontalFlow.wrap.counterGap)}
-                />
+                          wrap: {
+                            mode: "wrap",
+                            counterGap:
+                              horizontalFlow.wrap?.counterGap ??
+                              horizontalFlow.gap,
+                            counterAxisAlignContent:
+                              event.target.value === "auto"
+                                ? "space-between"
+                                : "auto",
+                          },
+                        })
+                      }
+                      value={autoCounterGap ? "auto" : "fixed"}
+                    >
+                      <option value="fixed">
+                        {t("properties.autoLayoutGapFixed")}
+                      </option>
+                      <option value="auto">
+                        {t("properties.autoLayoutGapAuto")}
+                      </option>
+                    </select>
+                  </label>
+                  <Field
+                    accessibleLabel={t("properties.autoLayoutCounterGap")}
+                    disabled={autoCounterGap}
+                    label={t("properties.autoLayoutCounterGap")}
+                    min={0}
+                    onCommit={(value) =>
+                      commitNumber(
+                        value,
+                        horizontalFlow.wrap?.counterGap ?? horizontalFlow.gap,
+                        (counterGap) =>
+                          onChange({
+                            ...horizontalFlow,
+                            wrap: {
+                              mode: "wrap",
+                              counterAxisAlignContent:
+                                horizontalFlow.wrap?.counterAxisAlignContent,
+                              counterGap,
+                            },
+                          }),
+                        { min: 0 },
+                      )
+                    }
+                    placeholder={
+                      autoCounterGap
+                        ? t("properties.autoLayoutGapAuto")
+                        : undefined
+                    }
+                    type="number"
+                    value={
+                      autoCounterGap
+                        ? ""
+                        : formatNumber(horizontalFlow.wrap.counterGap)
+                    }
+                  />
+                </>
               )}
               {!autoGap && (
                 <AlignmentSelect

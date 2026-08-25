@@ -6319,7 +6319,11 @@ describe("Renderer semantic hierarchy tool", () => {
               primaryAlignment: "start",
               counterAlignment: "start",
               sizing: { horizontal: "fixed", vertical: "hug" },
-              wrap: { mode: "wrap", counterGap: 20 },
+              wrap: {
+                mode: "wrap",
+                counterGap: 20,
+                counterAxisAlignContent: "space-between",
+              },
             },
           },
         },
@@ -6337,7 +6341,11 @@ describe("Renderer semantic hierarchy tool", () => {
           frameId: "frame_welcome",
           autoLayout: {
             mode: "horizontal",
-            wrap: { mode: "wrap", counterGap: 20 },
+            wrap: {
+              mode: "wrap",
+              counterGap: 20,
+              counterAxisAlignContent: "space-between",
+            },
           },
           revision: 1,
           atomic: true,
@@ -6350,7 +6358,11 @@ describe("Renderer semantic hierarchy tool", () => {
         autoLayout: {
           mode: "horizontal",
           sizing: { horizontal: "fixed", vertical: "hug" },
-          wrap: { mode: "wrap", counterGap: 20 },
+          wrap: {
+            mode: "wrap",
+            counterGap: 20,
+            counterAxisAlignContent: "space-between",
+          },
         },
       },
     });

@@ -2,7 +2,7 @@
 
 # OpenDesign 专业设计能力
 
-能力清单版本：`1` · 更新日期：2026-08-22 · 文档协议：`1.44.0` · 画布基线：`leafer-editor@2.2.9`
+能力清单版本：`1` · 更新日期：2026-08-25 · 文档协议：`1.45.0` · 画布基线：`leafer-editor@2.2.9`
 
 当前状态：可用 0 项，降级可用 22 项，不可用 0 项。只有必需表面全部可用，并同时具备自动化与实机证据时，能力才允许标记为“可用”。
 
@@ -235,18 +235,21 @@
 
 ### Auto Layout — 降级可用
 
-响应式布局 Frame，并添加不改变 child 几何且不导出的 Uniform、Columns 或 Rows Layout Guide。
+以线性、换行或 Grid Auto Layout 响应式布局 Frame，包括 wrapped rows 自动分布；也可添加不改变 child 几何且不导出的 Uniform、Columns 或 Rows Layout Guide。
 
 - ID：`layout.auto-layout`
-- 实现方：DesignDocument 1.35.0 Auto Layout Grid v2 + Layout Guide + @opendesign/layout-service Auto Layout contract v8 + EditorRuntime
+- 实现方：DesignDocument 1.45.0 + @opendesign/layout-service Auto Layout contract v9 + EditorRuntime + Figma public Wrap projection
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=degraded
 - 证据：自动化 18 项；实机 0 项
-- 限制：Auto Layout Grid v2 已支持显式 Fixed/Fill/Hug 行列轨道、row-major flow 自动增减 Fill 行、独立双 gap、Manual 或 row-major 排布、child cell/span/alignment、跨 span 的行列重排与完整 movement map、Runtime 确定回流、Inspector、Agent 与 Figma 公共 Plugin API 投影。Uniform、Columns 与 Rows Layout Guide 仍是不参与布局的视觉辅助。Fill 以外的自动行模板、自动列、dense/column flow、Guide style/变量、吸附、交叉轴 Auto gap、垂直 wrap、Wrap+Fill、baseline、旋转 absolute child、画布 cell 拖拽手柄、SVG Grid metadata，以及 macOS/Windows 打包 GUI 实机证据仍未完成。
+- 限制：Auto Layout Grid v2 已支持显式 Fixed/Fill/Hug 行列轨道、row-major flow 自动增减 Fill 行、独立双 gap、Manual 或 row-major 排布、child cell/span/alignment、跨 span 的行列重排与完整 movement map、Runtime 确定回流、Inspector、Agent 与 Figma 公共 Plugin API 投影。Uniform、Columns 与 Rows Layout Guide 仍是不参与布局的视觉辅助。Fill 以外的自动行模板、自动列、dense/column flow、Guide style/变量、吸附、垂直 wrap、Wrap+Fill、baseline、旋转 absolute child、画布 cell 拖拽手柄、SVG Grid metadata，以及 macOS/Windows 打包 GUI 实机证据仍未完成。
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360040451373-Guide-to-auto-layout)
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360040450513-Create-layout-guides)
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/31289469907863-Use-the-grid-auto-layout-flow)
 - 专业参照：[官方说明](https://developers.figma.com/docs/plugins/api/properties/nodes-primaryaxisalignitems/)
 - 专业参照：[官方说明](https://developers.figma.com/docs/plugins/api/properties/nodes-layoutpositioning/)
+- 专业参照：[官方说明](https://developers.figma.com/docs/plugins/api/properties/nodes-counteraxisaligncontent/)
+- 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/31289464393751-Use-the-horizontal-and-vertical-flows-in-auto-layout)
+- 专业参照：[官方说明](docs/adr/0153-figma-wrap-counter-axis-distribution.md)
 
 ## 设计系统
 

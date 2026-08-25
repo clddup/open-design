@@ -59,6 +59,7 @@ export const layoutMessages = {
   "properties.autoLayoutGapFixed": "固定",
   "properties.autoLayoutGapAuto": "自动",
   "properties.autoLayoutCounterGap": "垂直间距",
+  "properties.autoLayoutCounterGapMode": "垂直间距模式",
   "properties.autoLayoutPrimary": "主轴",
   "properties.autoLayoutCounter": "交叉轴",
   "properties.autoLayoutStart": "起始",

@@ -20,7 +20,9 @@ import {
   toFigmaNodeStyleReferences,
   toFigmaGridAutoLayout,
   toFigmaGridChild,
+  toFigmaWrapAutoLayout,
   fromFigmaGridAutoLayout,
+  fromFigmaWrapAutoLayout,
   toFigmaImageFilters,
   fromFigmaImageFilters,
   toFigmaSharedStyleMetadata,
@@ -48,6 +50,74 @@ describe("Figma image adjustment compatibility", () => {
     expect(fromFigmaImageFilters({ exposure: 1.5 })).toMatchObject({
       ok: false,
     });
+  });
+});
+
+describe("Figma wrapped Auto Layout compatibility", () => {
+  it("round-trips public counterAxisAlignContent and counterAxisSpacing", () => {
+    const figma = toFigmaWrapAutoLayout({
+      mode: "horizontal",
+      padding: { top: 8, right: 16, bottom: 12, left: 16 },
+      gap: 10,
+      primaryAlignment: "space-between",
+      counterAlignment: "center",
+      sizing: { horizontal: "fixed", vertical: "fixed" },
+      wrap: {
+        mode: "wrap",
+        counterGap: 18,
+        counterAxisAlignContent: "space-between",
+      },
+    });
+    expect(figma).toEqual({
+      layoutMode: "HORIZONTAL",
+      layoutWrap: "WRAP",
+      paddingTop: 8,
+      paddingRight: 16,
+      paddingBottom: 12,
+      paddingLeft: 16,
+      itemSpacing: 10,
+      counterAxisSpacing: 18,
+      primaryAxisAlignItems: "SPACE_BETWEEN",
+      counterAxisAlignItems: "CENTER",
+      counterAxisAlignContent: "SPACE_BETWEEN",
+      primaryAxisSizingMode: "FIXED",
+      counterAxisSizingMode: "FIXED",
+    });
+    if (!figma) throw new Error("missing Figma wrap projection");
+    expect(fromFigmaWrapAutoLayout(figma)).toEqual({
+      ok: true,
+      layout: {
+        mode: "horizontal",
+        padding: { top: 8, right: 16, bottom: 12, left: 16 },
+        gap: 10,
+        primaryAlignment: "space-between",
+        counterAlignment: "center",
+        sizing: { horizontal: "fixed", vertical: "fixed" },
+        wrap: {
+          mode: "wrap",
+          counterGap: 18,
+          counterAxisAlignContent: "space-between",
+        },
+      },
+    });
+    expect(
+      fromFigmaWrapAutoLayout({
+        ...figma,
+        counterAxisAlignItems: "BASELINE",
+      }),
+    ).toMatchObject({ ok: false });
+  });
+
+  it("returns null for a non-wrapping horizontal flow", () => {
+    expect(
+      toFigmaWrapAutoLayout({
+        mode: "horizontal",
+        padding: { top: 0, right: 0, bottom: 0, left: 0 },
+        gap: 0,
+        primaryAlignment: "start",
+        counterAlignment: "start",
+      }),
+    ).toBeNull();
   });
 });
 

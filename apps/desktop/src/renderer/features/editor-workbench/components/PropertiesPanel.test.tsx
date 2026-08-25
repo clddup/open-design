@@ -1247,6 +1247,36 @@ describe("PropertiesPanel SVG workflow", () => {
       wrap: { mode: "wrap", counterGap: 24 },
     });
 
+    await user.selectOptions(
+      screen.getByLabelText("Vertical gap mode"),
+      "auto",
+    );
+    const automatic = onUpdate.mock.calls.at(-1)?.[0].properties?.autoLayout;
+    expect(automatic).toMatchObject({
+      wrap: {
+        mode: "wrap",
+        counterGap: 16,
+        counterAxisAlignContent: "space-between",
+      },
+    });
+    cleanup();
+    const automaticWrapFrame = structuredClone(wrapFrame);
+    if (
+      automaticWrapFrame.kind !== "frame" ||
+      automaticWrapFrame.properties.autoLayout?.mode !== "horizontal" ||
+      !automaticWrapFrame.properties.autoLayout.wrap
+    ) {
+      throw new Error("missing wrapped Frame");
+    }
+    automaticWrapFrame.properties.autoLayout.wrap.counterAxisAlignContent =
+      "space-between";
+    renderPanel({
+      node: automaticWrapFrame,
+      selectionCount: 1,
+      onUpdate,
+    });
+    expect(screen.getByLabelText("Vertical gap")).toBeDisabled();
+
     await user.selectOptions(screen.getByLabelText("Direction"), "vertical");
     const vertical = onUpdate.mock.calls.at(-1)?.[0].properties?.autoLayout;
     expect(vertical).toMatchObject({ mode: "vertical" });

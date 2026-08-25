@@ -8,6 +8,7 @@ import type {
   DesignNode,
   GridAutoLayout,
   GridTrack as OpenDesignGridTrack,
+  LinearAutoLayoutFlow,
   ImageFilters as OpenDesignImageFilters,
   Paint as OpenDesignPaint,
   SharedStyleDefinition,
@@ -86,6 +87,30 @@ export type FigmaGridAutoLayout = Pick<
   | "layoutSizingHorizontal"
   | "layoutSizingVertical"
 >;
+
+export type FigmaWrapAutoLayout = Pick<
+  FrameNode,
+  | "layoutMode"
+  | "layoutWrap"
+  | "paddingTop"
+  | "paddingRight"
+  | "paddingBottom"
+  | "paddingLeft"
+  | "itemSpacing"
+  | "counterAxisSpacing"
+  | "primaryAxisAlignItems"
+  | "counterAxisAlignItems"
+  | "counterAxisAlignContent"
+  | "primaryAxisSizingMode"
+  | "counterAxisSizingMode"
+>;
+
+export type OpenDesignWrapResult =
+  | {
+      ok: true;
+      layout: Extract<LinearAutoLayoutFlow, { mode: "horizontal" }>;
+    }
+  | { ok: false; issues: readonly string[] };
 
 export type FigmaGridChild = Pick<
   RectangleNode,
@@ -267,6 +292,75 @@ export function toFigmaGridAutoLayout(
   };
 }
 
+export function toFigmaWrapAutoLayout(
+  layout: Extract<LinearAutoLayoutFlow, { mode: "horizontal" }>,
+): FigmaWrapAutoLayout | null {
+  if (!layout.wrap) return null;
+  return {
+    layoutMode: "HORIZONTAL",
+    layoutWrap: "WRAP",
+    paddingTop: layout.padding.top,
+    paddingRight: layout.padding.right,
+    paddingBottom: layout.padding.bottom,
+    paddingLeft: layout.padding.left,
+    itemSpacing: layout.gap,
+    counterAxisSpacing: layout.wrap.counterGap,
+    primaryAxisAlignItems: toFigmaAxisAlignment(layout.primaryAlignment),
+    counterAxisAlignItems: toFigmaCounterAlignment(layout.counterAlignment),
+    counterAxisAlignContent:
+      layout.wrap.counterAxisAlignContent === "space-between"
+        ? "SPACE_BETWEEN"
+        : "AUTO",
+    primaryAxisSizingMode:
+      layout.sizing?.horizontal === "hug" ? "AUTO" : "FIXED",
+    counterAxisSizingMode: layout.sizing?.vertical === "hug" ? "AUTO" : "FIXED",
+  };
+}
+
+export function fromFigmaWrapAutoLayout(
+  value: FigmaWrapAutoLayout,
+): OpenDesignWrapResult {
+  const issues: string[] = [];
+  if (value.layoutMode !== "HORIZONTAL")
+    issues.push("Figma wrapped Auto Layout must be HORIZONTAL");
+  if (value.layoutWrap !== "WRAP")
+    issues.push("Figma wrapped Auto Layout must use WRAP");
+  if (value.counterAxisSpacing === null || value.counterAxisSpacing < 0)
+    issues.push("Figma counterAxisSpacing must be a non-negative number");
+  if (value.itemSpacing < 0)
+    issues.push("Figma itemSpacing must be non-negative");
+  if (value.counterAxisAlignItems === "BASELINE")
+    issues.push("Text baseline alignment is not available in this contract");
+  if (issues.length > 0) return { ok: false, issues };
+  return {
+    ok: true,
+    layout: {
+      mode: "horizontal",
+      padding: {
+        top: value.paddingTop,
+        right: value.paddingRight,
+        bottom: value.paddingBottom,
+        left: value.paddingLeft,
+      },
+      gap: value.itemSpacing,
+      primaryAlignment: fromFigmaAxisAlignment(value.primaryAxisAlignItems),
+      counterAlignment: fromFigmaCounterAlignment(value.counterAxisAlignItems),
+      sizing: {
+        horizontal: value.primaryAxisSizingMode === "AUTO" ? "hug" : "fixed",
+        vertical: value.counterAxisSizingMode === "AUTO" ? "hug" : "fixed",
+      },
+      wrap: {
+        mode: "wrap",
+        counterGap: value.counterAxisSpacing as number,
+        counterAxisAlignContent:
+          value.counterAxisAlignContent === "SPACE_BETWEEN"
+            ? "space-between"
+            : "auto",
+      },
+    },
+  };
+}
+
 export function fromFigmaGridAutoLayout(
   value: FigmaGridAutoLayout,
 ): OpenDesignGridResult {
@@ -319,6 +413,40 @@ export function toFigmaGridChild(node: DesignNode): FigmaGridChild | null {
     gridChildHorizontalAlign: figmaGridAlignment(placement.horizontalAlign),
     gridChildVerticalAlign: figmaGridAlignment(placement.verticalAlign),
   };
+}
+
+function toFigmaAxisAlignment(
+  alignment: LinearAutoLayoutFlow["primaryAlignment"],
+): FrameNode["primaryAxisAlignItems"] {
+  if (alignment === "center") return "CENTER";
+  if (alignment === "end") return "MAX";
+  if (alignment === "space-between") return "SPACE_BETWEEN";
+  return "MIN";
+}
+
+function fromFigmaAxisAlignment(
+  alignment: FrameNode["primaryAxisAlignItems"],
+): LinearAutoLayoutFlow["primaryAlignment"] {
+  if (alignment === "CENTER") return "center";
+  if (alignment === "MAX") return "end";
+  if (alignment === "SPACE_BETWEEN") return "space-between";
+  return "start";
+}
+
+function toFigmaCounterAlignment(
+  alignment: LinearAutoLayoutFlow["counterAlignment"],
+): FrameNode["counterAxisAlignItems"] {
+  if (alignment === "center") return "CENTER";
+  if (alignment === "end") return "MAX";
+  return "MIN";
+}
+
+function fromFigmaCounterAlignment(
+  alignment: FrameNode["counterAxisAlignItems"],
+): LinearAutoLayoutFlow["counterAlignment"] {
+  if (alignment === "CENTER") return "center";
+  if (alignment === "MAX") return "end";
+  return "start";
 }
 
 function toFigmaGridTrack(track: OpenDesignGridTrack): GridTrackSize {

@@ -9,7 +9,7 @@ import type {
 
 type WrapRequest = LinearAutoLayoutRequest & {
   direction: "horizontal";
-  wrap: { mode: "wrap"; counterGap: number };
+  wrap: NonNullable<LinearAutoLayoutRequest["wrap"]>;
 };
 
 type ResolvedRow = {
@@ -50,9 +50,13 @@ export function solveHorizontalWrap(
   const packedGap =
     request.primaryAlignment === "space-between" ? 0 : request.gap;
   const rows = wrapRows(children, innerWidth, packedGap);
+  const rowHeightTotal = rows.reduce((sum, row) => sum + row.height, 0);
+  const autoCounterGap =
+    request.wrap.counterAxisAlignContent === "space-between";
   const contentHeight =
-    rows.reduce((sum, row) => sum + row.height, 0) +
-    request.wrap.counterGap * Math.max(0, rows.length - 1);
+    rowHeightTotal +
+    (autoCounterGap ? 0 : request.wrap.counterGap) *
+      Math.max(0, rows.length - 1);
   const frame: ConstraintSize = {
     width: frameWidth,
     height: resolveFrameExtent(
@@ -66,8 +70,14 @@ export function solveHorizontalWrap(
   };
   const blockFree =
     frame.height - request.padding.top - request.padding.bottom - contentHeight;
+  const resolvedCounterGap = autoCounterGap
+    ? request.frameSizing.vertical === "fixed"
+      ? autoGap(blockFree, rows.length)
+      : 0
+    : request.wrap.counterGap;
   let rowY =
-    request.padding.top + alignmentOffset(request.counterAlignment, blockFree);
+    request.padding.top +
+    (autoCounterGap ? 0 : alignmentOffset(request.counterAlignment, blockFree));
   const placements: Array<ConstraintRect & { id: string }> = [];
   for (const row of rows) {
     const rowGap =
@@ -96,7 +106,7 @@ export function solveHorizontalWrap(
       });
       childX += child.width + rowGap;
     }
-    rowY += row.height + request.wrap.counterGap;
+    rowY += row.height + resolvedCounterGap;
   }
   return { ok: true, frame, placements };
 }

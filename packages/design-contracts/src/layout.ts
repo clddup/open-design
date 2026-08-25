@@ -269,6 +269,9 @@ export const AutoLayoutWrapSchema = Type.Object(
   {
     mode: Type.Literal("wrap"),
     counterGap: Type.Number({ minimum: 0, maximum: 1_000_000 }),
+    counterAxisAlignContent: Type.Optional(
+      Type.Union([Type.Literal("auto"), Type.Literal("space-between")]),
+    ),
   },
   { additionalProperties: false },
 );

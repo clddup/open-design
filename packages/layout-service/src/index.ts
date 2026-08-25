@@ -9,7 +9,7 @@ export {
 } from "./grid-layout.js";
 
 export const LAYOUT_SERVICE_CONTRACT_VERSION = 1 as const;
-export const AUTO_LAYOUT_SERVICE_CONTRACT_VERSION = 8 as const;
+export const AUTO_LAYOUT_SERVICE_CONTRACT_VERSION = 9 as const;
 
 export type HorizontalConstraint =
   "left" | "right" | "left-right" | "center" | "scale";
@@ -77,7 +77,11 @@ export type LinearAutoLayoutRequest = {
     vertical: AutoLayoutFrameAxisSizing;
   };
   frameLimits?: AutoLayoutLimits;
-  wrap?: { mode: "wrap"; counterGap: number };
+  wrap?: {
+    mode: "wrap";
+    counterGap: number;
+    counterAxisAlignContent?: "auto" | "space-between";
+  };
   children: Array<{
     id: string;
     positioning: "flow" | "absolute";
@@ -471,7 +475,10 @@ function validLinearAutoLayoutRequest(
     (request.wrap === undefined ||
       (request.direction === "horizontal" &&
         request.wrap.mode === "wrap" &&
-        finiteNonNegative(request.wrap.counterGap))) &&
+        finiteNonNegative(request.wrap.counterGap) &&
+        (request.wrap.counterAxisAlignContent === undefined ||
+          request.wrap.counterAxisAlignContent === "auto" ||
+          request.wrap.counterAxisAlignContent === "space-between"))) &&
     Object.values(request.padding).every(finiteNonNegative) &&
     ["start", "center", "end", "space-between"].includes(
       request.primaryAlignment,

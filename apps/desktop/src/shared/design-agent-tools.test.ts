@@ -3230,6 +3230,7 @@ describe("design Agent tool contract", () => {
     expect(arrange?.description).toContain("Constraints v1");
     expect(arrange?.description).toContain("Auto Layout supports");
     expect(arrange?.description).toContain("Auto gap");
+    expect(arrange?.description).toContain("counterAxisAlignContent");
     expect(arrange?.description).toContain("min/max clamping");
     expect(arrange?.description).toContain("absolute child");
     expect(
@@ -3269,6 +3270,19 @@ describe("design Agent tool contract", () => {
     };
     expect(
       validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, wrapAutoLayout),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
+        ...wrapAutoLayout,
+        autoLayout: {
+          ...wrapAutoLayout.autoLayout,
+          wrap: {
+            mode: "wrap",
+            counterGap: 12,
+            counterAxisAlignContent: "space-between",
+          },
+        },
+      }),
     ).toBe(true);
     expect(
       validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, layoutSizing),
@@ -3364,6 +3378,19 @@ describe("design Agent tool contract", () => {
       validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
         ...wrapAutoLayout,
         autoLayout: { ...wrapAutoLayout.autoLayout, mode: "vertical" },
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
+        ...wrapAutoLayout,
+        autoLayout: {
+          ...wrapAutoLayout.autoLayout,
+          wrap: {
+            mode: "wrap",
+            counterGap: 12,
+            counterAxisAlignContent: "space-evenly",
+          },
+        },
       }),
     ).toBe(false);
     expect(
