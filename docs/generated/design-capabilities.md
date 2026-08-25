@@ -2,7 +2,7 @@
 
 # OpenDesign 专业设计能力
 
-能力清单版本：`1` · 更新日期：2026-08-25 · 文档协议：`1.46.0` · 画布基线：`leafer-editor@2.2.9`
+能力清单版本：`1` · 更新日期：2026-08-25 · 文档协议：`1.47.0` · 画布基线：`leafer-editor@2.2.9`
 
 当前状态：可用 0 项，降级可用 22 项，不可用 0 项。只有必需表面全部可用，并同时具备自动化与实机证据时，能力才允许标记为“可用”。
 
@@ -197,7 +197,7 @@
 创建、渲染、变换和编辑固定、自动宽度或自动高度文字，使用单一共享字体样式、对齐、明确换行以及固定框溢出控制。
 
 - ID：`text.single-style`
-- 实现方：DesignDocument 1.33.0 + Text Layout Service v4 + leafer-editor@2.2.9 Text/TextEditor + controlled SVG text metadata v8
+- 实现方：DesignDocument 1.33.0 + Text Layout Service v5 + leafer-editor@2.2.9 Text/TextEditor + controlled SVG text metadata v8
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=degraded
 - 证据：自动化 15 项；实机 0 项
 - 限制：family/style-name/weight/slant 精确身份、运行时字体可用性、全文件精确替换、显式 Auto Size 重排及 unresolved Figma 导出失败已通过单次 revision/undo 可用；字体二进制资源、可变字体轴、精确跨平台 shaping 及 macOS/Windows 视觉验收仍未完成。
@@ -235,14 +235,15 @@
 
 ### Auto Layout — 降级可用
 
-以线性、换行或 Grid Auto Layout 响应式布局 Frame，包括 row-local Fill 子层与 wrapped rows 自动分布；也可添加不改变 child 几何且不导出的 Uniform、Columns 或 Rows Layout Guide。
+以线性、换行或 Grid Auto Layout 响应式布局 Frame，包括首行文字基线对齐、row-local Fill 子层与 wrapped rows 自动分布；也可添加不改变 child 几何且不导出的 Uniform、Columns 或 Rows Layout Guide。
 
 - ID：`layout.auto-layout`
-- 实现方：DesignDocument 1.46.0 + @opendesign/layout-service Auto Layout contract v10 + EditorRuntime + Figma public Wrap parent/child projection
+- 实现方：DesignDocument 1.47.0 + @opendesign/layout-service Auto Layout contract v11 + Text Layout Service v5 + EditorRuntime + Figma public Auto Layout projection
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=degraded
 - 证据：自动化 18 项；实机 0 项
-- 限制：Horizontal Wrap 以每个 Fill 子层的最小宽度作为换行 basis，在 Min/Max 范围内逐 row 独立分配宽度；交叉轴 Fill 拉伸到所在 row，只有全部子层都填充交叉轴时 AUTO tracks 才整体拉伸。它不会跨 row 伪造共享列。Auto Layout Grid v2 已支持显式 Fixed/Fill/Hug 行列轨道、row-major flow 自动增减 Fill 行、独立双 gap、Manual 或 row-major 排布、child cell/span/alignment 与 span-aware 行列重排。Uniform、Columns 与 Rows Layout Guide 仍是不参与布局的视觉辅助。Fill 以外的自动行模板、自动列、dense/column flow、Guide style/变量、吸附、baseline、旋转 absolute child、画布 spacing/cell/reflow 手柄、SVG Grid metadata、breakpoint，以及 macOS/Windows 打包 GUI 实机证据仍未完成。
+- 限制：Horizontal flow 与 Wrap 使用 provider 实测首行文字基线，普通图层使用底边；交叉轴 Fill 继续以 stretch 覆盖对齐。Horizontal Wrap 以每个 Fill 子层的最小宽度作为换行 basis，在 Min/Max 范围内逐 row 独立分配宽度，只有全部子层都填充交叉轴时 AUTO tracks 才整体拉伸。它不会跨 row 伪造共享列。Auto Layout Grid v2 已支持显式 Fixed/Fill/Hug 行列轨道、row-major flow 自动增减 Fill 行、独立双 gap、Manual 或 row-major 排布、child cell/span/alignment 与 span-aware 行列重排。Uniform、Columns 与 Rows Layout Guide 仍是不参与布局的视觉辅助。Fill 以外的自动行模板、自动列、dense/column flow、Guide style/变量、吸附、旋转 absolute child、画布 spacing/cell/reflow 手柄、SVG Grid metadata、breakpoint，以及 macOS/Windows 打包 GUI 实机证据仍未完成。
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360040451373-Guide-to-auto-layout)
+- 专业参照：[官方说明](https://developers.figma.com/docs/plugins/api/properties/nodes-counteraxisalignitems/)
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360040450513-Create-layout-guides)
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/31289469907863-Use-the-grid-auto-layout-flow)
 - 专业参照：[官方说明](https://developers.figma.com/docs/plugins/api/properties/nodes-primaryaxisalignitems/)

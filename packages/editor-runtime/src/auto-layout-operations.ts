@@ -16,6 +16,7 @@ import {
 } from "@opendesign/design-contracts";
 import {
   AUTO_LAYOUT_SERVICE_CONTRACT_VERSION,
+  clampLayoutExtent,
   DEFAULT_LAYOUT_CONSTRAINTS,
   GRID_AUTO_LAYOUT_CONTRACT_VERSION,
   LAYOUT_SERVICE_CONTRACT_VERSION,
@@ -94,6 +95,15 @@ export function planSetFrameAutoLayout(
   if (typeof plannedGridPlacements === "string")
     return failure("visual-fidelity", plannedGridPlacements);
   if (autoLayout.mode !== "none") {
+    if (
+      autoLayout.mode === "vertical" &&
+      autoLayout.counterAlignment === "baseline"
+    ) {
+      return failure(
+        "visual-fidelity",
+        `Baseline alignment is only available on horizontal Auto Layout Frame ${frameId}`,
+      );
+    }
     if (
       autoLayout.mode === "grid" &&
       autoLayout.autoTracks === "rows" &&
@@ -270,6 +280,10 @@ export function planSetFrameAutoLayout(
 
 export function resolveAutoLayoutInPlace(
   document: DesignDocument,
+  resolveTextFirstBaseline?: (
+    node: Extract<DesignNode, { kind: "text" }>,
+    size: { width: number; height: number },
+  ) => number,
 ): AutoLayoutResolution {
   const frameIds = Object.values(document.nodesById)
     .filter(
@@ -353,11 +367,42 @@ export function resolveAutoLayoutInPlace(
         );
       }
       if (child.visible) {
+        let baseline: number | undefined;
+        if (
+          autoLayout.mode === "horizontal" &&
+          autoLayout.counterAlignment === "baseline" &&
+          child.kind === "text" &&
+          (child.layoutSizing?.vertical ?? "fixed") !== "fill"
+        ) {
+          if (!resolveTextFirstBaseline) {
+            return resolutionFailure(
+              "invalid-layout",
+              frameId,
+              `Text child ${childId} requires an available first-line baseline provider`,
+            );
+          }
+          baseline = resolveTextFirstBaseline(child, {
+            width:
+              (child.layoutSizing?.horizontal ?? "fixed") === "fixed"
+                ? clampLayoutExtent(
+                    child.size.width,
+                    child.layoutLimits,
+                    "horizontal",
+                  )
+                : child.size.width,
+            height: clampLayoutExtent(
+              child.size.height,
+              child.layoutLimits,
+              "vertical",
+            ),
+          });
+        }
         children.push({
           id: child.id,
           positioning: "flow",
           ...child.size,
           sizing: child.layoutSizing ?? DEFAULT_LAYOUT_SIZING,
+          ...(baseline === undefined ? {} : { baseline }),
           ...(child.layoutLimits ? { limits: child.layoutLimits } : {}),
           ...(child.gridPlacement
             ? { gridPlacement: child.gridPlacement }
@@ -441,6 +486,10 @@ export function resolveAutoLayoutUntilStable(
   resolveWidthDependentText: (
     node: Extract<DesignNode, { kind: "text" }>,
   ) => void,
+  resolveTextFirstBaseline: (
+    node: Extract<DesignNode, { kind: "text" }>,
+    size: { width: number; height: number },
+  ) => number,
 ): AutoLayoutResolution {
   const flowCount = Object.values(document.nodesById).filter(
     (node) =>
@@ -456,7 +505,10 @@ export function resolveAutoLayoutUntilStable(
       if (node.kind === "text" && node.properties.textResize === "auto-height")
         autoHeightWidths.set(node.id, node.size.width);
     }
-    const resolution = resolveAutoLayoutInPlace(document);
+    const resolution = resolveAutoLayoutInPlace(
+      document,
+      resolveTextFirstBaseline,
+    );
     if (!resolution.ok) return resolution;
     for (const [nodeId, previousWidth] of autoHeightWidths) {
       const node = document.nodesById[nodeId];
@@ -521,6 +573,7 @@ function solveFrame(
     positioning: "flow" | "absolute";
     width: number;
     height: number;
+    baseline?: number;
     sizing: LayoutSizing;
     limits?: LayoutLimits;
     gridPlacement?: GridChildPlacement;

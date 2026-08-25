@@ -91,7 +91,10 @@ export function AutoLayoutSection({
                 padding: current.padding,
                 gap: current.gap,
                 primaryAlignment: current.primaryAlignment,
-                counterAlignment: current.counterAlignment,
+                counterAlignment:
+                  mode === "vertical" && current.counterAlignment === "baseline"
+                    ? "start"
+                    : current.counterAlignment,
                 ...(current.sizing ? { sizing: current.sizing } : {}),
               });
             }}
@@ -310,7 +313,8 @@ export function AutoLayoutSection({
                   value={linearFlow.primaryAlignment as PackedAlignment}
                 />
               )}
-              <AlignmentSelect
+              <CounterAlignmentSelect
+                allowBaseline={linearFlow.mode === "horizontal"}
                 label={t("properties.autoLayoutCounter")}
                 onChange={(counterAlignment) =>
                   updateFlow({ counterAlignment })
@@ -379,6 +383,47 @@ function AlignmentSelect({
         <option value="start">{t("properties.autoLayoutStart")}</option>
         <option value="center">{t("properties.autoLayoutCenter")}</option>
         <option value="end">{t("properties.autoLayoutEnd")}</option>
+      </select>
+    </label>
+  );
+}
+
+function CounterAlignmentSelect({
+  allowBaseline,
+  label,
+  onChange,
+  value,
+}: {
+  allowBaseline: boolean;
+  label: string;
+  onChange: (value: LinearAutoLayoutFlow["counterAlignment"]) => void;
+  value: LinearAutoLayoutFlow["counterAlignment"];
+}) {
+  const { t } = useI18n();
+  return (
+    <label className={styles.select}>
+      <span>{label}</span>
+      <select
+        aria-label={label}
+        onChange={(event) =>
+          onChange(
+            event.target.value as LinearAutoLayoutFlow["counterAlignment"],
+          )
+        }
+        onKeyDown={(event) => {
+          if (allowBaseline && event.key.toLowerCase() === "b") {
+            event.preventDefault();
+            onChange("baseline");
+          }
+        }}
+        value={value}
+      >
+        <option value="start">{t("properties.autoLayoutStart")}</option>
+        <option value="center">{t("properties.autoLayoutCenter")}</option>
+        <option value="end">{t("properties.autoLayoutEnd")}</option>
+        {allowBaseline && (
+          <option value="baseline">{t("properties.autoLayoutBaseline")}</option>
+        )}
       </select>
     </label>
   );

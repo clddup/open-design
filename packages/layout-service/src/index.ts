@@ -1,5 +1,9 @@
 import { solveHorizontalWrap } from "./wrap-layout.js";
 import { distributeBoundedFill } from "./fill-distribution.js";
+import {
+  baselineItemOffset,
+  resolveBaselineMetrics,
+} from "./baseline-alignment.js";
 export {
   GRID_AUTO_LAYOUT_CONTRACT_VERSION,
   solveGridAutoLayout,
@@ -10,7 +14,7 @@ export {
 } from "./grid-layout.js";
 
 export const LAYOUT_SERVICE_CONTRACT_VERSION = 1 as const;
-export const AUTO_LAYOUT_SERVICE_CONTRACT_VERSION = 10 as const;
+export const AUTO_LAYOUT_SERVICE_CONTRACT_VERSION = 11 as const;
 
 export type HorizontalConstraint =
   "left" | "right" | "left-right" | "center" | "scale";
@@ -50,6 +54,7 @@ export type ConstraintResizeResult =
 
 export type AutoLayoutDirection = "horizontal" | "vertical";
 export type AutoLayoutAlignment = "start" | "center" | "end";
+export type AutoLayoutCounterAlignment = AutoLayoutAlignment | "baseline";
 export type AutoLayoutPrimaryAlignment = AutoLayoutAlignment | "space-between";
 export type AutoLayoutFrameAxisSizing = "fixed" | "hug";
 export type AutoLayoutChildAxisSizing = "fixed" | "fill";
@@ -72,7 +77,7 @@ export type LinearAutoLayoutRequest = {
   padding: AutoLayoutPadding;
   gap: number;
   primaryAlignment: AutoLayoutPrimaryAlignment;
-  counterAlignment: AutoLayoutAlignment;
+  counterAlignment: AutoLayoutCounterAlignment;
   frameSizing: {
     horizontal: AutoLayoutFrameAxisSizing;
     vertical: AutoLayoutFrameAxisSizing;
@@ -88,6 +93,7 @@ export type LinearAutoLayoutRequest = {
     positioning: "flow" | "absolute";
     width: number;
     height: number;
+    baseline?: number;
     sizing: {
       horizontal: AutoLayoutChildAxisSizing;
       vertical: AutoLayoutChildAxisSizing;
@@ -206,6 +212,19 @@ export function solveLinearAutoLayout(
   }));
   const packedGap =
     request.primaryAlignment === "space-between" ? 0 : request.gap;
+  const baselineMetrics =
+    request.direction === "horizontal" &&
+    request.counterAlignment === "baseline"
+      ? resolveBaselineMetrics(
+          limitedChildren.map((child) => ({
+            ...(child.baseline === undefined
+              ? {}
+              : { baseline: child.baseline }),
+            height: child.height,
+            stretch: child.sizing.vertical === "fill",
+          })),
+        )
+      : undefined;
   const frame = {
     width: resolveFrameExtent(
       horizontalHug
@@ -223,7 +242,9 @@ export function solveLinearAutoLayout(
     height: resolveFrameExtent(
       verticalHug
         ? huggedExtent(
-            limitedChildren.map((child) => child.height),
+            baselineMetrics
+              ? [baselineMetrics.extent]
+              : limitedChildren.map((child) => child.height),
             request.direction === "vertical",
             packedGap,
             request.padding.top + request.padding.bottom,
@@ -306,6 +327,18 @@ export function solveLinearAutoLayout(
   const contentMain =
     childMainTotal + resolvedGap * Math.max(0, resolvedChildren.length - 1);
   const mainFree = frameMain - mainStart - mainEnd - contentMain;
+  const resolvedBaselineMetrics =
+    horizontal && request.counterAlignment === "baseline"
+      ? resolveBaselineMetrics(
+          resolvedChildren.map((child) => ({
+            ...(child.baseline === undefined
+              ? {}
+              : { baseline: child.baseline }),
+            height: child.height,
+            stretch: child.sizing.vertical === "fill",
+          })),
+        )
+      : undefined;
   let cursor =
     mainStart +
     (request.primaryAlignment === "space-between"
@@ -315,8 +348,23 @@ export function solveLinearAutoLayout(
     const childMain = horizontal ? child.width : child.height;
     const childCounter = horizontal ? child.height : child.width;
     const counterFree = frameCounter - counterStart - counterEnd - childCounter;
-    const counter =
-      counterStart + alignmentOffset(request.counterAlignment, counterFree);
+    const counter = resolvedBaselineMetrics
+      ? counterStart +
+        baselineItemOffset(
+          {
+            ...(child.baseline === undefined
+              ? {}
+              : { baseline: child.baseline }),
+            height: child.height,
+            stretch: child.sizing.vertical === "fill",
+          },
+          resolvedBaselineMetrics,
+        )
+      : counterStart +
+        alignmentOffset(
+          request.counterAlignment as AutoLayoutAlignment,
+          counterFree,
+        );
     const placement = {
       id: child.id,
       width: child.width,
@@ -440,7 +488,9 @@ function validLinearAutoLayoutRequest(
     ["start", "center", "end", "space-between"].includes(
       request.primaryAlignment,
     ) &&
-    ["start", "center", "end"].includes(request.counterAlignment) &&
+    ["start", "center", "end", "baseline"].includes(request.counterAlignment) &&
+    (request.counterAlignment !== "baseline" ||
+      request.direction === "horizontal") &&
     request.children.every((child) => {
       if (
         typeof child.id !== "string" ||
@@ -449,6 +499,9 @@ function validLinearAutoLayoutRequest(
         !finiteNonNegative(child.width) ||
         !finiteNonNegative(child.height)
       ) {
+        return false;
+      }
+      if (child.baseline !== undefined && !finiteNonNegative(child.baseline)) {
         return false;
       }
       if (child.positioning !== "flow" && child.positioning !== "absolute")

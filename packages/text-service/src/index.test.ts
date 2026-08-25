@@ -2,11 +2,14 @@ import { describe, expect, it, vi } from "vitest";
 import {
   memoizeTextLayoutProvider,
   validateTextFontAvailabilityResult,
+  validateTextFirstBaselineRequest,
+  validateTextFirstBaselineResult,
   validateTextFontDescriptor,
   validateTextLayoutRequest,
   validateTextLayoutResult,
   type TextLayoutProvider,
   type TextLayoutRequest,
+  type TextFirstBaselineRequest,
 } from "./index.js";
 
 const autoHeight: TextLayoutRequest = {
@@ -27,6 +30,28 @@ const autoHeight: TextLayoutRequest = {
   mode: "auto-height",
   textWrap: "word",
   width: 240,
+};
+
+const fixedBaseline: TextFirstBaselineRequest = {
+  content: "OpenDesign",
+  fontFamily: "Inter",
+  fontStyleName: "Regular",
+  fontSize: 20,
+  fontWeight: 400,
+  fontSlant: "normal",
+  letterSpacing: 0,
+  lineHeight: 28,
+  paragraphIndent: 0,
+  paragraphSpacing: 0,
+  textCase: "original",
+  textDecoration: "none",
+  textTruncation: "disabled",
+  maxLines: null,
+  mode: "fixed",
+  textWrap: "word",
+  textAlignVertical: "center",
+  width: 160,
+  height: 48,
 };
 
 describe("text layout service contract", () => {
@@ -171,6 +196,46 @@ describe("text layout service contract", () => {
       fontSlant: "normal",
     });
     expect(measure).toHaveBeenCalledTimes(2);
+  });
+
+  it("validates and memoizes bounded first-line baseline measurements", () => {
+    expect(validateTextFirstBaselineRequest(fixedBaseline)).toBeNull();
+    expect(
+      validateTextFirstBaselineRequest({
+        ...fixedBaseline,
+        textAlignVertical: "justify" as "center",
+      }),
+    ).toContain("vertical alignment");
+    expect(
+      validateTextFirstBaselineResult({
+        ok: true,
+        provider: "test-provider",
+        providerVersion: "1",
+        baseline: Number.NaN,
+      }),
+    ).toContain("invalid metrics");
+    const measureFirstBaseline = vi.fn(() => ({
+      ok: true as const,
+      provider: "test-provider",
+      providerVersion: "1",
+      baseline: 22,
+    }));
+    const provider = memoizeTextLayoutProvider({
+      id: "test-provider",
+      version: "1",
+      measure: () => ({
+        ok: true,
+        provider: "test-provider",
+        providerVersion: "1",
+        size: { width: 160, height: 48 },
+        warnings: [],
+      }),
+      measureFirstBaseline,
+    });
+    expect(provider.measureFirstBaseline?.(fixedBaseline)).toEqual(
+      provider.measureFirstBaseline?.(fixedBaseline),
+    );
+    expect(measureFirstBaseline).toHaveBeenCalledTimes(1);
   });
 
   it("forwards uncached font availability inspection", () => {

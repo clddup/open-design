@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 60,
+  "schemaVersion": 61,
   "recordedAt": "2026-08-25",
   "policy": {
     "allowFloatingRefs": false,
@@ -7,17 +7,17 @@
   },
   "contracts": {
     "documentFormat": "dev.opendesign.document",
-    "documentSchemaVersion": "1.46.0",
+    "documentSchemaVersion": "1.47.0",
     "runtimeProtocolVersion": "0.1.0",
     "agentProtocolVersion": "3.12.0",
     "geometryServiceContractVersion": 13,
-    "textLayoutServiceContractVersion": 4,
+    "textLayoutServiceContractVersion": 5,
     "textRangeServiceContractVersion": 1,
     "textParagraphServiceContractVersion": 2,
     "textListServiceContractVersion": 1,
     "textEditingSessionServiceContractVersion": 2,
     "textRunLayoutServiceContractVersion": 4,
-    "layoutServiceContractVersion": 10,
+    "layoutServiceContractVersion": 11,
     "imageServiceContractVersion": 8
   },
   "components": {
@@ -75,7 +75,7 @@
       "version": "1.133.0",
       "sourceCommit": "83bfe81d9616ab759702f657eb18ef153f83e8ae",
       "license": "MIT",
-      "productionStatus": "compile-time-component-property-variant-slot-variable-shared-style-slice-export-setting-image-and-image-paint-filter-exact-font-name-rich-text-grid-auto-layout-v2-wrap-counter-axis-distribution-and-wrap-fill-child-roundtrip-verification"
+      "productionStatus": "compile-time-component-property-variant-slot-variable-shared-style-slice-export-setting-image-and-image-paint-filter-exact-font-name-rich-text-grid-auto-layout-v2-wrap-counter-axis-distribution-wrap-fill-child-and-baseline-roundtrip-verification"
     },
     "vectorGeometry": {
       "role": "vector-path-geometry-provider",
@@ -121,7 +121,7 @@
       "adapterPackage": "@opendesign/leafer-engine",
       "provider": "leafer-editor",
       "version": "2.2.9",
-      "productionStatus": "typography-core-v2-exact-face-identity-rich-runs-range-edit-auto-size-and-ending-max-lines-available-font-packaging-variable-axes-and-native-gate-pending"
+      "productionStatus": "typography-core-v2-exact-face-identity-rich-runs-range-edit-auto-size-ending-max-lines-and-first-line-baseline-measurement-available-font-packaging-variable-axes-and-native-gate-pending"
     },
     "textList": {
       "role": "figma-compatible-semantic-text-list-and-marker-service",
@@ -153,8 +153,8 @@
     "layout": {
       "role": "versioned-frame-constraints-and-auto-layout-provider",
       "contractPackage": "@opendesign/layout-service",
-      "contractVersion": 10,
-      "productionStatus": "frame-constraints-linear-auto-layout-grid-v3-canvas-track-reorder-automatic-rows-sizing-wrap-counter-axis-distribution-wrap-fill-min-max-auto-gap-absolute-child-and-layout-guides-available-native-gate-pending"
+      "contractVersion": 11,
+      "productionStatus": "frame-constraints-linear-auto-layout-grid-v3-canvas-track-reorder-automatic-rows-sizing-wrap-counter-axis-distribution-wrap-fill-first-line-baseline-min-max-auto-gap-absolute-child-and-layout-guides-available-native-gate-pending"
     },
     "imageService": {
       "role": "versioned-image-placement-crop-adjustment-area-expansion-upscale-background-replacement-and-relighting-service",

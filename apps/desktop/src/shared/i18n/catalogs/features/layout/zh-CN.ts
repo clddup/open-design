@@ -65,6 +65,7 @@ export const layoutMessages = {
   "properties.autoLayoutStart": "起始",
   "properties.autoLayoutCenter": "居中",
   "properties.autoLayoutEnd": "末端",
+  "properties.autoLayoutBaseline": "文字基线",
   "properties.autoLayoutWidthSizing": "宽度模式",
   "properties.autoLayoutHeightSizing": "高度模式",
   "properties.autoLayoutFixed": "固定",

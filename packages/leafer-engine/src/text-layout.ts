@@ -1,11 +1,14 @@
 import {
   memoizeTextLayoutProvider,
+  validateTextFirstBaselineRequest,
+  validateTextFirstBaselineResult,
   validateTextFontDescriptor,
   validateTextFontAvailabilityResult,
   validateTextLayoutRequest,
   validateTextLayoutResult,
   type TextFontAvailabilityResult,
   type TextFontDescriptor,
+  type TextFirstBaselineResult,
   type TextLayoutProvider,
   type TextLayoutRequest,
   type TextLayoutResult,
@@ -117,7 +120,94 @@ export function createLeaferTextLayoutProvider(
         text?.destroy();
       }
     },
+    measureFirstBaseline(request) {
+      const inputIssue = validateTextFirstBaselineRequest(request);
+      if (inputIssue)
+        return baselineFailure("invalid-input", inputIssue, false);
+      let text: InstanceType<LeaferModule["Text"]> | undefined;
+      try {
+        const data = {
+          text: request.content,
+          fontFamily: request.fontFamily,
+          fontSize: request.fontSize,
+          fontWeight: request.fontWeight,
+          italic: request.fontSlant === "italic",
+          lineHeight: { type: "px", value: request.lineHeight },
+          letterSpacing: { type: "px", value: request.letterSpacing },
+          paraIndent: request.paragraphIndent,
+          paraSpacing: request.paragraphSpacing,
+          textCase: mapTextCase(request.textCase),
+          textDecoration: mapTextDecoration(request.textDecoration),
+          textWrap: mapTextWrap(request.textWrap),
+          verticalAlign:
+            request.textAlignVertical === "center"
+              ? "middle"
+              : request.textAlignVertical,
+          textOverflow:
+            request.textTruncation === "ending" ? "ellipsis" : "show",
+          ...(request.mode === "auto-width"
+            ? {}
+            : request.mode === "fixed"
+              ? { width: request.width, height: request.height }
+              : { width: request.width }),
+        };
+        text = new leafer.Text(
+          materializeLeaferTextData(
+            leafer,
+            data,
+            request.maxLines ?? undefined,
+          ),
+        );
+        const internal = text as unknown as {
+          __?: {
+            __textDrawData?: { rows?: Array<{ y?: unknown }> };
+          };
+          boxBounds: { height: number };
+        };
+        void internal.boxBounds;
+        const baseline = internal.__?.__textDrawData?.rows?.[0]?.y;
+        if (
+          typeof baseline !== "number" ||
+          !Number.isFinite(baseline) ||
+          baseline < 0
+        ) {
+          return baselineFailure(
+            "measurement-failed",
+            "Leafer did not expose stable first-line baseline metrics",
+            true,
+          );
+        }
+        const result: TextFirstBaselineResult = {
+          ok: true,
+          provider: LEAFER_TEXT_LAYOUT_PROVIDER_ID,
+          providerVersion: LEAFER_TEXT_LAYOUT_PROVIDER_VERSION,
+          baseline: normalizeDimension(baseline),
+        };
+        const resultIssue = validateTextFirstBaselineResult(result);
+        return resultIssue
+          ? baselineFailure("measurement-failed", resultIssue, true)
+          : result;
+      } catch (error) {
+        return baselineFailure(
+          "measurement-failed",
+          error instanceof Error && error.message
+            ? `Leafer text baseline measurement failed: ${error.message}`
+            : "Leafer text baseline measurement failed",
+          true,
+        );
+      } finally {
+        text?.destroy();
+      }
+    },
   });
+}
+
+function baselineFailure(
+  code: "invalid-input" | "measurement-failed" | "provider-unavailable",
+  message: string,
+  retryable: boolean,
+): TextFirstBaselineResult {
+  return { ok: false, code, message, retryable };
 }
 
 export function inspectLeaferFont(

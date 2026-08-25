@@ -107,7 +107,25 @@ describe("Figma wrapped Auto Layout compatibility", () => {
         ...figma,
         counterAxisAlignItems: "BASELINE",
       }),
-    ).toMatchObject({ ok: false });
+    ).toMatchObject({
+      ok: true,
+      layout: { counterAlignment: "baseline" },
+    });
+    expect(
+      toFigmaWrapAutoLayout({
+        mode: "horizontal",
+        padding: { top: 8, right: 16, bottom: 12, left: 16 },
+        gap: 10,
+        primaryAlignment: "space-between",
+        counterAlignment: "baseline",
+        sizing: { horizontal: "fixed", vertical: "fixed" },
+        wrap: {
+          mode: "wrap",
+          counterGap: 18,
+          counterAxisAlignContent: "space-between",
+        },
+      })?.counterAxisAlignItems,
+    ).toBe("BASELINE");
   });
 
   it("returns null for a non-wrapping horizontal flow", () => {

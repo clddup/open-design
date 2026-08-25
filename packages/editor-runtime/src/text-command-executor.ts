@@ -8,6 +8,7 @@ import type {
 import { styleDefinition } from "@opendesign/style-service";
 import {
   validateTextFontAvailabilityResult,
+  validateTextFirstBaselineResult,
   validateTextLayoutResult,
   validateTextRunLayoutResult,
   type TextFontAvailabilityResult,
@@ -549,6 +550,139 @@ export function resolveTextAutoSize(
       message: warning.message,
     })),
   );
+}
+
+export function resolveTextFirstBaseline(
+  node: TextNode,
+  commandId: string,
+  context: TextCommandContext,
+  size: { width: number; height: number } = node.size,
+): number {
+  const path = `/nodesById/${escapeJsonPointer(node.id)}/properties`;
+  if (
+    (node.properties.runs?.length ?? 0) > 0 ||
+    (node.properties.paragraphRuns?.length ?? 0) > 0
+  ) {
+    const provider = context.textRunLayoutProvider;
+    if (!provider) {
+      throw new OperationError(
+        commandId,
+        "Rich text baseline measurement is still initializing; retry after the canvas is ready",
+        "engine-failure",
+        { path, retryable: true },
+      );
+    }
+    if (node.properties.textAlignHorizontal === "justify") {
+      throw new OperationError(
+        commandId,
+        "Rich text baseline measurement does not support justified alignment yet",
+        "unsupported",
+        {
+          path: `/nodesById/${escapeJsonPointer(node.id)}/properties/textAlignHorizontal`,
+        },
+      );
+    }
+    const request = {
+      baseStyle: runtimeTextRunStyle(textRunBaseStyle(node)),
+      content: node.properties.content,
+      mode: node.properties.textResize,
+      paragraphIndent: node.properties.paragraphIndent,
+      paragraphSpacing: node.properties.paragraphSpacing,
+      listSpacing: node.properties.listSpacing,
+      hangingList: node.properties.hangingList,
+      paragraphRuns: node.properties.paragraphRuns ?? [],
+      runs: (node.properties.runs ?? []).map((run) => ({
+        ...run,
+        style: runtimeTextRunStyle(run.style),
+      })),
+      textAlignHorizontal: node.properties.textAlignHorizontal,
+      textAlignVertical: node.properties.textAlignVertical,
+      textWrap: node.properties.textWrap,
+      ...(node.properties.textResize === "auto-width"
+        ? {}
+        : { width: size.width }),
+      ...(node.properties.textResize === "fixed"
+        ? { height: size.height }
+        : {}),
+    } as const;
+    const result = provider.layout(request);
+    const issue = validateTextRunLayoutResult(result, request);
+    if (issue || !result.ok) {
+      throw new OperationError(
+        commandId,
+        issue ??
+          (result.ok ? "Text baseline measurement failed" : result.message),
+        "engine-failure",
+        { path, retryable: !result.ok ? result.retryable : true },
+      );
+    }
+    if (
+      result.provider !== provider.id ||
+      result.providerVersion !== provider.version
+    ) {
+      throw new OperationError(
+        commandId,
+        "Rich text baseline provider returned inconsistent identity",
+        "engine-failure",
+        { path, retryable: true },
+      );
+    }
+    const firstLine = result.lines[0];
+    return firstLine ? firstLine.y + firstLine.baseline : 0;
+  }
+  const provider = context.textLayoutProvider;
+  if (!provider?.measureFirstBaseline) {
+    throw new OperationError(
+      commandId,
+      "Text baseline measurement is still initializing; retry after the canvas is ready",
+      "engine-failure",
+      { path, retryable: true },
+    );
+  }
+  const request = {
+    content: node.properties.content,
+    fontFamily: node.properties.fontFamily,
+    fontStyleName: node.properties.fontStyleName,
+    fontSize: node.properties.fontSize,
+    fontWeight: node.properties.fontWeight,
+    fontSlant: node.properties.fontSlant,
+    letterSpacing: node.properties.letterSpacing,
+    lineHeight: node.properties.lineHeight,
+    paragraphIndent: node.properties.paragraphIndent,
+    paragraphSpacing: node.properties.paragraphSpacing,
+    textCase: node.properties.textCase,
+    textDecoration: node.properties.textDecoration,
+    textTruncation: node.properties.textTruncation,
+    maxLines: node.properties.maxLines,
+    mode: node.properties.textResize,
+    textWrap: node.properties.textWrap,
+    textAlignVertical: node.properties.textAlignVertical,
+    width: size.width,
+    height: size.height,
+  } as const;
+  const result = provider.measureFirstBaseline(request);
+  const issue = validateTextFirstBaselineResult(result);
+  if (issue || !result.ok) {
+    throw new OperationError(
+      commandId,
+      issue ??
+        (result.ok ? "Text baseline measurement failed" : result.message),
+      "engine-failure",
+      { path, retryable: !result.ok ? result.retryable : true },
+    );
+  }
+  if (
+    result.provider !== provider.id ||
+    result.providerVersion !== provider.version
+  ) {
+    throw new OperationError(
+      commandId,
+      "Text baseline provider returned inconsistent identity",
+      "engine-failure",
+      { path, retryable: true },
+    );
+  }
+  return result.baseline;
 }
 
 function resolveRichTextAutoSize(

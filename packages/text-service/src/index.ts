@@ -18,7 +18,7 @@ import type {
   TextResizeMode,
 } from "./text-types.js";
 
-export const TEXT_LAYOUT_SERVICE_CONTRACT_VERSION = 4 as const;
+export const TEXT_LAYOUT_SERVICE_CONTRACT_VERSION = 5 as const;
 export const MAX_TEXT_LAYOUT_CHARACTERS = 1_000_000;
 export const MAX_TEXT_LAYOUT_CACHE_KEY_CHARACTERS = 4_000_000;
 export const MAX_TEXT_LAYOUT_DIMENSION = 1_000_000;
@@ -66,11 +66,124 @@ export type TextLayoutResult =
       retryable: boolean;
     };
 
+export interface TextFirstBaselineRequest {
+  content: string;
+  fontFamily: string;
+  fontStyleName: string | null;
+  fontSize: number;
+  fontWeight: number;
+  fontSlant: "normal" | "italic";
+  letterSpacing: number;
+  lineHeight: number;
+  paragraphIndent: number;
+  paragraphSpacing: number;
+  textCase: TextLayoutCase;
+  textDecoration: TextLayoutDecoration;
+  textTruncation: TextLayoutTruncation;
+  maxLines: number | null;
+  mode: TextResizeMode;
+  textWrap: TextLayoutWrap;
+  textAlignVertical: "top" | "center" | "bottom";
+  width: number;
+  height: number;
+}
+
+export type TextFirstBaselineResult =
+  | {
+      ok: true;
+      provider: string;
+      providerVersion: string;
+      baseline: number;
+    }
+  | {
+      ok: false;
+      code: TextLayoutFailureCode;
+      message: string;
+      retryable: boolean;
+    };
+
 export interface TextLayoutProvider {
   readonly id: string;
   readonly version: string;
   inspectFont?(descriptor: TextFontDescriptor): TextFontAvailabilityResult;
   measure(request: TextLayoutRequest): TextLayoutResult;
+  measureFirstBaseline?(
+    request: TextFirstBaselineRequest,
+  ): TextFirstBaselineResult;
+}
+
+export function validateTextFirstBaselineRequest(
+  request: TextFirstBaselineRequest,
+): string | null {
+  const layoutIssue = validateTextLayoutRequest({
+    content: request.content,
+    fontFamily: request.fontFamily,
+    fontStyleName: request.fontStyleName,
+    fontSize: request.fontSize,
+    fontWeight: request.fontWeight,
+    fontSlant: request.fontSlant,
+    letterSpacing: request.letterSpacing,
+    lineHeight: request.lineHeight,
+    paragraphIndent: request.paragraphIndent,
+    paragraphSpacing: request.paragraphSpacing,
+    textCase: request.textCase,
+    textDecoration: request.textDecoration,
+    textTruncation: request.textTruncation,
+    maxLines: request.maxLines,
+    mode: "auto-width",
+    textWrap: "none",
+  });
+  if (layoutIssue) return layoutIssue;
+  if (
+    !Number.isFinite(request.width) ||
+    request.width < 0 ||
+    request.width > MAX_TEXT_LAYOUT_DIMENSION ||
+    !Number.isFinite(request.height) ||
+    request.height < 0 ||
+    request.height > MAX_TEXT_LAYOUT_DIMENSION
+  ) {
+    return "Text baseline bounds are outside supported finite limits";
+  }
+  if (!(["fixed", "auto-width", "auto-height"] as const).includes(request.mode))
+    return "Text baseline resize mode is unsupported";
+  if (!(["none", "word", "character"] as const).includes(request.textWrap))
+    return "Text baseline wrapping mode is unsupported";
+  if (
+    !(["top", "center", "bottom"] as const).includes(request.textAlignVertical)
+  )
+    return "Text baseline vertical alignment is unsupported";
+  return null;
+}
+
+export function validateTextFirstBaselineResult(
+  value: TextFirstBaselineResult,
+): string | null {
+  if (!value || typeof value !== "object" || typeof value.ok !== "boolean")
+    return "Text baseline provider returned an invalid result";
+  if (!value.ok) {
+    return [
+      "invalid-input",
+      "measurement-failed",
+      "provider-unavailable",
+    ].includes(value.code) &&
+      typeof value.message === "string" &&
+      value.message.length > 0 &&
+      value.message.length <= MAX_TEXT_LAYOUT_MESSAGE_CHARACTERS &&
+      typeof value.retryable === "boolean"
+      ? null
+      : "Text baseline provider returned an invalid failure";
+  }
+  return typeof value.provider !== "string" ||
+    value.provider.length === 0 ||
+    value.provider.length > MAX_TEXT_LAYOUT_PROVIDER_ID_CHARACTERS ||
+    typeof value.providerVersion !== "string" ||
+    value.providerVersion.length === 0 ||
+    value.providerVersion.length > MAX_TEXT_LAYOUT_PROVIDER_ID_CHARACTERS ||
+    !Number.isFinite(value.baseline) ||
+    value.baseline < 0 ||
+    value.baseline > MAX_TEXT_LAYOUT_DIMENSION
+    ? "Text baseline provider returned invalid metrics"
+    : null;
 }
 
 export function validateTextFontDescriptor(
@@ -304,6 +417,8 @@ export function memoizeTextLayoutProvider(
   }
   const results = new Map<string, TextLayoutResult>();
   let keyCharacters = 0;
+  const baselineCache = new Map<string, TextFirstBaselineResult>();
+  let baselineKeyCharacters = 0;
   return {
     id: provider.id,
     version: provider.version,
@@ -341,6 +456,37 @@ export function memoizeTextLayoutProvider(
       }
       return structuredClone(result);
     },
+    ...(provider.measureFirstBaseline
+      ? {
+          measureFirstBaseline(request: TextFirstBaselineRequest) {
+            const key = JSON.stringify(request);
+            const cached = baselineCache.get(key);
+            if (cached) {
+              baselineCache.delete(key);
+              baselineCache.set(key, cached);
+              return structuredClone(cached);
+            }
+            const result = provider.measureFirstBaseline!(request);
+            if (
+              (result.ok || !result.retryable) &&
+              key.length <= MAX_TEXT_LAYOUT_CACHE_KEY_CHARACTERS
+            ) {
+              baselineCache.set(key, structuredClone(result));
+              baselineKeyCharacters += key.length;
+            }
+            while (
+              baselineCache.size > maxEntries ||
+              baselineKeyCharacters > MAX_TEXT_LAYOUT_CACHE_KEY_CHARACTERS
+            ) {
+              const oldest = baselineCache.keys().next().value;
+              if (oldest === undefined) break;
+              baselineKeyCharacters -= oldest.length;
+              baselineCache.delete(oldest);
+            }
+            return structuredClone(result);
+          },
+        }
+      : {}),
   };
 }
 

@@ -250,10 +250,13 @@ const AutoLayoutCounterAlignmentSchema = Type.Union([
   Type.Literal("start"),
   Type.Literal("center"),
   Type.Literal("end"),
+  Type.Literal("baseline"),
 ]);
 
 const AutoLayoutPrimaryAlignmentSchema = Type.Union([
-  AutoLayoutCounterAlignmentSchema,
+  Type.Literal("start"),
+  Type.Literal("center"),
+  Type.Literal("end"),
   Type.Literal("space-between"),
 ]);
 

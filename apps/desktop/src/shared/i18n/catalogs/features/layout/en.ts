@@ -63,6 +63,7 @@ export const layoutMessages = {
   "properties.autoLayoutStart": "Start",
   "properties.autoLayoutCenter": "Center",
   "properties.autoLayoutEnd": "End",
+  "properties.autoLayoutBaseline": "Text baseline",
   "properties.autoLayoutWidthSizing": "Width sizing",
   "properties.autoLayoutHeightSizing": "Height sizing",
   "properties.autoLayoutFixed": "Fixed",

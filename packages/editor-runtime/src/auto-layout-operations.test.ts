@@ -5,7 +5,7 @@ import type {
   DesignTransaction,
 } from "@opendesign/design-contracts";
 import type { TextLayoutProvider } from "@opendesign/text-service";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   EditorRuntime,
   createEmptyDesignDocument,
@@ -29,6 +29,89 @@ const horizontal: AutoLayoutFlow = {
 };
 
 describe("linear Auto Layout Runtime", () => {
+  it("aligns fixed text from provider-measured first-line baseline in one revision", () => {
+    const document = layoutDocument();
+    const frame = document.nodesById.frame;
+    if (frame?.kind !== "frame") throw new Error("missing frame");
+    frame.childIds = ["one", "label"];
+    document.nodesById.one!.size = { width: 24, height: 24 };
+    const label = autoHeightText("label", "frame", 80);
+    label.size = { width: 80, height: 40 };
+    label.properties.textResize = "fixed";
+    document.nodesById.label = label;
+    delete document.nodesById.two;
+    const measureFirstBaseline = vi.fn(() => ({
+      ok: true as const,
+      provider: "baseline-test",
+      providerVersion: "1",
+      baseline: 18,
+    }));
+    const provider: TextLayoutProvider = {
+      id: "baseline-test",
+      version: "1",
+      measure: () => ({
+        ok: false,
+        code: "measurement-failed",
+        message: "Auto Size is not expected",
+        retryable: false,
+      }),
+      measureFirstBaseline,
+    };
+    const runtime = new EditorRuntime(normalizeDesignDocument(document), {
+      textLayoutProvider: provider,
+    });
+    const plan = planSetFrameAutoLayout(
+      runtime.getSnapshot().document,
+      "page_layout",
+      "frame",
+      { ...horizontal, counterAlignment: "baseline" },
+      "baseline",
+    );
+    if (!plan.ok) throw new Error(plan.message);
+    expect(runtime.apply(transaction(runtime, plan.commands))).toMatchObject({
+      ok: true,
+      revision: { revision: 1 },
+    });
+    expectRect(runtime.getSnapshot().document, "one", 20, 10, 24, 24);
+    expectRect(runtime.getSnapshot().document, "label", 56, 16, 80, 40);
+    expect(measureFirstBaseline).toHaveBeenCalled();
+    expect(runtime.undo().ok).toBe(true);
+    expect(runtime.redo().ok).toBe(true);
+  });
+
+  it("rejects baseline on vertical Auto Layout before creating a transaction", () => {
+    const runtime = new EditorRuntime(layoutDocument());
+    expect(
+      planSetFrameAutoLayout(
+        runtime.getSnapshot().document,
+        "page_layout",
+        "frame",
+        {
+          ...horizontal,
+          mode: "vertical",
+          counterAlignment: "baseline",
+        },
+        "invalid_baseline",
+      ),
+    ).toMatchObject({ ok: false, code: "visual-fidelity" });
+    expect(runtime.getSnapshot().document.revision).toBe(0);
+  });
+
+  it("rejects a persisted vertical baseline document invariant", () => {
+    const document = layoutDocument();
+    const frame = document.nodesById.frame;
+    if (frame?.kind !== "frame") throw new Error("missing frame");
+    frame.properties.autoLayout = {
+      ...horizontal,
+      mode: "vertical",
+      counterAlignment: "baseline",
+    };
+    delete document.nodesById.one?.constraints;
+    expect(() => normalizeDesignDocument(document)).toThrow(
+      /baseline alignment is only valid on horizontal Auto Layout/,
+    );
+  });
+
   it("activates layout, clears constraints, and reflows in one reversible revision", () => {
     const runtime = new EditorRuntime(layoutDocument());
     const plan = planSetFrameAutoLayout(

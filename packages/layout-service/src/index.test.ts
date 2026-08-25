@@ -75,6 +75,113 @@ describe("layout-service constraints v1", () => {
 });
 
 describe("layout-service linear Auto Layout v6", () => {
+  it("aligns text first-line metrics with ordinary layer bottom edges", () => {
+    expect(
+      solveLinearAutoLayout({
+        version: AUTO_LAYOUT_SERVICE_CONTRACT_VERSION,
+        direction: "horizontal",
+        frame: { width: 240, height: 100 },
+        padding: { top: 10, right: 10, bottom: 10, left: 10 },
+        gap: 12,
+        primaryAlignment: "start",
+        counterAlignment: "baseline",
+        frameSizing: fixedFrame,
+        children: [
+          child("icon", 24, 24),
+          { ...child("label", 80, 40), baseline: 18 },
+          { ...child("title", 100, 56), baseline: 42 },
+        ],
+      }),
+    ).toEqual({
+      ok: true,
+      frame: { width: 240, height: 100 },
+      placements: [
+        { id: "icon", x: 10, y: 28, width: 24, height: 24 },
+        { id: "label", x: 46, y: 34, width: 80, height: 40 },
+        { id: "title", x: 138, y: 10, width: 100, height: 56 },
+      ],
+    });
+  });
+
+  it("uses baseline content extent for horizontal Hug height", () => {
+    expect(
+      solveLinearAutoLayout({
+        version: AUTO_LAYOUT_SERVICE_CONTRACT_VERSION,
+        direction: "horizontal",
+        frame: { width: 200, height: 1 },
+        padding: { top: 8, right: 8, bottom: 8, left: 8 },
+        gap: 8,
+        primaryAlignment: "start",
+        counterAlignment: "baseline",
+        frameSizing: { horizontal: "fixed", vertical: "hug" },
+        children: [
+          { ...child("small", 60, 30), baseline: 16 },
+          { ...child("large", 80, 44), baseline: 34 },
+        ],
+      }),
+    ).toMatchObject({
+      ok: true,
+      frame: { width: 200, height: 64 },
+      placements: [
+        { id: "small", y: 26 },
+        { id: "large", y: 8 },
+      ],
+    });
+  });
+
+  it("aligns each wrapped row independently and leaves stretched children at row start", () => {
+    expect(
+      solveLinearAutoLayout({
+        version: AUTO_LAYOUT_SERVICE_CONTRACT_VERSION,
+        direction: "horizontal",
+        frame: { width: 150, height: 130 },
+        padding: { top: 10, right: 10, bottom: 10, left: 10 },
+        gap: 8,
+        primaryAlignment: "start",
+        counterAlignment: "baseline",
+        frameSizing: fixedFrame,
+        wrap: { mode: "wrap", counterGap: 12 },
+        children: [
+          child("icon", 40, 24),
+          { ...child("label", 70, 36), baseline: 18 },
+          { ...child("title", 80, 48), baseline: 34 },
+          child("stretch", 40, 1, "fixed", "fill"),
+        ],
+      }),
+    ).toMatchObject({
+      ok: true,
+      placements: [
+        { id: "icon", x: 10, y: 10 },
+        { id: "label", x: 58, y: 16 },
+        { id: "title", x: 10, y: 64 },
+        { id: "stretch", x: 98, y: 64, height: 48 },
+      ],
+    });
+  });
+
+  it("rejects baseline on vertical flow and invalid child metrics", () => {
+    const request = {
+      version: AUTO_LAYOUT_SERVICE_CONTRACT_VERSION,
+      direction: "horizontal" as const,
+      frame: { width: 200, height: 100 },
+      padding: { top: 0, right: 0, bottom: 0, left: 0 },
+      gap: 8,
+      primaryAlignment: "start" as const,
+      counterAlignment: "baseline" as const,
+      frameSizing: fixedFrame,
+      children: [{ ...child("text", 80, 20), baseline: 14 }],
+    };
+    expect(
+      solveLinearAutoLayout({ ...request, direction: "vertical" }),
+    ).toMatchObject({ ok: false, code: "invalid-input" });
+    expect(
+      solveLinearAutoLayout({
+        ...request,
+        children: [{ ...child("text", 80, 20), baseline: -1 }],
+      }),
+    ).toMatchObject({ ok: false, code: "invalid-input" });
+  });
+
   it("places horizontal children with padding, gap, and two-axis alignment", () => {
     expect(
       solveLinearAutoLayout({

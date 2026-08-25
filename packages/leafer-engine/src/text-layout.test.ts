@@ -28,6 +28,22 @@ class FakeText {
       height: typeof this.input.width === "number" ? 64.5 : 32.25,
     };
   }
+
+  get __() {
+    const height = Number(this.input.height ?? this.boxBounds.height);
+    const contentHeight = this.boxBounds.height;
+    const offset =
+      this.input.verticalAlign === "middle"
+        ? (height - contentHeight) / 2
+        : this.input.verticalAlign === "bottom"
+          ? height - contentHeight
+          : 0;
+    return {
+      __baseLine: 20,
+      __lineHeight: 32,
+      __textDrawData: { rows: [{ y: 20 + offset }] },
+    };
+  }
 }
 
 class WrappingText {
@@ -194,6 +210,40 @@ describe("Leafer text layout provider", () => {
     expect(result.size).toEqual({ width: 240, height: 64.5 });
     expect(result.warnings[0]?.code).toBe("font-fallback");
     expect(result.warnings[0]?.message).toContain("Missing Sans");
+  });
+
+  it("measures the rendered first-line baseline inside a fixed text box", () => {
+    const provider = createLeaferTextLayoutProvider(leafer, {
+      fontAvailable: () => true,
+    });
+    expect(
+      provider.measureFirstBaseline?.({
+        content: "Label",
+        fontFamily: "Inter",
+        fontStyleName: "Regular",
+        fontSize: 20,
+        fontWeight: 400,
+        fontSlant: "normal",
+        letterSpacing: 0,
+        lineHeight: 32,
+        paragraphIndent: 0,
+        paragraphSpacing: 0,
+        textCase: "original",
+        textDecoration: "none",
+        textTruncation: "disabled",
+        maxLines: null,
+        mode: "fixed",
+        textWrap: "word",
+        textAlignVertical: "center",
+        width: 160,
+        height: 80,
+      }),
+    ).toEqual({
+      ok: true,
+      provider: LEAFER_TEXT_LAYOUT_PROVIDER_ID,
+      providerVersion: LEAFER_TEXT_LAYOUT_PROVIDER_VERSION,
+      baseline: 27.75,
+    });
   });
 
   it("measures Auto Height from the same derived max-lines text used by the canvas", () => {

@@ -45,6 +45,7 @@ import { applyCommand } from "./command-executor.js";
 import {
   inspectTextFontAvailability,
   resolveTextAutoSize,
+  resolveTextFirstBaseline,
   type RuntimeTextRunStyle,
   type TextCommandContext,
 } from "./text-command-executor.js";
@@ -485,8 +486,11 @@ export class EditorRuntime {
         applyCommand(draft, command, context);
       const autoLayoutCommandId =
         transaction.commands.at(-1)?.commandId ?? "auto_layout";
-      const autoLayout = resolveAutoLayoutUntilStable(draft, (node) =>
-        resolveTextAutoSize(node, autoLayoutCommandId, context),
+      const autoLayout = resolveAutoLayoutUntilStable(
+        draft,
+        (node) => resolveTextAutoSize(node, autoLayoutCommandId, context),
+        (node, size) =>
+          resolveTextFirstBaseline(node, autoLayoutCommandId, context, size),
       );
       if (!autoLayout.ok) {
         throw new OperationError(

@@ -338,8 +338,6 @@ export function fromFigmaWrapAutoLayout(
     issues.push("Figma counterAxisSpacing must be a non-negative number");
   if (value.itemSpacing < 0)
     issues.push("Figma itemSpacing must be non-negative");
-  if (value.counterAxisAlignItems === "BASELINE")
-    issues.push("Text baseline alignment is not available in this contract");
   if (issues.length > 0) return { ok: false, issues };
   return {
     ok: true,
@@ -474,6 +472,7 @@ function fromFigmaAxisAlignment(
 function toFigmaCounterAlignment(
   alignment: LinearAutoLayoutFlow["counterAlignment"],
 ): FrameNode["counterAxisAlignItems"] {
+  if (alignment === "baseline") return "BASELINE";
   if (alignment === "center") return "CENTER";
   if (alignment === "end") return "MAX";
   return "MIN";
@@ -482,6 +481,7 @@ function toFigmaCounterAlignment(
 function fromFigmaCounterAlignment(
   alignment: FrameNode["counterAxisAlignItems"],
 ): LinearAutoLayoutFlow["counterAlignment"] {
+  if (alignment === "BASELINE") return "baseline";
   if (alignment === "CENTER") return "center";
   if (alignment === "MAX") return "end";
   return "start";

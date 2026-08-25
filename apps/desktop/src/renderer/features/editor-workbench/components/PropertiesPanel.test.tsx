@@ -676,6 +676,71 @@ describe("PropertiesPanel SVG workflow", () => {
     });
   });
 
+  it("offers Figma-style text baseline only for horizontal Auto Layout", async () => {
+    const user = userEvent.setup();
+    const onUpdate = vi.fn<(updates: UpdatePropertiesPatch) => void>();
+    const frame: Extract<DesignNode, { kind: "frame" }> = {
+      id: "frame_baseline",
+      kind: "frame",
+      name: "Icon label row",
+      parentId: null,
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 0, 0],
+      size: { width: 320, height: 80 },
+      exportSettings: [],
+      opacity: 1,
+      properties: {
+        fills: [],
+        strokes: [],
+        strokeWidth: 0,
+        cornerRadius: 0,
+        clipsContent: true,
+        autoLayout: {
+          mode: "horizontal",
+          padding: { top: 8, right: 12, bottom: 8, left: 12 },
+          gap: 8,
+          primaryAlignment: "start",
+          counterAlignment: "center",
+        },
+      },
+      extensions: {},
+    };
+    renderPanel({ node: frame, selectionCount: 1, onUpdate });
+    await user.selectOptions(screen.getByLabelText("Counter axis"), "baseline");
+    expect(onUpdate).toHaveBeenLastCalledWith({
+      properties: {
+        autoLayout: {
+          ...frame.properties.autoLayout,
+          counterAlignment: "baseline",
+        },
+      },
+    });
+
+    cleanup();
+    renderPanel({
+      node: {
+        ...frame,
+        properties: {
+          ...frame.properties,
+          autoLayout: {
+            mode: "vertical",
+            padding: { top: 8, right: 12, bottom: 8, left: 12 },
+            gap: 8,
+            primaryAlignment: "start",
+            counterAlignment: "center",
+          },
+        },
+      },
+      selectionCount: 1,
+      onUpdate,
+    });
+    expect(
+      screen.queryByRole("option", { name: "Text baseline" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("adds, edits, and removes a Frame uniform layout guide", async () => {
     const user = userEvent.setup();
     const onSetFrameLayoutGuides =

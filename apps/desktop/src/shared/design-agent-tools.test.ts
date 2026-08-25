@@ -3233,6 +3233,7 @@ describe("design Agent tool contract", () => {
     expect(arrange?.description).toContain("counterAxisAlignContent");
     expect(arrange?.description).toContain("Fill child's minimum width");
     expect(arrange?.description).toContain("stretches rows");
+    expect(arrange?.description).toContain("first-line baseline");
     expect(arrange?.description).toContain("min/max clamping");
     expect(arrange?.description).toContain("absolute child");
     expect(
@@ -3252,6 +3253,15 @@ describe("design Agent tool contract", () => {
     ).toBe(true);
     expect(
       validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, autoLayout),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
+        ...autoLayout,
+        autoLayout: {
+          ...autoLayout.autoLayout,
+          counterAlignment: "baseline",
+        },
+      }),
     ).toBe(true);
     expect(
       validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {

@@ -1,5 +1,9 @@
 import { autoGap, clampLayoutExtent, resolveFrameExtent } from "./index.js";
 import { distributeBoundedFill } from "./fill-distribution.js";
+import {
+  baselineItemOffset,
+  resolveBaselineMetrics,
+} from "./baseline-alignment.js";
 import type {
   AutoLayoutAlignment,
   ConstraintRect,
@@ -54,8 +58,9 @@ export function solveHorizontalWrap(
   );
   const packedGap =
     request.primaryAlignment === "space-between" ? 0 : request.gap;
-  const rows = wrapRows(children, innerWidth, packedGap).map((row) =>
-    resolveRowMainAxis(row, innerWidth, packedGap),
+  const baselineAligned = request.counterAlignment === "baseline";
+  const rows = wrapRows(children, innerWidth, packedGap, baselineAligned).map(
+    (row) => resolveRowMainAxis(row, innerWidth, packedGap, baselineAligned),
   );
   const rowHeightTotal = rows.reduce((sum, row) => sum + row.height, 0);
   const autoCounterGap =
@@ -93,9 +98,12 @@ export function solveHorizontalWrap(
     : request.wrap.counterGap;
   let rowY =
     request.padding.top +
-    (autoCounterGap || stretchRows
+    (autoCounterGap || stretchRows || baselineAligned
       ? 0
-      : alignmentOffset(request.counterAlignment, blockFree));
+      : alignmentOffset(
+          request.counterAlignment as AutoLayoutAlignment,
+          blockFree,
+        ));
   const placements: Array<ConstraintRect & { id: string }> = [];
   for (const row of rows) {
     const rowGap =
@@ -112,6 +120,15 @@ export function solveHorizontalWrap(
       (request.primaryAlignment === "space-between"
         ? 0
         : alignmentOffset(request.primaryAlignment, rowFree));
+    const rowBaseline = baselineAligned
+      ? resolveBaselineMetrics(
+          row.children.map((item) => ({
+            ...(item.baseline === undefined ? {} : { baseline: item.baseline }),
+            height: item.height,
+            stretch: item.sizing.vertical === "fill",
+          })),
+        )
+      : undefined;
     for (const child of row.children) {
       const childHeight =
         child.sizing.vertical === "fill"
@@ -120,9 +137,23 @@ export function solveHorizontalWrap(
       placements.push({
         id: child.id,
         x: childX,
-        y:
-          rowY +
-          alignmentOffset(request.counterAlignment, row.height - childHeight),
+        y: rowBaseline
+          ? rowY +
+            baselineItemOffset(
+              {
+                ...(child.baseline === undefined
+                  ? {}
+                  : { baseline: child.baseline }),
+                height: childHeight,
+                stretch: child.sizing.vertical === "fill",
+              },
+              rowBaseline,
+            )
+          : rowY +
+            alignmentOffset(
+              request.counterAlignment as AutoLayoutAlignment,
+              row.height - childHeight,
+            ),
         width: child.width,
         height: childHeight,
       });
@@ -137,6 +168,7 @@ function resolveRowMainAxis(
   row: ResolvedRow,
   innerWidth: number,
   gap: number,
+  baselineAligned: boolean,
 ): ResolvedRow {
   const fillChildren = row.children.filter(
     (child) => child.sizing.horizontal === "fill",
@@ -164,7 +196,17 @@ function resolveRowMainAxis(
   }));
   return {
     children,
-    height: Math.max(0, ...children.map((child) => child.height)),
+    height: baselineAligned
+      ? resolveBaselineMetrics(
+          children.map((child) => ({
+            ...(child.baseline === undefined
+              ? {}
+              : { baseline: child.baseline }),
+            height: child.height,
+            stretch: child.sizing.vertical === "fill",
+          })),
+        ).extent
+      : Math.max(0, ...children.map((child) => child.height)),
     width: children.reduce((sum, child) => sum + child.width, 0) + gapTotal,
   };
 }
@@ -173,6 +215,7 @@ function wrapRows(
   children: WrapRequest["children"],
   availableWidth: number,
   gap: number,
+  baselineAligned: boolean,
 ): ResolvedRow[] {
   const rows: ResolvedRow[] = [];
   for (const child of children) {
@@ -183,15 +226,30 @@ function wrapRows(
       rows.push({
         children: [child],
         width: child.width,
-        height: child.height,
+        height: rowHeight([child], baselineAligned),
       });
       continue;
     }
     row.children.push(child);
     row.width = nextWidth;
-    row.height = Math.max(row.height, child.height);
+    row.height = rowHeight(row.children, baselineAligned);
   }
   return rows;
+}
+
+function rowHeight(
+  children: WrapRequest["children"],
+  baselineAligned: boolean,
+): number {
+  return baselineAligned
+    ? resolveBaselineMetrics(
+        children.map((child) => ({
+          ...(child.baseline === undefined ? {} : { baseline: child.baseline }),
+          height: child.height,
+          stretch: child.sizing.vertical === "fill",
+        })),
+      ).extent
+    : Math.max(0, ...children.map((child) => child.height));
 }
 
 function alignmentOffset(

@@ -20,6 +20,16 @@ export function validateNodeLayoutInvariants(
   const issues: DocumentInvariantIssue[] = [];
   if (
     (node.kind === "frame" || node.kind === "slot") &&
+    node.properties.autoLayout?.mode === "vertical" &&
+    node.properties.autoLayout.counterAlignment === "baseline"
+  ) {
+    issues.push({
+      path: `/nodesById/${nodeId}/properties/autoLayout/counterAlignment`,
+      message: "baseline alignment is only valid on horizontal Auto Layout",
+    });
+  }
+  if (
+    (node.kind === "frame" || node.kind === "slot") &&
     node.properties.autoLayout?.mode === "grid"
   ) {
     const grid = node.properties.autoLayout;

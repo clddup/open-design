@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { capabilityManifestForAgent } from "@opendesign/design-capabilities";
 import { DESIGN_CAPABILITIES_TOOL_NAME } from "@/shared/design-agent-tools";
 import { ParentDesignToolExecutor } from "./parent-design-tool-executor";
 
@@ -37,6 +38,7 @@ describe("ParentDesignToolExecutor", () => {
       version?: unknown;
       capabilities?: unknown;
     };
+    expect(content).toEqual(capabilityManifestForAgent());
     expect(content.version).toBe(1);
     expect(Array.isArray(content.capabilities)).toBe(true);
     if (!Array.isArray(content.capabilities)) {
@@ -54,9 +56,6 @@ describe("ParentDesignToolExecutor", () => {
       id: "layout.auto-layout",
       status: "degraded",
       name: "Auto layout",
-      provider:
-        "DesignDocument 1.35.0 Auto Layout Grid v2 + Layout Guide + @opendesign/layout-service Auto Layout contract v8 + EditorRuntime",
-      evidence: { automated: 18, manual: 0 },
     });
   });
 

@@ -8,6 +8,7 @@ import {
   planCreateBooleanGroup,
 } from "@opendesign/editor-runtime";
 import { memoizeTextLayoutProvider } from "@opendesign/text-service";
+import type { TextLayoutProvider } from "@opendesign/text-service";
 import { describe, expect, it, vi } from "vitest";
 import {
   DESIGN_ARRANGE_TOOL_NAME,
@@ -6297,6 +6298,69 @@ describe("Renderer semantic hierarchy tool", () => {
         ],
       },
     });
+  });
+
+  it("applies horizontal text baseline alignment through the typed Agent planner", async () => {
+    const provider: TextLayoutProvider = memoizeTextLayoutProvider({
+      id: "agent-baseline",
+      version: "1",
+      measure: (request) => ({
+        ok: true,
+        provider: "agent-baseline",
+        providerVersion: "1",
+        size: {
+          width: request.width ?? Math.max(1, request.content.length * 8),
+          height: request.lineHeight,
+        },
+        warnings: [],
+      }),
+      measureFirstBaseline: (request) => ({
+        ok: true,
+        provider: "agent-baseline",
+        providerVersion: "1",
+        baseline: Math.min(request.height, request.fontSize * 0.8),
+      }),
+    });
+    const runtime = new EditorRuntime(createWelcomeDocument(), {
+      textLayoutProvider: provider,
+    });
+    const response = await executeDesignToolRequest(
+      {
+        requestId: "auto_layout_baseline",
+        call: {
+          toolCallId: "tool_auto_layout_baseline",
+          toolName: DESIGN_ARRANGE_TOOL_NAME,
+          input: {
+            action: "set-auto-layout",
+            label: "Align icon and labels",
+            pageId: "page_welcome",
+            frameId: "frame_welcome",
+            autoLayout: {
+              mode: "horizontal",
+              padding: { top: 24, right: 32, bottom: 24, left: 32 },
+              gap: 16,
+              primaryAlignment: "start",
+              counterAlignment: "baseline",
+            },
+          },
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(response).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "set-auto-layout",
+          autoLayout: { counterAlignment: "baseline" },
+          revision: 1,
+          atomic: true,
+        },
+      },
+    });
+    expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
   });
 
   it("sets horizontal Wrap through the Agent tool and derives wrapped child rows", async () => {
