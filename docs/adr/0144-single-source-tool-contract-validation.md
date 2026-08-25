@@ -1,6 +1,6 @@
 # ADR-0144：单一来源的工具契约验证
 
-- 状态：Accepted，first-slice、node apply、Design Plan、Visual Review、Checkpoint、图片获取、公开图片操作、Page、Component、Style、Variable、Hierarchy、Vector 与 Arrange 工具已实施，其余契约分阶段实施
+- 状态：Accepted，first-slice、node apply、Design Plan、Visual Review、Checkpoint、图片获取、公开图片操作、Page、Component、Style、Variable、Hierarchy、Vector、Arrange 与公开 SVG/Raster Import-Export 工具已实施，其余契约分阶段实施
 - 日期：2026-08-23
 - 首个迁移对象：compact first-slice
 - 关联：ADR-0018、ADR-0100、ADR-0103、ADR-0141、ADR-0143
@@ -93,12 +93,14 @@ Hierarchy 与 Vector 工具已完成第十一个结构编辑迁移切片：原�
 
 Arrange 工具已完成第十二个布局编辑迁移切片：原 962 行混合 types、宽泛 Provider schema 和约 460 行 `isDesignArrangeToolInput / isLayout* / onlyKeys` 手写结构遍历被拆为 types、action-aware executable schema 与 `DesignArrangeContract`。21 个 align/distribute/tidy/spacing/constraints/resize/Auto Layout/Grid/child sizing-positioning-limits/Layout Guides/overflow repair action 现在都是闭合分支；Provider、Pi、Main handler、Renderer canonical bridge 与聚合 dispatcher 使用同一 schema 和 parse 入口。Grid `autoTracks` 与 `row-auto-flow`、min/max 反转、Layout Guide ID 唯一性是仅存的三个跨字段 refinement；Page、revision、节点类型/祖先、locked、Grid 占用、几何、preview 与事务 invariant 继续由 Main/EditorRuntime/Layout Service 拥有。Provider 说明中“Auto Layout Grid 未支持”的旧事实已删除：OpenDesign 明确区分会驱动内容 reflow 的 Auto Layout Grid 与只作视觉辅助、不导出的 Layout Guides，这与 Figma 当前的 [Auto layout vertical/horizontal/grid 三种 flow](https://help.figma.com/hc/en-us/articles/360040451373-Guide-to-auto-layout)、[Grid tracks/cells/span](https://help.figma.com/hc/en-us/articles/31289469907863-Use-the-grid-auto-layout-flow) 以及 [Uniform/Column/Row Layout Guides](https://help.figma.com/hc/en-us/articles/360040450513-Create-layout-guides) 语义一致。OpenDesign 仍通过自身稳定 ID、current Page capability、revision、原子事务和单 undo 维护文档事实。
 
+公开 SVG/Raster Import-Export 已完成第十三个文件交付迁移切片：`ImportSvgContract / ExportSvgContract / ExportRasterContract` 分别以同一 executable schema 服务 Provider、Pi、Main policy/host 与 Renderer canonical bridge；旧 `isImportSvgToolInput / isExportSvgToolInput / isExportRasterToolInput` 已删除。SVG import 只接受当前 Run 的内容寻址 attachment handle、明确 Page/parent/index 与 parent-local 坐标；公开输入不可能夹带 XML 或路径。SVG export 接受一个 Page 上 1..512 个稳定 root ID、portable suggested name、可选 layer ID 和 padding。Raster 以 `format` 闭合 PNG/JPEG/WebP 分支：公开 scale 明确为 1x/2x/3x 或固定 width/height，PNG 不接收 quality，JPEG 必须使用不透明颜色背景，WebP 保持 OpenDesign 扩展；Provider 与 Runtime 不再一个声明 `oneOf`、另一个暗中接受 64x scale。Portable file name 的 Windows reserved device name 是唯一 domain refinement，路径、控制字符、尾随点/空格已经进入结构 schema。Run attachment 授权、Page/selection-free target、exact revision、像素/字节预算、原生保存框、取消与事务仍分别由 Main、Renderer 和 Import-Export Service 拥有；trusted internal SVG materialization、prepared bytes/result validator 暂按后续 internal bridge 切片保留，不重新暴露给模型。公开 raster 的 format + SCALE/WIDTH/HEIGHT 语义参照 Figma [`ExportSettings`](https://developers.figma.com/docs/plugins/api/ExportSettings/)；OpenDesign 当前只实现其已声明的 PNG/JPEG/SVG 子集并额外提供 WebP，不把 PDF、Display P3、absolute bounds、overlapping content 或 outline-text 写成已完成。
+
 `ValidationIssue` 的稳定 `code/path/expected/actual/recovery` 通过 `tool-validation` failure details 进入 Agent event、journal 和 Timeline；这种参数修正使用 `correct-and-retry`，不冒充需要文档 inspection 的事务错误。Design transaction 仍保留独立 `inspect-and-revise` 恢复语义。
 
-导入导出、文字/字体等其余 Agent tools，以及已迁移公开工具之后的其他 trusted internal Renderer bridge、IPC 与持久化契约尚未迁移，不得据此宣称全仓已实现单一验证入口。
+文字/字体等其余 Agent tools，以及已迁移公开工具之后的 trusted internal Renderer bridge、IPC 与持久化契约尚未迁移，不得据此宣称全仓已实现单一验证入口。
 
 ## 后果
 
 - 不重写 pi-agent-core 已有的循环或 TypeBox 参数验证；OpenDesign 只增加产品 domain refinement 和边界 issue adapter。
 - 首个迁移会删除较多手写代码并改变测试入口，属于允许的破坏性开发更新。
-- 在迁移完成前，新增 first-slice、node apply、Design Plan、Visual Review、Checkpoint、Read/Generate/Place/Update/Edit Image、Page Structure/Page Lifecycle、Component、Style、Variable、Hierarchy、Vector 与 Arrange 字段必须进入对应单一入口；不得继续扩展三套旧函数。
+- 在迁移完成前，新增 first-slice、node apply、Design Plan、Visual Review、Checkpoint、Read/Generate/Place/Update/Edit Image、Page Structure/Page Lifecycle、Component、Style、Variable、Hierarchy、Vector、Arrange 与公开 SVG/Raster Import-Export 字段必须进入对应单一入口；不得继续扩展三套旧函数。

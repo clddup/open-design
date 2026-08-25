@@ -1,279 +1,155 @@
-import {
-  isSvgInterchangeIssue,
-  type SvgInterchangeIssue,
-} from "@opendesign/import-export-service/svg-issues";
+import { isSvgInterchangeIssue } from "@opendesign/import-export-service/svg-issues";
 import { SVG_MAX_CHARACTERS } from "@opendesign/import-export-service/limits";
+import type { TSchema } from "@opendesign/design-contracts";
 import {
   RASTER_EXPORT_MAX_ENCODED_BYTES,
-  RASTER_EXPORT_VERSION,
-  isRasterExportRequest,
   rasterExportMimeType,
-  type RasterExportBackground,
-  type RasterExportFormat,
-  type RasterExportMimeType,
-  type RasterExportResampling,
-  type RasterExportSize,
 } from "@opendesign/import-export-service/raster";
 import { isPortableFileName } from "./portable-file-name";
 import {
+  EXPORT_RASTER_TOOL_INPUT_SCHEMA,
+  EXPORT_SVG_TOOL_INPUT_SCHEMA,
+  IMPORT_SVG_TOOL_INPUT_SCHEMA,
+} from "./design-agent-import-export-tool-schema";
+import type {
+  AgentSvgImportResult,
+  ExportRasterToolInput,
+  ExportSvgToolInput,
+  ImportSvgToolInput,
+  InternalImportSvgToolInput,
+  PreparedAgentRasterExport,
+  PreparedAgentSvgExport,
+} from "./design-agent-import-export-tool-types";
+import {
+  contractDiscriminatedSchemaIssues,
+  contractSchemaIssues,
+  type ValidationIssue,
+  type ValidationResult,
+} from "./contract-validation";
+import {
   boundedText,
   exactKeys,
-  finite,
   isRecord,
   safeId,
 } from "./design-agent-validation";
 
-export type ExportSvgToolInput = {
-  pageId: string;
-  rootNodeIds: string[];
-  suggestedName: string;
-  includeLayerIds?: boolean;
-  padding?: number;
-};
+export {
+  EXPORT_RASTER_TOOL_INPUT_SCHEMA,
+  EXPORT_SVG_TOOL_INPUT_SCHEMA,
+  IMPORT_SVG_TOOL_INPUT_SCHEMA,
+} from "./design-agent-import-export-tool-schema";
+export type {
+  AgentSvgImportResult,
+  ExportRasterToolInput,
+  ExportSvgToolInput,
+  ImportSvgToolInput,
+  InternalImportSvgToolInput,
+  PreparedAgentRasterExport,
+  PreparedAgentSvgExport,
+} from "./design-agent-import-export-tool-types";
 
-export type ExportRasterToolInput = {
-  pageId: string;
-  rootNodeId: string;
-  suggestedName: string;
-  format: RasterExportFormat;
-  size: RasterExportSize;
-  background: RasterExportBackground;
-  quality?: number;
-  resampling: RasterExportResampling;
-};
+export const ImportSvgContract = contract<ImportSvgToolInput>(
+  IMPORT_SVG_TOOL_INPUT_SCHEMA,
+  "design_import_svg.schema_invalid",
+  "SVG import",
+  undefined,
+);
 
-export type PreparedAgentRasterExport = {
-  kind: "raster-export-preparation";
-  version: 1;
-  suggestedName: string;
-  format: RasterExportFormat;
-  mimeType: RasterExportMimeType;
-  bytes: Uint8Array;
-  width: number;
-  height: number;
-  revision: number;
-  rootNodeId: string;
-};
+export const ExportSvgContract = contract<ExportSvgToolInput>(
+  EXPORT_SVG_TOOL_INPUT_SCHEMA,
+  "design_export_svg.schema_invalid",
+  "SVG export",
+  refinePortableSuggestedName,
+);
 
-export type ImportSvgToolInput = {
-  attachmentId: string;
-  pageId: string;
-  parentId: string | null;
-  index: number;
-  x: number;
-  y: number;
-};
-
-export type InternalImportSvgToolInput = ImportSvgToolInput & {
-  name: string;
-  svg: string;
-  idPrefix: string;
-};
-
-export type AgentSvgImportResult = {
-  kind: "svg-import-result";
-  version: 1;
-  ok: true;
-  format: "svg";
-  attachmentId: string;
-  name: string;
-  pageId: string;
-  parentId: string | null;
-  rootNodeId: string;
-  importedNodeIds: string[];
-  revision: number;
-  atomic: true;
-  issues: SvgInterchangeIssue[];
-};
-
-export type PreparedAgentSvgExport = {
-  kind: "svg-export-preparation";
-  version: 1;
-  suggestedName: string;
-  svg: string;
-  revision: number;
-  exportedNodeIds: string[];
-  issues: SvgInterchangeIssue[];
-};
-
-export const IMPORT_SVG_TOOL_INPUT_SCHEMA = {
-  type: "object",
-  properties: {
-    attachmentId: { type: "string", pattern: "^svg_[a-f0-9]{64}$" },
-    pageId: { type: "string", minLength: 1, maxLength: 256 },
-    parentId: {
-      anyOf: [
-        { type: "string", minLength: 1, maxLength: 256 },
-        { type: "null" },
-      ],
-    },
-    index: { type: "integer", minimum: 0 },
-    x: { type: "number" },
-    y: { type: "number" },
-  },
-  required: ["attachmentId", "pageId", "parentId", "index", "x", "y"],
-  additionalProperties: false,
-} as const;
-
-export const EXPORT_SVG_TOOL_INPUT_SCHEMA = {
-  type: "object",
-  properties: {
-    pageId: { type: "string", minLength: 1, maxLength: 256 },
-    rootNodeIds: {
-      type: "array",
-      minItems: 1,
-      maxItems: 512,
-      uniqueItems: true,
-      items: { type: "string", minLength: 1, maxLength: 256 },
-    },
-    suggestedName: {
-      type: "string",
-      minLength: 1,
-      maxLength: 255,
-      description:
-        "Portable file name only, never a path. OpenDesign appends .svg when needed.",
-    },
-    includeLayerIds: { type: "boolean" },
-    padding: { type: "number", minimum: 0, maximum: 100_000 },
-  },
-  required: ["pageId", "rootNodeIds", "suggestedName"],
-  additionalProperties: false,
-} as const;
-
-export const EXPORT_RASTER_TOOL_INPUT_SCHEMA = {
-  type: "object",
-  properties: {
-    pageId: { type: "string", minLength: 1, maxLength: 256 },
-    rootNodeId: { type: "string", minLength: 1, maxLength: 256 },
-    suggestedName: {
-      type: "string",
-      minLength: 1,
-      maxLength: 255,
-      description: "Portable file name only, never a path.",
-    },
-    format: { enum: ["png", "jpeg", "webp"] },
-    size: {
-      oneOf: [
-        {
-          type: "object",
-          properties: {
-            mode: { const: "scale" },
-            value: { enum: [1, 2, 3] },
-          },
-          required: ["mode", "value"],
-          additionalProperties: false,
-        },
-        ...(["width", "height"] as const).map((mode) => ({
-          type: "object" as const,
-          properties: {
-            mode: { const: mode },
-            value: {
-              type: "integer" as const,
-              minimum: 1,
-              maximum: 16_384,
-            },
-          },
-          required: ["mode", "value"],
-          additionalProperties: false,
-        })),
-      ],
-    },
-    background: {
-      oneOf: [
-        {
-          type: "object",
-          properties: { mode: { const: "transparent" } },
-          required: ["mode"],
-          additionalProperties: false,
-        },
-        {
-          type: "object",
-          properties: {
-            mode: { const: "color" },
-            color: { type: "string", pattern: "^#[0-9A-Fa-f]{6}$" },
-          },
-          required: ["mode", "color"],
-          additionalProperties: false,
-        },
-      ],
-    },
-    quality: { type: "number", minimum: 0.01, maximum: 1 },
-    resampling: { enum: ["smooth", "pixelated"] },
-  },
-  required: [
-    "pageId",
-    "rootNodeId",
-    "suggestedName",
+export const ExportRasterContract =
+  discriminatedContract<ExportRasterToolInput>(
+    EXPORT_RASTER_TOOL_INPUT_SCHEMA,
     "format",
-    "size",
-    "background",
-    "resampling",
-  ],
-  additionalProperties: false,
-} as const;
-
-export function isExportSvgToolInput(
-  input: unknown,
-): input is ExportSvgToolInput {
-  if (!isRecord(input)) return false;
-  return (
-    safeId(input.pageId) &&
-    Array.isArray(input.rootNodeIds) &&
-    input.rootNodeIds.length > 0 &&
-    input.rootNodeIds.length <= 512 &&
-    input.rootNodeIds.every(safeId) &&
-    new Set(input.rootNodeIds).size === input.rootNodeIds.length &&
-    isPortableFileName(input.suggestedName) &&
-    (input.includeLayerIds === undefined ||
-      typeof input.includeLayerIds === "boolean") &&
-    (input.padding === undefined ||
-      (finite(input.padding) &&
-        input.padding >= 0 &&
-        input.padding <= 100_000)) &&
-    Object.keys(input).every((key) =>
-      [
-        "pageId",
-        "rootNodeIds",
-        "suggestedName",
-        "includeLayerIds",
-        "padding",
-      ].includes(key),
-    )
+    "design_export_raster.schema_invalid",
+    "Raster export",
+    refinePortableSuggestedName,
   );
+
+function contract<T>(
+  schema: TSchema,
+  code: string,
+  subject: string,
+  refine: ((value: T) => ValidationIssue[]) | undefined,
+) {
+  const parse = (input: unknown): ValidationResult<T> => {
+    const structureIssues = contractSchemaIssues(schema, input, {
+      code,
+      subject,
+      maximum: 32,
+    });
+    if (structureIssues.length > 0) {
+      return { ok: false, issues: structureIssues };
+    }
+    const value = structuredClone(input) as T;
+    const domainIssues = refine?.(value) ?? [];
+    return domainIssues.length > 0
+      ? { ok: false, issues: domainIssues }
+      : { ok: true, value };
+  };
+  return {
+    schema,
+    parse,
+    issues: (input: unknown): ValidationIssue[] => {
+      const result = parse(input);
+      return result.ok ? [] : result.issues;
+    },
+  };
 }
 
-export function isExportRasterToolInput(
-  input: unknown,
-): input is ExportRasterToolInput {
-  if (!isRecord(input) || !isPortableFileName(input.suggestedName)) {
-    return false;
-  }
-  if (
-    !Object.keys(input).every((key) =>
-      [
-        "pageId",
-        "rootNodeId",
-        "suggestedName",
-        "format",
-        "size",
-        "background",
-        "quality",
-        "resampling",
-      ].includes(key),
-    )
-  ) {
-    return false;
-  }
-  return isRasterExportRequest({
-    version: RASTER_EXPORT_VERSION,
-    pageId: input.pageId,
-    rootNodeId: input.rootNodeId,
-    format: input.format,
-    size: input.size,
-    background: input.background,
-    quality: input.quality,
-    resampling: input.resampling,
-  });
+function discriminatedContract<T>(
+  schema: TSchema,
+  discriminant: string,
+  code: string,
+  subject: string,
+  refine: ((value: T) => ValidationIssue[]) | undefined,
+) {
+  const parse = (input: unknown): ValidationResult<T> => {
+    const structureIssues = contractDiscriminatedSchemaIssues(
+      schema,
+      input,
+      discriminant,
+      { code, subject, maximum: 32 },
+    );
+    if (structureIssues.length > 0) {
+      return { ok: false, issues: structureIssues };
+    }
+    const value = structuredClone(input) as T;
+    const domainIssues = refine?.(value) ?? [];
+    return domainIssues.length > 0
+      ? { ok: false, issues: domainIssues }
+      : { ok: true, value };
+  };
+  return {
+    schema,
+    parse,
+    issues: (input: unknown): ValidationIssue[] => {
+      const result = parse(input);
+      return result.ok ? [] : result.issues;
+    },
+  };
+}
+
+function refinePortableSuggestedName(value: {
+  suggestedName: string;
+}): ValidationIssue[] {
+  return isPortableFileName(value.suggestedName)
+    ? []
+    : [
+        {
+          code: "design_export.portable_name_invalid",
+          path: "/suggestedName",
+          message: "suggestedName must be a portable file name, never a path",
+          actual: value.suggestedName,
+          recovery:
+            "Use a plain macOS/Windows-compatible file name without a directory, reserved device name, control character, or trailing dot/space.",
+        },
+      ];
 }
 
 export function isPreparedAgentRasterExport(
@@ -315,23 +191,6 @@ export function isPreparedAgentRasterExport(
   );
 }
 
-export function isImportSvgToolInput(
-  input: unknown,
-): input is ImportSvgToolInput {
-  return (
-    isRecord(input) &&
-    typeof input.attachmentId === "string" &&
-    /^svg_[a-f0-9]{64}$/.test(input.attachmentId) &&
-    safeId(input.pageId) &&
-    (input.parentId === null || safeId(input.parentId)) &&
-    Number.isInteger(input.index) &&
-    Number(input.index) >= 0 &&
-    finite(input.x) &&
-    finite(input.y) &&
-    exactKeys(input, ["attachmentId", "pageId", "parentId", "index", "x", "y"])
-  );
-}
-
 export function isInternalImportSvgToolInput(
   input: unknown,
 ): input is InternalImportSvgToolInput {
@@ -345,7 +204,7 @@ export function isInternalImportSvgToolInput(
     y: input.y,
   };
   return (
-    isImportSvgToolInput(publicInput) &&
+    ImportSvgContract.parse(publicInput).ok &&
     boundedText(input.name, 255) &&
     typeof input.svg === "string" &&
     input.svg.length > 0 &&

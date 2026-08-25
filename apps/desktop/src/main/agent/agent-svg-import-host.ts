@@ -7,8 +7,8 @@ import { createHash } from "node:crypto";
 import {
   IMPORT_SVG_TOOL_NAME,
   INTERNAL_IMPORT_SVG_TOOL_NAME,
+  ImportSvgContract,
   isAgentSvgImportResult,
-  isImportSvgToolInput,
   type InternalImportSvgToolInput,
 } from "@/shared/design-agent-tools";
 
@@ -55,15 +55,15 @@ export class AgentSvgImportHost {
     context: TrustedToolContext,
     signal: AbortSignal,
   ): Promise<TrustedToolResult> {
-    if (
-      call.toolName !== IMPORT_SVG_TOOL_NAME ||
-      !isImportSvgToolInput(call.input)
-    ) {
+    if (call.toolName !== IMPORT_SVG_TOOL_NAME) {
       throw new TypeError("Invalid Agent SVG import tool call");
     }
+    const parsed = ImportSvgContract.parse(call.input);
+    if (!parsed.ok) throw new TypeError("Invalid Agent SVG import tool call");
+    const publicInput = parsed.value;
     throwIfAborted(signal);
     const materialized = await this.references.materializeSvg(
-      call.input.attachmentId,
+      publicInput.attachmentId,
       context,
       signal,
     );
@@ -71,7 +71,7 @@ export class AgentSvgImportHost {
     const idPrefix = createSvgIdPrefix(call, context);
     const name = safeSvgName(materialized.attachment.name);
     const internalInput: InternalImportSvgToolInput = {
-      ...call.input,
+      ...publicInput,
       name,
       svg: materialized.svg,
       idPrefix,
@@ -91,10 +91,10 @@ export class AgentSvgImportHost {
       throw new TypeError("Renderer returned an invalid SVG import result");
     }
     if (
-      result.attachmentId !== call.input.attachmentId ||
+      result.attachmentId !== publicInput.attachmentId ||
       result.name !== name ||
-      result.pageId !== call.input.pageId ||
-      result.parentId !== call.input.parentId ||
+      result.pageId !== publicInput.pageId ||
+      result.parentId !== publicInput.parentId ||
       !result.importedNodeIds.every((nodeId) =>
         nodeId.startsWith(`${idPrefix}_`),
       )

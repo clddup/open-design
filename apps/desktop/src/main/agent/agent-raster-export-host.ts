@@ -4,8 +4,8 @@ import type {
   TrustedToolResult,
 } from "@opendesign/agent-contracts";
 import {
+  ExportRasterContract,
   EXPORT_RASTER_TOOL_NAME,
-  isExportRasterToolInput,
   isPreparedAgentRasterExport,
 } from "@/shared/design-agent-tools.js";
 import type { RasterFileService } from "../raster/raster-file-service.js";
@@ -26,14 +26,20 @@ export class AgentRasterExportHost {
     context: TrustedToolContext,
     signal: AbortSignal,
   ): Promise<TrustedToolResult> {
-    if (
-      call.toolName !== EXPORT_RASTER_TOOL_NAME ||
-      !isExportRasterToolInput(call.input)
-    ) {
+    if (call.toolName !== EXPORT_RASTER_TOOL_NAME) {
       throw new TypeError("Invalid Agent raster export tool call");
     }
+    const parsed = ExportRasterContract.parse(call.input);
+    if (!parsed.ok) {
+      throw new TypeError("Invalid Agent raster export tool call");
+    }
+    const publicInput = parsed.value;
     throwIfAborted(signal);
-    const preparedResult = await this.renderer.execute(call, context, signal);
+    const preparedResult = await this.renderer.execute(
+      { ...call, input: publicInput },
+      context,
+      signal,
+    );
     throwIfAborted(signal);
     const prepared = preparedResult.content;
     if (!isPreparedAgentRasterExport(prepared)) {
@@ -48,9 +54,9 @@ export class AgentRasterExportHost {
       );
     }
     if (
-      prepared.suggestedName !== call.input.suggestedName ||
-      prepared.rootNodeId !== call.input.rootNodeId ||
-      prepared.format !== call.input.format
+      prepared.suggestedName !== publicInput.suggestedName ||
+      prepared.rootNodeId !== publicInput.rootNodeId ||
+      prepared.format !== publicInput.format
     ) {
       throw new TypeError(
         "Renderer returned mismatched raster export metadata",

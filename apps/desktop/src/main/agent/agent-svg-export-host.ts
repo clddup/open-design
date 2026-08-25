@@ -4,8 +4,8 @@ import type {
   TrustedToolResult,
 } from "@opendesign/agent-contracts";
 import {
+  ExportSvgContract,
   EXPORT_SVG_TOOL_NAME,
-  isExportSvgToolInput,
   isPreparedAgentSvgExport,
 } from "@/shared/design-agent-tools";
 import type { SvgFileService } from "../svg/svg-file-service";
@@ -39,14 +39,18 @@ export class AgentSvgExportHost {
     context: TrustedToolContext,
     signal: AbortSignal,
   ): Promise<TrustedToolResult> {
-    if (
-      call.toolName !== EXPORT_SVG_TOOL_NAME ||
-      !isExportSvgToolInput(call.input)
-    ) {
+    if (call.toolName !== EXPORT_SVG_TOOL_NAME) {
       throw new TypeError("Invalid Agent SVG export tool call");
     }
+    const parsed = ExportSvgContract.parse(call.input);
+    if (!parsed.ok) throw new TypeError("Invalid Agent SVG export tool call");
+    const publicInput = parsed.value;
     throwIfAborted(signal);
-    const preparedResult = await this.renderer.execute(call, context, signal);
+    const preparedResult = await this.renderer.execute(
+      { ...call, input: publicInput },
+      context,
+      signal,
+    );
     throwIfAborted(signal);
     const prepared = preparedResult.content;
     if (!isPreparedAgentSvgExport(prepared)) {
@@ -61,8 +65,8 @@ export class AgentSvgExportHost {
       );
     }
     if (
-      prepared.suggestedName !== call.input.suggestedName ||
-      !call.input.rootNodeIds.every((nodeId) =>
+      prepared.suggestedName !== publicInput.suggestedName ||
+      !publicInput.rootNodeIds.every((nodeId) =>
         prepared.exportedNodeIds.includes(nodeId),
       )
     ) {

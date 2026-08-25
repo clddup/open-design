@@ -65,10 +65,10 @@ import {
   DesignHierarchyContract,
   DesignPageContract,
   DesignVectorContract,
+  ExportRasterContract,
+  ExportSvgContract,
   isDesignFontToolInput,
   isDesignTextRangeToolInput,
-  isExportSvgToolInput,
-  isExportRasterToolInput,
   isInternalImportSvgToolInput,
   isInternalReadImageSourceToolInput,
   isInternalUpdateImageToolInput,
@@ -682,11 +682,14 @@ async function executeDesignToolRequestUnsafe(
     };
   }
 
-  if (
-    request.call.toolName === EXPORT_RASTER_TOOL_NAME &&
-    isExportRasterToolInput(request.call.input)
-  ) {
-    const input = request.call.input;
+  if (request.call.toolName === EXPORT_RASTER_TOOL_NAME) {
+    const parsed = ExportRasterContract.parse(request.call.input);
+    if (!parsed.ok) {
+      throw new TypeError(
+        "Renderer received invalid canonical Raster export input",
+      );
+    }
+    const input = parsed.value;
     assertPageWithinMutationTarget(
       input.pageId,
       request.context.mutationTarget,
@@ -729,11 +732,14 @@ async function executeDesignToolRequestUnsafe(
     };
   }
 
-  if (
-    request.call.toolName === EXPORT_SVG_TOOL_NAME &&
-    isExportSvgToolInput(request.call.input)
-  ) {
-    const input = request.call.input;
+  if (request.call.toolName === EXPORT_SVG_TOOL_NAME) {
+    const parsed = ExportSvgContract.parse(request.call.input);
+    if (!parsed.ok) {
+      throw new TypeError(
+        "Renderer received invalid canonical SVG export input",
+      );
+    }
+    const input = parsed.value;
     assertPageWithinMutationTarget(
       input.pageId,
       request.context.mutationTarget,

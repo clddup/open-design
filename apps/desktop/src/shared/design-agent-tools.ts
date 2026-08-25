@@ -68,12 +68,12 @@ import {
   isInternalUpdateImageToolInput,
 } from "./design-agent-image-tools";
 import {
+  ExportRasterContract,
+  ExportSvgContract,
   EXPORT_RASTER_TOOL_INPUT_SCHEMA,
   EXPORT_SVG_TOOL_INPUT_SCHEMA,
+  ImportSvgContract,
   IMPORT_SVG_TOOL_INPUT_SCHEMA,
-  isExportRasterToolInput,
-  isExportSvgToolInput,
-  isImportSvgToolInput,
   isInternalImportSvgToolInput,
 } from "./design-agent-import-export-tools";
 import {
@@ -243,13 +243,13 @@ export type {
   UpdateImageToolInput,
 } from "./design-agent-image-tools";
 export {
+  ExportRasterContract,
+  ExportSvgContract,
   EXPORT_RASTER_TOOL_INPUT_SCHEMA,
   EXPORT_SVG_TOOL_INPUT_SCHEMA,
+  ImportSvgContract,
   IMPORT_SVG_TOOL_INPUT_SCHEMA,
   isAgentSvgImportResult,
-  isExportRasterToolInput,
-  isExportSvgToolInput,
-  isImportSvgToolInput,
   isInternalImportSvgToolInput,
   isPreparedAgentRasterExport,
   isPreparedAgentSvgExport,
@@ -488,6 +488,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     inputSchema: IMPORT_SVG_TOOL_INPUT_SCHEMA,
     risk: "design_write" as const,
     approval: "never" as const,
+    validateInputIssues: ImportSvgContract.issues,
   },
   {
     name: EXPORT_SVG_TOOL_NAME,
@@ -500,6 +501,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     inputSchema: EXPORT_SVG_TOOL_INPUT_SCHEMA,
     risk: "external" as const,
     approval: "never" as const,
+    validateInputIssues: ExportSvgContract.issues,
   },
   {
     name: EXPORT_RASTER_TOOL_NAME,
@@ -512,6 +514,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     inputSchema: EXPORT_RASTER_TOOL_INPUT_SCHEMA,
     risk: "external" as const,
     approval: "never" as const,
+    validateInputIssues: ExportRasterContract.issues,
   },
   {
     name: DESIGN_HIERARCHY_TOOL_NAME,
@@ -706,10 +709,14 @@ export function validateDesignAgentToolInput(
   if (toolName === EDIT_IMAGE_TOOL_NAME) {
     return EditImageContract.parse(input).ok;
   }
-  if (toolName === IMPORT_SVG_TOOL_NAME) return isImportSvgToolInput(input);
-  if (toolName === EXPORT_SVG_TOOL_NAME) return isExportSvgToolInput(input);
+  if (toolName === IMPORT_SVG_TOOL_NAME) {
+    return ImportSvgContract.parse(input).ok;
+  }
+  if (toolName === EXPORT_SVG_TOOL_NAME) {
+    return ExportSvgContract.parse(input).ok;
+  }
   if (toolName === EXPORT_RASTER_TOOL_NAME) {
-    return isExportRasterToolInput(input);
+    return ExportRasterContract.parse(input).ok;
   }
   if (toolName === INTERNAL_IMPORT_SVG_TOOL_NAME) {
     return isInternalImportSvgToolInput(input);

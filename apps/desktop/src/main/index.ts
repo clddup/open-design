@@ -136,16 +136,16 @@ import {
   DeliveryScopeContract,
   DesignVisualReviewContract,
   EditImageContract,
+  ExportRasterContract,
+  ExportSvgContract,
   GenerateImageContract,
+  ImportSvgContract,
   PageStructureAccessContract,
   PlaceImageContract,
   ReadImageContract,
   UpdateImageContract,
   isDesignFontToolInput,
   isDesignTextRangeToolInput,
-  isExportSvgToolInput,
-  isExportRasterToolInput,
-  isImportSvgToolInput,
   isPreparedImageEditSource,
   INTERNAL_UPDATE_IMAGE_TOOL_NAME,
   PLACE_IMAGE_TOOL_NAME,
@@ -1108,40 +1108,49 @@ async function startDesktopApplication(
         return recordVisualReview(parsed.value);
       }
       if (call.toolName === EXPORT_SVG_TOOL_NAME) {
-        if (!isExportSvgToolInput(call.input)) {
-          throw new TypeError("Invalid SVG export tool input");
+        const parsed = ExportSvgContract.parse(call.input);
+        if (!parsed.ok) {
+          throw new TypeError(
+            formatValidationFailure("SVG export", parsed.issues),
+          );
         }
         globalTaskCoordinator.assertDocumentInspected(context);
         return await requireAgentSvgExportHost().execute(
-          call,
+          { ...call, input: parsed.value },
           executionContext,
           signal,
         );
       }
       if (call.toolName === EXPORT_RASTER_TOOL_NAME) {
-        if (!isExportRasterToolInput(call.input)) {
-          throw new TypeError("Invalid raster export tool input");
+        const parsed = ExportRasterContract.parse(call.input);
+        if (!parsed.ok) {
+          throw new TypeError(
+            formatValidationFailure("Raster export", parsed.issues),
+          );
         }
         globalTaskCoordinator.assertDocumentInspected(context);
         return await requireAgentRasterExportHost().execute(
-          call,
+          { ...call, input: parsed.value },
           executionContext,
           signal,
         );
       }
       if (call.toolName === IMPORT_SVG_TOOL_NAME) {
-        if (!isImportSvgToolInput(call.input)) {
-          throw new TypeError("Invalid SVG import tool input");
+        const parsed = ImportSvgContract.parse(call.input);
+        if (!parsed.ok) {
+          throw new TypeError(
+            formatValidationFailure("SVG import", parsed.issues),
+          );
         }
         globalTaskCoordinator.assertDocumentInspected(context);
         globalTaskCoordinator.assertVisualReviewBeforeWrite(context);
         const targetIds = globalTaskCoordinator.resolveMaterialTargetIds(
           context,
           [],
-          call.input.parentId,
+          parsed.value.parentId,
         );
         const result = await requireAgentSvgImportHost().execute(
-          call,
+          { ...call, input: parsed.value },
           executionContext,
           signal,
         );
