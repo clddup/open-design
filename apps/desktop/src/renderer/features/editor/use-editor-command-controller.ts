@@ -6,13 +6,14 @@ import type {
   LayoutGuide,
   LayoutPositioning,
   LayoutSizing,
+  GridTrack,
   Size,
   UpdatePropertiesCommand,
 } from "@opendesign/design-contracts";
 import {
   planSetFrameAutoLayout,
-  planResizeGridTrack,
   planReorderGridTracks,
+  planSetGridTrack,
   planSetNodeLayoutLimits,
   planSetNodeLayoutPositioning,
   planSetFrameLayoutGuides,
@@ -192,27 +193,27 @@ export function useEditorCommandController({
     [applyCommands, runtime, setEditorError, t],
   );
 
-  const resizeGridTrack = useCallback(
+  const setGridTrack = useCallback(
     (
       frameId: string,
       expectedRevision: number,
       axis: "rows" | "columns",
       index: number,
-      value: number,
+      track: GridTrack,
     ) => {
       const current = runtime.getSnapshot().document;
       if (current.revision !== expectedRevision) {
         setEditorError(t("canvas.gridTrackStale"));
         return false;
       }
-      const plan = planResizeGridTrack(
+      const plan = planSetGridTrack(
         current,
         pageIdForNode(current, frameId),
         frameId,
         axis,
         index,
-        value,
-        `canvas_grid_resize_${frameId}`,
+        track,
+        `canvas_grid_track_${frameId}`,
       );
       if (!plan.ok) {
         if (plan.code === "no-op") {
@@ -222,7 +223,7 @@ export function useEditorCommandController({
         setEditorError(plan.message);
         return false;
       }
-      return applyCommands(t("history.resizeGridTrack"), plan.commands);
+      return applyCommands(t("history.updateGridTrack"), plan.commands);
     },
     [applyCommands, runtime, setEditorError, t],
   );
@@ -420,7 +421,7 @@ export function useEditorCommandController({
   return {
     adjustAutoLayoutSpacing,
     applyCommands,
-    resizeGridTrack,
+    setGridTrack,
     resizeFrame,
     reorderGridTracks,
     setFrameAutoLayout,

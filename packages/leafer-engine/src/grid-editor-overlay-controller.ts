@@ -17,18 +17,12 @@ import {
   type GridEditorOverlayPlan,
   type GridEditorTrackSpec,
 } from "./grid-editor-overlay.js";
+import { eventClientPoint, type LeaferEventLike } from "./pointer-event.js";
+import type { LeaferGridTrackInputRequest } from "./types.js";
 
 type LeaferModule = typeof LeaferEditorModule;
 type LeaferElement = InstanceType<LeaferModule["UI"]>;
 type LeaferGroup = InstanceType<LeaferModule["Group"]>;
-
-export interface GridEditorPointerEvent {
-  getInnerPoint(relative: unknown): { x: number; y: number };
-  isCancel?: boolean;
-  middle?: boolean;
-  right?: boolean;
-  target: unknown;
-}
 
 interface GridTrackElements {
   label: LeaferElement;
@@ -38,13 +32,17 @@ interface GridTrackElements {
 }
 
 interface GridReorderDragSession {
+  authoredTrack: GridEditorTrackSpec["authoredTrack"];
   axis: GridEditorAxis;
   documentId: string;
   frameId: string;
   fromIndex: number;
   insertionIndex: number;
   kind: "reorder";
+  moved: boolean;
+  resolvedSize: number;
   revision: number;
+  startClientPoint: { x: number; y: number };
 }
 
 interface GridResizeDragSession {
@@ -100,6 +98,7 @@ export class GridEditorOverlayController {
   readonly #leafer: LeaferModule;
   readonly #onReorder: GridTrackReorderHandler;
   readonly #onResize: GridTrackResizeHandler;
+  readonly #onInputRequest: (request: LeaferGridTrackInputRequest) => void;
   #plan: GridEditorOverlayPlan | null = null;
   readonly #presentationRoot: LeaferGroup;
   #renderScale = 1;
@@ -112,12 +111,14 @@ export class GridEditorOverlayController {
   constructor(options: {
     layerIndex: number;
     leafer: LeaferModule;
+    onInputRequest: (request: LeaferGridTrackInputRequest) => void;
     onReorder: GridTrackReorderHandler;
     onResize: GridTrackResizeHandler;
     presentationRoot: LeaferGroup;
     viewportRoot: LeaferGroup;
   }) {
     this.#leafer = options.leafer;
+    this.#onInputRequest = options.onInputRequest;
     this.#onReorder = options.onReorder;
     this.#onResize = options.onResize;
     this.#presentationRoot = options.presentationRoot;
@@ -174,7 +175,7 @@ export class GridEditorOverlayController {
     this.#layer.destroy();
   }
 
-  pointerDown(event: GridEditorPointerEvent): boolean {
+  pointerDown(event: LeaferEventLike): boolean {
     const target =
       event.target && typeof event.target === "object"
         ? event.target
@@ -212,20 +213,24 @@ export class GridEditorOverlayController {
     }
     const track = reorderTrack!;
     this.#drag = {
+      authoredTrack: track.authoredTrack,
       axis: track.axis,
       documentId: this.#documentId!,
       frameId: this.#plan.frameId,
       fromIndex: track.index,
       insertionIndex: track.index,
       kind: "reorder",
+      moved: false,
+      resolvedSize: track.resolvedSize,
       revision: this.#revision!,
+      startClientPoint: eventClientPoint(event),
     };
     this.#indicator.visible = false;
     this.#syncTrackAppearance();
     return true;
   }
 
-  pointerMove(event: GridEditorPointerEvent): boolean {
+  pointerMove(event: LeaferEventLike): boolean {
     const drag = this.#drag;
     const plan = this.#plan;
     if (!drag || !plan) return false;
@@ -251,6 +256,15 @@ export class GridEditorOverlayController {
       this.syncViewport();
       return true;
     }
+    const clientPoint = eventClientPoint(event);
+    if (
+      Math.hypot(
+        clientPoint.x - drag.startClientPoint.x,
+        clientPoint.y - drag.startClientPoint.y,
+      ) >= RESIZE_DRAG_THRESHOLD
+    ) {
+      drag.moved = true;
+    }
     drag.insertionIndex = nearestGridInsertionIndex(
       plan,
       drag.axis,
@@ -260,7 +274,7 @@ export class GridEditorOverlayController {
     return true;
   }
 
-  pointerUp(event: GridEditorPointerEvent): boolean {
+  pointerUp(event: LeaferEventLike): boolean {
     const drag = this.#drag;
     if (!drag) return false;
     if (!event.isCancel) this.pointerMove(event);
@@ -274,6 +288,18 @@ export class GridEditorOverlayController {
         frameId: current.frameId,
         index: current.index,
         value: current.value,
+      });
+      return true;
+    }
+    if (current && !event.isCancel && !current.moved) {
+      this.#onInputRequest({
+        axis: current.axis,
+        clientPoint: eventClientPoint(event),
+        expectedRevision: current.revision,
+        frameId: current.frameId,
+        index: current.fromIndex,
+        resolvedSize: current.resolvedSize,
+        track: current.authoredTrack,
       });
       return true;
     }

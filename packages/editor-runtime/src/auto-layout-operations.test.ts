@@ -12,6 +12,7 @@ import {
   normalizeDesignDocument,
   planResizeGridTrack,
   planReorderGridTracks,
+  planSetGridTrack,
   planResizeFrameWithConstraints,
   planSetFrameAutoLayout,
   planSetNodeLayoutLimits,
@@ -1869,6 +1870,72 @@ describe("Grid Auto Layout Runtime", () => {
         99,
         200,
         "invalid",
+      ),
+    ).toMatchObject({ ok: false, code: "invalid-target" });
+    expect(runtime.getSnapshot().document.revision).toBe(revision);
+  });
+
+  it("sets Fill and Hug track sizing through the same authoritative planner", () => {
+    const document = layoutDocument();
+    const frame = document.nodesById.frame;
+    if (frame?.kind !== "frame") throw new Error("missing frame");
+    frame.properties.autoLayout = {
+      mode: "grid",
+      padding: { top: 0, right: 0, bottom: 0, left: 0 },
+      rowGap: 0,
+      columnGap: 0,
+      rows: [{ type: "fixed", value: 100 }],
+      columns: [{ type: "fixed", value: 100 }],
+      itemsPositioning: "row-auto-flow",
+      autoTracks: "rows",
+    };
+    delete document.nodesById.one!.constraints;
+    const runtime = new EditorRuntime(normalizeDesignDocument(document));
+
+    const fill = planSetGridTrack(
+      runtime.getSnapshot().document,
+      "page_layout",
+      "frame",
+      "columns",
+      0,
+      { type: "fill", value: 2 },
+      "fill_track",
+    );
+    if (!fill.ok) throw new Error(fill.message);
+    expect(runtime.apply(transaction(runtime, fill.commands)).ok).toBe(true);
+    expect(
+      frameAutoLayout(runtime.getSnapshot().document, "frame"),
+    ).toMatchObject({
+      columns: [{ type: "fill", value: 2 }],
+    });
+
+    const hug = planSetGridTrack(
+      runtime.getSnapshot().document,
+      "page_layout",
+      "frame",
+      "columns",
+      0,
+      { type: "hug" },
+      "hug_track",
+    );
+    if (!hug.ok) throw new Error(hug.message);
+    expect(runtime.apply(transaction(runtime, hug.commands)).ok).toBe(true);
+    expect(
+      frameAutoLayout(runtime.getSnapshot().document, "frame"),
+    ).toMatchObject({
+      columns: [{ type: "hug" }],
+    });
+
+    const revision = runtime.getSnapshot().document.revision;
+    expect(
+      planSetGridTrack(
+        runtime.getSnapshot().document,
+        "page_layout",
+        "frame",
+        "columns",
+        0,
+        { type: "fill", value: 0 },
+        "invalid_fill",
       ),
     ).toMatchObject({ ok: false, code: "invalid-target" });
     expect(runtime.getSnapshot().document.revision).toBe(revision);

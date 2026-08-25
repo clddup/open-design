@@ -1,0 +1,58 @@
+.root {
+  position: absolute;
+  z-index: 6;
+  top: var(--grid-track-input-y);
+  left: var(--grid-track-input-x);
+  display: flex;
+  gap: 2px;
+  align-items: center;
+  padding: 2px;
+  border: 1px solid var(--ui-accent);
+  border-radius: 5px;
+  background: var(--ui-surface-raised);
+  box-shadow: var(--ui-shadow-sm);
+  translate: 8px 8px;
+  pointer-events: auto;
+
+  select,
+  input {
+    height: 24px;
+    border: 0;
+    outline: 0;
+    color: var(--ui-text);
+    background: transparent;
+    font: inherit;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  select {
+    width: 78px;
+    padding: 0 4px;
+  }
+
+  label {
+    display: flex;
+    align-items: center;
+
+    span {
+      padding-right: 5px;
+      color: var(--ui-text-muted);
+      font-size: 10px;
+      pointer-events: none;
+    }
+  }
+
+  input {
+    width: 54px;
+    padding: 0 4px;
+    text-align: right;
+    appearance: textfield;
+
+    &::-webkit-inner-spin-button,
+    &::-webkit-outer-spin-button {
+      margin: 0;
+      appearance: none;
+    }
+  }
+}

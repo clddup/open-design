@@ -706,6 +706,42 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
+  it("opens the exact Grid track sizing request on a track label click", async () => {
+    const onGridTrackInputRequest = vi.fn();
+    const onGridTrackReorder = vi.fn(() => true);
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onGridTrackInputRequest,
+      onGridTrackReorder,
+    });
+    const input = withGridFixture(createInput());
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    const hit =
+      app &&
+      findElement(
+        app.sky,
+        "__opendesign_grid_track_hit__:frame_welcome:columns:1",
+      );
+    if (!app || !hit) throw new Error("Missing Grid column track label");
+
+    app.emit("pointer.down", pointerEvent(666, -20, hit));
+    app.emit("pointer.up", pointerEvent(666, -20, hit));
+
+    expect(onGridTrackReorder).not.toHaveBeenCalled();
+    expect(onGridTrackInputRequest).toHaveBeenCalledOnce();
+    expect(onGridTrackInputRequest).toHaveBeenCalledWith({
+      axis: "columns",
+      clientPoint: { x: 666, y: -20 },
+      expectedRevision: input.document.revision,
+      frameId: "frame_welcome",
+      index: 1,
+      resolvedSize: 1_028,
+      track: { type: "fill", value: 1 },
+    });
+    adapter.dispose();
+  });
+
   it("resizes a Grid track edge through one exact-revision semantic callback", async () => {
     const onGridTrackResize = vi.fn(() => true);
     const adapter = await createLeaferEngineAdapter(createHost(), {

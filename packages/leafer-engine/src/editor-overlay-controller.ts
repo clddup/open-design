@@ -26,6 +26,7 @@ import type { LeaferEventLike } from "./pointer-event.js";
 import type {
   LeaferAutoLayoutSpacingCommitRequest,
   LeaferAutoLayoutSpacingInputRequest,
+  LeaferGridTrackInputRequest,
 } from "./types.js";
 
 type LeaferModule = typeof LeaferEditorModule;
@@ -72,6 +73,7 @@ export class EditorOverlayController {
       fromIndices: readonly number[];
       insertionIndex: number;
     }) => boolean;
+    onGridTrackInputRequest: (request: LeaferGridTrackInputRequest) => void;
     onGridTrackResize: (request: {
       axis: GridEditorAxis;
       expectedRevision: number;
@@ -99,6 +101,7 @@ export class EditorOverlayController {
     this.#gridEditor = new GridEditorOverlayController({
       layerIndex: 5,
       leafer: options.leafer,
+      onInputRequest: options.onGridTrackInputRequest,
       onReorder: options.onGridTrackReorder,
       onResize: options.onGridTrackResize,
       presentationRoot: options.presentationRoot,

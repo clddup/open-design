@@ -25,6 +25,7 @@ export type {
   LeaferGenerationSkeletonRole,
   LeaferGridTrackReorderRequest,
   LeaferGridTrackResizeRequest,
+  LeaferGridTrackInputRequest,
   LeaferImageCropCommitRequest,
   LeaferImageCropState,
   LeaferOperationKind,

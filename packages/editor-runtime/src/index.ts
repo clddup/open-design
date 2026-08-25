@@ -82,11 +82,13 @@ export { planSetNodeLayoutSizing } from "./auto-layout-sizing-operations.js";
 export {
   planResizeGridTrack,
   planReorderGridTracks,
+  planSetGridTrack,
   planSetNodeGridPlacement,
   type GridTrackAxis,
   type GridTrackMovement,
   type GridTrackReorderPlan,
   type GridTrackResizePlan,
+  type GridTrackUpdatePlan,
 } from "./auto-layout-grid-operations.js";
 export { planSetNodeLayoutLimits } from "./auto-layout-limits-operations.js";
 export {

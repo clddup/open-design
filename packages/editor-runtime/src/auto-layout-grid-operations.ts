@@ -29,7 +29,7 @@ export type GridTrackReorderPlan =
     }
   | Extract<AutoLayoutOperationPlan, { ok: false }>;
 
-export type GridTrackResizePlan =
+export type GridTrackUpdatePlan =
   | {
       ok: true;
       commands: DesignOperation[];
@@ -38,6 +38,8 @@ export type GridTrackResizePlan =
       track: GridTrack;
     }
   | Extract<AutoLayoutOperationPlan, { ok: false }>;
+
+export type GridTrackResizePlan = GridTrackUpdatePlan;
 
 export function planSetNodeGridPlacement(
   document: DesignDocument,
@@ -284,6 +286,26 @@ export function planResizeGridTrack(
   value: number,
   commandPrefix: string,
 ): GridTrackResizePlan {
+  return planSetGridTrack(
+    document,
+    pageId,
+    frameId,
+    axis,
+    index,
+    { type: "fixed", value },
+    commandPrefix,
+  );
+}
+
+export function planSetGridTrack(
+  document: DesignDocument,
+  pageId: string,
+  frameId: string,
+  axis: GridTrackAxis,
+  index: number,
+  track: GridTrack,
+  commandPrefix: string,
+): GridTrackUpdatePlan {
   const frame = document.nodesById[frameId];
   if (!frame) return failure("not-found", `Frame ${frameId} does not exist`);
   if (
@@ -308,17 +330,16 @@ export function planResizeGridTrack(
       "invalid-target",
       `Grid ${axis} resize index is outside the declared tracks`,
     );
-  if (!Number.isFinite(value) || value < 0 || value > MAX_GRID_TRACK_VALUE)
+  if (!validGridTrack(track))
     return failure(
       "invalid-target",
-      `Grid track size must be between 0 and ${MAX_GRID_TRACK_VALUE} pixels`,
+      `Grid track must be Hug, a Fixed value from 0 to ${MAX_GRID_TRACK_VALUE}px, or a positive Fill weight up to ${MAX_GRID_TRACK_VALUE}fr`,
     );
-  const track: GridTrack = { type: "fixed", value };
   const current = tracks[index];
-  if (current?.type === "fixed" && current.value === value)
+  if (current && sameTrack(current, track))
     return failure(
       "no-op",
-      `Grid ${axis} track ${index + 1} is already ${value}px`,
+      `Grid ${axis} track ${index + 1} already uses the requested sizing`,
     );
   const nextTracks = tracks.map((candidate, candidateIndex) =>
     candidateIndex === index ? track : candidate,
@@ -341,6 +362,24 @@ export function planResizeGridTrack(
     nodeIds: [frameId, ...frame.childIds],
     track,
   };
+}
+
+function validGridTrack(track: GridTrack): boolean {
+  if (track.type === "hug") return true;
+  return (
+    Number.isFinite(track.value) &&
+    track.value >= 0 &&
+    track.value <= MAX_GRID_TRACK_VALUE &&
+    (track.type !== "fill" || track.value > 0)
+  );
+}
+
+function sameTrack(left: GridTrack, right: GridTrack): boolean {
+  return (
+    left.type === right.type &&
+    (left.type === "hug" ||
+      (right.type !== "hug" && left.value === right.value))
+  );
 }
 
 function closeSelectionOverChildSpans(

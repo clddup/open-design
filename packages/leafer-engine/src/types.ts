@@ -3,6 +3,7 @@ import type {
   DesignChangeSet,
   DesignDocument,
   DesignOperation,
+  GridTrack,
   ImagePlacement,
   Point,
   SelectionState,
@@ -115,6 +116,16 @@ export interface LeaferGridTrackResizeRequest {
   value: number;
 }
 
+export interface LeaferGridTrackInputRequest {
+  axis: "rows" | "columns";
+  clientPoint: Point;
+  expectedRevision: number;
+  frameId: string;
+  index: number;
+  resolvedSize: number;
+  track: GridTrack;
+}
+
 export type LeaferAutoLayoutSpacingChange =
   | {
       kind: "padding";
@@ -186,6 +197,7 @@ export interface LeaferEngineCallbacks {
   onError(error: Error): void;
   onGridTrackReorder?(request: LeaferGridTrackReorderRequest): boolean;
   onGridTrackResize?(request: LeaferGridTrackResizeRequest): boolean;
+  onGridTrackInputRequest?(request: LeaferGridTrackInputRequest): void;
   onImageCropCommit?(request: LeaferImageCropCommitRequest): boolean;
   onImageCropStateChange?(state: LeaferImageCropState | null): void;
   onOperations(request: LeaferOperationRequest): boolean;

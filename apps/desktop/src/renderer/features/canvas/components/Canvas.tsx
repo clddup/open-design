@@ -4,6 +4,7 @@ import {
   type DesignNode,
   type EllipseNode,
   type FrameNode,
+  type GridTrack,
   type LineNode,
   type PolygonNode,
   type RectangleNode,
@@ -89,11 +90,10 @@ import {
   ImageAreaSelectionOverlay,
   type ImageAreaSelectionAction,
 } from "./ImageAreaSelectionOverlay";
-import {
-  AutoLayoutSpacingInput,
-  type CanvasAutoLayoutSpacingInput,
-} from "./AutoLayoutSpacingInput";
+import { AutoLayoutSpacingInput } from "./AutoLayoutSpacingInput";
+import { GridTrackInput } from "./GridTrackInput";
 import { ImageExpandOverlay } from "./ImageExpandOverlay";
+import { useCanvasInlineEditors } from "../use-canvas-inline-editors";
 
 export function Canvas({
   activeAgentRunId,
@@ -117,7 +117,7 @@ export function Canvas({
   onTextEditingStyleControllerChange,
   onTextRangeSelectionChange,
   onReorderGridTracks,
-  onResizeGridTrack,
+  onSetGridTrack,
   onResizeFrame,
   selectionActions,
   showAgentRunStatus,
@@ -179,12 +179,12 @@ export function Canvas({
     fromIndices: readonly number[],
     insertionIndex: number,
   ) => boolean;
-  onResizeGridTrack: (
+  onSetGridTrack: (
     frameId: string,
     expectedRevision: number,
     axis: "rows" | "columns",
     index: number,
-    value: number,
+    track: GridTrack,
   ) => boolean;
   onResizeFrame: ResizeFrameHandler;
   selectionActions?: ReactNode;
@@ -200,8 +200,6 @@ export function Canvas({
   );
   const [renderError, setRenderError] = useState<string | null>(null);
   const [assetDropActive, setAssetDropActive] = useState(false);
-  const [autoLayoutSpacingInput, setAutoLayoutSpacingInput] =
-    useState<CanvasAutoLayoutSpacingInput | null>(null);
   const [imageCropState, setImageCropState] =
     useState<LeaferImageCropState | null>(null);
   const [imageAreaSelection, setImageAreaSelection] = useState<{
@@ -233,6 +231,11 @@ export function Canvas({
   const vectorEditStateRef = useRef(vectorEditState);
   vectorEditStateRef.current = vectorEditState;
   const tool = isTool(snapshot.state.tool) ? snapshot.state.tool : "select";
+  const inlineEditors = useCanvasInlineEditors({
+    revision: snapshot.document.revision,
+    selection: snapshot.state.selection,
+    tool,
+  });
   const activeTextRunLayoutProvider = useMemo(() => {
     if (!textRunLayoutProvider) return undefined;
     return composeTextRunLayoutProviders(
@@ -301,27 +304,6 @@ export function Canvas({
       adapter.current?.finishGenerationPresentation();
     }
   }, [activeAgentRunId]);
-
-  useEffect(() => {
-    if (!autoLayoutSpacingInput) return;
-    const selectedFrameId =
-      snapshot.state.selection.nodeIds.length === 1 &&
-      !snapshot.state.selection.componentTarget
-        ? snapshot.state.selection.nodeIds[0]
-        : undefined;
-    if (
-      tool !== "select" ||
-      selectedFrameId !== autoLayoutSpacingInput.frameId ||
-      snapshot.document.revision !== autoLayoutSpacingInput.expectedRevision
-    ) {
-      setAutoLayoutSpacingInput(null);
-    }
-  }, [
-    autoLayoutSpacingInput,
-    snapshot.document.revision,
-    snapshot.state.selection,
-    tool,
-  ]);
 
   const startImageAreaSelection = useCallback(
     (nodeId: string) => {
@@ -1139,9 +1121,7 @@ export function Canvas({
       onAutoLayoutSpacingCommit: ({ change, expectedRevision, frameId }) =>
         onAdjustAutoLayoutSpacing(frameId, expectedRevision, change),
       onAutoLayoutSpacingInputRequest: (request) =>
-        setAutoLayoutSpacingInput(
-          canvasAutoLayoutSpacingInput(request, element),
-        ),
+        inlineEditors.openAutoLayoutSpacing(request, element),
       onCreate: createNode,
       onCreateVector: createVectorNode,
       onError: (error) => {
@@ -1152,8 +1132,13 @@ export function Canvas({
       onImageCropStateChange: setImageCropState,
       onGridTrackReorder: ({ axis, frameId, fromIndices, insertionIndex }) =>
         onReorderGridTracks(frameId, axis, fromIndices, insertionIndex),
+      onGridTrackInputRequest: (request) =>
+        inlineEditors.openGridTrack(request, element),
       onGridTrackResize: ({ axis, expectedRevision, frameId, index, value }) =>
-        onResizeGridTrack(frameId, expectedRevision, axis, index, value),
+        onSetGridTrack(frameId, expectedRevision, axis, index, {
+          type: "fixed",
+          value,
+        }),
       onOperations: applyOperations,
       onSelectionChange: (nodeIds, anchorNodeId, componentTarget) => {
         runtime.setSelection(nodeIds, anchorNodeId, componentTarget);
@@ -1241,9 +1226,11 @@ export function Canvas({
     createNode,
     createVectorNode,
     exitVectorEdit,
+    inlineEditors.openAutoLayoutSpacing,
+    inlineEditors.openGridTrack,
     onImageCropControllerChange,
     onReorderGridTracks,
-    onResizeGridTrack,
+    onSetGridTrack,
     onAdjustAutoLayoutSpacing,
     onTextLayoutProviderReady,
     onTextEditingStyleControllerChange,
@@ -1411,20 +1398,51 @@ export function Canvas({
           {t("canvas.dropImageAsset")}
         </div>
       )}
-      {autoLayoutSpacingInput && (
-        <AutoLayoutSpacingInput
-          label={t(autoLayoutSpacingInputLabel(autoLayoutSpacingInput.kind))}
-          onClose={() => setAutoLayoutSpacingInput(null)}
-          onCommit={(change) =>
-            onAdjustAutoLayoutSpacing(
-              autoLayoutSpacingInput.frameId,
-              autoLayoutSpacingInput.expectedRevision,
-              change,
-            )
-          }
-          request={autoLayoutSpacingInput}
-        />
-      )}
+      {inlineEditors.autoLayoutSpacing &&
+        (() => {
+          const request = inlineEditors.autoLayoutSpacing;
+          return (
+            <AutoLayoutSpacingInput
+              label={t(autoLayoutSpacingInputLabel(request.kind))}
+              onClose={inlineEditors.closeAutoLayoutSpacing}
+              onCommit={(change) =>
+                onAdjustAutoLayoutSpacing(
+                  request.frameId,
+                  request.expectedRevision,
+                  change,
+                )
+              }
+              request={request}
+            />
+          );
+        })()}
+      {inlineEditors.gridTrack &&
+        (() => {
+          const request = inlineEditors.gridTrack;
+          return (
+            <GridTrackInput
+              fixedLabel={t("properties.autoLayoutFixed")}
+              fillLabel={t("properties.autoLayoutFill")}
+              hugLabel={t("properties.autoLayoutHug")}
+              label={t(
+                request.axis === "columns"
+                  ? "properties.autoLayoutColumns"
+                  : "properties.autoLayoutRows",
+              )}
+              onClose={inlineEditors.closeGridTrack}
+              onCommit={(track) =>
+                onSetGridTrack(
+                  request.frameId,
+                  request.expectedRevision,
+                  request.axis,
+                  request.index,
+                  track,
+                )
+              }
+              request={request}
+            />
+          );
+        })()}
       {imageAreaSelection &&
         (() => {
           const node = snapshot.document.nodesById[imageAreaSelection.nodeId];
@@ -1899,40 +1917,12 @@ function operationLabel(
   }
 }
 
-function canvasAutoLayoutSpacingInput(
-  request: LeaferAutoLayoutSpacingInputRequest,
-  element: HTMLElement,
-): CanvasAutoLayoutSpacingInput {
-  const bounds = element.getBoundingClientRect();
-  const inputWidth = 84;
-  const inputHeight = 40;
-  return {
-    ...request,
-    canvasPoint: {
-      x: clamp(
-        request.clientPoint.x - bounds.left,
-        0,
-        Math.max(0, bounds.width - inputWidth),
-      ),
-      y: clamp(
-        request.clientPoint.y - bounds.top,
-        0,
-        Math.max(0, bounds.height - inputHeight),
-      ),
-    },
-  };
-}
-
 function autoLayoutSpacingInputLabel(
   kind: LeaferAutoLayoutSpacingInputRequest["kind"],
 ): MessageKey {
   if (kind === "gap") return "properties.autoLayoutGap";
   if (kind === "counter-gap") return "properties.autoLayoutCounterGap";
   return `properties.padding.${kind.slice("padding-".length)}` as MessageKey;
-}
-
-function clamp(value: number, minimum: number, maximum: number): number {
-  return Math.min(maximum, Math.max(minimum, value));
 }
 
 function createDesignNode(
