@@ -5,6 +5,7 @@ import type {
   DesignOperation,
   GridChildPlacement,
   GridTrack,
+  Size,
 } from "@opendesign/design-contracts";
 import {
   DEFAULT_AUTO_LAYOUT_FRAME_SIZING,
@@ -58,6 +59,21 @@ export type GridChildMovePlan =
       frameId: string;
       nodeIds: string[];
       target: { row: number; column: number };
+    }
+  | Extract<AutoLayoutOperationPlan, { ok: false }>;
+
+export type GridChildSpanTarget = Pick<
+  GridChildPlacement,
+  "row" | "column" | "rowSpan" | "columnSpan"
+>;
+
+export type GridChildSpanPlan =
+  | {
+      ok: true;
+      commands: DesignOperation[];
+      frameId: string;
+      nodeIds: string[];
+      target: GridChildSpanTarget;
     }
   | Extract<AutoLayoutOperationPlan, { ok: false }>;
 
@@ -671,6 +687,186 @@ export function planMoveGridChildren(
   );
 }
 
+export function planResizeGridChildSpan(
+  document: DesignDocument,
+  pageId: string,
+  frameId: string,
+  nodeId: string,
+  target: GridChildSpanTarget,
+  commandPrefix: string,
+  size?: Size,
+): GridChildSpanPlan {
+  const frame = document.nodesById[frameId];
+  const node = document.nodesById[nodeId];
+  if (!frame || !node) {
+    return failure("not-found", "Grid Frame or child does not exist");
+  }
+  if (
+    (frame.kind !== "frame" && frame.kind !== "slot") ||
+    !nodeBelongsToPage(document, pageId, frameId) ||
+    node.parentId !== frameId
+  ) {
+    return failure(
+      "invalid-target",
+      `Layer ${nodeId} must be a direct child of Grid Frame ${frameId}`,
+    );
+  }
+  const grid = frame.properties.autoLayout;
+  if (!grid || grid.mode !== "grid" || !node.gridPlacement) {
+    return failure("invalid-target", "Grid span requires an explicit cell");
+  }
+  if (!node.visible || node.layoutPositioning === "absolute") {
+    return failure("invalid-target", "Only visible Grid flow layers can span");
+  }
+  if (
+    isEffectivelyLocked(document, frameId) ||
+    isEffectivelyLocked(document, nodeId)
+  ) {
+    return failure("locked", "Locked Grid layers cannot change span");
+  }
+  if (
+    grid.rows.length * grid.columns.length >
+    MAX_GRID_CHILD_MOVE_SEARCH_CELLS
+  ) {
+    return failure(
+      "operation-limit",
+      "Grid is too large for bounded direct span editing",
+    );
+  }
+  if (
+    ![target.row, target.column, target.rowSpan, target.columnSpan].every(
+      Number.isInteger,
+    ) ||
+    target.row < 0 ||
+    target.column < 0 ||
+    target.rowSpan < 1 ||
+    target.columnSpan < 1
+  ) {
+    return failure("invalid-target", "Grid span target is invalid");
+  }
+  if (
+    size &&
+    (!Number.isFinite(size.width) ||
+      !Number.isFinite(size.height) ||
+      size.width < 0 ||
+      size.height < 0)
+  ) {
+    return failure("invalid-target", "Grid child size is invalid");
+  }
+  const persistedSize = size
+    ? {
+        width:
+          node.layoutSizing?.horizontal === "fill"
+            ? node.size.width
+            : size.width,
+        height:
+          node.layoutSizing?.vertical === "fill"
+            ? node.size.height
+            : size.height,
+      }
+    : undefined;
+  const placement = { ...node.gridPlacement, ...target };
+  if (
+    grid.itemsPositioning === "row-auto-flow" &&
+    (placement.row !== node.gridPlacement.row ||
+      placement.column !== node.gridPlacement.column)
+  ) {
+    return failure(
+      "invalid-target",
+      "Automatic Grid span editing cannot change the generated start cell",
+    );
+  }
+  if (!placementFitsGrid(placement, grid.rows.length, grid.columns.length)) {
+    return failure(
+      "invalid-target",
+      `Grid span for ${nodeId} extends outside the declared tracks`,
+    );
+  }
+  const placementChanged = !samePlacement(node.gridPlacement, placement);
+  const sizeChanged =
+    persistedSize !== undefined &&
+    (persistedSize.width !== node.size.width ||
+      persistedSize.height !== node.size.height);
+  if (!placementChanged && !sizeChanged) {
+    return failure("no-op", "Grid child already uses this span");
+  }
+
+  if (grid.itemsPositioning === "manual") {
+    if (!placementChanged && persistedSize) {
+      return {
+        ok: true,
+        commands: [
+          {
+            commandId: `${commandPrefix}_size`,
+            type: "update_properties",
+            nodeId,
+            size: persistedSize,
+          },
+        ],
+        frameId,
+        nodeIds: [nodeId],
+        target,
+      };
+    }
+    const plan = planManualGridPlacementChanges(
+      document,
+      frame,
+      new Map([[nodeId, placement]]),
+      commandPrefix,
+    );
+    return plan.ok
+      ? {
+          ...plan,
+          commands: mergeGridSpanSize(plan.commands, nodeId, persistedSize),
+          target,
+        }
+      : plan;
+  }
+
+  const flowChildren = frame.childIds.filter((childId) => {
+    const child = document.nodesById[childId];
+    return child?.visible === true && child.layoutPositioning !== "absolute";
+  });
+  if (placementChanged) {
+    const preflight = preflightAutomaticGridChildren(
+      document,
+      frame,
+      grid,
+      flowChildren,
+      new Map([[nodeId, placement]]),
+    );
+    if (!preflight.ok) return preflight;
+  }
+  return {
+    ok: true,
+    commands: [
+      {
+        commandId: `${commandPrefix}_span`,
+        type: "update_properties",
+        nodeId,
+        ...(placementChanged ? { gridPlacement: placement } : {}),
+        ...(persistedSize ? { size: persistedSize } : {}),
+      },
+    ],
+    frameId,
+    nodeIds: [nodeId],
+    target,
+  };
+}
+
+function mergeGridSpanSize(
+  commands: readonly DesignOperation[],
+  nodeId: string,
+  size: Size | undefined,
+): DesignOperation[] {
+  if (!size) return [...commands];
+  return commands.map((command) =>
+    command.type === "update_properties" && command.nodeId === nodeId
+      ? { ...command, size }
+      : command,
+  );
+}
+
 function planMoveAutomaticGridChildren(
   document: DesignDocument,
   pageId: string,
@@ -687,11 +883,39 @@ function planMoveAutomaticGridChildren(
     return node?.visible === true && node.layoutPositioning !== "absolute";
   });
   const remaining = flowChildren.filter((nodeId) => !selected.has(nodeId));
+  const currentLayout = solveAutomaticGridChildren(
+    document,
+    frame,
+    grid,
+    flowChildren,
+  );
+  if (!currentLayout.ok) {
+    return failure(
+      "visual-fidelity",
+      `Grid content cannot resolve its current flow: ${currentLayout.message}`,
+    );
+  }
   const targetOrdinal = target.row * grid.columns.length + target.column;
+  const targetOccupant = currentLayout.placements.find(({ placement }) =>
+    placementContainsCell(placement, target),
+  );
+  const targetBoundary = targetOccupant
+    ? selected.has(targetOccupant.id)
+      ? flowChildren.indexOf(targetOccupant.id)
+      : remaining.indexOf(targetOccupant.id)
+    : currentLayout.placements
+        .filter(({ id }) => !selected.has(id))
+        .findIndex(
+          ({ placement }) =>
+            placement.row * grid.columns.length + placement.column >
+            targetOrdinal,
+        );
   const anchorOffset = ordered.indexOf(anchorNodeId);
+  const resolvedBoundary =
+    targetBoundary < 0 ? remaining.length : targetBoundary;
   const insertionIndex = Math.max(
     0,
-    Math.min(targetOrdinal - anchorOffset, remaining.length),
+    Math.min(resolvedBoundary - anchorOffset, remaining.length),
   );
   const nextFlow = [
     ...remaining.slice(0, insertionIndex),
@@ -702,36 +926,13 @@ function planMoveAutomaticGridChildren(
     return failure("no-op", "Grid children already occupy this flow position");
   }
 
-  const preflight = solveGridAutoLayout({
-    version: GRID_AUTO_LAYOUT_CONTRACT_VERSION,
-    frame: frame.size,
-    frameSizing: grid.sizing ?? DEFAULT_AUTO_LAYOUT_FRAME_SIZING,
-    ...(frame.layoutLimits ? { frameLimits: frame.layoutLimits } : {}),
-    padding: grid.padding,
-    rowGap: grid.rowGap,
-    columnGap: grid.columnGap,
-    rows: grid.rows,
-    columns: grid.columns,
-    itemsPositioning: grid.itemsPositioning,
-    ...(grid.autoTracks ? { autoTracks: grid.autoTracks } : {}),
-    children: nextFlow.map((nodeId) => {
-      const node = document.nodesById[nodeId]!;
-      return {
-        id: node.id,
-        width: node.size.width,
-        height: node.size.height,
-        sizing: node.layoutSizing ?? DEFAULT_LAYOUT_SIZING,
-        ...(node.layoutLimits ? { limits: node.layoutLimits } : {}),
-        ...(node.gridPlacement ? { placement: node.gridPlacement } : {}),
-      };
-    }),
-  });
-  if (!preflight.ok) {
-    return failure(
-      "visual-fidelity",
-      `Grid content cannot use the requested flow order: ${preflight.message}`,
-    );
-  }
+  const preflight = preflightAutomaticGridChildren(
+    document,
+    frame,
+    grid,
+    nextFlow,
+  );
+  if (!preflight.ok) return preflight;
 
   const flowSlots = new Set(flowChildren);
   let nextFlowIndex = 0;
@@ -798,6 +999,84 @@ function planMoveAutomaticGridChildren(
   };
 }
 
+function preflightAutomaticGridChildren(
+  document: DesignDocument,
+  frame: Extract<DesignNode, { kind: "frame" | "slot" }>,
+  grid: Extract<AutoLayout, { mode: "grid" }>,
+  orderedNodeIds: readonly string[],
+  placementOverrides: ReadonlyMap<string, GridChildPlacement> = new Map(),
+):
+  | Extract<AutoLayoutOperationPlan, { ok: true }>
+  | Extract<AutoLayoutOperationPlan, { ok: false }> {
+  const result = solveAutomaticGridChildren(
+    document,
+    frame,
+    grid,
+    orderedNodeIds,
+    placementOverrides,
+  );
+  return result.ok
+    ? {
+        ok: true,
+        commands: [],
+        frameId: frame.id,
+        nodeIds: [...orderedNodeIds],
+      }
+    : failure(
+        "visual-fidelity",
+        `Grid content cannot use the requested span or flow order: ${result.message}`,
+      );
+}
+
+function solveAutomaticGridChildren(
+  document: DesignDocument,
+  frame: Extract<DesignNode, { kind: "frame" | "slot" }>,
+  grid: Extract<AutoLayout, { mode: "grid" }>,
+  orderedNodeIds: readonly string[],
+  placementOverrides: ReadonlyMap<string, GridChildPlacement> = new Map(),
+) {
+  return solveGridAutoLayout({
+    version: GRID_AUTO_LAYOUT_CONTRACT_VERSION,
+    frame: frame.size,
+    frameSizing: grid.sizing ?? DEFAULT_AUTO_LAYOUT_FRAME_SIZING,
+    ...(frame.layoutLimits ? { frameLimits: frame.layoutLimits } : {}),
+    padding: grid.padding,
+    rowGap: grid.rowGap,
+    columnGap: grid.columnGap,
+    rows: grid.rows,
+    columns: grid.columns,
+    itemsPositioning: grid.itemsPositioning,
+    ...(grid.autoTracks ? { autoTracks: grid.autoTracks } : {}),
+    children: orderedNodeIds.map((nodeId) => {
+      const node = document.nodesById[nodeId]!;
+      const placement = placementOverrides.get(nodeId) ?? node.gridPlacement;
+      return {
+        id: node.id,
+        width: node.size.width,
+        height: node.size.height,
+        sizing: node.layoutSizing ?? DEFAULT_LAYOUT_SIZING,
+        ...(node.layoutLimits ? { limits: node.layoutLimits } : {}),
+        ...(placement ? { placement } : {}),
+      };
+    }),
+  });
+}
+
+function placementContainsCell(
+  placement: Pick<
+    GridChildPlacement,
+    "row" | "column" | "rowSpan" | "columnSpan"
+  >,
+  cell: { row: number; column: number },
+): boolean {
+  return (
+    cell.row >= placement.row &&
+    cell.row < placement.row + placement.rowSpan &&
+    cell.column >= placement.column &&
+    cell.column < placement.column + placement.columnSpan
+  );
+}
+
 function planMoveManualGridChildren(
   document: DesignDocument,
   frame: Extract<DesignNode, { kind: "frame" | "slot" }>,
@@ -814,7 +1093,6 @@ function planMoveManualGridChildren(
   if (!anchor) return failure("not-found", "Grid move anchor is unavailable");
   const rowOffset = target.row - anchor.row;
   const columnOffset = target.column - anchor.column;
-  const selected = new Set(ordered);
   const selectedPlacements = new Map<string, GridChildPlacement>();
   for (const nodeId of ordered) {
     const placement = document.nodesById[nodeId]!.gridPlacement!;
@@ -841,7 +1119,26 @@ function planMoveManualGridChildren(
     }
     selectedPlacements.set(nodeId, shifted);
   }
+  const plan = planManualGridPlacementChanges(
+    document,
+    frame,
+    selectedPlacements,
+    commandPrefix,
+  );
+  return plan.ok ? { ...plan, target } : plan;
+}
 
+function planManualGridPlacementChanges(
+  document: DesignDocument,
+  frame: Extract<DesignNode, { kind: "frame" | "slot" }>,
+  selectedPlacements: ReadonlyMap<string, GridChildPlacement>,
+  commandPrefix: string,
+): AutoLayoutOperationPlan {
+  const grid = frame.properties.autoLayout;
+  if (!grid || grid.mode !== "grid") {
+    return failure("invalid-target", "Grid Auto Layout is unavailable");
+  }
+  const selected = new Set(selectedPlacements.keys());
   const unselected = frame.childIds.flatMap((nodeId) => {
     const node = document.nodesById[nodeId];
     return node &&
@@ -943,7 +1240,6 @@ function planMoveManualGridChildren(
     commands,
     frameId: frame.id,
     nodeIds: [...placements.keys()],
-    target,
   };
 }
 

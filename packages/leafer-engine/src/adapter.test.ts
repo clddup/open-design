@@ -26,6 +26,7 @@ import type {
   LeaferEngineCallbacks,
   LeaferEngineSyncInput,
   LeaferGenerationSkeleton,
+  LeaferGridChildSpanRequest,
   LeaferVectorEditRequest,
 } from "./types.js";
 
@@ -1140,6 +1141,53 @@ describe("Leafer engine selection bounds synchronization", () => {
     expect(child.localTransform.e).toBe(authoritativeX);
     expect(onGridChildMove).not.toHaveBeenCalled();
     expect(onOperations).not.toHaveBeenCalled();
+
+    app.editor.editBox.dragging = true;
+    app.editor.emit("editor.before-move");
+    child.localTransform.e = 700;
+    app.editor.emit("editor.move");
+    app.editor.editBox.dragging = false;
+    app.editor.editBox.emit("drag.end", { isCancel: true });
+    expect(drop.visible).toBe(false);
+    expect(child.localTransform.e).toBe(authoritativeX);
+    expect(onGridChildMove).not.toHaveBeenCalled();
+    expect(onOperations).not.toHaveBeenCalled();
+    adapter.dispose();
+  });
+
+  it("keeps a spanning Grid anchor in its origin cell during a slight drag", async () => {
+    const onGridChildMove = vi.fn(() => true);
+    const input = withGridChildFixture(createInput());
+    const first = input.document.nodesById.feature_one;
+    const second = input.document.nodesById.feature_two;
+    if (!first?.gridPlacement || !second?.gridPlacement) {
+      throw new Error("Missing spanning Grid fixture");
+    }
+    first.gridPlacement.columnSpan = 2;
+    first.layoutSizing = { horizontal: "fill", vertical: "fixed" };
+    second.gridPlacement = { ...second.gridPlacement, row: 1, column: 0 };
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onGridChildMove,
+    });
+    adapter.sync(input);
+    flushAnimationFrames();
+    const app = leaferHarness.app;
+    const child = app && findElement(app.tree, "feature_one");
+    if (!app || !child) throw new Error("Missing spanning Grid child");
+    const authoritativeX = child.localTransform.e;
+
+    app.editor.target = [child];
+    app.editor.moving = true;
+    app.editor.editBox.dragging = true;
+    app.editor.emit("editor.before-move");
+    child.localTransform.e += 1;
+    app.editor.emit("editor.move");
+    app.editor.editBox.dragging = false;
+    app.editor.editBox.emit("drag.end");
+
+    expect(onGridChildMove).not.toHaveBeenCalled();
+    expect(child.localTransform.e).toBe(authoritativeX);
     adapter.dispose();
   });
 
@@ -1187,6 +1235,216 @@ describe("Leafer engine selection bounds synchronization", () => {
         ],
       }),
     );
+    adapter.dispose();
+  });
+
+  it("snaps Fill Grid child resize to a semantic span while preserving a fixed counter-axis size", async () => {
+    const onGridChildSpan = vi.fn(() => true);
+    const input = withGridChildFixture(createInput());
+    const source = input.document.nodesById.feature_one;
+    if (!source) throw new Error("Missing Grid child source");
+    source.layoutSizing = { horizontal: "fill", vertical: "fixed" };
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onGridChildSpan,
+    });
+    adapter.sync(input);
+    flushAnimationFrames();
+    const app = leaferHarness.app;
+    const child = app && findElement(app.tree, "feature_one");
+    const drop = app && findElement(app.sky, "__opendesign_grid_child_drop__");
+    if (!app || !child || !drop) throw new Error("Missing Grid span fixture");
+
+    app.editor.target = [child];
+    app.editor.resizing = true;
+    app.editor.editBox.dragging = true;
+    app.editor.emit("editor.before-scale");
+    const resizedSize = {
+      width: 1_180 - child.localTransform.e,
+      height: Number(child.height) + 40,
+    };
+    child.width = resizedSize.width;
+    child.height = resizedSize.height;
+    app.editor.emit("editor.scale");
+
+    expect(drop.visible).toBe(true);
+    expect(drop.x).toBe(20);
+    expect(drop.width).toBe(1_160);
+    app.editor.editBox.dragging = false;
+    app.editor.editBox.emit("drag.end");
+
+    expect(drop.visible).toBe(false);
+    expect(onGridChildSpan).toHaveBeenCalledWith({
+      expectedRevision: input.document.revision,
+      frameId: "frame_welcome",
+      nodeId: "feature_one",
+      size: resizedSize,
+      target: { row: 0, column: 0, rowSpan: 1, columnSpan: 2 },
+    });
+
+    app.editor.editBox.dragging = true;
+    app.editor.emit("editor.before-scale");
+    child.width = 1_180 - child.localTransform.e;
+    app.editor.emit("editor.scale");
+    app.editor.editBox.dragging = false;
+    app.editor.editBox.emit("drag.end", { isCancel: true });
+    expect(drop.visible).toBe(false);
+    expect(onGridChildSpan).toHaveBeenCalledTimes(1);
+    adapter.dispose();
+  });
+
+  it("keeps a fixed Grid child axis resizable when the Fill axis stays in the same span", async () => {
+    const onGridChildSpan = vi.fn(() => true);
+    const onOperations = vi.fn(() => true);
+    const input = withGridChildFixture(createInput());
+    const source = input.document.nodesById.feature_one;
+    if (!source) throw new Error("Missing Grid child source");
+    source.layoutSizing = { horizontal: "fill", vertical: "fixed" };
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onGridChildSpan,
+      onOperations,
+    });
+    adapter.sync(input);
+    flushAnimationFrames();
+    const app = leaferHarness.app;
+    const child = app && findElement(app.tree, "feature_one");
+    if (!app || !child) throw new Error("Missing Grid child fixture");
+    const currentWidth = Number(child.width);
+    const nextHeight = Number(child.height) + 40;
+
+    app.editor.target = [child];
+    app.editor.resizing = true;
+    app.editor.editBox.dragging = true;
+    app.editor.emit("editor.before-scale");
+    child.height = nextHeight;
+    app.editor.emit("editor.scale");
+    app.editor.editBox.dragging = false;
+    app.editor.editBox.emit("drag.end");
+
+    expect(onGridChildSpan).toHaveBeenCalledWith({
+      expectedRevision: input.document.revision,
+      frameId: "frame_welcome",
+      nodeId: "feature_one",
+      size: { width: currentWidth, height: nextHeight },
+      target: { row: 0, column: 0, rowSpan: 1, columnSpan: 1 },
+    });
+    expect(onOperations).not.toHaveBeenCalled();
+    adapter.dispose();
+  });
+
+  it("does not commit the previous valid Grid span when the final resize target is invalid", async () => {
+    const onGridChildSpan = vi.fn(() => true);
+    const input = withGridChildFixture(createInput());
+    const frame = input.document.nodesById.frame_welcome;
+    const source = input.document.nodesById.feature_one;
+    if (frame?.kind !== "frame" || !source) {
+      throw new Error("Missing Grid fixture");
+    }
+    const grid = frame.properties.autoLayout;
+    if (!grid || grid.mode !== "grid") throw new Error("Missing Grid");
+    grid.itemsPositioning = "row-auto-flow";
+    source.layoutSizing = { horizontal: "fill", vertical: "fixed" };
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onGridChildSpan,
+    });
+    adapter.sync(input);
+    flushAnimationFrames();
+    const app = leaferHarness.app;
+    const child = app && findElement(app.tree, "feature_one");
+    const drop = app && findElement(app.sky, "__opendesign_grid_child_drop__");
+    if (!app || !child || !drop) throw new Error("Missing Grid child fixture");
+
+    app.editor.target = [child];
+    app.editor.resizing = true;
+    app.editor.editBox.dragging = true;
+    app.editor.emit("editor.before-scale");
+    child.width = 1_180 - child.localTransform.e;
+    app.editor.emit("editor.scale");
+    expect(drop.visible).toBe(true);
+
+    child.localTransform.e = 152;
+    child.width = 1_028;
+    app.editor.emit("editor.scale");
+    expect(drop.visible).toBe(false);
+    app.editor.editBox.dragging = false;
+    app.editor.editBox.emit("drag.end");
+
+    expect(onGridChildSpan).not.toHaveBeenCalled();
+    adapter.dispose();
+  });
+
+  it("uses transformed visual bounds when scale-based Grid children resize", async () => {
+    const onGridChildSpan = vi.fn<
+      (request: LeaferGridChildSpanRequest) => boolean
+    >(() => true);
+    const input = withGridChildFixture(createInput());
+    const source = input.document.nodesById.feature_one;
+    if (!source) throw new Error("Missing Grid child source");
+    source.layoutSizing = { horizontal: "fill", vertical: "fixed" };
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onGridChildSpan,
+    });
+    adapter.sync(input);
+    flushAnimationFrames();
+    const app = leaferHarness.app;
+    const child = app && findElement(app.tree, "feature_one");
+    if (!app || !child) throw new Error("Missing Grid child fixture");
+    const baseWidth = Number(child.width);
+
+    app.editor.target = [child];
+    app.editor.resizing = true;
+    app.editor.editBox.dragging = true;
+    app.editor.emit("editor.before-scale");
+    child.localTransform.a = 1_180 / baseWidth;
+    app.editor.emit("editor.scale");
+    app.editor.editBox.dragging = false;
+    app.editor.editBox.emit("drag.end");
+
+    const request = onGridChildSpan.mock.calls[0]?.[0];
+    expect(request?.size?.width).toBeCloseTo(1_180, 3);
+    expect(request?.target).toEqual({
+      row: 0,
+      column: 0,
+      rowSpan: 1,
+      columnSpan: 2,
+    });
+    adapter.dispose();
+  });
+
+  it("preserves a Line fixed counter-axis resize through the Grid span semantic callback", async () => {
+    const onGridChildSpan = vi.fn(() => true);
+    const input = withGridLineFixture(createInput());
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onGridChildSpan,
+    });
+    adapter.sync(input);
+    flushAnimationFrames();
+    const app = leaferHarness.app;
+    const line = app && findElement(app.tree, "flow_line");
+    if (!app || !(line instanceof FakeArrow)) {
+      throw new Error("Missing Grid Line fixture");
+    }
+
+    app.editor.target = [line];
+    app.editor.resizing = true;
+    app.editor.editBox.dragging = true;
+    app.editor.emit("editor.before-scale");
+    line.points = [0, 0, 100, 40];
+    app.editor.emit("editor.scale");
+    app.editor.editBox.dragging = false;
+    app.editor.editBox.emit("drag.end");
+
+    expect(onGridChildSpan).toHaveBeenCalledWith({
+      expectedRevision: input.document.revision,
+      frameId: "frame_welcome",
+      nodeId: "flow_line",
+      size: { width: 100, height: 40 },
+      target: { row: 0, column: 0, rowSpan: 1, columnSpan: 1 },
+    });
     adapter.dispose();
   });
 
@@ -7242,6 +7500,47 @@ function withGridChildFixture(
     document,
     gridEditorFrameId: frame.id,
     selection: { nodeIds: [first.id], anchorNodeId: first.id },
+  };
+}
+
+function withGridLineFixture(
+  input: LeaferEngineSyncInput,
+): LeaferEngineSyncInput {
+  const fixture = withLineFixture(input);
+  const document = structuredClone(fixture.document);
+  const frame = document.nodesById.frame_welcome;
+  const line = document.nodesById.flow_line;
+  if (frame?.kind !== "frame" || line?.kind !== "line") {
+    throw new Error("Missing Grid Line fixture");
+  }
+  frame.size = { width: 100, height: 100 };
+  frame.childIds = [line.id];
+  frame.properties.autoLayout = {
+    mode: "grid",
+    padding: { top: 0, right: 0, bottom: 0, left: 0 },
+    rowGap: 0,
+    columnGap: 0,
+    rows: [{ type: "fixed", value: 100 }],
+    columns: [{ type: "fixed", value: 100 }],
+    itemsPositioning: "row-auto-flow",
+  };
+  line.transform = [1, 0, 0, 1, 0, 0];
+  line.size = { width: 100, height: 0 };
+  line.gridPlacement = {
+    row: 0,
+    column: 0,
+    rowSpan: 1,
+    columnSpan: 1,
+    horizontalAlign: "auto",
+    verticalAlign: "auto",
+  };
+  line.layoutSizing = { horizontal: "fill", vertical: "fixed" };
+  return {
+    ...fixture,
+    document,
+    gridEditorFrameId: frame.id,
+    selection: { nodeIds: [line.id], anchorNodeId: line.id },
+    tool: "select",
   };
 }
 

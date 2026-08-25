@@ -1,6 +1,8 @@
 import {
+  DEFAULT_LAYOUT_SIZING,
   normalizeLineEndpoints,
   type DesignOperation,
+  type LayoutSizing,
   type Transform,
 } from "@opendesign/design-contracts";
 import type * as LeaferEditorModule from "leafer-editor";
@@ -8,6 +10,7 @@ import type { LeaferElementSpec, LeaferSceneProjection } from "./mapping.js";
 import type {
   LeaferEngineSyncInput,
   LeaferGridChildMoveRequest,
+  LeaferGridChildSpanRequest,
   LeaferOperationKind,
   LeaferOperationRequest,
 } from "./types.js";
@@ -33,9 +36,28 @@ interface DirectTransformSession {
   gridChildMove?: {
     anchorNodeId: string;
     frameId: string;
+    hitOffset: { row: number; column: number };
     initialTarget: { row: number; column: number };
     nodeIds: string[];
     target: { row: number; column: number };
+  };
+  gridChildSpan?: {
+    frameId: string;
+    initialTarget: {
+      row: number;
+      column: number;
+      rowSpan: number;
+      columnSpan: number;
+    };
+    nodeId: string;
+    size: { width: number; height: number };
+    sizing: LayoutSizing;
+    target: {
+      row: number;
+      column: number;
+      rowSpan: number;
+      columnSpan: number;
+    } | null;
   };
 }
 
@@ -51,8 +73,13 @@ interface DirectTransformControllerOptions {
   element: (nodeId: string) => LeaferElement | undefined;
   finishNodePresentation: (nodeId: string) => void;
   hasComponentTarget: () => boolean;
+  gridChildCellAt: (
+    frameId: string,
+    point: { x: number; y: number },
+  ) => { row: number; column: number } | null;
   nodeId: (element: LeaferElement) => string | undefined;
   onGridChildMove: (request: LeaferGridChildMoveRequest) => boolean;
+  onGridChildSpan: (request: LeaferGridChildSpanRequest) => boolean;
   onOperations: (request: LeaferOperationRequest) => boolean;
   onPreviewBoolean: (
     states: ReadonlyMap<string, DirectTransformElementState>,
@@ -61,6 +88,17 @@ interface DirectTransformControllerOptions {
     frameId: string,
     point: { x: number; y: number } | null,
   ) => { row: number; column: number } | null;
+  previewGridChildSpan: (
+    frameId: string,
+    nodeId: string,
+    before: DirectTransformElementState,
+    next: DirectTransformElementState | null,
+  ) => {
+    row: number;
+    column: number;
+    rowSpan: number;
+    columnSpan: number;
+  } | null;
   restoreProjection: () => void;
 }
 
@@ -94,6 +132,8 @@ export class DirectTransformController {
       input.vectorEditScope !== undefined ||
       (session.gridChildMove !== undefined &&
         session.gridChildMove.frameId !== input.gridEditorFrameId) ||
+      (session.gridChildSpan !== undefined &&
+        session.gridChildSpan.frameId !== input.gridEditorFrameId) ||
       !sameStringList(session.selectionNodeIds, input.selection.nodeIds)
     ) {
       this.cancel(!identityChanged);
@@ -118,6 +158,8 @@ export class DirectTransformController {
       (revisionChanged && !contiguousRevision) ||
       (session.gridChildMove !== undefined &&
         sync.changedNodeIds.has(session.gridChildMove.frameId)) ||
+      (session.gridChildSpan !== undefined &&
+        sync.changedNodeIds.has(session.gridChildSpan.frameId)) ||
       [...session.before.keys()].some(invalidatesInteraction)
     ) {
       this.cancel(true);
@@ -146,9 +188,11 @@ export class DirectTransformController {
     const nodeIds = this.#selectedSubtreeIds();
     if (nodeIds.length === 0) return;
     nodeIds.forEach(this.#options.finishNodePresentation);
+    const before = this.#capture(nodeIds);
     const gridChildMove = this.#gridChildMove(input);
+    const gridChildSpan = this.#gridChildSpan(input, before);
     this.#session = {
-      before: this.#capture(nodeIds),
+      before,
       changed: false,
       documentId: input.document.documentId,
       kind: kind ?? this.#currentKind(),
@@ -156,6 +200,7 @@ export class DirectTransformController {
       revision: input.document.revision,
       selectionNodeIds: this.#selectedNodeIds(),
       ...(gridChildMove ? { gridChildMove } : {}),
+      ...(gridChildSpan ? { gridChildSpan } : {}),
     };
   }
 
@@ -172,11 +217,32 @@ export class DirectTransformController {
     if (session.gridChildMove && session.kind === "move") {
       const anchor = this.#options.element(session.gridChildMove.anchorNodeId);
       if (anchor) {
-        session.gridChildMove.target =
-          this.#options.previewGridChildDrop(
-            session.gridChildMove.frameId,
-            elementCenter(anchor),
-          ) ?? session.gridChildMove.target;
+        const hit = this.#options.previewGridChildDrop(
+          session.gridChildMove.frameId,
+          elementCenter(anchor),
+        );
+        if (hit) {
+          session.gridChildMove.target = {
+            row: hit.row - session.gridChildMove.hitOffset.row,
+            column: hit.column - session.gridChildMove.hitOffset.column,
+          };
+        }
+      }
+    }
+    if (session.gridChildSpan && session.kind === "resize") {
+      const span = session.gridChildSpan;
+      const before = session.before.get(span.nodeId);
+      const element = this.#options.element(span.nodeId);
+      if (before && element) {
+        const next = readElementState(element);
+        span.target = this.#options.previewGridChildSpan(
+          span.frameId,
+          span.nodeId,
+          before,
+          next,
+        );
+        const bounds = directTransformElementBounds(next);
+        span.size = { width: bounds.width, height: bounds.height };
       }
     }
     this.#schedulePreview();
@@ -199,6 +265,17 @@ export class DirectTransformController {
     if (session.gridChildMove) {
       this.#options.previewGridChildDrop(session.gridChildMove.frameId, null);
     }
+    if (session.gridChildSpan) {
+      const before = session.before.get(session.gridChildSpan.nodeId);
+      if (before) {
+        this.#options.previewGridChildSpan(
+          session.gridChildSpan.frameId,
+          session.gridChildSpan.nodeId,
+          before,
+          null,
+        );
+      }
+    }
     if (!session.changed) return false;
     if (session.gridChildMove && session.kind === "move") {
       const move = session.gridChildMove;
@@ -211,6 +288,9 @@ export class DirectTransformController {
         nodeIds: move.nodeIds,
         target: move.target,
       });
+    }
+    if (session.gridChildSpan && session.kind === "resize") {
+      return this.#finishGridChildSpan(session);
     }
     const operations = this.#operationsFrom(session.before);
     if (operations.length === 0) return false;
@@ -234,10 +314,23 @@ export class DirectTransformController {
   cancel(restore = false): boolean {
     this.cancelPreview();
     if (!this.#session) return false;
-    const gridChildMove = this.#session.gridChildMove;
+    const session = this.#session;
+    const gridChildMove = session.gridChildMove;
+    const gridChildSpan = session.gridChildSpan;
     this.#session = null;
     if (gridChildMove) {
       this.#options.previewGridChildDrop(gridChildMove.frameId, null);
+    }
+    if (gridChildSpan) {
+      const before = session.before.get(gridChildSpan.nodeId);
+      if (before) {
+        this.#options.previewGridChildSpan(
+          gridChildSpan.frameId,
+          gridChildSpan.nodeId,
+          before,
+          null,
+        );
+      }
     }
     if (restore && !this.#options.current().disposed) {
       this.#options.restoreProjection();
@@ -306,10 +399,18 @@ export class DirectTransformController {
     }
     const initialPlacement =
       input.document.nodesById[anchorNodeId]?.gridPlacement;
-    if (!initialPlacement) return undefined;
+    const anchor = this.#options.element(anchorNodeId);
+    const hit = anchor
+      ? this.#options.gridChildCellAt(frameId, elementCenter(anchor))
+      : null;
+    if (!initialPlacement || !hit) return undefined;
     return {
       anchorNodeId,
       frameId,
+      hitOffset: {
+        row: hit.row - initialPlacement.row,
+        column: hit.column - initialPlacement.column,
+      },
       initialTarget: {
         row: initialPlacement.row,
         column: initialPlacement.column,
@@ -320,6 +421,93 @@ export class DirectTransformController {
         column: initialPlacement.column,
       },
     };
+  }
+
+  #gridChildSpan(
+    input: LeaferEngineSyncInput,
+    before: ReadonlyMap<string, DirectTransformElementState>,
+  ): DirectTransformSession["gridChildSpan"] {
+    const frameId = input.gridEditorFrameId;
+    const nodeId = this.#selectedNodeIds()[0];
+    const frame = frameId ? input.document.nodesById[frameId] : undefined;
+    const node = nodeId ? input.document.nodesById[nodeId] : undefined;
+    const sizing = node?.layoutSizing ?? DEFAULT_LAYOUT_SIZING;
+    const placement = node?.gridPlacement;
+    const state = nodeId ? before.get(nodeId) : undefined;
+    if (
+      input.selection.nodeIds.length !== 1 ||
+      !frameId ||
+      !nodeId ||
+      !frame ||
+      (frame.kind !== "frame" && frame.kind !== "slot") ||
+      frame.properties.autoLayout?.mode !== "grid" ||
+      !node ||
+      node.parentId !== frameId ||
+      !node.visible ||
+      node.layoutPositioning === "absolute" ||
+      !placement ||
+      !state ||
+      (sizing.horizontal !== "fill" && sizing.vertical !== "fill")
+    ) {
+      return undefined;
+    }
+    const target = {
+      row: placement.row,
+      column: placement.column,
+      rowSpan: placement.rowSpan,
+      columnSpan: placement.columnSpan,
+    };
+    return {
+      frameId,
+      initialTarget: target,
+      nodeId,
+      size: state.size,
+      sizing,
+      target: { ...target },
+    };
+  }
+
+  #finishGridChildSpan(session: DirectTransformSession): boolean {
+    const span = session.gridChildSpan;
+    const document = this.#options.current().input?.document;
+    const node = span && document?.nodesById[span.nodeId];
+    if (!span || !node) {
+      this.#options.restoreProjection();
+      return false;
+    }
+    this.#options.restoreProjection();
+    if (!span.target) return false;
+    const spanChanged = !sameGridSpan(span.initialTarget, span.target);
+    const canPersistSize =
+      node.kind !== "group" &&
+      node.kind !== "boolean" &&
+      node.kind !== "instance";
+    const persistedSize = canPersistSize
+      ? {
+          width:
+            span.sizing.horizontal === "fill"
+              ? node.size.width
+              : span.size.width,
+          height:
+            span.sizing.vertical === "fill"
+              ? node.size.height
+              : span.size.height,
+        }
+      : undefined;
+    const sizeChanged =
+      persistedSize !== undefined &&
+      (!nearlyEqual(persistedSize.width, node.size.width) ||
+        !nearlyEqual(persistedSize.height, node.size.height));
+    if (!spanChanged && !sizeChanged) {
+      return false;
+    }
+    return this.#options.onGridChildSpan({
+      expectedRevision: session.revision,
+      frameId: span.frameId,
+      nodeId: span.nodeId,
+      ...(canPersistSize ? { size: span.size } : {}),
+      target: span.target,
+    });
   }
 
   #operationsFrom(
@@ -491,11 +679,42 @@ function readElementState(element: LeaferElement): DirectTransformElementState {
   };
 }
 
-function elementCenter(element: LeaferElement): { x: number; y: number } {
-  const state = readElementState(element);
+export function directTransformElementBounds(
+  state: DirectTransformElementState,
+): { x: number; y: number; width: number; height: number } {
+  const localPoints = state.linePoints
+    ? [
+        { x: state.linePoints[0], y: state.linePoints[1] },
+        { x: state.linePoints[2], y: state.linePoints[3] },
+      ]
+    : [
+        { x: 0, y: 0 },
+        { x: state.size.width, y: 0 },
+        { x: state.size.width, y: state.size.height },
+        { x: 0, y: state.size.height },
+      ];
+  const [a, b, c, d, e, f] = state.transform;
+  const points = localPoints.map(({ x, y }) => ({
+    x: a * x + c * y + e,
+    y: b * x + d * y + f,
+  }));
+  const left = Math.min(...points.map((point) => point.x));
+  const top = Math.min(...points.map((point) => point.y));
+  const right = Math.max(...points.map((point) => point.x));
+  const bottom = Math.max(...points.map((point) => point.y));
   return {
-    x: state.transform[4] + state.size.width / 2,
-    y: state.transform[5] + state.size.height / 2,
+    x: normalizeNumber(left),
+    y: normalizeNumber(top),
+    width: normalizeNumber(right - left),
+    height: normalizeNumber(bottom - top),
+  };
+}
+
+function elementCenter(element: LeaferElement): { x: number; y: number } {
+  const bounds = directTransformElementBounds(readElementState(element));
+  return {
+    x: bounds.x + bounds.width / 2,
+    y: bounds.y + bounds.height / 2,
   };
 }
 
@@ -504,6 +723,18 @@ function sameGridCell(
   right: { row: number; column: number },
 ): boolean {
   return left.row === right.row && left.column === right.column;
+}
+
+function sameGridSpan(
+  left: { row: number; column: number; rowSpan: number; columnSpan: number },
+  right: { row: number; column: number; rowSpan: number; columnSpan: number },
+): boolean {
+  return (
+    left.row === right.row &&
+    left.column === right.column &&
+    left.rowSpan === right.rowSpan &&
+    left.columnSpan === right.columnSpan
+  );
 }
 
 function readLinePoints(

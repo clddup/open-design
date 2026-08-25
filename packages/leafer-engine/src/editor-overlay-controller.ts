@@ -1,4 +1,7 @@
-import type { DesignDocument } from "@opendesign/design-contracts";
+import {
+  DEFAULT_LAYOUT_SIZING,
+  type DesignDocument,
+} from "@opendesign/design-contracts";
 import type * as LeaferEditorModule from "leafer-editor";
 import {
   matrixRelativeToParent,
@@ -13,6 +16,10 @@ import {
 } from "./component-slot-overlay.js";
 import { GridEditorOverlayController } from "./grid-editor-overlay-controller.js";
 import type { GridEditorAxis } from "./grid-editor-overlay.js";
+import {
+  directTransformElementBounds,
+  type DirectTransformElementState,
+} from "./direct-transform-controller.js";
 import {
   createLayoutGuideOverlayPlan,
   layoutGuideDocumentTransform,
@@ -146,6 +153,40 @@ export class EditorOverlayController {
   ): { row: number; column: number } | null {
     const cell = this.#gridEditor.previewChildDrop(frameId, point);
     return cell ? { row: cell.row, column: cell.column } : null;
+  }
+
+  gridChildCellAt(
+    frameId: string,
+    point: { x: number; y: number },
+  ): { row: number; column: number } | null {
+    const cell = this.#gridEditor.childCellAt(frameId, point);
+    return cell ? { row: cell.row, column: cell.column } : null;
+  }
+
+  previewGridChildSpan(
+    frameId: string,
+    nodeId: string,
+    before: DirectTransformElementState,
+    next: DirectTransformElementState | null,
+  ): {
+    row: number;
+    column: number;
+    rowSpan: number;
+    columnSpan: number;
+  } | null {
+    if (!next) {
+      this.#gridEditor.previewChildPlacement(frameId, null);
+      return null;
+    }
+    const node = this.#document?.nodesById[nodeId];
+    if (!node?.gridPlacement) return null;
+    return this.#gridEditor.previewChildSpan(
+      frameId,
+      node.gridPlacement,
+      node.layoutSizing ?? DEFAULT_LAYOUT_SIZING,
+      directTransformElementBounds(before),
+      directTransformElementBounds(next),
+    );
   }
 
   dispose(): void {

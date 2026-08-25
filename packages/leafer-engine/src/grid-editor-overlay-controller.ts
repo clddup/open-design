@@ -1,6 +1,8 @@
 import {
   MAX_GRID_TRACK_VALUE,
   type DesignDocument,
+  type GridChildPlacement,
+  type LayoutSizing,
 } from "@opendesign/design-contracts";
 import type * as LeaferEditorModule from "leafer-editor";
 import {
@@ -11,6 +13,8 @@ import {
 } from "./affine.js";
 import {
   createGridEditorOverlayPlan,
+  gridAreaForPlacement,
+  gridChildSpanTargetFromBounds,
   gridTrackSelectionReorderChangesOrder,
   nearestGridInsertionIndex,
   nearestGridCell,
@@ -228,6 +232,59 @@ export class GridEditorOverlayController {
     this.#childDropCell = cell;
     this.#syncChildDropAppearance();
     return cell;
+  }
+
+  childCellAt(
+    frameId: string,
+    point: { x: number; y: number },
+  ): GridEditorCellSpec | null {
+    if (!this.#plan || this.#plan.frameId !== frameId) return null;
+    return nearestGridCell(this.#plan, point);
+  }
+
+  previewChildPlacement(
+    frameId: string,
+    placement: {
+      row: number;
+      column: number;
+      rowSpan: number;
+      columnSpan: number;
+    } | null,
+  ): boolean {
+    if (!this.#plan || this.#plan.frameId !== frameId) return false;
+    this.#childDropCell = placement
+      ? gridAreaForPlacement(this.#plan, placement)
+      : null;
+    this.#syncChildDropAppearance();
+    return this.#childDropCell !== null;
+  }
+
+  previewChildSpan(
+    frameId: string,
+    placement: GridChildPlacement,
+    sizing: LayoutSizing,
+    before: { x: number; y: number; width: number; height: number },
+    next: { x: number; y: number; width: number; height: number },
+  ): {
+    row: number;
+    column: number;
+    rowSpan: number;
+    columnSpan: number;
+  } | null {
+    if (!this.#plan || this.#plan.frameId !== frameId) return null;
+    const target = gridChildSpanTargetFromBounds(
+      this.#plan,
+      placement,
+      sizing,
+      before,
+      next,
+    );
+    if (!target) {
+      this.previewChildPlacement(frameId, null);
+      return null;
+    }
+    if (!this.previewChildPlacement(frameId, target)) return null;
+    return target;
   }
 
   dispose(): void {

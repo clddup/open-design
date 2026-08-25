@@ -653,6 +653,7 @@ export function EditorWorkbenchFeature({
               harfBuzzTextRunLayoutProvider={fontBinaryRuntime.provider}
               onDeleteGridTracks={deleteCanvasGridTracks}
               onMoveGridChildren={editorCommands.moveGridChildren}
+              onResizeGridChildSpan={editorCommands.resizeGridChildSpan}
               onResizeFrame={resizeFrame}
               onReorderGridTracks={editorCommands.reorderGridTracks}
               onSetGridTracks={editorCommands.setGridTracks}

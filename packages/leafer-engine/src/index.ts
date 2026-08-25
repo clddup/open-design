@@ -24,6 +24,7 @@ export type {
   LeaferGenerationSkeletonRegion,
   LeaferGenerationSkeletonRole,
   LeaferGridChildMoveRequest,
+  LeaferGridChildSpanRequest,
   LeaferGridTrackReorderRequest,
   LeaferGridTrackDeleteRequest,
   LeaferGridTrackResizeRequest,

@@ -7,6 +7,7 @@ import type {
   ImagePlacement,
   Point,
   SelectionState,
+  Size,
   TextParagraphStyle,
   TextRunStyle,
   Transform,
@@ -143,6 +144,19 @@ export interface LeaferGridChildMoveRequest {
   target: { row: number; column: number };
 }
 
+export interface LeaferGridChildSpanRequest {
+  expectedRevision: number;
+  frameId: string;
+  nodeId: string;
+  size?: Size;
+  target: {
+    row: number;
+    column: number;
+    rowSpan: number;
+    columnSpan: number;
+  };
+}
+
 export type LeaferAutoLayoutSpacingChange =
   | {
       kind: "padding";
@@ -213,6 +227,7 @@ export interface LeaferEngineCallbacks {
   onCreateVector(request: LeaferCreateVectorRequest): boolean;
   onError(error: Error): void;
   onGridChildMove?(request: LeaferGridChildMoveRequest): boolean;
+  onGridChildSpan?(request: LeaferGridChildSpanRequest): boolean;
   onGridTrackDelete?(request: LeaferGridTrackDeleteRequest): boolean;
   onGridTrackReorder?(request: LeaferGridTrackReorderRequest): boolean;
   onGridTrackResize?(request: LeaferGridTrackResizeRequest): boolean;

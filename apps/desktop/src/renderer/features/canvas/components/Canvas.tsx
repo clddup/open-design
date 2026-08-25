@@ -49,6 +49,7 @@ import {
   type LeaferFidelityWarning,
   type LeaferGenerationActivity,
   type LeaferGridChildMoveRequest,
+  type LeaferGridChildSpanRequest,
   type LeaferImageCropCommitRequest,
   type LeaferImageCropState,
   type LeaferOperationKind,
@@ -120,6 +121,7 @@ export function Canvas({
   onTextRangeSelectionChange,
   onDeleteGridTracks,
   onMoveGridChildren,
+  onResizeGridChildSpan,
   onReorderGridTracks,
   onSetGridTracks,
   onResizeFrame,
@@ -190,6 +192,7 @@ export function Canvas({
     indices: readonly number[],
   ) => boolean;
   onMoveGridChildren: (request: LeaferGridChildMoveRequest) => boolean;
+  onResizeGridChildSpan: (request: LeaferGridChildSpanRequest) => boolean;
   onSetGridTracks: (
     frameId: string,
     expectedRevision: number,
@@ -1142,6 +1145,7 @@ export function Canvas({
       onImageCropCommit: applyImageCrop,
       onImageCropStateChange: setImageCropState,
       onGridChildMove: onMoveGridChildren,
+      onGridChildSpan: onResizeGridChildSpan,
       onGridTrackReorder: ({ axis, frameId, fromIndices, insertionIndex }) =>
         onReorderGridTracks(frameId, axis, fromIndices, insertionIndex),
       onGridTrackDelete: ({ axis, expectedRevision, frameId, indices }) =>
@@ -1244,6 +1248,7 @@ export function Canvas({
     inlineEditors.openGridTrack,
     onImageCropControllerChange,
     onMoveGridChildren,
+    onResizeGridChildSpan,
     onDeleteGridTracks,
     onReorderGridTracks,
     onSetGridTracks,

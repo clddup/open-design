@@ -2,6 +2,8 @@ import { createWelcomeDocument } from "@opendesign/editor-runtime";
 import { describe, expect, it } from "vitest";
 import {
   createGridEditorOverlayPlan,
+  gridAreaForPlacement,
+  gridChildSpanTargetFromBounds,
   gridTrackReorderChangesOrder,
   gridTrackSelectionReorderChangesOrder,
   nearestGridCell,
@@ -110,6 +112,57 @@ describe("Grid editor overlay geometry", () => {
       x: 152,
       y: 124,
     });
+  });
+
+  it("snaps Fill child resize bounds to real row and column span edges", () => {
+    const plan = createGridEditorOverlayPlan(gridDocument(), "frame_welcome");
+    if (!plan) throw new Error("missing Grid plan");
+    const placement = {
+      row: 0,
+      column: 0,
+      rowSpan: 1,
+      columnSpan: 1,
+      horizontalAlign: "auto" as const,
+      verticalAlign: "auto" as const,
+    };
+    const before = gridAreaForPlacement(plan, placement);
+    if (!before) throw new Error("missing Grid area");
+
+    expect(
+      gridChildSpanTargetFromBounds(
+        plan,
+        placement,
+        { horizontal: "fill", vertical: "fill" },
+        before,
+        { ...before, width: 1_160, height: 208 },
+      ),
+    ).toEqual({ row: 0, column: 0, rowSpan: 2, columnSpan: 2 });
+    expect(
+      gridChildSpanTargetFromBounds(
+        plan,
+        placement,
+        { horizontal: "fixed", vertical: "fill" },
+        before,
+        { ...before, width: 1_160, height: 208 },
+      ),
+    ).toEqual({ row: 0, column: 0, rowSpan: 2, columnSpan: 1 });
+
+    const secondPlacement = { ...placement, column: 1 };
+    const secondBefore = gridAreaForPlacement(plan, secondPlacement);
+    if (!secondBefore) throw new Error("missing second Grid area");
+    expect(
+      gridChildSpanTargetFromBounds(
+        plan,
+        secondPlacement,
+        { horizontal: "fill", vertical: "fixed" },
+        secondBefore,
+        {
+          ...secondBefore,
+          x: plan.columns[0]!.start,
+          width: secondBefore.x + secondBefore.width - plan.columns[0]!.start,
+        },
+      ),
+    ).toBeNull();
   });
 
   it("keeps pathological track counts on the Inspector path", () => {

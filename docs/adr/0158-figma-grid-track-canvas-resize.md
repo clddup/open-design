@@ -60,13 +60,24 @@ OpenDesign 已能通过 Inspector 编辑 Grid 的 Fixed、Fill 与 Hug 轨道，
 
 当 Select 工具下的当前选区全部是同一个轴对齐、未锁定 Grid Frame 的可见直属 flow child 时，普通 move 手势切换为 cell 语义，而不是把 Layout Service 派生的 x/y 写回文档：
 
-- pointer move 保留 Leafer 的实时对象预览，并根据 anchor child 的 Frame-local 中心点命中 Layout Service 已求得的最近真实 cell；editor sky 同时显示固定屏幕描边和轻量填充的目标 cell，高亮是 disposable overlay；
+- pointer move 保留 Leafer 的实时对象预览。宿主记录 anchor 初始 Frame-local 视觉中心命中 cell 与 placement 起点之间的稳定 offset，后续命中 Layout Service 已求得的最近真实 cell 后换算回同一 placement-origin 坐标域，避免 spanning/Fill anchor 轻微移动就跨格；editor sky 同时显示固定屏幕描边和轻量填充的目标 cell，高亮是 disposable overlay；
 - 多选以 selection anchor 为命中基准，保持选区在 layer order 中的稳定顺序。Manual Grid 按 row/column delta 平移整组，保留 span 和横纵 alignment；目标冲突时把未选 child 确定性安置到最近空 cell，无可用空间时按最后一条 authored row 的规格增加必要行；
-- row-auto-flow 不伪造 placement patch，而是重排 flow child 的 layer order。hidden 与 absolute child 固定在原 layer slot，也不会成为生成的 move command 目标；固定容量下混合 span 无法排下时在提交前由权威 Layout Service 预求解失败封闭，`autoTracks: rows` 继续按既有规则扩展；
+- row-auto-flow 不伪造 placement patch，而是重排 flow child 的 layer order。目标 cell 先映射到当前 Layout Service 解析出的真实 occupant/insertion boundary，而不是把二维 cell ordinal 错当 child ordinal，因此前置 span、空洞和非首项 anchor 仍得到稳定顺序。hidden 与 absolute child 固定在原 layer slot，也不会成为生成的 move command 目标；固定容量下混合 span 无法排下时在提交前由权威 Layout Service 预求解失败封闭，`autoTracks: rows` 继续按既有规则扩展；
 - Runtime 对直接拖拽使用有界 cell 搜索。超过 65,536 个显式 cell 的 Grid 不进入同步 cell 安置，继续使用 Inspector/结构编辑路径，避免大矩阵拖拽冻结 Renderer；
 - pointer up 先恢复权威 Leafer 投影，再只发送 `frameId + nodeIds + anchorNodeId + target cell + expectedRevision`。Renderer 调用唯一 `planMoveGridChildren`，Frame tracks、选中 placement、被安置 child 或 row-auto-flow layer order 组成一个事务、一个 revision 和一个 undo entry。
 
 Escape、pointer cancel、Page/工具/选区变化、非连续 revision、component 派生选区、locked obstruction、无位移和 stale callback 均恢复权威投影且零写入。cell 高亮与拖动预览不进入 document、history、save、capture 或 export。
+
+### 子层 Span 调整
+
+Figma 的公开 Grid 行为要求 child 在目标轴使用 Fill container 后，通过画布 resize 把边缘吸附到 cell 边界并修改 Row/Column span。OpenDesign 复用同一个 Grid editor sky 与 Direct Transform session：
+
+- 单选直属 flow child 且至少一个轴为 Fill 时，resize 继续使用 Leafer 的即时对象预览；宿主比较 gesture 前后边界，只在 Fill 轴上吸附 Layout Service 求得的真实 track start/end，Fixed 轴保留普通尺寸编辑；
+- 目标高亮覆盖完整 prospective span，而不是只亮一个 cell。Manual Grid 可从任意边缘调整起点和终点；row-auto-flow 只接受不改变自动起点的 trailing-edge span，leading-edge 手势恢复权威投影，避免预览向左/上扩展而提交后向右/下回流；
+- Manual span 与 cell move 共用同一冲突安置算法，遮挡 child 移到最近空 cell并可增加 authored row；row-auto-flow 在提交前以当前 layer order 和目标 span 调用权威 Layout Service 预求解，固定容量不足时零写入，`autoTracks: rows` 可按既有语义扩行；
+- pointer up 先恢复权威 Leafer 投影，再发送 `frameId + nodeId + target placement + size + expectedRevision`。Renderer 调用 `planResizeGridChildSpan`；placement、Fixed 轴 size、被安置 child 和必要 tracks 合成一条事务、一个 revision/undo。Group/Boolean/Instance 不伪造不属于其契约的显式 size；Line 使用变换后端点边界保留 Fixed counter-axis 尺寸；两轴 Fill 且没有跨越 cell 边界时直接吸附回原 span。
+
+Escape、pointer cancel、Page/工具/选区/revision 变化、非 Fill 轴、非法或反向 span、locked child、超大 Grid 和 stale callback 都失败封闭。resize 预览与 span 高亮仍为 session-only，不进入 document/history/save/capture/export。
 
 ### 事务语义
 
@@ -88,12 +99,13 @@ Fixed、Fill、Hug 都遵循同一行为；用户通过手动边缘缩放明确�
 
 ### 未纳入本切片
 
-span 拉伸、旋转 Grid 控件和超大 Grid viewport virtualization 继续作为独立完整切片。Grid row/column gap 仍只使用 Inspector，不借轨道边缘手势增加未由 Figma 公共行为支持的画布控件。
+旋转 Grid 控件和超大 Grid viewport virtualization 继续作为独立完整切片。Grid row/column gap 仍只使用 Inspector，不借轨道边缘手势增加未由 Figma 公共行为支持的画布控件。
 
 ## 后果
 
 - 用户可以在画布上直接调整或删除 Grid 行列，也能单选、追加、范围选择并统一设置 Fixed/Fill/Hug，而不必往返 Inspector。
 - 用户可以直接把单个或多个 Grid flow child 拖到真实 cell；画布显示真实手势与目标预览，最终仍提交语义事务而不是派生坐标。
+- Fill Grid child 可直接通过画布 resize 吸附并调整 row/column span，Fixed counter-axis 尺寸与 span 在同一次 undo 中提交。
 - child 几何、自动行、Hug/Fill 求解、history、undo/redo 和保存重开继续共享现有 Runtime 事实，没有第二份布局状态。
 - 预览不触发模型、截图、审查或 React 文档重算，不增加 Agent 首屏等待时间。
 - exact revision 防止长拖动覆盖用户或 Agent 的并发修改。
@@ -104,7 +116,8 @@ span 拉伸、旋转 Grid 控件和超大 Grid viewport virtualization 继续作
 - Leafer adapter 测试覆盖行/列边缘、标签单击请求、Command/Ctrl 追加、Shift 范围、选择外观、Mixed 输入、选择集重排、真实 resolved size、zoom、3px 阈值、Escape、pointer cancel 与 stale revision。
 - Renderer 输入与 controller 测试覆盖 Mixed → Fixed/Fill/Hug、批量 index、Enter、Escape、拒绝后保留、exact revision、一次事务/undo 和过期请求零写入。
 - Runtime/Leafer/Renderer 测试覆盖单选与多选删除、contained child 删除、跨轨道 span 收缩、后续 placement 平移、Component Main 删除与外部 Instance detach、至少保留一条轨道、自动行无无效控件、Delete/Backspace、Inspector 复用、exact revision 和一次 undo。
-- Grid child 测试覆盖 Manual 空 cell/占用 cell、多选相对位置、span/alignment、必要 row 扩展、locked obstruction、row-auto-flow 稳定重排、hidden/absolute 固定 slot、混合 span 预求解失败、超大矩阵有界拒绝、目标 cell 高亮、Escape/stale、一次 revision/undo/redo 和 save/reopen。
+- Grid child 测试覆盖 Manual 空 cell/占用 cell、多选相对位置、span/alignment、必要 row 扩展、locked obstruction、row-auto-flow resolved occupant 映射、spanning anchor 稳定 offset、hidden/absolute 固定 slot、混合 span 预求解失败、超大矩阵有界拒绝、目标 cell 高亮、Escape/pointer cancel/stale、一次 revision/undo/redo 和 save/reopen。
+- Grid span 测试覆盖真实 track 边缘吸附、Fill/Fixed 混合轴、Manual obstruction 安置、row-auto 固定容量失败与自动行扩展、完整 span 高亮、leading-edge 失败封闭、变换后视觉 bounds、Line Fixed counter-axis、最终非法 target、Escape/pointer cancel/stale、一次 revision/undo 和 Fixed 轴 size 保留。
 
 ## 参考
 

@@ -13,6 +13,7 @@ import type {
 import {
   planDeleteGridTracks,
   planMoveGridChildren,
+  planResizeGridChildSpan,
   planSetFrameAutoLayout,
   planReorderGridTracks,
   planSetGridTracks,
@@ -28,6 +29,7 @@ import {
 import type {
   LeaferAutoLayoutSpacingChange,
   LeaferGridChildMoveRequest,
+  LeaferGridChildSpanRequest,
 } from "@opendesign/leafer-engine";
 import { useCallback, useEffect } from "react";
 import type { MessageKey, MessageParameters } from "@/shared/i18n/messages";
@@ -223,6 +225,35 @@ export function useEditorCommandController({
         return false;
       }
       return applyCommands(t("history.moveGridContent"), plan.commands);
+    },
+    [applyCommands, runtime, setEditorError, t],
+  );
+
+  const resizeGridChildSpan = useCallback(
+    (request: LeaferGridChildSpanRequest) => {
+      const current = runtime.getSnapshot().document;
+      if (current.revision !== request.expectedRevision) {
+        setEditorError(t("canvas.gridTrackStale"));
+        return false;
+      }
+      const plan = planResizeGridChildSpan(
+        current,
+        pageIdForNode(current, request.frameId),
+        request.frameId,
+        request.nodeId,
+        request.target,
+        `canvas_grid_child_span_${request.frameId}`,
+        request.size,
+      );
+      if (!plan.ok) {
+        if (plan.code === "no-op") {
+          setEditorError(null);
+          return true;
+        }
+        setEditorError(plan.message);
+        return false;
+      }
+      return applyCommands(t("history.resizeGridSpan"), plan.commands);
     },
     [applyCommands, runtime, setEditorError, t],
   );
@@ -489,6 +520,7 @@ export function useEditorCommandController({
     applyCommands,
     deleteGridTracks,
     moveGridChildren,
+    resizeGridChildSpan,
     setGridTracks,
     resizeFrame,
     reorderGridTracks,

@@ -12,6 +12,7 @@ import {
   normalizeDesignDocument,
   planResizeGridTrack,
   planMoveGridChildren,
+  planResizeGridChildSpan,
   planDeleteGridTracks,
   planReorderGridTracks,
   planSetGridTrack,
@@ -2296,6 +2297,69 @@ describe("Grid Auto Layout Runtime", () => {
     );
   });
 
+  it("maps an automatic Grid drop to the resolved occupant after an earlier span", () => {
+    const document = layoutDocument();
+    const frame = document.nodesById.frame;
+    if (frame?.kind !== "frame") throw new Error("missing frame");
+    document.nodesById.three = rectangle("three", "frame", 0, 0, 20, 20);
+    frame.childIds = ["one", "two", "three"];
+    frame.size = { width: 300, height: 200 };
+    frame.properties.autoLayout = {
+      mode: "grid",
+      padding: { top: 0, right: 0, bottom: 0, left: 0 },
+      rowGap: 0,
+      columnGap: 0,
+      rows: [
+        { type: "fixed", value: 100 },
+        { type: "fixed", value: 100 },
+      ],
+      columns: [
+        { type: "fixed", value: 100 },
+        { type: "fixed", value: 100 },
+        { type: "fixed", value: 100 },
+      ],
+      itemsPositioning: "row-auto-flow",
+    };
+    document.nodesById.one!.gridPlacement = {
+      ...gridPlacement(0, 0),
+      columnSpan: 2,
+    };
+    delete document.nodesById.one!.constraints;
+    const runtime = new EditorRuntime(normalizeDesignDocument(document));
+    expect(
+      runtime.apply(
+        transaction(runtime, [
+          {
+            commandId: "resolve_occupant_grid",
+            type: "update_properties",
+            nodeId: "frame",
+            name: "Resolved occupant Grid",
+          },
+        ]),
+      ).ok,
+    ).toBe(true);
+
+    const plan = planMoveGridChildren(
+      runtime.getSnapshot().document,
+      "page_layout",
+      "frame",
+      ["three"],
+      "three",
+      { row: 0, column: 2 },
+      "move_before_resolved_occupant",
+    );
+    if (!plan.ok) throw new Error(plan.message);
+    expect(runtime.apply(transaction(runtime, plan.commands)).ok).toBe(true);
+    expect(runtime.getSnapshot().document.nodesById.frame?.childIds).toEqual([
+      "one",
+      "three",
+      "two",
+    ]);
+    expect(
+      runtime.getSnapshot().document.nodesById.three?.gridPlacement,
+    ).toMatchObject({ row: 0, column: 2 });
+  });
+
   it("rejects an automatic Grid reorder whose later span cannot fit without changing revision", () => {
     const document = layoutDocument();
     const frame = document.nodesById.frame;
@@ -2436,6 +2500,194 @@ describe("Grid Auto Layout Runtime", () => {
       ),
     ).toMatchObject({ ok: false, code: "operation-limit" });
     expect(runtime.getSnapshot().document.revision).toBe(revision);
+  });
+
+  it("resizes a manual Grid child span, displaces obstruction, and preserves alignment in one undo", () => {
+    const document = layoutDocument();
+    const frame = document.nodesById.frame;
+    if (frame?.kind !== "frame") throw new Error("missing frame");
+    document.nodesById.three = rectangle("three", "frame", 0, 0, 20, 20);
+    frame.childIds = ["one", "two", "three"];
+    frame.size = { width: 200, height: 200 };
+    frame.properties.autoLayout = {
+      mode: "grid",
+      padding: { top: 0, right: 0, bottom: 0, left: 0 },
+      rowGap: 0,
+      columnGap: 0,
+      rows: [
+        { type: "fixed", value: 100 },
+        { type: "fixed", value: 100 },
+      ],
+      columns: [
+        { type: "fixed", value: 100 },
+        { type: "fixed", value: 100 },
+      ],
+      itemsPositioning: "manual",
+    };
+    document.nodesById.one!.gridPlacement = {
+      ...gridPlacement(0, 0),
+      horizontalAlign: "end",
+      verticalAlign: "center",
+    };
+    document.nodesById.one!.layoutSizing = {
+      horizontal: "fill",
+      vertical: "fixed",
+    };
+    document.nodesById.two!.gridPlacement = gridPlacement(0, 1);
+    document.nodesById.three.gridPlacement = gridPlacement(1, 0);
+    delete document.nodesById.one!.constraints;
+    const runtime = new EditorRuntime(normalizeDesignDocument(document));
+    const plan = planResizeGridChildSpan(
+      runtime.getSnapshot().document,
+      "page_layout",
+      "frame",
+      "one",
+      { row: 0, column: 0, rowSpan: 1, columnSpan: 2 },
+      "span_one",
+      { width: 999, height: 64 },
+    );
+    if (!plan.ok) throw new Error(plan.message);
+
+    expect(runtime.apply(transaction(runtime, plan.commands)).ok).toBe(true);
+    expect(runtime.getSnapshot().document.nodesById.one?.gridPlacement).toEqual(
+      {
+        row: 0,
+        column: 0,
+        rowSpan: 1,
+        columnSpan: 2,
+        horizontalAlign: "end",
+        verticalAlign: "center",
+      },
+    );
+    expect(
+      runtime.getSnapshot().document.nodesById.two?.gridPlacement,
+    ).toMatchObject({ row: 1, column: 1 });
+    expect(runtime.getSnapshot().document.nodesById.one?.size).toEqual({
+      width: 200,
+      height: 64,
+    });
+    expect(runtime.getSnapshot().document.revision).toBe(1);
+    expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
+    expect(runtime.undo().ok).toBe(true);
+    expect(
+      runtime.getSnapshot().document.nodesById.one?.gridPlacement,
+    ).toMatchObject({
+      row: 0,
+      column: 0,
+      columnSpan: 1,
+    });
+  });
+
+  it("preflights row-auto span capacity and lets automatic rows grow atomically", () => {
+    const source = layoutDocument();
+    const frame = source.nodesById.frame;
+    if (frame?.kind !== "frame") throw new Error("missing frame");
+    source.nodesById.three = rectangle("three", "frame", 0, 0, 20, 20);
+    source.nodesById.four = rectangle("four", "frame", 0, 0, 20, 20);
+    frame.childIds = ["one", "two", "three", "four"];
+    frame.size = { width: 200, height: 200 };
+    frame.properties.autoLayout = {
+      mode: "grid",
+      padding: { top: 0, right: 0, bottom: 0, left: 0 },
+      rowGap: 0,
+      columnGap: 0,
+      rows: [
+        { type: "fill", value: 1 },
+        { type: "fill", value: 1 },
+      ],
+      columns: [
+        { type: "fixed", value: 100 },
+        { type: "fixed", value: 100 },
+      ],
+      itemsPositioning: "row-auto-flow",
+    };
+    delete source.nodesById.one!.constraints;
+    const fixed = new EditorRuntime(
+      normalizeDesignDocument(structuredClone(source)),
+    );
+    expect(
+      fixed.apply(
+        transaction(fixed, [
+          {
+            commandId: "resolve_fixed_span_grid",
+            type: "update_properties",
+            nodeId: "frame",
+            name: "Resolved fixed Grid",
+          },
+        ]),
+      ).ok,
+    ).toBe(true);
+    const fixedRevision = fixed.getSnapshot().document.revision;
+    expect(
+      planResizeGridChildSpan(
+        fixed.getSnapshot().document,
+        "page_layout",
+        "frame",
+        "one",
+        { row: 0, column: 0, rowSpan: 1, columnSpan: 2 },
+        "span_fixed",
+      ),
+    ).toMatchObject({ ok: false, code: "visual-fidelity" });
+    expect(fixed.getSnapshot().document.revision).toBe(fixedRevision);
+    expect(
+      planResizeGridChildSpan(
+        fixed.getSnapshot().document,
+        "page_layout",
+        "frame",
+        "one",
+        { row: 0, column: 1, rowSpan: 1, columnSpan: 1 },
+        "span_generated_origin",
+      ),
+    ).toMatchObject({ ok: false, code: "invalid-target" });
+
+    const automaticSource = structuredClone(source);
+    const automaticFrame = automaticSource.nodesById.frame;
+    if (automaticFrame?.kind !== "frame") throw new Error("missing frame");
+    const automaticGrid = automaticFrame.properties.autoLayout;
+    if (!automaticGrid || automaticGrid.mode !== "grid") {
+      throw new Error("missing Grid");
+    }
+    automaticGrid.autoTracks = "rows";
+    const automatic = new EditorRuntime(
+      normalizeDesignDocument(automaticSource),
+    );
+    expect(
+      automatic.apply(
+        transaction(automatic, [
+          {
+            commandId: "resolve_auto_span_grid",
+            type: "update_properties",
+            nodeId: "frame",
+            name: "Resolved automatic Grid",
+          },
+        ]),
+      ).ok,
+    ).toBe(true);
+    const beforeSpan = automatic.getSnapshot();
+    const plan = planResizeGridChildSpan(
+      automatic.getSnapshot().document,
+      "page_layout",
+      "frame",
+      "one",
+      { row: 0, column: 0, rowSpan: 1, columnSpan: 2 },
+      "span_auto",
+    );
+    if (!plan.ok) throw new Error(plan.message);
+    expect(automatic.apply(transaction(automatic, plan.commands)).ok).toBe(
+      true,
+    );
+    const resolvedGrid = frameAutoLayout(
+      automatic.getSnapshot().document,
+      "frame",
+    );
+    if (resolvedGrid?.mode !== "grid") throw new Error("missing resolved Grid");
+    expect(resolvedGrid.rows).toHaveLength(3);
+    expect(automatic.getSnapshot().document.revision).toBe(
+      beforeSpan.document.revision + 1,
+    );
+    expect(automatic.getSnapshot().state.history.undo).toHaveLength(
+      beforeSpan.state.history.undo.length + 1,
+    );
   });
 
   it("deletes selected Grid tracks, their contained layers, and shrinks surviving spans in one history entry", () => {

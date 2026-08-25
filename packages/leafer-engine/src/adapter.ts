@@ -388,14 +388,25 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       finishNodePresentation: (nodeId) => {
         this.#generationPresentation.finishNode(nodeId);
       },
+      gridChildCellAt: (frameId, point) =>
+        this.#editorOverlays.gridChildCellAt(frameId, point),
       hasComponentTarget: () => this.#selectedComponentTarget() !== undefined,
       nodeId: (element) => this.#nodeId(element),
       onGridChildMove: (request) =>
         this.#callbacks.onGridChildMove?.(request) ?? false,
+      onGridChildSpan: (request) =>
+        this.#callbacks.onGridChildSpan?.(request) ?? false,
       onOperations: (request) => this.#callbacks.onOperations(request),
       onPreviewBoolean: (states) => this.#previewBooleanTransform(states),
       previewGridChildDrop: (frameId, point) =>
         this.#editorOverlays.previewGridChildDrop(frameId, point),
+      previewGridChildSpan: (frameId, nodeId, before, next) =>
+        this.#editorOverlays.previewGridChildSpan(
+          frameId,
+          nodeId,
+          before,
+          next,
+        ),
       restoreProjection: () => this.#restoreProjection(),
     });
     this.#penToolController = new PenToolController({
@@ -794,9 +805,13 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     this.#editor.editBox.on(DragEvent.START, () =>
       this.#directTransformController.begin(),
     );
-    this.#editor.editBox.on(DragEvent.END, () =>
-      this.#directTransformController.finish(),
-    );
+    this.#editor.editBox.on(DragEvent.END, (event: unknown) => {
+      if (gestureWasCancelled(event)) {
+        this.#directTransformController.cancel(true);
+        return;
+      }
+      this.#directTransformController.finish();
+    });
 
     const changed = () => this.#directTransformController.markChanged();
     this.#editor.on(EditorMoveEvent.BEFORE_MOVE, () =>
@@ -1432,6 +1447,14 @@ function readElementText(element: LeaferElement): string {
 function isStringArray(value: unknown): value is string[] {
   return (
     Array.isArray(value) && value.every((item) => typeof item === "string")
+  );
+}
+
+function gestureWasCancelled(event: unknown): boolean {
+  return (
+    typeof event === "object" &&
+    event !== null &&
+    (event as { isCancel?: unknown }).isCancel === true
   );
 }
 

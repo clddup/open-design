@@ -480,6 +480,43 @@ describe("editor command controllers", () => {
     expect(
       runtime.getSnapshot().document.nodesById[first.id]?.gridPlacement,
     ).toMatchObject({ row: 0, column: 0 });
+
+    const spanRevision = runtime.getSnapshot().document.revision;
+    act(() => {
+      accepted = result.current.editor.resizeGridChildSpan({
+        expectedRevision: spanRevision,
+        frameId: frame.id,
+        nodeId: first.id,
+        size: { width: 200, height: 64 },
+        target: { row: 0, column: 0, rowSpan: 1, columnSpan: 2 },
+      });
+    });
+    expect(accepted).toBe(true);
+    expect(runtime.getSnapshot().document.revision).toBe(spanRevision + 1);
+    expect(
+      runtime.getSnapshot().document.nodesById[first.id]?.gridPlacement,
+    ).toMatchObject({ row: 0, column: 0, rowSpan: 1, columnSpan: 2 });
+    expect(runtime.getSnapshot().document.nodesById[first.id]?.size).toEqual({
+      width: 200,
+      height: 64,
+    });
+
+    const sizeRevision = runtime.getSnapshot().document.revision;
+    act(() => {
+      accepted = result.current.editor.resizeGridChildSpan({
+        expectedRevision: sizeRevision,
+        frameId: frame.id,
+        nodeId: first.id,
+        size: { width: 200, height: 80 },
+        target: { row: 0, column: 0, rowSpan: 1, columnSpan: 2 },
+      });
+    });
+    expect(accepted).toBe(true);
+    expect(runtime.getSnapshot().document.revision).toBe(sizeRevision + 1);
+    expect(runtime.getSnapshot().document.nodesById[first.id]?.size).toEqual({
+      width: 200,
+      height: 80,
+    });
   });
 
   it("sizes selected Grid tracks at the exact canvas revision in one history entry", () => {
