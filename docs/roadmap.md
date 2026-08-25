@@ -53,9 +53,10 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 ## Workspace 会话与桌面入口
 
 - [x] Conversation 已从 Project 子实体升级为 Workspace 一级实体；`WorkspaceContract 2` 使用不可变 `originProjectId` 与可空/可移动 `filedProjectId`，不保留 `homeProjectId` 兼容或双写。
-- [x] Workspace 提供全局最近会话、删除入口和 Global Task 审计；Project Home 只显示归档过滤视图，不再是进入会话的门槛。
+- [x] Workspace 提供全局最近会话与删除入口；最近任务生命周期并入对应 Conversation 行，Global Task 继续作为 Main 的恢复与审计事实而不单独占用首页卡片。Project Home 只显示 Design File 与归档 Conversation 的紧凑过滤视图，不再是进入会话的门槛。
 - [x] 打开 Conversation 由 Main 依次解析活动 Run、最近 Task 与归档 Project 默认文件，直接恢复准确 Project/Design File/Page；无有效目标时保留 Timeline 并禁用 Composer。
 - [x] Conversation 删除由 Main 活动 Run/continuation 权威门禁；已提交设计、文档 history 和 terminal Global Task 审计不随列表 tombstone 删除。见 [ADR-0094](adr/0094-workspace-owned-conversations.md)。
+- [x] Project 创建直接使用原生选择目录的 basename，不再重复输入名称；Project-backed Design File 可在没有 Conversation 时直接输入，首次发送惰性创建 Conversation 并立即提交同一 prompt。Agent Composer 正文独占整行，附件、Page/Selection 上下文和发送操作位于底部工具栏。见 [ADR-0150](adr/0150-project-contextual-conversation-workbench.md)。
 
 ## P0-A：macOS 与 Windows 一级平台可用
 

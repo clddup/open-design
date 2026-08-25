@@ -2,6 +2,7 @@ import type {
   ConversationDescriptor,
   DesignTarget,
 } from "@opendesign/workspace-contracts";
+import { basename } from "node:path";
 import {
   isCreateConversationRequest,
   isDeleteConversationRequest,
@@ -49,9 +50,13 @@ export class ProjectIpcService {
     const rootPath = await this.selectProjectDirectory("create");
     if (!rootPath) return null;
     try {
+      const project = {
+        ...request,
+        name: basename(rootPath),
+      };
       return await this.projectHost.createProject(
         rootPath,
-        request,
+        project,
         createStarterProjectFiles(request.projectId),
       );
     } catch (error) {

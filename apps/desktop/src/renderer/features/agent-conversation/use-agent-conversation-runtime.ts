@@ -398,17 +398,23 @@ export function useAgentConversationRuntime({
       prompt: string,
       modelSelection: ModelSelection,
       attachments: readonly AgentAttachment[],
+      conversationOverride?: ConversationDescriptor,
     ) => {
+      const targetConversation = conversationOverride ?? activeConversation;
+      const targetAgentState = targetConversation
+        ? (agentByConversationId[targetConversation.conversationId] ??
+          EMPTY_AGENT_STATE)
+        : EMPTY_AGENT_STATE;
       if (
         !window.desktop ||
-        !activeConversation ||
-        activeAgentState.activeRunId
+        !targetConversation ||
+        targetAgentState.activeRunId
       ) {
         return false;
       }
       const current = runtime.getSnapshot();
       const runId = `run_${Date.now()}_${++runCounter.current}`;
-      const conversationId = activeConversation.conversationId;
+      const conversationId = targetConversation.conversationId;
       const activeFile =
         workspaceSnapshot.files[workspaceSnapshot.activeFileKey];
       if (!activeFile) return false;
@@ -524,9 +530,9 @@ export function useAgentConversationRuntime({
       }
     },
     [
-      activeAgentState.activeRunId,
       activeConversation,
       activePageId,
+      agentByConversationId,
       refreshGlobalTasks,
       runtime,
       setConversations,

@@ -22,6 +22,7 @@ export interface AgentComposerControllerOptions {
   activeRunId: string | null;
   conversationId: string | null;
   conversationTitle: string | null;
+  conversationCreationAvailable?: boolean;
   onCreateConversation?: () => Promise<boolean>;
   onStop: () => boolean | void | Promise<boolean | void>;
   onSubmit: (
@@ -38,6 +39,7 @@ export interface AgentComposerController {
   attachmentDropActive: boolean;
   attachments: readonly AgentAttachmentSelection[];
   canSubmit: boolean;
+  canCompose: boolean;
   catalogError: string | null;
   creatingConversation: boolean;
   hasConversation: boolean;
@@ -70,6 +72,7 @@ export function useAgentComposerController({
   activeRunId,
   conversationId,
   conversationTitle,
+  conversationCreationAvailable = false,
   onCreateConversation,
   onStop,
   onSubmit,
@@ -103,6 +106,7 @@ export function useAgentComposerController({
   const stopping =
     activeRunId !== null && stopRequest?.conversationId === conversationId;
   const hasConversation = conversationTitle !== null;
+  const canCompose = hasConversation || conversationCreationAvailable;
 
   useEffect(() => {
     if (!activeRunId) {
@@ -199,7 +203,7 @@ export function useAgentComposerController({
   );
   const hasImageAttachments = attachments.some(isImageAttachment);
   const canSubmit = Boolean(
-    hasConversation &&
+    canCompose &&
     submissionAvailable &&
     modelSelection &&
     prompt.trim() &&
@@ -358,6 +362,7 @@ export function useAgentComposerController({
     attachmentError,
     attachments,
     canSubmit,
+    canCompose,
     catalogError,
     createConversation,
     creatingConversation,

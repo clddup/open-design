@@ -128,49 +128,45 @@ export function useProjectNavigationController({
     ],
   );
 
-  const createProject = useCallback(
-    async (name: string) => {
-      if (!window.desktop) return false;
-      const projectId = createProjectId();
-      const transition = navigator.begin({ kind: "project", projectId });
-      setWorkspaceBusy(true);
-      setWorkspaceError(null);
-      try {
-        const manifest = await window.desktop.createProject({
-          projectId,
-          name: name.trim(),
-        });
-        if (!manifest) {
-          navigator.cancel(transition);
-          return false;
-        }
-        if (!showProject(manifest, transition)) return false;
-        await refreshRecentProjects();
-        return true;
-      } catch (error) {
-        if (!navigator.isCurrent(transition)) return false;
-        navigator.fail(transition, t("error.createProject"));
-        setWorkspaceError(
-          reportRendererError(
-            "project_create_failed",
-            error,
-            t("error.createProject"),
-          ),
-        );
+  const createProject = useCallback(async () => {
+    if (!window.desktop) return false;
+    const projectId = createProjectId();
+    const transition = navigator.begin({ kind: "project", projectId });
+    setWorkspaceBusy(true);
+    setWorkspaceError(null);
+    try {
+      const manifest = await window.desktop.createProject({
+        projectId,
+      });
+      if (!manifest) {
+        navigator.cancel(transition);
         return false;
-      } finally {
-        if (navigator.isCurrent(transition)) setWorkspaceBusy(false);
       }
-    },
-    [
-      refreshRecentProjects,
-      navigator,
-      setWorkspaceBusy,
-      setWorkspaceError,
-      showProject,
-      t,
-    ],
-  );
+      if (!showProject(manifest, transition)) return false;
+      await refreshRecentProjects();
+      return true;
+    } catch (error) {
+      if (!navigator.isCurrent(transition)) return false;
+      navigator.fail(transition, t("error.createProject"));
+      setWorkspaceError(
+        reportRendererError(
+          "project_create_failed",
+          error,
+          t("error.createProject"),
+        ),
+      );
+      return false;
+    } finally {
+      if (navigator.isCurrent(transition)) setWorkspaceBusy(false);
+    }
+  }, [
+    refreshRecentProjects,
+    navigator,
+    setWorkspaceBusy,
+    setWorkspaceError,
+    showProject,
+    t,
+  ]);
 
   const openProject = useCallback(async () => {
     if (!window.desktop) return;

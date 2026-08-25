@@ -1158,10 +1158,9 @@ describe("App", () => {
     expect(window.desktop?.deleteConversation).not.toHaveBeenCalled();
   });
 
-  it("creates and switches durable Project Conversations", async () => {
+  it("creates a Project Conversation from the first canvas prompt", async () => {
     const user = userEvent.setup();
     const manifest = projectManifest();
-    const existing = conversationDescriptor();
     const created = conversationDescriptor({
       conversationId: "conversation_website",
       title: "Design the website launch",
@@ -1173,27 +1172,27 @@ describe("App", () => {
     vi.mocked(window.desktop!.openRecentProject).mockResolvedValueOnce(
       manifest,
     );
-    vi.mocked(window.desktop!.listConversations).mockResolvedValueOnce([
-      existing,
-    ]);
+    vi.mocked(window.desktop!.listConversations).mockResolvedValueOnce([]);
     vi.mocked(window.desktop!.createConversation).mockResolvedValueOnce(
       created,
     );
+    mockProjectDesignFileRead(manifest);
 
     renderApp("workspace");
-    await openWorkspaceProject(user, /^Acme Design/, /Mobile UI/);
+    const designFile = await openWorkspaceProject(
+      user,
+      /^Acme Design/,
+      /Mobile UI/,
+    );
     expect(window.desktop?.listConversations).toHaveBeenCalledWith();
-    expect(
-      await screen.findByRole("button", {
-        name: "Refine the mobile experience",
-      }),
-    ).toBeInTheDocument();
+    await user.click(designFile);
+    await screen.findByRole("main", { name: "Design canvas" });
 
     await user.type(
-      screen.getByLabelText("Conversation title"),
+      screen.getByLabelText("Continue the task"),
       "Design the website launch",
     );
-    await user.click(screen.getByRole("button", { name: "Create" }));
+    await user.click(screen.getByRole("button", { name: "Send" }));
 
     expect(window.desktop?.createConversation).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1201,15 +1200,16 @@ describe("App", () => {
         title: "Design the website launch",
       }),
     );
-    expect(
-      await screen.findByRole("button", { name: "Design the website launch" }),
-    ).toHaveAttribute("aria-current", "true");
     expect(window.desktop?.sendAgentRequest).toHaveBeenCalledWith(
       expect.objectContaining({
-        type: "session.history",
+        type: "run.start",
         sessionId: created.conversationId,
+        prompt: "Design the website launch",
       }),
     );
+    expect(
+      screen.getByRole("combobox", { name: "Conversation" }),
+    ).toHaveTextContent("Design the website launch");
   });
 
   it("keeps durable history isolated when switching Conversations", async () => {
@@ -1561,7 +1561,11 @@ describe("App", () => {
     expect(screen.getByText("Request in progress")).toBeInTheDocument();
   });
 
-  it("counts only active Global Tasks while retaining terminal history", async () => {
+  it("shows task lifecycle on its Conversation instead of a separate task feed", async () => {
+    const conversation = conversationDescriptor();
+    vi.mocked(window.desktop!.listConversations).mockResolvedValueOnce([
+      conversation,
+    ]);
     vi.mocked(window.desktop!.listGlobalTasks).mockResolvedValueOnce([
       globalTask("running"),
       globalTask("completed"),
@@ -1570,14 +1574,15 @@ describe("App", () => {
 
     renderApp("workspace");
 
-    expect(await screen.findByText("1 active · 3 total")).toBeInTheDocument();
-    expect(screen.getByText("Running")).toBeInTheDocument();
-    expect(screen.getByText("Completed")).toBeInTheDocument();
-    expect(screen.getByText("Failed")).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "Open" })).toHaveLength(3);
+    expect(
+      await screen.findByRole("button", { name: conversation.title }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Running/)).toBeInTheDocument();
+    expect(screen.queryByText("1 active · 3 total")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open" })).toBeNull();
   });
 
-  it("opens a Global Task at its primary target and Conversation", async () => {
+  it("opens a recent Conversation at its latest available target", async () => {
     const manifest = projectManifest();
     const first = conversationDescriptor({
       conversationId: "conversation_a",
@@ -1587,11 +1592,9 @@ describe("App", () => {
       conversationId: "conversation_b",
       title: "Conversation B",
     });
-    const task = globalTask("completed", {
-      conversationId: second.conversationId,
-      title: "Completed website review",
-    });
-    vi.mocked(window.desktop!.listGlobalTasks).mockResolvedValueOnce([task]);
+    vi.mocked(window.desktop!.listRecentProjects).mockResolvedValueOnce([
+      { projectId: manifest.projectId, name: manifest.name, lastOpenedAt: now },
+    ]);
     vi.mocked(window.desktop!.openRecentProject).mockResolvedValueOnce(
       manifest,
     );
@@ -1599,14 +1602,20 @@ describe("App", () => {
       first,
       second,
     ]);
+    mockConversationTargetResolution(manifest);
     mockProjectDesignFileRead(manifest);
 
     const user = userEvent.setup();
     renderApp("workspace");
-    await user.click(await screen.findByRole("button", { name: "Open" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Conversation B" }),
+    );
 
+    expect(window.desktop?.resolveConversationOpenContext).toHaveBeenCalledWith(
+      { conversationId: second.conversationId },
+    );
     expect(window.desktop?.openRecentProject).toHaveBeenCalledWith({
-      projectId: task.targetSet.primaryTarget.projectId,
+      projectId: manifest.projectId,
     });
     expect(
       await screen.findByRole("combobox", { name: "Conversation" }),
@@ -1649,8 +1658,6 @@ describe("App", () => {
 
     renderApp("workspace");
     await user.click(screen.getByRole("button", { name: "Create Project" }));
-    await user.type(screen.getByLabelText("Project name"), "Acme Design");
-    await user.click(screen.getByRole("button", { name: "Choose folder" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Could not create the Project",
@@ -1680,12 +1687,11 @@ describe("App", () => {
 
     renderApp("workspace");
     await user.click(screen.getByRole("button", { name: "Create Project" }));
-    await user.type(screen.getByLabelText("Project name"), "Acme Design");
-    await user.click(screen.getByRole("button", { name: "Choose folder" }));
 
-    expect(window.desktop?.createProject).toHaveBeenCalledWith(
-      expect.objectContaining({ name: "Acme Design" }),
-    );
+    const createProjectRequest = vi.mocked(window.desktop!.createProject).mock
+      .calls[0]?.[0];
+    expect(createProjectRequest).toBeDefined();
+    expect(createProjectRequest?.projectId).toMatch(/^project_/);
     await user.click(await screen.findByRole("button", { name: /Mobile UI/ }));
     expect(window.desktop?.readProjectDesignFile).toHaveBeenCalledWith({
       projectId: "project_acme",

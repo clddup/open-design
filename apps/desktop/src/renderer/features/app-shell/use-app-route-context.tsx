@@ -238,12 +238,7 @@ export function useAppRouteContext() {
     setWorkspaceError,
     t,
   });
-  const {
-    createConversation,
-    deleteConversation,
-    openConversation,
-    openGlobalTask,
-  } = conversationNavigation;
+  const { deleteConversation, openConversation } = conversationNavigation;
 
   const notifications = (
     <DiagnosticNotifications
@@ -287,7 +282,6 @@ export function useAppRouteContext() {
       onRequestDeleteConversation: requestDeleteConversation,
       onOpenDesignFile: () => void openDocument(),
       onOpenConversation: (conversation) => void openConversation(conversation),
-      onOpenGlobalTask: (task) => void openGlobalTask(task),
       onOpenProject: () => void openProject(),
       onOpenRecentProject: (projectId) => void openRecentProject(projectId),
       onRemoveRecentProject: removeRecentProject,
@@ -307,7 +301,6 @@ export function useAppRouteContext() {
           error: workspaceError,
           manifest: destinationProject,
           onBack: () => navigator.navigate({ kind: "workspace" }),
-          onCreateConversation: createConversation,
           onRequestDeleteConversation: requestDeleteConversation,
           onOpenDesignFile: (designFileId) =>
             void openProjectDesignFile(designFileId),

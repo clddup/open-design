@@ -55,6 +55,11 @@ export type AgentTimelineProps = {
   conversationTitle: string | null;
   conversations?: readonly ConversationDescriptor[];
   onCreateConversation?: () => Promise<boolean>;
+  onStartConversation?: (
+    prompt: string,
+    selection: ModelSelection,
+    attachments: readonly AgentAttachment[],
+  ) => Promise<boolean>;
   onRequestDeleteConversation?: (conversationId: string) => void;
   onSelectConversation?: (conversationId: string) => void;
   onSubmit: (
@@ -167,6 +172,7 @@ export function AgentTimeline({
   conversationTitle,
   conversations = [],
   onCreateConversation,
+  onStartConversation,
   onRequestDeleteConversation,
   onSelectConversation,
   onSubmit,
@@ -189,9 +195,13 @@ export function AgentTimeline({
     activeRunId,
     conversationId,
     conversationTitle,
+    conversationCreationAvailable: Boolean(onStartConversation),
     onCreateConversation,
     onStop,
-    onSubmit,
+    onSubmit:
+      conversationTitle === null && onStartConversation
+        ? onStartConversation
+        : onSubmit,
     timeline,
     t,
     submissionAvailable,
@@ -240,7 +250,9 @@ export function AgentTimeline({
   }, [pendingApprovalIds, resolvingApprovalId]);
 
   const status = !hasConversation
-    ? t("agent.selectConversation")
+    ? composer.canCompose
+      ? t("agent.readyToStart")
+      : t("agent.selectConversation")
     : composer.stopping
       ? t("agent.stoppingRequest")
       : activeRunId
@@ -280,7 +292,9 @@ export function AgentTimeline({
       ? composer.modelOptions.length === 0
         ? t("agent.configureModel")
         : undefined
-      : t("agent.conversationRequired"));
+      : composer.canCompose
+        ? undefined
+        : t("agent.conversationRequired"));
   const helperIsError = Boolean(
     composer.attachmentError ||
     composer.catalogError ||
@@ -394,12 +408,16 @@ export function AgentTimeline({
               <strong>
                 {hasConversation
                   ? t("agent.activityEmpty")
-                  : t("agent.noConversation")}
+                  : composer.canCompose
+                    ? t("agent.startConversation")
+                    : t("agent.noConversation")}
               </strong>
               <small>
                 {hasConversation
                   ? t("agent.activityEmptyDetail")
-                  : t("agent.noConversationDetail")}
+                  : composer.canCompose
+                    ? t("agent.startConversationDetail")
+                    : t("agent.noConversationDetail")}
               </small>
             </li>
           ) : (

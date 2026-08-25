@@ -75,6 +75,10 @@ export const agentConversationMessages = {
     "Ask for a design, a focused edit, or an inspection of the current selection.",
   "agent.noConversationDetail":
     "Select or create a Conversation before sending an Agent request.",
+  "agent.readyToStart": "Ready for your first request",
+  "agent.startConversation": "Start with a prompt",
+  "agent.startConversationDetail":
+    "Your first message creates the Conversation and starts the design task.",
   "agent.conversation": "Conversation",
   "agent.noConversations": "No Conversations yet",
   "agent.chooseConversation": "Choose a Conversation",

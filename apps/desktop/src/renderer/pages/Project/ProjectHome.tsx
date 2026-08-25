@@ -3,7 +3,6 @@ import type {
   ProjectManifest,
 } from "@opendesign/workspace-contracts";
 import { Button, Icon, IconButton } from "@opendesign/ui";
-import { useState, type FormEvent } from "react";
 import type { ThemePreference } from "@/shared/desktop-api";
 import { HomeTitlebar } from "../../components/app-window/HomeTitlebar";
 import homeStyles from "../../components/app-window/HomeSurface.module.scss";
@@ -21,7 +20,6 @@ export type ProjectHomeProps = {
   platform: NodeJS.Platform;
   theme: ThemePreference;
   onBack: () => void;
-  onCreateConversation: (title: string) => Promise<boolean>;
   onRequestDeleteConversation: (conversationId: string) => void;
   onOpenDesignFile: (designFileId: string) => void;
   onOpenConversation: (conversationId: string) => void;
@@ -39,7 +37,6 @@ export function ProjectHome({
   platform,
   theme,
   onBack,
-  onCreateConversation,
   onRequestDeleteConversation,
   onOpenDesignFile,
   onOpenConversation,
@@ -47,21 +44,7 @@ export function ProjectHome({
   onThemeChange,
 }: ProjectHomeProps) {
   const { t } = useI18n();
-  const [conversationTitle, setConversationTitle] = useState("");
-  const [creatingConversation, setCreatingConversation] = useState(false);
   const nextTheme = theme === "dark" ? "light" : "dark";
-
-  const createConversation = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const title = conversationTitle.trim();
-    if (!title || busy || creatingConversation) return;
-    setCreatingConversation(true);
-    try {
-      if (await onCreateConversation(title)) setConversationTitle("");
-    } finally {
-      setCreatingConversation(false);
-    }
-  };
   return (
     <div className={homeStyles.shell}>
       <HomeTitlebar
@@ -127,7 +110,10 @@ export function ProjectHome({
         )}
 
         <div className={styles.layout}>
-          <section aria-labelledby="design-files-title">
+          <section
+            aria-labelledby="design-files-title"
+            className={homeStyles.panel}
+          >
             <div
               className={`${homeStyles.sectionHeading} ${styles.sectionHeading}`}
             >
@@ -141,151 +127,102 @@ export function ProjectHome({
                 {manifest.designFiles.length}
               </span>
             </div>
-            <div className={styles.designFileCards}>
-              {manifest.designFiles.map((file, index) => (
+            <div className={styles.designFileList}>
+              {manifest.designFiles.map((file) => (
                 <button
-                  className={styles.designFileCard}
+                  className={styles.designFileRow}
                   disabled={busy}
                   key={file.designFileId}
                   onClick={() => onOpenDesignFile(file.designFileId)}
                   type="button"
                 >
-                  <span
-                    aria-hidden="true"
-                    className={`${styles.preview}${index % 3 === 1 ? ` ${styles.previewAlternate}` : ""}`}
-                  >
-                    <i />
-                    <i />
-                    <i />
+                  <span className={styles.designFileIcon}>
+                    <Icon name="lucide:frame" size={15} />
                   </span>
                   <span className={styles.designFileMeta}>
-                    <span>
-                      <strong>{file.name}</strong>
-                      <small>{file.relativePath}</small>
-                    </span>
-                    <Icon name="lucide:chevron-right" size={14} />
+                    <strong>{file.name}</strong>
+                    <small>{file.relativePath}</small>
                   </span>
+                  <Icon name="lucide:chevron-right" size={14} />
                 </button>
               ))}
             </div>
           </section>
 
-          <aside className={styles.aside}>
-            <section className={`${homeStyles.panel} ${styles.summary}`}>
-              <span className={styles.summaryLabel}>
-                {t("project.activity")}
-              </span>
-              <div className={styles.summaryHeading}>
+          <section
+            aria-labelledby="project-conversations-title"
+            className={homeStyles.panel}
+          >
+            <div
+              className={`${homeStyles.sectionHeading} ${styles.sectionHeading}`}
+            >
+              <div>
+                <span className={homeStyles.sectionLabel}>
+                  {t("project.activity")}
+                </span>
                 <h2 id="project-conversations-title">
                   {t("project.conversations")}
                 </h2>
-                <span>{conversations.length}</span>
               </div>
-              <form
-                aria-label={t("project.createConversation")}
-                className={styles.conversationCreate}
-                onSubmit={(event) => void createConversation(event)}
-              >
-                <label className="visually-hidden" htmlFor="conversation-title">
-                  {t("project.conversationTitle")}
-                </label>
-                <input
-                  disabled={busy || creatingConversation}
-                  id="conversation-title"
-                  maxLength={2_000}
-                  onChange={(event) => setConversationTitle(event.target.value)}
-                  placeholder={t("project.newConversation")}
-                  value={conversationTitle}
-                />
-                <Button
-                  disabled={
-                    busy ||
-                    creatingConversation ||
-                    conversationTitle.trim().length === 0
-                  }
-                  icon="lucide:plus"
-                  tone="primary"
-                  type="submit"
-                >
-                  {creatingConversation
-                    ? t("common.creating")
-                    : t("common.create")}
-                </Button>
-              </form>
-              {conversations.length === 0 ? (
-                <div
-                  className={`${homeStyles.empty} ${homeStyles.emptyCompact} ${styles.summaryEmpty}`}
-                >
-                  <Icon name="lucide:message-square" size={20} />
-                  <strong>{t("project.noConversations")}</strong>
-                  <p>{t("project.noConversationsDetail")}</p>
-                </div>
-              ) : (
-                <ul
-                  aria-labelledby="project-conversations-title"
-                  className={styles.conversationList}
-                >
-                  {conversations.map((conversation) => {
-                    const active =
-                      conversation.conversationId === activeConversationId;
-                    const deleteBlocked = conversationDeleteBlockedIds.includes(
-                      conversation.conversationId,
-                    );
-                    return (
-                      <li
-                        className={styles.conversationItem}
-                        key={conversation.conversationId}
-                      >
-                        <button
-                          aria-label={conversation.title}
-                          aria-current={active ? "true" : undefined}
-                          className={`${styles.conversationRow}${active ? ` ${styles.conversationActive}` : ""}`}
-                          disabled={busy}
-                          onClick={() =>
-                            onOpenConversation(conversation.conversationId)
-                          }
-                          type="button"
-                        >
-                          <span>
-                            <strong>{conversation.title}</strong>
-                            <time dateTime={conversation.updatedAt}>
-                              {t("project.conversationUpdated", {
-                                date: conversation.updatedAt.slice(0, 10),
-                              })}
-                            </time>
-                          </span>
-                          <Icon name="lucide:chevron-right" size={13} />
-                        </button>
-                        <ConversationActions
-                          conversationId={conversation.conversationId}
-                          deleteBlocked={deleteBlocked}
-                          disabled={busy}
-                          onRequestDelete={onRequestDeleteConversation}
-                          title={conversation.title}
-                        />
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </section>
-            <section className={`${homeStyles.panel} ${styles.summary}`}>
-              <span className={styles.summaryLabel}>
-                {t("project.workingSet")}
+              <span className={homeStyles.sectionCount}>
+                {conversations.length}
               </span>
-              <h2>{t("project.assetsAccess")}</h2>
-              <dl>
-                <div>
-                  <dt>{t("project.projectFiles")}</dt>
-                  <dd>{t("project.readWrite")}</dd>
-                </div>
-                <div>
-                  <dt>{t("project.externalRoots")}</dt>
-                  <dd>{t("project.noneAttached")}</dd>
-                </div>
-              </dl>
-            </section>
-          </aside>
+            </div>
+            {conversations.length === 0 ? (
+              <div className={`${homeStyles.empty} ${homeStyles.emptyCompact}`}>
+                <Icon name="lucide:message-square" size={20} />
+                <strong>{t("project.noConversations")}</strong>
+                <p>{t("project.noConversationsDetail")}</p>
+              </div>
+            ) : (
+              <ul
+                aria-labelledby="project-conversations-title"
+                className={styles.conversationList}
+              >
+                {conversations.map((conversation) => {
+                  const active =
+                    conversation.conversationId === activeConversationId;
+                  const deleteBlocked = conversationDeleteBlockedIds.includes(
+                    conversation.conversationId,
+                  );
+                  return (
+                    <li
+                      className={styles.conversationItem}
+                      key={conversation.conversationId}
+                    >
+                      <button
+                        aria-label={conversation.title}
+                        aria-current={active ? "true" : undefined}
+                        className={`${styles.conversationRow}${active ? ` ${styles.conversationActive}` : ""}`}
+                        disabled={busy}
+                        onClick={() =>
+                          onOpenConversation(conversation.conversationId)
+                        }
+                        type="button"
+                      >
+                        <span>
+                          <strong>{conversation.title}</strong>
+                          <time dateTime={conversation.updatedAt}>
+                            {t("project.conversationUpdated", {
+                              date: conversation.updatedAt.slice(0, 10),
+                            })}
+                          </time>
+                        </span>
+                        <Icon name="lucide:chevron-right" size={13} />
+                      </button>
+                      <ConversationActions
+                        conversationId={conversation.conversationId}
+                        deleteBlocked={deleteBlocked}
+                        disabled={busy}
+                        onRequestDelete={onRequestDeleteConversation}
+                        title={conversation.title}
+                      />
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
         </div>
       </main>
     </div>

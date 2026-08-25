@@ -1,4 +1,10 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type {
   AgentAttachment,
@@ -268,6 +274,90 @@ describe("AgentTimeline", () => {
     ).toHaveTextContent("No Conversations yet");
     await user.click(screen.getByRole("button", { name: "New Conversation" }));
     expect(onCreateConversation).toHaveBeenCalledOnce();
+  });
+
+  it("uses the first canvas prompt to start a Conversation without reserving a side column", async () => {
+    const user = userEvent.setup();
+    const onStartConversation = vi.fn().mockResolvedValue(true);
+    window.desktop = {
+      getModelProviderCatalog: vi.fn().mockResolvedValue({
+        version: 3,
+        providers: [
+          {
+            providerId: "provider_1",
+            name: "Primary",
+            enabled: true,
+            apiFormat: "openai-responses",
+            authMode: "bearer",
+            baseUrl: "https://api.openai.com/v1",
+            models: [
+              {
+                modelId: "design-model",
+                name: "Design model",
+                contextWindow: 200_000,
+                maxOutputTokens: 16_384,
+                capabilities: {
+                  toolUse: true,
+                  imageInput: false,
+                  reasoning: true,
+                },
+                reasoningEfforts: ["off", "medium"],
+              },
+            ],
+            hasApiKey: true,
+            updatedAt: now,
+          },
+        ],
+        defaultSelection: {
+          providerId: "provider_1",
+          modelId: "design-model",
+          reasoningEffort: "medium",
+        },
+      }),
+      onModelProviderCatalogChange: vi.fn().mockReturnValue(() => undefined),
+      selectAgentAttachments: vi.fn().mockResolvedValue([]),
+    } as unknown as DesktopApi;
+
+    const { container } = render(
+      <AgentTimeline
+        activeRunId={null}
+        conversationId={null}
+        conversationTitle={null}
+        error={null}
+        events={[]}
+        onStartConversation={onStartConversation}
+        onStop={vi.fn()}
+        onSubmit={vi.fn().mockResolvedValue(true)}
+        timeline={[]}
+      />,
+    );
+
+    const prompt = screen.getByLabelText("Continue the task");
+    const editor = container.querySelector("[data-agent-prompt-editor]");
+    const toolbar = container.querySelector("[data-agent-prompt-toolbar]");
+    expect(screen.getByText("Start with a prompt")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Your first message creates the Conversation and starts the design task.",
+      ),
+    ).toBeInTheDocument();
+    expect(prompt).toBeEnabled();
+    expect(prompt.parentElement).toBe(editor);
+    expect(prompt.nextElementSibling).toBe(toolbar);
+
+    await user.type(prompt, "Design the website launch");
+    const send = screen.getByRole("button", { name: "Send" });
+    await waitFor(() => expect(send).toBeEnabled());
+    await user.click(send);
+
+    expect(onStartConversation).toHaveBeenCalledWith(
+      "Design the website launch",
+      expect.objectContaining({
+        providerId: "provider_1",
+        modelId: "design-model",
+      }),
+      [],
+    );
   });
 
   it("merges durable and live completed items without duplicates", () => {

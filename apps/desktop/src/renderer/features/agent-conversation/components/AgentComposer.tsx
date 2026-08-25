@@ -93,14 +93,6 @@ export function AgentComposer({
         }}
         onDrop={handleAttachmentDrop}
       >
-        {controller.hasConversation && (
-          <div className={styles.scope}>
-            <span className={styles.context}>
-              <Icon name="lucide:mouse-pointer-2" size={12} />
-              <span>{t("agent.contextScope", { scope: scopeLabel })}</span>
-            </span>
-          </div>
-        )}
         {controller.attachments.length > 0 && (
           <ul
             aria-label={t("agent.attachments")}
@@ -136,38 +128,44 @@ export function AgentComposer({
             ))}
           </ul>
         )}
-        <div className={styles.inputRow}>
-          <textarea
-            aria-label={t("agent.continueTask")}
-            aria-busy={Boolean(activeRunId)}
-            disabled={
-              !controller.hasConversation || !controller.submissionAvailable
-            }
-            id="agent-prompt"
-            onChange={(event) => controller.setPrompt(event.target.value)}
-            onKeyDown={handlePromptKeyDown}
-            onPaste={handleAttachmentPaste}
-            placeholder={
-              !controller.hasConversation
-                ? t("agent.selectConversationPlaceholder")
-                : activeRunId
-                  ? t("agent.workingPlaceholder")
-                  : t("agent.promptPlaceholder")
-            }
-            rows={3}
-            value={controller.prompt}
-          />
-          <IconButton
-            disabled={
-              !controller.hasConversation ||
-              !controller.submissionAvailable ||
-              controller.selectingAttachments ||
-              controller.attachments.length >= MAX_AGENT_ATTACHMENTS
-            }
-            icon="lucide:paperclip"
-            label={t("agent.addAttachments")}
-            onClick={() => void controller.selectAttachments()}
-          />
+        <textarea
+          aria-label={t("agent.continueTask")}
+          aria-busy={Boolean(activeRunId)}
+          disabled={!controller.canCompose || !controller.submissionAvailable}
+          id="agent-prompt"
+          onChange={(event) => controller.setPrompt(event.target.value)}
+          onKeyDown={handlePromptKeyDown}
+          onPaste={handleAttachmentPaste}
+          placeholder={
+            !controller.canCompose
+              ? t("agent.selectConversationPlaceholder")
+              : activeRunId
+                ? t("agent.workingPlaceholder")
+                : t("agent.promptPlaceholder")
+          }
+          rows={3}
+          value={controller.prompt}
+        />
+        <div className={styles.toolbar} data-agent-prompt-toolbar="">
+          <div className={styles.contextTools}>
+            <IconButton
+              disabled={
+                !controller.canCompose ||
+                !controller.submissionAvailable ||
+                controller.selectingAttachments ||
+                controller.attachments.length >= MAX_AGENT_ATTACHMENTS
+              }
+              icon="lucide:paperclip"
+              label={t("agent.addAttachments")}
+              onClick={() => void controller.selectAttachments()}
+            />
+            {controller.canCompose && (
+              <span className={styles.context}>
+                <Icon name="lucide:mouse-pointer-2" size={12} />
+                <span>{t("agent.contextScope", { scope: scopeLabel })}</span>
+              </span>
+            )}
+          </div>
           {activeRunId ? (
             <Button
               className={styles.stop}

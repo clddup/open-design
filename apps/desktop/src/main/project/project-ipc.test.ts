@@ -47,9 +47,9 @@ describe("ProjectIpcService", () => {
     );
     const manifest = await service.createProject({
       projectId: "project_acme",
-      name: "Acme Design",
     });
     if (!manifest) throw new Error("Project selection was cancelled");
+    expect(manifest.name).toBe("Acme Design");
     const source = manifest.designFiles[0];
     if (!source) throw new Error("Source design file is missing");
     const consumerDocument = createEmptyDesignDocument(
@@ -134,7 +134,6 @@ describe("ProjectIpcService", () => {
     await expect(
       service.createProject({
         projectId: "project_acme",
-        name: "Acme Design",
       }),
     ).resolves.toBeNull();
     await expect(service.openProject()).resolves.toBeNull();
@@ -151,7 +150,6 @@ describe("ProjectIpcService", () => {
     );
     const manifest = await service.createProject({
       projectId: "project_acme",
-      name: "Acme Design",
     });
     if (!manifest)
       throw new Error("Project selection was unexpectedly cancelled");
@@ -243,7 +241,6 @@ describe("ProjectIpcService", () => {
     );
     const manifest = await service.createProject({
       projectId: "project_acme",
-      name: "Acme Design",
     });
     if (!manifest)
       throw new Error("Project selection was unexpectedly cancelled");
@@ -273,7 +270,6 @@ describe("ProjectIpcService", () => {
     );
     const original = await service.createProject({
       projectId: "project_original",
-      name: "Original",
     });
     if (!original)
       throw new Error("Project selection was unexpectedly cancelled");
@@ -287,7 +283,6 @@ describe("ProjectIpcService", () => {
 
     const replacement = await service.createProject({
       projectId: "project_replacement",
-      name: "Replacement",
     });
     if (!replacement)
       throw new Error("Project selection was unexpectedly cancelled");
@@ -332,7 +327,6 @@ describe("ProjectIpcService", () => {
     await expect(
       service.createProject({
         projectId: "project_retry_request",
-        name: "Retry request",
       }),
     ).resolves.toEqual(orphan);
     expect(store.getProjectRoot("project_removed")).toBeNull();
@@ -351,7 +345,6 @@ describe("ProjectIpcService", () => {
     );
     const manifest = await firstService.createProject({
       projectId: "project_acme",
-      name: "Acme Design",
     });
     if (!manifest)
       throw new Error("Project selection was unexpectedly cancelled");
@@ -405,7 +398,6 @@ describe("ProjectIpcService", () => {
     );
     const manifest = await service.createProject({
       projectId: "project_acme",
-      name: "Acme Design",
     });
     if (!manifest)
       throw new Error("Project selection was unexpectedly cancelled");
@@ -454,7 +446,6 @@ describe("ProjectIpcService", () => {
     );
     const manifest = await service.createProject({
       projectId: "project_acme",
-      name: "Acme Design",
     });
     if (!manifest)
       throw new Error("Project selection was unexpectedly cancelled");
@@ -531,7 +522,6 @@ describe("ProjectIpcService", () => {
     );
     const manifest = await service.createProject({
       projectId: "project_acme",
-      name: "Acme Design",
     });
     if (!manifest)
       throw new Error("Project selection was unexpectedly cancelled");
@@ -583,7 +573,6 @@ describe("ProjectIpcService", () => {
     await expect(
       service.createProject({
         projectId: "project_acme",
-        name: "Acme Design",
         rootPath: "/tmp/forged",
       }),
     ).rejects.toThrow("Invalid Project create request");

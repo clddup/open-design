@@ -756,13 +756,17 @@ describe("Project desktop API guards", () => {
     expect(
       isCreateProjectRequest({
         projectId: "project_acme",
-        name: "Acme Design",
       }),
     ).toBe(true);
     expect(
       isCreateProjectRequest({
         projectId: "project_acme",
         name: "Acme Design",
+      }),
+    ).toBe(false);
+    expect(
+      isCreateProjectRequest({
+        projectId: "project_acme",
         rootPath: "/tmp/Acme Design",
       }),
     ).toBe(false);

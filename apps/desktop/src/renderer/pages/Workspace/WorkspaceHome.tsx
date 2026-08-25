@@ -28,10 +28,9 @@ export type WorkspaceHomeProps = {
   platform: NodeJS.Platform;
   recentProjects: readonly RecentProject[];
   theme: ThemePreference;
-  onCreateProject: (name: string) => Promise<boolean>;
+  onCreateProject: () => Promise<boolean>;
   onRequestDeleteConversation: (conversationId: string) => void;
   onOpenDesignFile: () => void;
-  onOpenGlobalTask?: (task: GlobalTaskProjection) => void;
   onOpenConversation: (conversation: ConversationDescriptor) => void;
   onOpenProject: () => void;
   onOpenRecentProject: (projectId: string) => void;
@@ -70,7 +69,6 @@ export function WorkspaceHome({
   onCreateProject,
   onRequestDeleteConversation,
   onOpenDesignFile,
-  onOpenGlobalTask,
   onOpenConversation,
   onOpenProject,
   onOpenRecentProject,
@@ -80,16 +78,11 @@ export function WorkspaceHome({
   onThemeChange,
 }: WorkspaceHomeProps) {
   const { t } = useI18n();
-  const [creating, setCreating] = useState(false);
-  const [projectName, setProjectName] = useState("");
   const [pendingRemovalId, setPendingRemovalId] = useState<string | null>(null);
   const [removingProjectId, setRemovingProjectId] = useState<string | null>(
     null,
   );
   const nextTheme = theme === "dark" ? "light" : "dark";
-  const activeTaskCount = globalTasks.filter((task) =>
-    activeTaskLifecycles.has(task.lifecycle),
-  ).length;
   const activeConversationIds = new Set(
     globalTasks
       .filter((task) => activeTaskLifecycles.has(task.lifecycle))
@@ -125,17 +118,21 @@ export function WorkspaceHome({
         aria-labelledby="workspace-home-title"
         className={`${homeStyles.viewport} ${styles.content}`}
       >
-        <section className={styles.hero}>
-          <span className={homeStyles.eyebrow}>{t("workspace.label")}</span>
-          <h1 className={homeStyles.title} id="workspace-home-title">
-            {t("workspace.title")}
-          </h1>
-          <p className={homeStyles.description}>{t("workspace.description")}</p>
+        <header className={styles.header}>
+          <div>
+            <span className={homeStyles.eyebrow}>{t("workspace.label")}</span>
+            <h1 className={homeStyles.title} id="workspace-home-title">
+              {t("workspace.title")}
+            </h1>
+            <p className={homeStyles.description}>
+              {t("workspace.description")}
+            </p>
+          </div>
           <div className={styles.actions}>
             <Button
               disabled={busy}
               icon="lucide:plus"
-              onClick={() => setCreating(true)}
+              onClick={() => void onCreateProject()}
               tone="primary"
             >
               {t("workspace.createProject")}
@@ -143,60 +140,21 @@ export function WorkspaceHome({
             <Button disabled={busy} onClick={onOpenProject}>
               {t("workspace.openProject")}
             </Button>
+            <Button disabled={busy} onClick={onOpenDesignFile} tone="quiet">
+              {t("workspace.openStandalone")}
+            </Button>
           </div>
-          {creating && (
-            <form
-              aria-label={t("workspace.createProjectForm")}
-              className={styles.createProject}
-              onSubmit={(event) => {
-                event.preventDefault();
-                void onCreateProject(projectName).then((created) => {
-                  if (created) {
-                    setCreating(false);
-                    setProjectName("");
-                  }
-                });
-              }}
-            >
-              <label htmlFor="project-name">{t("workspace.projectName")}</label>
-              <div>
-                <input
-                  autoFocus
-                  disabled={busy}
-                  id="project-name"
-                  maxLength={256}
-                  onChange={(event) => setProjectName(event.target.value)}
-                  placeholder={t("workspace.projectNamePlaceholder")}
-                  value={projectName}
-                />
-                <Button
-                  disabled={busy || projectName.trim().length === 0}
-                  tone="primary"
-                  type="submit"
-                >
-                  {t("workspace.chooseFolder")}
-                </Button>
-                <Button
-                  disabled={busy}
-                  onClick={() => setCreating(false)}
-                  tone="quiet"
-                >
-                  {t("common.cancel")}
-                </Button>
-              </div>
-            </form>
-          )}
           {error && (
             <p className={homeStyles.error} role="alert">
               {error}
             </p>
           )}
-        </section>
+        </header>
 
         <div className={styles.grid}>
           <section
             aria-labelledby="recent-conversations-title"
-            className={`${homeStyles.panel} ${styles.conversationPanel}`}
+            className={homeStyles.panel}
           >
             <div className={homeStyles.sectionHeading}>
               <div>
@@ -386,63 +344,7 @@ export function WorkspaceHome({
               </div>
             )}
           </section>
-
-          <section
-            aria-labelledby="global-tasks-title"
-            className={homeStyles.panel}
-          >
-            <div className={homeStyles.sectionHeading}>
-              <div>
-                <span className={homeStyles.sectionLabel}>
-                  {t("workspace.acrossProjects")}
-                </span>
-                <h2 id="global-tasks-title">{t("workspace.globalTasks")}</h2>
-              </div>
-              <span className={homeStyles.sectionCount}>
-                {t("workspace.taskCount", {
-                  active: activeTaskCount,
-                  total: globalTasks.length,
-                })}
-              </span>
-            </div>
-            {globalTasks.length === 0 ? (
-              <div className={`${homeStyles.empty} ${homeStyles.emptyCompact}`}>
-                <Icon name="lucide:bot" size={20} />
-                <strong>{t("workspace.noAgentTasks")}</strong>
-                <p>{t("workspace.noAgentTasksDetail")}</p>
-              </div>
-            ) : (
-              <ul className={styles.taskList}>
-                {globalTasks.map((task) => (
-                  <li className={styles.taskRow} key={task.taskId}>
-                    <span>
-                      <strong>{task.title}</strong>
-                      <small>{t(taskLifecycleLabels[task.lifecycle])}</small>
-                    </span>
-                    {onOpenGlobalTask && (
-                      <Button
-                        disabled={busy}
-                        onClick={() => onOpenGlobalTask(task)}
-                        tone="quiet"
-                      >
-                        {t("common.open")}
-                      </Button>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
         </div>
-
-        <button
-          className={styles.compatibilityLink}
-          disabled={busy}
-          onClick={onOpenDesignFile}
-          type="button"
-        >
-          {t("workspace.openStandalone")}
-        </button>
       </main>
     </div>
   );

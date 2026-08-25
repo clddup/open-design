@@ -1,6 +1,5 @@
 import type {
   ConversationDescriptor,
-  GlobalTaskProjection,
   ProjectManifest,
 } from "@opendesign/workspace-contracts";
 import { useCallback, type Dispatch, type SetStateAction } from "react";
@@ -63,7 +62,7 @@ export function useConversationNavigationController({
 }) {
   const createConversation = useCallback(
     async (title: string) => {
-      if (!window.desktop || !activeProject) return false;
+      if (!window.desktop || !activeProject) return null;
       setWorkspaceBusy(true);
       setWorkspaceError(null);
       try {
@@ -80,8 +79,7 @@ export function useConversationNavigationController({
           ),
         ]);
         selectConversation(conversation.conversationId);
-        void requestConversationHistory(conversation.conversationId);
-        return true;
+        return conversation;
       } catch (error) {
         setWorkspaceError(
           reportRendererError(
@@ -91,14 +89,13 @@ export function useConversationNavigationController({
             { projectId: activeProject.projectId },
           ),
         );
-        return false;
+        return null;
       } finally {
         setWorkspaceBusy(false);
       }
     },
     [
       activeProject,
-      requestConversationHistory,
       selectConversation,
       setConversations,
       setWorkspaceBusy,
@@ -236,59 +233,10 @@ export function useConversationNavigationController({
     ],
   );
 
-  const openGlobalTask = useCallback(
-    async (task: GlobalTaskProjection) => {
-      if (!window.desktop) return;
-      const transition = navigator.begin({
-        kind: "editor",
-        fileKey: `${task.targetSet.primaryTarget.projectId}:${task.targetSet.primaryTarget.designFileId}`,
-      });
-      selectConversation(task.conversationId);
-      void requestConversationHistory(task.conversationId);
-      setWorkspaceBusy(true);
-      setWorkspaceError(null);
-      try {
-        await openProjectTarget(task.targetSet.primaryTarget, transition);
-        if (!navigator.isCurrent(transition)) return;
-        setConversationOpenIssue(null);
-        await refreshRecentProjects();
-      } catch (error) {
-        if (!navigator.isCurrent(transition)) return;
-        navigator.fail(transition, t("error.openAgentTask"));
-        setWorkspaceError(
-          reportRendererError(
-            "agent_task_open_failed",
-            error,
-            t("error.openAgentTask"),
-            {
-              projectId: task.targetSet.primaryTarget.projectId,
-              conversationId: task.conversationId,
-              runId: task.runId,
-            },
-          ),
-        );
-      } finally {
-        if (navigator.isCurrent(transition)) setWorkspaceBusy(false);
-      }
-    },
-    [
-      openProjectTarget,
-      navigator,
-      refreshRecentProjects,
-      requestConversationHistory,
-      selectConversation,
-      setConversationOpenIssue,
-      setWorkspaceBusy,
-      setWorkspaceError,
-      t,
-    ],
-  );
-
   return {
     createConversation,
     deleteConversation,
     openConversation,
-    openGlobalTask,
   };
 }
 

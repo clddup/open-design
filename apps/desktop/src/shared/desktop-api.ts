@@ -334,7 +334,6 @@ export type CancelDesignImageEditRequest = { requestId: string };
 
 export type CreateProjectRequest = {
   projectId: string;
-  name: string;
 };
 
 export type OpenRecentProjectRequest = {
@@ -1336,11 +1335,7 @@ export function isCreateProjectRequest(
 ): value is CreateProjectRequest {
   if (!value || typeof value !== "object") return false;
   const request = value as Record<string, unknown>;
-  return (
-    isStableId(request.projectId) &&
-    isDisplayName(request.name) &&
-    hasExactKeys(request, ["projectId", "name"])
-  );
+  return isStableId(request.projectId) && hasExactKeys(request, ["projectId"]);
 }
 
 export function isOpenRecentProjectRequest(

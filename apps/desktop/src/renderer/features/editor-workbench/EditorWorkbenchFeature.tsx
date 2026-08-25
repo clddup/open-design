@@ -707,11 +707,13 @@ export function EditorWorkbenchFeature({
                 events={activeAgentState.events}
                 onCreateConversation={
                   activeProject
-                    ? () =>
-                        createConversation(
-                          t("agent.defaultConversationTitle", {
-                            count: projectConversations.length + 1,
-                          }),
+                    ? async () =>
+                        Boolean(
+                          await createConversation(
+                            t("agent.defaultConversationTitle", {
+                              count: projectConversations.length + 1,
+                            }),
+                          ),
                         )
                     : undefined
                 }
@@ -723,6 +725,23 @@ export function EditorWorkbenchFeature({
                   if (conversation) void openConversation(conversation);
                 }}
                 onResolveApproval={resolveAgentApproval}
+                onStartConversation={
+                  activeProject
+                    ? async (prompt, selection, attachments) => {
+                        const conversation = await createConversation(
+                          conversationTitleFromPrompt(prompt),
+                        );
+                        return conversation
+                          ? submitAgentTask(
+                              prompt,
+                              selection,
+                              attachments,
+                              conversation,
+                            )
+                          : false;
+                      }
+                    : undefined
+                }
                 onStop={stopAgentTask}
                 onSubmit={submitAgentTask}
                 scope={
@@ -912,4 +931,9 @@ export function EditorWorkbenchFeature({
       </div>
     </>
   );
+}
+
+function conversationTitleFromPrompt(prompt: string): string {
+  const normalized = prompt.replaceAll(/\s+/g, " ").trim();
+  return normalized.length > 48 ? `${normalized.slice(0, 48)}…` : normalized;
 }
