@@ -60,11 +60,11 @@ import {
   INTERNAL_READ_IMAGE_SOURCE_TOOL_NAME,
   INTERNAL_UPDATE_IMAGE_TOOL_NAME,
   DesignApplyContract,
+  DesignArrangeContract,
   DesignComponentContract,
   DesignHierarchyContract,
   DesignPageContract,
   DesignVectorContract,
-  isDesignArrangeToolInput,
   isDesignFontToolInput,
   isDesignTextRangeToolInput,
   isExportSvgToolInput,
@@ -1012,11 +1012,12 @@ async function executeDesignToolRequestUnsafe(
     };
   }
 
-  if (
-    request.call.toolName === DESIGN_ARRANGE_TOOL_NAME &&
-    isDesignArrangeToolInput(request.call.input)
-  ) {
-    const input = request.call.input;
+  if (request.call.toolName === DESIGN_ARRANGE_TOOL_NAME) {
+    const parsed = DesignArrangeContract.parse(request.call.input);
+    if (!parsed.ok) {
+      throw new TypeError("Renderer received invalid canonical Arrange input");
+    }
+    const input = parsed.value;
     assertPageWithinMutationTarget(
       input.pageId,
       request.context.mutationTarget,

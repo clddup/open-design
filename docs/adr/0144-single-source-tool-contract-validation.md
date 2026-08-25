@@ -1,6 +1,6 @@
 # ADR-0144：单一来源的工具契约验证
 
-- 状态：Accepted，first-slice、node apply、Design Plan、Visual Review、Checkpoint、图片获取、公开图片操作、Page、Component、Style、Variable、Hierarchy 与 Vector 工具已实施，其余契约分阶段实施
+- 状态：Accepted，first-slice、node apply、Design Plan、Visual Review、Checkpoint、图片获取、公开图片操作、Page、Component、Style、Variable、Hierarchy、Vector 与 Arrange 工具已实施，其余契约分阶段实施
 - 日期：2026-08-23
 - 首个迁移对象：compact first-slice
 - 关联：ADR-0018、ADR-0100、ADR-0103、ADR-0141、ADR-0143
@@ -91,12 +91,14 @@ Style 与 Variable 工具已完成第十个设计系统迁移切片：`DesignSty
 
 Hierarchy 与 Vector 工具已完成第十一个结构编辑迁移切片：原混合 types、Provider guidance schema 与约 250 行 `isDesignHierarchyToolInput / isDesignVectorToolInput / exactKeys` 的 746 行文件拆为 type、executable schema 和 Contract 三个明确模块。`DesignHierarchyContract` 覆盖 Group/Ungroup、sibling Mask、Boolean group、reorder 与 reparent 十个闭合 action；`DesignVectorContract` 覆盖 open/close/reverse、connect/disconnect、单层/跨层 vertex transform 和三类 Cut 九个闭合 action。Provider、Pi、工具聚合、Main policy/execution 与 Renderer canonical bridge 现在消费同一 action branch，旧“Provider 只给宽泛字段、Runtime 另行校验 action-specific shape”的双事实已删除；Main 也不再跳过 Hierarchy 输入校验后直接强转 material target。Vector topology ID 直接复用文档权威 `VectorGeometryIdSchema`；nested `at.kind` 错误会定位到真实 `segmentId/t`、`vertexId` 或未知 `/at/kind`。跨层 target node 唯一性与 16,384 vertex 总预算是仅存的两个 domain refinements，外层数组不再用泛化 `uniqueItems` 抢先覆盖稳定 node path；Page、revision、locked、same-parent、mask source、Boolean operand、拓扑与几何歧义继续由 Main/EditorRuntime/Geometry Service 当前文档层拥有。语义参照 Figma 的 [GroupNode](https://developers.figma.com/docs/plugins/api/GroupNode/)、[BooleanOperationNode](https://developers.figma.com/docs/plugins/api/BooleanOperationNode/) 与 [VectorNetwork](https://developers.figma.com/docs/plugins/api/VectorNetwork/)；OpenDesign 继续额外拥有稳定 topology ID、事务 preview/apply、单次 undo 和受控多层宿主几何规划。
 
+Arrange 工具已完成第十二个布局编辑迁移切片：原 962 行混合 types、宽泛 Provider schema 和约 460 行 `isDesignArrangeToolInput / isLayout* / onlyKeys` 手写结构遍历被拆为 types、action-aware executable schema 与 `DesignArrangeContract`。21 个 align/distribute/tidy/spacing/constraints/resize/Auto Layout/Grid/child sizing-positioning-limits/Layout Guides/overflow repair action 现在都是闭合分支；Provider、Pi、Main handler、Renderer canonical bridge 与聚合 dispatcher 使用同一 schema 和 parse 入口。Grid `autoTracks` 与 `row-auto-flow`、min/max 反转、Layout Guide ID 唯一性是仅存的三个跨字段 refinement；Page、revision、节点类型/祖先、locked、Grid 占用、几何、preview 与事务 invariant 继续由 Main/EditorRuntime/Layout Service 拥有。Provider 说明中“Auto Layout Grid 未支持”的旧事实已删除：OpenDesign 明确区分会驱动内容 reflow 的 Auto Layout Grid 与只作视觉辅助、不导出的 Layout Guides，这与 Figma 当前的 [Auto layout vertical/horizontal/grid 三种 flow](https://help.figma.com/hc/en-us/articles/360040451373-Guide-to-auto-layout)、[Grid tracks/cells/span](https://help.figma.com/hc/en-us/articles/31289469907863-Use-the-grid-auto-layout-flow) 以及 [Uniform/Column/Row Layout Guides](https://help.figma.com/hc/en-us/articles/360040450513-Create-layout-guides) 语义一致。OpenDesign 仍通过自身稳定 ID、current Page capability、revision、原子事务和单 undo 维护文档事实。
+
 `ValidationIssue` 的稳定 `code/path/expected/actual/recovery` 通过 `tool-validation` failure details 进入 Agent event、journal 和 Timeline；这种参数修正使用 `correct-and-retry`，不冒充需要文档 inspection 的事务错误。Design transaction 仍保留独立 `inspect-and-revise` 恢复语义。
 
-导入导出、Arrange、文字/字体等其余 Agent tools，以及已迁移公开工具之后的其他 trusted internal Renderer bridge、IPC 与持久化契约尚未迁移，不得据此宣称全仓已实现单一验证入口。
+导入导出、文字/字体等其余 Agent tools，以及已迁移公开工具之后的其他 trusted internal Renderer bridge、IPC 与持久化契约尚未迁移，不得据此宣称全仓已实现单一验证入口。
 
 ## 后果
 
 - 不重写 pi-agent-core 已有的循环或 TypeBox 参数验证；OpenDesign 只增加产品 domain refinement 和边界 issue adapter。
 - 首个迁移会删除较多手写代码并改变测试入口，属于允许的破坏性开发更新。
-- 在迁移完成前，新增 first-slice、node apply、Design Plan、Visual Review、Checkpoint、Read/Generate/Place/Update/Edit Image、Page Structure/Page Lifecycle、Component、Style、Variable、Hierarchy 与 Vector 字段必须进入对应单一入口；不得继续扩展三套旧函数。
+- 在迁移完成前，新增 first-slice、node apply、Design Plan、Visual Review、Checkpoint、Read/Generate/Place/Update/Edit Image、Page Structure/Page Lifecycle、Component、Style、Variable、Hierarchy、Vector 与 Arrange 字段必须进入对应单一入口；不得继续扩展三套旧函数。

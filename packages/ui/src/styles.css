@@ -99,7 +99,7 @@ button {
   border-radius: var(--ui-radius-sm);
   background: transparent;
   color: var(--ui-text-muted);
-  cursor: default;
+  cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -125,6 +125,7 @@ button {
 }
 .ui-icon-button:disabled,
 .ui-button:disabled {
+  cursor: not-allowed;
   opacity: 0.38;
 }
 .ui-button {

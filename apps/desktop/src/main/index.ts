@@ -107,10 +107,10 @@ import { registerRendererDesignToolIpc } from "./agent/renderer-design-tool-ipc"
 import { channels } from "@/shared/desktop-api";
 import { handleDesignSystemTool } from "./agent/design-system-tool-handler.js";
 import { handleDesignStructureTool } from "./agent/design-structure-tool-handler.js";
+import { handleDesignArrangeTool } from "./agent/design-arrange-tool-handler.js";
 import { translate } from "@/shared/i18n/messages";
 import {
   DESIGN_APPLY_TOOL_NAME,
-  DESIGN_ARRANGE_TOOL_NAME,
   DESIGN_CAPTURE_TOOL_NAME,
   DESIGN_CHECKPOINT_TOOL_NAME,
   DESIGN_COMPONENT_TOOL_NAME,
@@ -151,7 +151,6 @@ import {
   PLACE_IMAGE_TOOL_NAME,
   READ_IMAGE_TOOL_NAME,
   UPDATE_IMAGE_TOOL_NAME,
-  type DesignArrangeToolInput,
   type DesignApplyToolInput,
   type DesignVisualReviewToolInput,
 } from "@/shared/design-agent-tools";
@@ -1773,23 +1772,14 @@ async function startDesktopApplication(
         withDelivery: withDesignDelivery,
       });
       if (designStructureResult) return designStructureResult;
-      if (call.toolName === DESIGN_ARRANGE_TOOL_NAME) {
-        const arrangeInput = call.input as DesignArrangeToolInput;
-        globalTaskCoordinator.assertVisualReviewBeforeWrite(context);
-        const nodeIds = materialTargetIdsForArrangeTool(arrangeInput);
-        const targetIds = globalTaskCoordinator.resolveMaterialTargetIds(
-          context,
-          nodeIds,
-        );
-        const result = await executeRendererTool(call);
-        globalTaskCoordinator.recordMaterialDesignWriteCompleted(
-          context.runId,
-          targetIds,
-          result.designRevision?.revision,
-          [],
-        );
-        return withDesignDelivery(result, context.runId);
-      }
+      const designArrangeResult = await handleDesignArrangeTool({
+        call,
+        context,
+        coordinator: globalTaskCoordinator,
+        execute: executeRendererTool,
+        withDelivery: withDesignDelivery,
+      });
+      if (designArrangeResult) return designArrangeResult;
       if (call.toolName === DESIGN_CAPTURE_TOOL_NAME) {
         return await executeCanvasCapture(call);
       }
@@ -1949,14 +1939,6 @@ function smokePdf(text: string): Buffer {
 
 function isRecordValue(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function materialTargetIdsForArrangeTool(
-  input: DesignArrangeToolInput,
-): string[] {
-  if ("nodeId" in input) return [input.nodeId];
-  if ("frameId" in input) return [input.frameId];
-  return [...input.nodeIds];
 }
 
 function importedNodeIdsFromResult(result: TrustedToolResult): string[] {

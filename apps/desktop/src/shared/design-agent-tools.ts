@@ -10,8 +10,8 @@ import {
 } from "./design-first-slice-tool";
 import { DesignApplyContract } from "./design-apply-input";
 import {
+  DesignArrangeContract,
   DESIGN_ARRANGE_TOOL_INPUT_SCHEMA,
-  isDesignArrangeToolInput,
 } from "./design-arrange-tool";
 import {
   DesignPlanContract,
@@ -147,8 +147,9 @@ export type {
   PlannedDesignRebaseTarget,
 } from "./design-apply-input";
 export {
+  DesignArrangeContract,
+  DESIGN_ARRANGE_ACTIONS,
   DESIGN_ARRANGE_TOOL_INPUT_SCHEMA,
-  isDesignArrangeToolInput,
 } from "./design-arrange-tool";
 export type { DesignArrangeToolInput } from "./design-arrange-tool";
 export { componentStrategyOccurrencesForTarget } from "./design-plan-component-strategy";
@@ -532,10 +533,11 @@ export const DESIGN_AGENT_TOOL_SPECS = [
       role: "material-write" as const,
     },
     description:
-      "Precisely arrange explicit existing layers in the currently bound Design File using host-computed geometry. It aligns selection bounds, distributes or sets exact spacing, performs deterministic one- or two-dimensional Tidy up, assigns Constraints v1 to an ordinary Frame child, resizes a Frame while resolving constraints, configures Frame-owned Auto Layout, direct flow-child sizing, bounded min/max width and height, an absolute child that ignores Auto Layout flow, or non-exported Frame Layout Guides with action=set-layout-guides. Uniform, Columns, and Rows guides are visual editing aids only: they never change child geometry, participate in Auto Layout, or appear in capture/export. Columns/Rows accept count/gutter and either stretch + margin or fixed start/center/end + sectionSize with edge offset. Auto Layout supports per-axis Frame Fixed/Hug, child Fixed/Fill, fixed or Auto gap, min/max clamping, bounded Fill redistribution, padding minimums, hidden-child exclusion, nested convergence, and horizontal Fill + Auto Height text remeasurement. Set primaryAlignment=space-between for Auto gap; it never becomes negative and starts a single child at the leading padding. Horizontal Wrap resolves Auto gap independently per row while preserving the explicit counter gap; it requires Fixed Frame width and rejects visible Fill children. Child geometry is always host-derived. The host previews the complete change and applies one atomic undoable transaction. Targets are stable Page and layer IDs returned by inspection, never the send-time or live user selection. It rejects locked, missing, stale, out-of-scope, non-invertible, ambiguous, lossy, no-op, inverted limits, and over-limit operations. Snapping, Auto Layout Grid, vertical wrap, Wrap+Fill, auto track gap, baseline, Smart Selection canvas handles, and reflow handles remain separate capabilities.",
+      "Precisely arrange explicit existing layers in the currently bound Design File using host-computed geometry. It aligns selection bounds, distributes or sets exact spacing, performs deterministic one- or two-dimensional Tidy up, assigns Constraints v1 to an ordinary Frame child, resizes a Frame while resolving constraints, configures Frame-owned linear, wrapped, or Grid Auto Layout, direct flow-child sizing, bounded min/max width and height, an absolute child that ignores Auto Layout flow, Grid child placement/track ordering, or non-exported Frame Layout Guides. Uniform, Columns, and Rows guides are visual editing aids only: they never change child geometry, participate in Auto Layout, or appear in capture/export. Columns/Rows accept count/gutter and either stretch + margin or fixed start/center/end + sectionSize with edge offset. Auto Layout supports per-axis Frame Fixed/Hug, child Fixed/Fill, fixed or Auto gap, min/max clamping, bounded Fill redistribution, padding minimums, hidden-child exclusion, nested convergence, horizontal Fill + Auto Height text remeasurement, and two-dimensional Fixed/Fill/Hug Grid tracks with manual or row-auto-flow placement. Set primaryAlignment=space-between for Auto gap; it never becomes negative and starts a single child at the leading padding. Horizontal Wrap resolves Auto gap independently per row while preserving the explicit counter gap; it requires Fixed Frame width and rejects visible Fill children. Child geometry is always host-derived. The host previews the complete change and applies one atomic undoable transaction. Targets are stable Page and layer IDs returned by inspection, never the send-time or live user selection. It rejects locked, missing, stale, out-of-scope, non-invertible, ambiguous, lossy, no-op, inverted limits, and over-limit operations. Snapping, vertical wrap, Wrap+Fill, auto track gap, baseline, Smart Selection canvas handles, and reflow handles remain separate capabilities.",
     inputSchema: DESIGN_ARRANGE_TOOL_INPUT_SCHEMA,
     risk: "design_write" as const,
     approval: "never" as const,
+    validateInputIssues: DesignArrangeContract.issues,
   },
   {
     name: DESIGN_VECTOR_TOOL_NAME,
@@ -722,7 +724,7 @@ export function validateDesignAgentToolInput(
     return DesignHierarchyContract.parse(input).ok;
   }
   if (toolName === DESIGN_ARRANGE_TOOL_NAME) {
-    return isDesignArrangeToolInput(input);
+    return DesignArrangeContract.parse(input).ok;
   }
   if (toolName === DESIGN_VECTOR_TOOL_NAME) {
     return DesignVectorContract.parse(input).ok;

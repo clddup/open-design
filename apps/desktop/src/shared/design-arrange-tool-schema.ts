@@ -1,0 +1,239 @@
+import {
+  AutoLayoutSchema,
+  executableJsonSchema,
+  GridChildPlacementSchema,
+  LayoutConstraintsSchema,
+  LayoutGuideSchema,
+  LayoutLimitsSchema,
+  LayoutSizingSchema,
+} from "@opendesign/design-contracts";
+
+export const DESIGN_ARRANGE_ACTIONS = [
+  "align-left",
+  "align-horizontal-center",
+  "align-right",
+  "align-top",
+  "align-vertical-center",
+  "align-bottom",
+  "distribute-horizontal",
+  "distribute-vertical",
+  "tidy-up",
+  "set-horizontal-spacing",
+  "set-vertical-spacing",
+  "set-constraints",
+  "repair-overflow",
+  "resize-frame",
+  "set-auto-layout",
+  "set-layout-sizing",
+  "set-layout-positioning",
+  "set-layout-limits",
+  "set-layout-guides",
+  "set-grid-placement",
+  "reorder-grid-tracks",
+] as const;
+
+const ALIGN_ACTIONS = [
+  "align-left",
+  "align-horizontal-center",
+  "align-right",
+  "align-top",
+  "align-vertical-center",
+  "align-bottom",
+] as const;
+
+const DISTRIBUTION_ACTIONS = [
+  "distribute-horizontal",
+  "distribute-vertical",
+  "tidy-up",
+] as const;
+
+const SPACING_ACTIONS = [
+  "set-horizontal-spacing",
+  "set-vertical-spacing",
+] as const;
+
+const ID_SCHEMA = {
+  type: "string",
+  minLength: 1,
+  maxLength: 256,
+} as const;
+
+const LABEL_SCHEMA = {
+  type: "string",
+  minLength: 1,
+  maxLength: 256,
+  pattern: "\\S",
+} as const;
+
+function nodeIdsSchema(minItems: number) {
+  return {
+    type: "array" as const,
+    minItems,
+    maxItems: 500,
+    uniqueItems: true,
+    items: ID_SCHEMA,
+  };
+}
+
+const SPACING_SCHEMA = {
+  type: "number",
+  minimum: -1_000_000,
+  maximum: 1_000_000,
+} as const;
+
+const FRAME_SIZE_SCHEMA = {
+  type: "number",
+  exclusiveMinimum: 0,
+  maximum: 1_000_000,
+} as const;
+
+const FROM_INDICES_SCHEMA = {
+  type: "array",
+  minItems: 1,
+  maxItems: 4_096,
+  items: { type: "integer", minimum: 0, maximum: 4_095 },
+} as const;
+
+const LAYOUT_GUIDES_SCHEMA = {
+  type: "array",
+  maxItems: 8,
+  items: LayoutGuideSchema,
+} as const;
+
+const ARRANGE_COMMON_PROPERTIES = {
+  label: LABEL_SCHEMA,
+  pageId: ID_SCHEMA,
+} as const;
+
+function arrangeBranch<
+  const TAction extends (typeof DESIGN_ARRANGE_ACTIONS)[number],
+  const TProperties extends Record<string, unknown>,
+>(
+  action: TAction,
+  properties: TProperties,
+  required: readonly (keyof TProperties & string)[],
+) {
+  return {
+    type: "object" as const,
+    properties: {
+      action: { const: action },
+      ...ARRANGE_COMMON_PROPERTIES,
+      ...properties,
+    },
+    required: ["action", "label", "pageId", ...required],
+    additionalProperties: false,
+  };
+}
+
+const ARRANGE_ACTION_BRANCHES = [
+  ...ALIGN_ACTIONS.map((action) =>
+    arrangeBranch(action, { nodeIds: nodeIdsSchema(2) }, ["nodeIds"]),
+  ),
+  ...DISTRIBUTION_ACTIONS.map((action) =>
+    arrangeBranch(action, { nodeIds: nodeIdsSchema(3) }, ["nodeIds"]),
+  ),
+  ...SPACING_ACTIONS.map((action) =>
+    arrangeBranch(
+      action,
+      { nodeIds: nodeIdsSchema(2), spacing: SPACING_SCHEMA },
+      ["nodeIds", "spacing"],
+    ),
+  ),
+  arrangeBranch(
+    "set-constraints",
+    { nodeId: ID_SCHEMA, constraints: LayoutConstraintsSchema },
+    ["nodeId", "constraints"],
+  ),
+  arrangeBranch("repair-overflow", { frameId: ID_SCHEMA }, ["frameId"]),
+  arrangeBranch(
+    "resize-frame",
+    {
+      frameId: ID_SCHEMA,
+      width: FRAME_SIZE_SCHEMA,
+      height: FRAME_SIZE_SCHEMA,
+    },
+    ["frameId", "width", "height"],
+  ),
+  arrangeBranch(
+    "set-auto-layout",
+    { frameId: ID_SCHEMA, autoLayout: AutoLayoutSchema },
+    ["frameId", "autoLayout"],
+  ),
+  arrangeBranch(
+    "set-layout-sizing",
+    { nodeId: ID_SCHEMA, sizing: LayoutSizingSchema },
+    ["nodeId", "sizing"],
+  ),
+  arrangeBranch(
+    "set-layout-positioning",
+    { nodeId: ID_SCHEMA, positioning: { const: "flow" } },
+    ["nodeId", "positioning"],
+  ),
+  arrangeBranch(
+    "set-layout-positioning",
+    {
+      nodeId: ID_SCHEMA,
+      positioning: { const: "absolute" },
+      constraints: LayoutConstraintsSchema,
+    },
+    ["nodeId", "positioning"],
+  ),
+  arrangeBranch(
+    "set-layout-limits",
+    {
+      nodeId: ID_SCHEMA,
+      limits: { anyOf: [LayoutLimitsSchema, { type: "null" }] },
+    },
+    ["nodeId", "limits"],
+  ),
+  arrangeBranch(
+    "set-layout-guides",
+    { frameId: ID_SCHEMA, layoutGuides: LAYOUT_GUIDES_SCHEMA },
+    ["frameId", "layoutGuides"],
+  ),
+  arrangeBranch(
+    "set-grid-placement",
+    { nodeId: ID_SCHEMA, placement: GridChildPlacementSchema },
+    ["nodeId", "placement"],
+  ),
+  arrangeBranch(
+    "reorder-grid-tracks",
+    {
+      frameId: ID_SCHEMA,
+      axis: { enum: ["rows", "columns"] },
+      fromIndices: FROM_INDICES_SCHEMA,
+      insertionIndex: { type: "integer", minimum: 0, maximum: 4_096 },
+    },
+    ["frameId", "axis", "fromIndices", "insertionIndex"],
+  ),
+] as const;
+
+export const DESIGN_ARRANGE_TOOL_INPUT_SCHEMA = executableJsonSchema({
+  type: "object",
+  description:
+    "Arrange explicit inspected layers with one of 21 closed action shapes. Align needs at least two unique layer IDs; distribute and tidy-up need at least three. Spacing may be negative, zero, or positive. Constraints, Frame resize, linear/wrapped Auto Layout, Auto Layout Grid, child sizing/positioning/limits, Grid placement/track reorder, Layout Guides, and bounded overflow repair use the same Figma-shaped document fields as the Runtime. Grid autoTracks is valid only for row-auto-flow. Layout Guide IDs must be unique. The host owns current Page/revision checks, geometry, preview, transaction, and undo.",
+  properties: {
+    action: { enum: DESIGN_ARRANGE_ACTIONS },
+    label: LABEL_SCHEMA,
+    pageId: ID_SCHEMA,
+    nodeIds: nodeIdsSchema(2),
+    spacing: SPACING_SCHEMA,
+    nodeId: ID_SCHEMA,
+    constraints: LayoutConstraintsSchema,
+    positioning: { enum: ["flow", "absolute"] },
+    frameId: ID_SCHEMA,
+    width: FRAME_SIZE_SCHEMA,
+    height: FRAME_SIZE_SCHEMA,
+    axis: { enum: ["rows", "columns"] },
+    fromIndices: FROM_INDICES_SCHEMA,
+    insertionIndex: { type: "integer", minimum: 0, maximum: 4_096 },
+    autoLayout: AutoLayoutSchema,
+    placement: GridChildPlacementSchema,
+    sizing: LayoutSizingSchema,
+    limits: { anyOf: [LayoutLimitsSchema, { type: "null" }] },
+    layoutGuides: LAYOUT_GUIDES_SCHEMA,
+  },
+  required: ["action", "label", "pageId"],
+  anyOf: ARRANGE_ACTION_BRANCHES,
+  additionalProperties: false,
+});
