@@ -11,6 +11,7 @@ import {
   createEmptyDesignDocument,
   normalizeDesignDocument,
   planResizeGridTrack,
+  planDeleteGridTracks,
   planReorderGridTracks,
   planSetGridTrack,
   planSetGridTracks,
@@ -2007,6 +2008,282 @@ describe("Grid Auto Layout Runtime", () => {
         "empty_selection",
       ),
     ).toMatchObject({ ok: false, code: "invalid-target" });
+  });
+
+  it("deletes selected Grid tracks, their contained layers, and shrinks surviving spans in one history entry", () => {
+    const document = layoutDocument();
+    const frame = document.nodesById.frame;
+    if (frame?.kind !== "frame") throw new Error("missing frame");
+    document.nodesById.three = rectangle("three", "frame", 0, 0, 20, 20);
+    frame.childIds = ["one", "two", "three"];
+    frame.size = { width: 400, height: 100 };
+    frame.properties.autoLayout = {
+      mode: "grid",
+      padding: { top: 0, right: 0, bottom: 0, left: 0 },
+      rowGap: 0,
+      columnGap: 0,
+      rows: [{ type: "fixed", value: 100 }],
+      columns: [
+        { type: "fixed", value: 100 },
+        { type: "fixed", value: 100 },
+        { type: "fixed", value: 100 },
+        { type: "fixed", value: 100 },
+      ],
+      itemsPositioning: "manual",
+    };
+    document.nodesById.one!.gridPlacement = {
+      row: 0,
+      column: 0,
+      rowSpan: 1,
+      columnSpan: 2,
+      horizontalAlign: "auto",
+      verticalAlign: "auto",
+    };
+    document.nodesById.two!.gridPlacement = {
+      row: 0,
+      column: 2,
+      rowSpan: 1,
+      columnSpan: 1,
+      horizontalAlign: "auto",
+      verticalAlign: "auto",
+    };
+    document.nodesById.three.gridPlacement = {
+      row: 0,
+      column: 3,
+      rowSpan: 1,
+      columnSpan: 1,
+      horizontalAlign: "auto",
+      verticalAlign: "auto",
+    };
+    delete document.nodesById.one!.constraints;
+    const runtime = new EditorRuntime(normalizeDesignDocument(document));
+    const plan = planDeleteGridTracks(
+      runtime.getSnapshot().document,
+      "page_layout",
+      "frame",
+      "columns",
+      [2, 1, 2],
+      "delete_columns",
+    );
+    if (!plan.ok) throw new Error(plan.message);
+    expect(plan.indices).toEqual([1, 2]);
+    expect(plan.deletedNodeIds).toEqual(["two"]);
+    expect(runtime.apply(transaction(runtime, plan.commands)).ok).toBe(true);
+
+    let result = runtime.getSnapshot().document;
+    expect(frameAutoLayout(result, "frame")).toMatchObject({
+      columns: [
+        { type: "fixed", value: 100 },
+        { type: "fixed", value: 100 },
+      ],
+    });
+    expect(result.nodesById.two).toBeUndefined();
+    expect(result.nodesById.one?.gridPlacement).toMatchObject({
+      column: 0,
+      columnSpan: 1,
+    });
+    expect(result.nodesById.three?.gridPlacement).toMatchObject({ column: 1 });
+    expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
+
+    expect(runtime.undo().ok).toBe(true);
+    result = runtime.getSnapshot().document;
+    expect(result.nodesById.two).toBeDefined();
+    expect(frameAutoLayout(result, "frame")).toMatchObject({
+      columns: [{}, {}, {}, {}],
+    });
+    expect(result.nodesById.one?.gridPlacement).toMatchObject({
+      column: 0,
+      columnSpan: 2,
+    });
+  });
+
+  it("uses reference-aware deletion when a removed Grid track contains a Component Main", () => {
+    const document = layoutDocument();
+    const frame = document.nodesById.frame;
+    if (frame?.kind !== "frame") throw new Error("missing frame");
+    document.nodesById.two = {
+      id: "two",
+      kind: "frame",
+      name: "Card Main",
+      parentId: "frame",
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 0, 0],
+      size: { width: 100, height: 100 },
+      exportSettings: [],
+      opacity: 1,
+      properties: {
+        fills: [],
+        strokes: [],
+        strokeWidth: 0,
+        cornerRadius: 0,
+        clipsContent: false,
+      },
+      extensions: {},
+      gridPlacement: {
+        row: 0,
+        column: 1,
+        rowSpan: 1,
+        columnSpan: 1,
+        horizontalAlign: "auto",
+        verticalAlign: "auto",
+      },
+    };
+    document.componentsById.component_card = {
+      id: "component_card",
+      name: "Card",
+      rootNodeId: "two",
+      componentPropertyOrder: [],
+      componentPropertyDefinitions: {},
+      variantProperties: {},
+      extensions: {},
+    };
+    document.nodesById.card_instance = {
+      id: "card_instance",
+      kind: "instance",
+      name: "Card",
+      parentId: null,
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 400, 0],
+      size: { width: 100, height: 100 },
+      exportSettings: [],
+      opacity: 1,
+      properties: {
+        componentId: "component_card",
+        componentProperties: {},
+        overrides: [],
+      },
+      extensions: {},
+    };
+    document.pagesById.page_layout!.rootNodeIds.push("card_instance");
+    frame.properties.autoLayout = {
+      mode: "grid",
+      padding: { top: 0, right: 0, bottom: 0, left: 0 },
+      rowGap: 0,
+      columnGap: 0,
+      rows: [{ type: "fixed", value: 100 }],
+      columns: [
+        { type: "fixed", value: 100 },
+        { type: "fixed", value: 100 },
+      ],
+      itemsPositioning: "manual",
+    };
+    document.nodesById.one!.gridPlacement = {
+      row: 0,
+      column: 0,
+      rowSpan: 1,
+      columnSpan: 1,
+      horizontalAlign: "auto",
+      verticalAlign: "auto",
+    };
+    delete document.nodesById.one!.constraints;
+    const runtime = new EditorRuntime(normalizeDesignDocument(document));
+    const plan = planDeleteGridTracks(
+      runtime.getSnapshot().document,
+      "page_layout",
+      "frame",
+      "columns",
+      [1],
+      "delete_component_track",
+    );
+    if (!plan.ok) throw new Error(plan.message);
+    const applied = runtime.apply(transaction(runtime, plan.commands));
+    expect(applied.ok).toBe(true);
+
+    const result = runtime.getSnapshot().document;
+    expect(result.nodesById.two).toBeUndefined();
+    expect(result.componentsById.component_card).toBeUndefined();
+    expect(result.nodesById.card_instance?.kind).toBe("frame");
+    expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
+    expect(runtime.undo().ok).toBe(true);
+    expect(runtime.getSnapshot().document.nodesById.card_instance?.kind).toBe(
+      "instance",
+    );
+  });
+
+  it("rejects deleting every explicit track or an automatically generated row without a revision", () => {
+    const document = layoutDocument();
+    const frame = document.nodesById.frame;
+    if (frame?.kind !== "frame") throw new Error("missing frame");
+    frame.properties.autoLayout = {
+      mode: "grid",
+      padding: { top: 0, right: 0, bottom: 0, left: 0 },
+      rowGap: 0,
+      columnGap: 0,
+      rows: [{ type: "fill", value: 1 }],
+      columns: [{ type: "fill", value: 1 }],
+      itemsPositioning: "row-auto-flow",
+      autoTracks: "rows",
+    };
+    delete document.nodesById.one!.constraints;
+    const runtime = new EditorRuntime(normalizeDesignDocument(document));
+    const revision = runtime.getSnapshot().document.revision;
+    expect(
+      planDeleteGridTracks(
+        runtime.getSnapshot().document,
+        "page_layout",
+        "frame",
+        "columns",
+        [0],
+        "delete_last_column",
+      ),
+    ).toMatchObject({ ok: false, code: "invalid-target" });
+    expect(
+      planDeleteGridTracks(
+        runtime.getSnapshot().document,
+        "page_layout",
+        "frame",
+        "rows",
+        [0],
+        "delete_auto_row",
+      ),
+    ).toMatchObject({ ok: false, code: "invalid-target" });
+    expect(runtime.getSnapshot().document.revision).toBe(revision);
+
+    const lockedDocument = layoutDocument();
+    const lockedFrame = lockedDocument.nodesById.frame;
+    if (lockedFrame?.kind !== "frame") throw new Error("missing frame");
+    lockedFrame.properties.autoLayout = {
+      mode: "grid",
+      padding: { top: 0, right: 0, bottom: 0, left: 0 },
+      rowGap: 0,
+      columnGap: 0,
+      rows: [{ type: "fixed", value: 100 }],
+      columns: [
+        { type: "fixed", value: 100 },
+        { type: "fixed", value: 100 },
+      ],
+      itemsPositioning: "manual",
+    };
+    for (const [column, nodeId] of lockedFrame.childIds.entries()) {
+      lockedDocument.nodesById[nodeId]!.gridPlacement = {
+        row: 0,
+        column,
+        rowSpan: 1,
+        columnSpan: 1,
+        horizontalAlign: "auto",
+        verticalAlign: "auto",
+      };
+    }
+    delete lockedDocument.nodesById.one!.constraints;
+    lockedDocument.nodesById.two!.locked = true;
+    const lockedRuntime = new EditorRuntime(
+      normalizeDesignDocument(lockedDocument),
+    );
+    expect(
+      planDeleteGridTracks(
+        lockedRuntime.getSnapshot().document,
+        "page_layout",
+        "frame",
+        "columns",
+        [1],
+        "delete_locked_track",
+      ),
+    ).toMatchObject({ ok: false });
+    expect(lockedRuntime.getSnapshot().document.revision).toBe(0);
   });
 });
 

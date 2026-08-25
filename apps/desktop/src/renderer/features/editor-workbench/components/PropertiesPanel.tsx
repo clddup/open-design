@@ -120,6 +120,7 @@ export function PropertiesPanel({
   onSetConstraints,
   onSetLayoutPositioning,
   onSetFrameLayoutGuides,
+  onDeleteGridTracks,
   onReorderGridTracks,
   onUpdate,
   onUpdateComponentOverride,
@@ -237,6 +238,12 @@ export function PropertiesPanel({
   onSetFrameLayoutGuides: (
     frameId: string,
     layoutGuides: readonly LayoutGuide[],
+  ) => void;
+  onDeleteGridTracks: (
+    frameId: string,
+    axis: "rows" | "columns",
+    indices: readonly number[],
+    expectedRevision: number,
   ) => void;
   onReorderGridTracks: (
     frameId: string,
@@ -375,6 +382,7 @@ export function PropertiesPanel({
             onSetConstraints={onSetConstraints}
             onSetLayoutPositioning={onSetLayoutPositioning}
             onSetFrameLayoutGuides={onSetFrameLayoutGuides}
+            onDeleteGridTracks={onDeleteGridTracks}
             onReorderGridTracks={onReorderGridTracks}
             onUpdate={onUpdate}
             onUpdateComponentOverride={onUpdateComponentOverride}

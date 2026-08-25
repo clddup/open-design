@@ -108,6 +108,13 @@ export interface LeaferGridTrackReorderRequest {
   insertionIndex: number;
 }
 
+export interface LeaferGridTrackDeleteRequest {
+  axis: "rows" | "columns";
+  expectedRevision: number;
+  frameId: string;
+  indices: readonly number[];
+}
+
 export interface LeaferGridTrackResizeRequest {
   axis: "rows" | "columns";
   expectedRevision: number;
@@ -197,6 +204,7 @@ export interface LeaferEngineCallbacks {
   onCreate(request: LeaferCreateRequest): boolean;
   onCreateVector(request: LeaferCreateVectorRequest): boolean;
   onError(error: Error): void;
+  onGridTrackDelete?(request: LeaferGridTrackDeleteRequest): boolean;
   onGridTrackReorder?(request: LeaferGridTrackReorderRequest): boolean;
   onGridTrackResize?(request: LeaferGridTrackResizeRequest): boolean;
   onGridTrackInputRequest?(request: LeaferGridTrackInputRequest): void;

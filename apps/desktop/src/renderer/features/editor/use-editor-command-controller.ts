@@ -11,6 +11,7 @@ import type {
   UpdatePropertiesCommand,
 } from "@opendesign/design-contracts";
 import {
+  planDeleteGridTracks,
   planSetFrameAutoLayout,
   planReorderGridTracks,
   planSetGridTracks,
@@ -189,6 +190,38 @@ export function useEditorCommandController({
         return false;
       }
       return applyCommands(t("history.reorderGridTracks"), plan.commands);
+    },
+    [applyCommands, runtime, setEditorError, t],
+  );
+
+  const deleteGridTracks = useCallback(
+    (
+      frameId: string,
+      axis: "rows" | "columns",
+      indices: readonly number[],
+      expectedRevision?: number,
+    ) => {
+      const current = runtime.getSnapshot().document;
+      if (
+        expectedRevision !== undefined &&
+        current.revision !== expectedRevision
+      ) {
+        setEditorError(t("canvas.gridTrackStale"));
+        return false;
+      }
+      const plan = planDeleteGridTracks(
+        current,
+        pageIdForNode(current, frameId),
+        frameId,
+        axis,
+        indices,
+        `grid_track_delete_${frameId}`,
+      );
+      if (!plan.ok) {
+        setEditorError(plan.message);
+        return false;
+      }
+      return applyCommands(t("history.deleteGridTracks"), plan.commands);
     },
     [applyCommands, runtime, setEditorError, t],
   );
@@ -421,6 +454,7 @@ export function useEditorCommandController({
   return {
     adjustAutoLayoutSpacing,
     applyCommands,
+    deleteGridTracks,
     setGridTracks,
     resizeFrame,
     reorderGridTracks,

@@ -102,6 +102,12 @@ function renderPanel(
       frameId: string,
       layoutGuides: readonly LayoutGuide[],
     ) => void;
+    onDeleteGridTracks?: (
+      frameId: string,
+      axis: "rows" | "columns",
+      indices: readonly number[],
+      expectedRevision: number,
+    ) => void;
     onReorderGridTracks?: (
       frameId: string,
       axis: "rows" | "columns",
@@ -211,6 +217,7 @@ function renderPanel(
           onSetConstraints={options.onSetConstraints ?? vi.fn()}
           onSetLayoutPositioning={options.onSetLayoutPositioning ?? vi.fn()}
           onSetFrameLayoutGuides={options.onSetFrameLayoutGuides ?? vi.fn()}
+          onDeleteGridTracks={options.onDeleteGridTracks ?? vi.fn()}
           onReorderGridTracks={options.onReorderGridTracks ?? vi.fn()}
           onSvgExportSettingsChange={onSvgExportSettingsChange}
           onSetComponentProperty={options.onSetComponentProperty ?? vi.fn()}
@@ -1409,6 +1416,7 @@ describe("PropertiesPanel SVG workflow", () => {
       ],
     });
     cleanup();
+    const onDeleteGridTracks = vi.fn();
     const onReorderGridTracks = vi.fn();
     renderPanel({
       node: {
@@ -1430,6 +1438,7 @@ describe("PropertiesPanel SVG workflow", () => {
         },
       },
       selectionCount: 1,
+      onDeleteGridTracks,
       onUpdate,
       onReorderGridTracks,
     });
@@ -1441,6 +1450,15 @@ describe("PropertiesPanel SVG workflow", () => {
       "columns",
       [0],
       2,
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Remove Columns track 1" }),
+    );
+    expect(onDeleteGridTracks).toHaveBeenCalledWith(
+      "frame_grid",
+      "columns",
+      [0],
+      0,
     );
     await user.selectOptions(screen.getByLabelText("Rows"), "automatic");
     expect(
@@ -1469,6 +1487,27 @@ describe("PropertiesPanel SVG workflow", () => {
     ).toMatchObject({
       columnGap: 24,
     });
+    cleanup();
+    renderPanel({
+      node: {
+        ...frame,
+        properties: {
+          ...frame.properties,
+          autoLayout: {
+            mode: "grid",
+            padding: { top: 16, right: 16, bottom: 16, left: 16 },
+            rowGap: 12,
+            columnGap: 16,
+            rows: [{ type: "fill", value: 1 }],
+            columns: [{ type: "fill", value: 1 }],
+            itemsPositioning: "row-auto-flow",
+            autoTracks: "rows",
+          },
+        },
+      },
+      selectionCount: 1,
+    });
+    expect(screen.getByLabelText("Rows 1")).toBeDisabled();
   });
 
   it("shows cancellable background progress and disables conflicting export controls", async () => {

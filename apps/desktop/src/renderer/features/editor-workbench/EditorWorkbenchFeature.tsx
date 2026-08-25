@@ -641,6 +641,14 @@ export function EditorWorkbenchFeature({
               }
               onTextRangeSelectionChange={setTextRangeSelection}
               harfBuzzTextRunLayoutProvider={fontBinaryRuntime.provider}
+              onDeleteGridTracks={(frameId, revision, axis, indices) =>
+                editorCommands.deleteGridTracks(
+                  frameId,
+                  axis,
+                  indices,
+                  revision,
+                )
+              }
               onResizeFrame={resizeFrame}
               onReorderGridTracks={editorCommands.reorderGridTracks}
               onSetGridTracks={editorCommands.setGridTracks}
@@ -878,6 +886,14 @@ export function EditorWorkbenchFeature({
                 onSetConstraints={editorCommands.setNodeConstraints}
                 onSetLayoutPositioning={editorCommands.setNodeLayoutPositioning}
                 onSetFrameLayoutGuides={editorCommands.setFrameLayoutGuides}
+                onDeleteGridTracks={(frameId, axis, indices, revision) =>
+                  editorCommands.deleteGridTracks(
+                    frameId,
+                    axis,
+                    indices,
+                    revision,
+                  )
+                }
                 onReorderGridTracks={editorCommands.reorderGridTracks}
                 onUpdate={(updates) => {
                   if (selectedNode) updateNode(selectedNode.id, updates);

@@ -74,6 +74,20 @@ describe("Grid editor overlay geometry", () => {
     expect(createGridEditorOverlayPlan(invalid, "frame_welcome")).toBeNull();
   });
 
+  it("keeps generated automatic rows visible but not directly editable", () => {
+    const document = gridDocument();
+    const frame = document.nodesById.frame_welcome;
+    if (frame?.kind !== "frame") throw new Error("Missing welcome Frame");
+    const grid = frame.properties.autoLayout;
+    if (!grid || grid.mode !== "grid") throw new Error("Missing Grid flow");
+    grid.autoTracks = "rows";
+    const plan = createGridEditorOverlayPlan(document, frame.id);
+
+    expect(plan?.rows.length).toBeGreaterThan(0);
+    expect(plan?.rows.every((track) => !track.editable)).toBe(true);
+    expect(plan?.columns.every((track) => track.editable)).toBe(true);
+  });
+
   it("distinguishes a real reorder from either adjacent no-op slot", () => {
     expect(gridTrackReorderChangesOrder(1, 0)).toBe(true);
     expect(gridTrackReorderChangesOrder(1, 1)).toBe(false);

@@ -116,6 +116,7 @@ export function Canvas({
   onTextLayoutProviderReady,
   onTextEditingStyleControllerChange,
   onTextRangeSelectionChange,
+  onDeleteGridTracks,
   onReorderGridTracks,
   onSetGridTracks,
   onResizeFrame,
@@ -178,6 +179,12 @@ export function Canvas({
     axis: "rows" | "columns",
     fromIndices: readonly number[],
     insertionIndex: number,
+  ) => boolean;
+  onDeleteGridTracks: (
+    frameId: string,
+    expectedRevision: number,
+    axis: "rows" | "columns",
+    indices: readonly number[],
   ) => boolean;
   onSetGridTracks: (
     frameId: string,
@@ -1132,6 +1139,8 @@ export function Canvas({
       onImageCropStateChange: setImageCropState,
       onGridTrackReorder: ({ axis, frameId, fromIndices, insertionIndex }) =>
         onReorderGridTracks(frameId, axis, fromIndices, insertionIndex),
+      onGridTrackDelete: ({ axis, expectedRevision, frameId, indices }) =>
+        onDeleteGridTracks(frameId, expectedRevision, axis, indices),
       onGridTrackInputRequest: (request) =>
         inlineEditors.openGridTrack(request, element),
       onGridTrackResize: ({ axis, expectedRevision, frameId, index, value }) =>
@@ -1229,6 +1238,7 @@ export function Canvas({
     inlineEditors.openAutoLayoutSpacing,
     inlineEditors.openGridTrack,
     onImageCropControllerChange,
+    onDeleteGridTracks,
     onReorderGridTracks,
     onSetGridTracks,
     onAdjustAutoLayoutSpacing,

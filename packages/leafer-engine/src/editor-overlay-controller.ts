@@ -61,6 +61,12 @@ export class EditorOverlayController {
 
   constructor(options: {
     leafer: LeaferModule;
+    onGridTrackDelete: (request: {
+      axis: GridEditorAxis;
+      expectedRevision: number;
+      frameId: string;
+      indices: readonly number[];
+    }) => boolean;
     onAutoLayoutSpacingCommit: (
       request: LeaferAutoLayoutSpacingCommitRequest,
     ) => boolean;
@@ -101,6 +107,7 @@ export class EditorOverlayController {
     this.#gridEditor = new GridEditorOverlayController({
       layerIndex: 5,
       leafer: options.leafer,
+      onDelete: options.onGridTrackDelete,
       onInputRequest: options.onGridTrackInputRequest,
       onReorder: options.onGridTrackReorder,
       onResize: options.onGridTrackResize,
@@ -127,6 +134,10 @@ export class EditorOverlayController {
     return (
       this.#autoLayoutSpacing.cancelDrag() || this.#gridEditor.cancelDrag()
     );
+  }
+
+  handleKeyDown(event: KeyboardEvent): boolean {
+    return this.#gridEditor.handleKeyDown(event);
   }
 
   dispose(): void {

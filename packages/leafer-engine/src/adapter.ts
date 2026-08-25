@@ -280,6 +280,8 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         this.#callbacks.onAutoLayoutSpacingCommit?.(request) ?? false,
       onAutoLayoutSpacingInputRequest: (request) =>
         this.#callbacks.onAutoLayoutSpacingInputRequest?.(request),
+      onGridTrackDelete: (request) =>
+        this.#callbacks.onGridTrackDelete?.(request) ?? false,
       onGridTrackReorder: (request) =>
         this.#callbacks.onGridTrackReorder?.(request) ?? false,
       onGridTrackInputRequest: (request) =>
@@ -1279,6 +1281,14 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
 
   #onWindowKeyDown = (event: KeyboardEvent) => {
     if (this.#textEditDomController.handleKeyDown(event)) return;
+    if (
+      !isKeyboardInputTarget(event.target) &&
+      this.#editorOverlays.handleKeyDown(event)
+    ) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      return;
+    }
     if (
       event.code === "Escape" &&
       this.#editorOverlays.dragging &&

@@ -453,4 +453,69 @@ describe("editor command controllers", () => {
       "中文:canvas.gridTrackStale",
     );
   });
+
+  it("deletes Grid tracks through the shared planner and rejects a stale canvas selection", () => {
+    const document = structuredClone(createWelcomeDocument());
+    const frame = document.nodesById.frame_welcome;
+    if (frame?.kind !== "frame") throw new Error("missing Frame");
+    frame.properties.autoLayout = {
+      mode: "grid",
+      padding: { top: 0, right: 0, bottom: 0, left: 0 },
+      rowGap: 0,
+      columnGap: 0,
+      rows: [{ type: "fixed", value: 180 }],
+      columns: frame.childIds.map(() => ({
+        type: "fixed" as const,
+        value: 100,
+      })),
+      itemsPositioning: "row-auto-flow",
+    };
+    frame.childIds.forEach((nodeId, column) => {
+      const child = document.nodesById[nodeId];
+      if (!child) throw new Error("missing Grid child");
+      child.gridPlacement = {
+        row: 0,
+        column,
+        rowSpan: 1,
+        columnSpan: 1,
+        horizontalAlign: "auto",
+        verticalAlign: "auto",
+      };
+    });
+    const deletedChildId = frame.childIds[1];
+    const runtime = new EditorRuntime(document);
+    const { result, setEditorError } = renderControllers(runtime);
+    let accepted = false;
+
+    act(() => {
+      accepted = result.current.editor.deleteGridTracks(
+        frame.id,
+        "columns",
+        [1],
+        0,
+      );
+    });
+
+    expect(accepted).toBe(true);
+    expect(runtime.getSnapshot().document.revision).toBe(1);
+    expect(runtime.getSnapshot().document.nodesById[deletedChildId]).toBe(
+      undefined,
+    );
+    expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
+    expect(setEditorError).toHaveBeenLastCalledWith(null);
+
+    act(() => {
+      accepted = result.current.editor.deleteGridTracks(
+        frame.id,
+        "columns",
+        [0],
+        0,
+      );
+    });
+    expect(accepted).toBe(false);
+    expect(runtime.getSnapshot().document.revision).toBe(1);
+    expect(setEditorError).toHaveBeenLastCalledWith(
+      "中文:canvas.gridTrackStale",
+    );
+  });
 });

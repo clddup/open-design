@@ -706,7 +706,7 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
-  it("opens the exact Grid track sizing request on a track label click", async () => {
+  it("selects a Grid track first and opens its exact sizing request on the next click", async () => {
     const onGridTrackInputRequest = vi.fn();
     const onGridTrackReorder = vi.fn(() => true);
     const adapter = await createLeaferEngineAdapter(createHost(), {
@@ -729,6 +729,9 @@ describe("Leafer engine selection bounds synchronization", () => {
     app.emit("pointer.up", pointerEvent(666, -20, hit));
 
     expect(onGridTrackReorder).not.toHaveBeenCalled();
+    expect(onGridTrackInputRequest).not.toHaveBeenCalled();
+    app.emit("pointer.down", pointerEvent(666, -20, hit));
+    app.emit("pointer.up", pointerEvent(666, -20, hit));
     expect(onGridTrackInputRequest).toHaveBeenCalledOnce();
     expect(onGridTrackInputRequest).toHaveBeenCalledWith({
       axis: "columns",
@@ -823,6 +826,102 @@ describe("Leafer engine selection bounds synchronization", () => {
     expect(
       (firstPill as FakeElement & { strokeWidth?: unknown }).strokeWidth,
     ).toBe(0);
+    adapter.dispose();
+  });
+
+  it("routes Delete and Backspace for the selected Grid tracks without deleting the Frame", async () => {
+    const onGridTrackDelete = vi.fn(() => true);
+    const onOperations = vi.fn(() => true);
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onGridTrackDelete,
+      onOperations,
+    });
+    const input = withGridFixture(createInput());
+    const frame = input.document.nodesById.frame_welcome;
+    const grid =
+      frame?.kind === "frame" ? frame.properties.autoLayout : undefined;
+    if (!grid || grid.mode !== "grid") throw new Error("Missing Grid fixture");
+    grid.columns.push({ type: "fixed", value: 80 });
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    const first =
+      app &&
+      findElement(
+        app.sky,
+        "__opendesign_grid_track_hit__:frame_welcome:columns:0",
+      );
+    const second =
+      app &&
+      findElement(
+        app.sky,
+        "__opendesign_grid_track_hit__:frame_welcome:columns:1",
+      );
+    if (!app || !first || !second)
+      throw new Error("Missing Grid delete controls");
+
+    app.emit("pointer.down", pointerEvent(80, -20, first));
+    app.emit("pointer.up", pointerEvent(80, -20, first));
+    const backspace = emitWindowKey("Backspace");
+
+    expect(backspace.preventDefault).toHaveBeenCalledOnce();
+    expect(backspace.stopImmediatePropagation).toHaveBeenCalledOnce();
+    expect(onGridTrackDelete).toHaveBeenLastCalledWith({
+      axis: "columns",
+      expectedRevision: input.document.revision,
+      frameId: "frame_welcome",
+      indices: [0],
+    });
+
+    app.emit("pointer.down", pointerEvent(620, -20, second, { metaKey: true }));
+    app.emit("pointer.up", pointerEvent(620, -20, second, { metaKey: true }));
+    const deleteKey = emitWindowKey("Delete");
+
+    expect(deleteKey.preventDefault).toHaveBeenCalledOnce();
+    expect(deleteKey.stopImmediatePropagation).toHaveBeenCalledOnce();
+    expect(onGridTrackDelete).toHaveBeenLastCalledWith({
+      axis: "columns",
+      expectedRevision: input.document.revision,
+      frameId: "frame_welcome",
+      indices: [0, 1],
+    });
+    expect(onOperations).not.toHaveBeenCalled();
+
+    const changed = structuredClone(input);
+    changed.document.revision += 1;
+    adapter.sync(changed);
+    emitWindowKey("Delete");
+    expect(onGridTrackDelete).toHaveBeenCalledTimes(2);
+    adapter.dispose();
+  });
+
+  it("does not expose invalid direct controls for generated automatic Grid rows", async () => {
+    const adapter = await createLeaferEngineAdapter(
+      createHost(),
+      createCallbacks(),
+    );
+    const input = withGridFixture(createInput());
+    const frame = input.document.nodesById.frame_welcome;
+    const grid =
+      frame?.kind === "frame" ? frame.properties.autoLayout : undefined;
+    if (!grid || grid.mode !== "grid") throw new Error("Missing Grid fixture");
+    grid.autoTracks = "rows";
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Missing Leafer app");
+
+    expect(
+      findElement(
+        app.sky,
+        "__opendesign_grid_track_hit__:frame_welcome:rows:0",
+      ),
+    ).toBeUndefined();
+    expect(
+      findElement(
+        app.sky,
+        "__opendesign_grid_track_hit__:frame_welcome:columns:0",
+      ),
+    ).toBeDefined();
     adapter.dispose();
   });
 

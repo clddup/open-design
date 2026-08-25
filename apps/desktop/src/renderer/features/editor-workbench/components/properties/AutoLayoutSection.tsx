@@ -34,10 +34,15 @@ const defaultGridLayout: GridAutoLayout = {
 export function AutoLayoutSection({
   autoLayout,
   onChange,
+  onDeleteGridTracks,
   onReorderGridTracks,
 }: {
   autoLayout: AutoLayout;
   onChange: (autoLayout: AutoLayout) => void;
+  onDeleteGridTracks: (
+    axis: "rows" | "columns",
+    indices: readonly number[],
+  ) => void;
   onReorderGridTracks: (
     axis: "rows" | "columns",
     fromIndices: readonly number[],
@@ -354,6 +359,7 @@ export function AutoLayoutSection({
           <GridControls
             grid={gridFlow}
             onChange={onChange}
+            onDeleteGridTracks={onDeleteGridTracks}
             onReorderGridTracks={onReorderGridTracks}
           />
         )}
@@ -437,10 +443,15 @@ type PackedAlignment = Exclude<
 function GridControls({
   grid,
   onChange,
+  onDeleteGridTracks,
   onReorderGridTracks,
 }: {
   grid: GridAutoLayout;
   onChange: (autoLayout: AutoLayout) => void;
+  onDeleteGridTracks: (
+    axis: "rows" | "columns",
+    indices: readonly number[],
+  ) => void;
   onReorderGridTracks: (
     axis: "rows" | "columns",
     fromIndices: readonly number[],
@@ -536,6 +547,7 @@ function GridControls({
         axis="columns"
         label={t("properties.autoLayoutColumns")}
         onChange={(columns) => update({ columns })}
+        onDelete={onDeleteGridTracks}
         onReorder={onReorderGridTracks}
         tracks={grid.columns}
       />
@@ -544,6 +556,7 @@ function GridControls({
         fixedCount={grid.autoTracks === "rows"}
         label={t("properties.autoLayoutRows")}
         onChange={(rows) => update({ rows })}
+        onDelete={onDeleteGridTracks}
         onReorder={onReorderGridTracks}
         tracks={grid.rows}
       />
@@ -615,6 +628,7 @@ function TrackList({
   fixedCount = false,
   label,
   onChange,
+  onDelete,
   onReorder,
   tracks,
 }: {
@@ -622,6 +636,7 @@ function TrackList({
   fixedCount?: boolean;
   label: string;
   onChange: (tracks: GridTrack[]) => void;
+  onDelete: (axis: "rows" | "columns", indices: readonly number[]) => void;
   onReorder: (
     axis: "rows" | "columns",
     fromIndices: readonly number[],
@@ -647,6 +662,7 @@ function TrackList({
             <span>{`${label} ${index + 1}`}</span>
             <select
               aria-label={`${label} ${index + 1}`}
+              disabled={fixedCount}
               onChange={(event) => {
                 const type = event.target.value as GridTrack["type"];
                 const next = [...tracks];
@@ -666,6 +682,7 @@ function TrackList({
           {track.type !== "hug" && (
             <Field
               accessibleLabel={`${label} ${index + 1} ${track.type === "fill" ? "fr" : "px"}`}
+              disabled={fixedCount}
               label={track.type === "fill" ? "fr" : "px"}
               min={track.type === "fill" ? Number.EPSILON : 0}
               onCommit={(value) =>
@@ -687,7 +704,7 @@ function TrackList({
           {track.type === "hug" && <span aria-hidden="true" />}
           <IconButton
             className={styles.trackMoveUp}
-            disabled={index === 0}
+            disabled={fixedCount || index === 0}
             icon="lucide:chevron-down"
             label={t("properties.autoLayoutTrackMoveUp", {
               label,
@@ -696,7 +713,7 @@ function TrackList({
             onClick={() => onReorder(axis, [index], index - 1)}
           />
           <IconButton
-            disabled={index === tracks.length - 1}
+            disabled={fixedCount || index === tracks.length - 1}
             icon="lucide:chevron-down"
             label={t("properties.autoLayoutTrackMoveDown", {
               label,
@@ -711,9 +728,7 @@ function TrackList({
               label,
               index: index + 1,
             })}
-            onClick={() =>
-              onChange(tracks.filter((_, itemIndex) => itemIndex !== index))
-            }
+            onClick={() => onDelete(axis, [index])}
           />
         </div>
       ))}

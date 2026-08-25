@@ -11,6 +11,7 @@ import {
   MAX_TRANSACTION_COMMANDS,
 } from "@opendesign/design-contracts";
 import type { AutoLayoutOperationPlan } from "./auto-layout-operations.js";
+import { planDeleteNodes } from "./deletion-operations.js";
 
 export type GridTrackAxis = "rows" | "columns";
 
@@ -41,6 +42,17 @@ export type GridTrackUpdatePlan =
   | Extract<AutoLayoutOperationPlan, { ok: false }>;
 
 export type GridTrackResizePlan = GridTrackUpdatePlan;
+
+export type GridTrackDeletePlan =
+  | {
+      ok: true;
+      commands: DesignOperation[];
+      deletedNodeIds: string[];
+      frameId: string;
+      indices: number[];
+      nodeIds: string[];
+    }
+  | Extract<AutoLayoutOperationPlan, { ok: false }>;
 
 export function planSetNodeGridPlacement(
   document: DesignDocument,
@@ -393,6 +405,170 @@ export function planSetGridTracks(
     nodeIds: [frameId, ...frame.childIds],
     track,
   };
+}
+
+export function planDeleteGridTracks(
+  document: DesignDocument,
+  pageId: string,
+  frameId: string,
+  axis: GridTrackAxis,
+  indices: readonly number[],
+  commandPrefix: string,
+): GridTrackDeletePlan {
+  const frame = document.nodesById[frameId];
+  if (!frame) return failure("not-found", `Frame ${frameId} does not exist`);
+  if (
+    (frame.kind !== "frame" && frame.kind !== "slot") ||
+    !nodeBelongsToPage(document, pageId, frameId)
+  ) {
+    return failure(
+      "invalid-target",
+      `Target ${frameId} must be a Frame on Page ${pageId}`,
+    );
+  }
+  const grid = frame.properties.autoLayout;
+  if (!grid || grid.mode !== "grid") {
+    return failure(
+      "invalid-target",
+      `Frame ${frameId} does not use Grid Auto Layout`,
+    );
+  }
+  if (isEffectivelyLocked(document, frameId)) {
+    return failure("locked", "Locked Frames cannot delete Grid tracks");
+  }
+  if (axis === "rows" && grid.autoTracks === "rows") {
+    return failure(
+      "invalid-target",
+      "Automatically generated Grid rows cannot be deleted individually",
+    );
+  }
+
+  const tracks = grid[axis];
+  const selectedIndices = [...new Set(indices)].sort(
+    (left, right) => left - right,
+  );
+  if (
+    selectedIndices.length === 0 ||
+    selectedIndices.some(
+      (index) =>
+        !Number.isInteger(index) || index < 0 || index >= tracks.length,
+    )
+  ) {
+    return failure(
+      "invalid-target",
+      `Grid ${axis} deletion indices are outside the declared tracks`,
+    );
+  }
+  if (selectedIndices.length >= tracks.length) {
+    return failure(
+      "invalid-target",
+      `Grid ${axis} must retain at least one track`,
+    );
+  }
+
+  const selected = new Set(selectedIndices);
+  const deletedNodeIds: string[] = [];
+  const placementUpdates: Array<{
+    nodeId: string;
+    placement: GridChildPlacement;
+  }> = [];
+  for (const childId of frame.childIds) {
+    const child = document.nodesById[childId];
+    if (!child) return failure("not-found", `Layer ${childId} does not exist`);
+    if (child.layoutPositioning === "absolute" || !child.gridPlacement) {
+      continue;
+    }
+    const placement = placementAfterTrackDeletion(
+      child.gridPlacement,
+      axis,
+      selected,
+    );
+    if (!placement) {
+      deletedNodeIds.push(childId);
+      continue;
+    }
+    if (samePlacement(placement, child.gridPlacement)) continue;
+    if (isEffectivelyLocked(document, childId)) {
+      return failure(
+        "locked",
+        `Locked layer ${childId} cannot move with deleted Grid tracks`,
+      );
+    }
+    placementUpdates.push({ nodeId: childId, placement });
+  }
+
+  const deletion =
+    deletedNodeIds.length > 0
+      ? planDeleteNodes(document, {
+          nodeIds: deletedNodeIds,
+          commandPrefix: `${commandPrefix}_contents`,
+        })
+      : { ok: true as const, commands: [], rootNodeIds: [] };
+  if (!deletion.ok) {
+    return failure(
+      deletion.code === "operation-limit"
+        ? "operation-limit"
+        : "invalid-target",
+      deletion.message,
+    );
+  }
+
+  const nextGrid: Extract<AutoLayout, { mode: "grid" }> = {
+    ...grid,
+    [axis]: tracks.filter((_, index) => !selected.has(index)),
+  };
+  const commands: DesignOperation[] = [
+    ...deletion.commands,
+    {
+      commandId: `${commandPrefix}_tracks`,
+      type: "update_properties",
+      nodeId: frameId,
+      properties: { autoLayout: nextGrid },
+    },
+    ...placementUpdates.map(
+      ({ nodeId, placement }, index): DesignOperation => ({
+        commandId: `${commandPrefix}_placement_${index}`,
+        type: "update_properties",
+        nodeId,
+        gridPlacement: placement,
+      }),
+    ),
+  ];
+  if (commands.length > MAX_TRANSACTION_COMMANDS) {
+    return failure(
+      "operation-limit",
+      `Grid track deletion exceeds the ${MAX_TRANSACTION_COMMANDS}-command transaction limit`,
+    );
+  }
+  return {
+    ok: true,
+    commands,
+    deletedNodeIds: [...deletion.rootNodeIds],
+    frameId,
+    indices: selectedIndices,
+    nodeIds: [frameId, ...frame.childIds],
+  };
+}
+
+function placementAfterTrackDeletion(
+  placement: GridChildPlacement,
+  axis: GridTrackAxis,
+  deleted: ReadonlySet<number>,
+): GridChildPlacement | null {
+  const start = axis === "rows" ? placement.row : placement.column;
+  const span = axis === "rows" ? placement.rowSpan : placement.columnSpan;
+  const surviving = Array.from(
+    { length: span },
+    (_, offset) => start + offset,
+  ).filter((index) => !deleted.has(index));
+  const first = surviving[0];
+  if (first === undefined) return null;
+  const nextStart = Array.from({ length: first }, (_, index) => index).filter(
+    (index) => !deleted.has(index),
+  ).length;
+  return axis === "rows"
+    ? { ...placement, row: nextStart, rowSpan: surviving.length }
+    : { ...placement, column: nextStart, columnSpan: surviving.length };
 }
 
 function validGridTrack(track: GridTrack): boolean {

@@ -75,6 +75,13 @@ type GridTrackReorderHandler = (request: {
   insertionIndex: number;
 }) => boolean;
 
+type GridTrackDeleteHandler = (request: {
+  axis: GridEditorAxis;
+  expectedRevision: number;
+  frameId: string;
+  indices: readonly number[];
+}) => boolean;
+
 type GridTrackResizeHandler = (request: {
   axis: GridEditorAxis;
   expectedRevision: number;
@@ -104,6 +111,7 @@ export class GridEditorOverlayController {
   readonly #indicator: LeaferElement;
   readonly #layer: LeaferGroup;
   readonly #leafer: LeaferModule;
+  readonly #onDelete: GridTrackDeleteHandler;
   readonly #onReorder: GridTrackReorderHandler;
   readonly #onResize: GridTrackResizeHandler;
   readonly #onInputRequest: (request: LeaferGridTrackInputRequest) => void;
@@ -120,6 +128,7 @@ export class GridEditorOverlayController {
   constructor(options: {
     layerIndex: number;
     leafer: LeaferModule;
+    onDelete: GridTrackDeleteHandler;
     onInputRequest: (request: LeaferGridTrackInputRequest) => void;
     onReorder: GridTrackReorderHandler;
     onResize: GridTrackResizeHandler;
@@ -127,6 +136,7 @@ export class GridEditorOverlayController {
     viewportRoot: LeaferGroup;
   }) {
     this.#leafer = options.leafer;
+    this.#onDelete = options.onDelete;
     this.#onInputRequest = options.onInputRequest;
     this.#onReorder = options.onReorder;
     this.#onResize = options.onResize;
@@ -162,6 +172,27 @@ export class GridEditorOverlayController {
 
   get dragging(): boolean {
     return this.#drag !== null;
+  }
+
+  handleKeyDown(event: KeyboardEvent): boolean {
+    if (
+      (event.code !== "Delete" && event.code !== "Backspace") ||
+      this.#drag ||
+      !this.#selection ||
+      !this.#plan ||
+      this.#revision === null ||
+      this.#selection.frameId !== this.#plan.frameId ||
+      this.#selection.revision !== this.#revision
+    ) {
+      return false;
+    }
+    this.#onDelete({
+      axis: this.#selection.axis,
+      expectedRevision: this.#revision,
+      frameId: this.#selection.frameId,
+      indices: this.#selection.indices,
+    });
+    return true;
   }
 
   cancelDrag(): boolean {
@@ -231,6 +262,11 @@ export class GridEditorOverlayController {
     const modifiedSelection = Boolean(
       event.metaKey || event.ctrlKey || event.shiftKey,
     );
+    const alreadySelected = Boolean(
+      this.#selection?.frameId === this.#plan.frameId &&
+      this.#selection.axis === track.axis &&
+      this.#selection.indices.includes(track.index),
+    );
     const fromIndices = this.#selectTrack(track, event);
     this.#drag = {
       axis: track.axis,
@@ -241,7 +277,7 @@ export class GridEditorOverlayController {
       insertionIndex: track.index,
       kind: "reorder",
       moved: false,
-      openInputOnClick: !modifiedSelection,
+      openInputOnClick: !modifiedSelection && alreadySelected,
       revision: this.#revision!,
       startClientPoint: eventClientPoint(event),
     };
@@ -541,6 +577,7 @@ export class GridEditorOverlayController {
   #reconcileTracks(plan: GridEditorOverlayPlan): void {
     const expected = new Set<string>();
     for (const spec of [...plan.columns, ...plan.rows]) {
+      if (!spec.editable) continue;
       expected.add(spec.id);
       const existing = this.#tracks.get(spec.id);
       if (existing) {

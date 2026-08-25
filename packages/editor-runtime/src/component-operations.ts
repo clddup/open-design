@@ -520,6 +520,9 @@ export function planDetachComponentInstance(
     clone.childIds = resolved.node.childIds.map(
       (childId) => idByProjection.get(childId) ?? childId,
     );
+    if (!resolved.parentProjectionId) {
+      copyParentLayoutMetadata(clone, instance);
+    }
     return clone;
   });
   return {
@@ -539,6 +542,22 @@ export function planDetachComponentInstance(
         ?.rootNodeId ?? "",
     selectionNodeIds: [instance.id],
   };
+}
+
+function copyParentLayoutMetadata(
+  target: DesignNode,
+  source: DesignNode,
+): void {
+  if (source.constraints === undefined) delete target.constraints;
+  else target.constraints = structuredClone(source.constraints);
+  if (source.gridPlacement === undefined) delete target.gridPlacement;
+  else target.gridPlacement = structuredClone(source.gridPlacement);
+  if (source.layoutLimits === undefined) delete target.layoutLimits;
+  else target.layoutLimits = structuredClone(source.layoutLimits);
+  if (source.layoutPositioning === undefined) delete target.layoutPositioning;
+  else target.layoutPositioning = source.layoutPositioning;
+  if (source.layoutSizing === undefined) delete target.layoutSizing;
+  else target.layoutSizing = structuredClone(source.layoutSizing);
 }
 
 function collectSubtreeIds(

@@ -5,6 +5,7 @@ export const layoutMessages = {
   "history.updateAutoLayoutSizing": "Update Auto Layout sizing",
   "history.updateAutoLayoutLimits": "Update Auto Layout limits",
   "history.reorderGridTracks": "Reorder Grid tracks",
+  "history.deleteGridTracks": "Delete Grid tracks",
   "history.updateGridTrack": "Update Grid track",
   "history.updateLayoutPositioning": "Update layout positioning",
   "history.updateLayoutGuides": "Update layout guides",

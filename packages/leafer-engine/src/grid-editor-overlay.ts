@@ -25,6 +25,7 @@ export interface GridEditorTrackSpec {
   authoredTrack: GridTrack;
   center: number;
   end: number;
+  editable: boolean;
   id: string;
   index: number;
   label: string;
@@ -114,6 +115,7 @@ export function createGridEditorOverlayPlan(
     resolution.rows,
     grid.padding.top,
     grid.rowGap,
+    grid.autoTracks !== "rows",
   );
   const columns = createTrackSpecs(
     frame.id,
@@ -122,6 +124,7 @@ export function createGridEditorOverlayPlan(
     grid.columns,
     grid.padding.left,
     grid.columnGap,
+    true,
   );
   const plan = {
     frameId: frame.id,
@@ -200,6 +203,7 @@ function createTrackSpecs(
   tracks: readonly GridTrack[],
   origin: number,
   gap: number,
+  editable: boolean,
 ): GridEditorTrackSpec[] {
   let cursor = origin;
   return sizes.map((size, index) => {
@@ -211,6 +215,7 @@ function createTrackSpecs(
       authoredTrack: tracks[index]!,
       center: (start + end) / 2,
       end,
+      editable,
       id: `${frameId}:${axis}:${index}`,
       index,
       label: String(index + 1),

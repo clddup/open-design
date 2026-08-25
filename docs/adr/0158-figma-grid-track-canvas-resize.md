@@ -28,14 +28,14 @@ OpenDesign 已能通过 Inspector 编辑 Grid 的 Fixed、Fill 与 Hug 轨道，
 
 ### 标签输入
 
-单击顶部或左侧编号标签，在点击位置附近打开紧凑 DOM 输入：
+首次单击顶部或左侧编号标签只建立可辨识轨道选择；再次单击已选标签，在点击位置附近打开紧凑 DOM 输入。这样单选轨道也能直接接收 Delete/Backspace，而不把按键焦点提前送入数值字段：
 
 - 可选择 Fixed、Fill 或 Hug；Fixed 编辑 `px`，Fill 编辑正数 `fr`，Hug 不伪造数值；
 - 从 Fill/Hug 切换到 Fixed 时，以 Layout Service 当前求得的真实像素尺寸作为初值；从其他类型切到 Fill 时以 `1fr` 作为明确初值；
 - Enter 提交，Escape 或焦点离开取消；输入被 Runtime 拒绝时保持打开供用户修正；
 - 输入位置限制在 Canvas host 内，且输入本身不进入 document、history、save、capture 或 export。
 
-标签点击和抓手拖动继续共用同一命中对象：达到 3px 阈值后只执行重排，不弹出输入；未达到阈值才打开输入。这样不会为了增加就地编辑而破坏既有轨道重排手势。
+标签点击和抓手拖动继续共用同一命中对象：达到 3px 阈值后只执行重排，不弹出输入；未达到阈值时首次点击选择、再次点击编辑。这样不会为了增加就地编辑和删除而破坏既有轨道重排手势。
 
 ### 多轨道选择
 
@@ -46,6 +46,15 @@ OpenDesign 已能通过 Inspector 编辑 Grid 的 Fixed、Fill 与 Hug 轨道，
 - 已选轨道使用完整不透明度与额外描边，不能只靠颜色表达；modifier 单击只改变选择，不弹输入；随后普通单击任一已选标签打开共享输入；
 - 类型或数值不一致时输入显示 Mixed，不伪造共同值。用户选择 Fixed/Fill/Hug 并输入值后，`planSetGridTracks` 在一个 Auto Layout patch 中修改全部已选轨道，只产生一个 revision/undo；
 - 拖动已选标签时，既有 `planReorderGridTracks(fromIndices)` 重排完整选择；跨 span closure 和 row-auto-flow layer order 仍只由 Runtime 处理。直接拖动轨道边缘继续明确选择并缩放单条轨道，多选尺寸通过标签字段设置，与 Figma 的公开说明一致。
+
+### 删除轨道
+
+选中一条或多条显式轨道后，macOS/Windows 的 `Delete` 或 `Backspace` 进入同一个 `planDeleteGridTracks`；Inspector 的逐轨道删除按钮也复用该 planner，不再通过任意替换 rows/columns 数组建立第二套语义：
+
+- 至少保留一条行轨道和一条列轨道；`autoTracks: rows` 产生的自动行继续参与网格投影，但不显示会稳定失败的独立标签、缩放、重排或删除控件；
+- 完全位于被删轨道中的 flow child 连同其 subtree 通过正式 reference-aware 删除 planner 移除；Component/Variant、锁定层和事务预算继续使用既有失败封闭语义，不能绕过引用清理。删除 Component Main 时，外部 Instance 的 detach root 保留 Instance 自己的 parent-level layout metadata，不继承 Main 在原 Grid 中的 placement；
+- 横跨被删与保留轨道的 child 保留，并按剩余原始 cell 收缩 span、移动到最近仍存在的轨道；未相交 child 的 placement 按删除后的索引平移；absolute child 不占 Grid cell，因此不随轨道删除；
+- Frame tracks、surviving placement、引用清理和内容删除组成一条事务，只产生一个 revision/undo。Canvas 请求携带 selection 建立时的 exact revision；成功 revision 后 session-only 轨道选择自然失效，stale、非法索引、删除全部轨道或失败事务均为零写入。
 
 ### 事务语义
 
@@ -67,11 +76,11 @@ Fixed、Fill、Hug 都遵循同一行为；用户通过手动边缘缩放明确�
 
 ### 未纳入本切片
 
-删除轨道、child cell 拖拽/交换、span 拉伸、旋转 Grid 控件和超大 Grid viewport virtualization 继续作为独立完整切片。Grid row/column gap 仍只使用 Inspector，不借轨道边缘手势增加未由 Figma 公共行为支持的画布控件。
+child cell 拖拽/交换、span 拉伸、旋转 Grid 控件和超大 Grid viewport virtualization 继续作为独立完整切片。Grid row/column gap 仍只使用 Inspector，不借轨道边缘手势增加未由 Figma 公共行为支持的画布控件。
 
 ## 后果
 
-- 用户可以在画布上直接调整 Grid 行高和列宽，也能单选、追加、范围选择并统一设置 Fixed/Fill/Hug，而不必往返 Inspector。
+- 用户可以在画布上直接调整或删除 Grid 行列，也能单选、追加、范围选择并统一设置 Fixed/Fill/Hug，而不必往返 Inspector。
 - child 几何、自动行、Hug/Fill 求解、history、undo/redo 和保存重开继续共享现有 Runtime 事实，没有第二份布局状态。
 - 预览不触发模型、截图、审查或 React 文档重算，不增加 Agent 首屏等待时间。
 - exact revision 防止长拖动覆盖用户或 Agent 的并发修改。
@@ -81,6 +90,7 @@ Fixed、Fill、Hug 都遵循同一行为；用户通过手动边缘缩放明确�
 - EditorRuntime 测试覆盖 Fixed、Fill、Hug 的单条/批量统一设置、重复 index 归一、拖动到 Fixed、非法/空选择、no-op、一次 revision、undo/redo。
 - Leafer adapter 测试覆盖行/列边缘、标签单击请求、Command/Ctrl 追加、Shift 范围、选择外观、Mixed 输入、选择集重排、真实 resolved size、zoom、3px 阈值、Escape、pointer cancel 与 stale revision。
 - Renderer 输入与 controller 测试覆盖 Mixed → Fixed/Fill/Hug、批量 index、Enter、Escape、拒绝后保留、exact revision、一次事务/undo 和过期请求零写入。
+- Runtime/Leafer/Renderer 测试覆盖单选与多选删除、contained child 删除、跨轨道 span 收缩、后续 placement 平移、Component Main 删除与外部 Instance detach、至少保留一条轨道、自动行无无效控件、Delete/Backspace、Inspector 复用、exact revision 和一次 undo。
 
 ## 参考
 
