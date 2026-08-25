@@ -47,6 +47,7 @@ export const layoutMessages = {
   "properties.autoLayoutRowGap": "Row gap",
   "properties.autoLayoutColumns": "Columns",
   "properties.autoLayoutRows": "Rows",
+  "properties.autoLayoutTrackSelection": "{{label}} · {{count}} selected",
   "properties.autoLayoutTrackAdd": "Add {{label}} track",
   "properties.autoLayoutTrackRemove": "Remove {{label}} track {{index}}",
   "properties.autoLayoutTrackMoveUp": "Move {{label}} track {{index}} up",

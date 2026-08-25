@@ -117,7 +117,7 @@ export function Canvas({
   onTextEditingStyleControllerChange,
   onTextRangeSelectionChange,
   onReorderGridTracks,
-  onSetGridTrack,
+  onSetGridTracks,
   onResizeFrame,
   selectionActions,
   showAgentRunStatus,
@@ -179,11 +179,11 @@ export function Canvas({
     fromIndices: readonly number[],
     insertionIndex: number,
   ) => boolean;
-  onSetGridTrack: (
+  onSetGridTracks: (
     frameId: string,
     expectedRevision: number,
     axis: "rows" | "columns",
-    index: number,
+    indices: readonly number[],
     track: GridTrack,
   ) => boolean;
   onResizeFrame: ResizeFrameHandler;
@@ -1135,7 +1135,7 @@ export function Canvas({
       onGridTrackInputRequest: (request) =>
         inlineEditors.openGridTrack(request, element),
       onGridTrackResize: ({ axis, expectedRevision, frameId, index, value }) =>
-        onSetGridTrack(frameId, expectedRevision, axis, index, {
+        onSetGridTracks(frameId, expectedRevision, axis, [index], {
           type: "fixed",
           value,
         }),
@@ -1230,7 +1230,7 @@ export function Canvas({
     inlineEditors.openGridTrack,
     onImageCropControllerChange,
     onReorderGridTracks,
-    onSetGridTrack,
+    onSetGridTracks,
     onAdjustAutoLayoutSpacing,
     onTextLayoutProviderReady,
     onTextEditingStyleControllerChange,
@@ -1424,18 +1424,22 @@ export function Canvas({
               fixedLabel={t("properties.autoLayoutFixed")}
               fillLabel={t("properties.autoLayoutFill")}
               hugLabel={t("properties.autoLayoutHug")}
-              label={t(
-                request.axis === "columns"
-                  ? "properties.autoLayoutColumns"
-                  : "properties.autoLayoutRows",
-              )}
+              label={t("properties.autoLayoutTrackSelection", {
+                count: request.tracks.length,
+                label: t(
+                  request.axis === "columns"
+                    ? "properties.autoLayoutColumns"
+                    : "properties.autoLayoutRows",
+                ),
+              })}
+              mixedLabel={t("properties.mixed")}
               onClose={inlineEditors.closeGridTrack}
               onCommit={(track) =>
-                onSetGridTrack(
+                onSetGridTracks(
                   request.frameId,
                   request.expectedRevision,
                   request.axis,
-                  request.index,
+                  request.tracks.map((item) => item.index),
                   track,
                 )
               }

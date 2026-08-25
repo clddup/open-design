@@ -11,7 +11,7 @@ import {
 } from "./affine.js";
 import {
   createGridEditorOverlayPlan,
-  gridTrackReorderChangesOrder,
+  gridTrackSelectionReorderChangesOrder,
   nearestGridInsertionIndex,
   type GridEditorAxis,
   type GridEditorOverlayPlan,
@@ -32,17 +32,25 @@ interface GridTrackElements {
 }
 
 interface GridReorderDragSession {
-  authoredTrack: GridEditorTrackSpec["authoredTrack"];
   axis: GridEditorAxis;
   documentId: string;
   frameId: string;
   fromIndex: number;
+  fromIndices: readonly number[];
   insertionIndex: number;
   kind: "reorder";
   moved: boolean;
-  resolvedSize: number;
+  openInputOnClick: boolean;
   revision: number;
   startClientPoint: { x: number; y: number };
+}
+
+interface GridTrackSelection {
+  anchorIndex: number;
+  axis: GridEditorAxis;
+  frameId: string;
+  indices: readonly number[];
+  revision: number;
 }
 
 interface GridResizeDragSession {
@@ -105,6 +113,7 @@ export class GridEditorOverlayController {
   #scaleX = 1;
   #scaleY = 1;
   #revision: number | null = null;
+  #selection: GridTrackSelection | null = null;
   readonly #tracks = new Map<string, GridTrackElements>();
   readonly #viewportRoot: LeaferGroup;
 
@@ -194,6 +203,13 @@ export class GridEditorOverlayController {
     if (resizeTrack) {
       const point = event.getInnerPoint(this.#layer);
       const coordinate = resizeTrack.axis === "rows" ? point.y : point.x;
+      this.#selection = {
+        anchorIndex: resizeTrack.index,
+        axis: resizeTrack.axis,
+        frameId: this.#plan.frameId,
+        indices: [resizeTrack.index],
+        revision: this.#revision!,
+      };
       this.#drag = {
         axis: resizeTrack.axis,
         documentId: this.#documentId!,
@@ -212,16 +228,20 @@ export class GridEditorOverlayController {
       return true;
     }
     const track = reorderTrack!;
+    const modifiedSelection = Boolean(
+      event.metaKey || event.ctrlKey || event.shiftKey,
+    );
+    const fromIndices = this.#selectTrack(track, event);
     this.#drag = {
-      authoredTrack: track.authoredTrack,
       axis: track.axis,
       documentId: this.#documentId!,
       frameId: this.#plan.frameId,
       fromIndex: track.index,
+      fromIndices,
       insertionIndex: track.index,
       kind: "reorder",
       moved: false,
-      resolvedSize: track.resolvedSize,
+      openInputOnClick: !modifiedSelection,
       revision: this.#revision!,
       startClientPoint: eventClientPoint(event),
     };
@@ -291,29 +311,50 @@ export class GridEditorOverlayController {
       });
       return true;
     }
-    if (current && !event.isCancel && !current.moved) {
-      this.#onInputRequest({
-        axis: current.axis,
-        clientPoint: eventClientPoint(event),
-        expectedRevision: current.revision,
-        frameId: current.frameId,
-        index: current.fromIndex,
-        resolvedSize: current.resolvedSize,
-        track: current.authoredTrack,
-      });
+    if (
+      current &&
+      !event.isCancel &&
+      !current.moved &&
+      current.openInputOnClick
+    ) {
+      const tracks = this.#selectedTrackSpecs(
+        current.axis,
+        current.fromIndices,
+      ).map((spec) => ({
+        index: spec.index,
+        resolvedSize: spec.resolvedSize,
+        track: spec.authoredTrack,
+      }));
+      if (tracks.length > 0) {
+        this.#onInputRequest({
+          axis: current.axis,
+          clientPoint: eventClientPoint(event),
+          expectedRevision: current.revision,
+          frameId: current.frameId,
+          tracks,
+        });
+      }
       return true;
     }
+    const trackCount =
+      current?.axis === "rows"
+        ? (this.#plan?.rows.length ?? 0)
+        : (this.#plan?.columns.length ?? 0);
     if (
       event.isCancel ||
       !current ||
-      !gridTrackReorderChangesOrder(current.fromIndex, current.insertionIndex)
+      !gridTrackSelectionReorderChangesOrder(
+        current.fromIndices,
+        current.insertionIndex,
+        trackCount,
+      )
     ) {
       return true;
     }
     this.#onReorder({
       axis: current.axis,
       frameId: current.frameId,
-      fromIndices: [current.fromIndex],
+      fromIndices: current.fromIndices,
       insertionIndex: current.insertionIndex,
     });
     return true;
@@ -328,18 +369,28 @@ export class GridEditorOverlayController {
     ) {
       this.cancelDrag();
     }
+    if (
+      this.#selection &&
+      (this.#documentId !== input.document.documentId ||
+        this.#selection.frameId !== input.frameId ||
+        this.#selection.revision !== input.document.revision)
+    ) {
+      this.#selection = null;
+    }
     this.#documentId = input.document.documentId;
     this.#revision = input.document.revision;
     const plan = createGridEditorOverlayPlan(input.document, input.frameId);
     this.#plan = plan;
     if (!plan) {
       this.#fingerprint = null;
+      this.#selection = null;
       this.#destroyTracks();
       this.#guide.visible = false;
       this.#indicator.visible = false;
       this.#layer.visible = false;
       return;
     }
+    this.#reconcileSelection(plan);
     if (plan.fingerprint !== this.#fingerprint) {
       this.#reconcileTracks(plan);
       this.#fingerprint = plan.fingerprint;
@@ -428,6 +479,7 @@ export class GridEditorOverlayController {
             },
       );
     }
+    this.#syncTrackAppearance();
     this.#syncDragIndicator();
   }
 
@@ -450,6 +502,7 @@ export class GridEditorOverlayController {
       editable: false,
       fill: GRID_COLOR,
       hittable: false,
+      id: `__opendesign_grid_track_pill__:${spec.id}`,
     }) as LeaferElement;
     const label = new this.#leafer.Text({
       editable: false,
@@ -514,6 +567,76 @@ export class GridEditorOverlayController {
     this.#syncTrackAppearance();
   }
 
+  #selectTrack(
+    track: GridEditorTrackSpec,
+    event: LeaferEventLike,
+  ): readonly number[] {
+    const frameId = this.#plan?.frameId;
+    if (!frameId) return [track.index];
+    const selection = this.#selection;
+    const current =
+      selection?.frameId === frameId && selection.axis === track.axis
+        ? selection
+        : null;
+    let anchorIndex = current?.anchorIndex ?? track.index;
+    let indices: number[];
+    if (event.shiftKey) {
+      const start = Math.min(anchorIndex, track.index);
+      const end = Math.max(anchorIndex, track.index);
+      indices = Array.from(
+        { length: end - start + 1 },
+        (_, offset) => start + offset,
+      );
+    } else if (event.metaKey || event.ctrlKey) {
+      const selected = new Set(current?.indices ?? []);
+      if (selected.has(track.index)) selected.delete(track.index);
+      else selected.add(track.index);
+      if (selected.size === 0) selected.add(track.index);
+      indices = [...selected].sort((left, right) => left - right);
+      anchorIndex = track.index;
+    } else if (current?.indices.includes(track.index)) {
+      indices = [...current.indices];
+    } else {
+      indices = [track.index];
+      anchorIndex = track.index;
+    }
+    this.#selection = {
+      anchorIndex,
+      axis: track.axis,
+      frameId,
+      indices,
+      revision: this.#revision!,
+    };
+    return indices;
+  }
+
+  #selectedTrackSpecs(
+    axis: GridEditorAxis,
+    indices: readonly number[],
+  ): GridEditorTrackSpec[] {
+    const specs = axis === "rows" ? this.#plan?.rows : this.#plan?.columns;
+    if (!specs) return [];
+    const selected = new Set(indices);
+    return specs.filter((spec) => selected.has(spec.index));
+  }
+
+  #reconcileSelection(plan: GridEditorOverlayPlan): void {
+    const selection = this.#selection;
+    if (!selection || selection.frameId !== plan.frameId) return;
+    const trackCount =
+      selection.axis === "rows" ? plan.rows.length : plan.columns.length;
+    const indices = selection.indices.filter((index) => index < trackCount);
+    if (indices.length === 0) {
+      this.#selection = null;
+      return;
+    }
+    this.#selection = {
+      ...selection,
+      anchorIndex: Math.min(selection.anchorIndex, trackCount - 1),
+      indices,
+    };
+  }
+
   #syncDragIndicator(): void {
     const drag = this.#drag;
     const plan = this.#plan;
@@ -536,9 +659,15 @@ export class GridEditorOverlayController {
     const insertion = (
       drag.axis === "rows" ? plan.rowInsertions : plan.columnInsertions
     ).find((candidate) => candidate.index === drag.insertionIndex);
+    const trackCount =
+      drag.axis === "rows" ? plan.rows.length : plan.columns.length;
     if (
       !insertion ||
-      !gridTrackReorderChangesOrder(drag.fromIndex, drag.insertionIndex)
+      !gridTrackSelectionReorderChangesOrder(
+        drag.fromIndices,
+        drag.insertionIndex,
+        trackCount,
+      )
     ) {
       this.#indicator.visible = false;
       return;
@@ -558,13 +687,27 @@ export class GridEditorOverlayController {
     const activeId = drag
       ? `${drag.frameId}:${drag.axis}:${drag.kind === "reorder" ? drag.fromIndex : drag.index}`
       : null;
+    const selection =
+      this.#selection?.frameId === this.#plan?.frameId ? this.#selection : null;
+    const selectedIds = new Set(
+      selection
+        ? selection.indices.map(
+            (index) => `${selection.frameId}:${selection.axis}:${index}`,
+          )
+        : [],
+    );
     for (const [id, elements] of this.#tracks) {
       const active = id === activeId;
+      const selected = selectedIds.has(id);
       elements.reorderHit.set({
         cursor: active && drag?.kind === "reorder" ? "grabbing" : "grab",
       });
-      elements.pill.set({ opacity: active ? 0.72 : 1 });
-      elements.label.set({ opacity: active ? 0.9 : 1 });
+      elements.pill.set({
+        opacity: active ? 0.82 : selected ? 1 : 0.68,
+        stroke: "#ffffff",
+        strokeWidth: selected ? 1 / this.#renderScale : 0,
+      });
+      elements.label.set({ opacity: active ? 0.9 : selected ? 1 : 0.82 });
     }
   }
 

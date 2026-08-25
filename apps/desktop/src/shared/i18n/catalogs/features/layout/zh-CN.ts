@@ -49,6 +49,7 @@ export const layoutMessages = {
   "properties.autoLayoutRowGap": "行间距",
   "properties.autoLayoutColumns": "列轨道",
   "properties.autoLayoutRows": "行轨道",
+  "properties.autoLayoutTrackSelection": "{{label}} · 已选 {{count}}",
   "properties.autoLayoutTrackAdd": "添加{{label}}轨道",
   "properties.autoLayoutTrackRemove": "移除{{label}}轨道 {{index}}",
   "properties.autoLayoutTrackMoveUp": "上移{{label}}轨道 {{index}}",

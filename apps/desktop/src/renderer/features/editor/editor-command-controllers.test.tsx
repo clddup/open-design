@@ -396,7 +396,7 @@ describe("editor command controllers", () => {
     );
   });
 
-  it("resizes a Grid track at the exact canvas revision in one history entry", () => {
+  it("sizes selected Grid tracks at the exact canvas revision in one history entry", () => {
     const document = structuredClone(createWelcomeDocument());
     const frame = document.nodesById.frame_welcome;
     if (frame?.kind !== "frame") throw new Error("missing Frame");
@@ -415,10 +415,13 @@ describe("editor command controllers", () => {
     let accepted = false;
 
     act(() => {
-      accepted = result.current.editor.setGridTrack(frame.id, 0, "columns", 0, {
-        type: "fixed",
-        value: 240,
-      });
+      accepted = result.current.editor.setGridTracks(
+        frame.id,
+        0,
+        "columns",
+        [0, 1],
+        { type: "fixed", value: 240 },
+      );
     });
 
     expect(accepted).toBe(true);
@@ -427,14 +430,21 @@ describe("editor command controllers", () => {
     const resizedFrame = runtime.getSnapshot().document.nodesById.frame_welcome;
     if (resizedFrame?.kind !== "frame") throw new Error("missing Frame");
     expect(resizedFrame.properties.autoLayout).toMatchObject({
-      columns: [{ type: "fixed", value: 240 }, { type: "hug" }],
+      columns: [
+        { type: "fixed", value: 240 },
+        { type: "fixed", value: 240 },
+      ],
     });
     expect(setEditorError).toHaveBeenLastCalledWith(null);
 
     act(() => {
-      accepted = result.current.editor.setGridTrack(frame.id, 0, "columns", 1, {
-        type: "hug",
-      });
+      accepted = result.current.editor.setGridTracks(
+        frame.id,
+        0,
+        "columns",
+        [1],
+        { type: "hug" },
+      );
     });
     expect(accepted).toBe(false);
     expect(runtime.getSnapshot().document.revision).toBe(1);

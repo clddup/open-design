@@ -83,6 +83,7 @@ export {
   planResizeGridTrack,
   planReorderGridTracks,
   planSetGridTrack,
+  planSetGridTracks,
   planSetNodeGridPlacement,
   type GridTrackAxis,
   type GridTrackMovement,

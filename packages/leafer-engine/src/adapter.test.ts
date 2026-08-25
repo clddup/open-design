@@ -735,9 +735,139 @@ describe("Leafer engine selection bounds synchronization", () => {
       clientPoint: { x: 666, y: -20 },
       expectedRevision: input.document.revision,
       frameId: "frame_welcome",
-      index: 1,
-      resolvedSize: 1_028,
-      track: { type: "fill", value: 1 },
+      tracks: [
+        {
+          index: 1,
+          resolvedSize: 1_028,
+          track: { type: "fill", value: 1 },
+        },
+      ],
+    });
+    adapter.dispose();
+  });
+
+  it("selects multiple Grid tracks with platform and range modifiers before opening one mixed input", async () => {
+    const onGridTrackInputRequest = vi.fn();
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onGridTrackInputRequest,
+    });
+    const input = withGridFixture(createInput());
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    const first =
+      app &&
+      findElement(
+        app.sky,
+        "__opendesign_grid_track_hit__:frame_welcome:columns:0",
+      );
+    const second =
+      app &&
+      findElement(
+        app.sky,
+        "__opendesign_grid_track_hit__:frame_welcome:columns:1",
+      );
+    const firstPill =
+      app &&
+      findElement(
+        app.sky,
+        "__opendesign_grid_track_pill__:frame_welcome:columns:0",
+      );
+    const secondPill =
+      app &&
+      findElement(
+        app.sky,
+        "__opendesign_grid_track_pill__:frame_welcome:columns:1",
+      );
+    if (!app || !first || !second || !firstPill || !secondPill)
+      throw new Error("Missing Grid multi-selection controls");
+
+    app.emit("pointer.down", pointerEvent(80, -20, first, { metaKey: true }));
+    app.emit("pointer.up", pointerEvent(80, -20, first, { metaKey: true }));
+    app.emit(
+      "pointer.down",
+      pointerEvent(666, -20, second, { shiftKey: true }),
+    );
+    app.emit("pointer.up", pointerEvent(666, -20, second, { shiftKey: true }));
+    expect(onGridTrackInputRequest).not.toHaveBeenCalled();
+    expect((firstPill as FakeElement & { stroke?: unknown }).stroke).toBe(
+      "#ffffff",
+    );
+    expect((secondPill as FakeElement & { stroke?: unknown }).stroke).toBe(
+      "#ffffff",
+    );
+
+    app.emit("pointer.down", pointerEvent(666, -20, second));
+    app.emit("pointer.up", pointerEvent(666, -20, second));
+    expect(onGridTrackInputRequest).toHaveBeenCalledWith({
+      axis: "columns",
+      clientPoint: { x: 666, y: -20 },
+      expectedRevision: input.document.revision,
+      frameId: "frame_welcome",
+      tracks: [
+        {
+          index: 0,
+          resolvedSize: 120,
+          track: { type: "fixed", value: 120 },
+        },
+        {
+          index: 1,
+          resolvedSize: 1_028,
+          track: { type: "fill", value: 1 },
+        },
+      ],
+    });
+    const changed = structuredClone(input);
+    changed.document.revision += 1;
+    adapter.sync(changed);
+    expect(
+      (firstPill as FakeElement & { strokeWidth?: unknown }).strokeWidth,
+    ).toBe(0);
+    adapter.dispose();
+  });
+
+  it("reorders the selected Grid track set through the existing semantic callback", async () => {
+    const onGridTrackReorder = vi.fn(() => true);
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onGridTrackReorder,
+    });
+    const input = withGridFixture(createInput());
+    const frame = input.document.nodesById.frame_welcome;
+    const grid =
+      frame?.kind === "frame" ? frame.properties.autoLayout : undefined;
+    if (!grid || grid.mode !== "grid") throw new Error("Missing Grid fixture");
+    grid.columns.push({ type: "fixed", value: 80 });
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    const first =
+      app &&
+      findElement(
+        app.sky,
+        "__opendesign_grid_track_hit__:frame_welcome:columns:0",
+      );
+    const second =
+      app &&
+      findElement(
+        app.sky,
+        "__opendesign_grid_track_hit__:frame_welcome:columns:1",
+      );
+    if (!app || !first || !second)
+      throw new Error("Missing Grid multi-reorder controls");
+
+    app.emit("pointer.down", pointerEvent(80, -20, first, { ctrlKey: true }));
+    app.emit("pointer.up", pointerEvent(80, -20, first, { ctrlKey: true }));
+    app.emit("pointer.down", pointerEvent(620, -20, second, { ctrlKey: true }));
+    app.emit("pointer.up", pointerEvent(620, -20, second, { ctrlKey: true }));
+    app.emit("pointer.down", pointerEvent(620, -20, second));
+    app.emit("pointer.move", pointerEvent(1_175, 40, app.sky));
+    app.emit("pointer.up", pointerEvent(1_175, 40, app.sky));
+
+    expect(onGridTrackReorder).toHaveBeenCalledWith({
+      axis: "columns",
+      frameId: "frame_welcome",
+      fromIndices: [0, 1],
+      insertionIndex: 3,
     });
     adapter.dispose();
   });

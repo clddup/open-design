@@ -13,7 +13,7 @@ import type {
 import {
   planSetFrameAutoLayout,
   planReorderGridTracks,
-  planSetGridTrack,
+  planSetGridTracks,
   planSetNodeLayoutLimits,
   planSetNodeLayoutPositioning,
   planSetFrameLayoutGuides,
@@ -193,12 +193,12 @@ export function useEditorCommandController({
     [applyCommands, runtime, setEditorError, t],
   );
 
-  const setGridTrack = useCallback(
+  const setGridTracks = useCallback(
     (
       frameId: string,
       expectedRevision: number,
       axis: "rows" | "columns",
-      index: number,
+      indices: readonly number[],
       track: GridTrack,
     ) => {
       const current = runtime.getSnapshot().document;
@@ -206,12 +206,12 @@ export function useEditorCommandController({
         setEditorError(t("canvas.gridTrackStale"));
         return false;
       }
-      const plan = planSetGridTrack(
+      const plan = planSetGridTracks(
         current,
         pageIdForNode(current, frameId),
         frameId,
         axis,
-        index,
+        indices,
         track,
         `canvas_grid_track_${frameId}`,
       );
@@ -421,7 +421,7 @@ export function useEditorCommandController({
   return {
     adjustAutoLayoutSpacing,
     applyCommands,
-    setGridTrack,
+    setGridTracks,
     resizeFrame,
     reorderGridTracks,
     setFrameAutoLayout,

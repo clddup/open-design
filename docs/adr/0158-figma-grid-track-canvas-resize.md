@@ -37,6 +37,16 @@ OpenDesign 已能通过 Inspector 编辑 Grid 的 Fixed、Fill 与 Hug 轨道，
 
 标签点击和抓手拖动继续共用同一命中对象：达到 3px 阈值后只执行重排，不弹出输入；未达到阈值才打开输入。这样不会为了增加就地编辑而破坏既有轨道重排手势。
 
+### 多轨道选择
+
+轨道选择是 Canvas session state，不进入 DesignDocument：
+
+- `Command`（macOS）/`Ctrl`（Windows）单击追加或切换轨道；`Shift` 从最近 anchor 连续选择范围；
+- 同一时间只保留一个 Frame、一个 axis、一个 document revision 的轨道选择；切换 Frame、Page、工具或 revision 时清除，避免无稳定 track ID 时把选择错误套到重排后的其他轨道；
+- 已选轨道使用完整不透明度与额外描边，不能只靠颜色表达；modifier 单击只改变选择，不弹输入；随后普通单击任一已选标签打开共享输入；
+- 类型或数值不一致时输入显示 Mixed，不伪造共同值。用户选择 Fixed/Fill/Hug 并输入值后，`planSetGridTracks` 在一个 Auto Layout patch 中修改全部已选轨道，只产生一个 revision/undo；
+- 拖动已选标签时，既有 `planReorderGridTracks(fromIndices)` 重排完整选择；跨 span closure 和 row-auto-flow layer order 仍只由 Runtime 处理。直接拖动轨道边缘继续明确选择并缩放单条轨道，多选尺寸通过标签字段设置，与 Figma 的公开说明一致。
+
 ### 事务语义
 
 pointer up 只发送：
@@ -51,26 +61,26 @@ pointer up 只发送：
 }
 ```
 
-Renderer 必须先匹配 exact revision，再调用统一的 `planSetGridTrack`；`planResizeGridTrack` 只是把拖动结果收敛为 Fixed track 后复用该入口。planner 只替换 `rows[index]` 或 `columns[index]` 的一条正式 `GridTrack`，随后由唯一 `EditorRuntime.apply` 在同一事务内完成 Grid reflow。一次拖动或一次 Enter 只产生一个 revision 和一个 undo entry，不传递 Leafer 对象或派生 child 几何。
+Renderer 必须先匹配 exact revision，再调用统一的 `planSetGridTracks`；单条 `planSetGridTrack` 与 `planResizeGridTrack` 都只是该批量入口的窄调用。planner 在一个 Auto Layout patch 中替换已选 `rows[index]` 或 `columns[index]` 的正式 `GridTrack`，随后由唯一 `EditorRuntime.apply` 在同一事务内完成 Grid reflow。一次拖动或一次 Enter 只产生一个 revision 和一个 undo entry，不传递 Leafer 对象或派生 child 几何。
 
 Fixed、Fill、Hug 都遵循同一行为；用户通过手动边缘缩放明确选择固定像素尺寸。Escape、pointer cancel、无位移、选区/工具切换、document/revision 变化以及过期回调均为零写入。Runtime 拒绝时保留当前权威文档，并通过既有编辑错误区反馈。
 
 ### 未纳入本切片
 
-多轨道选择、范围选择、删除轨道、child cell 拖拽/交换、span 拉伸、旋转 Grid 控件和超大 Grid viewport virtualization 继续作为独立完整切片。Grid row/column gap 仍只使用 Inspector，不借轨道边缘手势增加未由 Figma 公共行为支持的画布控件。
+删除轨道、child cell 拖拽/交换、span 拉伸、旋转 Grid 控件和超大 Grid viewport virtualization 继续作为独立完整切片。Grid row/column gap 仍只使用 Inspector，不借轨道边缘手势增加未由 Figma 公共行为支持的画布控件。
 
 ## 后果
 
-- 用户可以在画布上直接调整 Grid 行高和列宽，也能精确切换 Fixed/Fill/Hug，而不必往返 Inspector。
+- 用户可以在画布上直接调整 Grid 行高和列宽，也能单选、追加、范围选择并统一设置 Fixed/Fill/Hug，而不必往返 Inspector。
 - child 几何、自动行、Hug/Fill 求解、history、undo/redo 和保存重开继续共享现有 Runtime 事实，没有第二份布局状态。
 - 预览不触发模型、截图、审查或 React 文档重算，不增加 Agent 首屏等待时间。
 - exact revision 防止长拖动覆盖用户或 Agent 的并发修改。
 
 ## 验证
 
-- EditorRuntime 测试覆盖 Fixed、Fill、Hug 的统一设置、拖动到 Fixed、行列索引、非法值、no-op、一次 revision、undo/redo。
-- Leafer adapter 测试覆盖行/列边缘、标签单击请求、Fixed/Fill/Hug 原始语义、真实 resolved size、固定屏幕命中尺寸、zoom、3px 阈值、Escape、pointer cancel 与 stale revision。
-- Renderer 输入与 controller 测试覆盖 Fixed/Fill/Hug、Enter、Escape、拒绝后保留、exact revision、一次事务/undo 和过期请求零写入。
+- EditorRuntime 测试覆盖 Fixed、Fill、Hug 的单条/批量统一设置、重复 index 归一、拖动到 Fixed、非法/空选择、no-op、一次 revision、undo/redo。
+- Leafer adapter 测试覆盖行/列边缘、标签单击请求、Command/Ctrl 追加、Shift 范围、选择外观、Mixed 输入、选择集重排、真实 resolved size、zoom、3px 阈值、Escape、pointer cancel 与 stale revision。
+- Renderer 输入与 controller 测试覆盖 Mixed → Fixed/Fill/Hug、批量 index、Enter、Escape、拒绝后保留、exact revision、一次事务/undo 和过期请求零写入。
 
 ## 参考
 

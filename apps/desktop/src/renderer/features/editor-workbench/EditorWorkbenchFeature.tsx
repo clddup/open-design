@@ -643,7 +643,7 @@ export function EditorWorkbenchFeature({
               harfBuzzTextRunLayoutProvider={fontBinaryRuntime.provider}
               onResizeFrame={resizeFrame}
               onReorderGridTracks={editorCommands.reorderGridTracks}
-              onSetGridTrack={editorCommands.setGridTrack}
+              onSetGridTracks={editorCommands.setGridTracks}
               runtime={runtime}
               showAgentRunStatus={
                 !utilityPanelVisible || utilityTab !== "agent"

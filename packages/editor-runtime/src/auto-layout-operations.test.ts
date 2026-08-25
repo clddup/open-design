@@ -13,6 +13,7 @@ import {
   planResizeGridTrack,
   planReorderGridTracks,
   planSetGridTrack,
+  planSetGridTracks,
   planResizeFrameWithConstraints,
   planSetFrameAutoLayout,
   planSetNodeLayoutLimits,
@@ -1939,6 +1940,73 @@ describe("Grid Auto Layout Runtime", () => {
       ),
     ).toMatchObject({ ok: false, code: "invalid-target" });
     expect(runtime.getSnapshot().document.revision).toBe(revision);
+  });
+
+  it("sets multiple selected Grid tracks in one reversible transaction", () => {
+    const document = layoutDocument();
+    const frame = document.nodesById.frame;
+    if (frame?.kind !== "frame") throw new Error("missing frame");
+    frame.properties.autoLayout = {
+      mode: "grid",
+      padding: { top: 0, right: 0, bottom: 0, left: 0 },
+      rowGap: 0,
+      columnGap: 0,
+      rows: [{ type: "fixed", value: 100 }],
+      columns: [
+        { type: "fixed", value: 100 },
+        { type: "fill", value: 1 },
+        { type: "hug" },
+      ],
+      itemsPositioning: "row-auto-flow",
+      autoTracks: "rows",
+    };
+    delete document.nodesById.one!.constraints;
+    const runtime = new EditorRuntime(normalizeDesignDocument(document));
+    const plan = planSetGridTracks(
+      runtime.getSnapshot().document,
+      "page_layout",
+      "frame",
+      "columns",
+      [2, 0, 2],
+      { type: "fill", value: 2 },
+      "multi_track",
+    );
+    if (!plan.ok) throw new Error(plan.message);
+    expect(plan.indices).toEqual([0, 2]);
+    expect(plan.commands).toHaveLength(1);
+    expect(runtime.apply(transaction(runtime, plan.commands)).ok).toBe(true);
+    expect(
+      frameAutoLayout(runtime.getSnapshot().document, "frame"),
+    ).toMatchObject({
+      columns: [
+        { type: "fill", value: 2 },
+        { type: "fill", value: 1 },
+        { type: "fill", value: 2 },
+      ],
+    });
+    expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
+    expect(runtime.undo().ok).toBe(true);
+    expect(
+      frameAutoLayout(runtime.getSnapshot().document, "frame"),
+    ).toMatchObject({
+      columns: [
+        { type: "fixed", value: 100 },
+        { type: "fill", value: 1 },
+        { type: "hug" },
+      ],
+    });
+
+    expect(
+      planSetGridTracks(
+        runtime.getSnapshot().document,
+        "page_layout",
+        "frame",
+        "columns",
+        [],
+        { type: "fixed", value: 10 },
+        "empty_selection",
+      ),
+    ).toMatchObject({ ok: false, code: "invalid-target" });
   });
 });
 

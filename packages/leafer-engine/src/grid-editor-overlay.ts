@@ -163,6 +163,36 @@ export function gridTrackReorderChangesOrder(
   return insertionIndex !== fromIndex && insertionIndex !== fromIndex + 1;
 }
 
+export function gridTrackSelectionReorderChangesOrder(
+  fromIndices: readonly number[],
+  insertionIndex: number,
+  trackCount: number,
+): boolean {
+  const selected = new Set(fromIndices);
+  if (
+    selected.size === 0 ||
+    insertionIndex < 0 ||
+    insertionIndex > trackCount ||
+    [...selected].some((index) => index < 0 || index >= trackCount)
+  ) {
+    return false;
+  }
+  const selectedIndices = [...selected].sort((left, right) => left - right);
+  const remaining = Array.from(
+    { length: trackCount },
+    (_, index) => index,
+  ).filter((index) => !selected.has(index));
+  const insertionInRemaining = remaining.filter(
+    (index) => index < insertionIndex,
+  ).length;
+  const nextOrder = [
+    ...remaining.slice(0, insertionInRemaining),
+    ...selectedIndices,
+    ...remaining.slice(insertionInRemaining),
+  ];
+  return nextOrder.some((from, to) => from !== to);
+}
+
 function createTrackSpecs(
   frameId: string,
   axis: GridEditorAxis,

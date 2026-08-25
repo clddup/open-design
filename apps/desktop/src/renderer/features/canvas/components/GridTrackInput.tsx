@@ -24,6 +24,7 @@ export function GridTrackInput({
   fillLabel,
   hugLabel,
   label,
+  mixedLabel,
   onClose,
   onCommit,
   request,
@@ -32,6 +33,7 @@ export function GridTrackInput({
   fillLabel: string;
   hugLabel: string;
   label: string;
+  mixedLabel: string;
   onClose: () => void;
   onCommit: (track: GridTrack) => boolean;
   request: CanvasGridTrackInput;
@@ -39,22 +41,27 @@ export function GridTrackInput({
   const formRef = useRef<HTMLFormElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const selectRef = useRef<HTMLSelectElement>(null);
-  const [type, setType] = useState<GridTrack["type"]>(request.track.type);
+  const [type, setType] = useState<GridTrack["type"] | "">(() =>
+    commonTrackType(request),
+  );
   const [value, setValue] = useState(() =>
-    initialValue(request, request.track.type),
+    initialValue(request, commonTrackType(request)),
   );
 
   useLayoutEffect(() => {
-    setType(request.track.type);
-    setValue(initialValue(request, request.track.type));
+    const nextType = commonTrackType(request);
+    setType(nextType);
+    setValue(initialValue(request, nextType));
     const target =
-      request.track.type === "hug" ? selectRef.current : inputRef.current;
+      nextType === "" || nextType === "hug"
+        ? selectRef.current
+        : inputRef.current;
     target?.focus();
     if (target instanceof HTMLInputElement) target.select();
   }, [request]);
 
   useLayoutEffect(() => {
-    if (type === "hug") selectRef.current?.focus();
+    if (type === "" || type === "hug") selectRef.current?.focus();
     else {
       inputRef.current?.focus();
       inputRef.current?.select();
@@ -117,11 +124,14 @@ export function GridTrackInput({
         ref={selectRef}
         value={type}
       >
+        <option disabled value="">
+          {mixedLabel}
+        </option>
         <option value="fixed">{fixedLabel}</option>
         <option value="fill">{fillLabel}</option>
         <option value="hug">{hugLabel}</option>
       </select>
-      {type !== "hug" && (
+      {type !== "" && type !== "hug" && (
         <label>
           <input
             aria-label={`${label} ${type === "fill" ? "fr" : "px"}`}
@@ -145,23 +155,38 @@ export function GridTrackInput({
 
 function initialValue(
   request: LeaferGridTrackInputRequest,
-  type: GridTrack["type"],
+  type: GridTrack["type"] | "",
 ): string {
-  if (type === "fill")
-    return String(request.track.type === "fill" ? request.track.value : 1);
-  if (type === "fixed")
-    return String(
-      request.track.type === "fixed"
-        ? request.track.value
-        : Math.round(request.resolvedSize),
-    );
+  if (type === "" || type === "hug") return "";
+  const first = request.tracks[0];
+  if (!first) return "";
+  const values = request.tracks.map((item) =>
+    item.track.type === type ? item.track.value : null,
+  );
+  const firstValue = values[0];
+  if (firstValue !== null && values.every((value) => value === firstValue)) {
+    return String(firstValue);
+  }
+  if (type === "fill") return "1";
+  if (request.tracks.length === 1)
+    return String(Math.round(first.resolvedSize));
   return "";
 }
 
+function commonTrackType(
+  request: LeaferGridTrackInputRequest,
+): GridTrack["type"] | "" {
+  const first = request.tracks[0]?.track.type;
+  return first && request.tracks.every((item) => item.track.type === first)
+    ? first
+    : "";
+}
+
 function trackFromInput(
-  type: GridTrack["type"],
+  type: GridTrack["type"] | "",
   value: string,
 ): GridTrack | null {
+  if (type === "") return null;
   if (type === "hug") return { type };
   const numeric = Number(value);
   if (

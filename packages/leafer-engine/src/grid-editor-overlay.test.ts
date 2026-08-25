@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   createGridEditorOverlayPlan,
   gridTrackReorderChangesOrder,
+  gridTrackSelectionReorderChangesOrder,
   nearestGridInsertionIndex,
 } from "./grid-editor-overlay.js";
 
@@ -78,6 +79,10 @@ describe("Grid editor overlay geometry", () => {
     expect(gridTrackReorderChangesOrder(1, 1)).toBe(false);
     expect(gridTrackReorderChangesOrder(1, 2)).toBe(false);
     expect(gridTrackReorderChangesOrder(1, 3)).toBe(true);
+    expect(gridTrackSelectionReorderChangesOrder([1, 2], 1, 4)).toBe(false);
+    expect(gridTrackSelectionReorderChangesOrder([1, 2], 3, 4)).toBe(false);
+    expect(gridTrackSelectionReorderChangesOrder([1, 2], 4, 4)).toBe(true);
+    expect(gridTrackSelectionReorderChangesOrder([2, 0], 4, 4)).toBe(true);
   });
 
   it("keeps pathological track counts on the Inspector path", () => {

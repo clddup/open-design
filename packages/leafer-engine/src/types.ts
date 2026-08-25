@@ -121,9 +121,11 @@ export interface LeaferGridTrackInputRequest {
   clientPoint: Point;
   expectedRevision: number;
   frameId: string;
-  index: number;
-  resolvedSize: number;
-  track: GridTrack;
+  tracks: readonly {
+    index: number;
+    resolvedSize: number;
+    track: GridTrack;
+  }[];
 }
 
 export type LeaferAutoLayoutSpacingChange =

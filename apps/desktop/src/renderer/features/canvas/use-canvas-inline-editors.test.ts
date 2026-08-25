@@ -34,9 +34,13 @@ describe("canvas inline editor session", () => {
           clientPoint: { x: 990, y: 750 },
           expectedRevision: 7,
           frameId: "frame_1",
-          index: 0,
-          resolvedSize: 200,
-          track: { type: "fixed", value: 200 },
+          tracks: [
+            {
+              index: 0,
+              resolvedSize: 200,
+              track: { type: "fixed", value: 200 },
+            },
+          ],
         },
         element,
       );

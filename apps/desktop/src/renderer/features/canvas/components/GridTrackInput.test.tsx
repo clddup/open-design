@@ -9,9 +9,13 @@ const request: CanvasGridTrackInput = {
   clientPoint: { x: 140, y: 110 },
   expectedRevision: 7,
   frameId: "frame_1",
-  index: 1,
-  resolvedSize: 320,
-  track: { type: "fill", value: 2 },
+  tracks: [
+    {
+      index: 1,
+      resolvedSize: 320,
+      track: { type: "fill", value: 2 },
+    },
+  ],
 };
 
 function renderInput(
@@ -26,6 +30,7 @@ function renderInput(
       fillLabel="Fill"
       hugLabel="Hug"
       label="Column 2"
+      mixedLabel="Mixed"
       onClose={options.onClose ?? vi.fn()}
       onCommit={options.onCommit ?? vi.fn(() => true)}
       request={request}
@@ -69,6 +74,40 @@ describe("Grid track canvas input", () => {
     fireEvent.change(select, { target: { value: "hug" } });
     fireEvent.keyDown(select, { key: "Enter" });
     expect(onCommit).toHaveBeenCalledWith({ type: "hug" });
+  });
+
+  it("represents mixed tracks without pretending they share a value", () => {
+    const onCommit = vi.fn(() => true);
+    render(
+      <GridTrackInput
+        fixedLabel="Fixed"
+        fillLabel="Fill"
+        hugLabel="Hug"
+        label="2 columns"
+        mixedLabel="Mixed"
+        onClose={vi.fn()}
+        onCommit={onCommit}
+        request={{
+          ...request,
+          tracks: [
+            request.tracks[0],
+            {
+              index: 2,
+              resolvedSize: 180,
+              track: { type: "hug" },
+            },
+          ],
+        }}
+      />,
+    );
+
+    const select = screen.getByRole("combobox", { name: "2 columns" });
+    expect(select).toHaveValue("");
+    expect(screen.queryByRole("spinbutton")).toBeNull();
+    fireEvent.change(select, { target: { value: "fill" } });
+    expect(screen.getByRole("spinbutton")).toHaveValue(1);
+    fireEvent.submit(select.closest("form")!);
+    expect(onCommit).toHaveBeenCalledWith({ type: "fill", value: 1 });
   });
 
   it("cancels on Escape and stays open when the commit is rejected", () => {

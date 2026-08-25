@@ -34,6 +34,7 @@ export type GridTrackUpdatePlan =
       ok: true;
       commands: DesignOperation[];
       frameId: string;
+      indices: number[];
       nodeIds: string[];
       track: GridTrack;
     }
@@ -306,6 +307,26 @@ export function planSetGridTrack(
   track: GridTrack,
   commandPrefix: string,
 ): GridTrackUpdatePlan {
+  return planSetGridTracks(
+    document,
+    pageId,
+    frameId,
+    axis,
+    [index],
+    track,
+    commandPrefix,
+  );
+}
+
+export function planSetGridTracks(
+  document: DesignDocument,
+  pageId: string,
+  frameId: string,
+  axis: GridTrackAxis,
+  indices: readonly number[],
+  track: GridTrack,
+  commandPrefix: string,
+): GridTrackUpdatePlan {
   const frame = document.nodesById[frameId];
   if (!frame) return failure("not-found", `Frame ${frameId} does not exist`);
   if (
@@ -325,24 +346,33 @@ export function planSetGridTrack(
   if (isEffectivelyLocked(document, frameId))
     return failure("locked", "Locked Frames cannot resize Grid tracks");
   const tracks = grid[axis];
-  if (!Number.isInteger(index) || index < 0 || index >= tracks.length)
+  const selectedIndices = [...new Set(indices)].sort(
+    (left, right) => left - right,
+  );
+  if (
+    selectedIndices.length === 0 ||
+    selectedIndices.some(
+      (index) =>
+        !Number.isInteger(index) || index < 0 || index >= tracks.length,
+    )
+  )
     return failure(
       "invalid-target",
-      `Grid ${axis} resize index is outside the declared tracks`,
+      `Grid ${axis} sizing indices are outside the declared tracks`,
     );
   if (!validGridTrack(track))
     return failure(
       "invalid-target",
       `Grid track must be Hug, a Fixed value from 0 to ${MAX_GRID_TRACK_VALUE}px, or a positive Fill weight up to ${MAX_GRID_TRACK_VALUE}fr`,
     );
-  const current = tracks[index];
-  if (current && sameTrack(current, track))
+  if (selectedIndices.every((index) => sameTrack(tracks[index]!, track)))
     return failure(
       "no-op",
-      `Grid ${axis} track ${index + 1} already uses the requested sizing`,
+      `Selected Grid ${axis} tracks already use the requested sizing`,
     );
+  const selected = new Set(selectedIndices);
   const nextTracks = tracks.map((candidate, candidateIndex) =>
-    candidateIndex === index ? track : candidate,
+    selected.has(candidateIndex) ? track : candidate,
   );
   const nextGrid: Extract<AutoLayout, { mode: "grid" }> = {
     ...grid,
@@ -352,13 +382,14 @@ export function planSetGridTrack(
     ok: true,
     commands: [
       {
-        commandId: `${commandPrefix}_track`,
+        commandId: `${commandPrefix}_tracks`,
         type: "update_properties",
         nodeId: frameId,
         properties: { autoLayout: nextGrid },
       },
     ],
     frameId,
+    indices: selectedIndices,
     nodeIds: [frameId, ...frame.childIds],
     track,
   };
