@@ -60,6 +60,45 @@ describe("current Design Plan amendments", () => {
     expect(target?.lastReview).toBeNull();
   });
 
+  it("does not inherit verified state when a new Plan redesigns only a completed target", () => {
+    const redesigned = registerDesignWorkflowPlan({
+      inspection: inspectedExistingDesign(),
+      plan: plan(),
+      recoverableDelivery: {
+        version: 3,
+        targets: [
+          {
+            targetId: "target_home",
+            label: "Previous Home",
+            pageId: "page_1",
+            rootNodeId: "frame_home",
+            reservedNodeIds: ["frame_home", "navigation_group"],
+            status: "verified",
+            allocatedRevision: 3,
+            draftRevision: 6,
+            captureRevision: 7,
+            reviewRevision: 7,
+            verifiedRevision: 7,
+          },
+          {
+            targetId: "target_profile",
+            label: "Profile",
+            pageId: "page_1",
+            rootNodeId: "frame_profile",
+            reservedNodeIds: ["frame_profile"],
+            status: "allocated",
+            allocatedRevision: 3,
+          },
+        ],
+        activeTargetId: "target_profile",
+      },
+    });
+
+    expect(
+      redesigned.state.targetsById.get("target_home")?.delivery,
+    ).toMatchObject({ status: "drafted", draftRevision: 7 });
+  });
+
   it("reports material identity violations before replacement placement errors", () => {
     const initialPlan = plan();
     const initial = registerDesignWorkflowPlan({

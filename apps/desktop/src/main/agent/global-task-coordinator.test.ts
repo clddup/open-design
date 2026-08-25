@@ -4419,6 +4419,114 @@ describe("GlobalTaskCoordinator", () => {
     store.close();
   });
 
+  it("carries the accepted Plan into an automatic continuation without replanning", async () => {
+    const { store, host, file, opened, pageId } = await setup();
+    const coordinator = new GlobalTaskCoordinator(host, store);
+    const initialRunId = "run_plan_continuation";
+    await coordinator.registerRun({
+      type: "run.start",
+      runId: initialRunId,
+      sessionId: "conversation_mobile",
+      prompt: "Design the complete workspace",
+      documentId: file.documentId,
+      revision: opened.document.revision,
+      modelSelection,
+      scope: { kind: "page", pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page", pageId },
+    });
+    const initialContext = {
+      runId: initialRunId,
+      sessionId: "conversation_mobile",
+      documentId: file.documentId,
+      revision: opened.document.revision,
+      scope: { kind: "page" as const, pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page" as const, pageId },
+    };
+    coordinator.recordDocumentInspection(initialContext, {
+      ...inspectionResult(opened.document, pageId),
+      content: {
+        ...inspectionResult(opened.document, pageId).content,
+        idAllocation: createAgentDesignIdAllocation(initialRunId),
+      },
+    });
+    const prefix = "odr_run_plan_continuation_";
+    const sourcePlan = designPlanForPage(pageId);
+    const continuedPlan: DesignPlanToolInput = {
+      ...sourcePlan,
+      targets: sourcePlan.targets.map((target) => ({
+        ...target,
+        artboard: {
+          ...target.artboard,
+          frameId: `${prefix}${target.artboard.frameId}`,
+        },
+        composition: {
+          ...target.composition,
+          regions: target.composition.regions.map((region) => ({
+            ...region,
+            nodeId: `${prefix}${region.nodeId}`,
+          })),
+        },
+        qualityProfile:
+          target.qualityProfile.kind === "ui"
+            ? {
+                ...target.qualityProfile,
+                safeAreaNodeIds: target.qualityProfile.safeAreaNodeIds.map(
+                  (nodeId) => `${prefix}${nodeId}`,
+                ),
+                interactiveNodeIds:
+                  target.qualityProfile.interactiveNodeIds.map(
+                    (nodeId) => `${prefix}${nodeId}`,
+                  ),
+              }
+            : target.qualityProfile,
+      })),
+    };
+    coordinator.registerDesignPlan(initialContext, continuedPlan);
+
+    const nextRunId = "run_plan_continuation_next";
+    coordinator.handleAgentEvent({
+      type: "run.continuation",
+      runId: initialRunId,
+      status: "scheduled",
+      attempt: 1,
+      maxAttempts: 3,
+      reason: "retryable-error",
+      nextRunId,
+    });
+    await coordinator.registerRun({
+      type: "run.start",
+      runId: nextRunId,
+      sessionId: "conversation_mobile",
+      prompt: "Continue the unfinished design delivery",
+      documentId: file.documentId,
+      revision: opened.document.revision,
+      modelSelection,
+      scope: { kind: "page", pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page", pageId },
+      continuation: {
+        parentRunId: initialRunId,
+        rootRunId: initialRunId,
+        attempt: 1,
+        maxAttempts: 3,
+        reason: "retryable-error",
+      },
+    });
+
+    expect(coordinator.getDeliveryLedger(nextRunId)).toMatchObject({
+      activeTargetId: "workspace",
+      targets: [{ targetId: "workspace", status: "pending" }],
+    });
+    expect(
+      coordinator.createDesignPlanAllocation(nextRunId)?.targetIds,
+    ).toEqual(["workspace"]);
+    expect(
+      store.listGlobalTasks().find((task) => task.runId === nextRunId)
+        ?.delivery,
+    ).toMatchObject({ activeTargetId: "workspace" });
+
+    store.close();
+  });
+
   it("rejects unregistered Conversations and marks stale tasks interrupted", async () => {
     const { store, host, file, opened, pageId } = await setup();
     const coordinator = new GlobalTaskCoordinator(host, store);

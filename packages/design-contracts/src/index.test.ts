@@ -190,6 +190,55 @@ describe("executable JSON Schema", () => {
       ]),
     );
   });
+
+  it("preserves empty-object runtime metadata when executable schemas are composed", () => {
+    const nested = executableJsonSchema({
+      type: "object",
+      properties: {
+        action: { const: "replace" },
+        nodes: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              extensions: { type: "object" },
+            },
+            required: ["extensions"],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ["action", "nodes"],
+      additionalProperties: false,
+    } as const);
+    const composed = executableJsonSchema({
+      type: "object",
+      properties: {
+        version: { const: 1 },
+        apply: { type: "object" },
+      },
+      required: ["version"],
+      additionalProperties: false,
+      anyOf: [
+        {
+          type: "object",
+          properties: {
+            version: { const: 1 },
+            apply: nested,
+          },
+          required: ["version", "apply"],
+          additionalProperties: false,
+        },
+      ],
+    } as const);
+
+    expect(
+      schemaValidationIssues(composed, {
+        version: 1,
+        apply: { action: "replace", nodes: [{ extensions: {} }] },
+      }),
+    ).toHaveLength(0);
+  });
 });
 
 it("validates typed image asset derivation commands", () => {

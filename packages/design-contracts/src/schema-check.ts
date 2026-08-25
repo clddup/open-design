@@ -39,7 +39,14 @@ function decorateSchema(schema: JsonSchema): TSchema {
       enumerable: false,
     });
   }
-  if (kind === "Object" && !isRecord(schema.properties)) {
+  // executableJsonSchema() is intentionally composable: an already decorated
+  // schema may be embedded in another authoritative schema. Empty object
+  // schemas carry TypeBox's required `properties` field as non-enumerable
+  // metadata so Provider JSON remains unchanged. Re-decoration therefore has
+  // to inspect the clone, not the source object; otherwise the source's hidden
+  // metadata prevents us from restoring it on the new clone and TypeBox throws
+  // while validating a perfectly valid object value.
+  if (kind === "Object" && !isRecord(clone.properties)) {
     Object.defineProperty(clone, "properties", {
       value: {},
       enumerable: false,

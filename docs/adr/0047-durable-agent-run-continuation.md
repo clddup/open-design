@@ -25,6 +25,8 @@ Main 记录每个 `run.start` 的稳定请求身份、最近一次可信 `delive
 
 每条 continuation 记录 `parentRunId`、`rootRunId`、`attempt`、固定 `maxAttempts=3` 和原因。用户取消不续跑；不可重试错误或三次自动续跑耗尽进入 `needs_attention`。这是一条有界恢复链，不是无限 Agent 循环。
 
+同一 Main 生命周期内，`scheduled` 事件必须在清理父 Run 前把已经接受的完整 Plan state、delivery ledger 和已生成 raster role 绑定转移到 `nextRunId`。下一 Run 创建 Global Task 时直接持有同一 ledger，首次权威 inspection 只负责按当前 revision 对账；模型可以从首个未完成 target 继续 material transaction，不需要重新生成整份 Plan，也不能因为新 Run namespace 而丢弃 ledger 中明确保留的 stable/reserved ID。若应用进程已经重启，内存 Plan 不再存在，则仍以持久 ledger + 当前 inspection 走显式 Plan 恢复，不伪造旧内存状态。
+
 用户取消意图在 Main 收到 `run.cancel` 时立即生效，而不等待 Agent Runtime 发布 terminal。若 continuation 已经 scheduled 但尚未完成文档读取或 Run 注册，Main 必须阻止该 Run 启动并投影 `cancelled` terminal；取消后的 Provider retry/recovered 事件不得重新显示活动状态。这样 Stop 终止的是整条当前恢复链，而不是只尝试终止一个可能已经结束的 utility-process Run。
 
 ### 持久与可见状态分离
@@ -37,6 +39,8 @@ continuation provenance 进入下一 Run 的 `run.state` journal，重启后可�
 
 completion guard 同时读取当前 Run 的 `delivery` 与恢复 inspection 的 `unfinishedDelivery`。只有 plan、图片生成或失败工具而没有成功 material write 时，不能宣称设计完成。宿主会要求有效 typed transaction 推进 document revision；若同 Run 门禁重试耗尽，Main 再按持久账本轮换 Run。
 
+`unfinishedDelivery` 只是恢复上下文，不自动让后续任意用户请求继承所有旧 target 状态。新 Plan 只有在保留至少一个相同 `targetId/pageId/frameId` 的未完成 target 时才按 continuation 恢复整条 ledger；若新 Plan 只重构一个已 verified artboard，则该 target 必须重新进入 `drafted`，不能在首次材料写入前报 `delivery_already_verified`。
+
 ## 验证
 
 - incomplete + budget 自动创建下一 Run，保留 root provenance；
@@ -47,6 +51,8 @@ completion guard 同时读取当前 Run 的 `delivery` 与恢复 inspection 的 
 - continuation prompt 在 durable timeline 中是 system work，不冒充用户输入；
 - 只有 inspect + plan、没有成功 material write 时 completion guard 拒绝完成；
 - Agent 协议严格要求 scheduled continuation 带 `nextRunId`。
+- scheduled continuation 在父 Run 清理前把 accepted Plan/ledger 转移到 `nextRunId`，下一 Run 无需重规划即可继续分配或写入；
+- 显式新 Plan 只包含旧 verified target 时会重新打开 draft，而保留旧 incomplete target 时继续恢复 ledger。
 
 ## 后果与复审
 

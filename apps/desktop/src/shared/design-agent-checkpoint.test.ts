@@ -72,6 +72,89 @@ describe("design checkpoint contract", () => {
     });
   });
 
+  it("accepts composed replace subtrees with empty extensions and nullable text fields", () => {
+    const input = {
+      version: 1,
+      action: "apply-and-capture",
+      apply: {
+        label: "Replace material content",
+        commands: [
+          {
+            commandId: "replace_content",
+            type: "replace_subtree",
+            rootNodeId: "content_root",
+            nodes: [
+              {
+                id: "content_root",
+                name: "Content",
+                parentId: "artboard",
+                childIds: ["title"],
+                visible: true,
+                locked: false,
+                transform: [1, 0, 0, 1, 0, 0],
+                size: { width: 390, height: 844 },
+                opacity: 1,
+                extensions: {},
+                kind: "frame",
+                properties: {
+                  fills: [],
+                  strokes: [],
+                  strokeWidth: 0,
+                  cornerRadius: 0,
+                  clipsContent: true,
+                },
+              },
+              {
+                id: "title",
+                name: "Title",
+                parentId: "content_root",
+                childIds: [],
+                visible: true,
+                locked: false,
+                transform: [1, 0, 0, 1, 24, 24],
+                size: { width: 240, height: 40 },
+                opacity: 1,
+                extensions: {},
+                kind: "text",
+                properties: {
+                  fills: [],
+                  strokes: [],
+                  strokeWidth: 0,
+                  content: "标题",
+                  fontFamily: "PingFang SC",
+                  fontStyleName: "Regular",
+                  fontSize: 24,
+                  fontWeight: 400,
+                  fontSlant: "normal",
+                  lineHeight: 32,
+                  letterSpacing: 0,
+                  paragraphIndent: 0,
+                  paragraphSpacing: 0,
+                  listSpacing: 0,
+                  hangingList: false,
+                  textCase: "original",
+                  textDecoration: "none",
+                  textAlignHorizontal: "left",
+                  textAlignVertical: "top",
+                  textResize: "fixed",
+                  textWrap: "none",
+                  textOverflow: "visible",
+                  textTruncation: "disabled",
+                  maxLines: null,
+                },
+              },
+            ],
+          },
+        ],
+      },
+    } as const;
+
+    expect(
+      schemaValidationIssues(DESIGN_CHECKPOINT_TOOL_INPUT_SCHEMA, input),
+    ).toHaveLength(0);
+    expect(DesignCheckpointContract.parse(input)).toMatchObject({ ok: true });
+  });
+
   it("canonicalizes the refinement branch through the same Apply contract", () => {
     const result = DesignCheckpointContract.parse({
       version: 1,

@@ -225,6 +225,9 @@ export class GlobalTaskCoordinator {
         : {}),
       baseRevision: request.revision,
     };
+    const continuedPlan = request.continuation
+      ? this.#designPlansByRunId.get(request.runId)
+      : undefined;
     const task: GlobalTaskProjection = {
       version: WORKSPACE_CONTRACT_VERSION,
       taskId: `task_${request.runId}`,
@@ -233,6 +236,7 @@ export class GlobalTaskCoordinator {
       title: conversation.title,
       lifecycle: "queued",
       targetSet: { targets: [primaryTarget], primaryTarget },
+      ...(continuedPlan ? { delivery: deliveryLedger(continuedPlan) } : {}),
       createdAt: timestamp,
       updatedAt: timestamp,
     };
@@ -1614,6 +1618,27 @@ export class GlobalTaskCoordinator {
     }
     const runId = "runId" in event ? event.runId : undefined;
     if (!runId) return;
+    if (
+      event.type === "run.continuation" &&
+      event.status === "scheduled" &&
+      event.nextRunId
+    ) {
+      const plan = this.#designPlansByRunId.get(runId);
+      if (plan) {
+        // Automatic continuation is a new Provider Run, not a new design
+        // workflow. Carry the accepted Plan and ledger forward in memory so
+        // the next Run can resume the first incomplete target immediately
+        // instead of guessing IDs or spending another turn recreating Plan.
+        this.#designPlansByRunId.set(event.nextRunId, structuredClone(plan));
+      }
+      const rasterRoles = this.#generatedRasterRolesByRunId.get(runId);
+      if (rasterRoles) {
+        this.#generatedRasterRolesByRunId.set(
+          event.nextRunId,
+          structuredClone(rasterRoles),
+        );
+      }
+    }
     if (event.type === "tool.completed" && event.revision !== undefined) {
       const binding = this.#toolBindingsByRunId.get(runId);
       if (binding && event.revision > binding.revision) {
@@ -1630,7 +1655,22 @@ export class GlobalTaskCoordinator {
             .listGlobalTasks()
             .find((candidate) => candidate.runId === runId)
         : undefined);
-    if (!task) return;
+    if (!task) {
+      if (
+        event.type === "run.completed" ||
+        (event.type === "run.continuation" &&
+          event.status === "needs_attention" &&
+          event.nextRunId)
+      ) {
+        const abandonedRunId =
+          event.type === "run.continuation" && event.nextRunId
+            ? event.nextRunId
+            : runId;
+        this.#designPlansByRunId.delete(abandonedRunId);
+        this.#generatedRasterRolesByRunId.delete(abandonedRunId);
+      }
+      return;
+    }
     const activityAt = conversationActivityAt(event, this.now);
     if (activityAt) this.#touchConversation(task.conversationId, activityAt);
     const lifecycle = projectGlobalTaskLifecycle(

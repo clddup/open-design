@@ -74,9 +74,21 @@ export function registerDesignWorkflowPlan(options: {
   plan: DesignPlanToolInput;
   recoverableDelivery?: DesignDeliveryLedger;
 }): DesignPlanRegistration {
-  const { existing, inspection, recoverableDelivery } = options;
+  const { existing, inspection } = options;
   const plan = normalizePlanQualityProfiles(options.plan);
   const targets = designPlanTargets(plan);
+  // A previous unfinished ledger is context, not automatic ownership of every
+  // matching target in a later user request. Resume its verified/drafted state
+  // only when the new Plan actually retains at least one incomplete target.
+  // Otherwise a deliberate redesign of an already verified artboard must open
+  // a fresh draft instead of being rejected as "already verified" before its
+  // first material transaction.
+  const recoverableDelivery = recoveryMatchesIncompletePlanTarget(
+    options.recoverableDelivery,
+    targets,
+  )
+    ? options.recoverableDelivery
+    : undefined;
   // Amendments are first constrained by identities that already own material
   // document state. Placement and reservation validation may otherwise report
   // a secondary error for a replacement ID before the caller learns that the
@@ -556,6 +568,22 @@ function inspectedParentChainReaches(
     current = nodesById.get(current)?.parentId ?? null;
   }
   return false;
+}
+
+function recoveryMatchesIncompletePlanTarget(
+  delivery: DesignDeliveryLedger | undefined,
+  targets: readonly DesignPlanTarget[],
+): boolean {
+  if (!delivery || delivery.activeTargetId === null) return false;
+  return targets.some((target) =>
+    delivery.targets.some(
+      (candidate) =>
+        candidate.status !== "verified" &&
+        candidate.targetId === target.targetId &&
+        candidate.pageId === target.pageId &&
+        candidate.rootNodeId === target.artboard.frameId,
+    ),
+  );
 }
 
 function recoverDeliveryTarget(
