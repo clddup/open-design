@@ -1,5 +1,6 @@
 import {
   isDesignDocument,
+  migrateDesignDocument,
   type DesignDocument,
 } from "@opendesign/design-contracts";
 import { createBooleanGeometryResolver } from "@opendesign/geometry-service/boolean-resolver";
@@ -166,10 +167,11 @@ function isWithinComposite(
 
 function readDocument(relativePath: string): DesignDocument {
   const value: unknown = readJson(relativePath);
-  if (!isDesignDocument(value)) {
+  const migrated = migrateDesignDocument(value);
+  if (!migrated || !isDesignDocument(migrated)) {
     throw new Error(`Invalid professional fixture document: ${relativePath}`);
   }
-  return value;
+  return migrated;
 }
 
 function readJson<T = unknown>(relativePath: string): T {

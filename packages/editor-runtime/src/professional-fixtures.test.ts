@@ -1,5 +1,5 @@
 import {
-  DESIGN_SCHEMA_VERSION,
+  MIGRATABLE_DESIGN_SCHEMA_VERSIONS,
   isDesignTransaction,
   type DesignDocument,
   type DesignTransaction,
@@ -25,9 +25,11 @@ describe("professional design fixtures", () => {
   it("pins the fixture and engine contract", () => {
     expect(manifest).toMatchObject({
       version: 1,
-      documentSchemaVersion: DESIGN_SCHEMA_VERSION,
       engineBaseline: "leafer-editor@2.2.9",
     });
+    expect(MIGRATABLE_DESIGN_SCHEMA_VERSIONS).toContain(
+      manifest.documentSchemaVersion,
+    );
     expect(manifest.fixtures.map((fixture) => fixture.id)).toEqual([
       "OD-PENGUIN-01",
       "OD-POSTER-01",
