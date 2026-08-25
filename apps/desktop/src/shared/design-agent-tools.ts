@@ -64,17 +64,19 @@ import {
   ReadImageContract,
   UpdateImageContract,
   UPDATE_IMAGE_TOOL_INPUT_SCHEMA,
-  isInternalReadImageSourceToolInput,
-  isInternalUpdateImageToolInput,
 } from "./design-agent-image-tools";
+import {
+  InternalReadImageSourceContract,
+  InternalUpdateImageContract,
+} from "./design-agent-internal-image-tools";
 import {
   ExportRasterContract,
   ExportSvgContract,
   EXPORT_RASTER_TOOL_INPUT_SCHEMA,
   EXPORT_SVG_TOOL_INPUT_SCHEMA,
+  InternalImportSvgContract,
   ImportSvgContract,
   IMPORT_SVG_TOOL_INPUT_SCHEMA,
-  isInternalImportSvgToolInput,
 } from "./design-agent-import-export-tools";
 import {
   DesignHierarchyContract,
@@ -225,10 +227,14 @@ export {
   READ_IMAGE_TOOL_INPUT_SCHEMA,
   UpdateImageContract,
   UPDATE_IMAGE_TOOL_INPUT_SCHEMA,
-  isInternalReadImageSourceToolInput,
-  isInternalUpdateImageToolInput,
   isPreparedImageEditSource,
 } from "./design-agent-image-tools";
+export {
+  InternalReadImageSourceContract,
+  InternalUpdateImageContract,
+  INTERNAL_READ_IMAGE_SOURCE_TOOL_INPUT_SCHEMA,
+  INTERNAL_UPDATE_IMAGE_TOOL_INPUT_SCHEMA,
+} from "./design-agent-internal-image-tools";
 export type {
   EditImageToolInput,
   GenerateImageToolInput,
@@ -247,10 +253,11 @@ export {
   ExportSvgContract,
   EXPORT_RASTER_TOOL_INPUT_SCHEMA,
   EXPORT_SVG_TOOL_INPUT_SCHEMA,
+  InternalImportSvgContract,
+  INTERNAL_IMPORT_SVG_TOOL_INPUT_SCHEMA,
   ImportSvgContract,
   IMPORT_SVG_TOOL_INPUT_SCHEMA,
   isAgentSvgImportResult,
-  isInternalImportSvgToolInput,
   isPreparedAgentRasterExport,
   isPreparedAgentSvgExport,
 } from "./design-agent-import-export-tools";
@@ -723,13 +730,13 @@ export function validateDesignAgentToolInput(
     return ExportRasterContract.parse(input).ok;
   }
   if (toolName === INTERNAL_IMPORT_SVG_TOOL_NAME) {
-    return isInternalImportSvgToolInput(input);
+    return InternalImportSvgContract.parse(input).ok;
   }
   if (toolName === INTERNAL_UPDATE_IMAGE_TOOL_NAME) {
-    return isInternalUpdateImageToolInput(input);
+    return InternalUpdateImageContract.parse(input).ok;
   }
   if (toolName === INTERNAL_READ_IMAGE_SOURCE_TOOL_NAME) {
-    return isInternalReadImageSourceToolInput(input);
+    return InternalReadImageSourceContract.parse(input).ok;
   }
   if (toolName === DESIGN_HIERARCHY_TOOL_NAME) {
     return DesignHierarchyContract.parse(input).ok;

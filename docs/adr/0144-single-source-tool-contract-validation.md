@@ -1,6 +1,6 @@
 # ADR-0144：单一来源的工具契约验证
 
-- 状态：Accepted，first-slice、node apply、Design Plan、Visual Review、Checkpoint、图片获取、公开图片操作、Page、Component、Style、Variable、Hierarchy、Vector、Arrange 与公开 SVG/Raster Import-Export 工具已实施，其余契约分阶段实施
+- 状态：Accepted，first-slice、node apply、Design Plan、Visual Review、Checkpoint、图片获取、公开图片操作、Page、Component、Style、Variable、Hierarchy、Vector、Arrange、公开 SVG/Raster Import-Export、Text Range/Font 与 internal image/SVG materialization bridge 已实施，其余契约分阶段实施
 - 日期：2026-08-23
 - 首个迁移对象：compact first-slice
 - 关联：ADR-0018、ADR-0100、ADR-0103、ADR-0141、ADR-0143
@@ -97,9 +97,11 @@ Arrange 工具已完成第十二个布局编辑迁移切片：原 962 行混合 
 
 Text Range 与 Font 已完成第十四个文字编辑迁移切片：`DesignTextRangeContract / DesignFontContract` 分别成为富文本区间样式和显式字体 reflow/replace 的唯一公开输入入口。两者的 typography、paragraph、Paint、Style reference 与 font face shape 直接复用 `UpdateTextRangeStyleCommandSchema / TextFontDescriptorSchema`，不再在 Agent 层复制一套近似字段；Font 的 reflow/replace 是闭合 action 分支，Text Range 只保留 `end > start` 这一项跨字段 refinement。Provider、Pi、工具聚合、Main handler 与 Renderer canonical bridge 均显式 parse 同一 executable schema，旧 `isDesignFontToolInput / isDesignTextRangeToolInput / isTextFontDescriptor` 以及 `exactKeys` 结构遍历已删除。Main 继续拥有 inspect、active Page、planned target 与 review gate；Renderer/EditorRuntime 继续拥有 UTF-16/surrogate boundary、当前 Text 内容、Style 类型、font availability、locked/revision、layout、preview 与事务 invariant。该切片不把字体文件、shaping 或文档内部 run 校验混入模型输入契约。
 
+Internal image/SVG materialization 已完成第十五个 trusted Renderer bridge 切片：`InternalReadImageSourceContract / InternalUpdateImageContract / InternalImportSvgContract` 分别以一个 executable schema 覆盖 stale-safe 图片源读取、公开非破坏调整的 internal 分支、宿主物化的 embedded asset/derivation 以及内容寻址 SVG XML/ID prefix。Main→Preload/Renderer 请求判断、Renderer 执行与定向测试消费同一 parse 入口，旧 `isInternalReadImageSourceToolInput / isInternalUpdateImageToolInput / isInternalImportSvgToolInput` 及其 action-specific `exactKeys` 遍历已删除。内部 schema 负责闭合字段、资产形状、长度/范围和 action branch；唯一 refinement 负责 content-addressed embedded image、source/result/mask/reference provenance 关系与扩图非空几何。Run attachment/handle 授权、Page/Mutation Target、revision 与文档资产 DAG invariant 仍分别属于 Main 和 EditorRuntime；字节、XML 与路径不向模型公开。
+
 `ValidationIssue` 的稳定 `code/path/expected/actual/recovery` 通过 `tool-validation` failure details 进入 Agent event、journal 和 Timeline；这种参数修正使用 `correct-and-retry`，不冒充需要文档 inspection 的事务错误。Design transaction 仍保留独立 `inspect-and-revise` 恢复语义。
 
-其余 Agent tools，以及已迁移公开工具之后的 trusted internal Renderer bridge、IPC 与持久化契约尚未迁移，不得据此宣称全仓已实现单一验证入口。
+其余 Agent tools、trusted internal Renderer bridge、IPC 与持久化契约尚未全部迁移，不得据此宣称全仓已实现单一验证入口。
 
 ## 后果
 

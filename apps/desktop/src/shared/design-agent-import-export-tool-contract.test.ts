@@ -10,8 +10,9 @@ import {
   ExportSvgContract,
   IMPORT_SVG_TOOL_INPUT_SCHEMA,
   IMPORT_SVG_TOOL_NAME,
+  INTERNAL_IMPORT_SVG_TOOL_INPUT_SCHEMA,
   ImportSvgContract,
-  isInternalImportSvgToolInput,
+  InternalImportSvgContract,
   type ExportRasterToolInput,
   type ExportSvgToolInput,
   type ImportSvgToolInput,
@@ -151,13 +152,26 @@ describe("Import and export Agent contracts", () => {
 
   it("keeps trusted SVG materialization internal to the canonical bridge", () => {
     expect(
-      isInternalImportSvgToolInput({
+      InternalImportSvgContract.parse({
         ...importInput,
         name: "Brand source.svg",
         svg: '<svg viewBox="0 0 24 24"></svg>',
         idPrefix: "od_brand",
-      }),
+      }).ok,
     ).toBe(true);
+    expect(InternalImportSvgContract.schema).toBe(
+      INTERNAL_IMPORT_SVG_TOOL_INPUT_SCHEMA,
+    );
+    expect(
+      InternalImportSvgContract.issues({
+        ...importInput,
+        name: "Brand source.svg",
+        svg: '<svg viewBox="0 0 24 24"></svg>',
+        idPrefix: "9-invalid",
+      }),
+    ).toEqual(
+      expect.arrayContaining([expect.objectContaining({ path: "/idPrefix" })]),
+    );
     expect(
       ImportSvgContract.issues({
         ...importInput,

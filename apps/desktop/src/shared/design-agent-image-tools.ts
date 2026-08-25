@@ -1,15 +1,11 @@
 import {
   executableJsonSchema,
   isDesignAsset,
-  isImageAssetDerivation,
   ImageFiltersSchema,
   ImagePaintSchema,
   ImagePlacementSchema,
   ImageLightingPresetSchema,
-  isImageFilters,
-  isImagePaint,
   isImagePlacement,
-  isImageLightingPreset,
   type DesignAsset,
   type ImageFilters,
   type ImagePlacement,
@@ -29,7 +25,6 @@ import {
 } from "./contract-validation";
 import {
   exactKeys,
-  finite,
   isRecord,
   positive,
   safeId,
@@ -285,13 +280,13 @@ export const GENERATE_IMAGE_TOOL_INPUT_SCHEMA = executableJsonSchema({
   additionalProperties: false,
 });
 
-const IMAGE_TOOL_ID_SCHEMA = {
+export const IMAGE_TOOL_ID_SCHEMA = {
   type: "string",
   minLength: 1,
   maxLength: 256,
 } as const;
 
-const IMAGE_TOOL_LABEL_SCHEMA = {
+export const IMAGE_TOOL_LABEL_SCHEMA = {
   type: "string",
   minLength: 1,
   maxLength: 256,
@@ -503,7 +498,7 @@ const IMAGE_SELECTION_SCHEMA = {
     "Closed lasso polygon in normalized source-image coordinates from current visual inspection.",
 } as const;
 
-const IMAGE_EXPANSION_SCHEMA = {
+export const IMAGE_EXPANSION_SCHEMA = {
   type: "object",
   properties: {
     top: { type: "number", minimum: 0, maximum: 1_000_000 },
@@ -794,18 +789,6 @@ export const EditImageContract = {
   },
 } as const;
 
-export function isInternalReadImageSourceToolInput(
-  input: unknown,
-): input is InternalReadImageSourceToolInput {
-  return (
-    isRecord(input) &&
-    safeId(input.pageId) &&
-    safeId(input.nodeId) &&
-    safeId(input.expectedAssetId) &&
-    exactKeys(input, ["pageId", "nodeId", "expectedAssetId"])
-  );
-}
-
 export function isPreparedImageEditSource(
   input: unknown,
 ): input is PreparedImageEditSource {
@@ -831,250 +814,6 @@ export function isPreparedImageEditSource(
   );
 }
 
-export function isInternalUpdateImageToolInput(
-  input: unknown,
-): input is InternalUpdateImageToolInput {
-  if (!isRecord(input) || !hasCommonUpdateFields(input)) return false;
-  if (input.action === "upscale-source") {
-    return (
-      safeId(input.expectedAssetId) &&
-      isPositiveSize(input.expectedSourceSize) &&
-      isPositiveSize(input.targetSize) &&
-      isBoundedEmbeddedImageAsset(input.asset) &&
-      input.asset.mimeType === "image/png" &&
-      isImageAssetDerivation(input.derivation) &&
-      input.derivation.operation === "upscale" &&
-      input.derivation.sourceAssetId === input.expectedAssetId &&
-      input.derivation.resultAssetId === input.asset.id &&
-      input.derivation.prompt === undefined &&
-      input.derivation.maskAssetId === undefined &&
-      input.derivation.referenceAssetIds.length === 0 &&
-      exactKeys(input, [
-        "action",
-        "label",
-        "pageId",
-        "nodeId",
-        "expectedAssetId",
-        "expectedSourceSize",
-        "targetSize",
-        "asset",
-        "derivation",
-      ])
-    );
-  }
-  if (input.action === "expand-source") {
-    return (
-      safeId(input.expectedAssetId) &&
-      isImagePlacement(input.expectedPlacement) &&
-      isPositiveSize(input.expectedTargetSize) &&
-      isImageExpansion(input.expansion) &&
-      isBoundedEmbeddedImageAsset(input.asset) &&
-      isImageAssetDerivation(input.derivation) &&
-      input.derivation.operation === "expand" &&
-      input.derivation.sourceAssetId === input.expectedAssetId &&
-      input.derivation.resultAssetId === input.asset.id &&
-      input.derivation.maskAssetId !== undefined &&
-      input.derivation.referenceAssetIds.length === 0 &&
-      Array.isArray(input.supportingAssets) &&
-      input.supportingAssets.length === 1 &&
-      isBoundedEmbeddedImageAsset(input.supportingAssets[0]) &&
-      input.supportingAssets[0].mimeType === "image/png" &&
-      input.supportingAssets[0].id === input.derivation.maskAssetId &&
-      exactKeys(input, [
-        "action",
-        "label",
-        "pageId",
-        "nodeId",
-        "expectedAssetId",
-        "expectedPlacement",
-        "expectedTargetSize",
-        "expansion",
-        "asset",
-        "derivation",
-        "supportingAssets",
-      ])
-    );
-  }
-  if (input.action === "derive-source" || input.action === "derive-layer") {
-    if (
-      !safeId(input.expectedAssetId) ||
-      !isBoundedEmbeddedImageAsset(input.asset) ||
-      !isImageAssetDerivation(input.derivation) ||
-      input.derivation.sourceAssetId !== input.expectedAssetId ||
-      input.derivation.resultAssetId !== input.asset.id ||
-      input.derivation.operation === "replacement" ||
-      (input.action === "derive-layer" &&
-        (!safeId(input.resultNodeId) ||
-          typeof input.resultNodeName !== "string" ||
-          input.resultNodeName.trim().length === 0 ||
-          input.resultNodeName.length > 256 ||
-          input.derivation.operation !== "isolate-object")) ||
-      (input.action === "derive-source" &&
-        input.derivation.operation === "isolate-object")
-    ) {
-      return false;
-    }
-    const asset = input.asset;
-    const derivation = input.derivation;
-    const supportingAssets = input.supportingAssets ?? [];
-    if (
-      !Array.isArray(supportingAssets) ||
-      supportingAssets.length > 1 ||
-      !supportingAssets.every(isBoundedEmbeddedImageAsset) ||
-      supportingAssets.some(
-        (supportingAsset) =>
-          supportingAsset.mimeType !== "image/png" &&
-          supportingAsset.mimeType !== "image/jpeg" &&
-          supportingAsset.mimeType !== "image/webp",
-      ) ||
-      supportingAssets.length !==
-        derivation.referenceAssetIds.length +
-          (derivation.maskAssetId === undefined ? 0 : 1) ||
-      supportingAssets.some(
-        (supportingAsset, index) =>
-          supportingAsset.id !==
-            [
-              ...derivation.referenceAssetIds,
-              ...(derivation.maskAssetId ? [derivation.maskAssetId] : []),
-            ][index] ||
-          supportingAsset.id === input.expectedAssetId ||
-          supportingAsset.id === asset.id,
-      )
-    ) {
-      return false;
-    }
-    if (
-      (derivation.operation !== "relight" &&
-        derivation.lightingPreset !== undefined) ||
-      (derivation.operation === "remove-background" &&
-        (derivation.prompt !== undefined ||
-          derivation.maskAssetId !== undefined ||
-          supportingAssets.length !== 0)) ||
-      (derivation.operation === "prompt-edit" &&
-        (typeof derivation.prompt !== "string" ||
-          derivation.prompt.trim().length === 0 ||
-          derivation.maskAssetId !== undefined)) ||
-      (derivation.operation === "replace-background" &&
-        (typeof derivation.prompt !== "string" ||
-          derivation.prompt.trim().length === 0 ||
-          derivation.maskAssetId !== undefined ||
-          derivation.referenceAssetIds.length !== 0 ||
-          supportingAssets.length !== 0)) ||
-      (derivation.operation === "relight" &&
-        (!isImageLightingPreset(derivation.lightingPreset) ||
-          derivation.prompt !== undefined ||
-          derivation.maskAssetId !== undefined ||
-          derivation.referenceAssetIds.length !== 0 ||
-          supportingAssets.length !== 0)) ||
-      ((derivation.operation === "erase-object" ||
-        derivation.operation === "isolate-object") &&
-        (typeof derivation.prompt !== "string" ||
-          derivation.prompt.trim().length === 0 ||
-          derivation.referenceAssetIds.length !== 0 ||
-          derivation.maskAssetId === undefined ||
-          supportingAssets.length !== 1 ||
-          supportingAssets[0]?.mimeType !== "image/png")) ||
-      (derivation.operation !== "remove-background" &&
-        derivation.operation !== "replace-background" &&
-        derivation.operation !== "relight" &&
-        derivation.operation !== "prompt-edit" &&
-        derivation.operation !== "erase-object" &&
-        derivation.operation !== "isolate-object")
-    ) {
-      return false;
-    }
-    return exactKeys(input, [
-      "action",
-      "label",
-      "pageId",
-      "nodeId",
-      "expectedAssetId",
-      "asset",
-      "derivation",
-      ...(input.action === "derive-layer"
-        ? ["resultNodeId", "resultNodeName"]
-        : []),
-      ...(input.supportingAssets === undefined ? [] : ["supportingAssets"]),
-    ]);
-  }
-  if (input.action === "set-placement") {
-    return (
-      isImagePlacement(input.placement) &&
-      exactKeys(input, ["action", "label", "pageId", "nodeId", "placement"])
-    );
-  }
-  if (input.action === "set-filters") {
-    return (
-      isImageFilters(input.filters) &&
-      exactKeys(input, ["action", "label", "pageId", "nodeId", "filters"])
-    );
-  }
-  if (input.action === "set-paint-filters") {
-    return (
-      (input.paintField === "fills" || input.paintField === "strokes") &&
-      Number.isInteger(input.paintIndex) &&
-      Number(input.paintIndex) >= 0 &&
-      Number(input.paintIndex) <= 4_095 &&
-      isImagePaint(input.expectedPaint) &&
-      isImageFilters(input.filters) &&
-      exactKeys(input, [
-        "action",
-        "label",
-        "pageId",
-        "nodeId",
-        "paintField",
-        "paintIndex",
-        "expectedPaint",
-        "filters",
-      ])
-    );
-  }
-  if (input.action === "switch-source") {
-    return (
-      safeId(input.expectedAssetId) &&
-      safeId(input.assetId) &&
-      exactKeys(input, [
-        "action",
-        "label",
-        "pageId",
-        "nodeId",
-        "expectedAssetId",
-        "assetId",
-      ])
-    );
-  }
-  return (
-    input.action === "replace-source" &&
-    isBoundedEmbeddedImageAsset(input.asset) &&
-    (input.placement === undefined || isImagePlacement(input.placement)) &&
-    exactKeys(input, [
-      "action",
-      "label",
-      "pageId",
-      "nodeId",
-      "asset",
-      ...(input.placement === undefined ? [] : ["placement"]),
-    ])
-  );
-}
-
-function isImageExpansion(value: unknown): value is ImageExpansion {
-  if (
-    !isRecord(value) ||
-    !exactKeys(value, ["top", "right", "bottom", "left"])
-  ) {
-    return false;
-  }
-  const values = [value.top, value.right, value.bottom, value.left];
-  return (
-    values.some((candidate) => finite(candidate) && candidate > 0) &&
-    values.every(
-      (candidate) =>
-        finite(candidate) && candidate >= 0 && candidate <= 1_000_000,
-    )
-  );
-}
-
 function isPositiveSize(
   value: unknown,
 ): value is { width: number; height: number } {
@@ -1086,17 +825,9 @@ function isPositiveSize(
   );
 }
 
-function hasCommonUpdateFields(input: Record<string, unknown>): boolean {
-  return (
-    typeof input.label === "string" &&
-    input.label.length > 0 &&
-    input.label.length <= 256 &&
-    safeId(input.pageId) &&
-    safeId(input.nodeId)
-  );
-}
-
-function isBoundedEmbeddedImageAsset(value: unknown): value is DesignAsset {
+export function isBoundedEmbeddedImageAsset(
+  value: unknown,
+): value is DesignAsset {
   if (!isDesignAsset(value) || value.kind !== "image") return false;
   return (
     /^asset_[a-f0-9]{64}$/.test(value.id) &&

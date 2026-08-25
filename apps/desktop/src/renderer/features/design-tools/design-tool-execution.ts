@@ -69,15 +69,16 @@ import {
   DesignVectorContract,
   ExportRasterContract,
   ExportSvgContract,
-  isInternalImportSvgToolInput,
-  isInternalReadImageSourceToolInput,
-  isInternalUpdateImageToolInput,
+  InternalImportSvgContract,
+  InternalReadImageSourceContract,
+  InternalUpdateImageContract,
   type DesignComponentToolInput,
   type DesignFontToolInput,
   type DesignPageToolInput,
   type DesignTextRangeToolInput,
   type InternalDesignApplyToolInput,
 } from "@/shared/design-agent-tools";
+import { formatValidationFailure } from "@/shared/contract-validation";
 import { createAgentDesignIdAllocation } from "@/shared/design-id-allocation";
 import type {
   RendererDesignToolProgressPhase,
@@ -596,11 +597,14 @@ async function executeDesignToolRequestUnsafe(
     };
   }
 
-  if (
-    request.call.toolName === INTERNAL_IMPORT_SVG_TOOL_NAME &&
-    isInternalImportSvgToolInput(request.call.input)
-  ) {
-    const input = request.call.input;
+  if (request.call.toolName === INTERNAL_IMPORT_SVG_TOOL_NAME) {
+    const parsed = InternalImportSvgContract.parse(request.call.input);
+    if (!parsed.ok) {
+      throw new TypeError(
+        formatValidationFailure("internal SVG import", parsed.issues),
+      );
+    }
+    const input = parsed.value;
     assertPageWithinMutationTarget(
       input.pageId,
       request.context.mutationTarget,
@@ -1355,11 +1359,14 @@ async function executeDesignToolRequestUnsafe(
     };
   }
 
-  if (
-    request.call.toolName === INTERNAL_READ_IMAGE_SOURCE_TOOL_NAME &&
-    isInternalReadImageSourceToolInput(request.call.input)
-  ) {
-    const input = request.call.input;
+  if (request.call.toolName === INTERNAL_READ_IMAGE_SOURCE_TOOL_NAME) {
+    const parsed = InternalReadImageSourceContract.parse(request.call.input);
+    if (!parsed.ok) {
+      throw new TypeError(
+        formatValidationFailure("internal image source", parsed.issues),
+      );
+    }
+    const input = parsed.value;
     assertPageWithinMutationTarget(
       input.pageId,
       request.context.mutationTarget,
@@ -1410,11 +1417,14 @@ async function executeDesignToolRequestUnsafe(
     };
   }
 
-  if (
-    request.call.toolName === INTERNAL_UPDATE_IMAGE_TOOL_NAME &&
-    isInternalUpdateImageToolInput(request.call.input)
-  ) {
-    const input = request.call.input;
+  if (request.call.toolName === INTERNAL_UPDATE_IMAGE_TOOL_NAME) {
+    const parsed = InternalUpdateImageContract.parse(request.call.input);
+    if (!parsed.ok) {
+      throw new TypeError(
+        formatValidationFailure("internal image update", parsed.issues),
+      );
+    }
+    const input = parsed.value;
     assertPageWithinMutationTarget(
       input.pageId,
       request.context.mutationTarget,

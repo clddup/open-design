@@ -10,6 +10,7 @@ import {
   EXPORT_RASTER_TOOL_INPUT_SCHEMA,
   EXPORT_SVG_TOOL_INPUT_SCHEMA,
   IMPORT_SVG_TOOL_INPUT_SCHEMA,
+  INTERNAL_IMPORT_SVG_TOOL_INPUT_SCHEMA,
 } from "./design-agent-import-export-tool-schema";
 import type {
   AgentSvgImportResult,
@@ -37,6 +38,7 @@ export {
   EXPORT_RASTER_TOOL_INPUT_SCHEMA,
   EXPORT_SVG_TOOL_INPUT_SCHEMA,
   IMPORT_SVG_TOOL_INPUT_SCHEMA,
+  INTERNAL_IMPORT_SVG_TOOL_INPUT_SCHEMA,
 } from "./design-agent-import-export-tool-schema";
 export type {
   AgentSvgImportResult,
@@ -53,6 +55,14 @@ export const ImportSvgContract = contract<ImportSvgToolInput>(
   "design_import_svg.schema_invalid",
   "SVG import",
   undefined,
+);
+
+export const InternalImportSvgContract = contract<InternalImportSvgToolInput>(
+  INTERNAL_IMPORT_SVG_TOOL_INPUT_SCHEMA,
+  "internal_import_svg.schema_invalid",
+  "internal SVG import",
+  undefined,
+  false,
 );
 
 export const ExportSvgContract = contract<ExportSvgToolInput>(
@@ -76,6 +86,7 @@ function contract<T>(
   code: string,
   subject: string,
   refine: ((value: T) => ValidationIssue[]) | undefined,
+  clone = true,
 ) {
   const parse = (input: unknown): ValidationResult<T> => {
     const structureIssues = contractSchemaIssues(schema, input, {
@@ -86,7 +97,7 @@ function contract<T>(
     if (structureIssues.length > 0) {
       return { ok: false, issues: structureIssues };
     }
-    const value = structuredClone(input) as T;
+    const value = (clone ? structuredClone(input) : input) as T;
     const domainIssues = refine?.(value) ?? [];
     return domainIssues.length > 0
       ? { ok: false, issues: domainIssues }
@@ -187,41 +198,6 @@ export function isPreparedAgentRasterExport(
       "height",
       "revision",
       "rootNodeId",
-    ])
-  );
-}
-
-export function isInternalImportSvgToolInput(
-  input: unknown,
-): input is InternalImportSvgToolInput {
-  if (!isRecord(input)) return false;
-  const publicInput = {
-    attachmentId: input.attachmentId,
-    pageId: input.pageId,
-    parentId: input.parentId,
-    index: input.index,
-    x: input.x,
-    y: input.y,
-  };
-  return (
-    ImportSvgContract.parse(publicInput).ok &&
-    boundedText(input.name, 255) &&
-    typeof input.svg === "string" &&
-    input.svg.length > 0 &&
-    input.svg.length <= SVG_MAX_CHARACTERS &&
-    typeof input.idPrefix === "string" &&
-    input.idPrefix.length <= 80 &&
-    /^[A-Za-z][A-Za-z0-9_-]*$/.test(input.idPrefix) &&
-    exactKeys(input, [
-      "attachmentId",
-      "pageId",
-      "parentId",
-      "index",
-      "x",
-      "y",
-      "name",
-      "svg",
-      "idPrefix",
     ])
   );
 }

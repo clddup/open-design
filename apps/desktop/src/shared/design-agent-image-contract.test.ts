@@ -13,6 +13,12 @@ import {
   UpdateImageContract,
 } from "./design-agent-image-tools";
 import {
+  INTERNAL_READ_IMAGE_SOURCE_TOOL_INPUT_SCHEMA,
+  INTERNAL_UPDATE_IMAGE_TOOL_INPUT_SCHEMA,
+  InternalReadImageSourceContract,
+  InternalUpdateImageContract,
+} from "./design-agent-internal-image-tools";
+import {
   DESIGN_AGENT_TOOL_SPECS,
   EDIT_IMAGE_TOOL_NAME,
   GENERATE_IMAGE_TOOL_NAME,
@@ -24,6 +30,15 @@ import {
 const attachmentId = `image_${"a".repeat(64)}`;
 const assetId = `asset_${"b".repeat(64)}`;
 const replacementAssetId = `asset_${"c".repeat(64)}`;
+const internalAsset = {
+  id: replacementAssetId,
+  kind: "image",
+  name: "Hero.png",
+  mimeType: "image/png",
+  source: { type: "data", value: "aW1hZ2U=" },
+  size: { width: 1600, height: 900 },
+  extensions: {},
+} as const;
 
 const placementInput = {
   attachmentId,
@@ -91,6 +106,85 @@ describe("image Agent contracts", () => {
     expect(
       schemaValidationIssues(PLACE_IMAGE_TOOL_INPUT_SCHEMA, placementInput),
     ).toHaveLength(0);
+  });
+
+  it("uses executable contracts for trusted image bridge inputs", () => {
+    const read = {
+      pageId: "page_1",
+      nodeId: "hero_image",
+      expectedAssetId: assetId,
+    };
+    const replace = {
+      action: "replace-source",
+      label: "Replace hero source",
+      pageId: "page_1",
+      nodeId: "hero_image",
+      asset: internalAsset,
+    } as const;
+
+    expect(InternalReadImageSourceContract.schema).toBe(
+      INTERNAL_READ_IMAGE_SOURCE_TOOL_INPUT_SCHEMA,
+    );
+    expect(InternalUpdateImageContract.schema).toBe(
+      INTERNAL_UPDATE_IMAGE_TOOL_INPUT_SCHEMA,
+    );
+    expect(InternalReadImageSourceContract.parse(read)).toMatchObject({
+      ok: true,
+    });
+    expect(InternalUpdateImageContract.parse(replace)).toMatchObject({
+      ok: true,
+    });
+    expect(
+      InternalReadImageSourceContract.issues({ ...read, filePath: "/tmp/a" }),
+    ).toEqual(
+      expect.arrayContaining([expect.objectContaining({ path: "/filePath" })]),
+    );
+    expect(
+      InternalUpdateImageContract.issues({
+        ...replace,
+        asset: {
+          ...internalAsset,
+          source: { type: "external", value: "C:\\secret\\hero.png" },
+        },
+      }),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "internal_update_image.provenance_invalid",
+          path: "/asset",
+        }),
+      ]),
+    );
+  });
+
+  it("returns exact provenance paths for trusted derivation mismatches", () => {
+    const derivation = {
+      id: "image_derivation_remove_background",
+      sourceAssetId: assetId,
+      resultAssetId: internalAsset.id,
+      operation: "remove-background",
+      referenceAssetIds: [],
+      extensions: {},
+    } as const;
+    const input = {
+      action: "derive-source",
+      label: "Remove background",
+      pageId: "page_1",
+      nodeId: "hero_image",
+      expectedAssetId: assetId,
+      asset: internalAsset,
+      derivation,
+    } as const;
+
+    expect(InternalUpdateImageContract.parse(input)).toMatchObject({
+      ok: true,
+    });
+    expect(
+      InternalUpdateImageContract.issues({
+        ...input,
+        derivation: { ...derivation, sourceAssetId: replacementAssetId },
+      }),
+    ).toEqual([expect.objectContaining({ path: "/derivation/sourceAssetId" })]);
   });
 
   it("accepts exactly one placement source and returns source-specific paths", () => {
