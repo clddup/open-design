@@ -118,9 +118,9 @@ describe("Pi run event adapter", () => {
     expect(normalizeJournal(pi.store.events)).toEqual(
       normalizeJournal(production.store.events),
     );
-    expect(await pi.store.readTimeline(request.sessionId)).toMatchObject([
+    const timeline = await pi.store.readTimeline(request.sessionId);
+    expect(timeline).toMatchObject([
       { type: "user.message", content: request.prompt },
-      { type: "run", status: "completed" },
       {
         type: "assistant.message",
         blocks: [
@@ -134,7 +134,13 @@ describe("Pi run event adapter", () => {
           },
         ],
       },
+      { type: "run", status: "completed" },
     ]);
+    const assistant = timeline[1];
+    const terminalRun = timeline[2];
+    if (!assistant || !terminalRun)
+      throw new Error("Missing terminal timeline");
+    expect(terminalRun.sequence).toBeGreaterThan(assistant.sequence);
     expect(pi.store.events.slice(0, 2).map((event) => event.type)).toEqual([
       "message.user",
       "run.state",
