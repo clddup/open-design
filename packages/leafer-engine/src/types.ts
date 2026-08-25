@@ -107,6 +107,20 @@ export interface LeaferGridTrackReorderRequest {
   insertionIndex: number;
 }
 
+export type LeaferAutoLayoutSpacingChange =
+  | {
+      kind: "padding";
+      value: { bottom: number; left: number; right: number; top: number };
+    }
+  | { kind: "gap"; value: number }
+  | { kind: "counter-gap"; value: number };
+
+export interface LeaferAutoLayoutSpacingCommitRequest {
+  change: LeaferAutoLayoutSpacingChange;
+  expectedRevision: number;
+  frameId: string;
+}
+
 export interface LeaferVectorCutRequest {
   at: VectorCutLocation;
   nodeId: string;
@@ -135,6 +149,9 @@ export type LeaferVectorLineCutResponse =
   | { ok: false };
 
 export interface LeaferEngineCallbacks {
+  onAutoLayoutSpacingCommit?(
+    request: LeaferAutoLayoutSpacingCommitRequest,
+  ): boolean;
   onCreate(request: LeaferCreateRequest): boolean;
   onCreateVector(request: LeaferCreateVectorRequest): boolean;
   onError(error: Error): void;
@@ -288,6 +305,7 @@ export interface LeaferGenerationSkeleton {
 }
 
 export interface LeaferEngineSyncInput {
+  autoLayoutSpacingFrameId?: string;
   booleanEditScope?: LeaferBooleanEditScope;
   document: DesignDocument;
   changes?: DesignChangeSet;

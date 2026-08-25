@@ -9,6 +9,8 @@ export const layoutMessages = {
   "history.reorderGridTracks": "重排行列轨道",
   "history.updateLayoutPositioning": "更新布局定位",
   "history.updateLayoutGuides": "更新布局参考线",
+  "canvas.autoLayoutSpacingStale":
+    "调整间距时所选 Auto Layout 已发生变化，请重新拖动当前画布手柄。",
   "agent.canvasCircuitOpen": "画布渲染连续停滞",
   "agent.canvasCircuitOpenDetail":
     "OpenDesign 已在画布连续停滞后停止本次任务。已提交的设计 revision 均已保留，请重启 OpenDesign 后再尝试视觉生成。",

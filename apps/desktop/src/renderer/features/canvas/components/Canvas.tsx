@@ -40,6 +40,7 @@ import {
   createLeaferEngineAdapter,
   resolveDesignTextRuns,
   type LeaferCreateRequest,
+  type LeaferAutoLayoutSpacingChange,
   type LeaferCreateVectorRequest,
   type LeaferEngineAdapter,
   type LeaferEngineSyncInput,
@@ -99,6 +100,7 @@ export function Canvas({
   runtime,
   snapshot,
   onTransactionError,
+  onAdjustAutoLayoutSpacing,
   onAssetDrop,
   imageEditActivity,
   onImageAreaEdit,
@@ -128,6 +130,11 @@ export function Canvas({
   runtime: EditorRuntime;
   snapshot: EditorSnapshot;
   onTransactionError: (message: string | null) => void;
+  onAdjustAutoLayoutSpacing: (
+    frameId: string,
+    expectedRevision: number,
+    change: LeaferAutoLayoutSpacingChange,
+  ) => boolean;
   onAssetDrop: (
     assetId: string,
     documentPoint: { x: number; y: number },
@@ -1093,6 +1100,8 @@ export function Canvas({
     setRenderError(null);
 
     void createLeaferEngineAdapter(element, {
+      onAutoLayoutSpacingCommit: ({ change, expectedRevision, frameId }) =>
+        onAdjustAutoLayoutSpacing(frameId, expectedRevision, change),
       onCreate: createNode,
       onCreateVector: createVectorNode,
       onError: (error) => {
@@ -1192,6 +1201,7 @@ export function Canvas({
     exitVectorEdit,
     onImageCropControllerChange,
     onReorderGridTracks,
+    onAdjustAutoLayoutSpacing,
     onTextLayoutProviderReady,
     onTextEditingStyleControllerChange,
     onTextRangeSelectionChange,
@@ -1232,7 +1242,10 @@ export function Canvas({
       snapshot.state.selection.nodeIds.length === 1 &&
       snapshot.document.nodesById[snapshot.state.selection.nodeIds[0] ?? ""]
         ?.kind === "frame"
-        ? { gridEditorFrameId: snapshot.state.selection.nodeIds[0] }
+        ? {
+            autoLayoutSpacingFrameId: snapshot.state.selection.nodeIds[0],
+            gridEditorFrameId: snapshot.state.selection.nodeIds[0],
+          }
         : {}),
       reducedMotion,
       ...(richTextResolution

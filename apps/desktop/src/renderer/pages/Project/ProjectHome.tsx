@@ -114,9 +114,7 @@ export function ProjectHome({
             aria-labelledby="design-files-title"
             className={homeStyles.panel}
           >
-            <div
-              className={`${homeStyles.sectionHeading} ${styles.sectionHeading}`}
-            >
+            <div className={homeStyles.sectionHeading}>
               <div>
                 <span className={homeStyles.sectionLabel}>
                   {t("project.canvasSources")}
@@ -153,9 +151,7 @@ export function ProjectHome({
             aria-labelledby="project-conversations-title"
             className={homeStyles.panel}
           >
-            <div
-              className={`${homeStyles.sectionHeading} ${styles.sectionHeading}`}
-            >
+            <div className={homeStyles.sectionHeading}>
               <div>
                 <span className={homeStyles.sectionLabel}>
                   {t("project.activity")}

@@ -68,7 +68,7 @@ OpenDesign DesignDocument / DesignTransaction / revision / history
 `DesignDocument 1.47.0` 已用完整垂直切片加入正式 Line/Arrow、Polygon/Star、editable Vector Network / Pen、Typography Core、Figma-compatible font face identity、rich-text character/paragraph/list runs、Component/Instance/Override/Variant/Slot、Variables、Shared Styles、Slice 与有序 Export Settings、普通 Frame constraints、线性与 Grid Auto Layout、Horizontal Wrap 交叉轴自动分布、Fill child 与首行文字 baseline、Layout Guides、Figma-compatible 派生层 lock/visibility override、跨 Design File imported Component/Variant/Style/Variable source、Image 节点与 Image Paint 七项非破坏调整、可恢复图片来源谱系、独立背景替换及 typed 重打光语义，而不是为单个 UI 控件增加私有字段。后续文档协议升级仍必须围绕完整的专业语义切片，并至少统一设计和迁移以下剩余内容：
 
 1. Line 后续 connector/routing 语义、Polygon/Star corner smoothing 与精确 rounded outline，以及 Path/Vector 多轮廓与编辑语义；不得退回无类型 `JsonObject`。
-2. Auto Layout 的更多自动轨道、画布 spacing/reflow controls 与 breakpoint 语义；Vertical Wrap 不属于 Figma 公共模型。
+2. Auto Layout 的更多自动轨道、画布 spacing 单击输入/旋转/Grid gap、普通 Smart Selection reflow controls 与 breakpoint 语义；基础 Frame padding、linear/Wrap 固定 gap 拖动已完成，Vertical Wrap 不属于 Figma 公共模型。
 3. Text/Font 的确定性 shaping、字体二进制 asset/授权、列表/缩进层级、OpenType、font axis、text-on-path 与字体引用。
 4. 图片 crop/focal/adjustments、AI 透明背景与复杂可组合 mask graph；基础 Figma-style contained sibling mask authoring 已完成。
 5. Workspace/远端 Library、Figma import/export adapter，以及更多 style/token/variable binding；同 Project Component/Variant/Shared Style/Variable Library、Component Set 画布拖拽矩阵重排与 Slot 内 persistent nested Instance 的派生层统一选择/安全 override 已完成。Slot-in-Slot 按 Figma 公开 composition model 永久失败封闭。

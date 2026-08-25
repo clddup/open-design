@@ -7,6 +7,8 @@ export const layoutMessages = {
   "history.reorderGridTracks": "Reorder Grid tracks",
   "history.updateLayoutPositioning": "Update layout positioning",
   "history.updateLayoutGuides": "Update layout guides",
+  "canvas.autoLayoutSpacingStale":
+    "The selected Auto Layout changed while spacing was being adjusted. Drag the current canvas handle again.",
   "agent.canvasCircuitOpen": "Canvas renderer repeatedly stalled",
   "agent.canvasCircuitOpenDetail":
     "OpenDesign stopped this task after repeated canvas stalls. Committed design revisions were preserved; restart OpenDesign before retrying visual generation.",

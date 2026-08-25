@@ -706,6 +706,97 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
+  it("commits selected Auto Layout padding and gap canvas drags as semantic exact-revision requests", async () => {
+    const onAutoLayoutSpacingCommit = vi.fn(() => true);
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onAutoLayoutSpacingCommit,
+    });
+    const input = withAutoLayoutSpacingFixture(createInput());
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+    const paddingHit = findElement(
+      app.sky,
+      "__opendesign_auto_layout_spacing_hit__:frame_welcome:padding-left",
+    );
+    const gapHit = findElement(
+      app.sky,
+      "__opendesign_auto_layout_spacing_hit__:frame_welcome:gap:flow:0",
+    );
+    if (!paddingHit || !gapHit) throw new Error("Missing spacing controls");
+    expect(findElement(app.tree, paddingHit.id!)).toBeUndefined();
+
+    app.emit(
+      "pointer.down",
+      pointerEvent(12, 80, paddingHit, { altKey: true, shiftKey: true }),
+    );
+    app.emit(
+      "pointer.move",
+      pointerEvent(28, 80, paddingHit, { altKey: true, shiftKey: true }),
+    );
+    app.emit(
+      "pointer.up",
+      pointerEvent(28, 80, paddingHit, { altKey: true, shiftKey: true }),
+    );
+    expect(onAutoLayoutSpacingCommit).toHaveBeenLastCalledWith({
+      change: {
+        kind: "padding",
+        value: { top: 40, right: 40, bottom: 40, left: 40 },
+      },
+      expectedRevision: input.document.revision,
+      frameId: "frame_welcome",
+    });
+
+    app.emit("pointer.down", pointerEvent(130, 50, gapHit));
+    app.emit("pointer.move", pointerEvent(138, 50, gapHit, { shiftKey: true }));
+    app.emit("pointer.up", pointerEvent(138, 50, gapHit, { shiftKey: true }));
+    expect(onAutoLayoutSpacingCommit).toHaveBeenLastCalledWith({
+      change: { kind: "gap", value: 20 },
+      expectedRevision: input.document.revision,
+      frameId: "frame_welcome",
+    });
+    expect(onAutoLayoutSpacingCommit).toHaveBeenCalledTimes(2);
+    adapter.dispose();
+  });
+
+  it("cancels Auto Layout spacing drags on no-op, Escape, or a stale revision", async () => {
+    const onAutoLayoutSpacingCommit = vi.fn(() => true);
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onAutoLayoutSpacingCommit,
+    });
+    const input = withAutoLayoutSpacingFixture(createInput());
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    const hit =
+      app &&
+      findElement(
+        app.sky,
+        "__opendesign_auto_layout_spacing_hit__:frame_welcome:padding-left",
+      );
+    if (!app || !hit) throw new Error("Missing padding control");
+
+    app.emit("pointer.down", pointerEvent(12, 80, hit));
+    app.emit("pointer.up", pointerEvent(12, 80, hit));
+    expect(onAutoLayoutSpacingCommit).not.toHaveBeenCalled();
+
+    app.emit("pointer.down", pointerEvent(12, 80, hit));
+    app.emit("pointer.move", pointerEvent(30, 80, hit));
+    emitWindowKey("Escape");
+    app.emit("pointer.up", pointerEvent(30, 80, hit));
+    expect(onAutoLayoutSpacingCommit).not.toHaveBeenCalled();
+
+    app.emit("pointer.down", pointerEvent(12, 80, hit));
+    app.emit("pointer.move", pointerEvent(30, 80, hit));
+    const changed = structuredClone(input);
+    changed.document.revision += 1;
+    adapter.sync(changed);
+    app.emit("pointer.up", pointerEvent(30, 80, hit));
+    expect(onAutoLayoutSpacingCommit).not.toHaveBeenCalled();
+    adapter.dispose();
+  });
+
   it("stages direct image crop movement and commits one crop placement", async () => {
     const onImageCropCommit = vi.fn<
       NonNullable<LeaferEngineCallbacks["onImageCropCommit"]>
@@ -6593,6 +6684,36 @@ function withGridFixture(input: LeaferEngineSyncInput): LeaferEngineSyncInput {
   };
 }
 
+function withAutoLayoutSpacingFixture(
+  input: LeaferEngineSyncInput,
+): LeaferEngineSyncInput {
+  const document = structuredClone(input.document);
+  const frame = document.nodesById.frame_welcome;
+  if (frame?.kind !== "frame") throw new Error("Missing welcome Frame");
+  frame.size = { width: 600, height: 260 };
+  frame.childIds = ["feature_one", "feature_two", "feature_three"];
+  frame.properties.autoLayout = {
+    mode: "horizontal",
+    padding: { top: 16, right: 24, bottom: 20, left: 24 },
+    gap: 12,
+    primaryAlignment: "start",
+    counterAlignment: "start",
+  };
+  frame.childIds.forEach((childId, index) => {
+    const child = document.nodesById[childId];
+    if (!child) throw new Error(`Missing ${childId}`);
+    child.size = { width: 100, height: 60 };
+    child.transform = [1, 0, 0, 1, 24 + index * 112, 20];
+  });
+  return {
+    ...input,
+    autoLayoutSpacingFrameId: frame.id,
+    document,
+    selection: { nodeIds: [frame.id], anchorNodeId: frame.id },
+    tool: "select",
+  };
+}
+
 function textRunProjection(
   input: LeaferEngineSyncInput,
   nodeId = "title_welcome",
@@ -7144,10 +7265,15 @@ function pointerEvent(
   x: number,
   y: number,
   target: FakeElement,
-  modifiers: { ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean } = {},
+  modifiers: {
+    altKey?: boolean;
+    ctrlKey?: boolean;
+    metaKey?: boolean;
+    shiftKey?: boolean;
+  } = {},
 ) {
   return {
-    altKey: false,
+    altKey: modifiers.altKey ?? false,
     clientX: x,
     clientY: y,
     ctrlKey: modifiers.ctrlKey ?? false,

@@ -235,13 +235,13 @@
 
 ### Auto Layout — 降级可用
 
-以线性、换行或 Grid Auto Layout 响应式布局 Frame，包括首行文字基线对齐、row-local Fill 子层与 wrapped rows 自动分布；也可添加不改变 child 几何且不导出的 Uniform、Columns 或 Rows Layout Guide。
+以线性、换行或 Grid Auto Layout 响应式布局 Frame，包括首行文字基线对齐、row-local Fill 子层、wrapped rows 自动分布及画布 padding/固定 gap 直接操作；也可添加不改变 child 几何且不导出的 Uniform、Columns 或 Rows Layout Guide。
 
 - ID：`layout.auto-layout`
 - 实现方：DesignDocument 1.47.0 + @opendesign/layout-service Auto Layout contract v11 + Text Layout Service v5 + EditorRuntime + Figma public Auto Layout projection
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=degraded
-- 证据：自动化 18 项；实机 0 项
-- 限制：Horizontal flow 与 Wrap 使用 provider 实测首行文字基线，普通图层使用底边；交叉轴 Fill 继续以 stretch 覆盖对齐。Horizontal Wrap 以每个 Fill 子层的最小宽度作为换行 basis，在 Min/Max 范围内逐 row 独立分配宽度，只有全部子层都填充交叉轴时 AUTO tracks 才整体拉伸。它不会跨 row 伪造共享列。Auto Layout Grid v2 已支持显式 Fixed/Fill/Hug 行列轨道、row-major flow 自动增减 Fill 行、独立双 gap、Manual 或 row-major 排布、child cell/span/alignment 与 span-aware 行列重排。Uniform、Columns 与 Rows Layout Guide 仍是不参与布局的视觉辅助。Fill 以外的自动行模板、自动列、dense/column flow、Guide style/变量、吸附、旋转 absolute child、画布 spacing/cell/reflow 手柄、SVG Grid metadata、breakpoint，以及 macOS/Windows 打包 GUI 实机证据仍未完成。
+- 证据：自动化 19 项；实机 0 项
+- 限制：Horizontal flow 与 Wrap 使用 provider 实测首行文字基线，普通图层使用底边；交叉轴 Fill 继续以 stretch 覆盖对齐。Horizontal Wrap 以每个 Fill 子层的最小宽度作为换行 basis，在 Min/Max 范围内逐 row 独立分配宽度，只有全部子层都填充交叉轴时 AUTO tracks 才整体拉伸。它不会跨 row 伪造共享列。选中的轴对齐 Frame 会显示可丢弃的 padding 与 linear/Wrap 固定 gap 手柄，并以 exact revision 单次 undo 提交；Auto spacing 不会被静默改成固定值。Auto Layout Grid v2 已支持显式 Fixed/Fill/Hug 行列轨道、row-major flow 自动增减 Fill 行、独立双 gap、Manual 或 row-major 排布、child cell/span/alignment 与 span-aware 行列重排。Uniform、Columns 与 Rows Layout Guide 仍是不参与布局的视觉辅助。Fill 以外的自动行模板、自动列、dense/column flow、Guide style/变量、吸附、旋转 absolute child、spacing 单击输入/旋转/Grid gap 控件、普通 Smart Selection cell/reflow 手柄、SVG Grid metadata、breakpoint，以及 macOS/Windows 打包 GUI 实机证据仍未完成。
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360040451373-Guide-to-auto-layout)
 - 专业参照：[官方说明](https://developers.figma.com/docs/plugins/api/properties/nodes-counteraxisalignitems/)
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360040450513-Create-layout-guides)

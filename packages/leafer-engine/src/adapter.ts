@@ -276,6 +276,8 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     });
     this.#editorOverlays = new EditorOverlayController({
       leafer,
+      onAutoLayoutSpacingCommit: (request) =>
+        this.#callbacks.onAutoLayoutSpacingCommit?.(request) ?? false,
       onGridTrackReorder: (request) =>
         this.#callbacks.onGridTrackReorder?.(request) ?? false,
       presentationRoot: this.#generationPresentationRoot,
@@ -838,19 +840,19 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       this.#boxDrawController.finish(event);
     });
     this.#app.on(PointerEvent.DOWN, (event: unknown) => {
-      if (this.#editorOverlays.gridPointerDown(asLeaferEvent(event))) return;
+      if (this.#editorOverlays.pointerDown(asLeaferEvent(event))) return;
       this.#imageCropController.pointerDown(event);
       this.#penToolController.pointerDown(event);
       this.#vectorEditController.pointerDown(event);
     });
     this.#app.on(PointerEvent.MOVE, (event: unknown) => {
-      if (this.#editorOverlays.gridPointerMove(asLeaferEvent(event))) return;
+      if (this.#editorOverlays.pointerMove(asLeaferEvent(event))) return;
       this.#imageCropController.pointerMove(event);
       this.#penToolController.pointerMove(event);
       this.#vectorEditController.pointerMove(event);
     });
     this.#app.on(PointerEvent.UP, (event: unknown) => {
-      if (this.#editorOverlays.gridPointerUp(asLeaferEvent(event))) return;
+      if (this.#editorOverlays.pointerUp(asLeaferEvent(event))) return;
       this.#imageCropController.pointerUp(event);
       this.#penToolController.pointerUp(event);
       this.#vectorEditController.pointerUp(event);
@@ -1273,12 +1275,12 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     if (this.#textEditDomController.handleKeyDown(event)) return;
     if (
       event.code === "Escape" &&
-      this.#editorOverlays.gridDragging &&
+      this.#editorOverlays.dragging &&
       !isKeyboardInputTarget(event.target)
     ) {
       event.preventDefault();
       event.stopImmediatePropagation();
-      this.#editorOverlays.cancelGridDrag();
+      this.#editorOverlays.cancelDrag();
       return;
     }
     if (

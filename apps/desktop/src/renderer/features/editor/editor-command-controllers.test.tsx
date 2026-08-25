@@ -192,6 +192,63 @@ describe("editor command controllers", () => {
     expect(setEditorError).toHaveBeenLastCalledWith(null);
   });
 
+  it("commits canvas Auto Layout spacing against the exact revision as one undoable transaction", () => {
+    const document = structuredClone(createWelcomeDocument());
+    const frame = document.nodesById.frame_welcome;
+    if (frame?.kind !== "frame") throw new Error("missing Frame");
+    frame.properties.autoLayout = {
+      mode: "horizontal",
+      padding: { top: 8, right: 16, bottom: 8, left: 16 },
+      gap: 12,
+      primaryAlignment: "start",
+      counterAlignment: "center",
+      wrap: { mode: "wrap", counterGap: 20 },
+    };
+    const runtime = new EditorRuntime(document);
+    const before = structuredClone(frame.properties.autoLayout);
+    const { result, setEditorError } = renderControllers(runtime);
+    let accepted = false;
+
+    act(() => {
+      accepted = result.current.editor.adjustAutoLayoutSpacing(frame.id, 0, {
+        kind: "padding",
+        value: { top: 24, right: 24, bottom: 24, left: 24 },
+      });
+    });
+
+    expect(accepted).toBe(true);
+    expect(
+      runtime.getSnapshot().document.nodesById.frame_welcome,
+    ).toMatchObject({
+      properties: {
+        autoLayout: {
+          padding: { top: 24, right: 24, bottom: 24, left: 24 },
+        },
+      },
+    });
+    expect(runtime.getSnapshot().document.revision).toBe(1);
+    expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
+
+    act(() => {
+      accepted = result.current.editor.adjustAutoLayoutSpacing(frame.id, 0, {
+        kind: "gap",
+        value: 32,
+      });
+    });
+    expect(accepted).toBe(false);
+    expect(runtime.getSnapshot().document.revision).toBe(1);
+    expect(setEditorError).toHaveBeenLastCalledWith(
+      "中文:canvas.autoLayoutSpacingStale",
+    );
+
+    act(() => {
+      runtime.undo();
+    });
+    expect(
+      runtime.getSnapshot().document.nodesById.frame_welcome,
+    ).toMatchObject({ properties: { autoLayout: before } });
+  });
+
   it("routes flow-child Fill sizing through the dedicated planner", () => {
     const document = structuredClone(createWelcomeDocument());
     const frame = document.nodesById.frame_welcome;

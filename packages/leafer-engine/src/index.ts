@@ -1,6 +1,8 @@
 export { createLeaferEngineAdapter } from "./adapter.js";
 export type {
   LeaferBoxCreateTool,
+  LeaferAutoLayoutSpacingChange,
+  LeaferAutoLayoutSpacingCommitRequest,
   LeaferCanvasTool,
   LeaferBooleanEditScope,
   LeaferCaptureResult,

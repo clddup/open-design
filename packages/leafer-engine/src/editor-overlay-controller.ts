@@ -6,14 +6,12 @@ import {
   transformToAffine,
   type AffineMatrix,
 } from "./affine.js";
+import { AutoLayoutSpacingOverlayController } from "./auto-layout-spacing-overlay-controller.js";
 import {
   createComponentSlotOverlayPlan,
   type ComponentSlotOverlaySpec,
 } from "./component-slot-overlay.js";
-import {
-  GridEditorOverlayController,
-  type GridEditorPointerEvent,
-} from "./grid-editor-overlay-controller.js";
+import { GridEditorOverlayController } from "./grid-editor-overlay-controller.js";
 import type { GridEditorAxis } from "./grid-editor-overlay.js";
 import {
   createLayoutGuideOverlayPlan,
@@ -24,6 +22,8 @@ import {
   createSliceOverlayPlan,
   type SliceOverlaySpec,
 } from "./slice-overlay.js";
+import type { LeaferEventLike } from "./pointer-event.js";
+import type { LeaferAutoLayoutSpacingCommitRequest } from "./types.js";
 
 type LeaferModule = typeof LeaferEditorModule;
 type LeaferElement = InstanceType<LeaferModule["UI"]>;
@@ -35,6 +35,7 @@ const SLOT_INDICATOR_COLOR = "#d946ef";
 const SLICE_INDICATOR_COLOR = "#7c3aed";
 
 export class EditorOverlayController {
+  readonly #autoLayoutSpacing: AutoLayoutSpacingOverlayController;
   #document: DesignDocument | null = null;
   readonly #guideAreaIds = new Set<string>();
   readonly #guideElements = new Map<string, LeaferElement>();
@@ -56,6 +57,9 @@ export class EditorOverlayController {
 
   constructor(options: {
     leafer: LeaferModule;
+    onAutoLayoutSpacingCommit: (
+      request: LeaferAutoLayoutSpacingCommitRequest,
+    ) => boolean;
     onGridTrackReorder: (request: {
       axis: GridEditorAxis;
       frameId: string;
@@ -71,8 +75,15 @@ export class EditorOverlayController {
     this.#guideLayer = this.#createLayer(1);
     this.#slotLayer = this.#createLayer(2);
     this.#sliceLayer = this.#createLayer(3);
-    this.#gridEditor = new GridEditorOverlayController({
+    this.#autoLayoutSpacing = new AutoLayoutSpacingOverlayController({
       layerIndex: 4,
+      leafer: options.leafer,
+      onCommit: options.onAutoLayoutSpacingCommit,
+      presentationRoot: options.presentationRoot,
+      viewportRoot: options.viewportRoot,
+    });
+    this.#gridEditor = new GridEditorOverlayController({
+      layerIndex: 5,
       leafer: options.leafer,
       onReorder: options.onGridTrackReorder,
       presentationRoot: options.presentationRoot,
@@ -85,16 +96,19 @@ export class EditorOverlayController {
       this.#guideElements.size > 0 ||
       this.#slotElements.size > 0 ||
       this.#sliceElements.size > 0 ||
+      this.#autoLayoutSpacing.active ||
       this.#gridEditor.active
     );
   }
 
-  get gridDragging(): boolean {
-    return this.#gridEditor.dragging;
+  get dragging(): boolean {
+    return this.#autoLayoutSpacing.dragging || this.#gridEditor.dragging;
   }
 
-  cancelGridDrag(): boolean {
-    return this.#gridEditor.cancelDrag();
+  cancelDrag(): boolean {
+    return (
+      this.#autoLayoutSpacing.cancelDrag() || this.#gridEditor.cancelDrag()
+    );
   }
 
   dispose(): void {
@@ -104,6 +118,7 @@ export class EditorOverlayController {
     this.#guideAreaIds.clear();
     this.#slotSpecs.clear();
     this.#sliceSpecs.clear();
+    this.#autoLayoutSpacing.dispose();
     this.#gridEditor.dispose();
     this.#guideLayer.remove();
     this.#guideLayer.destroy();
@@ -114,6 +129,7 @@ export class EditorOverlayController {
   }
 
   sync(input: {
+    autoLayoutSpacingFrameId?: string;
     document: DesignDocument;
     gridEditorFrameId?: string;
     layoutGuideFrameId?: string;
@@ -124,6 +140,12 @@ export class EditorOverlayController {
     this.#syncGuides(input.document, input.layoutGuideFrameId);
     this.#syncSlots(input.document, input.pageId);
     this.#syncSlices(input.document, input.pageId);
+    this.#autoLayoutSpacing.sync({
+      document: input.document,
+      ...(input.autoLayoutSpacingFrameId
+        ? { frameId: input.autoLayoutSpacingFrameId }
+        : {}),
+    });
     this.#gridEditor.sync({
       document: input.document,
       ...(input.gridEditorFrameId ? { frameId: input.gridEditorFrameId } : {}),
@@ -131,22 +153,30 @@ export class EditorOverlayController {
     this.syncViewport();
   }
 
-  gridPointerDown(event: GridEditorPointerEvent): boolean {
-    return this.#gridEditor.pointerDown(event);
+  pointerDown(event: LeaferEventLike): boolean {
+    return (
+      this.#autoLayoutSpacing.pointerDown(event) ||
+      this.#gridEditor.pointerDown(event)
+    );
   }
 
-  gridPointerMove(event: GridEditorPointerEvent): boolean {
+  pointerMove(event: LeaferEventLike): boolean {
+    if (this.#autoLayoutSpacing.pointerMove(event)) return true;
     return this.#gridEditor.pointerMove(event);
   }
 
-  gridPointerUp(event: GridEditorPointerEvent): boolean {
-    return this.#gridEditor.pointerUp(event);
+  pointerUp(event: LeaferEventLike): boolean {
+    return (
+      this.#autoLayoutSpacing.pointerUp(event) ||
+      this.#gridEditor.pointerUp(event)
+    );
   }
 
   syncViewport(): void {
     this.#syncGuideViewport();
     this.#syncSlotViewport();
     this.#syncSliceViewport();
+    this.#autoLayoutSpacing.syncViewport();
     this.#gridEditor.syncViewport();
   }
 

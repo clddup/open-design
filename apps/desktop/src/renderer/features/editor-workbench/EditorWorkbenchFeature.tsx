@@ -622,6 +622,7 @@ export function EditorWorkbenchFeature({
                   : undefined
               }
               onTransactionError={setEditorError}
+              onAdjustAutoLayoutSpacing={editorCommands.adjustAutoLayoutSpacing}
               onAssetDrop={placeImageAssetAtPoint}
               onImageAreaEdit={(nodeId, action, selection) =>
                 void runImageEdit(nodeId, { action, selection })

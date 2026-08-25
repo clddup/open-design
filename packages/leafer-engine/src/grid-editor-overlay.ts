@@ -2,16 +2,19 @@ import {
   DEFAULT_AUTO_LAYOUT_FRAME_SIZING,
   DEFAULT_LAYOUT_SIZING,
   type DesignDocument,
-  type DesignNode,
   type Transform,
 } from "@opendesign/design-contracts";
 import {
   GRID_AUTO_LAYOUT_CONTRACT_VERSION,
   solveGridAutoLayout,
 } from "@opendesign/layout-service";
+import {
+  effectivelyLockedForEditorOverlay,
+  hasTranslationOnlyTransform,
+  supportsAxisAlignedEditorOverlay,
+} from "./editor-overlay-support.js";
 import { getVisibleWorldTransform } from "./scene-node-transform.js";
 
-const MATRIX_EPSILON = 0.000_001;
 export const MAX_GRID_EDITOR_TRACK_CONTROLS = 512;
 
 export type GridEditorAxis = "rows" | "columns";
@@ -58,17 +61,17 @@ export function createGridEditorOverlayPlan(
     grid.rows.length + grid.columns.length > MAX_GRID_EDITOR_TRACK_CONTROLS ||
     frame.size.width <= 0 ||
     frame.size.height <= 0 ||
-    effectivelyLocked(document, frame.id)
+    effectivelyLockedForEditorOverlay(document, frame.id)
   ) {
     return null;
   }
   const transform = getVisibleWorldTransform(document.nodesById, frame.id);
-  if (!transform || !supportsTrackControls(transform)) return null;
+  if (!transform || !supportsAxisAlignedEditorOverlay(transform)) return null;
 
   const children = [];
   for (const childId of frame.childIds) {
     const child = document.nodesById[childId];
-    if (!child || !translationOnly(child.transform)) return null;
+    if (!child || !hasTranslationOnlyTransform(child.transform)) return null;
     if (!child.visible || child.layoutPositioning === "absolute") continue;
     children.push({
       id: child.id,
@@ -194,35 +197,4 @@ function createInsertionSpecs(
           : (tracks[index - 1]!.end + tracks[index]!.start) / 2,
     index,
   }));
-}
-
-function effectivelyLocked(document: DesignDocument, nodeId: string): boolean {
-  const visited = new Set<string>();
-  let current: DesignNode | undefined = document.nodesById[nodeId];
-  while (current && !visited.has(current.id)) {
-    if (current.locked) return true;
-    visited.add(current.id);
-    current = current.parentId
-      ? document.nodesById[current.parentId]
-      : undefined;
-  }
-  return false;
-}
-
-function supportsTrackControls(transform: Transform): boolean {
-  return (
-    Math.abs(transform[1]) <= MATRIX_EPSILON &&
-    Math.abs(transform[2]) <= MATRIX_EPSILON &&
-    transform[0] > MATRIX_EPSILON &&
-    transform[3] > MATRIX_EPSILON
-  );
-}
-
-function translationOnly(transform: Transform): boolean {
-  return (
-    transform[0] === 1 &&
-    transform[1] === 0 &&
-    transform[2] === 0 &&
-    transform[3] === 1
-  );
 }

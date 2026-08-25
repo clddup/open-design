@@ -21,6 +21,7 @@ import {
   planSetNodeConstraints,
   type EditorRuntime,
 } from "@opendesign/editor-runtime";
+import type { LeaferAutoLayoutSpacingChange } from "@opendesign/leafer-engine";
 import { useCallback, useEffect } from "react";
 import type { MessageKey, MessageParameters } from "@/shared/i18n/messages";
 import type { UpdatePropertiesPatch } from "./types";
@@ -95,6 +96,67 @@ export function useEditorCommandController({
         return;
       }
       applyCommands(t("history.updateAutoLayout"), plan.commands);
+    },
+    [applyCommands, runtime, setEditorError, t],
+  );
+
+  const adjustAutoLayoutSpacing = useCallback(
+    (
+      frameId: string,
+      expectedRevision: number,
+      change: LeaferAutoLayoutSpacingChange,
+    ) => {
+      const current = runtime.getSnapshot().document;
+      if (current.revision !== expectedRevision) {
+        setEditorError(t("canvas.autoLayoutSpacingStale"));
+        return false;
+      }
+      const frame = current.nodesById[frameId];
+      const autoLayout =
+        frame?.kind === "frame" ? frame.properties.autoLayout : undefined;
+      if (!autoLayout || autoLayout.mode === "none") {
+        setEditorError(t("canvas.autoLayoutSpacingStale"));
+        return false;
+      }
+      let next: AutoLayout;
+      if (change.kind === "padding") {
+        next = { ...autoLayout, padding: change.value };
+      } else if (
+        change.kind === "gap" &&
+        (autoLayout.mode === "horizontal" || autoLayout.mode === "vertical") &&
+        autoLayout.primaryAlignment !== "space-between"
+      ) {
+        next = { ...autoLayout, gap: change.value };
+      } else if (
+        change.kind === "counter-gap" &&
+        autoLayout.mode === "horizontal" &&
+        autoLayout.wrap &&
+        autoLayout.wrap.counterAxisAlignContent !== "space-between"
+      ) {
+        next = {
+          ...autoLayout,
+          wrap: { ...autoLayout.wrap, counterGap: change.value },
+        };
+      } else {
+        setEditorError(t("canvas.autoLayoutSpacingStale"));
+        return false;
+      }
+      const plan = planSetFrameAutoLayout(
+        current,
+        pageIdForNode(current, frameId),
+        frameId,
+        next,
+        `canvas_auto_layout_spacing_${frameId}`,
+      );
+      if (!plan.ok) {
+        if (plan.code === "no-op") {
+          setEditorError(null);
+          return true;
+        }
+        setEditorError(plan.message);
+        return false;
+      }
+      return applyCommands(t("history.updateAutoLayout"), plan.commands);
     },
     [applyCommands, runtime, setEditorError, t],
   );
@@ -320,6 +382,7 @@ export function useEditorCommandController({
   );
 
   return {
+    adjustAutoLayoutSpacing,
     applyCommands,
     resizeFrame,
     reorderGridTracks,
