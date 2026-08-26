@@ -49,8 +49,11 @@ export type ContractDefinition<
 export type Contract<CanonicalValue, Context = undefined> = {
   schema: TSchema;
   canonicalSchema?: TSchema;
-  parse(input: unknown, context?: Context): ValidationResult<CanonicalValue>;
-  issues(input: unknown, context?: Context): ValidationIssue[];
+  parse: (
+    input: unknown,
+    context?: Context,
+  ) => ValidationResult<CanonicalValue>;
+  issues: (input: unknown, context?: Context) => ValidationIssue[];
 };
 
 export type ContractValidationOptions = {
