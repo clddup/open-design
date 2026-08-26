@@ -1,10 +1,11 @@
-import type { DesignError } from "@opendesign/design-contracts";
+import type { DesignError, DesignIssue } from "@opendesign/design-contracts";
 
 export class OperationError extends Error {
   readonly commandId: string;
   readonly code: DesignError["code"];
   readonly path: string | undefined;
   readonly details: DesignError["details"] | undefined;
+  readonly issues: readonly DesignIssue[] | undefined;
   readonly retryable: boolean;
 
   constructor(
@@ -14,6 +15,7 @@ export class OperationError extends Error {
     options: {
       path?: string;
       details?: DesignError["details"];
+      issues?: readonly DesignIssue[];
       retryable?: boolean;
     } = {},
   ) {
@@ -22,6 +24,7 @@ export class OperationError extends Error {
     this.code = code;
     this.path = options.path;
     this.details = options.details;
+    this.issues = options.issues;
     this.retryable = options.retryable ?? false;
   }
 }

@@ -456,7 +456,7 @@ export class EditorRuntime {
             code: "invalid",
             message: "Transaction does not match the design contract",
             retryable: false,
-            details: parsed.issues.map(
+            issues: parsed.issues.map(
               ({ code, path, message, expected, actual, recovery }) => ({
                 code,
                 path,
@@ -587,6 +587,17 @@ export class EditorRuntime {
     mode: "preview" | "apply",
     error: DesignError,
   ): DesignTransactionFailure {
+    const issues = error.issues ?? [
+      {
+        code: `design.runtime.${error.code}`,
+        path: error.path ?? "",
+        message: error.message,
+        ...(error.commandId === undefined
+          ? {}
+          : { commandId: error.commandId }),
+        ...(error.details === undefined ? {} : { details: error.details }),
+      },
+    ];
     return deepFreeze({
       ok: false,
       mode,
@@ -594,7 +605,7 @@ export class EditorRuntime {
       documentId: transaction.documentId,
       baseRevision: transaction.baseRevision,
       revision: this.#revision,
-      error,
+      error: { ...error, issues },
     });
   }
 
@@ -614,6 +625,14 @@ export class EditorRuntime {
         code: "invalid",
         message,
         retryable: false,
+        issues: [
+          {
+            code: "design.history_invalid",
+            path: "",
+            message,
+            details: { actorId },
+          },
+        ],
         details: { actorId },
       },
     });
@@ -764,6 +783,20 @@ function operationError(error: unknown): DesignError {
       commandId: error.commandId,
       ...(error.path === undefined ? {} : { path: error.path }),
       retryable: error.retryable,
+      issues:
+        error.issues === undefined
+          ? [
+              {
+                code: `design.operation.${error.code}`,
+                commandId: error.commandId,
+                path: error.path ?? "",
+                message: error.message,
+                ...(error.details === undefined
+                  ? {}
+                  : { details: error.details }),
+              },
+            ]
+          : [...error.issues],
       ...(error.details === undefined ? {} : { details: error.details }),
     };
   }
@@ -772,9 +805,11 @@ function operationError(error: unknown): DesignError {
       code: "invalid",
       message: "Transaction would violate document invariants",
       retryable: false,
-      details: error.issues.map((issue) => ({
+      issues: error.issues.map((issue) => ({
+        code: issue.code ?? "design.document_invariant_invalid",
         path: issue.path,
         message: issue.message,
+        ...(issue.recovery === undefined ? {} : { recovery: issue.recovery }),
       })),
     };
   }
@@ -782,6 +817,14 @@ function operationError(error: unknown): DesignError {
     code: "engine-failure",
     message: error instanceof Error ? error.message : "Unknown runtime failure",
     retryable: false,
+    issues: [
+      {
+        code: "design.engine_failure",
+        path: "",
+        message:
+          error instanceof Error ? error.message : "Unknown runtime failure",
+      },
+    ],
   };
 }
 

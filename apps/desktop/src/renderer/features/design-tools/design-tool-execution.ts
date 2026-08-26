@@ -2182,24 +2182,24 @@ function designFailureIssues(
   error: DesignError,
   commands: readonly DesignOperation[],
 ): AgentToolFailureIssue[] {
-  const rawIssues = Array.isArray(error.details)
-    ? error.details.flatMap((value) => {
-        const issue = recordValue(value);
-        if (!issue) return [];
-        return typeof issue.path === "string" &&
-          typeof issue.message === "string"
-          ? [{ path: issue.path, message: issue.message }]
-          : [];
-      })
-    : [];
+  const rawIssues = error.issues ?? [];
   const issues =
     rawIssues.length > 0
       ? rawIssues
-      : [{ path: error.path ?? "", message: error.message }];
+      : [
+          {
+            code: `design.runtime.${error.code}`,
+            path: error.path ?? "",
+            message: error.message,
+          },
+        ];
   return issues.slice(0, 128).map((issue) => {
-    const nodeId = nodeIdFromInvariantPath(issue.path);
+    const nodeId = issue.nodeId ?? nodeIdFromInvariantPath(issue.path);
     const commandId =
-      error.commandId ?? commandIdForNode(commands, nodeId) ?? undefined;
+      issue.commandId ??
+      error.commandId ??
+      commandIdForNode(commands, nodeId) ??
+      undefined;
     return {
       ...(commandId ? { commandId } : {}),
       ...(nodeId ? { nodeId } : {}),
@@ -2244,12 +2244,6 @@ function commandDirectlyTargetsNode(
     default:
       return false;
   }
-}
-
-function recordValue(value: unknown): Record<string, unknown> | null {
-  return value !== null && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
 }
 
 function hashFailureText(value: string): string {

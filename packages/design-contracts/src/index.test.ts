@@ -34,6 +34,7 @@ import {
   DesignNodeSchema,
   DesignDocumentContract,
   DesignTransactionContract,
+  DesignTransactionResultContract,
   DesignOperationSchema,
   DesignTransactionSchema,
   EffectSchema,
@@ -57,6 +58,7 @@ import {
   schemaValidationIssues,
   executableJsonSchema,
   type DesignDocument,
+  type DesignTransactionResult,
 } from "./index.js";
 
 const actor = { type: "user" as const, id: "user_1" };
@@ -3156,6 +3158,55 @@ describe("design contract schemas", () => {
         }),
       ],
     });
+  });
+
+  it("owns successful transaction result correlation", () => {
+    const result = {
+      ok: true as const,
+      mode: "apply" as const,
+      transactionId: "transaction_1",
+      documentId: "document_1",
+      baseRevision: 4,
+      revision: {
+        revision: 5,
+        createdAt: "2026-08-26T12:00:00.000Z",
+        transactionId: "transaction_1",
+        actor,
+      },
+      changes: {
+        documentId: "document_1",
+        fromRevision: 4,
+        toRevision: 5,
+        addedNodeIds: ["node_1"],
+        changedNodeIds: [] as string[],
+        removedNodeIds: [],
+        changes: [],
+      },
+      warnings: [],
+    } satisfies DesignTransactionResult;
+    expect(DesignTransactionResultContract.parse(result)).toEqual({
+      ok: true,
+      value: result,
+    });
+
+    const mismatched = structuredClone(result);
+    mismatched.revision.revision = 6;
+    mismatched.changes.changedNodeIds = ["node_1"];
+    const parsed = DesignTransactionResultContract.parse(mismatched);
+    expect(parsed.ok).toBe(false);
+    if (parsed.ok) throw new Error("Expected result correlation to fail");
+    expect(parsed.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "design.result_revision_invalid",
+          path: "/revision/revision",
+        }),
+        expect.objectContaining({
+          code: "design.result_change_identity_overlap",
+          path: "/changes/changedNodeIds/0",
+        }),
+      ]),
+    );
   });
 
   it("validates explicit constraints and nullable update removal", () => {

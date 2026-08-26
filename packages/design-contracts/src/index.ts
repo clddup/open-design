@@ -18,6 +18,7 @@ import {
   createDesignOperationContract,
   createDesignTransactionContract,
 } from "./operation-contract.js";
+import { createDesignTransactionResultContract } from "./transaction-result-contract.js";
 import * as limits from "./limits.js";
 import * as versions from "./versions.js";
 import {
@@ -1707,6 +1708,21 @@ export const DesignErrorCodeSchema = Type.Union([
   Type.Literal("engine-failure"),
 ]);
 
+export const DesignIssueSchema = Type.Object(
+  {
+    code: Type.String({ minLength: 1, maxLength: 256 }),
+    path: Type.String({ maxLength: 4_000 }),
+    message: Type.String({ minLength: 1, maxLength: 20_000 }),
+    commandId: Type.Optional(Type.String({ minLength: 1, maxLength: 256 })),
+    nodeId: Type.Optional(Type.String({ minLength: 1, maxLength: 256 })),
+    expected: Type.Optional(JsonValueSchema),
+    actual: Type.Optional(JsonValueSchema),
+    recovery: Type.Optional(Type.String({ minLength: 1, maxLength: 4_000 })),
+    details: Type.Optional(JsonValueSchema),
+  },
+  { additionalProperties: false },
+);
+
 export const DesignErrorSchema = Type.Object(
   {
     code: DesignErrorCodeSchema,
@@ -1714,6 +1730,9 @@ export const DesignErrorSchema = Type.Object(
     commandId: Type.Optional(Type.String({ minLength: 1 })),
     path: Type.Optional(Type.String()),
     retryable: Type.Boolean(),
+    issues: Type.Optional(
+      Type.Array(DesignIssueSchema, { minItems: 1, maxItems: 128 }),
+    ),
     details: Type.Optional(JsonValueSchema),
   },
   { additionalProperties: false },
@@ -2485,6 +2504,7 @@ export type DesignActor = Static<typeof DesignActorSchema>;
 export type DesignTransaction = Static<typeof DesignTransactionSchema>;
 export type DesignErrorCode = Static<typeof DesignErrorCodeSchema>;
 export type DesignError = Static<typeof DesignErrorSchema>;
+export type DesignIssue = Static<typeof DesignIssueSchema>;
 export type Revision = Static<typeof RevisionSchema>;
 export type NodeChange = Static<typeof NodeChangeSchema>;
 export type PageChange = Static<typeof PageChangeSchema>;
@@ -2997,8 +3017,11 @@ export const DesignTransactionContract = createDesignTransactionContract(
 export function isDesignTransactionResult(
   value: unknown,
 ): value is DesignTransactionResult {
-  return checkSchema(DesignTransactionResultSchema, value);
+  return DesignTransactionResultContract.parse(value).ok;
 }
+
+export const DesignTransactionResultContract =
+  createDesignTransactionResultContract(DesignTransactionResultSchema);
 
 export function isEditorEvent(value: unknown): value is EditorEvent {
   return checkSchema(EditorEventSchema, value);

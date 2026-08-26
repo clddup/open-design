@@ -179,7 +179,12 @@ function updateProperties(
       "invalid",
       {
         ...(firstIssue ? { path: firstIssue.path } : {}),
-        details,
+        issues: details.map((issue) => ({
+          code: "design.node_schema_invalid",
+          commandId: command.commandId,
+          path: issue.path,
+          message: issue.message,
+        })),
       },
     );
   }
