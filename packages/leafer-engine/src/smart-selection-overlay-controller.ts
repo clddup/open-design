@@ -1,8 +1,5 @@
 import type { DesignDocument, Transform } from "@opendesign/design-contracts";
-import {
-  reorderSmartSelection,
-  setSmartSelectionSpacing,
-} from "@opendesign/geometry-service";
+import { setSmartSelectionSpacing } from "@opendesign/geometry-service";
 import type * as LeaferEditorModule from "leafer-editor";
 import { matrixRelativeToParent } from "./affine.js";
 import { eventClientPoint, type LeaferEventLike } from "./pointer-event.js";
@@ -12,6 +9,7 @@ import {
   type SmartSelectionGapHandleSpec,
   type SmartSelectionOverlayPlan,
 } from "./smart-selection-overlay.js";
+import { SmartSelectionReorderController } from "./smart-selection-reorder-controller.js";
 import type {
   LeaferSmartSelectionReorderRequest,
   LeaferSmartSelectionSpacingRequest,
@@ -22,11 +20,6 @@ type LeaferElement = InstanceType<LeaferModule["UI"]>;
 type LeaferGroup = InstanceType<LeaferModule["Group"]>;
 
 interface SmartGapElements {
-  hit: LeaferElement;
-  visual: LeaferElement;
-}
-
-interface SmartRingElements {
   hit: LeaferElement;
   visual: LeaferElement;
 }
@@ -46,31 +39,14 @@ interface SmartSelectionDragSession {
   startSpacing: number;
 }
 
-interface SmartSelectionReorderDragSession {
-  axis: "horizontal" | "vertical";
-  before: ReadonlyMap<string, Transform>;
-  documentId: string;
-  expectedRevision: number;
-  insertionIndex: number;
-  moved: boolean;
-  movedNodeIds: readonly string[];
-  nodeIds: readonly string[];
-  pageId: string;
-  startClientPoint: { x: number; y: number };
-  valid: boolean;
-}
-
 const MATRIX_EPSILON = 0.000_001;
 const SMART_COLOR = "#f24e8a";
-const SMART_INSERTION_COLOR = "#0d99ff";
 const SMART_IDLE_COLOR = "rgba(242, 78, 138, 0.82)";
 const SMART_HIT_FILL = "rgba(0, 0, 0, 0.001)";
 const HANDLE_LENGTH = 22;
 const HANDLE_THICKNESS = 2;
 const HIT_CROSS = 14;
 const HIT_LENGTH = 34;
-const RING_SIZE = 8;
-const RING_HIT_SIZE = 20;
 const PILL_HEIGHT = 20;
 const PILL_OFFSET = 10;
 const BIG_NUDGE = 10;
@@ -83,12 +59,10 @@ export class SmartSelectionOverlayController {
   readonly #finishNodePresentation: (nodeId: string) => void;
   readonly #gaps = new Map<string, SmartGapElements>();
   readonly #hitHandleIds = new WeakMap<object, string>();
-  readonly #hitRingNodeIds = new WeakMap<object, string>();
   #hovered = false;
   readonly #layer: LeaferGroup;
   readonly #leafer: LeaferModule;
   readonly #onCommit: (request: LeaferSmartSelectionSpacingRequest) => boolean;
-  readonly #onReorder: (request: LeaferSmartSelectionReorderRequest) => boolean;
   readonly #pill: LeaferElement;
   readonly #pillLabel: LeaferElement;
   #plan: SmartSelectionOverlayPlan | null = null;
@@ -96,10 +70,7 @@ export class SmartSelectionOverlayController {
   #previewSpacing: number | null = null;
   readonly #presentationRoot: LeaferGroup;
   readonly #restoreProjection: () => void;
-  readonly #rings = new Map<string, SmartRingElements>();
-  readonly #markedNodeIds = new Set<string>();
-  readonly #insertionIndicator: LeaferElement;
-  #reorderDrag: SmartSelectionReorderDragSession | null = null;
+  readonly #reorder: SmartSelectionReorderController;
   readonly #specs = new Map<string, SmartSelectionGapHandleSpec>();
   #syncFingerprint: string | null = null;
   readonly #viewportRoot: LeaferGroup;
@@ -119,7 +90,6 @@ export class SmartSelectionOverlayController {
     this.#finishNodePresentation = options.finishNodePresentation;
     this.#leafer = options.leafer;
     this.#onCommit = options.onCommit;
-    this.#onReorder = options.onReorder;
     this.#presentationRoot = options.presentationRoot;
     this.#restoreProjection = options.restoreProjection;
     this.#viewportRoot = options.viewportRoot;
@@ -145,18 +115,19 @@ export class SmartSelectionOverlayController {
       verticalAlign: "middle",
       visible: false,
     });
-    this.#insertionIndicator = new this.#leafer.Rect({
-      cornerRadius: 1,
-      editable: false,
-      fill: SMART_INSERTION_COLOR,
-      hittable: false,
-      id: "__opendesign_smart_selection_insertion__",
-      visible: false,
-    });
-    this.#layer.add(this.#insertionIndicator);
     this.#layer.add(this.#pill);
     this.#layer.add(this.#pillLabel);
     this.#presentationRoot.addAt(this.#layer, options.layerIndex);
+    this.#reorder = new SmartSelectionReorderController({
+      element: options.element,
+      finishNodePresentation: options.finishNodePresentation,
+      layerIndex: options.layerIndex + 1,
+      leafer: options.leafer,
+      onReorder: options.onReorder,
+      presentationRoot: options.presentationRoot,
+      restoreProjection: options.restoreProjection,
+      viewportRoot: options.viewportRoot,
+    });
   }
 
   get active(): boolean {
@@ -164,18 +135,16 @@ export class SmartSelectionOverlayController {
   }
 
   get dragging(): boolean {
-    return this.#drag !== null || this.#reorderDrag !== null;
+    return this.#drag !== null || this.#reorder.dragging;
   }
 
   cancelDrag(restore = true): boolean {
-    if (!this.#drag && !this.#reorderDrag) return false;
+    if (!this.#drag) return this.#reorder.cancelDrag(restore);
     this.#drag = null;
-    this.#reorderDrag = null;
     this.#previewPoint = null;
     this.#previewSpacing = null;
     this.#pill.visible = false;
     this.#pillLabel.visible = false;
-    this.#insertionIndicator.visible = false;
     if (restore) this.#restoreProjection();
     this.#syncAppearance();
     return true;
@@ -188,55 +157,13 @@ export class SmartSelectionOverlayController {
     this.#pill.destroy();
     this.#pillLabel.remove();
     this.#pillLabel.destroy();
-    this.#insertionIndicator.remove();
-    this.#insertionIndicator.destroy();
+    this.#reorder.dispose();
     this.#layer.remove();
     this.#layer.destroy();
   }
 
   pointerDown(event: LeaferEventLike): boolean {
-    const ringNodeId =
-      event.target && typeof event.target === "object"
-        ? this.#hitRingNodeIds.get(event.target)
-        : undefined;
-    if (ringNodeId && this.#plan && !event.right && !event.middle) {
-      if (event.shiftKey && this.#plan.dimension !== "grid") {
-        if (this.#markedNodeIds.has(ringNodeId)) {
-          this.#markedNodeIds.delete(ringNodeId);
-        } else {
-          this.#markedNodeIds.add(ringNodeId);
-        }
-        this.#syncAppearance();
-        return true;
-      }
-      if (!this.#markedNodeIds.has(ringNodeId)) {
-        this.#markedNodeIds.clear();
-        this.#markedNodeIds.add(ringNodeId);
-      }
-      this.#syncAppearance();
-      if (this.#plan.dimension === "grid") return true;
-      const before = this.#captureTransforms(this.#plan.nodeIds);
-      if (!before) return true;
-      this.#reorderDrag = {
-        axis: this.#plan.dimension,
-        before,
-        documentId: this.#plan.documentId,
-        expectedRevision: this.#plan.revision,
-        insertionIndex: originalInsertionIndex(
-          this.#plan.nodeIds,
-          this.#markedNodeIds,
-        ),
-        moved: false,
-        movedNodeIds: this.#plan.nodeIds.filter((id) =>
-          this.#markedNodeIds.has(id),
-        ),
-        nodeIds: this.#plan.nodeIds,
-        pageId: this.#plan.pageId,
-        startClientPoint: eventClientPoint(event),
-        valid: false,
-      };
-      return true;
-    }
+    if (this.#reorder.pointerDown(event)) return true;
     const handleId =
       event.target && typeof event.target === "object"
         ? this.#hitHandleIds.get(event.target)
@@ -272,67 +199,7 @@ export class SmartSelectionOverlayController {
   }
 
   pointerMove(event: LeaferEventLike): boolean {
-    const reorderDrag = this.#reorderDrag;
-    const reorderPlan = this.#plan;
-    if (reorderDrag && reorderPlan && this.#document) {
-      if (event.isCancel) {
-        this.cancelDrag(true);
-        return true;
-      }
-      const clientPoint = eventClientPoint(event);
-      if (
-        Math.hypot(
-          clientPoint.x - reorderDrag.startClientPoint.x,
-          clientPoint.y - reorderDrag.startClientPoint.y,
-        ) >= 3
-      ) {
-        reorderDrag.moved = true;
-      }
-      if (!reorderDrag.moved) return true;
-      const point = event.getInnerPoint(this.#layer);
-      const insertionIndex = smartInsertionIndex(
-        reorderPlan.items,
-        reorderDrag.movedNodeIds,
-        reorderDrag.axis,
-        reorderDrag.axis === "horizontal" ? point.x : point.y,
-      );
-      const preview = reorderSmartSelection(
-        reorderPlan.items,
-        reorderDrag.movedNodeIds,
-        insertionIndex,
-      );
-      reorderDrag.insertionIndex = insertionIndex;
-      if (!preview.ok) {
-        this.#restorePreview(reorderDrag.before);
-        reorderDrag.valid = false;
-        this.#insertionIndicator.visible = false;
-        return true;
-      }
-      for (const placement of preview.placements) {
-        const before = reorderDrag.before.get(placement.id);
-        const element = this.#element(placement.id);
-        const localDelta = documentDeltaToNodeParent(
-          this.#document,
-          placement.id,
-          placement.delta,
-        );
-        if (!before || !element || !localDelta) {
-          this.cancelDrag(true);
-          return true;
-        }
-        element.setTransform({
-          a: before[0],
-          b: before[1],
-          c: before[2],
-          d: before[3],
-          e: before[4] + localDelta.x,
-          f: before[5] + localDelta.y,
-        });
-      }
-      reorderDrag.valid = true;
-      this.#syncInsertionIndicator(reorderPlan, reorderDrag, insertionIndex);
-      return true;
-    }
+    if (this.#reorder.pointerMove(event)) return true;
     const drag = this.#drag;
     const plan = this.#plan;
     if (!drag || !plan || !this.#document) {
@@ -346,6 +213,7 @@ export class SmartSelectionOverlayController {
       );
       if (hovered !== this.#hovered) {
         this.#hovered = hovered;
+        this.#reorder.setHovered(hovered);
         this.#syncAppearance();
       }
       return false;
@@ -410,23 +278,7 @@ export class SmartSelectionOverlayController {
   }
 
   pointerUp(event: LeaferEventLike): boolean {
-    const reorderDrag = this.#reorderDrag;
-    if (reorderDrag) {
-      if (!event.isCancel) this.pointerMove(event);
-      const current = this.#reorderDrag;
-      this.cancelDrag(true);
-      if (!event.isCancel && current?.moved && current.valid) {
-        this.#onReorder({
-          documentId: current.documentId,
-          expectedRevision: current.expectedRevision,
-          insertionIndex: current.insertionIndex,
-          movedNodeIds: current.movedNodeIds,
-          nodeIds: current.nodeIds,
-          pageId: current.pageId,
-        });
-      }
-      return true;
-    }
+    if (this.#reorder.pointerUp(event)) return true;
     const drag = this.#drag;
     if (!drag) return false;
     if (!event.isCancel) this.pointerMove(event);
@@ -465,15 +317,6 @@ export class SmartSelectionOverlayController {
     ) {
       this.cancelDrag(true);
     }
-    if (
-      this.#reorderDrag &&
-      (this.#reorderDrag.documentId !== input.document.documentId ||
-        this.#reorderDrag.expectedRevision !== input.document.revision ||
-        input.tool !== "select" ||
-        !sameStringSet(this.#reorderDrag.nodeIds, input.selectedNodeIds))
-    ) {
-      this.cancelDrag(true);
-    }
     this.#document = input.document;
     const fingerprint = smartSelectionSyncFingerprint(input);
     if (fingerprint === this.#syncFingerprint) {
@@ -490,19 +333,16 @@ export class SmartSelectionOverlayController {
           )
         : null;
     if (!this.#plan) {
-      this.#markedNodeIds.clear();
       this.#hovered = false;
       this.#destroyElements();
       this.#pill.visible = false;
       this.#pillLabel.visible = false;
       this.#layer.visible = false;
+      this.#reorder.sync(input.document, null);
       return;
     }
-    for (const nodeId of this.#markedNodeIds) {
-      if (!this.#plan.nodeIds.includes(nodeId))
-        this.#markedNodeIds.delete(nodeId);
-    }
     this.#reconcileElements(this.#plan);
+    this.#reorder.sync(input.document, this.#plan);
     this.syncViewport();
   }
 
@@ -527,30 +367,8 @@ export class SmartSelectionOverlayController {
         this.#viewportRoot.localTransform.b,
       ),
     );
-    for (const ringSpec of plan.rings) {
-      const elements = this.#rings.get(ringSpec.id);
-      elements?.visual.set({
-        x: ringSpec.x - RING_SIZE / zoom / 2,
-        y: ringSpec.y - RING_SIZE / zoom / 2,
-        width: RING_SIZE / zoom,
-        height: RING_SIZE / zoom,
-        strokeWidth: 1.5 / zoom,
-      });
-      elements?.hit.set({
-        x: ringSpec.x - RING_HIT_SIZE / zoom / 2,
-        y: ringSpec.y - RING_HIT_SIZE / zoom / 2,
-        width: RING_HIT_SIZE / zoom,
-        height: RING_HIT_SIZE / zoom,
-      });
-    }
     for (const spec of plan.handles) this.#syncGapGeometry(spec, zoom);
-    if (this.#reorderDrag?.valid) {
-      this.#syncInsertionIndicator(
-        plan,
-        this.#reorderDrag,
-        this.#reorderDrag.insertionIndex,
-      );
-    }
+    this.#reorder.syncViewport();
     this.#syncAppearance();
     this.#syncPill();
   }
@@ -597,29 +415,6 @@ export class SmartSelectionOverlayController {
     return { hit, visual };
   }
 
-  #createRing(id: string, nodeId: string): SmartRingElements {
-    const hit = new this.#leafer.Ellipse({
-      cursor: "move",
-      editable: false,
-      fill: SMART_HIT_FILL,
-      hittable: true,
-      id: `__opendesign_smart_selection_ring_hit__:${id}`,
-    }) as LeaferElement;
-    const visual = new this.#leafer.Ellipse({
-      cursor: "move",
-      editable: false,
-      fill: "rgba(255, 255, 255, 0.96)",
-      hittable: true,
-      id: `__opendesign_smart_selection_ring__:${id}`,
-      stroke: SMART_COLOR,
-    }) as LeaferElement;
-    this.#hitRingNodeIds.set(hit, nodeId);
-    this.#hitRingNodeIds.set(visual, nodeId);
-    this.#layer.add(hit);
-    this.#layer.add(visual);
-    return { hit, visual };
-  }
-
   #destroyElements(): void {
     for (const elements of this.#gaps.values()) {
       elements.hit.remove();
@@ -627,14 +422,7 @@ export class SmartSelectionOverlayController {
       elements.visual.remove();
       elements.visual.destroy();
     }
-    for (const elements of this.#rings.values()) {
-      elements.hit.remove();
-      elements.hit.destroy();
-      elements.visual.remove();
-      elements.visual.destroy();
-    }
     this.#gaps.clear();
-    this.#rings.clear();
     this.#specs.clear();
   }
 
@@ -643,9 +431,6 @@ export class SmartSelectionOverlayController {
     for (const spec of plan.handles) {
       this.#specs.set(spec.id, spec);
       this.#gaps.set(spec.id, this.#createGap(spec));
-    }
-    for (const spec of plan.rings) {
-      this.#rings.set(spec.id, this.#createRing(spec.id, spec.nodeId));
     }
   }
 
@@ -660,61 +445,6 @@ export class SmartSelectionOverlayController {
         f: transform[5],
       });
     }
-  }
-
-  #syncInsertionIndicator(
-    plan: SmartSelectionOverlayPlan,
-    drag: SmartSelectionReorderDragSession,
-    insertionIndex: number,
-  ): void {
-    const moved = new Set(drag.movedNodeIds);
-    const remaining = [...plan.items]
-      .filter((item) => !moved.has(item.id))
-      .sort((left, right) =>
-        drag.axis === "horizontal"
-          ? left.bounds.x - right.bounds.x || left.id.localeCompare(right.id)
-          : left.bounds.y - right.bounds.y || left.id.localeCompare(right.id),
-      );
-    const previous = remaining[insertionIndex - 1];
-    const next = remaining[insertionIndex];
-    const coordinate =
-      drag.axis === "horizontal"
-        ? previous && next
-          ? (previous.bounds.x + previous.bounds.width + next.bounds.x) / 2
-          : previous
-            ? previous.bounds.x + previous.bounds.width
-            : (next?.bounds.x ?? plan.bounds.x)
-        : previous && next
-          ? (previous.bounds.y + previous.bounds.height + next.bounds.y) / 2
-          : previous
-            ? previous.bounds.y + previous.bounds.height
-            : (next?.bounds.y ?? plan.bounds.y);
-    const zoom = Math.max(
-      MATRIX_EPSILON,
-      Math.hypot(
-        this.#viewportRoot.localTransform.a,
-        this.#viewportRoot.localTransform.b,
-      ),
-    );
-    const thickness = 2 / zoom;
-    const overhang = 8 / zoom;
-    this.#insertionIndicator.set(
-      drag.axis === "horizontal"
-        ? {
-            x: coordinate - thickness / 2,
-            y: plan.bounds.y - overhang,
-            width: thickness,
-            height: plan.bounds.height + overhang * 2,
-            visible: true,
-          }
-        : {
-            x: plan.bounds.x - overhang,
-            y: coordinate - thickness / 2,
-            width: plan.bounds.width + overhang * 2,
-            height: thickness,
-            visible: true,
-          },
-    );
   }
 
   #syncGapGeometry(spec: SmartSelectionGapHandleSpec, zoom: number): void {
@@ -758,13 +488,6 @@ export class SmartSelectionOverlayController {
       elements.visual.set({
         opacity: active ? 1 : 0.84,
         visible: active || this.#hovered,
-      });
-    }
-    for (const spec of this.#plan?.rings ?? []) {
-      const marked = this.#markedNodeIds.has(spec.nodeId);
-      this.#rings.get(spec.id)?.visual.set({
-        fill: marked ? SMART_COLOR : "rgba(255, 255, 255, 0.96)",
-        opacity: this.#hovered || this.dragging || marked ? 1 : 0.72,
       });
     }
   }
@@ -840,31 +563,4 @@ function smartSelectionSyncFingerprint(input: {
     input.componentTargetActive ? "component" : "nodes",
     [...new Set(input.selectedNodeIds)].sort().join("\u0000"),
   ].join("\u0001");
-}
-
-function originalInsertionIndex(
-  orderedIds: readonly string[],
-  movedIds: ReadonlySet<string>,
-): number {
-  const firstMovedIndex = orderedIds.findIndex((id) => movedIds.has(id));
-  if (firstMovedIndex < 0) return 0;
-  return orderedIds.slice(0, firstMovedIndex).filter((id) => !movedIds.has(id))
-    .length;
-}
-
-function smartInsertionIndex(
-  items: readonly SmartSelectionOverlayPlan["items"][number][],
-  movedNodeIds: readonly string[],
-  axis: "horizontal" | "vertical",
-  coordinate: number,
-): number {
-  const moved = new Set(movedNodeIds);
-  return items
-    .filter((item) => !moved.has(item.id))
-    .map((item) =>
-      axis === "horizontal"
-        ? item.bounds.x + item.bounds.width / 2
-        : item.bounds.y + item.bounds.height / 2,
-    )
-    .filter((center) => coordinate > center).length;
 }
