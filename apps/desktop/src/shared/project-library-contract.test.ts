@@ -2,11 +2,16 @@ import { createEmptyDesignDocument } from "@opendesign/editor-runtime";
 import { createLibraryReleaseSnapshot } from "@opendesign/library-service";
 import { describe, expect, it } from "vitest";
 import {
+  isListProjectLibrariesRequest,
   isProjectLibraryCatalog,
+  isPublishProjectLibraryRequest,
   isPublishProjectLibraryResult,
+  isReadProjectLibraryReleaseRequest,
   isSetProjectLibraryEnabledRequest,
   isSetProjectLibraryUpdateAcceptedRequest,
   isSetProjectLibraryUpdateIgnoredRequest,
+  ProjectLibraryCatalogContract,
+  PublishProjectLibraryResultContract,
 } from "./project-library-contract";
 
 describe("Project Library contract", () => {
@@ -128,5 +133,79 @@ describe("Project Library contract", () => {
         filePath: "/tmp/forged",
       }),
     ).toBe(false);
+    expect(
+      isPublishProjectLibraryRequest({
+        projectId: "project_acme",
+        designFileId: "design_system",
+        name: "   ",
+      }),
+    ).toBe(false);
+    expect(isListProjectLibrariesRequest({ projectId: "project_acme" })).toBe(
+      true,
+    );
+    expect(
+      isReadProjectLibraryReleaseRequest({
+        projectId: "project_acme",
+        libraryId: "library_acme",
+        releaseId: "release_current",
+      }),
+    ).toBe(true);
+  });
+
+  it("returns stable paths for catalog references and publish identity drift", () => {
+    const document = createEmptyDesignDocument(
+      "document_system",
+      "page_system",
+    );
+    const release = createLibraryReleaseSnapshot(document, {
+      libraryId: "library_acme",
+      releaseId: "release_current",
+      sourceProjectId: "project_acme",
+      sourceDesignFileId: "design_system",
+      name: "Acme Library",
+      publishedAt: "2026-08-21T08:00:00.000Z",
+    });
+    const entry = {
+      libraryId: release.libraryId,
+      name: release.name,
+      sourceProjectId: release.sourceProjectId,
+      sourceDesignFileId: release.sourceDesignFileId,
+      sourceDocumentId: release.sourceDocumentId,
+      latestReleaseId: release.releaseId,
+      publishedAt: release.publishedAt,
+      releases: [
+        { releaseId: release.releaseId, publishedAt: release.publishedAt },
+      ],
+    };
+    const catalog = {
+      version: 1 as const,
+      libraries: [entry],
+      enabledLibraryIdsByDesignFileId: {
+        design_consumer: ["library_missing"],
+      },
+      acceptedReleaseIdsByDesignFileId: {},
+      ignoredReleaseIdsByDesignFileId: {},
+    };
+    expect(ProjectLibraryCatalogContract.issues(catalog)).toContainEqual(
+      expect.objectContaining({
+        code: "project_library_catalog.enabled_library_missing",
+        path: "/enabledLibraryIdsByDesignFileId/design_consumer/0",
+      }),
+    );
+    expect(
+      PublishProjectLibraryResultContract.issues({
+        catalog: {
+          ...catalog,
+          enabledLibraryIdsByDesignFileId: {},
+        },
+        entry: { ...entry, libraryId: "library_other" },
+        release,
+      }),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "publish_project_library_result.library_mismatch",
+        path: "/entry/libraryId",
+      }),
+    );
   });
 });

@@ -1,325 +1,168 @@
+import { defineContract } from "./contract-validation";
 import {
-  isLibraryReleaseSnapshot,
-  type LibraryReleaseSnapshot,
-} from "@opendesign/design-contracts";
-import { isStableId } from "@opendesign/workspace-contracts";
+  projectLibraryCatalogEntryIssues,
+  projectLibraryCatalogIssues,
+  projectLibraryIssue,
+  publishProjectLibraryResultIssues,
+} from "./project-library-contract-domain";
+import {
+  ListProjectLibrariesRequestSchema,
+  ProjectLibraryCatalogEntrySchema,
+  ProjectLibraryCatalogSchema,
+  PublishProjectLibraryRequestSchema,
+  PublishProjectLibraryResultSchema,
+  ReadProjectLibraryReleaseRequestSchema,
+  SetProjectLibraryEnabledRequestSchema,
+  SetProjectLibraryUpdateAcceptedRequestSchema,
+  SetProjectLibraryUpdateIgnoredRequestSchema,
+  type ListProjectLibrariesRequest,
+  type ProjectLibraryCatalog,
+  type ProjectLibraryCatalogEntry,
+  type PublishProjectLibraryRequest,
+  type PublishProjectLibraryResult,
+  type ReadProjectLibraryReleaseRequest,
+  type SetProjectLibraryEnabledRequest,
+  type SetProjectLibraryUpdateAcceptedRequest,
+  type SetProjectLibraryUpdateIgnoredRequest,
+} from "./project-library-contract-schemas";
 
-export interface ProjectLibraryCatalogEntry {
-  libraryId: string;
-  name: string;
-  sourceProjectId: string;
-  sourceDesignFileId: string;
-  sourceDocumentId: string;
-  latestReleaseId: string;
-  publishedAt: string;
-  releases: Array<{ releaseId: string; publishedAt: string }>;
-}
+export const ProjectLibraryCatalogEntryContract =
+  defineContract<ProjectLibraryCatalogEntry>({
+    schema: ProjectLibraryCatalogEntrySchema,
+    code: "project_library_catalog_entry.schema_invalid",
+    subject: "Project Library catalog entry",
+    clone: false,
+    refine: projectLibraryCatalogEntryIssues,
+  });
 
-export interface ProjectLibraryCatalog {
-  version: 1;
-  libraries: ProjectLibraryCatalogEntry[];
-  enabledLibraryIdsByDesignFileId: Record<string, string[]>;
-  acceptedReleaseIdsByDesignFileId: Record<string, Record<string, string>>;
-  ignoredReleaseIdsByDesignFileId: Record<string, Record<string, string>>;
-}
+export const ProjectLibraryCatalogContract =
+  defineContract<ProjectLibraryCatalog>({
+    schema: ProjectLibraryCatalogSchema,
+    code: "project_library_catalog.schema_invalid",
+    subject: "Project Library catalog",
+    clone: false,
+    refine: projectLibraryCatalogIssues,
+  });
 
-export interface PublishProjectLibraryRequest {
-  projectId: string;
-  designFileId: string;
-  name?: string;
-}
+export const PublishProjectLibraryRequestContract =
+  defineContract<PublishProjectLibraryRequest>({
+    schema: PublishProjectLibraryRequestSchema,
+    code: "publish_project_library_request.schema_invalid",
+    subject: "Publish Project Library request",
+    clone: false,
+    refine: (value) =>
+      value.name === undefined || value.name.trim().length > 0
+        ? []
+        : [
+            projectLibraryIssue(
+              "publish_project_library_request.name_empty",
+              "/name",
+              "Library name must contain visible text",
+            ),
+          ],
+  });
 
-export interface PublishProjectLibraryResult {
-  catalog: ProjectLibraryCatalog;
-  entry: ProjectLibraryCatalogEntry;
-  release: LibraryReleaseSnapshot;
-}
+export const PublishProjectLibraryResultContract =
+  defineContract<PublishProjectLibraryResult>({
+    schema: PublishProjectLibraryResultSchema,
+    code: "publish_project_library_result.schema_invalid",
+    subject: "Publish Project Library result",
+    clone: false,
+    refine: publishProjectLibraryResultIssues,
+  });
 
-export interface ListProjectLibrariesRequest {
-  projectId: string;
-}
+export const ListProjectLibrariesRequestContract =
+  defineContract<ListProjectLibrariesRequest>({
+    schema: ListProjectLibrariesRequestSchema,
+    code: "list_project_libraries_request.schema_invalid",
+    subject: "List Project Libraries request",
+    clone: false,
+  });
 
-export interface ReadProjectLibraryReleaseRequest {
-  projectId: string;
-  libraryId: string;
-  releaseId?: string;
-}
+export const ReadProjectLibraryReleaseRequestContract =
+  defineContract<ReadProjectLibraryReleaseRequest>({
+    schema: ReadProjectLibraryReleaseRequestSchema,
+    code: "read_project_library_release_request.schema_invalid",
+    subject: "Read Project Library release request",
+    clone: false,
+  });
 
-export interface SetProjectLibraryEnabledRequest {
-  projectId: string;
-  designFileId: string;
-  libraryId: string;
-  enabled: boolean;
-}
+export const SetProjectLibraryEnabledRequestContract =
+  defineContract<SetProjectLibraryEnabledRequest>({
+    schema: SetProjectLibraryEnabledRequestSchema,
+    code: "set_project_library_enabled_request.schema_invalid",
+    subject: "Set Project Library enabled request",
+    clone: false,
+  });
 
-export interface SetProjectLibraryUpdateIgnoredRequest {
-  projectId: string;
-  designFileId: string;
-  libraryId: string;
-  releaseId: string | null;
-}
+export const SetProjectLibraryUpdateIgnoredRequestContract =
+  defineContract<SetProjectLibraryUpdateIgnoredRequest>({
+    schema: SetProjectLibraryUpdateIgnoredRequestSchema,
+    code: "set_project_library_update_ignored_request.schema_invalid",
+    subject: "Set Project Library ignored release request",
+    clone: false,
+  });
 
-export interface SetProjectLibraryUpdateAcceptedRequest {
-  projectId: string;
-  designFileId: string;
-  libraryId: string;
-  releaseId: string;
-}
+export const SetProjectLibraryUpdateAcceptedRequestContract =
+  defineContract<SetProjectLibraryUpdateAcceptedRequest>({
+    schema: SetProjectLibraryUpdateAcceptedRequestSchema,
+    code: "set_project_library_update_accepted_request.schema_invalid",
+    subject: "Set Project Library accepted release request",
+    clone: false,
+  });
 
 export function isProjectLibraryCatalog(
   value: unknown,
 ): value is ProjectLibraryCatalog {
-  if (!isRecord(value)) return false;
-  if (
-    value.version !== 1 ||
-    !Array.isArray(value.libraries) ||
-    !isRecord(value.enabledLibraryIdsByDesignFileId) ||
-    !isRecord(value.acceptedReleaseIdsByDesignFileId) ||
-    !isRecord(value.ignoredReleaseIdsByDesignFileId) ||
-    !onlyKeys(value, [
-      "version",
-      "libraries",
-      "enabledLibraryIdsByDesignFileId",
-      "acceptedReleaseIdsByDesignFileId",
-      "ignoredReleaseIdsByDesignFileId",
-    ])
-  ) {
-    return false;
-  }
-  const libraries = value.libraries;
-  if (
-    libraries.length > 4_096 ||
-    !libraries.every(isProjectLibraryCatalogEntry)
-  ) {
-    return false;
-  }
-  const libraryIds = new Set(libraries.map((entry) => entry.libraryId));
-  const releaseIdsByLibraryId = new Map(
-    libraries.map((entry) => [
-      entry.libraryId,
-      new Set(entry.releases.map((release) => release.releaseId)),
-    ]),
-  );
-  if (libraryIds.size !== libraries.length) return false;
-  if (
-    !Object.entries(value.enabledLibraryIdsByDesignFileId).every(
-      ([designFileId, ids]) =>
-        isStableId(designFileId) &&
-        Array.isArray(ids) &&
-        ids.length <= 4_096 &&
-        ids.every((id) => typeof id === "string" && libraryIds.has(id)) &&
-        new Set(ids).size === ids.length,
-    )
-  ) {
-    return false;
-  }
-  return (
-    isReleaseDecisionMap(
-      value.acceptedReleaseIdsByDesignFileId,
-      releaseIdsByLibraryId,
-    ) &&
-    isReleaseDecisionMap(
-      value.ignoredReleaseIdsByDesignFileId,
-      releaseIdsByLibraryId,
-    ) &&
-    releaseDecisionsAreDisjoint(
-      value.acceptedReleaseIdsByDesignFileId,
-      value.ignoredReleaseIdsByDesignFileId,
-    )
-  );
-}
-
-function releaseDecisionsAreDisjoint(
-  accepted: Record<string, unknown>,
-  ignored: Record<string, unknown>,
-) {
-  for (const [designFileId, acceptedByLibrary] of Object.entries(accepted)) {
-    if (!isRecord(acceptedByLibrary)) return false;
-    const ignoredByLibrary = ignored[designFileId];
-    if (!isRecord(ignoredByLibrary)) continue;
-    if (
-      Object.keys(acceptedByLibrary).some((libraryId) =>
-        Object.hasOwn(ignoredByLibrary, libraryId),
-      )
-    ) {
-      return false;
-    }
-  }
-  return true;
-}
-
-function isReleaseDecisionMap(
-  value: Record<string, unknown>,
-  releaseIdsByLibraryId: ReadonlyMap<string, ReadonlySet<string>>,
-) {
-  return Object.entries(value).every(
-    ([designFileId, ignored]) =>
-      isStableId(designFileId) &&
-      isRecord(ignored) &&
-      Object.entries(ignored).every(
-        ([libraryId, releaseId]) =>
-          isLibraryStorageId(releaseId) &&
-          releaseIdsByLibraryId.get(libraryId)?.has(releaseId) === true,
-      ),
-  );
+  return ProjectLibraryCatalogContract.parse(value).ok;
 }
 
 export function isProjectLibraryCatalogEntry(
   value: unknown,
 ): value is ProjectLibraryCatalogEntry {
-  if (!isRecord(value) || !Array.isArray(value.releases)) return false;
-  if (
-    !onlyKeys(value, [
-      "libraryId",
-      "name",
-      "sourceProjectId",
-      "sourceDesignFileId",
-      "sourceDocumentId",
-      "latestReleaseId",
-      "publishedAt",
-      "releases",
-    ]) ||
-    !isLibraryStorageId(value.libraryId) ||
-    typeof value.name !== "string" ||
-    value.name.length < 1 ||
-    value.name.length > 256 ||
-    !isStableId(value.sourceProjectId) ||
-    !isStableId(value.sourceDesignFileId) ||
-    !isStableId(value.sourceDocumentId) ||
-    !isLibraryStorageId(value.latestReleaseId) ||
-    !isTimestamp(value.publishedAt) ||
-    value.releases.length < 1 ||
-    value.releases.length > 4_096
-  ) {
-    return false;
-  }
-  const releaseIds = new Set<string>();
-  for (const release of value.releases) {
-    if (
-      !isRecord(release) ||
-      !onlyKeys(release, ["releaseId", "publishedAt"]) ||
-      !isLibraryStorageId(release.releaseId) ||
-      !isTimestamp(release.publishedAt) ||
-      releaseIds.has(release.releaseId)
-    ) {
-      return false;
-    }
-    releaseIds.add(release.releaseId);
-  }
-  return releaseIds.has(value.latestReleaseId);
+  return ProjectLibraryCatalogEntryContract.parse(value).ok;
 }
 
 export function isPublishProjectLibraryRequest(
   value: unknown,
 ): value is PublishProjectLibraryRequest {
-  return (
-    isRecord(value) &&
-    isStableId(value.projectId) &&
-    isStableId(value.designFileId) &&
-    (value.name === undefined || boundedName(value.name)) &&
-    onlyKeys(value, ["projectId", "designFileId", "name"])
-  );
+  return PublishProjectLibraryRequestContract.parse(value).ok;
 }
 
 export function isPublishProjectLibraryResult(
   value: unknown,
 ): value is PublishProjectLibraryResult {
-  return (
-    isRecord(value) &&
-    isProjectLibraryCatalog(value.catalog) &&
-    isProjectLibraryCatalogEntry(value.entry) &&
-    isLibraryReleaseSnapshot(value.release) &&
-    value.entry.libraryId === value.release.libraryId &&
-    value.entry.latestReleaseId === value.release.releaseId &&
-    onlyKeys(value, ["catalog", "entry", "release"])
-  );
+  return PublishProjectLibraryResultContract.parse(value).ok;
 }
 
 export function isListProjectLibrariesRequest(
   value: unknown,
 ): value is ListProjectLibrariesRequest {
-  return (
-    isRecord(value) &&
-    isStableId(value.projectId) &&
-    onlyKeys(value, ["projectId"])
-  );
+  return ListProjectLibrariesRequestContract.parse(value).ok;
 }
 
 export function isReadProjectLibraryReleaseRequest(
   value: unknown,
 ): value is ReadProjectLibraryReleaseRequest {
-  return (
-    isRecord(value) &&
-    isStableId(value.projectId) &&
-    isLibraryStorageId(value.libraryId) &&
-    (value.releaseId === undefined || isLibraryStorageId(value.releaseId)) &&
-    onlyKeys(value, ["projectId", "libraryId", "releaseId"])
-  );
+  return ReadProjectLibraryReleaseRequestContract.parse(value).ok;
 }
 
 export function isSetProjectLibraryEnabledRequest(
   value: unknown,
 ): value is SetProjectLibraryEnabledRequest {
-  return (
-    isRecord(value) &&
-    isStableId(value.projectId) &&
-    isStableId(value.designFileId) &&
-    isLibraryStorageId(value.libraryId) &&
-    typeof value.enabled === "boolean" &&
-    onlyKeys(value, ["projectId", "designFileId", "libraryId", "enabled"])
-  );
+  return SetProjectLibraryEnabledRequestContract.parse(value).ok;
 }
 
 export function isSetProjectLibraryUpdateIgnoredRequest(
   value: unknown,
 ): value is SetProjectLibraryUpdateIgnoredRequest {
-  return (
-    isRecord(value) &&
-    isStableId(value.projectId) &&
-    isStableId(value.designFileId) &&
-    isLibraryStorageId(value.libraryId) &&
-    (value.releaseId === null || isLibraryStorageId(value.releaseId)) &&
-    onlyKeys(value, ["projectId", "designFileId", "libraryId", "releaseId"])
-  );
+  return SetProjectLibraryUpdateIgnoredRequestContract.parse(value).ok;
 }
 
 export function isSetProjectLibraryUpdateAcceptedRequest(
   value: unknown,
 ): value is SetProjectLibraryUpdateAcceptedRequest {
-  return (
-    isRecord(value) &&
-    isStableId(value.projectId) &&
-    isStableId(value.designFileId) &&
-    isLibraryStorageId(value.libraryId) &&
-    isLibraryStorageId(value.releaseId) &&
-    onlyKeys(value, ["projectId", "designFileId", "libraryId", "releaseId"])
-  );
+  return SetProjectLibraryUpdateAcceptedRequestContract.parse(value).ok;
 }
 
-function boundedName(value: unknown): value is string {
-  return (
-    typeof value === "string" && value.trim().length >= 1 && value.length <= 256
-  );
-}
-
-function isLibraryStorageId(value: unknown): value is string {
-  return (
-    typeof value === "string" &&
-    value.length >= 1 &&
-    value.length <= 256 &&
-    /^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(value)
-  );
-}
-
-function isTimestamp(value: unknown): value is string {
-  return typeof value === "string" && !Number.isNaN(Date.parse(value));
-}
-
-function onlyKeys(value: Record<string, unknown>, keys: readonly string[]) {
-  const allowed = new Set(keys);
-  return Object.keys(value).every((key) => allowed.has(key));
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+export * from "./project-library-contract-schemas";
