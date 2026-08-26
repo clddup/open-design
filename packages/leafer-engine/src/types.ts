@@ -166,6 +166,15 @@ export interface LeaferSmartSelectionSpacingRequest {
   spacing: number;
 }
 
+export interface LeaferSmartSelectionReorderRequest {
+  documentId: string;
+  expectedRevision: number;
+  insertionIndex: number;
+  movedNodeIds: readonly string[];
+  nodeIds: readonly string[];
+  pageId: string;
+}
+
 export type LeaferAutoLayoutSpacingChange =
   | {
       kind: "padding";
@@ -251,6 +260,9 @@ export interface LeaferEngineCallbacks {
   ): void;
   onSmartSelectionSpacing?(
     request: LeaferSmartSelectionSpacingRequest,
+  ): boolean;
+  onSmartSelectionReorder?(
+    request: LeaferSmartSelectionReorderRequest,
   ): boolean;
   onTextRangeSelectionChange?(selection: LeaferTextRangeSelection | null): void;
   onVectorCut?(request: LeaferVectorCutRequest): LeaferVectorCutResponse;

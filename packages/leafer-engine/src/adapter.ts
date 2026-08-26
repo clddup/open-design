@@ -293,6 +293,8 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         this.#callbacks.onGridTrackResize?.(request) ?? false,
       onSmartSelectionSpacing: (request) =>
         this.#callbacks.onSmartSelectionSpacing?.(request) ?? false,
+      onSmartSelectionReorder: (request) =>
+        this.#callbacks.onSmartSelectionReorder?.(request) ?? false,
       presentationRoot: this.#generationPresentationRoot,
       restoreProjection: () => this.#restoreProjection(),
       viewportRoot: this.#app.tree as unknown as LeaferGroup,

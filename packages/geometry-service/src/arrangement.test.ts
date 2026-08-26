@@ -6,6 +6,7 @@ import {
   GEOMETRY_SERVICE_CONTRACT_VERSION,
   MAX_ARRANGEMENT_SPACING,
   measureItemSpacing,
+  reorderSmartSelection,
   setItemSpacing,
   setSmartSelectionSpacing,
   tidyUpItems,
@@ -150,6 +151,39 @@ describe("geometry arrangement", () => {
         ),
       ),
     ).toMatchObject({ ok: false, code: "ambiguous-anchors" });
+  });
+
+  it("reorders one or more Smart Selection layers without changing hierarchy or spacing", () => {
+    const row = items(
+      ["one", 0, 0, 30, 20],
+      ["two", 50, 0, 20, 20],
+      ["three", 90, 0, 40, 20],
+      ["four", 150, 0, 10, 20],
+    );
+    expect(reorderSmartSelection(row, ["two"], 3)).toMatchObject({
+      ok: true,
+      axis: "horizontal",
+      orderedIds: ["one", "three", "four", "two"],
+      resolvedSpacing: 20,
+      placements: [
+        { id: "one", targetLeadingEdge: 0 },
+        { id: "three", targetLeadingEdge: 50 },
+        { id: "four", targetLeadingEdge: 110 },
+        { id: "two", targetLeadingEdge: 140 },
+      ],
+    });
+    expect(reorderSmartSelection(row, ["three", "two"], 2)).toMatchObject({
+      ok: true,
+      orderedIds: ["one", "four", "two", "three"],
+    });
+    expect(reorderSmartSelection(row, ["two"], 1)).toMatchObject({
+      ok: false,
+      code: "no-op",
+    });
+    expect(reorderSmartSelection(row, ["missing"], 0)).toMatchObject({
+      ok: false,
+      code: "invalid-input",
+    });
   });
 
   it("adjusts one axis of an unequal Smart grid without flattening the other axis", () => {

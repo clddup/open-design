@@ -35,6 +35,7 @@ export type {
   LeaferOperationRequest,
   LeaferRasterExportResult,
   LeaferSmartSelectionSpacingRequest,
+  LeaferSmartSelectionReorderRequest,
   LeaferTextRangeSelection,
   LeaferTextStyleUpdate,
   LeaferVectorEditRequest,

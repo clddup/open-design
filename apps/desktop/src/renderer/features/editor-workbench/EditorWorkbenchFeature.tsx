@@ -224,6 +224,7 @@ export function EditorWorkbenchFeature({
     maskSelectionAction,
     reorderSelection,
     renameLayers,
+    reorderSmartSelection,
     reparentLayers,
     toggleMaskSelection,
     ungroupSelection,
@@ -635,6 +636,7 @@ export function EditorWorkbenchFeature({
               onTransactionError={setEditorError}
               onAdjustAutoLayoutSpacing={editorCommands.adjustAutoLayoutSpacing}
               onAdjustSmartSelectionSpacing={adjustSmartSelectionSpacing}
+              onReorderSmartSelection={reorderSmartSelection}
               onAssetDrop={placeImageAssetAtPoint}
               onImageAreaEdit={(nodeId, action, selection) =>
                 void runImageEdit(nodeId, { action, selection })

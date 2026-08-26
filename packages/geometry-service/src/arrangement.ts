@@ -363,6 +363,81 @@ export function setSmartSelectionSpacing(
   );
 }
 
+export function reorderSmartSelection(
+  items: readonly ArrangementItem[],
+  movedIds: readonly string[],
+  insertionIndex: number,
+): ArrangementPlan {
+  const analysis = analyzeSmartSelection(items);
+  if (!analysis.ok) return analysis;
+  if (analysis.dimension === "grid") {
+    return failure(
+      "invalid-input",
+      "Two-dimensional Smart selection reorder requires an explicit row or column target",
+    );
+  }
+  const movedSet = new Set(movedIds);
+  if (
+    movedSet.size === 0 ||
+    movedSet.size !== movedIds.length ||
+    movedIds.some((id) => !analysis.orderedIds.includes(id)) ||
+    movedSet.size === analysis.orderedIds.length
+  ) {
+    return failure(
+      "invalid-input",
+      "Smart selection reorder requires a unique proper subset of selected layers",
+    );
+  }
+  const remainingIds = analysis.orderedIds.filter((id) => !movedSet.has(id));
+  if (
+    !Number.isInteger(insertionIndex) ||
+    insertionIndex < 0 ||
+    insertionIndex > remainingIds.length
+  ) {
+    return failure(
+      "invalid-input",
+      "Smart selection insertion index is outside the remaining layer order",
+    );
+  }
+  const orderedMovedIds = analysis.orderedIds.filter((id) => movedSet.has(id));
+  const orderedIds = [
+    ...remainingIds.slice(0, insertionIndex),
+    ...orderedMovedIds,
+    ...remainingIds.slice(insertionIndex),
+  ];
+  if (orderedIds.every((id, index) => id === analysis.orderedIds[index])) {
+    return failure(
+      "no-op",
+      "Layers already match the requested Smart selection order",
+    );
+  }
+  const byId = new Map(items.map((item) => [item.id, item] as const));
+  const axis = analysis.dimension;
+  const spacing =
+    axis === "horizontal"
+      ? analysis.horizontalSpacing
+      : analysis.verticalSpacing;
+  if (spacing === undefined) {
+    return failure("invalid-input", "Smart selection spacing is unavailable");
+  }
+  const projected = orderedIds.map(
+    (id) => projectAxis([byId.get(id)!], axis)[0],
+  );
+  if (projected.some((item) => item === undefined)) {
+    return failure(
+      "invalid-input",
+      "Smart selection layer order is incomplete",
+    );
+  }
+  let cursor = Math.min(...projectAxis(items, axis).map((item) => item.start));
+  const placements = projected.map((item) => {
+    const targetLeadingEdge = cursor;
+    cursor += item!.extent + spacing;
+    return placement(item!, axis, targetLeadingEdge);
+  });
+  return finalize(axis, orderedIds, placements, spacing);
+}
+
 /**
  * Produces a Figma-style Tidy up placement without mutating document state.
  * One-dimensional selections only change their arrangement axis. A proven

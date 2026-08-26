@@ -315,6 +315,25 @@ describe("editor command controllers", () => {
     expect(snapshot.document.nodesById.feature_three?.transform).toEqual(
       before.nodesById.feature_three?.transform,
     );
+
+    const reorderRevision = snapshot.document.revision;
+    act(() => {
+      accepted = result.current.layer.reorderSmartSelection({
+        documentId: snapshot.document.documentId,
+        expectedRevision: reorderRevision,
+        insertionIndex: 2,
+        movedNodeIds: ["feature_one"],
+        nodeIds: ["feature_one", "feature_two", "feature_three"],
+        pageId: "page_welcome",
+      });
+    });
+    expect(accepted).toBe(true);
+    snapshot = runtime.getSnapshot();
+    expect(snapshot.document.revision).toBe(reorderRevision + 1);
+    expect(snapshot.state.history.undo).toHaveLength(1);
+    expect(snapshot.document.nodesById.feature_two?.transform[4]).toBe(0);
+    expect(snapshot.document.nodesById.feature_three?.transform[4]).toBe(280);
+    expect(snapshot.document.nodesById.feature_one?.transform[4]).toBe(560);
   });
 
   it("routes flow-child Fill sizing through the dedicated planner", () => {

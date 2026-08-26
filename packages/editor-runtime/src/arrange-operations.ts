@@ -8,6 +8,7 @@ import {
   alignItems,
   distributeItems,
   measureItemSpacing,
+  reorderSmartSelection,
   setItemSpacing,
   setSmartSelectionSpacing,
   tidyUpItems,
@@ -56,7 +57,7 @@ export type ArrangeOperationFailureCode =
 export type ArrangeOperationPlan =
   | {
       ok: true;
-      action: ArrangeAction;
+      action: ArrangeAction | "smart-reorder";
       commands: DesignOperation[];
       orderedNodeIds: string[];
       selectionNodeIds: string[];
@@ -138,11 +139,41 @@ export function planSmartSelectionSpacing(
   );
 }
 
+export function planSmartSelectionReorder(
+  document: DesignDocument,
+  pageId: string,
+  nodeIds: readonly string[],
+  movedNodeIds: readonly string[],
+  insertionIndex: number,
+  commandPrefix: string,
+): ArrangeOperationPlan {
+  const selection = analyzeArrangeSelection(document, pageId, nodeIds);
+  if (!selection.ok) return selection;
+  const geometryPlan = reorderSmartSelection(
+    selection.items,
+    movedNodeIds,
+    insertionIndex,
+  );
+  if (!geometryPlan.ok) {
+    return failure(
+      geometryPlan.code === "no-op" ? "no-op" : "invalid-selection",
+      geometryPlan.message,
+    );
+  }
+  return arrangementCommands(
+    document,
+    selection,
+    geometryPlan,
+    "smart-reorder",
+    commandPrefix,
+  );
+}
+
 function arrangementCommands(
   document: DesignDocument,
   selection: ArrangeSelection,
   geometryPlan: Extract<ArrangementPlan | TidyUpPlan, { ok: true }>,
-  action: ArrangeAction,
+  action: ArrangeAction | "smart-reorder",
   commandPrefix: string,
 ): ArrangeOperationPlan {
   const projected = structuredClone(document);

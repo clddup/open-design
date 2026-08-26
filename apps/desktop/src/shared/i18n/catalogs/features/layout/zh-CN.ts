@@ -7,6 +7,7 @@ export const layoutMessages = {
   "history.updateAutoLayoutSizing": "更新 Auto Layout 尺寸模式",
   "history.updateAutoLayoutLimits": "更新 Auto Layout 尺寸限制",
   "history.reorderGridTracks": "重排行列轨道",
+  "history.reorderSmartSelection": "重排智能选区",
   "history.moveGridContent": "移动网格内容",
   "history.resizeGridSpan": "调整网格跨区",
   "history.deleteGridTracks": "删除行列轨道",

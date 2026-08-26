@@ -9,6 +9,7 @@ import {
   normalizeDesignDocument,
   planArrangeNodes,
   planSmartSelectionSpacing,
+  planSmartSelectionReorder,
 } from "./index.js";
 
 function transaction(
@@ -280,6 +281,48 @@ describe("arrange operations", () => {
     expect(getNodeBounds(runtime.getSnapshot().document, "smart_e")?.x).toBe(
       194,
     );
+  });
+
+  it("reorders a Smart row through one reversible transform transaction", () => {
+    const document = structuredClone(createWelcomeDocument());
+    const one = document.nodesById.feature_one;
+    const two = document.nodesById.feature_two;
+    const three = document.nodesById.feature_three;
+    if (!one || !two || !three) throw new Error("missing Smart row fixture");
+    one.transform = [1, 0, 0, 1, 0, 0];
+    two.transform = [1, 0, 0, 1, 280, 0];
+    three.transform = [1, 0, 0, 1, 560, 0];
+    one.size = { width: 260, height: 100 };
+    two.size = { width: 260, height: 80 };
+    three.size = { width: 260, height: 120 };
+    const runtime = new EditorRuntime(document);
+    const before = runtime.getSnapshot();
+    const plan = planSmartSelectionReorder(
+      before.document,
+      "page_welcome",
+      ["feature_one", "feature_two", "feature_three"],
+      ["feature_one"],
+      2,
+      "smart_reorder",
+    );
+    if (!plan.ok) throw new Error(plan.message);
+    expect(plan).toMatchObject({
+      action: "smart-reorder",
+      orderedNodeIds: ["feature_two", "feature_three", "feature_one"],
+    });
+    expect(
+      runtime.apply(transaction(runtime, "reorder", plan.commands)).ok,
+    ).toBe(true);
+    const result = runtime.getSnapshot();
+    expect(result.document.nodesById.feature_two?.transform[4]).toBe(0);
+    expect(result.document.nodesById.feature_three?.transform[4]).toBe(280);
+    expect(result.document.nodesById.feature_one?.transform[4]).toBe(560);
+    expect(result.document.revision).toBe(1);
+    expect(result.state.history.undo).toHaveLength(1);
+    expect(runtime.undo().ok).toBe(true);
+    expect(
+      runtime.getSnapshot().document.nodesById.feature_one?.transform,
+    ).toEqual(before.document.nodesById.feature_one?.transform);
   });
 
   it("rejects locked, singular, no-op, and insufficient selections atomically", () => {

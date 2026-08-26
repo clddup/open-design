@@ -1702,6 +1702,97 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
+  it("marks Smart Selection rings and reorders a one-dimensional selection with real preview", async () => {
+    const onSmartSelectionReorder = vi.fn(() => true);
+    const input = withSmartSelectionFixture(createInput());
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onSmartSelectionReorder,
+    });
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    const firstRing =
+      app &&
+      findElement(
+        app.sky,
+        "__opendesign_smart_selection_ring__:smart-ring:feature_one",
+      );
+    const secondRing =
+      app &&
+      findElement(
+        app.sky,
+        "__opendesign_smart_selection_ring__:smart-ring:feature_two",
+      );
+    const insertion =
+      app && findElement(app.sky, "__opendesign_smart_selection_insertion__");
+    const first = app && findElement(app.tree, "feature_one");
+    const second = app && findElement(app.tree, "feature_two");
+    const third = app && findElement(app.tree, "feature_three");
+    if (
+      !app ||
+      !firstRing ||
+      !secondRing ||
+      !insertion ||
+      !first ||
+      !second ||
+      !third
+    ) {
+      throw new Error("Missing Smart Selection reorder controls");
+    }
+    const before = [
+      first.localTransform.e,
+      second.localTransform.e,
+      third.localTransform.e,
+    ];
+
+    app.emit("pointer.down", pointerEvent(274, 454, firstRing));
+    app.emit("pointer.up", pointerEvent(274, 454, firstRing));
+    expect(firstRing).toMatchObject({ fill: "#f24e8a" });
+    expect(onSmartSelectionReorder).not.toHaveBeenCalled();
+
+    app.emit(
+      "pointer.down",
+      pointerEvent(554, 454, secondRing, { shiftKey: true }),
+    );
+    app.emit(
+      "pointer.up",
+      pointerEvent(554, 454, secondRing, { shiftKey: true }),
+    );
+    expect(secondRing).toMatchObject({ fill: "#f24e8a" });
+
+    app.emit("pointer.down", pointerEvent(274, 454, firstRing));
+    app.emit("pointer.move", pointerEvent(1_000, 454, app.sky));
+    expect(insertion.visible).toBe(true);
+    expect(first.localTransform.e).toBe(before[0]! + 280);
+    expect(second.localTransform.e).toBe(before[1]! + 280);
+    expect(third.localTransform.e).toBe(before[2]! - 560);
+    app.emit("pointer.up", pointerEvent(1_000, 454, app.sky));
+
+    expect(first.localTransform.e).toBe(before[0]);
+    expect(second.localTransform.e).toBe(before[1]);
+    expect(third.localTransform.e).toBe(before[2]);
+    expect(insertion.visible).toBe(false);
+    expect(onSmartSelectionReorder).toHaveBeenCalledWith({
+      documentId: input.document.documentId,
+      expectedRevision: input.document.revision,
+      insertionIndex: 1,
+      movedNodeIds: ["feature_one", "feature_two"],
+      nodeIds: ["feature_one", "feature_two", "feature_three"],
+      pageId: input.pageId,
+    });
+
+    app.emit("pointer.down", pointerEvent(274, 454, firstRing));
+    app.emit("pointer.move", pointerEvent(1_000, 454, app.sky));
+    const changed = structuredClone(input);
+    changed.document.revision += 1;
+    adapter.sync(changed);
+    expect(first.localTransform.e).toBe(before[0]);
+    expect(second.localTransform.e).toBe(before[1]);
+    expect(third.localTransform.e).toBe(before[2]);
+    expect(onSmartSelectionReorder).toHaveBeenCalledTimes(1);
+    adapter.dispose();
+  });
+
   it("restores Smart Selection previews on negative no-op, Escape, pointer cancel, or stale revision", async () => {
     const onSmartSelectionSpacing = vi.fn(() => true);
     const input = withSmartSelectionFixture(createInput());
