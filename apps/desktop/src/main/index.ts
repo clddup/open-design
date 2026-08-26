@@ -85,6 +85,7 @@ import { handleDesignTypographyTool } from "./agent/design-typography-tool-handl
 import { DesignImageEditService } from "./agent/design-image-edit-service.js";
 import { handleDesignImageTool } from "./agent/design-image-tool-handler.js";
 import { createDesignCaptureReviewSession } from "./agent/design-capture-review-tool-handler.js";
+import { handleDesignImportExportTool } from "./agent/design-import-export-tool-handler.js";
 import { translate } from "@/shared/i18n/messages";
 import {
   DESIGN_CAPTURE_TOOL_NAME,
@@ -96,17 +97,11 @@ import {
   DESIGN_PAGE_TOOL_NAME,
   PAGE_STRUCTURE_ACCESS_TOOL_NAME,
   DESIGN_PLAN_TOOL_NAME,
-  EXPORT_SVG_TOOL_NAME,
-  EXPORT_RASTER_TOOL_NAME,
-  IMPORT_SVG_TOOL_NAME,
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
   DesignApplyContract,
   DesignComponentContract,
   DesignPageContract,
   DeliveryScopeContract,
-  ExportRasterContract,
-  ExportSvgContract,
-  ImportSvgContract,
   PageStructureAccessContract,
   type DesignApplyToolInput,
 } from "@/shared/design-agent-tools";
@@ -969,61 +964,18 @@ async function startDesktopApplication(
       }
       const captureReviewResult = await captureReviewSession.handle(call);
       if (captureReviewResult) return captureReviewResult;
-      if (call.toolName === EXPORT_SVG_TOOL_NAME) {
-        const parsed = ExportSvgContract.parse(call.input);
-        if (!parsed.ok) {
-          throw new TypeError(
-            formatValidationFailure("SVG export", parsed.issues),
-          );
-        }
-        globalTaskCoordinator.assertDocumentInspected(context);
-        return await requireAgentSvgExportHost().execute(
-          { ...call, input: parsed.value },
-          executionContext,
-          signal,
-        );
-      }
-      if (call.toolName === EXPORT_RASTER_TOOL_NAME) {
-        const parsed = ExportRasterContract.parse(call.input);
-        if (!parsed.ok) {
-          throw new TypeError(
-            formatValidationFailure("Raster export", parsed.issues),
-          );
-        }
-        globalTaskCoordinator.assertDocumentInspected(context);
-        return await requireAgentRasterExportHost().execute(
-          { ...call, input: parsed.value },
-          executionContext,
-          signal,
-        );
-      }
-      if (call.toolName === IMPORT_SVG_TOOL_NAME) {
-        const parsed = ImportSvgContract.parse(call.input);
-        if (!parsed.ok) {
-          throw new TypeError(
-            formatValidationFailure("SVG import", parsed.issues),
-          );
-        }
-        globalTaskCoordinator.assertDocumentInspected(context);
-        globalTaskCoordinator.assertVisualReviewBeforeWrite(context);
-        const targetIds = globalTaskCoordinator.resolveMaterialTargetIds(
-          context,
-          [],
-          parsed.value.parentId,
-        );
-        const result = await requireAgentSvgImportHost().execute(
-          { ...call, input: parsed.value },
-          executionContext,
-          signal,
-        );
-        globalTaskCoordinator.recordMaterialDesignWriteCompleted(
-          context.runId,
-          targetIds,
-          result.designRevision?.revision,
-          importedNodeIdsFromResult(result),
-        );
-        return withDesignDelivery(result, context.runId);
-      }
+      const importExportResult = await handleDesignImportExportTool({
+        call,
+        context,
+        executionContext,
+        signal,
+        coordinator: globalTaskCoordinator,
+        getSvgExportHost: requireAgentSvgExportHost,
+        getRasterExportHost: requireAgentRasterExportHost,
+        getSvgImportHost: requireAgentSvgImportHost,
+        withDelivery: (result) => withDesignDelivery(result, context.runId),
+      });
+      if (importExportResult) return importExportResult;
       const designImageResult = await handleDesignImageTool({
         call,
         context,
@@ -1302,17 +1254,6 @@ function smokePdf(text: string): Buffer {
 
 function isRecordValue(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function importedNodeIdsFromResult(result: TrustedToolResult): string[] {
-  if (!isRecordValue(result.content)) return [];
-  const importedNodeIds = result.content.importedNodeIds;
-  return Array.isArray(importedNodeIds)
-    ? importedNodeIds.filter(
-        (nodeId): nodeId is string =>
-          typeof nodeId === "string" && nodeId.length > 0,
-      )
-    : [];
 }
 
 function withDesignDelivery(
