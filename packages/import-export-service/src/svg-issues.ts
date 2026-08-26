@@ -43,6 +43,53 @@ export interface SvgInterchangeIssue {
   sourceElement?: string;
 }
 
+export function createSvgIssue(
+  code: SvgInterchangeIssueCode,
+  severity: SvgInterchangeIssueSeverity,
+  message: string,
+  context: Pick<SvgInterchangeIssue, "nodeId" | "sourceElement"> = {},
+): SvgInterchangeIssue {
+  return { code, severity, message, ...context };
+}
+
+export function svgIssuesHaveErrors(
+  issues: readonly SvgInterchangeIssue[],
+): boolean {
+  return issues.some((issue) => issue.severity === "error");
+}
+
+export function reportUnsupportedSvgElementAttributes(
+  element: Element,
+  issues: SvgInterchangeIssue[],
+): void {
+  for (let index = 0; index < element.attributes.length; index += 1) {
+    const attribute = element.attributes.item(index);
+    if (!attribute) continue;
+    const name = attribute.name.toLowerCase();
+    if (name.startsWith("on")) {
+      issues.push(
+        createSvgIssue(
+          "unsafe-xml",
+          "error",
+          `SVG event attribute ${attribute.name} is not accepted`,
+          { sourceElement: element.localName },
+        ),
+      );
+      continue;
+    }
+    if (name === "class") {
+      issues.push(
+        createSvgIssue(
+          "unsupported-css",
+          "warning",
+          "SVG class selectors are not resolved by the editable import boundary",
+          { sourceElement: element.localName },
+        ),
+      );
+    }
+  }
+}
+
 /**
  * Validates the bounded fidelity report shared across Renderer/Main/Agent.
  * This entrypoint intentionally has no XML or geometry dependencies.

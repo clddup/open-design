@@ -47,10 +47,12 @@ import {
   type SvgMaskMode,
   type SvgMaskReference,
 } from "./svg-mask-clip.js";
-import type {
-  SvgInterchangeIssue,
-  SvgInterchangeIssueCode,
-  SvgInterchangeIssueSeverity,
+import {
+  createSvgIssue,
+  reportUnsupportedSvgElementAttributes,
+  svgIssuesHaveErrors,
+  type SvgInterchangeIssue,
+  type SvgInterchangeIssueCode,
 } from "./svg-issues.js";
 import {
   appendSvgLineEndpointDefinition,
@@ -252,7 +254,7 @@ export function exportSvg(request: SvgExportRequest): SvgExportResult {
     const node = request.document.nodesById[rootNodeId];
     if (!node) {
       issues.push(
-        svgIssue(
+        createSvgIssue(
           "invalid-root",
           "error",
           `SVG export root ${rootNodeId} does not exist`,
@@ -266,7 +268,7 @@ export function exportSvg(request: SvgExportRequest): SvgExportResult {
     while (parentId && !seen.has(parentId)) {
       if (rootSet.has(parentId)) {
         issues.push(
-          svgIssue(
+          createSvgIssue(
             "invalid-root",
             "error",
             `SVG export root ${rootNodeId} is already contained by selected root ${parentId}`,
@@ -279,7 +281,7 @@ export function exportSvg(request: SvgExportRequest): SvgExportResult {
       parentId = request.document.nodesById[parentId]?.parentId ?? null;
     }
   }
-  if (hasErrors(issues)) return failed(issues);
+  if (svgIssuesHaveErrors(issues)) return failed(issues);
 
   const implementation = new DOMImplementation();
   const xmlDocument = implementation.createDocument(SVG_NAMESPACE, "svg", null);
@@ -330,7 +332,7 @@ export function exportSvg(request: SvgExportRequest): SvgExportResult {
   if (definitions.childNodes.length > 0) {
     root.insertBefore(definitions, root.firstChild);
   }
-  if (hasErrors(issues)) return failed(issues);
+  if (svgIssuesHaveErrors(issues)) return failed(issues);
   try {
     const svg = new XMLSerializer().serializeToString(
       xmlDocument,
@@ -379,7 +381,7 @@ export function importSvg(
     const value = readSvgStyleOrAttribute(root, property);
     if (value && value.trim().toLowerCase() !== "none") {
       issues.push(
-        svgIssue(
+        createSvgIssue(
           "mask-omitted",
           "error",
           `SVG root-level ${property} requires a later viewport compositing slice`,
@@ -416,7 +418,7 @@ export function importSvg(
     rootStyle,
     1,
   );
-  if (hasErrors(issues)) return failed(issues);
+  if (svgIssuesHaveErrors(issues)) return failed(issues);
   if (childIds.length === 0) {
     return failure(
       "invalid-root",
@@ -479,7 +481,7 @@ function exportNode(
   const node = context.request.document.nodesById[nodeId];
   if (!node) {
     context.issues.push(
-      svgIssue("invalid-root", "error", `SVG node ${nodeId} is missing`, {
+      createSvgIssue("invalid-root", "error", `SVG node ${nodeId} is missing`, {
         nodeId,
       }),
     );
@@ -487,7 +489,7 @@ function exportNode(
   }
   if (context.visiting.has(nodeId)) {
     context.issues.push(
-      svgIssue("invalid-root", "error", `SVG node ${nodeId} is cyclic`, {
+      createSvgIssue("invalid-root", "error", `SVG node ${nodeId} is cyclic`, {
         nodeId,
       }),
     );
@@ -545,7 +547,7 @@ function exportNode(
       const resolved = context.request.resolvedBooleanPaths?.[node.id];
       if (!resolved || (!resolved.empty && resolved.path.length === 0)) {
         context.issues.push(
-          svgIssue(
+          createSvgIssue(
             "missing-boolean-geometry",
             "error",
             `Boolean ${node.id} requires an explicit resolved path for SVG export`,
@@ -576,7 +578,7 @@ function exportNode(
       );
       applyExportShapeAppearance(context, path, node.id, node.properties);
       context.issues.push(
-        svgIssue(
+        createSvgIssue(
           "boolean-flattened",
           "warning",
           `Boolean ${node.id} is exported as its standard SVG result path; editable operands remain only in the OpenDesign document`,
@@ -610,7 +612,7 @@ function exportNode(
     } else if (node.kind === "polygon" || node.kind === "star") {
       if (node.properties.cornerRadius > 0) {
         context.issues.push(
-          svgIssue(
+          createSvgIssue(
             "regular-shape-fidelity-unsupported",
             "error",
             `Rounded ${node.kind} ${node.id} requires an exact outline before SVG export`,
@@ -625,7 +627,7 @@ function exportNode(
       const path = resolvePathPropertiesData(node.properties);
       if (path === null) {
         context.issues.push(
-          svgIssue(
+          createSvgIssue(
             "invalid-geometry",
             "error",
             `Editable vector network ${node.id} is invalid and cannot be exported`,
@@ -642,7 +644,7 @@ function exportNode(
         !writeSvgEditableVector(element, node.properties.network)
       ) {
         context.issues.push(
-          svgIssue(
+          createSvgIssue(
             "size-limit",
             "warning",
             `Editable vector metadata for ${node.id} exceeds its interchange limit and was omitted; standard path geometry remains exported`,
@@ -655,7 +657,7 @@ function exportNode(
       const result = writeSvgText(element, node);
       if (!result.ok) {
         context.issues.push(
-          svgIssue("malformed-svg", "error", result.message, {
+          createSvgIssue("malformed-svg", "error", result.message, {
             nodeId: node.id,
           }),
         );
@@ -663,7 +665,7 @@ function exportNode(
       }
       if (!result.metadataWritten) {
         context.issues.push(
-          svgIssue(
+          createSvgIssue(
             "size-limit",
             "warning",
             `Editable text metadata for ${node.id} exceeds its interchange limit and was omitted; standard SVG text remains exported`,
@@ -672,13 +674,13 @@ function exportNode(
         );
       }
       context.issues.push(
-        svgIssue(
+        createSvgIssue(
           "text-font-not-embedded",
           "warning",
           `Text ${node.id} references ${node.properties.fontFamily} ${node.properties.fontStyleName ?? "(unresolved face)"}; the font is not embedded in this SVG`,
           { nodeId: node.id },
         ),
-        svgIssue(
+        createSvgIssue(
           "text-layout-fidelity",
           "warning",
           `Text ${node.id} uses ${node.properties.textResize} resizing, ${node.properties.textWrap} wrapping, ${node.properties.textTruncation} truncation, and ${node.properties.maxLines ?? "box-height"} max lines inside an OpenDesign text box; standard SVG line positions cannot preserve automatic sizing, wrapping, truncation, paragraph layout, justify, or exact font shaping without OpenDesign metadata`,
@@ -687,7 +689,7 @@ function exportNode(
       );
     } else {
       context.issues.push(
-        svgIssue(
+        createSvgIssue(
           "unsupported-element",
           "error",
           `${node.kind} node ${node.id} is not supported by the current editable SVG export slice`,
@@ -996,7 +998,7 @@ function importContainerChildren(
       if (!reference) continue;
       if (consumedMaskReferences.has(reference.id)) {
         context.issues.push(
-          svgIssue(
+          createSvgIssue(
             "mask-omitted",
             "error",
             `SVG mask run #${reference.id} is repeated in one container`,
@@ -1013,7 +1015,7 @@ function importContainerChildren(
         sourceId = visibleSource?.nodeId ?? null;
         if (!sourceId || !visibleSource) {
           context.issues.push(
-            svgIssue(
+            createSvgIssue(
               "mask-omitted",
               "error",
               `SVG clipping mask run #${reference.id} is missing its visible sibling source`,
@@ -1029,7 +1031,7 @@ function importContainerChildren(
           )
         ) {
           context.issues.push(
-            svgIssue(
+            createSvgIssue(
               "mask-omitted",
               "error",
               `SVG clipping mask definition #${reference.id} does not match its visible source`,
@@ -1079,7 +1081,7 @@ function importContainerChildren(
     if (sourceReference) {
       if (visibleMaskSources.has(sourceReference.id)) {
         context.issues.push(
-          svgIssue(
+          createSvgIssue(
             "mask-omitted",
             "error",
             `SVG clipping mask #${sourceReference.id} has multiple visible sources`,
@@ -1097,7 +1099,7 @@ function importContainerChildren(
 
   for (const [referenceId, source] of visibleMaskSources) {
     context.issues.push(
-      svgIssue(
+      createSvgIssue(
         "mask-omitted",
         "error",
         `SVG clipping mask source #${referenceId} is not followed by its mask run`,
@@ -1148,7 +1150,7 @@ function importMaskedElement(
     context.nodes.splice(checkpoint);
     if (exceedsNodeBudget) {
       context.issues.push(
-        svgIssue(
+        createSvgIssue(
           "element-limit",
           "error",
           `SVG import exceeds ${MAX_IMPORTED_NODES} editable nodes`,
@@ -1194,7 +1196,7 @@ function importMaskDefinitionSource(
 ): string | null {
   if (context.activeMaskReferences.has(reference.id)) {
     context.issues.push(
-      svgIssue(
+      createSvgIssue(
         "mask-omitted",
         "error",
         `SVG mask reference cycle detected at #${reference.id}`,
@@ -1222,7 +1224,7 @@ function importMaskDefinitionSource(
     );
     if (sourceElements.length === 0) {
       context.issues.push(
-        svgIssue(
+        createSvgIssue(
           "mask-omitted",
           "error",
           `SVG mask definition #${reference.id} contains no editable graphics`,
@@ -1262,7 +1264,7 @@ function importMaskDefinitionSource(
 
     if (context.nodes.length >= MAX_IMPORTED_NODES) {
       context.issues.push(
-        svgIssue(
+        createSvgIssue(
           "element-limit",
           "error",
           `SVG import exceeds ${MAX_IMPORTED_NODES} editable nodes`,
@@ -1285,7 +1287,7 @@ function importMaskDefinitionSource(
       context.nodes.splice(checkpoint);
       if (exceedsNodeBudget) {
         context.issues.push(
-          svgIssue(
+          createSvgIssue(
             "element-limit",
             "error",
             `SVG import exceeds ${MAX_IMPORTED_NODES} editable nodes`,
@@ -1294,7 +1296,7 @@ function importMaskDefinitionSource(
         );
       } else {
         context.issues.push(
-          svgIssue(
+          createSvgIssue(
             "mask-omitted",
             "error",
             `SVG mask definition #${reference.id} contains no supported source layers`,
@@ -1359,7 +1361,7 @@ function importElement(
   }
   if (depth > MAX_SVG_DEPTH) {
     context.issues.push(
-      svgIssue(
+      createSvgIssue(
         "depth-limit",
         "error",
         `SVG import exceeds ${MAX_SVG_DEPTH} nested levels`,
@@ -1370,7 +1372,7 @@ function importElement(
   }
   if (context.nodes.length >= MAX_IMPORTED_NODES) {
     context.issues.push(
-      svgIssue(
+      createSvgIssue(
         "element-limit",
         "error",
         `SVG import exceeds ${MAX_IMPORTED_NODES} editable nodes`,
@@ -1381,7 +1383,7 @@ function importElement(
   }
   if (tag === "script" || tag === "foreignobject" || tag === "use") {
     context.issues.push(
-      svgIssue(
+      createSvgIssue(
         tag === "use" ? "external-reference" : "unsupported-element",
         "error",
         `SVG <${tag}> is not accepted by the editable import boundary`,
@@ -1392,7 +1394,7 @@ function importElement(
   }
   if (tag === "style") {
     context.issues.push(
-      svgIssue(
+      createSvgIssue(
         "unsupported-css",
         "error",
         "SVG stylesheets are not accepted; use presentation attributes or inline style",
@@ -1403,7 +1405,7 @@ function importElement(
   }
   if (tag === "image" || tag === "clippath" || tag === "mask") {
     context.issues.push(
-      svgIssue(
+      createSvgIssue(
         "unsupported-element",
         "error",
         `SVG <${tag}> requires a later typed import slice`,
@@ -1444,11 +1446,7 @@ function importElement(
     nodeId,
   });
   context.issues.push(...filterEffects.issues);
-  reportUnsupportedElementAttributes(
-    element,
-    context.issues,
-    options.ignoreMaskReference === true,
-  );
+  reportUnsupportedSvgElementAttributes(element, context.issues);
   const transform = readSvgElementTransform(element, context.issues);
   const common: ImportedNodeBase = {
     id: nodeId,
@@ -1479,7 +1477,7 @@ function importElement(
   const regularShape = readSvgRegularShape(element);
   if (regularShape.status === "invalid") {
     context.issues.push(
-      svgIssue(
+      createSvgIssue(
         "regular-shape-fidelity-unsupported",
         "error",
         regularShape.message,
@@ -1529,7 +1527,7 @@ function importElement(
     const serializedText = readSvgText(element);
     if (serializedText.status === "absent") {
       context.issues.push(
-        svgIssue(
+        createSvgIssue(
           "unsupported-element",
           "error",
           "Ordinary SVG <text> requires deterministic font and text-box semantics before editable import",
@@ -1540,10 +1538,15 @@ function importElement(
     }
     if (serializedText.status === "invalid") {
       context.issues.push(
-        svgIssue("text-fidelity-unsupported", "error", serializedText.message, {
-          nodeId,
-          sourceElement: tag,
-        }),
+        createSvgIssue(
+          "text-fidelity-unsupported",
+          "error",
+          serializedText.message,
+          {
+            nodeId,
+            sourceElement: tag,
+          },
+        ),
       );
       return null;
     }
@@ -1556,7 +1559,7 @@ function importElement(
     if (!shape) return null;
     if (!svgTextShapeMatches(serializedText.value.properties, shape)) {
       context.issues.push(
-        svgIssue(
+        createSvgIssue(
           "text-fidelity-unsupported",
           "error",
           "OpenDesign text metadata does not match the rendered SVG paint or stroke",
@@ -1630,7 +1633,7 @@ function importElement(
       !isPositiveSvgLength(height)
     ) {
       context.issues.push(
-        svgIssue(
+        createSvgIssue(
           "invalid-dimension",
           "error",
           "SVG <rect> requires finite positive width and height",
@@ -1674,7 +1677,7 @@ function importElement(
       !isPositiveSvgLength(ry)
     ) {
       context.issues.push(
-        svgIssue(
+        createSvgIssue(
           "invalid-dimension",
           "error",
           `SVG <${tag}> requires finite positive radii`,
@@ -1752,7 +1755,7 @@ function importElement(
   const pathData = readElementPath(element, tag, context.issues);
   if (!pathData) {
     context.issues.push(
-      svgIssue(
+      createSvgIssue(
         "unsupported-element",
         "error",
         `SVG <${tag}> is not supported by the current editable vector slice`,
@@ -1764,7 +1767,7 @@ function importElement(
   const editableVector = readSvgEditableVector(element, pathData);
   if (editableVector.status === "invalid") {
     context.issues.push(
-      svgIssue("invalid-geometry", "error", editableVector.message, {
+      createSvgIssue("invalid-geometry", "error", editableVector.message, {
         nodeId,
         sourceElement: tag,
       }),
@@ -1775,7 +1778,7 @@ function importElement(
     const normalizedNetwork = normalizeVectorNetwork(editableVector.network);
     if (!normalizedNetwork.ok || !normalizedNetwork.offset) {
       context.issues.push(
-        svgIssue(
+        createSvgIssue(
           "invalid-geometry",
           "error",
           normalizedNetwork.ok
@@ -1817,7 +1820,7 @@ function importElement(
   });
   if (!normalized.ok) {
     context.issues.push(
-      svgIssue("invalid-geometry", "error", normalized.message, {
+      createSvgIssue("invalid-geometry", "error", normalized.message, {
         sourceElement: tag,
       }),
     );
@@ -1841,7 +1844,7 @@ function importElement(
     };
     context.nodes.push(node);
     context.issues.push(
-      svgIssue(
+      createSvgIssue(
         "empty-geometry",
         "warning",
         `SVG <${tag}> contains no drawable geometry and is imported as an invisible editable Vector`,
@@ -1857,7 +1860,7 @@ function importElement(
   );
   if (!localized.ok || localized.empty || !localized.bounds) {
     context.issues.push(
-      svgIssue(
+      createSvgIssue(
         "invalid-geometry",
         "error",
         localized.ok
@@ -1910,7 +1913,7 @@ function importFrameElement(
   );
   if (backgrounds.length !== 1 || structuralChildren[0] !== backgrounds[0]) {
     context.issues.push(
-      svgIssue(
+      createSvgIssue(
         "unsupported-element",
         "error",
         "OpenDesign SVG Frame requires exactly one leading frame background rect",
@@ -1928,7 +1931,7 @@ function importFrameElement(
     readSvgOpacity(background.getAttribute("opacity"), 1) !== 1
   ) {
     context.issues.push(
-      svgIssue(
+      createSvgIssue(
         "unsupported-element",
         "error",
         "OpenDesign SVG Frame background contains unsupported structural appearance",
@@ -1951,7 +1954,7 @@ function importFrameElement(
     radius < 0
   ) {
     context.issues.push(
-      svgIssue(
+      createSvgIssue(
         "invalid-dimension",
         "error",
         "OpenDesign SVG Frame background requires origin-zero positive bounds and a non-negative corner radius",
@@ -1982,7 +1985,7 @@ function importFrameElement(
   if (contentWrappers.length > 0) {
     if (contentWrappers.length !== 1 || contentElements.length !== 1) {
       context.issues.push(
-        svgIssue(
+        createSvgIssue(
           "mask-omitted",
           "error",
           "OpenDesign SVG Frame clipping wrapper must be the only content container",
@@ -2001,7 +2004,7 @@ function importFrameElement(
       wrapper.hasAttribute("visibility")
     ) {
       context.issues.push(
-        svgIssue(
+        createSvgIssue(
           "mask-omitted",
           "error",
           "OpenDesign SVG Frame clipping wrapper contains unsupported appearance or transform",
@@ -2022,7 +2025,7 @@ function importFrameElement(
       !validateSvgFrameClipDefinition(definition, width, height, radius)
     ) {
       context.issues.push(
-        svgIssue(
+        createSvgIssue(
           "mask-omitted",
           "error",
           "OpenDesign SVG Frame clipping definition is missing or does not match the Frame bounds",
@@ -2097,43 +2100,6 @@ function readElementPath(
   return null;
 }
 
-function reportUnsupportedElementAttributes(
-  element: Element,
-  issues: SvgInterchangeIssue[],
-  ignoreMaskReference: boolean,
-): void {
-  for (let index = 0; index < element.attributes.length; index += 1) {
-    const attribute = element.attributes.item(index);
-    if (!attribute) continue;
-    const name = attribute.name.toLowerCase();
-    if (name.startsWith("on")) {
-      issues.push(
-        svgIssue(
-          "unsafe-xml",
-          "error",
-          `SVG event attribute ${attribute.name} is not accepted`,
-          { sourceElement: element.localName },
-        ),
-      );
-      continue;
-    }
-    if (name === "class") {
-      issues.push(
-        svgIssue(
-          "unsupported-css",
-          "warning",
-          "SVG class selectors are not resolved by the editable import boundary",
-          { sourceElement: element.localName },
-        ),
-      );
-      continue;
-    }
-    if (name === "mask" || name === "clip-path") {
-      if (ignoreMaskReference) continue;
-    }
-  }
-}
-
 function elementChildren(element: Element): Element[] {
   const children: Element[] = [];
   for (let index = 0; index < element.childNodes.length; index += 1) {
@@ -2168,30 +2134,17 @@ function isFinitePositiveRect(value: Rect): boolean {
   );
 }
 
-function hasErrors(issues: readonly SvgInterchangeIssue[]): boolean {
-  return issues.some((issue) => issue.severity === "error");
-}
-
 function capitalize(value: string): string {
   return value.length === 0
     ? value
     : `${value[0]!.toUpperCase()}${value.slice(1)}`;
 }
 
-function svgIssue(
-  code: SvgInterchangeIssueCode,
-  severity: SvgInterchangeIssueSeverity,
-  message: string,
-  context: Pick<SvgInterchangeIssue, "nodeId" | "sourceElement"> = {},
-): SvgInterchangeIssue {
-  return { code, severity, message, ...context };
-}
-
 function failure(
   code: SvgInterchangeIssueCode,
   message: string,
 ): SvgFailureResult {
-  return failed([svgIssue(code, "error", message)]);
+  return failed([createSvgIssue(code, "error", message)]);
 }
 
 function failed(issues: readonly SvgInterchangeIssue[]): SvgFailureResult {

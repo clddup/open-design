@@ -9,7 +9,7 @@ import {
   translate,
   type Matrix,
 } from "transformation-matrix";
-import type { SvgInterchangeIssue } from "./svg-issues.js";
+import { createSvgIssue, type SvgInterchangeIssue } from "./svg-issues.js";
 import { parseSvgLength } from "./svg-parse.js";
 
 export interface ImportedSvgStyle {
@@ -75,12 +75,14 @@ export function readImportedSvgStyle(
   ]);
   declarations.forEach((_value, name) => {
     if (!supported.has(name)) {
-      issues.push({
-        code: "unsupported-css",
-        severity: "warning",
-        message: `SVG inline style property ${name} is not preserved`,
-        sourceElement: element.localName,
-      });
+      issues.push(
+        createSvgIssue(
+          "unsupported-css",
+          "warning",
+          `SVG inline style property ${name} is not preserved`,
+          { sourceElement: element.localName },
+        ),
+      );
     }
   });
   const cap = read("stroke-linecap");
@@ -159,15 +161,16 @@ export function readSvgElementTransform(
     if (!isFiniteSvgMatrix(matrix)) throw new TypeError("non-finite transform");
     return transformFromSvgMatrix(matrix);
   } catch (error) {
-    issues.push({
-      code: "invalid-transform",
-      severity: "error",
-      message:
+    issues.push(
+      createSvgIssue(
+        "invalid-transform",
+        "error",
         error instanceof Error
           ? `Invalid SVG transform: ${error.message}`
           : "Invalid SVG transform",
-      sourceElement: element.localName,
-    });
+        { sourceElement: element.localName },
+      ),
+    );
     return [1, 0, 0, 1, 0, 0];
   }
 }
@@ -235,12 +238,14 @@ export function readSvgLength(
   if (!value) return fallback;
   const parsed = parseSvgLength(value);
   if (parsed === null) {
-    issues.push({
-      code: "invalid-dimension",
-      severity: "error",
-      message: `SVG ${element.localName}.${attribute} must use finite px or unitless coordinates`,
-      sourceElement: element.localName,
-    });
+    issues.push(
+      createSvgIssue(
+        "invalid-dimension",
+        "error",
+        `SVG ${element.localName}.${attribute} must use finite px or unitless coordinates`,
+        { sourceElement: element.localName },
+      ),
+    );
   }
   return parsed;
 }

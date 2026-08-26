@@ -1,9 +1,10 @@
 import type { Rect } from "@opendesign/design-contracts";
 import { DOMParser } from "@xmldom/xmldom";
 import { SVG_MAX_CHARACTERS } from "./limits.js";
-import type {
-  SvgInterchangeIssue,
-  SvgInterchangeIssueCode,
+import {
+  createSvgIssue,
+  type SvgInterchangeIssue,
+  type SvgInterchangeIssueCode,
 } from "./svg-issues.js";
 
 export const SVG_IMPORT_MAX_DEPTH = 64;
@@ -100,24 +101,27 @@ function validateSvgStructure(root: Element): SvgInterchangeIssue | null {
     if (!current) break;
     const tag = current.element.localName.toLowerCase();
     if (tag === "script" || tag === "foreignobject") {
-      return issue(
+      return createSvgIssue(
         "unsupported-element",
+        "error",
         `SVG <${tag}> is not accepted by the editable import boundary`,
-        tag,
+        { sourceElement: tag },
       );
     }
     if (tag === "style") {
-      return issue(
+      return createSvgIssue(
         "unsupported-css",
+        "error",
         "SVG stylesheets are not accepted; use presentation attributes or inline style",
-        tag,
+        { sourceElement: tag },
       );
     }
     if (tag === "use") {
-      return issue(
+      return createSvgIssue(
         "external-reference",
+        "error",
         "SVG <use> references are not accepted by the editable import boundary",
-        tag,
+        { sourceElement: tag },
       );
     }
     for (
@@ -129,30 +133,34 @@ function validateSvgStructure(root: Element): SvgInterchangeIssue | null {
       if (!attribute) continue;
       const name = attribute.name.toLowerCase();
       if (name.startsWith("on")) {
-        return issue(
+        return createSvgIssue(
           "unsafe-xml",
+          "error",
           `SVG event attribute ${attribute.name} is not accepted`,
-          tag,
+          { sourceElement: tag },
         );
       }
       if (name === "href" || name === "xlink:href") {
-        return issue(
+        return createSvgIssue(
           "external-reference",
+          "error",
           `SVG reference attribute ${attribute.name} is not accepted`,
-          tag,
+          { sourceElement: tag },
         );
       }
     }
     count += 1;
     if (count > MAX_SVG_ELEMENTS) {
-      return issue(
+      return createSvgIssue(
         "element-limit",
+        "error",
         `SVG import exceeds ${MAX_SVG_ELEMENTS} XML elements`,
       );
     }
     if (current.depth > SVG_IMPORT_MAX_DEPTH) {
-      return issue(
+      return createSvgIssue(
         "depth-limit",
+        "error",
         `SVG import exceeds ${SVG_IMPORT_MAX_DEPTH} nested levels`,
       );
     }
@@ -202,22 +210,9 @@ function positive(value: number | null): value is number {
   return value !== null && Number.isFinite(value) && value > 0;
 }
 
-function issue(
-  code: SvgInterchangeIssueCode,
-  message: string,
-  sourceElement?: string,
-): SvgInterchangeIssue {
-  return {
-    code,
-    severity: "error",
-    message,
-    ...(sourceElement ? { sourceElement } : {}),
-  };
-}
-
 function invalid(
   code: SvgInterchangeIssueCode,
   message: string,
 ): SvgParseResult {
-  return { ok: false, issues: [issue(code, message)] };
+  return { ok: false, issues: [createSvgIssue(code, "error", message)] };
 }

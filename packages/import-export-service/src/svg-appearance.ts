@@ -1,10 +1,7 @@
 import type { DesignNode, Paint } from "@opendesign/design-contracts";
 import { appendSvgEffectFilter } from "./svg-filter-effects.js";
-import type {
-  SvgInterchangeIssue,
-  SvgInterchangeIssueCode,
-  SvgInterchangeIssueSeverity,
-} from "./svg-issues.js";
+import type { SvgInterchangeIssue } from "./svg-issues.js";
+import { createSvgIssue } from "./svg-issues.js";
 import {
   readSvgOpacity,
   readSvgStyleOrAttribute,
@@ -70,7 +67,7 @@ export function applyExportNodeAppearance(
   }
   if (!maskSource && node.maskMode && node.maskMode !== "none") {
     context.issues.push(
-      issue(
+      createSvgIssue(
         "mask-omitted",
         "warning",
         `Mask source ${node.id} was exported without its parent sibling run, so mode ${node.maskMode} could not be preserved`,
@@ -108,7 +105,7 @@ export function applyExportShapeAppearance(
   }
   if (properties.strokeAlign && properties.strokeAlign !== "center") {
     context.issues.push(
-      issue(
+      createSvgIssue(
         "stroke-alignment-flattened",
         "warning",
         `${properties.strokeAlign} stroke on ${nodeId} requires outline-stroke conversion for standard SVG fidelity`,
@@ -144,7 +141,7 @@ export function importSvgShapeProperties(
 ): SvgShapeProperties | null {
   if (!Number.isFinite(style.strokeWidth) || style.strokeWidth < 0) {
     context.issues.push(
-      issue(
+      createSvgIssue(
         "invalid-dimension",
         "error",
         `SVG stroke width on ${nodeId} must be finite and non-negative`,
@@ -193,7 +190,7 @@ function applyExportPaint(
   }
   if (visible.length > 1) {
     context.issues.push(
-      issue(
+      createSvgIssue(
         "multiple-paints-flattened",
         "warning",
         `SVG ${role} on ${nodeId} keeps only the first of ${visible.length} visible paints`,
@@ -216,7 +213,7 @@ function applyExportPaint(
       element.setAttribute(`${role}-opacity`, formatSvgNumber(first.opacity));
     }
     context.issues.push(
-      issue(
+      createSvgIssue(
         "angular-gradient-flattened",
         "warning",
         `Angular gradient ${role} on ${nodeId} has no standard SVG 1.1 equivalent and is reduced to its first stop`,
@@ -228,7 +225,7 @@ function applyExportPaint(
   if (paint.type === "image") {
     element.setAttribute(role, "none");
     context.issues.push(
-      issue(
+      createSvgIssue(
         "unsupported-paint",
         "error",
         `Image ${role} on ${nodeId} is not supported by the current SVG vector slice`,
@@ -295,7 +292,7 @@ function importPaint(
     paint === "context-stroke"
   ) {
     context.issues.push(
-      issue(
+      createSvgIssue(
         "unsupported-paint",
         "error",
         `SVG paint ${paint} on ${nodeId} depends on an unsupported external style context`,
@@ -308,7 +305,7 @@ function importPaint(
   if (!reference) {
     if (/^url\(/i.test(paint)) {
       context.issues.push(
-        issue(
+        createSvgIssue(
           "external-reference",
           "error",
           `SVG paint on ${nodeId} references an external resource`,
@@ -322,7 +319,7 @@ function importPaint(
   const definition = context.gradientDefinitions.get(reference[1]!);
   if (!definition) {
     context.issues.push(
-      issue(
+      createSvgIssue(
         "unsupported-gradient",
         "error",
         `SVG gradient #${reference[1]} is missing`,
@@ -336,7 +333,7 @@ function importPaint(
     definition.getAttribute("gradientUnits") !== "objectBoundingBox"
   ) {
     context.issues.push(
-      issue(
+      createSvgIssue(
         "unsupported-gradient",
         "error",
         `SVG gradient #${reference[1]} uses unsupported user-space coordinates`,
@@ -354,7 +351,7 @@ function importPaint(
     }));
   if (stops.length < 2) {
     context.issues.push(
-      issue(
+      createSvgIssue(
         "unsupported-gradient",
         "error",
         `SVG gradient #${reference[1]} requires at least two stops`,
@@ -396,7 +393,7 @@ function importPaint(
     };
   }
   context.issues.push(
-    issue(
+    createSvgIssue(
       "unsupported-gradient",
       "error",
       `SVG gradient #${reference[1]} is not linear or radial`,
@@ -418,7 +415,7 @@ function readGradientRotation(
     );
   if (!match) {
     issues.push(
-      issue(
+      createSvgIssue(
         "unsupported-gradient",
         "error",
         "SVG gradientTransform currently supports only rotate(angle 0.5 0.5)",
@@ -437,13 +434,4 @@ function elementChildren(element: Element): Element[] {
     if (child?.nodeType === 1) children.push(child as Element);
   }
   return children;
-}
-
-function issue(
-  code: SvgInterchangeIssueCode,
-  severity: SvgInterchangeIssueSeverity,
-  message: string,
-  context: Pick<SvgInterchangeIssue, "nodeId" | "sourceElement"> = {},
-): SvgInterchangeIssue {
-  return { code, severity, message, ...context };
 }
