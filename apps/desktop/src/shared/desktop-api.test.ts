@@ -50,6 +50,11 @@ import {
   SaveRasterFileRequestContract,
   SaveSvgFileResultContract,
 } from "./native-file-contract";
+import {
+  AgentAttachmentSelectionContract,
+  DesignImageEditRequestContract,
+  DesignImageEditResultContract,
+} from "./media-input-contract";
 
 const now = "2026-08-07T12:00:00.000Z";
 
@@ -353,6 +358,20 @@ describe("Agent attachment desktop API guards", () => {
         attachmentId: "../../reference.png",
       }),
     ).toBe(false);
+    expect(
+      AgentAttachmentSelectionContract.issues({
+        attachmentId,
+        name: "reference.png",
+        mimeType: "image/png",
+        byteSize: 1024,
+        previewDataUrl: "data:image/jpeg;base64,aW1hZ2U=",
+      }),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "agent_attachment_selection.preview_mime_mismatch",
+        path: "/previewDataUrl",
+      }),
+    );
   });
 });
 
@@ -406,6 +425,17 @@ describe("Design image desktop API guards", () => {
     expect(
       isDesignImageEditRequest({ ...request, provider: "openai-images" }),
     ).toBe(false);
+    expect(
+      DesignImageEditRequestContract.issues({
+        ...request,
+        reference: sourceAsset,
+      }),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "design_image_edit_request.reference_matches_source",
+        path: "/reference/id",
+      }),
+    );
   });
 
   it("binds prompt-edit results to exact supporting assets and provenance", () => {
@@ -442,6 +472,17 @@ describe("Design image desktop API guards", () => {
     ).toBe(false);
     expect(isDesignImageEditResult({ ...result, bytes: "not allowed" })).toBe(
       false,
+    );
+    expect(
+      DesignImageEditResultContract.issues({
+        ...result,
+        supportingAssets: [],
+      }),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "design_image_edit_result.supporting_asset_count",
+        path: "/supportingAssets",
+      }),
     );
   });
 

@@ -1,8 +1,4 @@
-import type {
-  AgentAttachment,
-  AgentEvent,
-  AgentRequest,
-} from "@opendesign/agent-contracts";
+import type { AgentEvent, AgentRequest } from "@opendesign/agent-contracts";
 import type {
   ModelApiFormat,
   ModelAuthMode,
@@ -10,16 +6,7 @@ import type {
   ModelSelection,
 } from "@opendesign/model-gateway";
 import {
-  isDesignAsset,
-  isImageAssetDerivation,
-  isImageLightingPreset,
-  isImagePlacement,
   isDesignDocument,
-  type DesignAsset,
-  type ImageAssetDerivation,
-  type ImageLightingPreset,
-  type ImagePlacement,
-  type Size,
   type DesignDocument,
   type LibraryReleaseSnapshot,
 } from "@opendesign/design-contracts";
@@ -72,6 +59,40 @@ import type {
   SaveSvgFileRequest,
   SaveSvgFileResult,
 } from "./native-file-contract";
+
+export {
+  isAgentAttachmentImport,
+  isAgentAttachmentPreviewRequest,
+  isAgentAttachmentPreviewResult,
+  isAgentAttachmentSelection,
+  isCancelDesignImageEditRequest,
+  isDesignImageAreaSelection,
+  isDesignImageEditRequest,
+  isDesignImageEditResult,
+  isDesignImageExpansion,
+  isDesignImageSelection,
+  type AgentAttachmentImport,
+  type AgentAttachmentPreviewRequest,
+  type AgentAttachmentPreviewResult,
+  type AgentAttachmentSelection,
+  type CancelDesignImageEditRequest,
+  type DesignImageAreaSelection,
+  type DesignImageEditAction,
+  type DesignImageEditRequest,
+  type DesignImageEditResult,
+  type DesignImageExpansion,
+  type DesignImageSelection,
+} from "./media-input-contract";
+import type {
+  AgentAttachmentImport,
+  AgentAttachmentPreviewRequest,
+  AgentAttachmentPreviewResult,
+  AgentAttachmentSelection,
+  CancelDesignImageEditRequest,
+  DesignImageEditRequest,
+  DesignImageEditResult,
+  DesignImageSelection,
+} from "./media-input-contract";
 import type {
   ListProjectLibrariesRequest,
   ProjectLibraryCatalog,
@@ -222,94 +243,6 @@ export type SaveGlobalImageGenerationSettingsRequest = {
 };
 
 export type TestModelProviderConnectionRequest = ModelSelection;
-
-export type AgentAttachmentSelection = AgentAttachment & {
-  previewDataUrl?: string;
-};
-
-export type AgentAttachmentImport = {
-  name: string;
-  bytes: Uint8Array;
-};
-
-export type AgentAttachmentPreviewRequest = { attachmentId: string };
-
-export type AgentAttachmentPreviewResult = AgentAttachmentPreviewRequest & {
-  previewDataUrl: string | null;
-};
-
-export type DesignImageSelection = {
-  asset: DesignAsset;
-};
-
-export type DesignImageAreaSelection = {
-  points: Array<{ x: number; y: number }>;
-};
-
-export type DesignImageExpansion = {
-  top: number;
-  right: number;
-  bottom: number;
-  left: number;
-};
-
-export type DesignImageEditAction =
-  | "remove-background"
-  | "replace-background"
-  | "relight"
-  | "prompt-edit"
-  | "erase-object"
-  | "isolate-object"
-  | "expand"
-  | "upscale";
-
-type DesignImageEditRequestBase = {
-  requestId: string;
-  pageId: string;
-  nodeId: string;
-  expectedAssetId: string;
-  source: DesignAsset;
-};
-
-export type DesignImageEditRequest = DesignImageEditRequestBase &
-  (
-    | { action: "remove-background" }
-    | { action: "upscale" }
-    | {
-        action: "replace-background";
-        prompt: string;
-      }
-    | {
-        action: "relight";
-        lightingPreset: ImageLightingPreset;
-      }
-    | {
-        action: "prompt-edit";
-        prompt: string;
-        reference?: DesignAsset;
-      }
-    | {
-        action: "erase-object" | "isolate-object";
-        selection: DesignImageAreaSelection;
-      }
-    | {
-        action: "expand";
-        expansion: DesignImageExpansion;
-        placement: ImagePlacement;
-        targetSize: Size;
-      }
-  );
-
-export type DesignImageEditResult = {
-  requestId: string;
-  action: DesignImageEditAction;
-  sourceAssetId: string;
-  asset: DesignAsset;
-  derivation: ImageAssetDerivation;
-  supportingAssets?: DesignAsset[];
-};
-
-export type CancelDesignImageEditRequest = { requestId: string };
 
 export type CreateProjectRequest = {
   projectId: string;
@@ -577,407 +510,6 @@ export const channels = {
 
 export function isThemePreference(value: unknown): value is ThemePreference {
   return value === "light" || value === "dark" || value === "system";
-}
-
-export function isAgentAttachmentPreviewRequest(
-  value: unknown,
-): value is AgentAttachmentPreviewRequest {
-  return (
-    isRecord(value) &&
-    isAgentAttachmentId(value.attachmentId) &&
-    Object.keys(value).every((key) => key === "attachmentId")
-  );
-}
-
-export function isAgentAttachmentSelection(
-  value: unknown,
-): value is AgentAttachmentSelection {
-  if (!isRecord(value) || !isAgentAttachment(value)) return false;
-  const preview = value.previewDataUrl;
-  const isImage = value.attachmentId.startsWith("image_");
-  return (
-    (isImage
-      ? typeof preview === "string" &&
-        preview.startsWith(`data:${value.mimeType};base64,`) &&
-        preview.length <= 24_000_000
-      : preview === undefined) &&
-    Object.keys(value).every((key) =>
-      [
-        "attachmentId",
-        "name",
-        "mimeType",
-        "byteSize",
-        "previewDataUrl",
-      ].includes(key),
-    )
-  );
-}
-
-export function isAgentAttachmentImport(
-  value: unknown,
-): value is AgentAttachmentImport {
-  return (
-    isRecord(value) &&
-    typeof value.name === "string" &&
-    value.name.length > 0 &&
-    value.name.length <= 255 &&
-    value.bytes instanceof Uint8Array &&
-    value.bytes.byteLength > 0 &&
-    value.bytes.byteLength <= 16 * 1024 * 1024 &&
-    Object.keys(value).every((key) => key === "name" || key === "bytes")
-  );
-}
-
-export function isAgentAttachmentPreviewResult(
-  value: unknown,
-): value is AgentAttachmentPreviewResult {
-  return (
-    isRecord(value) &&
-    isAgentAttachmentId(value.attachmentId) &&
-    (value.previewDataUrl === null ||
-      (typeof value.previewDataUrl === "string" &&
-        /^data:image\/(png|jpeg|webp|gif);base64,/.test(value.previewDataUrl) &&
-        value.previewDataUrl.length <= 24_000_000)) &&
-    Object.keys(value).every((key) =>
-      ["attachmentId", "previewDataUrl"].includes(key),
-    )
-  );
-}
-
-export function isDesignImageSelection(
-  value: unknown,
-): value is DesignImageSelection {
-  if (!isRecord(value) || !isDesignAsset(value.asset)) return false;
-  const { asset } = value;
-  return (
-    asset.kind === "image" &&
-    /^asset_[a-f0-9]{64}$/.test(asset.id) &&
-    asset.source.type === "data" &&
-    asset.source.value.length > 0 &&
-    asset.source.value.length <= 24_000_000 &&
-    /^[A-Za-z0-9+/]*={0,2}$/.test(asset.source.value) &&
-    asset.size !== undefined &&
-    asset.size.width > 0 &&
-    asset.size.height > 0 &&
-    Object.keys(value).every((key) => key === "asset")
-  );
-}
-
-export function isDesignImageEditRequest(
-  value: unknown,
-): value is DesignImageEditRequest {
-  if (!(
-    isRecord(value) &&
-    isStableId(value.requestId) &&
-    isStableId(value.pageId) &&
-    isStableId(value.nodeId) &&
-    isStableId(value.expectedAssetId) &&
-    isEmbeddedEditableImageAsset(value.source) &&
-    value.source.id === value.expectedAssetId
-  )) {
-    return false;
-  }
-  if (value.action === "remove-background" || value.action === "upscale") {
-    return hasExactKeys(value, [
-      "requestId",
-      "action",
-      "pageId",
-      "nodeId",
-      "expectedAssetId",
-      "source",
-    ]);
-  }
-  if (value.action === "erase-object" || value.action === "isolate-object") {
-    return (
-      isDesignImageAreaSelection(value.selection) &&
-      hasExactKeys(value, [
-        "requestId",
-        "action",
-        "pageId",
-        "nodeId",
-        "expectedAssetId",
-        "source",
-        "selection",
-      ])
-    );
-  }
-  if (value.action === "expand") {
-    return (
-      isDesignImageExpansion(value.expansion) &&
-      isImagePlacement(value.placement) &&
-      isPositiveSize(value.targetSize) &&
-      hasExactKeys(value, [
-        "requestId",
-        "action",
-        "pageId",
-        "nodeId",
-        "expectedAssetId",
-        "source",
-        "expansion",
-        "placement",
-        "targetSize",
-      ])
-    );
-  }
-  if (value.action === "replace-background") {
-    return (
-      typeof value.prompt === "string" &&
-      value.prompt.trim().length > 0 &&
-      value.prompt.length <= 32_000 &&
-      hasExactKeys(value, [
-        "requestId",
-        "action",
-        "pageId",
-        "nodeId",
-        "expectedAssetId",
-        "source",
-        "prompt",
-      ])
-    );
-  }
-  if (value.action === "relight") {
-    return (
-      isImageLightingPreset(value.lightingPreset) &&
-      hasExactKeys(value, [
-        "requestId",
-        "action",
-        "pageId",
-        "nodeId",
-        "expectedAssetId",
-        "source",
-        "lightingPreset",
-      ])
-    );
-  }
-  return (
-    value.action === "prompt-edit" &&
-    typeof value.prompt === "string" &&
-    value.prompt.trim().length > 0 &&
-    value.prompt.length <= 32_000 &&
-    (value.reference === undefined ||
-      (isEmbeddedEditableImageAsset(value.reference) &&
-        value.reference.id !== value.source.id)) &&
-    hasExactKeys(value, [
-      "requestId",
-      "action",
-      "pageId",
-      "nodeId",
-      "expectedAssetId",
-      "source",
-      "prompt",
-      ...(value.reference === undefined ? [] : ["reference"]),
-    ])
-  );
-}
-
-export function isDesignImageEditResult(
-  value: unknown,
-): value is DesignImageEditResult {
-  if (
-    !isRecord(value) ||
-    !isStableId(value.requestId) ||
-    (value.action !== "remove-background" &&
-      value.action !== "replace-background" &&
-      value.action !== "relight" &&
-      value.action !== "prompt-edit" &&
-      value.action !== "erase-object" &&
-      value.action !== "isolate-object" &&
-      value.action !== "expand" &&
-      value.action !== "upscale") ||
-    !isStableId(value.sourceAssetId) ||
-    !isEmbeddedEditableImageAsset(value.asset) ||
-    !isImageAssetDerivation(value.derivation) ||
-    value.derivation.sourceAssetId !== value.sourceAssetId ||
-    value.derivation.resultAssetId !== value.asset.id ||
-    value.derivation.operation !== value.action
-  ) {
-    return false;
-  }
-  const asset = value.asset;
-  const derivation = value.derivation;
-  if (value.action !== "relight" && derivation.lightingPreset !== undefined) {
-    return false;
-  }
-  const supportingAssets = value.supportingAssets ?? [];
-  const derivationInputIds = [
-    ...derivation.referenceAssetIds,
-    ...(derivation.maskAssetId ? [derivation.maskAssetId] : []),
-  ];
-  if (
-    !Array.isArray(supportingAssets) ||
-    supportingAssets.length > 1 ||
-    !supportingAssets.every(isEmbeddedEditableImageAsset) ||
-    supportingAssets.some(
-      (supportingAsset) =>
-        supportingAsset.id === value.sourceAssetId ||
-        supportingAsset.id === asset.id,
-    ) ||
-    supportingAssets.length !== derivationInputIds.length ||
-    supportingAssets.some(
-      (supportingAsset, index) =>
-        supportingAsset.id !== derivationInputIds[index],
-    )
-  ) {
-    return false;
-  }
-  if (
-    value.action === "remove-background" &&
-    (supportingAssets.length !== 0 ||
-      derivation.prompt !== undefined ||
-      derivation.maskAssetId !== undefined)
-  ) {
-    return false;
-  }
-  if (
-    value.action === "upscale" &&
-    (supportingAssets.length !== 0 ||
-      derivation.prompt !== undefined ||
-      derivation.maskAssetId !== undefined ||
-      derivation.referenceAssetIds.length !== 0 ||
-      value.asset.mimeType !== "image/png")
-  ) {
-    return false;
-  }
-  if (
-    value.action === "replace-background" &&
-    (typeof derivation.prompt !== "string" ||
-      derivation.prompt.trim().length === 0 ||
-      derivation.maskAssetId !== undefined ||
-      derivation.referenceAssetIds.length !== 0 ||
-      supportingAssets.length !== 0)
-  ) {
-    return false;
-  }
-  if (
-    value.action === "relight" &&
-    (!isImageLightingPreset(derivation.lightingPreset) ||
-      derivation.prompt !== undefined ||
-      derivation.maskAssetId !== undefined ||
-      derivation.referenceAssetIds.length !== 0 ||
-      supportingAssets.length !== 0)
-  ) {
-    return false;
-  }
-  if (
-    value.action === "prompt-edit" &&
-    (typeof derivation.prompt !== "string" ||
-      derivation.prompt.trim().length === 0 ||
-      derivation.maskAssetId !== undefined)
-  ) {
-    return false;
-  }
-  if (
-    (value.action === "erase-object" ||
-      value.action === "isolate-object" ||
-      value.action === "expand") &&
-    (typeof derivation.prompt !== "string" ||
-      derivation.prompt.trim().length === 0 ||
-      derivation.referenceAssetIds.length !== 0 ||
-      supportingAssets.length !== 1 ||
-      supportingAssets[0]?.mimeType !== "image/png" ||
-      derivation.maskAssetId !== supportingAssets[0]?.id ||
-      (value.action === "expand" && value.asset.mimeType !== "image/png"))
-  ) {
-    return false;
-  }
-  return hasExactKeys(value, [
-    "requestId",
-    "action",
-    "sourceAssetId",
-    "asset",
-    "derivation",
-    ...(value.supportingAssets === undefined ? [] : ["supportingAssets"]),
-  ]);
-}
-
-export function isDesignImageAreaSelection(
-  value: unknown,
-): value is DesignImageAreaSelection {
-  return (
-    isRecord(value) &&
-    Array.isArray(value.points) &&
-    value.points.length >= 3 &&
-    value.points.length <= 512 &&
-    value.points.every(
-      (point) =>
-        isRecord(point) &&
-        typeof point.x === "number" &&
-        Number.isFinite(point.x) &&
-        point.x >= 0 &&
-        point.x <= 1 &&
-        typeof point.y === "number" &&
-        Number.isFinite(point.y) &&
-        point.y >= 0 &&
-        point.y <= 1 &&
-        hasExactKeys(point, ["x", "y"]),
-    ) &&
-    hasExactKeys(value, ["points"])
-  );
-}
-
-export function isDesignImageExpansion(
-  value: unknown,
-): value is DesignImageExpansion {
-  if (
-    !isRecord(value) ||
-    !hasExactKeys(value, ["top", "right", "bottom", "left"])
-  ) {
-    return false;
-  }
-  const values = [value.top, value.right, value.bottom, value.left];
-  return (
-    values.some(
-      (candidate) => typeof candidate === "number" && candidate > 0,
-    ) &&
-    values.every(
-      (candidate) =>
-        typeof candidate === "number" &&
-        Number.isFinite(candidate) &&
-        candidate >= 0 &&
-        candidate <= 1_000_000,
-    )
-  );
-}
-
-function isPositiveSize(value: unknown): value is Size {
-  return (
-    isRecord(value) &&
-    typeof value.width === "number" &&
-    Number.isFinite(value.width) &&
-    value.width > 0 &&
-    typeof value.height === "number" &&
-    Number.isFinite(value.height) &&
-    value.height > 0 &&
-    hasExactKeys(value, ["width", "height"])
-  );
-}
-
-export function isCancelDesignImageEditRequest(
-  value: unknown,
-): value is CancelDesignImageEditRequest {
-  return (
-    isRecord(value) &&
-    isStableId(value.requestId) &&
-    hasExactKeys(value, ["requestId"])
-  );
-}
-
-function isEmbeddedEditableImageAsset(value: unknown): value is DesignAsset {
-  return (
-    isDesignAsset(value) &&
-    value.kind === "image" &&
-    /^asset_[a-f0-9]{64}$/.test(value.id) &&
-    (value.mimeType === "image/png" ||
-      value.mimeType === "image/jpeg" ||
-      value.mimeType === "image/webp") &&
-    value.source.type === "data" &&
-    value.source.value.length > 0 &&
-    value.source.value.length <= 24_000_000 &&
-    /^[A-Za-z0-9+/]*={0,2}$/.test(value.source.value) &&
-    value.size !== undefined &&
-    value.size.width > 0 &&
-    value.size.height > 0
-  );
 }
 
 export function isLocalePreference(value: unknown): value is AppLocale {
@@ -1686,50 +1218,4 @@ function hasControlCharacter(value: string): boolean {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function isAgentAttachmentId(value: unknown): value is string {
-  return (
-    typeof value === "string" && /^(image|file|svg)_[a-f0-9]{64}$/.test(value)
-  );
-}
-
-function isAgentAttachment(
-  value: Record<string, unknown>,
-): value is Record<string, unknown> & AgentAttachment {
-  const imageMimeTypes = ["image/png", "image/jpeg", "image/webp", "image/gif"];
-  const documentMimeTypes = [
-    "application/pdf",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "text/plain",
-    "text/markdown",
-    "text/csv",
-    "text/html",
-    "application/json",
-    "application/yaml",
-  ];
-  const kind =
-    typeof value.attachmentId !== "string"
-      ? null
-      : value.attachmentId.startsWith("image_")
-        ? "image"
-        : value.attachmentId.startsWith("file_")
-          ? "document"
-          : value.attachmentId.startsWith("svg_")
-            ? "svg"
-            : null;
-  return (
-    isAgentAttachmentId(value.attachmentId) &&
-    typeof value.name === "string" &&
-    value.name.length > 0 &&
-    value.name.length <= 255 &&
-    (kind === "image"
-      ? imageMimeTypes.includes(String(value.mimeType))
-      : kind === "document"
-        ? documentMimeTypes.includes(String(value.mimeType))
-        : value.mimeType === "image/svg+xml") &&
-    Number.isInteger(value.byteSize) &&
-    Number(value.byteSize) > 0 &&
-    Number(value.byteSize) <= 16 * 1024 * 1024
-  );
 }
