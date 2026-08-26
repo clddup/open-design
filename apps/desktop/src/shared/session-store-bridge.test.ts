@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   isSessionStoreBridgeRequest,
   isSessionStoreBridgeResponse,
+  SessionStoreBridgeRequestContract,
+  SessionStoreBridgeResponseContract,
   sessionStoreBridgeRequestId,
   sessionStoreBridgeResponseId,
 } from "./session-store-bridge.js";
@@ -65,7 +67,81 @@ describe("Session Store bridge", () => {
         type: "session-store.request",
         requestId: "request_1",
         operation: "append",
-        event: { ...event, payload: "x".repeat(4_000_001) },
+        event: {
+          ...event,
+          type: "tool.requested",
+          payload: {
+            toolCallId: "tool_1",
+            toolName: "opendesign_edit_design",
+            input: "x".repeat(4_000_001),
+            risk: "design_write",
+          },
+        },
+      }),
+    ).toBe(false);
+    expect(
+      SessionStoreBridgeRequestContract.issues({
+        type: "session-store.request",
+        requestId: "request_1",
+        operation: "append",
+        event: {
+          ...event,
+          type: "tool.requested",
+          payload: {
+            toolCallId: "tool_1",
+            toolName: "opendesign_edit_design",
+            input: "x".repeat(4_000_001),
+            risk: "design_write",
+          },
+        },
+      }),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "session_store_bridge_event.payload_too_large",
+        path: "/event/payload",
+      }),
+    );
+    expect(
+      isSessionStoreBridgeRequest({
+        type: "session-store.request",
+        requestId: "request_1",
+        operation: "append",
+        event: {
+          ...event,
+          createdAt: "not-a-timestamp",
+        },
+      }),
+    ).toBe(false);
+    expect(
+      SessionStoreBridgeRequestContract.issues({
+        type: "session-store.request",
+        requestId: "request_1",
+        operation: "append",
+        event: {
+          ...event,
+          createdAt: "not-a-timestamp",
+        },
+      }),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "session_store_bridge_event.timestamp_invalid",
+        path: "/event/createdAt",
+      }),
+    );
+    expect(
+      isSessionStoreBridgeRequest({
+        type: "session-store.request",
+        requestId: "request_1",
+        operation: "append",
+        event: {
+          ...event,
+          payload: {
+            messageId: "message_1",
+            documentId: "document_1",
+            revision: 0,
+            scope: { kind: "page", pageId: "page_1", selectedNodeIds: [] },
+          },
+        },
       }),
     ).toBe(false);
   });
@@ -98,6 +174,26 @@ describe("Session Store bridge", () => {
         result: [event],
       }),
     ).toBe(false);
+    expect(
+      SessionStoreBridgeResponseContract.issues({
+        type: "session-store.response",
+        requestId: "request_3",
+        operation: "project",
+        ok: true,
+        result: {
+          sessionId: "conversation_1",
+          lastSequence: 2,
+          messageCount: 0,
+          toolCallCount: 0,
+          compactedRanges: [{ fromSequence: 2, toSequence: 1 }],
+        },
+      }),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "session_store_bridge_response.compacted_range_invalid",
+        path: "/result/compactedRanges/0/toSequence",
+      }),
+    );
   });
 
   it("extracts IDs from malformed matching envelopes", () => {

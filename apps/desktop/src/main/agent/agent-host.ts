@@ -30,8 +30,10 @@ import {
 import { validateDesignAgentToolInput } from "@/shared/design-agent-tools";
 import {
   isSessionStoreBridgeRequest,
+  isSessionStoreBridgeResponse,
   sessionStoreBridgeRequestId,
   sessionStoreBridgeRequestOperation,
+  sessionStoreBridgeResponseValidationError,
   type SessionStoreBridgeRequest,
   type SessionStoreBridgeResponse,
 } from "@/shared/session-store-bridge";
@@ -554,6 +556,12 @@ export class AgentHost {
     try {
       const response = await handler(request, controller.signal);
       if (controller.signal.aborted) return;
+      if (!isSessionStoreBridgeResponse(response)) {
+        throw new TypeError(
+          sessionStoreBridgeResponseValidationError(response) ??
+            "Session Store handler returned an invalid response",
+        );
+      }
       if (
         response.requestId !== request.requestId ||
         response.operation !== request.operation
