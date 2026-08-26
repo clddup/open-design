@@ -54,6 +54,7 @@ describe("Agent Run starter", () => {
       initialInspectionControllers: new Map(),
       globalTaskCoordinator: {
         registerRun: vi.fn().mockResolvedValue({}),
+        assertRunRevisionCurrent: vi.fn().mockResolvedValue(undefined),
       } as never,
       modelProviderHost: {
         resolveModelContext: vi.fn().mockReturnValue({
@@ -77,6 +78,45 @@ describe("Agent Run starter", () => {
       initialDesignInspection,
       modelContext: { contextWindow: 200_000, maxOutputTokens: 16_384 },
     });
+  });
+
+  it("revalidates the registered revision after preflight before starting Agent", async () => {
+    const scheduler = new AgentContinuationScheduler(() => 1000);
+    const send = vi.fn();
+    const handleAgentEvent = vi.fn();
+    const assertRunRevisionCurrent = vi
+      .fn()
+      .mockRejectedValue(new Error("agent_run.preflight_stale"));
+
+    await expect(
+      startAgentRun(source, {
+        agentHost: { send } as never,
+        continuationScheduler: scheduler,
+        conversationIdByRunId: new Map(),
+        initialInspectionControllers: new Map(),
+        globalTaskCoordinator: {
+          registerRun: vi.fn().mockResolvedValue({}),
+          assertRunRevisionCurrent,
+          handleAgentEvent,
+        } as never,
+        modelProviderHost: { resolveModelContext: vi.fn() } as never,
+        prepareInitialDesignInspection: vi.fn().mockResolvedValue(undefined),
+        referenceHost: {
+          registerRun: vi.fn(),
+          releaseRun: vi.fn(),
+        } as never,
+      }),
+    ).rejects.toThrow("agent_run.preflight_stale");
+
+    expect(assertRunRevisionCurrent).toHaveBeenCalledWith(source.runId);
+    expect(send).not.toHaveBeenCalled();
+    expect(handleAgentEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "agent.error",
+        runId: source.runId,
+        code: "request_rejected",
+      }),
+    );
   });
 
   it("rejects a Renderer-forged initial inspection", async () => {
@@ -146,6 +186,7 @@ describe("Agent Run starter", () => {
         initialInspectionControllers: new Map(),
         globalTaskCoordinator: {
           registerRun: vi.fn().mockResolvedValue({}),
+          assertRunRevisionCurrent: vi.fn().mockResolvedValue(undefined),
         } as never,
         modelProviderHost: {
           resolveModelContext: vi.fn().mockReturnValue({
@@ -192,6 +233,7 @@ describe("Agent Run starter", () => {
       initialInspectionControllers: new Map<string, AbortController>(),
       globalTaskCoordinator: {
         registerRun: vi.fn().mockResolvedValue({}),
+        assertRunRevisionCurrent: vi.fn().mockResolvedValue(undefined),
         handleAgentEvent: vi.fn(),
       } as never,
       modelProviderHost: { resolveModelContext: vi.fn() } as never,
@@ -253,6 +295,7 @@ describe("Agent Run starter", () => {
         initialInspectionControllers: new Map(),
         globalTaskCoordinator: {
           registerRun: vi.fn().mockResolvedValue({}),
+          assertRunRevisionCurrent: vi.fn().mockResolvedValue(undefined),
           handleAgentEvent: (event: AgentEvent) => terminalEvents.push(event),
         } as never,
         modelProviderHost: { resolveModelContext: vi.fn() } as never,

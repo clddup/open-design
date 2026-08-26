@@ -58,6 +58,14 @@ export class AgentContinuationScheduler {
     );
   }
 
+  hasActiveExplicitConversationRun(conversationId: string): boolean {
+    return [...this.#requestsByRunId.values()].some(
+      (request) =>
+        request.sessionId === conversationId &&
+        request.continuation === undefined,
+    );
+  }
+
   activeRunIds(): string[] {
     return [
       ...new Set([

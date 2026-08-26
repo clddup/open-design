@@ -11,6 +11,12 @@ import { DESIGN_INSPECT_TOOL_NAME } from "@/shared/design-agent-tools.js";
 
 type RunStartRequest = Extract<AgentRequest, { type: "run.start" }>;
 
+export const INITIAL_DESIGN_INSPECTION_TIMEOUTS = {
+  firstResponseTimeoutMs: 5_000,
+  idleTimeoutMs: 10_000,
+  totalTimeoutMs: 15_000,
+} as const;
+
 export interface InitialDesignInspectionCoordinator {
   assertDesignToolContext(context: TrustedToolContext): void;
   resolveExecutionContext(context: TrustedToolContext): TrustedToolContext;
@@ -27,6 +33,13 @@ export interface InitialDesignInspectionRenderer {
     call: ToolCallRequest,
     context: TrustedToolContext,
     signal: AbortSignal,
+    options?: {
+      timeouts?: {
+        firstResponseTimeoutMs?: number;
+        idleTimeoutMs?: number;
+        totalTimeoutMs?: number;
+      };
+    },
   ): Promise<TrustedToolResult>;
 }
 
@@ -55,6 +68,7 @@ export async function prepareInitialDesignInspection(
     },
     executionContext,
     signal,
+    { timeouts: INITIAL_DESIGN_INSPECTION_TIMEOUTS },
   );
   if (result.observedRevision !== request.revision) {
     throw new Error(

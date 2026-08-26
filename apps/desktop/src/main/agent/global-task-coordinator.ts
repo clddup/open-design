@@ -286,6 +286,24 @@ export class GlobalTaskCoordinator {
     return task;
   }
 
+  async assertRunRevisionCurrent(runId: string): Promise<void> {
+    const task = this.#tasksByRunId.get(runId);
+    if (!task) throw new Error("Agent Run is not registered");
+    const target = task.targetSet.primaryTarget;
+    const opened = await this.projectHost.readDesignFile(
+      target.projectId,
+      target.designFileId,
+    );
+    if (
+      opened.document.documentId !== target.documentId ||
+      opened.document.revision > target.baseRevision
+    ) {
+      throw new Error(
+        `agent_run.preflight_stale: Design File advanced from revision ${target.baseRevision} to ${opened.document.revision} before the task started. Send the message again against the current design.`,
+      );
+    }
+  }
+
   assertDesignToolContext(context: TrustedToolContext): void {
     const binding = this.#toolBindingsByRunId.get(context.runId);
     if (!binding) {

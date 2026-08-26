@@ -20,7 +20,7 @@ OpenPencil 内置生成路径的可借鉴点是宿主先准备上下文、第一
 
 Run 已经通过 Project/Design File/Page/revision 注册后，Main 使用与公开 `opendesign_inspect_document` 完全相同的 Renderer tool host、scope 解析和结构化结果执行一次预检。结果必须精确匹配 Run revision，随后进入同一个 `GlobalTaskCoordinator.recordDocumentInspection()`；并发 revision、Renderer timeout 或任何预检失败都不伪造成功，而是回退到公开 inspection 工具链。
 
-预检不修改文档、不产生 revision/history，也不伪装成模型 tool call。`RendererDesignToolHost` 继续记录真实耗时；用户 Stop 会 abort 正在进行的预检并阻止 Run 进入 Agent utility process。
+预检不修改文档、不产生 revision/history，也不伪装成模型 tool call。`RendererDesignToolHost` 继续记录真实耗时；用户 Stop 会 abort 正在进行的预检并阻止 Run 进入 Agent utility process。预检使用独立的 5 秒首响应、10 秒空闲和 15 秒总 deadline，不能继承材料生成的 15 分钟总时限并让 Composer 看似无响应；deadline 后才允许回退公开 inspection 工具链。无论预检成功或回退，Main 都必须在发送 Agent Run 前重新读取注册 Design File 并核对 document/revision，避免等待期间的其他 Run 把初始上下文变成陈旧快照。
 
 ### AgentRequest 3.10 只携带有界 Main-owned 投影
 

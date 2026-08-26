@@ -1,7 +1,10 @@
 import type { AgentRequest } from "@opendesign/agent-contracts";
 import { describe, expect, it, vi } from "vitest";
 import { DESIGN_INSPECT_TOOL_NAME } from "@/shared/design-agent-tools.js";
-import { prepareInitialDesignInspection } from "./agent-initial-design-inspection.js";
+import {
+  INITIAL_DESIGN_INSPECTION_TIMEOUTS,
+  prepareInitialDesignInspection,
+} from "./agent-initial-design-inspection.js";
 
 type RunStartRequest = Extract<AgentRequest, { type: "run.start" }>;
 
@@ -71,6 +74,7 @@ describe("initial design inspection", () => {
       }),
       expect.objectContaining({ mutationTarget: { kind: "document" } }),
       expect.any(AbortSignal),
+      { timeouts: INITIAL_DESIGN_INSPECTION_TIMEOUTS },
     );
     expect(recordDocumentInspection).toHaveBeenCalledTimes(1);
     expect(result).toMatchObject({

@@ -99,10 +99,20 @@ export function useAgentConversationRuntime({
     new Map<string, ReturnType<typeof setTimeout>>(),
   );
 
-  const activeAgentState = activeConversation
+  const storedActiveAgentState = activeConversation
     ? (agentByConversationId[activeConversation.conversationId] ??
       EMPTY_AGENT_STATE)
     : EMPTY_AGENT_STATE;
+  const authoritativeActiveRunId = activeConversation
+    ? activeGlobalTaskRunId(globalTasks, activeConversation.conversationId)
+    : null;
+  const activeAgentState =
+    !storedActiveAgentState.activeRunId && authoritativeActiveRunId
+      ? {
+          ...storedActiveAgentState,
+          activeRunId: authoritativeActiveRunId,
+        }
+      : storedActiveAgentState;
   const activeCanvasAgentRunId = (() => {
     const runId = activeAgentState.activeRunId;
     if (!runId) return null;
@@ -413,7 +423,8 @@ export function useAgentConversationRuntime({
       if (
         !window.desktop ||
         !targetConversation ||
-        targetAgentState.activeRunId
+        targetAgentState.activeRunId ||
+        activeGlobalTaskRunId(globalTasks, targetConversation.conversationId)
       ) {
         return false;
       }
@@ -424,6 +435,7 @@ export function useAgentConversationRuntime({
         workspaceSnapshot.files[workspaceSnapshot.activeFileKey];
       if (!activeFile) return false;
       const createdAt = new Date().toISOString();
+      const optimisticItemId = `message:${runId}_user`;
       const request: AgentRequest = {
         type: "run.start",
         runId,
@@ -464,7 +476,7 @@ export function useAgentConversationRuntime({
               0,
             );
             const optimisticMessage: SessionTimelineItem = {
-              itemId: `message:${runId}_user`,
+              itemId: optimisticItemId,
               sessionId: conversationId,
               runId,
               sequence: maximumSequence + 1,
@@ -507,6 +519,11 @@ export function useAgentConversationRuntime({
         void refreshGlobalTasks();
         return true;
       } catch (error) {
+        const reportedError =
+          error instanceof Error &&
+          error.message.startsWith("agent_run.conversation_busy:")
+            ? new Error(t("agent.conversationBusy"))
+            : error;
         conversationIdByRunId.current.delete(runId);
         workspace.releaseFileForRun(
           activeFile.projectId,
@@ -520,11 +537,14 @@ export function useAgentConversationRuntime({
             conversationId,
             (previous) => ({
               ...previous,
+              timeline: previous.timeline.filter(
+                (item) => item.itemId !== optimisticItemId,
+              ),
               activeRunId:
                 previous.activeRunId === runId ? null : previous.activeRunId,
               error: reportRendererError(
                 "agent_request_failed",
-                error,
+                reportedError,
                 t("error.agentRuntime"),
                 { conversationId, runId },
               ),
@@ -538,6 +558,7 @@ export function useAgentConversationRuntime({
       activeConversation,
       activePageId,
       agentByConversationId,
+      globalTasks,
       refreshGlobalTasks,
       runtime,
       setConversations,
@@ -633,4 +654,17 @@ export function useAgentConversationRuntime({
     stopAgentTask,
     submitAgentTask,
   };
+}
+
+function activeGlobalTaskRunId(
+  tasks: readonly GlobalTaskProjection[],
+  conversationId: string,
+): string | null {
+  return (
+    tasks.find(
+      (task) =>
+        task.conversationId === conversationId &&
+        ["queued", "running", "waiting_approval"].includes(task.lifecycle),
+    )?.runId ?? null
+  );
 }

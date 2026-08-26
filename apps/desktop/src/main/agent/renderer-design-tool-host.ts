@@ -19,6 +19,7 @@ type PendingRequest = {
   currentPhaseStartedAt?: number;
   firstResponseTimeout: ReturnType<typeof setTimeout>;
   firstResponseMs: number | null;
+  idleTimeoutMs: number;
   idleTimeout?: ReturnType<typeof setTimeout>;
   phaseDurationMs: Record<RendererDesignToolProgress["phase"], number>;
   phaseProgressEvents: Record<RendererDesignToolProgress["phase"], number>;
@@ -90,11 +91,16 @@ export class RendererDesignToolHost {
     options: {
       captureTarget?: RendererDesignCaptureTarget;
       reportProgress?: (message: string, progress: number) => void;
+      timeouts?: Partial<RendererDesignToolTimeouts>;
     } = {},
   ): Promise<TrustedToolResult> {
     if (this.#circuitsByRunId.get(context.runId)?.open) {
       return Promise.reject(rendererCircuitOpen());
     }
+    const timeouts = resolveRendererToolTimeouts(
+      this.timeouts,
+      options.timeouts,
+    );
     const requestId = `renderer_tool_${Date.now()}_${++this.#sequence}`;
     return new Promise((resolve, reject) => {
       const failTimeout = (
@@ -114,13 +120,12 @@ export class RendererDesignToolHost {
         );
       };
       const firstResponseTimeout = setTimeout(
-        () =>
-          failTimeout("first-response", this.timeouts.firstResponseTimeoutMs),
-        this.timeouts.firstResponseTimeoutMs,
+        () => failTimeout("first-response", timeouts.firstResponseTimeoutMs),
+        timeouts.firstResponseTimeoutMs,
       );
       const totalTimeout = setTimeout(
-        () => failTimeout("total", this.timeouts.totalTimeoutMs),
-        this.timeouts.totalTimeoutMs,
+        () => failTimeout("total", timeouts.totalTimeoutMs),
+        timeouts.totalTimeoutMs,
       );
       const abort = () => {
         const pending = this.#pending.get(requestId);
@@ -144,6 +149,7 @@ export class RendererDesignToolHost {
         },
         firstResponseTimeout,
         firstResponseMs: null,
+        idleTimeoutMs: timeouts.idleTimeoutMs,
         phaseDurationMs: emptyPhaseNumbers(),
         phaseProgressEvents: emptyPhaseNumbers(),
         ...(options.reportProgress
@@ -206,13 +212,9 @@ export class RendererDesignToolHost {
       active.reject(
         this.#recordTimeout(active)
           ? rendererCircuitOpen()
-          : rendererToolTimeout(
-              "idle",
-              this.timeouts.idleTimeoutMs,
-              progress.phase,
-            ),
+          : rendererToolTimeout("idle", active.idleTimeoutMs, progress.phase),
       );
-    }, this.timeouts.idleTimeoutMs);
+    }, pending.idleTimeoutMs);
     return true;
   }
 
@@ -320,6 +322,32 @@ function emptyPhaseNumbers(): Record<
   number
 > {
   return { accepted: 0, applying: 0, capturing: 0, persisting: 0 };
+}
+
+function resolveRendererToolTimeouts(
+  defaults: RendererDesignToolTimeouts,
+  overrides: Partial<RendererDesignToolTimeouts> | undefined,
+): RendererDesignToolTimeouts {
+  return {
+    firstResponseTimeoutMs: positiveTimeout(
+      overrides?.firstResponseTimeoutMs,
+      defaults.firstResponseTimeoutMs,
+    ),
+    idleTimeoutMs: positiveTimeout(
+      overrides?.idleTimeoutMs,
+      defaults.idleTimeoutMs,
+    ),
+    totalTimeoutMs: positiveTimeout(
+      overrides?.totalTimeoutMs,
+      defaults.totalTimeoutMs,
+    ),
+  };
+}
+
+function positiveTimeout(value: number | undefined, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+    ? Math.round(value)
+    : fallback;
 }
 
 function roundedDuration(value: number): number {

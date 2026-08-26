@@ -858,6 +858,34 @@ function withExistingArtboard(
 }
 
 describe("GlobalTaskCoordinator", () => {
+  it("revalidates the registered Design File revision after Run preflight", async () => {
+    const { store, host, file, opened, pageId } = await setup();
+    const coordinator = new GlobalTaskCoordinator(host, store);
+    const rendererRevision = opened.document.revision + 1;
+    await coordinator.registerRun({
+      type: "run.start",
+      runId: "run_preflight_revision",
+      sessionId: "conversation_mobile",
+      prompt: "Continue the current design",
+      documentId: file.documentId,
+      revision: rendererRevision,
+      modelSelection,
+      scope: { kind: "page", pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page", pageId },
+    });
+
+    await expect(
+      coordinator.assertRunRevisionCurrent("run_preflight_revision"),
+    ).resolves.toBeUndefined();
+    await host.saveDesignFile("project_acme", file.designFileId, {
+      ...opened.document,
+      revision: rendererRevision + 1,
+    });
+    await expect(
+      coordinator.assertRunRevisionCurrent("run_preflight_revision"),
+    ).rejects.toThrow("agent_run.preflight_stale");
+  });
+
   it("binds the accepted Plan v6 quality profile to the active Frame capture target", async () => {
     const { store, host, file, opened, pageId } = await setup();
     const coordinator = new GlobalTaskCoordinator(host, store);

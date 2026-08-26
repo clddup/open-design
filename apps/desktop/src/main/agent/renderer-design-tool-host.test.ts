@@ -281,6 +281,45 @@ describe("RendererDesignToolHost", () => {
     }
   });
 
+  it("uses a short per-call deadline without changing the host defaults", async () => {
+    vi.useFakeTimers();
+    try {
+      const send = vi.fn();
+      const sendCancel = vi.fn();
+      const host = new RendererDesignToolHost(send, sendCancel, {
+        firstResponseTimeoutMs: 1_000,
+        idleTimeoutMs: 2_000,
+        totalTimeoutMs: 3_000,
+      });
+      const result = host.execute(
+        rendererCall("host_inspect"),
+        rendererContext("run_preflight"),
+        new AbortController().signal,
+        {
+          timeouts: {
+            firstResponseTimeoutMs: 10,
+            idleTimeoutMs: 20,
+            totalTimeoutMs: 30,
+          },
+        },
+      );
+      const request = send.mock.calls[0]?.[0] as { requestId: string };
+      const rejection = expect(result).rejects.toMatchObject({
+        cause: {
+          code: "renderer_first_response_timeout",
+          retryable: true,
+          recoverable: true,
+        },
+      });
+
+      await vi.advanceTimersByTimeAsync(11);
+      await rejection;
+      expect(sendCancel).toHaveBeenCalledWith({ requestId: request.requestId });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("opens a run-scoped circuit after two consecutive canvas stalls", async () => {
     vi.useFakeTimers();
     try {

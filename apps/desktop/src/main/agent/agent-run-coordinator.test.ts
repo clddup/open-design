@@ -91,6 +91,35 @@ describe("AgentRunCoordinator", () => {
     );
   });
 
+  it("rejects a second explicit message instead of silently queueing it", async () => {
+    const fixture = setup();
+    await fixture.coordinator.handleRequest(source);
+    const second = {
+      ...source,
+      runId: "run_queued_without_ui",
+      prompt: "继续",
+    };
+
+    await expect(fixture.coordinator.handleRequest(second)).rejects.toThrow(
+      "agent_run.conversation_busy",
+    );
+    expect(fixture.globalTaskCoordinator.registerRun).toHaveBeenCalledTimes(1);
+    expect(fixture.send).not.toHaveBeenCalledWith(
+      expect.objectContaining({ runId: second.runId }),
+    );
+
+    fixture.coordinator.handleEvent({
+      type: "run.completed",
+      runId: source.runId,
+      finishedAt: "2026-08-23T01:00:00.000Z",
+      stopReason: "complete",
+    });
+    await fixture.coordinator.handleRequest(second);
+    expect(fixture.send).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "run.start", runId: second.runId }),
+    );
+  });
+
   it("releases every Run lease after a process-level Agent failure", async () => {
     const fixture = setup();
     const second = {
@@ -271,6 +300,7 @@ function setup() {
   const globalTaskCoordinator = {
     handleAgentEvent: vi.fn(),
     registerRun: vi.fn(() => Promise.resolve({})),
+    assertRunRevisionCurrent: vi.fn(() => Promise.resolve()),
   };
   const modelProviderHost = {
     resolveModelContext: vi.fn(() => ({

@@ -124,6 +124,7 @@ export async function startAgentRun(
       continuationScheduler.forgetRun(request.runId);
       return false;
     }
+    await globalTaskCoordinator.assertRunRevisionCurrent(request.runId);
     referenceHost.registerRun(trustedRequest);
     conversationIdByRunId.set(request.runId, request.sessionId);
     agentHost.send({

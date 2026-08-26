@@ -63,6 +63,15 @@ export class AgentRunCoordinator {
     if (request.type === "run.start" && this.#quiescing) {
       throw new Error("Agent Run coordinator is shutting down");
     }
+    if (
+      request.type === "run.start" &&
+      request.continuation === undefined &&
+      this.#continuations.hasActiveExplicitConversationRun(request.sessionId)
+    ) {
+      throw new Error(
+        "agent_run.conversation_busy: This Conversation already has an active task. Stop it before sending another message.",
+      );
+    }
     const services = this.#requireRunServices();
     const handled = await handleAgentRunControlRequest(request, {
       ...this.#starter(services),

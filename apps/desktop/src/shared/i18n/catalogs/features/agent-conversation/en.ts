@@ -86,6 +86,8 @@ export const agentConversationMessages = {
   "agent.conversationActions": "Conversation actions",
   "agent.defaultConversationTitle": "Design session {{count}}",
   "agent.continueTask": "Continue the task",
+  "agent.conversationBusy":
+    "This conversation already has a running task. Stop it before sending another message.",
   "agent.selectConversationPlaceholder": "Select a Conversation to begin…",
   "agent.workingPlaceholder":
     "Draft the next message, then stop the current run to send it…",

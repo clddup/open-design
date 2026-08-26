@@ -6482,6 +6482,25 @@ describe("App", () => {
       await screen.findByText("Agent process is not ready"),
     ).toBeInTheDocument();
     expect(prompt).toHaveValue("Create a pricing card");
+    expect(
+      [...document.querySelectorAll("[data-agent-message]")].some((message) =>
+        message.textContent?.includes("Create a pricing card"),
+      ),
+    ).toBe(false);
+  });
+
+  it("keeps the composer bound to a Main-owned active Conversation task", async () => {
+    vi.mocked(window.desktop!.listGlobalTasks).mockResolvedValueOnce([
+      globalTask("running"),
+    ]);
+    await openProjectConversation();
+
+    expect(screen.getByRole("button", { name: "Stop" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Send" })).toBeNull();
+    expect(screen.getByLabelText("Continue the task")).toHaveAttribute(
+      "aria-busy",
+      "true",
+    );
   });
 
   it("unlocks the composer when a production model stream times out", async () => {
