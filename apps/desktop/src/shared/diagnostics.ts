@@ -1,11 +1,85 @@
 import {
-  isAgentRunFailure,
-  isAgentToolFailureDetails,
+  AgentRunFailureSchema,
+  AgentToolFailureDetailsSchema,
   type AgentRunFailure,
   type AgentToolFailureDetails,
 } from "@opendesign/agent-contracts";
+import { TimestampSchema } from "@opendesign/workspace-contracts";
+import { Type } from "@sinclair/typebox";
+import { defineContract } from "./contract-validation";
 
 export const DIAGNOSTIC_EVENT_VERSION = 3 as const;
+
+const DiagnosticIdentifierSchema = Type.String({
+  minLength: 1,
+  maxLength: 256,
+  pattern: "^[^\\u0000-\\u001F\\u007F]+$",
+});
+const DiagnosticLevelSchema = Type.Union([
+  Type.Literal("info"),
+  Type.Literal("warning"),
+  Type.Literal("error"),
+]);
+const DiagnosticSourceSchema = Type.Union([
+  Type.Literal("agent"),
+  Type.Literal("design-tool"),
+  Type.Literal("main"),
+  Type.Literal("model-provider"),
+  Type.Literal("renderer"),
+  Type.Literal("storage"),
+]);
+const DiagnosticPresentationSchema = Type.Union([
+  Type.Literal("silent"),
+  Type.Literal("toast"),
+]);
+
+export const DiagnosticContextSchema = Type.Object(
+  {
+    conversationId: Type.Optional(DiagnosticIdentifierSchema),
+    runId: Type.Optional(DiagnosticIdentifierSchema),
+    requestId: Type.Optional(DiagnosticIdentifierSchema),
+    toolCallId: Type.Optional(DiagnosticIdentifierSchema),
+    projectId: Type.Optional(DiagnosticIdentifierSchema),
+    designFileId: Type.Optional(DiagnosticIdentifierSchema),
+  },
+  { additionalProperties: false },
+);
+
+const DiagnosticPayloadProperties = {
+  level: DiagnosticLevelSchema,
+  presentation: DiagnosticPresentationSchema,
+  code: DiagnosticIdentifierSchema,
+  message: Type.String({ minLength: 1, maxLength: 20_000 }),
+  context: Type.Optional(DiagnosticContextSchema),
+  details: Type.Optional(AgentToolFailureDetailsSchema),
+  failure: Type.Optional(AgentRunFailureSchema),
+};
+
+export const RendererDiagnosticReportSchema = Type.Object(
+  DiagnosticPayloadProperties,
+  { additionalProperties: false },
+);
+
+export const DiagnosticInputSchema = Type.Object(
+  {
+    ...DiagnosticPayloadProperties,
+    source: DiagnosticSourceSchema,
+  },
+  { additionalProperties: false },
+);
+
+export const DiagnosticEventSchema = Type.Object(
+  {
+    ...DiagnosticPayloadProperties,
+    source: DiagnosticSourceSchema,
+    version: Type.Literal(DIAGNOSTIC_EVENT_VERSION),
+    eventId: DiagnosticIdentifierSchema,
+    occurredAt: TimestampSchema,
+    appVersion: DiagnosticIdentifierSchema,
+    platform: DiagnosticIdentifierSchema,
+  },
+  { additionalProperties: false },
+);
 
 export type DiagnosticLevel = "info" | "warning" | "error";
 
@@ -44,121 +118,49 @@ export type DiagnosticEvent = DiagnosticInput & {
   platform: NodeJS.Platform;
 };
 
-const diagnosticLevels = new Set<DiagnosticLevel>(["info", "warning", "error"]);
-const diagnosticSources = new Set<DiagnosticSource>([
-  "agent",
-  "design-tool",
-  "main",
-  "model-provider",
-  "renderer",
-  "storage",
-]);
-const diagnosticPresentations = new Set<DiagnosticPresentation>([
-  "silent",
-  "toast",
-]);
-const contextKeys = [
-  "conversationId",
-  "runId",
-  "requestId",
-  "toolCallId",
-  "projectId",
-  "designFileId",
-] as const;
+export const DiagnosticContextContract = defineContract<DiagnosticContext>({
+  schema: DiagnosticContextSchema,
+  code: "diagnostic_context.schema_invalid",
+  subject: "diagnostic context",
+  clone: false,
+});
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
+export const RendererDiagnosticReportContract =
+  defineContract<RendererDiagnosticReport>({
+    schema: RendererDiagnosticReportSchema,
+    code: "renderer_diagnostic_report.schema_invalid",
+    subject: "Renderer diagnostic report",
+    clone: false,
+  });
 
-function hasOnlyKeys(
-  value: Record<string, unknown>,
-  allowed: readonly string[],
-): boolean {
-  return Object.keys(value).every((key) => allowed.includes(key));
-}
+export const DiagnosticInputContract = defineContract<DiagnosticInput>({
+  schema: DiagnosticInputSchema,
+  code: "diagnostic_input.schema_invalid",
+  subject: "diagnostic input",
+  clone: false,
+});
 
-function isIdentifier(value: unknown): value is string {
-  return (
-    typeof value === "string" &&
-    value.length > 0 &&
-    value.length <= 256 &&
-    ![...value].some((character) => {
-      const codePoint = character.codePointAt(0);
-      return codePoint !== undefined && (codePoint <= 31 || codePoint === 127);
-    })
-  );
-}
+export const DiagnosticEventContract = defineContract<DiagnosticEvent>({
+  schema: DiagnosticEventSchema,
+  code: "diagnostic_event.schema_invalid",
+  subject: "diagnostic event",
+  clone: false,
+});
 
 export function isDiagnosticContext(
   value: unknown,
 ): value is DiagnosticContext {
-  if (!isRecord(value) || !hasOnlyKeys(value, contextKeys)) return false;
-  return contextKeys.every(
-    (key) => value[key] === undefined || isIdentifier(value[key]),
-  );
-}
-
-function isDiagnosticPayload(
-  value: Record<string, unknown>,
-  allowedKeys: readonly string[],
-): boolean {
-  return (
-    diagnosticLevels.has(value.level as DiagnosticLevel) &&
-    diagnosticPresentations.has(value.presentation as DiagnosticPresentation) &&
-    isIdentifier(value.code) &&
-    typeof value.message === "string" &&
-    value.message.length > 0 &&
-    value.message.length <= 20_000 &&
-    (value.context === undefined || isDiagnosticContext(value.context)) &&
-    (value.details === undefined || isAgentToolFailureDetails(value.details)) &&
-    (value.failure === undefined || isAgentRunFailure(value.failure)) &&
-    hasOnlyKeys(value, allowedKeys)
-  );
+  return DiagnosticContextContract.parse(value).ok;
 }
 
 export function isRendererDiagnosticReport(
   value: unknown,
 ): value is RendererDiagnosticReport {
-  return (
-    isRecord(value) &&
-    isDiagnosticPayload(value, [
-      "level",
-      "presentation",
-      "code",
-      "message",
-      "context",
-      "details",
-      "failure",
-    ])
-  );
+  return RendererDiagnosticReportContract.parse(value).ok;
 }
 
 export function isDiagnosticEvent(value: unknown): value is DiagnosticEvent {
-  return (
-    isRecord(value) &&
-    value.version === DIAGNOSTIC_EVENT_VERSION &&
-    isIdentifier(value.eventId) &&
-    typeof value.occurredAt === "string" &&
-    Number.isFinite(Date.parse(value.occurredAt)) &&
-    isIdentifier(value.appVersion) &&
-    isIdentifier(value.platform) &&
-    diagnosticSources.has(value.source as DiagnosticSource) &&
-    isDiagnosticPayload(value, [
-      "version",
-      "eventId",
-      "occurredAt",
-      "appVersion",
-      "platform",
-      "level",
-      "source",
-      "presentation",
-      "code",
-      "message",
-      "context",
-      "details",
-      "failure",
-    ])
-  );
+  return DiagnosticEventContract.parse(value).ok;
 }
 
 export function formatDiagnosticReport(event: DiagnosticEvent): string {

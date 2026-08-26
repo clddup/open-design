@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   DIAGNOSTIC_EVENT_VERSION,
+  DiagnosticEventContract,
   formatDiagnosticReport,
   isDiagnosticEvent,
   isRendererDiagnosticReport,
+  RendererDiagnosticReportContract,
   type DiagnosticEvent,
 } from "./diagnostics";
 
@@ -51,6 +53,34 @@ describe("diagnostic contract", () => {
       }),
     ).toBe(false);
     expect(isDiagnosticEvent({ ...event, credential: "secret" })).toBe(false);
+  });
+
+  it("reports exact IPC field paths through the contract owner", () => {
+    expect(
+      RendererDiagnosticReportContract.issues({
+        level: "error",
+        presentation: "toast",
+        code: "renderer_failed",
+        message: "Renderer operation failed",
+        context: { runId: "run_1", prompt: "secret prompt" },
+      }),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "renderer_diagnostic_report.schema_invalid",
+        path: "/context/prompt",
+      }),
+    );
+    expect(
+      DiagnosticEventContract.issues({
+        ...event,
+        occurredAt: "not-a-timestamp",
+      }),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "diagnostic_event.schema_invalid",
+        path: "/occurredAt",
+      }),
+    );
   });
 
   it("formats a copy-ready report with correlation identifiers", () => {
