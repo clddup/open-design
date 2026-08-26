@@ -3,6 +3,7 @@ import type {
   TrustedToolResult,
 } from "@opendesign/agent-contracts";
 import { describe, expect, it, vi } from "vitest";
+import { INTERNAL_DESIGN_APPLY_TOOL_NAME } from "@/shared/design-agent-tools.js";
 import {
   captureCommittedDesignCheckpoint,
   handleDesignCheckpointTool,
@@ -75,7 +76,7 @@ describe("design checkpoint tool handler", () => {
         }),
         deps,
       ),
-    ).rejects.toThrow(/design_checkpoint\.schema_invalid at \/apply\/commands/);
+    ).rejects.toThrow(/design_apply\.schema_invalid at \/apply\/commands/);
     expect(deps.apply).not.toHaveBeenCalled();
     expect(deps.capture).not.toHaveBeenCalled();
   });
@@ -102,7 +103,7 @@ describe("design checkpoint tool handler", () => {
     expect(deps.apply).toHaveBeenCalledWith(
       expect.objectContaining({
         toolCallId: "checkpoint_1_apply",
-        toolName: "opendesign_apply_transaction",
+        toolName: INTERNAL_DESIGN_APPLY_TOOL_NAME,
       }),
       applyInput,
       undefined,
