@@ -4,6 +4,11 @@ import type {
 } from "@opendesign/agent-contracts";
 import type { AppLocale } from "@/shared/i18n/locale";
 import {
+  DESIGN_FIRST_SLICE_TOOL_NAME,
+  DESIGN_PLAN_TOOL_NAME,
+} from "@/shared/design-agent-tools";
+import {
+  latestDeliveryLedger,
   parseCommittedDesignStep,
   projectDurableDesignSteps,
 } from "./timeline-design-delivery";
@@ -46,6 +51,7 @@ export function projectAgentTimeline({
     stoppingRunId,
     t,
   );
+  durable.push(...projectDurablePlans(timeline, t));
   durable.push(...projectDurableDesignSteps(timeline));
   const runOrder = new Map<string, number>();
   const recordRun = (runId: string | undefined) => {
@@ -83,6 +89,30 @@ export function projectAgentTimeline({
   }
   const latestRunId = [...runOrder.keys()].at(-1);
   const normalized = [...merged.values()].map((item) => {
+    if (item.kind === "plan" && item.plan && item.runId) {
+      const delivery = latestDeliveryLedger(timeline, events, item.runId);
+      if (delivery) {
+        const statusByTargetId = new Map(
+          delivery.targets.map((target) => [target.targetId, target.status]),
+        );
+        const targets = item.plan.targets.map((target) => ({
+          ...target,
+          ...(statusByTargetId.has(target.targetId)
+            ? { status: statusByTargetId.get(target.targetId) }
+            : {}),
+        }));
+        return {
+          ...item,
+          plan: {
+            ...item.plan,
+            status: targets.every((target) => target.status === "verified")
+              ? ("verified" as const)
+              : ("active" as const),
+            targets,
+          },
+        };
+      }
+    }
     if (
       item.runId === stoppingRunId &&
       (item.state === "active" || item.state === "queued")
@@ -264,7 +294,7 @@ export function timelineRenderMarker(
   return items
     .map(
       (item) =>
-        `${item.id}:${item.state}:${item.title.length}:${item.detail?.length ?? 0}:${item.reasoning?.length ?? 0}`,
+        `${item.id}:${item.state}:${item.title.length}:${item.detail?.length ?? 0}:${item.reasoning?.length ?? 0}:${item.plan?.status ?? ""}:${item.plan?.targets.map((target) => target.status ?? "").join(",") ?? ""}`,
     )
     .join("|");
 }
@@ -763,6 +793,22 @@ function projectLiveEvents(
             : `r${event.revision}`,
         title: toolTitle(existing?.toolName ?? "", "done", t),
       });
+      const plan = designPlanTimeline(existing?.toolName, event.result);
+      if (plan) {
+        update(
+          `plan:${event.toolCallId}`,
+          order + 0.1,
+          {
+            runId: event.runId,
+            state: "done",
+            kind: "plan",
+            time: t("common.done"),
+            title: planTitle(plan, t),
+            plan,
+          },
+          true,
+        );
+      }
     }
     if (event.type === "tool.failed") {
       if (event.code === "run_cancelled") return;
@@ -878,6 +924,138 @@ function projectLiveEvents(
     }
   });
   return [...items.values()];
+}
+
+function projectDurablePlans(
+  timeline: readonly SessionTimelineItem[],
+  t: Translate,
+): AgentTimelineItem[] {
+  return timeline.flatMap((item) => {
+    if (item.type !== "tool" || item.status !== "completed") return [];
+    const plan = designPlanTimeline(item.toolName, item.result);
+    if (!plan) return [];
+    return [
+      {
+        id: `plan:${item.toolCallId}`,
+        ...(item.runId ? { runId: item.runId } : {}),
+        order: item.sequence + 0.1,
+        state: "done" as const,
+        kind: "plan" as const,
+        time: t("common.done"),
+        title: planTitle(plan, t),
+        plan,
+      },
+    ];
+  });
+}
+
+function designPlanTimeline(
+  toolName: string | undefined,
+  result: unknown,
+): NonNullable<AgentTimelineItem["plan"]> | undefined {
+  if (
+    toolName !== DESIGN_PLAN_TOOL_NAME &&
+    toolName !== DESIGN_FIRST_SLICE_TOOL_NAME
+  ) {
+    return undefined;
+  }
+  const record = asRecord(result);
+  const plan = asRecord(record?.plan);
+  if (!plan || !Array.isArray(plan.targets) || plan.targets.length === 0) {
+    return undefined;
+  }
+  const delivery = asRecord(record?.delivery);
+  const statuses = new Map<string, string>();
+  if (Array.isArray(delivery?.targets)) {
+    for (const candidate of delivery.targets) {
+      const target = asRecord(candidate);
+      if (
+        typeof target?.targetId === "string" &&
+        typeof target.status === "string"
+      ) {
+        statuses.set(target.targetId, target.status);
+      }
+    }
+  }
+  const targets = plan.targets.flatMap((candidate) => {
+    const target = asRecord(candidate);
+    if (
+      typeof target?.targetId !== "string" ||
+      typeof target.label !== "string" ||
+      typeof target.objective !== "string"
+    ) {
+      return [];
+    }
+    const implementationSteps = Array.isArray(target.implementationSteps)
+      ? target.implementationSteps.filter(
+          (step): step is string => typeof step === "string",
+        )
+      : [];
+    const status = statuses.get(target.targetId);
+    return [
+      {
+        targetId: target.targetId,
+        label: target.label,
+        objective: target.objective,
+        implementationSteps,
+        ...(isDeliveryStatus(status) ? { status } : {}),
+      },
+    ];
+  });
+  if (targets.length === 0) return undefined;
+  const deliveryStage = asRecord(record?.deliveryStage);
+  const currentPlan = asRecord(deliveryStage?.currentPlan);
+  const stage =
+    typeof currentPlan?.stage === "number" && currentPlan.stage >= 1
+      ? currentPlan.stage
+      : typeof record?.planRevision === "number" && record.planRevision >= 1
+        ? record.planRevision
+        : 1;
+  const totalTargets =
+    typeof deliveryStage?.totalTargets === "number" &&
+    deliveryStage.totalTargets >= 1
+      ? deliveryStage.totalTargets
+      : undefined;
+  return {
+    stage,
+    ...(totalTargets === undefined ? {} : { totalTargets }),
+    status: currentPlan?.status === "verified" ? "verified" : "active",
+    targets,
+  };
+}
+
+function planTitle(
+  plan: NonNullable<AgentTimelineItem["plan"]>,
+  t: Translate,
+): string {
+  return plan.totalTargets === undefined
+    ? t("agent.currentPlan", { stage: plan.stage })
+    : t("agent.currentPlanProgress", {
+        stage: plan.stage,
+        total: plan.totalTargets,
+      });
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function isDeliveryStatus(
+  value: string | undefined,
+): value is NonNullable<
+  NonNullable<AgentTimelineItem["plan"]>["targets"][number]["status"]
+> {
+  return (
+    value === "pending" ||
+    value === "allocated" ||
+    value === "drafted" ||
+    value === "captured" ||
+    value === "reviewed" ||
+    value === "refined" ||
+    value === "verified"
+  );
 }
 
 function finalizeTimelineActivity(item: AgentTimelineItem): AgentTimelineItem {

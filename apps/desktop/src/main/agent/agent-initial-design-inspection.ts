@@ -19,6 +19,7 @@ export interface InitialDesignInspectionCoordinator {
     result: TrustedToolResult,
   ): void;
   getRecoverableDelivery(context: TrustedToolContext): unknown;
+  getDeliveryStageContext(runId: string): unknown;
 }
 
 export interface InitialDesignInspectionRenderer {
@@ -63,12 +64,16 @@ export async function prepareInitialDesignInspection(
   dependencies.coordinator.recordDocumentInspection(context, result);
   const unfinishedDelivery =
     dependencies.coordinator.getRecoverableDelivery(context);
+  const deliveryStage = dependencies.coordinator.getDeliveryStageContext(
+    context.runId,
+  );
   const content =
-    unfinishedDelivery === undefined
+    unfinishedDelivery === undefined && deliveryStage === undefined
       ? result.content
       : {
           ...requireRecord(result.content),
-          unfinishedDelivery,
+          ...(unfinishedDelivery === undefined ? {} : { unfinishedDelivery }),
+          ...(deliveryStage === undefined ? {} : { deliveryStage }),
         };
   const serialized = JSON.stringify(projectToolResultForModel(content));
   if (

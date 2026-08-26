@@ -1,4 +1,5 @@
 import type { AgentAttachment } from "@opendesign/agent-contracts";
+import type { DesignDeliveryStatus } from "@opendesign/workspace-contracts";
 import type { MessageKey, MessageParameters } from "@/shared/i18n/messages";
 
 export type Translate = (
@@ -10,7 +11,14 @@ export interface AgentTimelineItem {
   id: string;
   runId?: string;
   kind?:
-    "assistant" | "reasoning" | "user" | "tool" | "run" | "approval" | "system";
+    | "assistant"
+    | "reasoning"
+    | "user"
+    | "tool"
+    | "run"
+    | "approval"
+    | "system"
+    | "plan";
   state: "done" | "active" | "stopping" | "queued" | "error";
   time: string;
   title: string;
@@ -28,4 +36,16 @@ export interface AgentTimelineItem {
   approvalId?: string;
   toolCallId?: string;
   historical?: boolean;
+  plan?: {
+    stage: number;
+    totalTargets?: number;
+    status: "active" | "verified";
+    targets: Array<{
+      targetId: string;
+      label: string;
+      objective: string;
+      implementationSteps: string[];
+      status?: DesignDeliveryStatus;
+    }>;
+  };
 }

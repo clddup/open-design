@@ -66,14 +66,14 @@ describe("model tool disclosure", () => {
     ).toEqual([definition.name, exportDefinition.name]);
   });
 
-  it("isolates the compact new-design surface and continues without reopening the full Plan after material revision", () => {
+  it("keeps compact rolling stages available without reopening the full Plan", () => {
     const compact = {
       ...definition,
       name: "opendesign_generate_first_slice",
       modelDisclosure: {
         bootstrap: "available" as const,
         role: "material-write" as const,
-        surfaces: ["new-design"] as const,
+        surfaces: ["general", "new-design"] as const,
       },
     };
     const inspection = {
@@ -107,7 +107,7 @@ describe("model tool disclosure", () => {
         "continuation",
         { surface: "new-design" },
       ).map((tool) => tool.name),
-    ).toEqual([definition.name, inspection.name]);
+    ).toEqual([definition.name, compact.name, inspection.name]);
     expect(
       resolveModelToolDisclosurePhase(
         [definition, compact, inspection, plan],
@@ -219,7 +219,7 @@ describe("model tool disclosure", () => {
       modelDisclosure: {
         bootstrap: "available" as const,
         role: "material-write" as const,
-        surfaces: ["new-design"] as const,
+        surfaces: ["general", "new-design"] as const,
       },
     };
 

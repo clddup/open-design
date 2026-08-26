@@ -161,6 +161,7 @@ export async function handleDesignFirstSliceTool(
         revision: applied.designRevision?.revision,
       },
       delivery: coordinator.getDeliveryLedger(context.runId),
+      deliveryStage: coordinator.getDeliveryStageContext(context.runId),
     },
   };
 }

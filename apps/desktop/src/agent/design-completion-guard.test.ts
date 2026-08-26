@@ -234,7 +234,64 @@ describe("design completion guard", () => {
     );
     expect(mismatch.allow).toBe(false);
     if (mismatch.allow) throw new Error("Expected scope/ledger mismatch");
-    expect(mismatch.message).toContain("does not match");
+    expect(mismatch.message).toContain("not an ordered prefix");
+
+    const firstStageDelivery = structuredClone(
+      deliveryResult("verified").delivery,
+    );
+    firstStageDelivery.targets = firstStageDelivery.targets.slice(0, 1);
+    firstStageDelivery.activeTargetId = null;
+    const nextStage = reviewDesignCompletion(
+      context(
+        [
+          deliveryScope,
+          {
+            ...allTargetsVerified,
+            toolCallId: "capture_scope_first_stage",
+            result: { delivery: firstStageDelivery },
+          },
+        ],
+        undefined,
+        { deliveryScopeReview: "required" },
+      ),
+    );
+    expect(nextStage.allow).toBe(false);
+    if (nextStage.allow) throw new Error("Expected the next rolling Plan");
+    expect(nextStage.message).toContain("target_profile");
+    expect(nextStage.message).toContain("next Plan");
+
+    const continuedStage = reviewDesignCompletion(
+      context(
+        [
+          {
+            ...allTargetsVerified,
+            toolCallId: "capture_continued_first_stage",
+            result: { delivery: firstStageDelivery },
+          },
+        ],
+        undefined,
+        {
+          deliveryScopeReview: "required",
+          initialDesignInspection: {
+            version: 1,
+            observedRevision: 8,
+            content: JSON.stringify({
+              deliveryStage: {
+                totalTargets: 2,
+                plannedTargets: 1,
+                verifiedTargets: 1,
+                nextTarget: { targetId: "target_profile" },
+              },
+            }),
+          },
+        },
+      ),
+    );
+    expect(continuedStage.allow).toBe(false);
+    if (continuedStage.allow) {
+      throw new Error("Expected continuation scope to remain active");
+    }
+    expect(continuedStage.message).toContain("target_profile");
   });
 
   it("rejects a completion claim when planning never produced a design write", () => {

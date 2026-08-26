@@ -49,6 +49,17 @@ OpenDesign 是跨平台桌面产品。macOS 与 Windows 是同级一级支持平
 - OpenPencil 的单文件多页模型可以作为调研输入，但其 MCP 按调用接受任意 `filePath` 并直接加载或保存目标文件的方式不得照抄。完成 ADR-0005 与 ADR-0006 定义的移除门禁后，必须删除 OpenPencil 运行时、发行资源和 vendor 依赖，不能保留无期限 fallback 或双写路径。
 - 不要提交生成物、密钥、访问令牌、用户设计文件或模型会话内容。
 
+### 契约与校验单一事实源
+
+- 该约束覆盖完整 Agent 生成链，而不只覆盖 first-slice 或首屏：Delivery Scope、Plan、First Slice、Apply、Checkpoint、Capture、Review、图片读写与放置、组件/层级/排版/矢量工具、Agent/Provider Event、Main/Preload IPC、Workspace/Conversation 持久化以及最终 DesignDocument/事务协议都必须按同一原则收敛。可以分阶段迁移，但不得把单个工具迁移完成描述为整个流程已解决。
+- 每个 Agent tool、Provider 输入、跨进程事件和 IPC payload 必须只有一份权威结构 Schema。Provider 可见 Schema 必须从该 Schema 派生；不得另外手写一份字段、required、enum、union、长度、范围或未知字段规则。
+- 不得为同一输入并行维护 `isXxx()`、`exactKeys()`、`normalizeXxx()`、`explainInvalidXxx()` 或等价的重复结构判断。结构 parse、错误路径和 Provider 投影必须从同一 Contract 入口产生。
+- 校验职责固定分层：Schema 只管字段结构；Domain refinement 只管跨字段关系、ID 唯一性、父子结构和总量预算；Main guard 只管 Page、capability、revision、当前状态和可写目标；EditorRuntime 只管文档 invariant、引用和事务原子性。同一规则不得在多层重复定义。
+- Normalizer 只能注入当前 Page、权威 Run prompt、固定 skill refs 等可信宿主事实；不得静默修复任意非法模型输入，也不得在宿主绑定中新增 Provider 不可见的结构门禁。
+- 所有契约失败统一返回结构化 `code/path/message/expected/actual/recovery`；Timeline、诊断、恢复和测试使用稳定 `code/path`，不得通过解析错误文本推断类型。Union 必须先按 discriminant 选择真实分支，错误必须指向具体字段。
+- 契约迁移只有在旧结构校验、重复 normalizer 和错误解释路径被删除，Provider/Runtime 一致性测试、真实复杂 fixture 与失败字段路径测试通过后才算完成。只新增 `Contract.parse()` 但保留旧事实源，不得声称已经整改。
+- 用户可以容忍偶发一次模型参数错误，但同一 fingerprint 不得连续消耗完整 Provider 往返。首次错误必须返回准确字段路径与可执行恢复；重复错误必须抑制并保留已提交 revision，不得长时间零画布变化地循环。
+
 ## UI 质量基线
 
 - 优先使用桌面信息架构：稳定的应用框架、可调整面板、画布中央舞台、上下文检查器、命令面板和明确状态区。

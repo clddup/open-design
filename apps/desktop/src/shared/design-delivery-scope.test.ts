@@ -92,4 +92,34 @@ describe("delivery scope contract", () => {
       }).summary,
     ).toContain("将在当前 Page 创建 24 个画板。");
   });
+
+  it("keeps the complete reviewed scope independent from one Plan budget", () => {
+    const broadScope = scope();
+    let remainingExtra = 97 - 24;
+    broadScope.targets = Array.from({ length: 24 }, (_, index) => {
+      const count = 1 + Math.min(7, remainingExtra);
+      remainingExtra -= count - 1;
+      return {
+        targetId: `screen-${index + 1}`,
+        label: `界面 ${index + 1}`,
+        objective: `完成产品界面 ${index + 1} 的完整设计`,
+        requiredContent: Array.from(
+          { length: count },
+          (_, contentIndex) => `界面 ${index + 1} 的内容 ${contentIndex + 1}`,
+        ),
+      };
+    });
+
+    expect(remainingExtra).toBe(0);
+    expect(
+      broadScope.targets.reduce(
+        (total, target) => total + target.requiredContent.length,
+        0,
+      ),
+    ).toBe(97);
+    expect(DeliveryScopeContract.parse(broadScope)).toEqual({
+      ok: true,
+      value: broadScope,
+    });
+  });
 });

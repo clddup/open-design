@@ -82,9 +82,10 @@ export function deliveryScopeReviewToolDefinitions(
 }
 
 /**
- * New-design Runs stay on the compact surface through inspection and first
- * material commit, then enter a continuation surface that keeps the accepted
- * Plan authoritative. General Runs expand after a material revision. A Plan
+ * New-design Runs stay on the compact surface through inspection and the
+ * current stage's first material commit, then enter a continuation surface
+ * that keeps that stage authoritative while allowing the next compact stage.
+ * General Runs expand after a material revision. A Plan
  * that explicitly targets an existing artboard expands the edit surface
  * because its first valid mutation may require hierarchy/layout/component
  * tooling.

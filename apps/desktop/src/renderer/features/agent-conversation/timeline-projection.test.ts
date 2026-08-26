@@ -15,6 +15,119 @@ const continuation = {
 };
 
 describe("Agent continuation timeline projection", () => {
+  it("keeps the current executable Plan visible and updates its real delivery status", () => {
+    const now = "2026-08-26T04:00:00.000Z";
+    const runId = "run_visible_plan";
+    const delivery = {
+      version: 3 as const,
+      targets: [
+        {
+          targetId: "target_home",
+          label: "首页",
+          pageId: "page_1",
+          rootNodeId: "frame_home",
+          reservedNodeIds: ["frame_home", "frame_home_hero"],
+          status: "drafted" as const,
+          allocatedRevision: 1,
+          draftRevision: 2,
+        },
+      ],
+      activeTargetId: "target_home",
+    };
+    const timeline: SessionTimelineItem[] = [
+      {
+        itemId: "tool:plan_visible",
+        sessionId: "conversation_1",
+        runId,
+        sequence: 1,
+        createdAt: now,
+        updatedAt: now,
+        type: "tool",
+        toolCallId: "plan_visible",
+        toolName: "opendesign_generate_first_slice",
+        input: {},
+        risk: "design_write",
+        status: "completed",
+        result: {
+          planRevision: 1,
+          plan: {
+            targets: [
+              {
+                targetId: "target_home",
+                label: "首页",
+                objective: "建立核心信息层级与首要行动",
+                implementationSteps: [
+                  "构建导航与首屏层级",
+                  "完成核心内容与底部状态",
+                ],
+              },
+            ],
+          },
+          delivery,
+          deliveryStage: {
+            totalTargets: 12,
+            currentPlan: { stage: 1, status: "active" },
+          },
+        },
+        revision: 2,
+        transactionId: "transaction_first_slice",
+      },
+      {
+        itemId: "tool:checkpoint_visible",
+        sessionId: "conversation_1",
+        runId,
+        sequence: 2,
+        createdAt: now,
+        updatedAt: now,
+        type: "tool",
+        toolCallId: "checkpoint_visible",
+        toolName: "opendesign_design_checkpoint",
+        input: {},
+        risk: "design_write",
+        status: "completed",
+        result: {
+          delivery: {
+            ...delivery,
+            targets: [
+              {
+                ...delivery.targets[0],
+                status: "verified",
+                captureRevision: 3,
+                reviewRevision: 3,
+                refinementRevision: 3,
+                verifiedRevision: 3,
+              },
+            ],
+            activeTargetId: null,
+          },
+        },
+        revision: 3,
+        transactionId: "transaction_checkpoint",
+      },
+    ];
+
+    const items = projectAgentTimeline({
+      activeRunId: runId,
+      events: [],
+      locale: "zh-CN",
+      stoppingRunId: null,
+      timeline,
+      t: (key, parameters) => translate("zh-CN", key, parameters),
+    });
+
+    const visiblePlan = items.find((item) => item.id === "plan:plan_visible");
+    expect(visiblePlan).toMatchObject({
+      kind: "plan",
+      title: "当前计划 · 阶段 1/12",
+    });
+    expect(visiblePlan?.plan?.status).toBe("verified");
+    expect(visiblePlan?.plan?.targets[0]).toMatchObject({
+      label: "首页",
+      status: "verified",
+      implementationSteps: ["构建导航与首屏层级", "完成核心内容与底部状态"],
+    });
+  });
+
   it("keeps terminal failures at the end without duplicating one root cause", () => {
     const runId = "run_terminal_order";
     const startedAt = "2026-08-25T08:19:24.568Z";

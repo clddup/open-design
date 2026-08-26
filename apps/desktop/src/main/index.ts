@@ -1009,6 +1009,9 @@ async function startDesktopApplication(
             captureTarget,
             reviewWorkflow,
             delivery: globalTaskCoordinator!.getDeliveryLedger(context.runId),
+            deliveryStage: globalTaskCoordinator!.getDeliveryStageContext(
+              context.runId,
+            ),
           },
         };
       };
@@ -1942,7 +1945,11 @@ function withDesignDelivery(
   }
   return {
     ...result,
-    content: { ...result.content, delivery },
+    content: {
+      ...result.content,
+      delivery,
+      deliveryStage: globalTaskCoordinator?.getDeliveryStageContext(runId),
+    },
   };
 }
 

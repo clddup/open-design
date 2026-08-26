@@ -2860,13 +2860,14 @@ describe("GlobalTaskCoordinator", () => {
     plan.briefFidelity.requiredContent = ["Condensed suite requirements"];
     plan.briefFidelity.prohibitedAdditions = [];
     plan.briefFidelity.assumptions = [];
-    expect(() =>
-      coordinator.registerDesignPlan(context, {
-        ...plan,
-        targets: plan.targets.slice(0, 1),
-      }),
-    ).toThrow("delivery_scope_mismatch");
-    const registration = coordinator.registerDesignPlan(context, plan);
+    const firstStagePlan = {
+      ...structuredClone(plan),
+      targets: plan.targets.slice(0, 1),
+    };
+    const registration = coordinator.registerDesignPlan(
+      context,
+      firstStagePlan,
+    );
     expect(registration).toMatchObject({
       status: "accepted",
       planRevision: 1,
@@ -2877,20 +2878,74 @@ describe("GlobalTaskCoordinator", () => {
       objective: reviewedScope.targets[0]?.objective,
     });
     expect(registration.plan.briefFidelity).toMatchObject({
-      requiredContent: reviewedScope.targets.flatMap(
-        (target) => target.requiredContent,
-      ),
+      requiredContent: reviewedScope.targets[0]?.requiredContent,
       prohibitedAdditions: reviewedScope.exclusions,
       assumptions: reviewedScope.assumptions,
     });
     const ledger = coordinator.getDeliveryLedger(context.runId);
-    expect(ledger?.targets).toHaveLength(24);
+    expect(ledger?.targets).toHaveLength(1);
     expect(ledger?.targets[0]).toMatchObject({
       label: reviewedScope.targets[0]?.label,
     });
+    expect(coordinator.getDeliveryStageContext(context.runId)).toMatchObject({
+      totalTargets: 24,
+      plannedTargets: 1,
+      verifiedTargets: 0,
+      currentPlan: {
+        stage: 1,
+        status: "active",
+        targets: [
+          {
+            targetId: reviewedScope.targets[0]?.targetId,
+            requiredContent: reviewedScope.targets[0]?.requiredContent,
+          },
+        ],
+      },
+    });
+    expect(
+      coordinator.getDeliveryStageContext(context.runId)?.nextTarget,
+    ).toBeUndefined();
+    expect(() => coordinator.registerDesignPlan(context, plan)).toThrow(
+      "current stage has 1 target(s)",
+    );
     expect(new Set(plan.targets.map((target) => target.pageId))).toEqual(
       new Set([pageId]),
     );
+    const nextRunId = "run_reviewed_scope_continuation";
+    coordinator.handleAgentEvent({
+      type: "run.continuation",
+      runId: context.runId,
+      status: "scheduled",
+      attempt: 1,
+      maxAttempts: 3,
+      reason: "budget",
+      nextRunId,
+    });
+    await coordinator.registerRun({
+      type: "run.start",
+      runId: nextRunId,
+      sessionId: context.sessionId,
+      prompt: "Continue the confirmed delivery scope",
+      documentId: context.documentId,
+      revision: opened.document.revision,
+      modelSelection,
+      generationMode: "fast",
+      deliveryScopeReview: "required",
+      scope: { kind: "page", pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page", pageId },
+      continuation: {
+        parentRunId: context.runId,
+        rootRunId: context.runId,
+        attempt: 1,
+        maxAttempts: 3,
+        reason: "budget",
+      },
+    });
+    expect(coordinator.getDeliveryStageContext(nextRunId)).toMatchObject({
+      totalTargets: 24,
+      plannedTargets: 1,
+      currentPlan: { stage: 1 },
+    });
     store.close();
   });
 

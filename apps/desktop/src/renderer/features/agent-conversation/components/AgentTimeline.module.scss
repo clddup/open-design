@@ -260,6 +260,133 @@
   }
 }
 
+.plan {
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--ui-border-subtle);
+  border-radius: 8px;
+  background: var(--ui-surface-sunken);
+
+  > summary {
+    display: flex;
+    min-height: 34px;
+    cursor: pointer;
+    align-items: center;
+    gap: 6px;
+    padding: 0 9px;
+    color: var(--ui-text-muted);
+    font-size: 10px;
+    font-weight: 650;
+    list-style: none;
+    user-select: none;
+
+    &::-webkit-details-marker {
+      display: none;
+    }
+
+    &:hover {
+      color: var(--ui-text);
+      background: var(--ui-surface-raised);
+    }
+
+    &:focus-visible {
+      outline: 1px solid var(--ui-accent);
+      outline-offset: -1px;
+    }
+
+    :global(.ui-icon) {
+      width: 13px;
+      height: 13px;
+      color: var(--ui-accent);
+    }
+  }
+
+  &[open] > summary .reasoningChevron {
+    transform: rotate(90deg);
+  }
+}
+
+.planTargets {
+  display: grid;
+  gap: 7px;
+  padding: 0 8px 8px;
+}
+
+.planTarget {
+  min-width: 0;
+  padding: 8px 9px;
+  border: 1px solid var(--ui-border-subtle);
+  border-radius: 6px;
+  background: var(--ui-surface);
+
+  > header {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+
+    strong {
+      overflow: hidden;
+      color: var(--ui-text);
+      font-size: 10px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    small {
+      flex: none;
+      color: var(--ui-text-faint);
+      font-size: 8px;
+    }
+  }
+
+  > p {
+    margin: 4px 0 0;
+    color: var(--ui-text-muted);
+    font-size: 9px;
+    line-height: 1.45;
+  }
+}
+
+.planSteps {
+  margin-top: 8px;
+
+  > small {
+    color: var(--ui-text-faint);
+    font-size: 8px;
+    font-weight: 650;
+  }
+
+  ol {
+    display: grid;
+    gap: 5px;
+    margin: 6px 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  li {
+    display: grid;
+    grid-template-columns: 6px minmax(0, 1fr);
+    align-items: start;
+    gap: 6px;
+    color: var(--ui-text-muted);
+    font-size: 9px;
+    line-height: 1.4;
+
+    > span {
+      width: 5px;
+      height: 5px;
+      margin-top: 4px;
+      border: 1px solid var(--ui-border-strong);
+      border-radius: 50%;
+      background: var(--ui-surface);
+    }
+  }
+}
+
 .toolGroupItems {
   display: grid;
   gap: 3px;

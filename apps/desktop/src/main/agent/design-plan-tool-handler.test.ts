@@ -115,6 +115,7 @@ describe("handleDesignPlanTool", () => {
       }),
       recordDesignPlanAllocated: vi.fn(),
       getDeliveryLedger: vi.fn().mockReturnValue(delivery),
+      getDeliveryStageContext: vi.fn().mockReturnValue(undefined),
     };
     let renderedCall: ToolCallRequest | undefined;
     const rendererHost = {
@@ -196,6 +197,7 @@ describe("handleDesignPlanTool", () => {
       }),
       recordDesignPlanAllocated: vi.fn(),
       getDeliveryLedger: vi.fn(),
+      getDeliveryStageContext: vi.fn().mockReturnValue(undefined),
     };
     const rendererHost = {
       execute: vi.fn().mockRejectedValue(new Error("revision conflict")),

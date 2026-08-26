@@ -63,6 +63,7 @@ export async function handleDesignPlanTool(
       targets: designPlanTargets(registration.plan),
       rasterAssetRoles: registration.plan.rasterAssetRoles,
       delivery: coordinator.getDeliveryLedger(context.runId),
+      deliveryStage: coordinator.getDeliveryStageContext(context.runId),
       allocation: allocation
         ? {
             targetIds: allocation.targetIds,

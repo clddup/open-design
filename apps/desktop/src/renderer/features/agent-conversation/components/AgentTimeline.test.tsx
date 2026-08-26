@@ -36,6 +36,85 @@ function deferred<T>() {
 }
 
 describe("AgentTimeline", () => {
+  it("shows the current executable Plan as a real collapsible checklist", () => {
+    const timeline: SessionTimelineItem[] = [
+      {
+        itemId: "tool:first_slice_plan",
+        sessionId: "conversation_1",
+        runId: "run_1",
+        sequence: 1,
+        createdAt: now,
+        updatedAt: now,
+        type: "tool",
+        toolCallId: "first_slice_plan",
+        toolName: "opendesign_generate_first_slice",
+        input: {},
+        risk: "design_write",
+        status: "completed",
+        result: {
+          planRevision: 1,
+          plan: {
+            targets: [
+              {
+                targetId: "target_home",
+                label: "Home",
+                objective: "Establish the primary product hierarchy",
+                implementationSteps: [
+                  "Build navigation and hero",
+                  "Add primary content and status",
+                ],
+              },
+            ],
+          },
+          delivery: {
+            version: 3,
+            targets: [
+              {
+                targetId: "target_home",
+                label: "Home",
+                pageId: "page_1",
+                rootNodeId: "frame_home",
+                reservedNodeIds: ["frame_home"],
+                status: "drafted",
+                allocatedRevision: 1,
+                draftRevision: 2,
+              },
+            ],
+            activeTargetId: "target_home",
+          },
+          deliveryStage: {
+            totalTargets: 12,
+            plannedTargets: 1,
+            verifiedTargets: 0,
+            currentPlan: { stage: 1, status: "active" },
+          },
+        },
+        revision: 2,
+        transactionId: "transaction_first_slice",
+      },
+    ];
+
+    render(
+      <AgentTimeline
+        activeRunId="run_1"
+        conversationId="conversation_1"
+        conversationTitle="Product suite"
+        error={null}
+        events={[]}
+        onStop={vi.fn()}
+        onSubmit={vi.fn().mockResolvedValue(true)}
+        timeline={timeline}
+      />,
+    );
+
+    expect(screen.getByText("Current plan · Stage 1/12")).toBeInTheDocument();
+    expect(screen.getByText("Home")).toBeInTheDocument();
+    expect(screen.getByText("Build navigation and hero")).toBeInTheDocument();
+    expect(
+      document.querySelector("details[data-agent-plan]")?.hasAttribute("open"),
+    ).toBe(true);
+  });
+
   it("shows a trustworthy milestone without inferred delivery counts", () => {
     const timeline: SessionTimelineItem[] = [
       {

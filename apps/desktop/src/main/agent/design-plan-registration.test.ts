@@ -380,6 +380,72 @@ describe("current Design Plan amendments", () => {
       }),
     ).toThrow(/navigation_group.*target_home.*target_profile/i);
   });
+
+  it("advances to a bounded next Plan while retaining verified target state", () => {
+    const firstPlan = plan();
+    const first = registerDesignWorkflowPlan({
+      inspection: inspectedExistingDesign(),
+      plan: firstPlan,
+    });
+    markVerified(first.state.targetsById.get("target_home"));
+    const home = firstPlan.targets[0];
+    if (!home || home.qualityProfile.kind !== "ui") {
+      throw new Error("Home UI target is missing");
+    }
+    const nextPlan: DesignPlanToolInput = {
+      ...structuredClone(firstPlan),
+      objective: "Design the next confirmed Profile screen",
+      targets: [
+        {
+          ...structuredClone(home),
+          targetId: "target_profile",
+          label: "Profile",
+          objective: "Design the confirmed Profile screen",
+          artboard: {
+            ...home.artboard,
+            mode: "create",
+            frameId: "frame_profile",
+            x: 430,
+          },
+          composition: {
+            ...structuredClone(home.composition),
+            regions: home.composition.regions.map((region) => ({
+              ...region,
+              nodeId: "logical_profile_content",
+            })),
+          },
+          qualityProfile: {
+            ...structuredClone(home.qualityProfile),
+            safeAreaNodeIds: ["logical_profile_content"],
+            interactiveNodeIds: [],
+          },
+        },
+      ],
+      briefFidelity: {
+        ...structuredClone(firstPlan.briefFidelity),
+        requiredContent: ["Profile identity and account status"],
+      },
+    };
+
+    const advanced = registerDesignWorkflowPlan({
+      existing: first.state,
+      inspection: inspectedExistingDesign(),
+      plan: nextPlan,
+    });
+
+    expect(advanced.status).toBe("advanced");
+    expect(advanced.state.targetOrder).toEqual([
+      "target_home",
+      "target_profile",
+    ]);
+    expect(advanced.state.targetsById.get("target_home")?.delivery.status).toBe(
+      "verified",
+    );
+    expect(
+      advanced.state.targetsById.get("target_profile")?.delivery.status,
+    ).toBe("pending");
+    expect(advanced.changedTargetIds).toEqual(["target_profile"]);
+  });
 });
 
 function plan(): DesignPlanToolInput {

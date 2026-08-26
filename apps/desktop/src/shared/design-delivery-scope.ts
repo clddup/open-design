@@ -148,7 +148,6 @@ function refineDeliveryScope(scope: DesignDeliveryScope): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
   const targetIds = new Set<string>();
   const labels = new Set<string>();
-  let requiredContentCount = 0;
   for (const [index, target] of scope.targets.entries()) {
     if (targetIds.has(target.targetId)) {
       issues.push({
@@ -171,18 +170,6 @@ function refineDeliveryScope(scope: DesignDeliveryScope): ValidationIssue[] {
       });
     }
     labels.add(normalizedLabel);
-    requiredContentCount += target.requiredContent.length;
-  }
-  if (requiredContentCount > 24) {
-    issues.push({
-      code: "delivery_scope.required_content_excessive",
-      path: "/targets",
-      message: `${requiredContentCount} required content statements exceed the executable Plan fidelity budget`,
-      expected: 24,
-      actual: requiredContentCount,
-      recovery:
-        "Combine closely related acceptance details without dropping an independently verifiable deliverable.",
-    });
   }
   return issues;
 }

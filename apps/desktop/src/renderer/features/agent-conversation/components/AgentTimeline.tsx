@@ -16,7 +16,10 @@ import {
   projectAgentTimeline,
   timelineRenderMarker,
 } from "../timeline-projection";
-import { friendlyAgentError } from "../timeline-presentation";
+import {
+  deliveryStatusKey,
+  friendlyAgentError,
+} from "../timeline-presentation";
 import { projectAgentRunExperience } from "../agent-run-experience";
 import {
   groupAgentTimelineItems,
@@ -104,6 +107,62 @@ function ReasoningDisclosure({
       </summary>
       <p>{item.reasoning}</p>
       <small>{t("agent.reasoningSummaryNotice")}</small>
+    </details>
+  );
+}
+
+function PlanDisclosure({
+  current,
+  item,
+  t,
+}: {
+  current: boolean;
+  item: AgentTimelineItem;
+  t: Translate;
+}) {
+  const [open, setOpen] = useState(current);
+  useEffect(() => setOpen(current), [current]);
+  if (!item.plan) return null;
+  return (
+    <details
+      className={styles.plan}
+      data-agent-plan=""
+      onToggle={(event) => setOpen(event.currentTarget.open)}
+      open={open}
+    >
+      <summary>
+        <span aria-hidden="true" className={styles.reasoningChevron}>
+          ›
+        </span>
+        <Icon name="lucide:list-checks" />
+        <span>{item.title}</span>
+      </summary>
+      <div className={styles.planTargets}>
+        {item.plan.targets.map((target) => (
+          <article className={styles.planTarget} key={target.targetId}>
+            <header>
+              <strong>{target.label}</strong>
+              {target.status && (
+                <small>{t(deliveryStatusKey(target.status))}</small>
+              )}
+            </header>
+            <p>{target.objective}</p>
+            {target.implementationSteps.length > 0 && (
+              <div className={styles.planSteps}>
+                <small>{t("agent.planSteps")}</small>
+                <ol>
+                  {target.implementationSteps.map((step, index) => (
+                    <li key={`${target.targetId}:${index}`}>
+                      <span aria-hidden="true" />
+                      {step}
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            )}
+          </article>
+        ))}
+      </div>
     </details>
   );
 }
@@ -276,6 +335,9 @@ export function AgentTimeline({
     .filter(Boolean)
     .join("|");
   const renderMarker = timelineRenderMarker(items);
+  const latestPlanId = [...items]
+    .filter((item) => item.kind === "plan")
+    .at(-1)?.id;
   const hasConversation = composer.hasConversation;
 
   useLayoutEffect(() => {
@@ -500,7 +562,13 @@ export function AgentTimeline({
                   data-state={item.state}
                   key={item.id}
                 >
-                  {item.kind === "reasoning" ? (
+                  {item.kind === "plan" ? (
+                    <PlanDisclosure
+                      current={item.id === latestPlanId}
+                      item={item}
+                      t={t}
+                    />
+                  ) : item.kind === "reasoning" ? (
                     <ReasoningDisclosure item={item} t={t} />
                   ) : item.kind === "user" || item.kind === "assistant" ? (
                     <article

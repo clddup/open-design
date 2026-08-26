@@ -33,9 +33,13 @@ export function reviewDesignCompletion(
 ): AgentCompletionDecision {
   if (hasSupersededDelivery(context.toolCalls)) return { allow: true };
   const reviewedScope = latestReviewedDeliveryScope(context.toolCalls);
+  const deliveryStage =
+    latestDeliveryStage(context.toolCalls) ??
+    initialDeliveryStage(context.request.initialDesignInspection?.content);
   if (
     context.request.deliveryScopeReview === "required" &&
-    reviewedScope === undefined
+    reviewedScope === undefined &&
+    deliveryStage === undefined
   ) {
     return {
       allow: false,
@@ -63,18 +67,38 @@ export function reviewDesignCompletion(
   if (delivery) {
     if (
       reviewedScope &&
-      !deliveryMatchesReviewedScope(delivery, reviewedScope)
+      !deliveryIsOrderedScopePrefix(delivery, reviewedScope)
     ) {
       return {
         allow: false,
         message:
-          "The host delivery ledger does not match the user-confirmed Delivery Plan. Preserve every confirmed target ID and complete the missing targets instead of claiming completion from a smaller executable Plan.",
+          "The host delivery ledger is not an ordered prefix of the user-confirmed Delivery Plan. Preserve completed target IDs and plan only the next confirmed target instead of skipping, replacing, or reordering scope.",
       };
     }
     const incomplete = delivery.targets.find(
       (target) => target.status !== "verified",
     );
     if (incomplete) return incompleteDeliveryDecision(delivery, incomplete);
+    if (
+      reviewedScope &&
+      delivery.targets.length < reviewedScope.targets.length
+    ) {
+      const nextTarget = reviewedScope.targets[delivery.targets.length];
+      return {
+        allow: false,
+        message: `The current executable Plan is verified, but the confirmed delivery scope still has ${reviewedScope.targets.length - delivery.targets.length} unplanned target(s). Define the next Plan for confirmed target ${nextTarget?.targetId ?? "at the next scope position"}, create its first real editable slice, and continue. Do not repeat completed targets or claim total completion yet.`,
+      };
+    }
+    if (
+      !reviewedScope &&
+      deliveryStage &&
+      deliveryStage.plannedTargets < deliveryStage.totalTargets
+    ) {
+      return {
+        allow: false,
+        message: `The current executable Plan is verified, but the trusted delivery scope still has ${deliveryStage.totalTargets - deliveryStage.plannedTargets} unplanned target(s). Define the next Plan${deliveryStage.nextTargetId ? ` for confirmed target ${deliveryStage.nextTargetId}` : " from deliveryStage.nextTarget"}, create its first real editable slice, and continue without repeating completed targets.`,
+      };
+    }
     return { allow: true };
   }
   const generationIndex = context.toolCalls.findIndex(
@@ -224,14 +248,67 @@ function latestReviewedDeliveryScope(
   return undefined;
 }
 
-function deliveryMatchesReviewedScope(
+type DeliveryStageProgress = {
+  totalTargets: number;
+  plannedTargets: number;
+  nextTargetId?: string;
+};
+
+function latestDeliveryStage(
+  toolCalls: readonly AgentToolCallRecord[],
+): DeliveryStageProgress | undefined {
+  for (let index = toolCalls.length - 1; index >= 0; index -= 1) {
+    const result = toolCalls[index]?.result;
+    if (!isRecord(result)) continue;
+    const parsed = parseDeliveryStage(result.deliveryStage);
+    if (parsed) return parsed;
+  }
+  return undefined;
+}
+
+function initialDeliveryStage(
+  serialized: string | undefined,
+): DeliveryStageProgress | undefined {
+  if (!serialized) return undefined;
+  try {
+    const content: unknown = JSON.parse(serialized);
+    return isRecord(content)
+      ? parseDeliveryStage(content.deliveryStage)
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function parseDeliveryStage(value: unknown): DeliveryStageProgress | undefined {
+  if (!isRecord(value)) return undefined;
+  if (
+    !Number.isSafeInteger(value.totalTargets) ||
+    !Number.isSafeInteger(value.plannedTargets) ||
+    Number(value.totalTargets) < 1 ||
+    Number(value.plannedTargets) < 1 ||
+    Number(value.plannedTargets) > Number(value.totalTargets)
+  ) {
+    return undefined;
+  }
+  const nextTarget = isRecord(value.nextTarget) ? value.nextTarget : undefined;
+  return {
+    totalTargets: Number(value.totalTargets),
+    plannedTargets: Number(value.plannedTargets),
+    ...(typeof nextTarget?.targetId === "string"
+      ? { nextTargetId: nextTarget.targetId }
+      : {}),
+  };
+}
+
+function deliveryIsOrderedScopePrefix(
   delivery: DesignDeliveryLedger,
   scope: { targets: Array<{ targetId: string }> },
 ): boolean {
   return (
-    delivery.targets.length === scope.targets.length &&
-    scope.targets.every(
-      (target, index) => delivery.targets[index]?.targetId === target.targetId,
+    delivery.targets.length <= scope.targets.length &&
+    delivery.targets.every(
+      (target, index) => scope.targets[index]?.targetId === target.targetId,
     )
   );
 }
@@ -284,7 +361,7 @@ function incompleteDeliveryDecision(
               : `Capture ${target.label} again to verify the refined revision.`;
   return {
     allow: false,
-    message: `The host delivery ledger is ${progress} verified. ${action} Do not stop or ask the user to send “continue”; complete every declared target in this Run.`,
+    message: `The current executable Plan is ${progress} verified. ${action} Finish this stage before defining the next confirmed target Plan. Do not stop or ask the user to send “continue”.`,
   };
 }
 

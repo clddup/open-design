@@ -83,6 +83,29 @@ export type DesignPlanAllocation = {
   targetIds: string[];
 };
 
+export type DesignDeliveryStageContext = {
+  totalTargets: number;
+  plannedTargets: number;
+  verifiedTargets: number;
+  currentPlan?: {
+    stage: number;
+    status: "active" | "verified";
+    targets: Array<{
+      targetId: string;
+      label: string;
+      objective: string;
+      requiredContent: string[];
+    }>;
+  };
+  nextTarget?: {
+    stage: number;
+    targetId: string;
+    label: string;
+    objective: string;
+    requiredContent: string[];
+  };
+};
+
 const activeLifecycles = new Set<GlobalTaskLifecycle>([
   "queued",
   "running",
@@ -533,6 +556,7 @@ export class GlobalTaskCoordinator {
     const executablePlan = bindPlanToReviewedScope(
       binding.deliveryScopeReview,
       this.#deliveryScopesByRunId.get(context.runId),
+      existingPlan,
       plan,
     );
     const targets = designPlanTargets(executablePlan);
@@ -842,7 +866,9 @@ export class GlobalTaskCoordinator {
         deliveryTargetId: target.delivery.targetId,
         nextAction: nextIncompleteTarget(state)
           ? "continue-next-target"
-          : "complete-delivery",
+          : this.#nextUnplannedScopeTarget(context.runId, state)
+            ? "define-next-plan"
+            : "complete-delivery",
         reviewEligible: false,
         verified: true,
         verification: "deterministic-fast-delivery",
@@ -930,7 +956,9 @@ export class GlobalTaskCoordinator {
         deliveryTargetId: target.delivery.targetId,
         nextAction: nextIncompleteTarget(state)
           ? "continue-next-target"
-          : "complete-delivery",
+          : this.#nextUnplannedScopeTarget(context.runId, state)
+            ? "define-next-plan"
+            : "complete-delivery",
         reviewEligible: false,
         verified: true,
         ...(componentStrategy === undefined ||
@@ -1536,6 +1564,81 @@ export class GlobalTaskCoordinator {
     return state ? deliveryLedger(state) : undefined;
   }
 
+  getDeliveryStageContext(
+    runId: string,
+  ): DesignDeliveryStageContext | undefined {
+    const state = this.#designPlansByRunId.get(runId);
+    const scope = this.#deliveryScopesByRunId.get(runId);
+    if (!state && !scope) return undefined;
+    const currentTargets = state ? designPlanTargets(state.plan) : [];
+    const currentPlanTargets = currentTargets.map((target) => {
+      const confirmed = scope?.targets.find(
+        (candidate) => candidate.targetId === target.targetId,
+      );
+      return {
+        targetId: target.targetId,
+        label: confirmed?.label ?? target.label,
+        objective: confirmed?.objective ?? target.objective,
+        requiredContent: [...(confirmed?.requiredContent ?? [])],
+      };
+    });
+    const firstCurrentTargetId = currentTargets[0]?.targetId;
+    const firstCurrentIndex = firstCurrentTargetId
+      ? (scope?.targets.findIndex(
+          (target) => target.targetId === firstCurrentTargetId,
+        ) ?? -1)
+      : -1;
+    const currentPlanVerified =
+      currentTargets.length > 0 &&
+      currentTargets.every(
+        (target) =>
+          state?.targetsById.get(target.targetId)?.delivery.status ===
+          "verified",
+      );
+    const next =
+      !state || currentPlanVerified
+        ? scope && state
+          ? this.#nextUnplannedScopeTarget(runId, state)
+          : scope?.targets[0]
+        : undefined;
+    const nextIndex = next
+      ? (scope?.targets.findIndex(
+          (target) => target.targetId === next.targetId,
+        ) ?? -1)
+      : -1;
+    return {
+      totalTargets: scope?.targets.length ?? state?.targetOrder.length ?? 0,
+      plannedTargets: state?.targetOrder.length ?? 0,
+      verifiedTargets:
+        state?.targetOrder.filter(
+          (targetId) =>
+            state.targetsById.get(targetId)?.delivery.status === "verified",
+        ).length ?? 0,
+      ...(currentPlanTargets.length === 0
+        ? {}
+        : {
+            currentPlan: {
+              stage: firstCurrentIndex >= 0 ? firstCurrentIndex + 1 : 1,
+              status: currentPlanVerified
+                ? ("verified" as const)
+                : ("active" as const),
+              targets: currentPlanTargets,
+            },
+          }),
+      ...(!next
+        ? {}
+        : {
+            nextTarget: {
+              stage: nextIndex >= 0 ? nextIndex + 1 : 1,
+              targetId: next.targetId,
+              label: next.label,
+              objective: next.objective,
+              requiredContent: [...next.requiredContent],
+            },
+          }),
+    };
+  }
+
   getRecoverableDelivery(
     context: TrustedToolContext,
   ): DesignDeliveryLedger | undefined {
@@ -1630,6 +1733,13 @@ export class GlobalTaskCoordinator {
         // the next Run can resume the first incomplete target immediately
         // instead of guessing IDs or spending another turn recreating Plan.
         this.#designPlansByRunId.set(event.nextRunId, structuredClone(plan));
+      }
+      const deliveryScope = this.#deliveryScopesByRunId.get(runId);
+      if (deliveryScope) {
+        this.#deliveryScopesByRunId.set(
+          event.nextRunId,
+          structuredClone(deliveryScope),
+        );
       }
       const rasterRoles = this.#generatedRasterRolesByRunId.get(runId);
       if (rasterRoles) {
@@ -1753,6 +1863,15 @@ export class GlobalTaskCoordinator {
       );
     }
     return state;
+  }
+
+  #nextUnplannedScopeTarget(
+    runId: string,
+    state: DesignWorkflowState,
+  ): DesignDeliveryScope["targets"][number] | undefined {
+    return this.#deliveryScopesByRunId
+      .get(runId)
+      ?.targets.find((target) => !state.targetsById.has(target.targetId));
   }
 
   #requireDocumentInspection(context: TrustedToolContext): InspectedHierarchy {
@@ -2803,6 +2922,7 @@ function sameScope(left: SelectionScope, right: SelectionScope): boolean {
 function bindPlanToReviewedScope(
   reviewMode: "direct" | "required",
   scope: DesignDeliveryScope | undefined,
+  existing: DesignWorkflowState | undefined,
   plan: DesignPlanToolInput,
 ): DesignPlanToolInput {
   if (scope === undefined) {
@@ -2824,20 +2944,46 @@ function bindPlanToReviewedScope(
     );
   }
   const targets = designPlanTargets(plan);
-  if (targets.length !== scope.targets.length) {
+  const previousStageTargets = existing ? designPlanTargets(existing.plan) : [];
+  const previousStageIncomplete = previousStageTargets.some(
+    (target) =>
+      existing?.targetsById.get(target.targetId)?.delivery.status !==
+      "verified",
+  );
+  const expectedTargets = previousStageIncomplete
+    ? previousStageTargets.map((target) =>
+        scope.targets.find(
+          (confirmed) => confirmed.targetId === target.targetId,
+        ),
+      )
+    : [
+        scope.targets.find(
+          (confirmed) => !existing?.targetsById.has(confirmed.targetId),
+        ),
+      ];
+  if (expectedTargets.some((target) => target === undefined)) {
+    mismatch("The confirmed delivery scope has no remaining executable target");
+  }
+  const confirmedTargets = expectedTargets.filter(
+    (target): target is DesignDeliveryScope["targets"][number] =>
+      target !== undefined,
+  );
+  if (targets.length !== confirmedTargets.length) {
     mismatch(
-      `Executable Plan has ${targets.length} targets but ${scope.targets.length} were confirmed`,
+      previousStageIncomplete
+        ? `The current stage has ${confirmedTargets.length} target(s) and must be amended in place before advancing`
+        : `The next executable stage must contain only ${confirmedTargets[0]?.label ?? "the next confirmed target"}`,
     );
   }
-  for (const [index, confirmed] of scope.targets.entries()) {
+  for (const [index, confirmed] of confirmedTargets.entries()) {
     const target = targets[index];
     if (!target || target.targetId !== confirmed.targetId) {
-      mismatch(`Target ${index + 1} does not match ${confirmed.label}`);
+      mismatch(`Stage target ${index + 1} must be ${confirmed.label}`);
     }
   }
   const bound = structuredClone(plan);
   bound.objective = scope.objective;
-  for (const [index, confirmed] of scope.targets.entries()) {
+  for (const [index, confirmed] of confirmedTargets.entries()) {
     const target = bound.targets[index];
     if (!target) mismatch(`Target ${index + 1} is missing`);
     target.label = confirmed.label;
@@ -2845,7 +2991,9 @@ function bindPlanToReviewedScope(
   }
   bound.briefFidelity = {
     ...bound.briefFidelity,
-    requiredContent: scope.targets.flatMap((target) => target.requiredContent),
+    requiredContent: confirmedTargets.flatMap(
+      (target) => target.requiredContent,
+    ),
     prohibitedAdditions: Array.from(
       new Set([
         ...bound.briefFidelity.prohibitedAdditions,

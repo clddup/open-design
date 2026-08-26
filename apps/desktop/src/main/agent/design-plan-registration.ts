@@ -65,7 +65,7 @@ export type DesignPlanRegistration = {
   plan: DesignPlanToolInput;
   planRevision: number;
   state: DesignWorkflowState;
-  status: "accepted" | "unchanged" | "amended";
+  status: "accepted" | "unchanged" | "amended" | "advanced";
 };
 
 export function registerDesignWorkflowPlan(options: {
@@ -77,6 +77,18 @@ export function registerDesignWorkflowPlan(options: {
   const { existing, inspection } = options;
   const plan = normalizePlanQualityProfiles(options.plan);
   const targets = designPlanTargets(plan);
+  const previousStageTargetIds = new Set(
+    existing
+      ? designPlanTargets(existing.plan).map((target) => target.targetId)
+      : [],
+  );
+  const nextStageTargetIds = new Set(targets.map((target) => target.targetId));
+  const stageAdvanced =
+    existing !== undefined &&
+    previousStageTargetIds.size > 0 &&
+    [...previousStageTargetIds].every(
+      (targetId) => !nextStageTargetIds.has(targetId),
+    );
   // A previous unfinished ledger is context, not automatic ownership of every
   // matching target in a later user request. Resume its verified/drafted state
   // only when the new Plan actually retains at least one incomplete target.
@@ -96,7 +108,7 @@ export function registerDesignWorkflowPlan(options: {
   assertMaterialTargetsRemainStable(existing, plan, targets);
   assertMaterialComponentDecisionsRemainStable(existing, plan);
   assertReusableComponentsAreAvailable(inspection, plan);
-  assertUniquePlannedNodeIds(plan, targets);
+  assertUniquePlannedNodeIds(existing, plan, targets);
   assertCreatedArtboardsDoNotOverlap(inspection, targets);
   if (existing && sameJson(existing.plan, plan)) {
     const refreshed = refreshEstablishedTargets(existing, inspection);
@@ -132,7 +144,9 @@ export function registerDesignWorkflowPlan(options: {
       designPlanReferenceStrategy(existing.plan),
       designPlanReferenceStrategy(plan),
     );
-  const targetsById = new Map<string, DesignDeliveryTargetState>();
+  const targetsById = new Map<string, DesignDeliveryTargetState>(
+    existing?.targetsById ?? [],
+  );
   const changedTargetIds: string[] = [];
   for (const target of targets) {
     const reservedNodeIds = plannedNodeIdsForTarget(plan, target.targetId);
@@ -184,13 +198,15 @@ export function registerDesignWorkflowPlan(options: {
       changedTargetIds.push(target.targetId);
     }
   }
-  for (const targetId of existing?.targetOrder ?? []) {
-    if (!targetsById.has(targetId)) changedTargetIds.push(targetId);
+  const targetOrder = [...(existing?.targetOrder ?? [])];
+  for (const target of targets) {
+    if (!targetOrder.includes(target.targetId))
+      targetOrder.push(target.targetId);
   }
   const state: DesignWorkflowState = {
     plan: structuredClone(plan),
     planRevision: (existing?.planRevision ?? 0) + 1,
-    targetOrder: targets.map((target) => target.targetId),
+    targetOrder,
     targetsById,
   };
   return {
@@ -198,7 +214,7 @@ export function registerDesignWorkflowPlan(options: {
     plan: structuredClone(state.plan),
     planRevision: state.planRevision,
     state,
-    status: existing ? "amended" : "accepted",
+    status: existing ? (stageAdvanced ? "advanced" : "amended") : "accepted",
   };
 }
 
@@ -225,8 +241,12 @@ function assertMaterialComponentDecisionsRemainStable(
   plan: DesignPlanToolInput,
 ): void {
   if (!existing) return;
+  const nextTargetIds = new Set(
+    designPlanTargets(plan).map((target) => target.targetId),
+  );
   for (const target of existing.targetsById.values()) {
     if (!isMaterialDelivery(target.delivery)) continue;
+    if (!nextTargetIds.has(target.delivery.targetId)) continue;
     const previous = componentOccurrences(
       existing.plan,
       target.delivery.targetId,
@@ -396,6 +416,7 @@ function assertMaterialTargetsRemainStable(
   for (const current of materialTargets) {
     const next = nextTargets.get(current.delivery.targetId);
     if (!next) {
+      if (current.delivery.status === "verified") continue;
       throw new Error(
         `design_workflow.plan_amendment_invalid: Material target ${current.delivery.targetId} cannot be removed from an amended plan`,
       );
@@ -457,10 +478,18 @@ function normalizePlanQualityProfiles(
 }
 
 function assertUniquePlannedNodeIds(
+  existing: DesignWorkflowState | undefined,
   plan: DesignPlanToolInput,
   targets: readonly DesignPlanTarget[],
 ): void {
   const targetByNodeId = new Map<string, string>();
+  const amendedTargetIds = new Set(targets.map((target) => target.targetId));
+  for (const target of existing?.targetsById.values() ?? []) {
+    if (amendedTargetIds.has(target.delivery.targetId)) continue;
+    for (const nodeId of target.delivery.reservedNodeIds) {
+      targetByNodeId.set(nodeId, target.delivery.targetId);
+    }
+  }
   for (const target of targets) {
     for (const nodeId of plannedNodeIdsForTarget(plan, target.targetId)) {
       const ownerTargetId = targetByNodeId.get(nodeId);

@@ -45,6 +45,12 @@ describe("initial design inspection", () => {
             activeTargetId: "target_home",
             targets: [],
           }),
+          getDeliveryStageContext: () => ({
+            totalTargets: 2,
+            plannedTargets: 1,
+            verifiedTargets: 0,
+            currentPlan: { stage: 1, status: "active", targets: [] },
+          }),
         },
         renderer: { execute },
       },
@@ -74,6 +80,7 @@ describe("initial design inspection", () => {
     expect(JSON.parse(result.content)).toMatchObject({
       pageId: "page_1",
       unfinishedDelivery: { activeTargetId: "target_home" },
+      deliveryStage: { totalTargets: 2, plannedTargets: 1 },
     });
     expect(result.content).not.toContain("x".repeat(20_000));
   });
@@ -89,6 +96,7 @@ describe("initial design inspection", () => {
             resolveExecutionContext: (context) => context,
             recordDocumentInspection,
             getRecoverableDelivery: () => undefined,
+            getDeliveryStageContext: () => undefined,
           },
           renderer: {
             execute: vi.fn().mockResolvedValue({

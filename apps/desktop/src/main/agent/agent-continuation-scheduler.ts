@@ -29,6 +29,7 @@ export const AGENT_CONTINUATION_PROMPT =
 export class AgentContinuationScheduler {
   readonly #cancellationRequestedRunIds = new Set<string>();
   readonly #deliveryByRunId = new Map<string, DesignDeliveryLedger>();
+  readonly #remainingScopeByRunId = new Map<string, boolean>();
   readonly #failureByRunId = new Map<
     string,
     Extract<AgentEvent, { type: "agent.error" }>["failure"]
@@ -108,6 +109,7 @@ export class AgentContinuationScheduler {
     this.#cancellationRequestedRunIds.delete(runId);
     this.#requestsByRunId.delete(runId);
     this.#deliveryByRunId.delete(runId);
+    this.#remainingScopeByRunId.delete(runId);
     this.#failureByRunId.delete(runId);
     this.#nextRunIdByParentRunId.delete(runId);
     this.#pendingConversationIdByRunId.delete(runId);
@@ -123,9 +125,14 @@ export class AgentContinuationScheduler {
     if (!runId) return null;
     if (deliveryWasSuperseded(event)) {
       this.#deliveryByRunId.delete(runId);
+      this.#remainingScopeByRunId.delete(runId);
     } else {
       const delivery = deliveryFromEvent(event);
       if (delivery) this.#deliveryByRunId.set(runId, structuredClone(delivery));
+      const remainingScope = remainingScopeFromEvent(event);
+      if (remainingScope !== undefined) {
+        this.#remainingScopeByRunId.set(runId, remainingScope);
+      }
     }
     if (event.type === "agent.error") {
       this.#failureByRunId.set(runId, event.failure);
@@ -135,17 +142,19 @@ export class AgentContinuationScheduler {
 
     const source = this.#requestsByRunId.get(runId);
     const currentDelivery = this.#deliveryByRunId.get(runId);
+    const hasRemainingScope = this.#remainingScopeByRunId.get(runId) === true;
     const failure = this.#failureByRunId.get(runId);
     const cancellationRequested =
       this.#cancellationRequestedRunIds.delete(runId);
     this.#requestsByRunId.delete(runId);
     this.#deliveryByRunId.delete(runId);
+    this.#remainingScopeByRunId.delete(runId);
     this.#failureByRunId.delete(runId);
     if (
       cancellationRequested ||
       !source ||
       !currentDelivery ||
-      !hasIncompleteTarget(currentDelivery)
+      (!hasIncompleteTarget(currentDelivery) && !hasRemainingScope)
     )
       return null;
     if (event.stopReason === "cancelled") return null;
@@ -167,6 +176,7 @@ export class AgentContinuationScheduler {
     }
     const nextRunId = `run_${this.now()}_auto_${++this.#sequence}`;
     this.#deliveryByRunId.set(nextRunId, structuredClone(currentDelivery));
+    if (hasRemainingScope) this.#remainingScopeByRunId.set(nextRunId, true);
     this.#nextRunIdByParentRunId.set(runId, nextRunId);
     this.#pendingConversationIdByRunId.set(nextRunId, source.sessionId);
     return {
@@ -201,6 +211,19 @@ function deliveryFromEvent(
     return event.result.delivery;
   return isDesignDeliveryLedger(event.result.unfinishedDelivery)
     ? event.result.unfinishedDelivery
+    : undefined;
+}
+
+function remainingScopeFromEvent(event: AgentEvent): boolean | undefined {
+  if (event.type !== "tool.completed" || !isRecord(event.result)) {
+    return undefined;
+  }
+  const stage = event.result.deliveryStage;
+  if (!isRecord(stage)) return undefined;
+  if (isRecord(stage.nextTarget)) return true;
+  return typeof stage.totalTargets === "number" &&
+    typeof stage.plannedTargets === "number"
+    ? stage.plannedTargets < stage.totalTargets
     : undefined;
 }
 

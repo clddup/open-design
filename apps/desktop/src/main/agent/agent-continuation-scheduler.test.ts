@@ -220,6 +220,46 @@ describe("AgentContinuationScheduler", () => {
     expect(scheduler.record(completed(verified.runId, "budget"))).toBeNull();
   });
 
+  it("continues when the current Plan is verified but confirmed scope remains", () => {
+    const scheduler = new AgentContinuationScheduler(() => 4000);
+    const rolling = request();
+    scheduler.registerRun(rolling);
+    scheduler.record({
+      type: "tool.completed",
+      runId: rolling.runId,
+      toolCallId: "verify_stage_1",
+      revision: 6,
+      result: {
+        delivery: {
+          ...incomplete,
+          activeTargetId: null,
+          targets: [
+            {
+              ...incomplete.targets[0],
+              status: "verified",
+              captureRevision: 6,
+              reviewRevision: 6,
+              refinementRevision: 6,
+              verifiedRevision: 6,
+            },
+          ],
+        },
+        deliveryStage: {
+          totalTargets: 12,
+          plannedTargets: 1,
+          verifiedTargets: 1,
+          nextTarget: { targetId: "target_2" },
+        },
+      },
+    });
+
+    expect(scheduler.record(completed(rolling.runId, "budget"))).toMatchObject({
+      kind: "schedule",
+      nextRunId: "run_4000_auto_1",
+      continuation: { reason: "budget", attempt: 1 },
+    });
+  });
+
   it("does not continue a delivery superseded by an explicit Page clear", () => {
     const scheduler = new AgentContinuationScheduler();
     const active = request();

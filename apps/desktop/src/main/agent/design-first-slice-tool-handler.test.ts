@@ -73,6 +73,7 @@ describe("handleDesignFirstSliceTool", () => {
       recordDesignPlanAllocated: vi.fn(),
       recordDesignApplyCompleted: vi.fn(),
       getDeliveryLedger: vi.fn().mockReturnValue(delivery),
+      getDeliveryStageContext: vi.fn().mockReturnValue(undefined),
     };
     let rendererCall: ToolCallRequest | undefined;
     const rendererHost = {
