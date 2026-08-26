@@ -4,7 +4,7 @@ export class OperationError extends Error {
   readonly commandId: string;
   readonly code: DesignError["code"];
   readonly path: string | undefined;
-  readonly details: DesignError["details"] | undefined;
+  readonly context: DesignError["context"] | undefined;
   readonly issues: readonly DesignIssue[] | undefined;
   readonly retryable: boolean;
 
@@ -14,7 +14,7 @@ export class OperationError extends Error {
     code: DesignError["code"] = "invalid",
     options: {
       path?: string;
-      details?: DesignError["details"];
+      context?: DesignError["context"];
       issues?: readonly DesignIssue[];
       retryable?: boolean;
     } = {},
@@ -23,7 +23,7 @@ export class OperationError extends Error {
     this.commandId = commandId;
     this.code = code;
     this.path = options.path;
-    this.details = options.details;
+    this.context = options.context;
     this.issues = options.issues;
     this.retryable = options.retryable ?? false;
   }

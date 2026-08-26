@@ -514,7 +514,7 @@ describe("Shared Styles EditorRuntime", () => {
       ok: false,
       error: {
         code: "invalid",
-        commandId: "delete_referenced_library_style",
+        issues: [{ commandId: "delete_referenced_library_style" }],
       },
     });
 
@@ -534,7 +534,7 @@ describe("Shared Styles EditorRuntime", () => {
       ok: false,
       error: {
         code: "invalid",
-        commandId: "replace_library_style_identity",
+        issues: [{ commandId: "replace_library_style_identity" }],
       },
     });
     expect(runtime.getSnapshot().document.libraryStylesById).toHaveProperty(

@@ -2182,24 +2182,10 @@ function designFailureIssues(
   error: DesignError,
   commands: readonly DesignOperation[],
 ): AgentToolFailureIssue[] {
-  const rawIssues = error.issues ?? [];
-  const issues =
-    rawIssues.length > 0
-      ? rawIssues
-      : [
-          {
-            code: `design.runtime.${error.code}`,
-            path: error.path ?? "",
-            message: error.message,
-          },
-        ];
-  return issues.slice(0, 128).map((issue) => {
+  return error.issues.slice(0, 128).map((issue) => {
     const nodeId = issue.nodeId ?? nodeIdFromInvariantPath(issue.path);
     const commandId =
-      issue.commandId ??
-      error.commandId ??
-      commandIdForNode(commands, nodeId) ??
-      undefined;
+      issue.commandId ?? commandIdForNode(commands, nodeId) ?? undefined;
     return {
       ...(commandId ? { commandId } : {}),
       ...(nodeId ? { nodeId } : {}),

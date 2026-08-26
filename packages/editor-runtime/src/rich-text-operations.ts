@@ -168,7 +168,7 @@ export function commitTextEditingSession(
       command.commandId,
       "Text editing session did not change content, character styles, or paragraph styles",
       "invalid",
-      { details: { code: "no-op", nodeId: node.id } },
+      { context: { code: "no-op", nodeId: node.id } },
     );
   }
   prepareTextPropertiesUpdate(
@@ -194,7 +194,7 @@ export function commitTextEditingSession(
         "invalid",
         {
           path: `/paragraphPatches/${index}`,
-          details: { code: "invalid-paragraph-range", nodeId: node.id },
+          context: { code: "invalid-paragraph-range", nodeId: node.id },
         },
       );
     }
@@ -300,7 +300,7 @@ export function updateTextRangeStyle(
       command.commandId,
       "Text range already uses the requested style",
       "invalid",
-      { details: { code: "no-op", nodeId: node.id } },
+      { context: { code: "no-op", nodeId: node.id } },
     );
   }
   node.properties.runs = next;

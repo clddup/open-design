@@ -11,14 +11,14 @@
 - `DesignDocumentContract` 组合当前 executable schema 与文档内 Layout Limits、Text Runs、Paragraph Runs refinement。当前 schema 的非法文档不再进入 migration 静默补字段或合并 runs；已知旧 schema 才允许显式迁移。
 - `DesignOperationContract` 与 `DesignTransactionContract` 统一 operation cross-field、replacement bundle、Layout Limits 和 command ID 唯一性。`EditorRuntime` 每次 preview/apply 只 parse 一次；document ID、revision、节点存在、引用和应用后文档 invariant 仍由 Runtime guard 拥有。
 - `DesignTransactionResultContract` 校验成功结果的 revision、transaction、document 与 ChangeSet correlation，以及 added/changed/removed identity 互斥。
-- Runtime 产生的失败优先携带结构化 Design Issues；Renderer 直接消费 issue code/path/command/node，不再把任意 `details` 数组解释成字段错误。旧的顶层 message/path 仅作为尚未迁移错误源的过渡 fallback。
+- `DesignError` 强制携带至少一条结构化 Design Issue；Runtime 将 OperationError 与文档 invariant 转换为统一 issue code/path/command/node，Renderer 直接消费 issues，不再解释任意 `details` 数组，也不保留顶层 commandId/path/details fallback。错误源的补充上下文只允许进入可选 `context`，不能冒充字段问题。
 - Provider 的紧凑 Apply schema 与 canonical transaction 共享同一 command 数量上限；compiled commands 复用 operation domain owner，不在 Desktop 再维护一套 command 关系规则。
 
 ## 边界
 
 本决策不把完整文档 invariant 移入 design-contracts。Component/Instance/Slot、Variant、Style、Variable、Vector、Asset 和树引用仍依赖各服务与 EditorRuntime，避免形成循环依赖。
 
-DesignDocument 历史 migration 的物理拆分、所有 OperationError context 的 typed issue 化、DesignError 旧 fallback 删除以及 MCP 入口复用仍是后续切片；未完成前不得宣称整个事务错误协议已迁移完毕。
+DesignDocument 历史 migration 已物理拆到独立模块，并通过注入 current parser 避免 migration 与当前 Contract 形成运行时循环；当前 schema 的读取仍严格失败关闭。剩余 OperationError context 的更细领域 code、Main/Preload/MCP 入口复用与跨进程错误贯通仍是后续切片；未完成前不得宣称整个事务错误协议已迁移完毕。
 
 ## 失败行为
 

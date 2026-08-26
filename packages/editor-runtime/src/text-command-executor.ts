@@ -178,7 +178,7 @@ function reflowText(
         {
           path: `/nodesById/${escapeJsonPointer(nodeId)}/properties/fontFamily`,
           retryable: true,
-          details: {
+          context: {
             nodeId,
             expectedFont: command.expectedFont,
             currentFont: {
@@ -240,7 +240,7 @@ function reflowText(
       command.commandId,
       "Text layout is already up to date",
       "invalid",
-      { details: { code: "no-op", nodeIds: command.nodeIds } },
+      { context: { code: "no-op", nodeIds: command.nodeIds } },
     );
   }
 }
@@ -356,7 +356,7 @@ function inspectReflowFont(
       "engine-failure",
       {
         retryable: true,
-        details: {
+        context: {
           feature: "text-font-availability",
           recovery: "retry-after-canvas-ready",
         },
@@ -373,7 +373,7 @@ function inspectReflowFont(
         ? `Font availability provider failed: ${error.message}`
         : "Font availability provider failed",
       "engine-failure",
-      { retryable: true, details: { provider: provider.id } },
+      { retryable: true, context: { provider: provider.id } },
     );
   }
   const issue = validateTextFontAvailabilityResult(result);
@@ -388,7 +388,7 @@ function inspectReflowFont(
       "engine-failure",
       {
         retryable: true,
-        details: {
+        context: {
           provider: provider.id,
           providerVersion: provider.version,
           resultProvider: result.provider,
@@ -403,7 +403,7 @@ function inspectReflowFont(
       `Font ${descriptor.fontFamily} is not available to the current canvas`,
       "invalid",
       {
-        details: {
+        context: {
           code: "font-missing",
           font: {
             fontFamily: descriptor.fontFamily,
@@ -441,7 +441,7 @@ export function resolveTextAutoSize(
       {
         path: `/nodesById/${escapeJsonPointer(node.id)}/size`,
         retryable: true,
-        details: {
+        context: {
           nodeId: node.id,
           feature: "text-auto-size",
           recovery: "retry-after-canvas-ready",
@@ -483,7 +483,7 @@ export function resolveTextAutoSize(
       {
         path: `/nodesById/${escapeJsonPointer(node.id)}/size`,
         retryable: true,
-        details: {
+        context: {
           nodeId: node.id,
           provider: provider.id,
           providerVersion: provider.version,
@@ -501,7 +501,7 @@ export function resolveTextAutoSize(
       {
         path: `/nodesById/${escapeJsonPointer(node.id)}/size`,
         retryable: true,
-        details: {
+        context: {
           nodeId: node.id,
           provider: provider.id,
           providerVersion: provider.version,
@@ -513,7 +513,7 @@ export function resolveTextAutoSize(
     throw new OperationError(commandId, result.message, "engine-failure", {
       path: `/nodesById/${escapeJsonPointer(node.id)}/size`,
       retryable: result.retryable,
-      details: {
+      context: {
         nodeId: node.id,
         provider: provider.id,
         providerVersion: provider.version,
@@ -531,7 +531,7 @@ export function resolveTextAutoSize(
       "engine-failure",
       {
         path: `/nodesById/${escapeJsonPointer(node.id)}/size`,
-        details: {
+        context: {
           nodeId: node.id,
           provider: provider.id,
           providerVersion: provider.version,
@@ -700,7 +700,7 @@ function resolveRichTextAutoSize(
       {
         path,
         retryable: true,
-        details: {
+        context: {
           nodeId: node.id,
           feature: "rich-text-auto-size",
           recovery: "retry-after-canvas-ready",
@@ -758,7 +758,7 @@ function resolveRichTextAutoSize(
         ? `Rich text layout provider failed: ${error.message}`
         : "Rich text layout provider failed",
       "engine-failure",
-      { path, retryable: true, details: { provider: provider.id } },
+      { path, retryable: true, context: { provider: provider.id } },
     );
   }
   const issue = validateTextRunLayoutResult(result, request);
@@ -766,7 +766,7 @@ function resolveRichTextAutoSize(
     throw new OperationError(commandId, issue, "engine-failure", {
       path,
       retryable: true,
-      details: { provider: provider.id, providerVersion: provider.version },
+      context: { provider: provider.id, providerVersion: provider.version },
     });
   }
   if (!result.ok) {
@@ -777,7 +777,7 @@ function resolveRichTextAutoSize(
       {
         path,
         retryable: result.retryable,
-        details: { provider: provider.id, providerVersion: provider.version },
+        context: { provider: provider.id, providerVersion: provider.version },
       },
     );
   }

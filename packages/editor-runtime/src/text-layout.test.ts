@@ -192,10 +192,14 @@ describe("EditorRuntime text Auto Size", () => {
       ok: false,
       error: {
         code: "engine-failure",
-        commandId: "insert_pending_auto_text",
-        path: "/nodesById/auto_text/size",
         retryable: true,
-        details: { recovery: "retry-after-canvas-ready" },
+        issues: [
+          {
+            commandId: "insert_pending_auto_text",
+            path: "/nodesById/auto_text/size",
+            details: { recovery: "retry-after-canvas-ready" },
+          },
+        ],
       },
     });
     expect(runtime.getSnapshot().document.revision).toBe(document.revision);
@@ -228,10 +232,14 @@ describe("EditorRuntime text Auto Size", () => {
       ok: false,
       error: {
         code: "engine-failure",
-        commandId: "insert_throwing_text",
-        path: "/nodesById/auto_text/size",
         retryable: true,
-        details: { providerCode: "provider-threw" },
+        issues: [
+          {
+            commandId: "insert_throwing_text",
+            path: "/nodesById/auto_text/size",
+            details: { providerCode: "provider-threw" },
+          },
+        ],
       },
     });
 
@@ -261,13 +269,17 @@ describe("EditorRuntime text Auto Size", () => {
       ok: false,
       error: {
         code: "engine-failure",
-        commandId: "insert_inconsistent_text",
-        path: "/nodesById/auto_text/size",
         retryable: false,
-        details: {
-          provider: "expected-provider",
-          resultProvider: "unexpected-provider",
-        },
+        issues: [
+          {
+            commandId: "insert_inconsistent_text",
+            path: "/nodesById/auto_text/size",
+            details: {
+              provider: "expected-provider",
+              resultProvider: "unexpected-provider",
+            },
+          },
+        ],
       },
     });
   });
@@ -555,7 +567,10 @@ describe("EditorRuntime text Auto Size", () => {
           fontSlant: "normal",
         },
       },
-      { ok: false, error: { details: { code: "font-missing" } } },
+      {
+        ok: false,
+        error: { issues: [{ details: { code: "font-missing" } }] },
+      },
     );
 
     const unavailable = new EditorRuntime(createWelcomeDocument());
@@ -599,7 +614,7 @@ describe("EditorRuntime text Auto Size", () => {
           fontSlant: "normal",
         },
       },
-      { ok: false, error: { details: { code: "no-op" } } },
+      { ok: false, error: { issues: [{ details: { code: "no-op" } }] } },
     );
   });
 });

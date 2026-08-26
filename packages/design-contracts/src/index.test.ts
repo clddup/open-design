@@ -3209,6 +3209,45 @@ describe("design contract schemas", () => {
     );
   });
 
+  it("requires structured issues on transaction failures", () => {
+    const failure = {
+      ok: false as const,
+      mode: "apply" as const,
+      transactionId: "transaction_1",
+      documentId: "document_1",
+      baseRevision: 4,
+      revision: {
+        revision: 4,
+        createdAt: "2026-08-26T12:00:00.000Z",
+        actor,
+      },
+      error: {
+        code: "invalid" as const,
+        message: "Node is invalid",
+        retryable: false,
+        issues: [
+          {
+            code: "design.node_schema_invalid",
+            commandId: "update_node",
+            path: "/nodesById/node_1",
+            message: "Node is invalid",
+          },
+        ],
+      },
+    };
+    expect(DesignTransactionResultContract.parse(failure)).toEqual({
+      ok: true,
+      value: failure,
+    });
+
+    const legacyFailure = structuredClone(failure) as unknown as {
+      error: Record<string, unknown>;
+    };
+    delete legacyFailure.error.issues;
+    legacyFailure.error.commandId = "update_node";
+    expect(DesignTransactionResultContract.parse(legacyFailure).ok).toBe(false);
+  });
+
   it("validates explicit constraints and nullable update removal", () => {
     const text = textDocumentFixture().nodesById.text_1;
     expect(

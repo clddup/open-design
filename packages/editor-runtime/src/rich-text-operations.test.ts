@@ -85,8 +85,12 @@ describe("EditorRuntime rich text ranges", () => {
       ok: false,
       error: {
         code: "invalid",
-        commandId: "split_emoji",
-        path: "/nodesById/title_welcome/properties/runs",
+        issues: [
+          {
+            commandId: "split_emoji",
+            path: "/nodesById/title_welcome/properties/runs",
+          },
+        ],
       },
     });
     expect(runtime.getSnapshot().document.revision).toBe(revision);
@@ -516,8 +520,7 @@ describe("EditorRuntime rich text ranges", () => {
       ok: false,
       error: {
         code: "invalid",
-        commandId: "invalid_edit",
-        path: "/paragraphPatches/0",
+        issues: [{ commandId: "invalid_edit", path: "/paragraphPatches/0" }],
       },
     });
     expect(runtime.getSnapshot().document.revision).toBe(revision);
@@ -531,7 +534,7 @@ describe("EditorRuntime rich text ranges", () => {
       }),
     ).toMatchObject({
       ok: false,
-      error: { code: "invalid", commandId: "noop_edit" },
+      error: { code: "invalid", issues: [{ commandId: "noop_edit" }] },
     });
     expect(runtime.getSnapshot().document.revision).toBe(revision);
   });

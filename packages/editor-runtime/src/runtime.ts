@@ -87,6 +87,10 @@ interface QueuedEditorEvent {
   snapshot: EditorSnapshot;
 }
 
+type RuntimeDesignErrorInput = Omit<DesignError, "issues"> & {
+  issues?: DesignError["issues"];
+};
+
 type EditorEventPayload = EditorEvent extends infer Event
   ? Event extends EditorEvent
     ? Omit<
@@ -489,7 +493,7 @@ export class EditorRuntime {
         code: "conflict",
         message: `Expected revision ${transaction.baseRevision}, current revision is ${this.#document.revision}`,
         retryable: true,
-        details: {
+        context: {
           expectedRevision: transaction.baseRevision,
           currentRevision: this.#document.revision,
         },
@@ -534,7 +538,7 @@ export class EditorRuntime {
           "invalid",
           {
             path: `/nodesById/${escapeJsonPointer(autoLayout.frameId)}/properties/autoLayout`,
-            details: {
+            context: {
               nodeId: autoLayout.frameId,
               feature: "linear-auto-layout-v1",
               providerCode: autoLayout.code,
@@ -585,17 +589,14 @@ export class EditorRuntime {
   #failure(
     transaction: DesignTransaction,
     mode: "preview" | "apply",
-    error: DesignError,
+    error: RuntimeDesignErrorInput,
   ): DesignTransactionFailure {
     const issues = error.issues ?? [
       {
         code: `design.runtime.${error.code}`,
-        path: error.path ?? "",
+        path: "",
         message: error.message,
-        ...(error.commandId === undefined
-          ? {}
-          : { commandId: error.commandId }),
-        ...(error.details === undefined ? {} : { details: error.details }),
+        ...(error.context === undefined ? {} : { details: error.context }),
       },
     ];
     return deepFreeze({
@@ -630,10 +631,10 @@ export class EditorRuntime {
             code: "design.history_invalid",
             path: "",
             message,
-            details: { actorId },
+            context: { actorId },
           },
         ],
-        details: { actorId },
+        context: { actorId },
       },
     });
   }
@@ -780,8 +781,6 @@ function operationError(error: unknown): DesignError {
     return {
       code: error.code,
       message: error.message,
-      commandId: error.commandId,
-      ...(error.path === undefined ? {} : { path: error.path }),
       retryable: error.retryable,
       issues:
         error.issues === undefined
@@ -791,13 +790,13 @@ function operationError(error: unknown): DesignError {
                 commandId: error.commandId,
                 path: error.path ?? "",
                 message: error.message,
-                ...(error.details === undefined
+                ...(error.context === undefined
                   ? {}
-                  : { details: error.details }),
+                  : { details: error.context }),
               },
             ]
           : [...error.issues],
-      ...(error.details === undefined ? {} : { details: error.details }),
+      ...(error.context === undefined ? {} : { context: error.context }),
     };
   }
   if (error instanceof DocumentValidationError) {

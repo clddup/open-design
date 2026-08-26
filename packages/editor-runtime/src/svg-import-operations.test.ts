@@ -257,7 +257,10 @@ describe("SVG import transaction planner", () => {
 
     expect(result).toMatchObject({
       ok: false,
-      error: { code: "not-found", commandId: "failed_svg_missing" },
+      error: {
+        code: "not-found",
+        issues: [{ commandId: "failed_svg_missing" }],
+      },
     });
     expect(runtime.getSnapshot()).toBe(before);
     imported.nodes.forEach((node) =>

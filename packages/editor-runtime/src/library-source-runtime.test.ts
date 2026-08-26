@@ -83,7 +83,10 @@ describe("Library component source runtime", () => {
     );
     expect(identityResult).toMatchObject({
       ok: false,
-      error: { code: "invalid", commandId: "replace-identity" },
+      error: {
+        code: "invalid",
+        issues: [{ commandId: "replace-identity" }],
+      },
     });
 
     const deleteResult = runtime.apply(
@@ -97,7 +100,7 @@ describe("Library component source runtime", () => {
     );
     expect(deleteResult).toMatchObject({
       ok: false,
-      error: { commandId: "delete-source" },
+      error: { issues: [{ commandId: "delete-source" }] },
     });
     expect(runtime.getSnapshot().document.libraryComponentsById).toHaveProperty(
       "library-button",
