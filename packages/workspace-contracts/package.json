@@ -6,7 +6,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./descriptors": "./src/descriptors.ts",
-    "./access": "./src/access.ts"
+    "./access": "./src/access.ts",
+    "./delivery": "./src/delivery.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit"

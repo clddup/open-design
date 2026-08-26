@@ -6,9 +6,8 @@ import type {
 import {
   ConversationDescriptorContract,
   ConversationDescriptorListContract,
-  isGlobalTaskProjection,
+  GlobalTaskProjectionContract,
   isRootGrant,
-  normalizeGlobalTaskProjection,
 } from "@opendesign/workspace-contracts";
 import { formatContractFailure } from "@opendesign/contract-runtime";
 import { mkdirSync } from "node:fs";
@@ -367,9 +366,7 @@ export class WorkspaceStore {
   }
 
   saveGlobalTask(task: GlobalTaskProjection): void {
-    if (!isGlobalTaskProjection(task)) {
-      throw new TypeError("Invalid global task projection");
-    }
+    const canonical = requireGlobalTaskProjection(task);
     this.#database
       .prepare(
         `
@@ -383,20 +380,20 @@ export class WorkspaceStore {
             updated_at = excluded.updated_at
         `,
       )
-      .run(task.taskId, JSON.stringify(task), task.updatedAt);
+      .run(canonical.taskId, JSON.stringify(canonical), canonical.updatedAt);
   }
 
   listGlobalTasks(): GlobalTaskProjection[] {
     const rows = this.#database
       .prepare(
         `
-          SELECT projection_json AS descriptor_json
+          SELECT task_id, projection_json, updated_at
           FROM global_tasks
           ORDER BY updated_at DESC, task_id ASC
         `,
       )
-      .all() as Array<{ descriptor_json: string }>;
-    return parseMappedRows(rows, normalizeGlobalTaskProjection);
+      .all() as GlobalTaskRow[];
+    return rows.map(parseGlobalTaskRow);
   }
 
   close(): void {
@@ -473,6 +470,12 @@ type ConversationRow = {
   updated_at: string;
 };
 
+type GlobalTaskRow = {
+  task_id: string;
+  projection_json: string;
+  updated_at: string;
+};
+
 function requireConversationDescriptor(value: unknown): ConversationDescriptor {
   const result = ConversationDescriptorContract.parse(value);
   if (!result.ok) {
@@ -513,6 +516,38 @@ function parseConversationRow(row: ConversationRow): ConversationDescriptor {
   return descriptor;
 }
 
+function requireGlobalTaskProjection(value: unknown): GlobalTaskProjection {
+  const result = GlobalTaskProjectionContract.parse(value);
+  if (!result.ok) {
+    throw new TypeError(
+      formatContractFailure("Global Task projection", result.issues),
+    );
+  }
+  return result.value;
+}
+
+function parseGlobalTaskRow(row: GlobalTaskRow): GlobalTaskProjection {
+  let value: unknown;
+  try {
+    value = JSON.parse(row.projection_json);
+  } catch {
+    throw new TypeError("Invalid persisted Global Task JSON");
+  }
+  const task = requireGlobalTaskProjection(value);
+  const mismatches = [
+    task.taskId === row.task_id ? null : "/taskId",
+    task.updatedAt === row.updated_at ? null : "/updatedAt",
+  ].filter((path): path is string => path !== null);
+  if (mismatches.length > 0) {
+    throw new TypeError(
+      `Persisted Global Task columns disagree with projection JSON at ${mismatches.join(
+        ", ",
+      )}`,
+    );
+  }
+  return task;
+}
+
 function parseRows<T>(
   rows: Array<{ descriptor_json: string }>,
   guard: (value: unknown) => value is T,
@@ -521,20 +556,6 @@ function parseRows<T>(
     try {
       const value: unknown = JSON.parse(row.descriptor_json);
       return guard(value) ? [value] : [];
-    } catch {
-      return [];
-    }
-  });
-}
-
-function parseMappedRows<T>(
-  rows: Array<{ descriptor_json: string }>,
-  parse: (value: unknown) => T | null,
-): T[] {
-  return rows.flatMap((row) => {
-    try {
-      const parsed = parse(JSON.parse(row.descriptor_json));
-      return parsed === null ? [] : [parsed];
     } catch {
       return [];
     }

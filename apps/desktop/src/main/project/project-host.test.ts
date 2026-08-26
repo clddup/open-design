@@ -1347,4 +1347,36 @@ describe("WorkspaceStore", () => {
     );
     reopened.close();
   });
+
+  it("fails visibly when persisted Global Task columns disagree with JSON", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "opendesign-workspace-"));
+    const databasePath = join(directory, "workspace.sqlite");
+    const primaryTarget = designTarget();
+    const task: GlobalTaskProjection = {
+      version: WORKSPACE_CONTRACT_VERSION,
+      taskId: "task_1",
+      conversationId: "conversation_1",
+      runId: "run_1",
+      title: "Refine the mobile experience",
+      lifecycle: "running",
+      targetSet: { targets: [primaryTarget], primaryTarget },
+      createdAt: now,
+      updatedAt: now,
+    };
+    const initial = new WorkspaceStore(databasePath);
+    initial.saveGlobalTask(task);
+    initial.close();
+
+    const database = new DatabaseSync(databasePath);
+    database
+      .prepare("UPDATE global_tasks SET updated_at = ? WHERE task_id = ?")
+      .run(later, task.taskId);
+    database.close();
+
+    const reopened = new WorkspaceStore(databasePath);
+    expect(() => reopened.listGlobalTasks()).toThrow(
+      "Persisted Global Task columns disagree with projection JSON at /updatedAt",
+    );
+    reopened.close();
+  });
 });

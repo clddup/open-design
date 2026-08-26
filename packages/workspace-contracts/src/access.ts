@@ -287,7 +287,7 @@ export const RunTargetSetContract = defineContract<RunTargetSet>({
   schema: RunTargetSetSchema,
   code: "workspace.run_target_set_invalid",
   subject: "Run target set",
-  refine: runTargetSetIssues,
+  refine: runTargetSetDomainIssues,
   clone: false,
 });
 
@@ -381,7 +381,9 @@ function designTargetIssues(value: DesignTarget): ValidationIssue[] {
       ];
 }
 
-function runTargetSetIssues(value: RunTargetSet): ValidationIssue[] {
+export function runTargetSetDomainIssues(
+  value: RunTargetSet,
+): ValidationIssue[] {
   const issues = value.targets.flatMap((target, index) =>
     prefixIssues(designTargetIssues(target), `/targets/${index}`),
   );
@@ -429,7 +431,7 @@ function runTargetSetIssues(value: RunTargetSet): ValidationIssue[] {
 
 function runAccessSnapshotIssues(value: RunAccessSnapshot): ValidationIssue[] {
   const issues = prefixIssues(
-    runTargetSetIssues(value.targetSet),
+    runTargetSetDomainIssues(value.targetSet),
     "/targetSet",
   );
   value.rootGrants.forEach((grant, index) => {

@@ -4,7 +4,9 @@ import {
   DESIGN_DELIVERY_LEDGER_VERSION,
   ConversationDescriptorContract,
   ConversationDescriptorListContract,
+  DesignDeliveryLedgerContract,
   DesignTargetContract,
+  GlobalTaskProjectionContract,
   GlobalTaskProjectionSchema,
   MAX_DESIGN_TARGETS,
   MAX_PROJECT_DESIGN_FILES,
@@ -22,8 +24,6 @@ import {
   isDesignTarget,
   isDesignFileDescriptor,
   isDesignDeliveryLedger,
-  normalizeDesignDeliveryLedger,
-  normalizeGlobalTaskProjection,
   isGlobalTaskProjection,
   isNormalizedRelativePath,
   isProjectManifest,
@@ -709,6 +709,23 @@ describe("workspace contract schemas", () => {
       }),
     ).toBe(false);
     expect(
+      DesignDeliveryLedgerContract.parse({
+        ...delivery,
+        targets: [
+          { ...delivery.targets[0], reservedNodeIds: ["region_home"] },
+          delivery.targets[1],
+        ],
+      }),
+    ).toMatchObject({
+      ok: false,
+      issues: [
+        expect.objectContaining({
+          code: "workspace.delivery_root_not_reserved",
+          path: "/targets/0/reservedNodeIds",
+        }),
+      ],
+    });
+    expect(
       isDesignDeliveryLedger({
         ...delivery,
         targets: [
@@ -773,9 +790,27 @@ describe("workspace contract schemas", () => {
     expect(isGlobalTaskProjection({ ...projection, lifecycle: "paused" })).toBe(
       false,
     );
+    const invalidTargetProjection = GlobalTaskProjectionContract.parse({
+      ...projection,
+      targetSet: {
+        targets: [designTarget()],
+        primaryTarget: designTarget({ primaryNodeId: "node_missing" }),
+      },
+    });
+    expect(invalidTargetProjection.ok).toBe(false);
+    if (!invalidTargetProjection.ok) {
+      expect(invalidTargetProjection.issues).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            code: "workspace.primary_selection_invalid",
+            path: "/targetSet/primaryTarget/primaryNodeId",
+          }),
+        ]),
+      );
+    }
   });
 
-  it("upgrades persisted v1/v2 ledgers without inventing old Plan reservations", () => {
+  it("rejects obsolete development ledgers instead of maintaining compatibility paths", () => {
     const legacy = {
       version: 1,
       targets: [
@@ -791,55 +826,12 @@ describe("workspace contract schemas", () => {
       activeTargetId: "target_home",
     };
     expect(isDesignDeliveryLedger(legacy)).toBe(false);
-    expect(normalizeDesignDeliveryLedger(legacy)).toEqual({
-      ...legacy,
-      version: DESIGN_DELIVERY_LEDGER_VERSION,
-      targets: [
-        {
-          ...legacy.targets[0],
-          reservedNodeIds: ["frame_home"],
-          allocatedRevision: 3,
-        },
-      ],
-    });
-    expect(
-      normalizeDesignDeliveryLedger({
-        ...legacy,
-        version: 2,
-        targets: [
-          {
-            ...legacy.targets[0],
-            allocatedRevision: 2,
-            draftRevision: 3,
-          },
-        ],
-      }),
-    ).toEqual({
-      ...legacy,
-      version: DESIGN_DELIVERY_LEDGER_VERSION,
-      targets: [
-        {
-          ...legacy.targets[0],
-          reservedNodeIds: ["frame_home"],
-          allocatedRevision: 2,
-          draftRevision: 3,
-        },
-      ],
-    });
-    const projection = {
-      version: WORKSPACE_CONTRACT_VERSION,
-      taskId: "task_legacy",
-      conversationId: "conversation_1",
-      runId: "run_legacy",
-      title: "Legacy task",
-      lifecycle: "interrupted",
-      targetSet: targetSet(),
-      delivery: legacy,
-      createdAt: now,
-      updatedAt: now,
-    };
-    expect(normalizeGlobalTaskProjection(projection)?.delivery).toEqual(
-      normalizeDesignDeliveryLedger(legacy),
-    );
+    const result = DesignDeliveryLedgerContract.parse(legacy);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.issues).toEqual(
+        expect.arrayContaining([expect.objectContaining({ path: "/version" })]),
+      );
+    }
   });
 });
