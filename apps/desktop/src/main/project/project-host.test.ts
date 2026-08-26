@@ -1280,6 +1280,48 @@ describe("WorkspaceStore", () => {
     reopened.close();
   });
 
+  it("discards obsolete generated task state without blocking startup", async () => {
+    const root = await mkdtemp(join(tmpdir(), "opendesign-workspace-task-"));
+    const databasePath = join(root, "workspace.sqlite");
+    const initialized = new WorkspaceStore(databasePath);
+    initialized.close();
+    const database = new DatabaseSync(databasePath);
+    database
+      .prepare(
+        `
+          INSERT INTO global_tasks(task_id, projection_json, updated_at)
+          VALUES (?, ?, ?)
+        `,
+      )
+      .run(
+        "task_obsolete",
+        JSON.stringify({
+          version: WORKSPACE_CONTRACT_VERSION,
+          taskId: "task_obsolete",
+          conversationId: "conversation_1",
+          title: "Obsolete task",
+          lifecycle: "interrupted",
+          targetSet: {
+            targets: [designTarget()],
+            primaryTarget: designTarget(),
+          },
+          delivery: {
+            version: 2,
+            targets: [],
+            activeTargetId: null,
+          },
+          createdAt: now,
+          updatedAt: now,
+        }),
+        now,
+      );
+    database.close();
+
+    const reopened = new WorkspaceStore(databasePath);
+    expect(reopened.listGlobalTasks()).toEqual([]);
+    reopened.close();
+  });
+
   it("keeps Conversation origin immutable while allowing filed Project moves", () => {
     const store = new WorkspaceStore(":memory:");
     const conversation: ConversationDescriptor = {

@@ -6,6 +6,7 @@ import type {
 import {
   ConversationDescriptorContract,
   ConversationDescriptorListContract,
+  DESIGN_DELIVERY_LEDGER_VERSION,
   GlobalTaskProjectionContract,
   isRootGrant,
 } from "@opendesign/workspace-contracts";
@@ -88,6 +89,7 @@ export class WorkspaceStore {
     ) {
       resetConversationAndTaskSchema(this.#database);
     }
+    discardObsoleteGlobalTaskRows(this.#database);
     this.#database.exec(`
       CREATE INDEX IF NOT EXISTS conversations_filed_project
         ON conversations(filed_project_id, updated_at DESC);
@@ -426,6 +428,31 @@ function resetConversationAndTaskSchema(database: DatabaseSync): void {
   `);
 }
 
+function discardObsoleteGlobalTaskRows(database: DatabaseSync): void {
+  const rows = database
+    .prepare("SELECT task_id, projection_json FROM global_tasks")
+    .all() as Array<{ task_id: string; projection_json: string }>;
+  const remove = database.prepare("DELETE FROM global_tasks WHERE task_id = ?");
+  for (const row of rows) {
+    let value: unknown;
+    try {
+      value = JSON.parse(row.projection_json);
+    } catch {
+      continue;
+    }
+    if (!isRecord(value) || !isRecord(value.delivery)) continue;
+    const deliveryVersion = value.delivery.version;
+    if (
+      typeof deliveryVersion !== "number" ||
+      !Number.isInteger(deliveryVersion) ||
+      deliveryVersion >= DESIGN_DELIVERY_LEDGER_VERSION
+    ) {
+      continue;
+    }
+    remove.run(row.task_id);
+  }
+}
+
 function migrateProjectsRootPathToNullable(database: DatabaseSync): void {
   database.exec("BEGIN IMMEDIATE");
   try {
@@ -560,4 +587,8 @@ function parseRows<T>(
       return [];
     }
   });
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
