@@ -1,5 +1,8 @@
 import {
-  isToolCallRequest,
+  ToolCallRequestSchema,
+  TrustedToolContextSchema,
+  TrustedToolFailureSchema,
+  TrustedToolResultSchema,
   isTrustedToolContext,
   isTrustedToolFailure,
   isTrustedToolResult,
@@ -8,8 +11,10 @@ import {
   type TrustedToolFailure,
   type TrustedToolResult,
 } from "@opendesign/agent-contracts";
+import { executableJsonSchema } from "@opendesign/design-contracts";
+import { Type } from "@sinclair/typebox";
 import {
-  isDesignTargetQualityProfile,
+  DESIGN_TARGET_QUALITY_PROFILE_SCHEMA,
   type DesignTargetQualityProfile,
 } from "./design-plan-quality-profile";
 import {
@@ -18,6 +23,94 @@ import {
   isPreparedAgentRasterExport,
   validateDesignAgentToolInput,
 } from "./design-agent-tools";
+import { defineContract, type ValidationIssue } from "./contract-validation";
+
+const RendererBridgeIdSchema = Type.String({
+  minLength: 1,
+  maxLength: 512,
+  pattern: "^[^\\u0000-\\u001F\\u007F]+$",
+});
+const RendererDesignTargetQualityProfileSchema = executableJsonSchema(
+  DESIGN_TARGET_QUALITY_PROFILE_SCHEMA,
+);
+const RendererDesignCaptureTargetSchema = Type.Union([
+  Type.Object(
+    {
+      kind: Type.Literal("page"),
+      pageId: RendererBridgeIdSchema,
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      kind: Type.Literal("frame"),
+      pageId: RendererBridgeIdSchema,
+      nodeId: RendererBridgeIdSchema,
+      qualityProfile: Type.Optional(RendererDesignTargetQualityProfileSchema),
+    },
+    { additionalProperties: false },
+  ),
+]);
+const RendererDesignToolRequestSchema = executableJsonSchema(
+  Type.Object(
+    {
+      requestId: RendererBridgeIdSchema,
+      call: ToolCallRequestSchema,
+      context: TrustedToolContextSchema,
+      captureTarget: Type.Optional(RendererDesignCaptureTargetSchema),
+    },
+    { additionalProperties: false },
+  ),
+);
+const RendererDesignToolCancelSchema = Type.Object(
+  { requestId: RendererBridgeIdSchema },
+  { additionalProperties: false },
+);
+const RendererDesignToolProgressSchema = Type.Object(
+  {
+    requestId: RendererBridgeIdSchema,
+    phase: Type.Union([
+      Type.Literal("accepted"),
+      Type.Literal("applying"),
+      Type.Literal("capturing"),
+      Type.Literal("persisting"),
+    ]),
+    progress: Type.Number({ minimum: 0, maximum: 1 }),
+    message: Type.Optional(Type.String({ minLength: 1, maxLength: 2_000 })),
+  },
+  { additionalProperties: false },
+);
+const RendererDesignToolPerformanceSchema = Type.Object(
+  {
+    canvasWaitCount: Type.Integer({ minimum: 0, maximum: 10_000 }),
+    canvasWaitMs: Type.Integer({ minimum: 0, maximum: 86_400_000 }),
+    configuredStageDelayMs: Type.Integer({
+      minimum: 0,
+      maximum: 86_400_000,
+    }),
+  },
+  { additionalProperties: false },
+);
+const RendererDesignToolResponseSchema = Type.Union([
+  Type.Object(
+    {
+      requestId: RendererBridgeIdSchema,
+      ok: Type.Literal(true),
+      result: TrustedToolResultSchema,
+      performance: Type.Optional(RendererDesignToolPerformanceSchema),
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      requestId: RendererBridgeIdSchema,
+      ok: Type.Literal(false),
+      error: TrustedToolFailureSchema,
+      performance: Type.Optional(RendererDesignToolPerformanceSchema),
+    },
+    { additionalProperties: false },
+  ),
+]);
 
 export type RendererDesignToolRequest = {
   requestId: string;
@@ -69,159 +162,162 @@ export type RendererDesignToolResponse =
       performance?: RendererDesignToolPerformance;
     };
 
+const RendererDesignToolRequestContract =
+  defineContract<RendererDesignToolRequest>({
+    schema: RendererDesignToolRequestSchema,
+    code: "renderer_design_tool_request.schema_invalid",
+    subject: "Renderer design tool request",
+    clone: false,
+    refine: (value) => {
+      const issues: ValidationIssue[] = [];
+      if (
+        !validateDesignAgentToolInput(value.call.toolName, value.call.input)
+      ) {
+        issues.push(
+          bridgeIssue(
+            "renderer_design_tool_request.input_invalid",
+            "/call/input",
+            "Tool input does not satisfy the registered design tool contract",
+          ),
+        );
+      }
+      if (!isTrustedToolContext(value.context)) {
+        issues.push(
+          bridgeIssue(
+            "renderer_design_tool_request.context_invalid",
+            "/context",
+            "Trusted tool context violates selection or mutation-target invariants",
+          ),
+        );
+      }
+      if (
+        value.call.toolName === DESIGN_CAPTURE_TOOL_NAME
+          ? value.captureTarget === undefined
+          : value.captureTarget !== undefined
+      ) {
+        issues.push(
+          bridgeIssue(
+            "renderer_design_tool_request.capture_target_invalid",
+            "/captureTarget",
+            value.call.toolName === DESIGN_CAPTURE_TOOL_NAME
+              ? "Canvas capture requires one Main-selected Page or Frame target"
+              : "Only canvas capture may carry a capture target",
+          ),
+        );
+      }
+      return issues;
+    },
+  });
+
+const RendererDesignToolCancelContract =
+  defineContract<RendererDesignToolCancel>({
+    schema: RendererDesignToolCancelSchema,
+    code: "renderer_design_tool_cancel.schema_invalid",
+    subject: "Renderer design tool cancel",
+    clone: false,
+  });
+
+const RendererDesignToolProgressContract =
+  defineContract<RendererDesignToolProgress>({
+    schema: RendererDesignToolProgressSchema,
+    code: "renderer_design_tool_progress.schema_invalid",
+    subject: "Renderer design tool progress",
+    clone: false,
+  });
+
+const RendererDesignToolResponseContract =
+  defineContract<RendererDesignToolResponse>({
+    schema: RendererDesignToolResponseSchema,
+    code: "renderer_design_tool_response.schema_invalid",
+    subject: "Renderer design tool response",
+    clone: false,
+    refine: (value) => {
+      const valid = value.ok
+        ? isRendererTrustedToolResult(value.result)
+        : isTrustedToolFailure(value.error);
+      return valid
+        ? []
+        : [
+            bridgeIssue(
+              value.ok
+                ? "renderer_design_tool_response.result_invalid"
+                : "renderer_design_tool_response.error_invalid",
+              value.ok ? "/result" : "/error",
+              value.ok
+                ? "Trusted result violates revision, content, or prepared-material invariants"
+                : "Trusted failure violates structured failure invariants",
+            ),
+          ];
+    },
+  });
+
+const RendererBridgeRequestIdContract = defineContract<string>({
+  schema: RendererBridgeIdSchema,
+  code: "renderer_design_tool_request_id.schema_invalid",
+  subject: "Renderer design tool request ID",
+  clone: false,
+});
+
 export function isRendererDesignToolRequest(
   value: unknown,
 ): value is RendererDesignToolRequest {
-  if (
-    !record(value) ||
-    !safeId(value.requestId) ||
-    !isToolCallRequest(value.call, validateDesignAgentToolInput) ||
-    !isTrustedToolContext(value.context) ||
-    !Object.keys(value).every((key) =>
-      ["requestId", "call", "context", "captureTarget"].includes(key),
-    )
-  ) {
-    return false;
-  }
-  if (value.call.toolName === DESIGN_CAPTURE_TOOL_NAME) {
-    return isRendererDesignCaptureTarget(value.captureTarget);
-  }
-  return value.captureTarget === undefined;
+  return RendererDesignToolRequestContract.parse(value).ok;
 }
 
 export function rendererDesignToolRequestId(value: unknown): string | null {
-  return record(value) && safeId(value.requestId) ? value.requestId : null;
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  const result = RendererBridgeRequestIdContract.parse(
+    (value as Record<string, unknown>).requestId,
+  );
+  return result.ok ? result.value : null;
 }
 
 export function isRendererDesignToolCancel(
   value: unknown,
 ): value is RendererDesignToolCancel {
-  return (
-    record(value) &&
-    safeId(value.requestId) &&
-    Object.keys(value).every((key) => key === "requestId")
-  );
+  return RendererDesignToolCancelContract.parse(value).ok;
 }
 
 export function isRendererDesignToolProgress(
   value: unknown,
 ): value is RendererDesignToolProgress {
-  return (
-    record(value) &&
-    safeId(value.requestId) &&
-    ["accepted", "applying", "capturing", "persisting"].includes(
-      String(value.phase),
-    ) &&
-    typeof value.progress === "number" &&
-    Number.isFinite(value.progress) &&
-    value.progress >= 0 &&
-    value.progress <= 1 &&
-    Object.keys(value).every((key) =>
-      ["requestId", "phase", "progress", "message"].includes(key),
-    ) &&
-    (value.message === undefined || safeText(value.message, 2_000))
-  );
+  return RendererDesignToolProgressContract.parse(value).ok;
 }
 
 export function isRendererDesignToolResponse(
   value: unknown,
 ): value is RendererDesignToolResponse {
-  if (
-    !record(value) ||
-    !safeId(value.requestId) ||
-    typeof value.ok !== "boolean"
-  ) {
-    return false;
-  }
-  if (
-    value.performance !== undefined &&
-    !isRendererDesignToolPerformance(value.performance)
-  ) {
-    return false;
-  }
-  return value.ok
-    ? isRendererTrustedToolResult(value.result) &&
-        Object.keys(value).every((key) =>
-          ["requestId", "ok", "result", "performance"].includes(key),
-        )
-    : isTrustedToolFailure(value.error) &&
-        Object.keys(value).every((key) =>
-          ["requestId", "ok", "error", "performance"].includes(key),
-        );
-}
-
-function isRendererDesignToolPerformance(
-  value: unknown,
-): value is RendererDesignToolPerformance {
-  return (
-    record(value) &&
-    boundedPerformanceInteger(value.canvasWaitCount, 10_000) &&
-    boundedPerformanceInteger(value.canvasWaitMs, 86_400_000) &&
-    boundedPerformanceInteger(value.configuredStageDelayMs, 86_400_000) &&
-    Object.keys(value).every((key) =>
-      ["canvasWaitCount", "canvasWaitMs", "configuredStageDelayMs"].includes(
-        key,
-      ),
-    )
-  );
-}
-
-function boundedPerformanceInteger(value: unknown, maximum: number): boolean {
-  return (
-    typeof value === "number" &&
-    Number.isInteger(value) &&
-    value >= 0 &&
-    value <= maximum
-  );
-}
-
-function isRendererDesignCaptureTarget(
-  value: unknown,
-): value is RendererDesignCaptureTarget {
-  if (!record(value) || !safeId(value.pageId)) return false;
-  if (value.kind === "page") {
-    return Object.keys(value).every((key) => ["kind", "pageId"].includes(key));
-  }
-  return (
-    value.kind === "frame" &&
-    safeId(value.nodeId) &&
-    (value.qualityProfile === undefined ||
-      isDesignTargetQualityProfile(value.qualityProfile)) &&
-    Object.keys(value).every((key) =>
-      ["kind", "pageId", "nodeId", "qualityProfile"].includes(key),
-    )
-  );
+  return RendererDesignToolResponseContract.parse(value).ok;
 }
 
 function isRendererTrustedToolResult(
   value: unknown,
 ): value is TrustedToolResult {
-  if (!record(value)) return false;
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+  const content = (value as Record<string, unknown>).content;
   if (
-    !isPreparedAgentRasterExport(value.content) &&
-    !isPreparedImageEditSource(value.content)
+    !isPreparedAgentRasterExport(content) &&
+    !isPreparedImageEditSource(content)
   ) {
     return isTrustedToolResult(value);
   }
   return isTrustedToolResult({ ...value, content: null });
 }
 
-function record(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function safeId(value: unknown): value is string {
-  return (
-    safeText(value, 512) &&
-    ![...value].some((character) => {
-      const codePoint = character.codePointAt(0);
-      return codePoint !== undefined && (codePoint <= 31 || codePoint === 127);
-    })
-  );
-}
-
-function safeText(value: unknown, maximum: number): value is string {
-  return (
-    typeof value === "string" && value.length > 0 && value.length <= maximum
-  );
+function bridgeIssue(
+  code: string,
+  path: string,
+  message: string,
+): ValidationIssue {
+  return {
+    code,
+    path,
+    message,
+    recovery:
+      "Reject the malformed bridge payload and resend one value produced by the authoritative Renderer design-tool contract.",
+  };
 }

@@ -105,6 +105,8 @@ Text Range 与 Font 已完成第十四个文字编辑迁移切片：`DesignTextR
 
 Internal image/SVG materialization 已完成第十五个 trusted Renderer bridge 切片：`InternalReadImageSourceContract / InternalUpdateImageContract / InternalImportSvgContract` 分别以一个 executable schema 覆盖 stale-safe 图片源读取、公开非破坏调整的 internal 分支、宿主物化的 embedded asset/derivation 以及内容寻址 SVG XML/ID prefix。Main→Preload/Renderer 请求判断、Renderer 执行与定向测试消费同一 parse 入口，旧 `isInternalReadImageSourceToolInput / isInternalUpdateImageToolInput / isInternalImportSvgToolInput` 及其 action-specific `exactKeys` 遍历已删除。内部 schema 负责闭合字段、资产形状、长度/范围和 action branch；唯一 refinement 负责 content-addressed embedded image、source/result/mask/reference provenance 关系与扩图非空几何。Run attachment/handle 授权、Page/Mutation Target、revision 与文档资产 DAG invariant 仍分别属于 Main 和 EditorRuntime；字节、XML 与路径不向模型公开。
 
+Renderer design-tool bridge 已完成第十六个 trusted bridge 切片：Request、Cancel、Progress 与 Response 的 envelope 分别由一个 executable Schema + `defineContract` 拥有。Request 复用 `ToolCallRequestSchema / TrustedToolContextSchema` 与权威 Quality Profile JSON Schema，Response 复用 Trusted result/failure Schema；旧 `record/safeId/safeText/exact-key/bounded-performance/isRendererDesignCaptureTarget` 结构遍历已删除。工具输入 Contract、selection/mutation-target 关系、capture-only target 和 prepared Raster/Image content 只作为一次 domain refinement。Preload、Main IPC 和 Renderer 继续消费原 type guard 名称，但不存在旧 validator fallback。详见 ADR-0173。
+
 `ValidationIssue` 的稳定 `code/path/expected/actual/recovery` 通过 `tool-validation` failure details 进入 Agent event、journal 和 Timeline；这种参数修正使用 `correct-and-retry`，不冒充需要文档 inspection 的事务错误。Design transaction 仍保留独立 `inspect-and-revise` 恢复语义。
 
 其余 Agent tools、trusted internal Renderer bridge、IPC 与持久化契约尚未全部迁移，不得据此宣称全仓已实现单一验证入口。

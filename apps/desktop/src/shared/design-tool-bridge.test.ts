@@ -11,9 +11,11 @@ import {
   INTERNAL_UPDATE_IMAGE_TOOL_NAME,
 } from "./design-agent-tools";
 import {
+  isRendererDesignToolCancel,
   isRendererDesignToolProgress,
   isRendererDesignToolRequest,
   isRendererDesignToolResponse,
+  rendererDesignToolRequestId,
 } from "./design-tool-bridge";
 
 const context = {
@@ -31,6 +33,24 @@ const context = {
 };
 
 describe("Renderer design tool bridge", () => {
+  it("uses one bounded request identity contract for correlation and cancel", () => {
+    expect(rendererDesignToolRequestId({ requestId: "renderer_apply_1" })).toBe(
+      "renderer_apply_1",
+    );
+    expect(
+      rendererDesignToolRequestId({ requestId: "renderer\u0000apply" }),
+    ).toBeNull();
+    expect(isRendererDesignToolCancel({ requestId: "renderer_apply_1" })).toBe(
+      true,
+    );
+    expect(
+      isRendererDesignToolCancel({
+        requestId: "renderer_apply_1",
+        processId: 42,
+      }),
+    ).toBe(false);
+  });
+
   it("accepts only bounded correlated semantic-step progress", () => {
     expect(
       isRendererDesignToolProgress({
