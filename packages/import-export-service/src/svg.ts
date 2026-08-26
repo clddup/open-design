@@ -18,9 +18,7 @@ import {
   resolvePathPropertiesData,
   vectorNetworkHasFillRegion,
 } from "@opendesign/geometry-service/editable-vector";
-import { DOMImplementation, XMLSerializer } from "@xmldom/xmldom";
 import { applyToPoint, compose, translate } from "transformation-matrix";
-import { SVG_MAX_CHARACTERS } from "./limits.js";
 import {
   applyExportNodeAppearance,
   applyExportShapeAppearance,
@@ -88,17 +86,18 @@ import {
   type ImportedSvgStyle,
 } from "./svg-normalize.js";
 import {
+  createSvgExportDocument,
   formatSvgNumber,
   sanitizeSvgXmlId,
+  serializeSvgExportDocument,
   serializeSvgMatrixAttribute,
+  SVG_NAMESPACE,
 } from "./svg-serialize.js";
 
 export * from "./svg-issues.js";
 
 export const SVG_INTERCHANGE_VERSION = 1 as const;
 export const SVG_MIME_TYPE = "image/svg+xml" as const;
-
-const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
 
 export interface SvgResolvedBooleanPath {
   bounds: Rect | null;
@@ -283,35 +282,12 @@ export function exportSvg(request: SvgExportRequest): SvgExportResult {
   }
   if (svgIssuesHaveErrors(issues)) return failed(issues);
 
-  const implementation = new DOMImplementation();
-  const xmlDocument = implementation.createDocument(SVG_NAMESPACE, "svg", null);
-  const root = xmlDocument.documentElement;
-  root.setAttribute("xmlns", SVG_NAMESPACE);
-  root.setAttribute("version", "1.1");
-  root.setAttribute(
-    "viewBox",
-    [
-      request.viewport.x,
-      request.viewport.y,
-      request.viewport.width,
-      request.viewport.height,
-    ]
-      .map(formatSvgNumber)
-      .join(" "),
-  );
-  root.setAttribute("width", formatSvgNumber(request.viewport.width));
-  root.setAttribute("height", formatSvgNumber(request.viewport.height));
-  root.setAttribute(
-    "data-opendesign-svg-version",
-    String(SVG_INTERCHANGE_VERSION),
-  );
-
-  if (request.title?.trim()) {
-    const title = xmlDocument.createElementNS(SVG_NAMESPACE, "title");
-    title.appendChild(xmlDocument.createTextNode(request.title.trim()));
-    root.appendChild(title);
-  }
-  const definitions = xmlDocument.createElementNS(SVG_NAMESPACE, "defs");
+  const exportDocument = createSvgExportDocument({
+    version: SVG_INTERCHANGE_VERSION,
+    viewport: request.viewport,
+    ...(request.title === undefined ? {} : { title: request.title }),
+  });
+  const { definitions, document: xmlDocument, root } = exportDocument;
   const context: ExportContext = {
     definitions,
     document: xmlDocument,
@@ -329,38 +305,18 @@ export function exportSvg(request: SvgExportRequest): SvgExportResult {
     const element = exportNode(context, rootNodeId, { selectedRoot: true });
     if (element) root.appendChild(element);
   }
-  if (definitions.childNodes.length > 0) {
-    root.insertBefore(definitions, root.firstChild);
-  }
   if (svgIssuesHaveErrors(issues)) return failed(issues);
-  try {
-    const svg = new XMLSerializer().serializeToString(
-      xmlDocument,
-      false,
-      undefined,
-      { requireWellFormed: true },
-    );
-    if (svg.length > SVG_MAX_CHARACTERS) {
-      return failure(
-        "size-limit",
-        `SVG export exceeds ${SVG_MAX_CHARACTERS} characters`,
-      );
-    }
-    return {
-      ok: true,
-      version: SVG_INTERCHANGE_VERSION,
-      mimeType: SVG_MIME_TYPE,
-      svg,
-      viewport: { ...request.viewport },
-      exportedNodeIds: context.exportedNodeIds,
-      issues,
-    };
-  } catch (error) {
-    return failure(
-      "malformed-svg",
-      error instanceof Error ? error.message : "SVG serialization failed",
-    );
-  }
+  const serialized = serializeSvgExportDocument(exportDocument);
+  if (!serialized.ok) return failed([serialized.issue]);
+  return {
+    ok: true,
+    version: SVG_INTERCHANGE_VERSION,
+    mimeType: SVG_MIME_TYPE,
+    svg: serialized.svg,
+    viewport: { ...request.viewport },
+    exportedNodeIds: context.exportedNodeIds,
+    issues,
+  };
 }
 
 export function importSvg(

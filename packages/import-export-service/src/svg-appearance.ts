@@ -8,9 +8,11 @@ import {
   readSvgUnitInterval,
   type ImportedSvgStyle,
 } from "./svg-normalize.js";
-import { formatSvgNumber, sanitizeSvgXmlId } from "./svg-serialize.js";
-
-const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
+import {
+  formatSvgNumber,
+  sanitizeSvgXmlId,
+  SVG_NAMESPACE,
+} from "./svg-serialize.js";
 
 export type SvgShapeProperties = Extract<
   DesignNode,
