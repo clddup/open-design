@@ -20,15 +20,7 @@ import {
   vectorNetworkHasFillRegion,
 } from "@opendesign/geometry-service/editable-vector";
 import { DOMImplementation, XMLSerializer } from "@xmldom/xmldom";
-import {
-  applyToPoint,
-  compose,
-  fromDefinition,
-  fromTransformAttribute,
-  identity,
-  translate,
-  type Matrix,
-} from "transformation-matrix";
+import { applyToPoint, compose, translate } from "transformation-matrix";
 import { SVG_MAX_CHARACTERS } from "./limits.js";
 import {
   appendSvgEffectFilter,
@@ -72,10 +64,24 @@ import {
 } from "./svg-editable-vector.js";
 import {
   parseSvgImportSource,
-  parseSvgLength,
   SVG_IMPORT_MAX_DEPTH as MAX_SVG_DEPTH,
   SVG_IMPORT_MAX_NODES as MAX_IMPORTED_NODES,
 } from "./svg-parse.js";
+import {
+  DEFAULT_IMPORTED_SVG_STYLE,
+  importedSvgGroupBounds,
+  isPositiveSvgLength,
+  readImportedSvgStyle,
+  readSvgElementTransform,
+  readSvgLength,
+  readSvgOpacity,
+  readSvgStyleOrAttribute,
+  readSvgUnitInterval,
+  rebaseImportedSvgChildren,
+  transformFromSvgMatrix,
+  transformToSvgMatrix,
+  type ImportedSvgStyle,
+} from "./svg-normalize.js";
 
 export * from "./svg-issues.js";
 
@@ -192,7 +198,7 @@ interface ImportContext {
   >;
   nodeSequence: number;
   nodes: DesignNode[];
-  rootStyle: ImportedStyle;
+  rootStyle: ImportedSvgStyle;
 }
 
 interface ExportNodeOptions {
@@ -215,30 +221,6 @@ type ImportedNodeBase = Pick<
   | "parentId"
   | "visible"
 >;
-
-interface ImportedStyle {
-  fill: string;
-  fillOpacity: number;
-  fillRule: VectorFillRule;
-  stroke: string;
-  strokeCap: "none" | "round" | "square";
-  strokeJoin: "bevel" | "miter" | "round";
-  strokeOpacity: number;
-  strokeWidth: number;
-  dashPattern: number[];
-}
-
-const DEFAULT_IMPORTED_STYLE: ImportedStyle = {
-  fill: "#000000",
-  fillOpacity: 1,
-  fillRule: "nonzero",
-  stroke: "none",
-  strokeCap: "none",
-  strokeJoin: "miter",
-  strokeOpacity: 1,
-  strokeWidth: 1,
-  dashPattern: [],
-};
 
 export function exportSvg(request: SvgExportRequest): SvgExportResult {
   const issues: SvgInterchangeIssue[] = [];
@@ -380,9 +362,13 @@ export function importSvg(
   const { root, sourceViewport } = parsed.value;
 
   const issues: SvgInterchangeIssue[] = [];
-  const rootStyle = readImportedStyle(root, DEFAULT_IMPORTED_STYLE, issues);
+  const rootStyle = readImportedSvgStyle(
+    root,
+    DEFAULT_IMPORTED_SVG_STYLE,
+    issues,
+  );
   for (const property of ["mask", "clip-path"] as const) {
-    const value = readStyleOrAttribute(root, property);
+    const value = readSvgStyleOrAttribute(root, property);
     if (value && value.trim().toLowerCase() !== "none") {
       issues.push(
         svgIssue(
@@ -434,8 +420,8 @@ export function importSvg(
   for (const childId of childIds) {
     const node = context.nodes.find((candidate) => candidate.id === childId);
     if (node) {
-      node.transform = fromMatrix(
-        compose(viewportOffset, toMatrix(node.transform)),
+      node.transform = transformFromSvgMatrix(
+        compose(viewportOffset, transformToSvgMatrix(node.transform)),
       );
     }
   }
@@ -454,7 +440,7 @@ export function importSvg(
       width: sourceViewport.width,
       height: sourceViewport.height,
     },
-    opacity: readOpacity(root.getAttribute("opacity"), 1),
+    opacity: readSvgOpacity(root.getAttribute("opacity"), 1),
     exportSettings: [],
     ...(rootEffects.effects.length === 0
       ? {}
@@ -928,7 +914,7 @@ function svgMaskVisualPadding(
 }
 
 function transformedNodeBounds(node: DesignNode): Rect {
-  const matrix = toMatrix(node.transform);
+  const matrix = transformToSvgMatrix(node.transform);
   const corners = [
     applyToPoint(matrix, { x: 0, y: 0 }),
     applyToPoint(matrix, { x: node.size.width, y: 0 }),
@@ -1158,7 +1144,7 @@ function importContainerChildren(
   context: ImportContext,
   children: readonly Element[],
   parentId: string,
-  inheritedStyle: ImportedStyle,
+  inheritedStyle: ImportedSvgStyle,
   depth: number,
 ): string[] {
   const childIds: string[] = [];
@@ -1294,7 +1280,7 @@ function importMaskedElement(
   context: ImportContext,
   element: Element,
   parentId: string,
-  inheritedStyle: ImportedStyle,
+  inheritedStyle: ImportedSvgStyle,
   depth: number,
   reference: SvgMaskReference,
 ): string | null {
@@ -1310,10 +1296,10 @@ function importMaskedElement(
     ? context.nodes.find((node) => node.id === sourceId)
     : undefined;
   if (source) {
-    source.transform = fromMatrix(
+    source.transform = transformFromSvgMatrix(
       compose(
-        toMatrix(readElementTransform(element, context.issues)),
-        toMatrix(source.transform),
+        transformToSvgMatrix(readSvgElementTransform(element, context.issues)),
+        transformToSvgMatrix(source.transform),
       ),
     );
   }
@@ -1341,8 +1327,8 @@ function importMaskedElement(
     return null;
   }
   const childIds = [sourceId, targetId];
-  const bounds = importedGroupBounds(context.nodes, childIds);
-  rebaseImportedChildren(context.nodes, childIds, bounds.x, bounds.y);
+  const bounds = importedSvgGroupBounds(context.nodes, childIds);
+  rebaseImportedSvgChildren(context.nodes, childIds, bounds.x, bounds.y);
   const group: DesignNode = {
     id: groupId,
     kind: "group",
@@ -1387,12 +1373,12 @@ function importMaskDefinitionSource(
   }
   context.activeMaskReferences.add(reference.id);
   try {
-    const definitionStyle = readImportedStyle(
+    const definitionStyle = readImportedSvgStyle(
       reference.definition,
       context.rootStyle,
       context.issues,
     );
-    const definitionTransform = readElementTransform(
+    const definitionTransform = readSvgElementTransform(
       reference.definition,
       context.issues,
     );
@@ -1433,8 +1419,11 @@ function importMaskDefinitionSource(
       ) {
         source.opacity = 1;
       }
-      source.transform = fromMatrix(
-        compose(toMatrix(definitionTransform), toMatrix(source.transform)),
+      source.transform = transformFromSvgMatrix(
+        compose(
+          transformToSvgMatrix(definitionTransform),
+          transformToSvgMatrix(source.transform),
+        ),
       );
       return sourceId;
     }
@@ -1483,8 +1472,8 @@ function importMaskDefinitionSource(
       }
       return null;
     }
-    const bounds = importedGroupBounds(context.nodes, childIds);
-    rebaseImportedChildren(context.nodes, childIds, bounds.x, bounds.y);
+    const bounds = importedSvgGroupBounds(context.nodes, childIds);
+    rebaseImportedSvgChildren(context.nodes, childIds, bounds.x, bounds.y);
     const group: DesignNode = {
       id: groupId,
       kind: "group",
@@ -1493,8 +1482,11 @@ function importMaskDefinitionSource(
       childIds,
       visible: true,
       locked: false,
-      transform: fromMatrix(
-        compose(toMatrix(definitionTransform), translate(bounds.x, bounds.y)),
+      transform: transformFromSvgMatrix(
+        compose(
+          transformToSvgMatrix(definitionTransform),
+          translate(bounds.x, bounds.y),
+        ),
       ),
       size: { width: bounds.width, height: bounds.height },
       opacity: 1,
@@ -1520,7 +1512,7 @@ function importElement(
   context: ImportContext,
   element: Element,
   parentId: string,
-  inheritedStyle: ImportedStyle,
+  inheritedStyle: ImportedSvgStyle,
   depth: number,
   options: { ignoreMaskReference?: boolean } = {},
 ): string | null {
@@ -1608,7 +1600,11 @@ function importElement(
     }
   }
 
-  const localStyle = readImportedStyle(element, inheritedStyle, context.issues);
+  const localStyle = readImportedSvgStyle(
+    element,
+    inheritedStyle,
+    context.issues,
+  );
   const nodeId = nextImportedNodeId(context, tag);
   const filterEffects = readSvgFilterEffects({
     definitions: context.filterDefinitions,
@@ -1621,7 +1617,7 @@ function importElement(
     context.issues,
     options.ignoreMaskReference === true,
   );
-  const transform = readElementTransform(element, context.issues);
+  const transform = readSvgElementTransform(element, context.issues);
   const common: ImportedNodeBase = {
     id: nodeId,
     name: readSvgName(element) || `${capitalize(tag)} ${context.nodeSequence}`,
@@ -1631,7 +1627,7 @@ function importElement(
       element.getAttribute("display") !== "none" &&
       element.getAttribute("visibility") !== "hidden",
     locked: false,
-    opacity: readOpacity(element.getAttribute("opacity"), 1),
+    opacity: readSvgOpacity(element.getAttribute("opacity"), 1),
     exportSettings: [],
     ...(filterEffects.effects.length === 0
       ? {}
@@ -1681,14 +1677,14 @@ function importElement(
       depth + 1,
     );
     if (childIds.length === 0) return null;
-    const bounds = importedGroupBounds(context.nodes, childIds);
-    rebaseImportedChildren(context.nodes, childIds, bounds.x, bounds.y);
+    const bounds = importedSvgGroupBounds(context.nodes, childIds);
+    rebaseImportedSvgChildren(context.nodes, childIds, bounds.x, bounds.y);
     const node: DesignNode = {
       ...common,
       kind: "group",
       childIds,
-      transform: fromMatrix(
-        compose(toMatrix(transform), translate(bounds.x, bounds.y)),
+      transform: transformFromSvgMatrix(
+        compose(transformToSvgMatrix(transform), translate(bounds.x, bounds.y)),
       ),
       size: { width: bounds.width, height: bounds.height },
       properties: {},
@@ -1786,11 +1782,16 @@ function importElement(
   }
 
   if (tag === "rect") {
-    const x = readLength(element, "x", 0, context.issues);
-    const y = readLength(element, "y", 0, context.issues);
-    const width = readLength(element, "width", null, context.issues);
-    const height = readLength(element, "height", null, context.issues);
-    if (x === null || y === null || !isPositive(width) || !isPositive(height)) {
+    const x = readSvgLength(element, "x", 0, context.issues);
+    const y = readSvgLength(element, "y", 0, context.issues);
+    const width = readSvgLength(element, "width", null, context.issues);
+    const height = readSvgLength(element, "height", null, context.issues);
+    if (
+      x === null ||
+      y === null ||
+      !isPositiveSvgLength(width) ||
+      !isPositiveSvgLength(height)
+    ) {
       context.issues.push(
         svgIssue(
           "invalid-dimension",
@@ -1801,11 +1802,13 @@ function importElement(
       );
       return null;
     }
-    const radius = readLength(element, "rx", 0, context.issues);
+    const radius = readSvgLength(element, "rx", 0, context.issues);
     const node: DesignNode = {
       ...common,
       kind: "rectangle",
-      transform: fromMatrix(compose(toMatrix(transform), translate(x, y))),
+      transform: transformFromSvgMatrix(
+        compose(transformToSvgMatrix(transform), translate(x, y)),
+      ),
       size: { width, height },
       properties: {
         ...properties,
@@ -1817,15 +1820,22 @@ function importElement(
   }
 
   if (tag === "circle" || tag === "ellipse") {
-    const cx = readLength(element, "cx", 0, context.issues);
-    const cy = readLength(element, "cy", 0, context.issues);
+    const cx = readSvgLength(element, "cx", 0, context.issues);
+    const cy = readSvgLength(element, "cy", 0, context.issues);
     const rx =
       tag === "circle"
-        ? readLength(element, "r", null, context.issues)
-        : readLength(element, "rx", null, context.issues);
+        ? readSvgLength(element, "r", null, context.issues)
+        : readSvgLength(element, "rx", null, context.issues);
     const ry =
-      tag === "circle" ? rx : readLength(element, "ry", null, context.issues);
-    if (cx === null || cy === null || !isPositive(rx) || !isPositive(ry)) {
+      tag === "circle"
+        ? rx
+        : readSvgLength(element, "ry", null, context.issues);
+    if (
+      cx === null ||
+      cy === null ||
+      !isPositiveSvgLength(rx) ||
+      !isPositiveSvgLength(ry)
+    ) {
       context.issues.push(
         svgIssue(
           "invalid-dimension",
@@ -1839,8 +1849,8 @@ function importElement(
     const node: DesignNode = {
       ...common,
       kind: "ellipse",
-      transform: fromMatrix(
-        compose(toMatrix(transform), translate(cx - rx, cy - ry)),
+      transform: transformFromSvgMatrix(
+        compose(transformToSvgMatrix(transform), translate(cx - rx, cy - ry)),
       ),
       size: { width: rx * 2, height: ry * 2 },
       properties,
@@ -1850,10 +1860,10 @@ function importElement(
   }
 
   if (tag === "line") {
-    const x1 = readLength(element, "x1", 0, context.issues);
-    const y1 = readLength(element, "y1", 0, context.issues);
-    const x2 = readLength(element, "x2", 0, context.issues);
-    const y2 = readLength(element, "y2", 0, context.issues);
+    const x1 = readSvgLength(element, "x1", 0, context.issues);
+    const y1 = readSvgLength(element, "y1", 0, context.issues);
+    const x2 = readSvgLength(element, "x2", 0, context.issues);
+    const y2 = readSvgLength(element, "y2", 0, context.issues);
     if ([x1, y1, x2, y2].some((value) => value === null)) return null;
     const endpoints = readSvgLineEndpoints({
       definitions: context.markerDefinitions,
@@ -1869,9 +1879,9 @@ function importElement(
     const node: DesignNode = {
       ...common,
       kind: "line",
-      transform: fromMatrix(
+      transform: transformFromSvgMatrix(
         compose(
-          toMatrix(transform),
+          transformToSvgMatrix(transform),
           translate(geometry.bounds.x, geometry.bounds.y),
         ),
       ),
@@ -1945,9 +1955,9 @@ function importElement(
     const node: DesignNode = {
       ...common,
       kind,
-      transform: fromMatrix(
+      transform: transformFromSvgMatrix(
         compose(
-          toMatrix(transform),
+          transformToSvgMatrix(transform),
           translate(normalizedNetwork.offset.x, normalizedNetwork.offset.y),
         ),
       ),
@@ -2027,8 +2037,8 @@ function importElement(
   const node: DesignNode = {
     ...common,
     kind,
-    transform: fromMatrix(
-      compose(toMatrix(transform), translate(origin.x, origin.y)),
+    transform: transformFromSvgMatrix(
+      compose(transformToSvgMatrix(transform), translate(origin.x, origin.y)),
     ),
     size: { width: origin.width, height: origin.height },
     properties: {
@@ -2046,7 +2056,7 @@ function importFrameElement(
   element: Element,
   nodeId: string,
   common: ImportedNodeBase,
-  inheritedStyle: ImportedStyle,
+  inheritedStyle: ImportedSvgStyle,
   transform: Transform,
   depth: number,
 ): string | null {
@@ -2078,7 +2088,7 @@ function importFrameElement(
     background.hasAttribute("filter") ||
     background.hasAttribute("mask") ||
     background.hasAttribute("clip-path") ||
-    readOpacity(background.getAttribute("opacity"), 1) !== 1
+    readSvgOpacity(background.getAttribute("opacity"), 1) !== 1
   ) {
     context.issues.push(
       svgIssue(
@@ -2090,16 +2100,16 @@ function importFrameElement(
     );
     return null;
   }
-  const x = readLength(background, "x", 0, context.issues);
-  const y = readLength(background, "y", 0, context.issues);
-  const width = readLength(background, "width", null, context.issues);
-  const height = readLength(background, "height", null, context.issues);
-  const radius = readLength(background, "rx", 0, context.issues);
+  const x = readSvgLength(background, "x", 0, context.issues);
+  const y = readSvgLength(background, "y", 0, context.issues);
+  const width = readSvgLength(background, "width", null, context.issues);
+  const height = readSvgLength(background, "height", null, context.issues);
+  const radius = readSvgLength(background, "rx", 0, context.issues);
   if (
     x !== 0 ||
     y !== 0 ||
-    !isPositive(width) ||
-    !isPositive(height) ||
+    !isPositiveSvgLength(width) ||
+    !isPositiveSvgLength(height) ||
     radius === null ||
     radius < 0
   ) {
@@ -2113,7 +2123,7 @@ function importFrameElement(
     );
     return null;
   }
-  const backgroundStyle = readImportedStyle(
+  const backgroundStyle = readImportedSvgStyle(
     background,
     inheritedStyle,
     context.issues,
@@ -2164,7 +2174,7 @@ function importFrameElement(
       return null;
     }
     const referenceId = parseLocalSvgUrlReference(
-      readStyleOrAttribute(wrapper, "clip-path"),
+      readSvgStyleOrAttribute(wrapper, "clip-path"),
     );
     const definition = referenceId
       ? context.maskDefinitions.get(referenceId)
@@ -2214,7 +2224,7 @@ function importFrameElement(
 function importShapeProperties(
   context: ImportContext,
   element: Element,
-  style: ImportedStyle,
+  style: ImportedSvgStyle,
   nodeId: string,
 ): ShapeProperties | null {
   if (!Number.isFinite(style.strokeWidth) || style.strokeWidth < 0) {
@@ -2322,9 +2332,9 @@ function importPaint(
   const stops = elementChildren(definition)
     .filter((child) => child.localName.toLowerCase() === "stop")
     .map((stop) => ({
-      offset: readUnitInterval(readStyleOrAttribute(stop, "offset"), 0),
-      color: readStyleOrAttribute(stop, "stop-color") || "#000000",
-      opacity: readOpacity(readStyleOrAttribute(stop, "stop-opacity"), 1),
+      offset: readSvgUnitInterval(readSvgStyleOrAttribute(stop, "offset"), 0),
+      color: readSvgStyleOrAttribute(stop, "stop-color") || "#000000",
+      opacity: readSvgOpacity(readSvgStyleOrAttribute(stop, "stop-opacity"), 1),
     }));
   if (stops.length < 2) {
     context.issues.push(
@@ -2344,22 +2354,22 @@ function importPaint(
       opacity,
       stops,
       from: {
-        x: readUnitInterval(definition.getAttribute("x1"), 0),
-        y: readUnitInterval(definition.getAttribute("y1"), 0.5),
+        x: readSvgUnitInterval(definition.getAttribute("x1"), 0),
+        y: readSvgUnitInterval(definition.getAttribute("y1"), 0.5),
       },
       to: {
-        x: readUnitInterval(definition.getAttribute("x2"), 1),
-        y: readUnitInterval(definition.getAttribute("y2"), 0.5),
+        x: readSvgUnitInterval(definition.getAttribute("x2"), 1),
+        y: readSvgUnitInterval(definition.getAttribute("y2"), 0.5),
       },
       ...(rotation === undefined ? {} : { rotation }),
     };
   }
   if (definition.localName.toLowerCase() === "radialgradient") {
     const center = {
-      x: readUnitInterval(definition.getAttribute("cx"), 0.5),
-      y: readUnitInterval(definition.getAttribute("cy"), 0.5),
+      x: readSvgUnitInterval(definition.getAttribute("cx"), 0.5),
+      y: readSvgUnitInterval(definition.getAttribute("cy"), 0.5),
     };
-    const radius = readUnitInterval(definition.getAttribute("r"), 0.5);
+    const radius = readSvgUnitInterval(definition.getAttribute("r"), 0.5);
     return {
       type: "radial-gradient",
       opacity,
@@ -2380,109 +2390,6 @@ function importPaint(
   return null;
 }
 
-function readImportedStyle(
-  element: Element,
-  inherited: ImportedStyle,
-  issues: SvgInterchangeIssue[],
-): ImportedStyle {
-  const declarations = new Map<string, string>();
-  const style = element.getAttribute("style");
-  if (style) {
-    for (const declaration of style.split(";")) {
-      const separator = declaration.indexOf(":");
-      if (separator <= 0) continue;
-      declarations.set(
-        declaration.slice(0, separator).trim().toLowerCase(),
-        declaration.slice(separator + 1).trim(),
-      );
-    }
-  }
-  const read = (name: string): string | null =>
-    declarations.get(name) ??
-    (element.hasAttribute(name) ? element.getAttribute(name) : null);
-  const supported = new Set([
-    "clip-path",
-    "fill",
-    "fill-opacity",
-    "fill-rule",
-    "filter",
-    "mask",
-    "mask-type",
-    "marker-start",
-    "marker-end",
-    "stroke",
-    "stroke-opacity",
-    "stroke-width",
-    "stroke-linecap",
-    "stroke-linejoin",
-    "stroke-dasharray",
-  ]);
-  declarations.forEach((_value, name) => {
-    if (!supported.has(name)) {
-      issues.push(
-        svgIssue(
-          "unsupported-css",
-          "warning",
-          `SVG inline style property ${name} is not preserved`,
-          { sourceElement: element.localName },
-        ),
-      );
-    }
-  });
-  const cap = read("stroke-linecap");
-  const join = read("stroke-linejoin");
-  return {
-    fill: read("fill") ?? inherited.fill,
-    fillOpacity: readOpacity(read("fill-opacity"), inherited.fillOpacity),
-    fillRule:
-      read("fill-rule") === "evenodd"
-        ? "evenodd"
-        : read("fill-rule") === "nonzero"
-          ? "nonzero"
-          : inherited.fillRule,
-    stroke: read("stroke") ?? inherited.stroke,
-    strokeCap:
-      cap === "round"
-        ? "round"
-        : cap === "square"
-          ? "square"
-          : cap === "butt"
-            ? "none"
-            : inherited.strokeCap,
-    strokeJoin:
-      join === "round"
-        ? "round"
-        : join === "bevel"
-          ? "bevel"
-          : join === "miter"
-            ? "miter"
-            : inherited.strokeJoin,
-    strokeOpacity: readOpacity(read("stroke-opacity"), inherited.strokeOpacity),
-    strokeWidth: readFiniteNumber(read("stroke-width"), inherited.strokeWidth),
-    dashPattern: readDashPattern(
-      read("stroke-dasharray"),
-      inherited.dashPattern,
-    ),
-  };
-}
-
-function readStyleOrAttribute(element: Element, name: string): string | null {
-  const style = element.getAttribute("style");
-  if (style) {
-    for (const declaration of style.split(";")) {
-      const separator = declaration.indexOf(":");
-      if (separator <= 0) continue;
-      if (
-        declaration.slice(0, separator).trim().toLowerCase() ===
-        name.toLowerCase()
-      ) {
-        return declaration.slice(separator + 1).trim();
-      }
-    }
-  }
-  return element.hasAttribute(name) ? element.getAttribute(name) : null;
-}
-
 function readElementPath(
   element: Element,
   tag: string,
@@ -2490,10 +2397,10 @@ function readElementPath(
 ): string | null {
   if (tag === "path") return element.getAttribute("d")?.trim() || null;
   if (tag === "line") {
-    const x1 = readLength(element, "x1", 0, issues);
-    const y1 = readLength(element, "y1", 0, issues);
-    const x2 = readLength(element, "x2", 0, issues);
-    const y2 = readLength(element, "y2", 0, issues);
+    const x1 = readSvgLength(element, "x1", 0, issues);
+    const y1 = readSvgLength(element, "y1", 0, issues);
+    const x2 = readSvgLength(element, "x2", 0, issues);
+    const y2 = readSvgLength(element, "y2", 0, issues);
     if ([x1, y1, x2, y2].some((value) => value === null)) return null;
     return `M ${formatNumber(x1!)} ${formatNumber(y1!)} L ${formatNumber(x2!)} ${formatNumber(y2!)}`;
   }
@@ -2520,84 +2427,6 @@ function readElementPath(
     return commands.join(" ");
   }
   return null;
-}
-
-function readElementTransform(
-  element: Element,
-  issues: SvgInterchangeIssue[],
-): Transform {
-  const value = element.getAttribute("transform");
-  if (!value?.trim()) return [1, 0, 0, 1, 0, 0];
-  try {
-    const descriptors = fromTransformAttribute(value);
-    const matrices = fromDefinition(descriptors);
-    const matrix = matrices.length === 0 ? identity() : compose(matrices);
-    if (!isFiniteMatrix(matrix)) throw new TypeError("non-finite transform");
-    return fromMatrix(matrix);
-  } catch (error) {
-    issues.push(
-      svgIssue(
-        "invalid-transform",
-        "error",
-        error instanceof Error
-          ? `Invalid SVG transform: ${error.message}`
-          : "Invalid SVG transform",
-        { sourceElement: element.localName },
-      ),
-    );
-    return [1, 0, 0, 1, 0, 0];
-  }
-}
-
-function importedGroupBounds(
-  nodes: readonly DesignNode[],
-  childIds: readonly string[],
-): Rect {
-  let minX = Number.POSITIVE_INFINITY;
-  let minY = Number.POSITIVE_INFINITY;
-  let maxX = Number.NEGATIVE_INFINITY;
-  let maxY = Number.NEGATIVE_INFINITY;
-  for (const childId of childIds) {
-    const child = nodes.find((candidate) => candidate.id === childId);
-    if (!child) continue;
-    const matrix = toMatrix(child.transform);
-    const corners = [
-      applyToPoint(matrix, { x: 0, y: 0 }),
-      applyToPoint(matrix, { x: child.size.width, y: 0 }),
-      applyToPoint(matrix, { x: 0, y: child.size.height }),
-      applyToPoint(matrix, { x: child.size.width, y: child.size.height }),
-    ];
-    for (const point of corners) {
-      minX = Math.min(minX, point.x);
-      minY = Math.min(minY, point.y);
-      maxX = Math.max(maxX, point.x);
-      maxY = Math.max(maxY, point.y);
-    }
-  }
-  if (![minX, minY, maxX, maxY].every(Number.isFinite)) {
-    return { x: 0, y: 0, width: 0, height: 0 };
-  }
-  return {
-    x: minX,
-    y: minY,
-    width: Math.max(0, maxX - minX),
-    height: Math.max(0, maxY - minY),
-  };
-}
-
-function rebaseImportedChildren(
-  nodes: readonly DesignNode[],
-  childIds: readonly string[],
-  x: number,
-  y: number,
-): void {
-  const offset = translate(-x, -y);
-  for (const childId of childIds) {
-    const child = nodes.find((candidate) => candidate.id === childId);
-    if (child) {
-      child.transform = fromMatrix(compose(offset, toMatrix(child.transform)));
-    }
-  }
 }
 
 function reportUnsupportedElementAttributes(
@@ -2655,28 +2484,6 @@ function collectGradientDefinitions(
   return definitions;
 }
 
-function readLength(
-  element: Element,
-  attribute: string,
-  fallback: number | null,
-  issues: SvgInterchangeIssue[],
-): number | null {
-  const value = element.getAttribute(attribute);
-  if (!value) return fallback;
-  const parsed = parseSvgLength(value);
-  if (parsed === null) {
-    issues.push(
-      svgIssue(
-        "invalid-dimension",
-        "error",
-        `SVG ${element.localName}.${attribute} must use finite px or unitless coordinates`,
-        { sourceElement: element.localName },
-      ),
-    );
-  }
-  return parsed;
-}
-
 function readGradientRotation(
   definition: Element,
   issues: SvgInterchangeIssue[],
@@ -2724,40 +2531,6 @@ function nextImportedNodeId(context: ImportContext, tag: string): string {
   return `${context.idPrefix}_${context.nodeSequence.toString().padStart(4, "0")}_${sanitizeXmlId(tag)}`;
 }
 
-function readDashPattern(value: string | null, fallback: number[]): number[] {
-  if (!value || value === "none") return value === "none" ? [] : [...fallback];
-  const numbers = value
-    .split(/[\s,]+/)
-    .filter(Boolean)
-    .map(Number);
-  return numbers.length > 0 &&
-    numbers.every((number) => Number.isFinite(number) && number >= 0)
-    ? numbers
-    : [...fallback];
-}
-
-function readFiniteNumber(value: string | null, fallback: number): number {
-  if (value === null || value.trim() === "") return fallback;
-  const parsed = parseSvgLength(value) ?? Number.NaN;
-  return Number.isFinite(parsed) ? parsed : fallback;
-}
-
-function readOpacity(value: string | null, fallback: number): number {
-  if (value === null || value.trim() === "") return fallback;
-  const parsed = value.trim().endsWith("%")
-    ? Number(value.trim().slice(0, -1)) / 100
-    : Number(value);
-  return Number.isFinite(parsed) ? Math.min(1, Math.max(0, parsed)) : fallback;
-}
-
-function readUnitInterval(value: string | null, fallback: number): number {
-  return readOpacity(value, fallback);
-}
-
-function isPositive(value: number | null): value is number {
-  return value !== null && Number.isFinite(value) && value > 0;
-}
-
 function isFinitePositiveRect(value: Rect): boolean {
   return (
     Number.isFinite(value.x) &&
@@ -2775,21 +2548,6 @@ function hasErrors(issues: readonly SvgInterchangeIssue[]): boolean {
 
 function matrixAttribute(transform: Transform): string {
   return `matrix(${transform.map(formatNumber).join(" ")})`;
-}
-
-function toMatrix(transform: Transform): Matrix {
-  const [a, b, c, d, e, f] = transform;
-  return { a, b, c, d, e, f };
-}
-
-function fromMatrix(matrix: Matrix): Transform {
-  return [matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f];
-}
-
-function isFiniteMatrix(matrix: Matrix): boolean {
-  return [matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f].every(
-    Number.isFinite,
-  );
 }
 
 function sanitizeXmlId(value: string): string {
