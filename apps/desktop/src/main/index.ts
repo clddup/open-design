@@ -86,30 +86,24 @@ import { DesignImageEditService } from "./agent/design-image-edit-service.js";
 import { handleDesignImageTool } from "./agent/design-image-tool-handler.js";
 import { createDesignCaptureReviewSession } from "./agent/design-capture-review-tool-handler.js";
 import { handleDesignImportExportTool } from "./agent/design-import-export-tool-handler.js";
+import {
+  designPageToolPreauthorization,
+  handleDesignPageTool,
+} from "./agent/design-page-tool-handler.js";
+import { handleDesignComponentTool } from "./agent/design-component-tool-handler.js";
 import { translate } from "@/shared/i18n/messages";
 import {
   DESIGN_CAPTURE_TOOL_NAME,
   DESIGN_CHECKPOINT_TOOL_NAME,
-  DESIGN_COMPONENT_TOOL_NAME,
   DESIGN_DELIVERY_SCOPE_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
   DESIGN_FIRST_SLICE_TOOL_NAME,
-  DESIGN_PAGE_TOOL_NAME,
-  PAGE_STRUCTURE_ACCESS_TOOL_NAME,
   DESIGN_PLAN_TOOL_NAME,
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
   DesignApplyContract,
-  DesignComponentContract,
-  DesignPageContract,
   DeliveryScopeContract,
-  PageStructureAccessContract,
   type DesignApplyToolInput,
 } from "@/shared/design-agent-tools";
-import { formatValidationFailure } from "@/shared/contract-validation.js";
-import {
-  componentToolIsMaterialWrite,
-  materialTargetRefsForComponentTool,
-} from "./agent/component-tool-policy";
 
 const designGenerationPerformance = new DesignGenerationPerformanceTracker();
 app.setName("OpenDesign");
@@ -881,29 +875,13 @@ async function startDesktopApplication(
         execute: executeRendererTool,
         getModelProviderHost: requireModelProviderHost,
       });
-      if (call.toolName === PAGE_STRUCTURE_ACCESS_TOOL_NAME) {
-        const parsed = PageStructureAccessContract.parse(call.input);
-        if (!parsed.ok) {
-          throw new TypeError(
-            formatValidationFailure("Page Structure Access", parsed.issues),
-          );
-        }
-        if (!globalTaskCoordinator.hasPageStructureAccess(context.runId)) {
-          throw new Error(
-            "Page structure access was not approved for this Run",
-          );
-        }
-        globalTaskCoordinator.assertDeliveryScopeReviewed(context);
-        return {
-          content: {
-            ok: true,
-            capability: "page-structure",
-            scope: "current-design-file",
-            expires: "run-end",
-            actions: parsed.value.actions,
-          },
-        };
-      }
+      const designPageResult = await handleDesignPageTool({
+        call,
+        context,
+        coordinator: globalTaskCoordinator,
+        execute: executeRendererTool,
+      });
+      if (designPageResult) return designPageResult;
       if (call.toolName === DESIGN_DELIVERY_SCOPE_TOOL_NAME) {
         return handleDeliveryScopeTool(globalTaskCoordinator, call, context);
       }
@@ -1006,82 +984,14 @@ async function startDesktopApplication(
         withDelivery: withDesignDelivery,
       });
       if (designTypographyResult) return designTypographyResult;
-      if (call.toolName === DESIGN_PAGE_TOOL_NAME) {
-        const parsed = DesignPageContract.parse(call.input);
-        if (!parsed.ok) {
-          throw new TypeError(formatValidationFailure("Page", parsed.issues));
-        }
-        const normalizedPageInput = parsed.value;
-        globalTaskCoordinator.assertPageToolAccess(
-          context,
-          normalizedPageInput,
-        );
-        globalTaskCoordinator.assertPageLifecycleInspected(context);
-        const result = await executeRendererTool({
-          ...call,
-          input: normalizedPageInput,
-        });
-        if (result.designRevision || normalizedPageInput.action === "clear") {
-          globalTaskCoordinator.recordPageToolCompleted(
-            context.runId,
-            normalizedPageInput.action,
-          );
-        }
-        if (normalizedPageInput.action === "clear") {
-          globalTaskCoordinator.supersedeDesignDeliveryForClearedPage(
-            context,
-            normalizedPageInput.pageId,
-          );
-          if (!isRecordValue(result.content)) {
-            throw new TypeError("Page clear result must be structured");
-          }
-          return {
-            ...result,
-            content: {
-              ...result.content,
-              deliveryDisposition: "superseded",
-            },
-          };
-        }
-        return result;
-      }
-      if (call.toolName === DESIGN_COMPONENT_TOOL_NAME) {
-        const parsed = DesignComponentContract.parse(call.input);
-        if (!parsed.ok) {
-          throw new TypeError(
-            formatValidationFailure("Component", parsed.issues),
-          );
-        }
-        const componentInput = parsed.value;
-        globalTaskCoordinator.assertComponentToolAccess(
-          context,
-          componentInput,
-        );
-        globalTaskCoordinator.assertDocumentInspected(context);
-        const materialWrite = componentToolIsMaterialWrite(componentInput);
-        if (materialWrite) {
-          globalTaskCoordinator.assertVisualReviewBeforeWrite(context);
-        }
-        const result = await executeRendererTool({
-          ...call,
-          input: componentInput,
-        });
-        if (!materialWrite) return result;
-        const targetRefs = materialTargetRefsForComponentTool(componentInput);
-        const targetIds =
-          globalTaskCoordinator.resolveMaterialTargetIdsIfPlanned(
-            context,
-            targetRefs.nodeIds,
-            targetRefs.parentId,
-          );
-        globalTaskCoordinator.recordMaterialDesignWriteCompleted(
-          context.runId,
-          targetIds,
-          result.designRevision?.revision,
-          targetRefs.createdNodeIds,
-        );
-        return withDesignDelivery(result, context.runId);
-      }
+      const designComponentResult = await handleDesignComponentTool({
+        call,
+        context,
+        coordinator: globalTaskCoordinator,
+        execute: executeRendererTool,
+        withDelivery: withDesignDelivery,
+      });
+      if (designComponentResult) return designComponentResult;
       const designSystemResult = await handleDesignSystemTool({
         call,
         context,
@@ -1130,17 +1040,9 @@ async function startDesktopApplication(
             false)
         );
       }
-      if (call.toolName !== PAGE_STRUCTURE_ACCESS_TOOL_NAME) {
-        return true;
-      }
-      const parsed = PageStructureAccessContract.parse(call.input);
-      if (!parsed.ok) return true;
       return (
-        globalTaskCoordinator?.hasPageStructureAuthorization(
-          context.runId,
-          call.toolCallId,
-          parsed.value.actions,
-        ) ?? false
+        designPageToolPreauthorization(call, context, globalTaskCoordinator) ??
+        true
       );
     },
     recordAudit: (event) =>
