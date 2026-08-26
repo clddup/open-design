@@ -5,7 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./descriptors": "./src/descriptors.ts"
+    "./descriptors": "./src/descriptors.ts",
+    "./access": "./src/access.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit"

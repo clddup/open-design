@@ -4,6 +4,7 @@ import {
   DESIGN_DELIVERY_LEDGER_VERSION,
   ConversationDescriptorContract,
   ConversationDescriptorListContract,
+  DesignTargetContract,
   GlobalTaskProjectionSchema,
   MAX_DESIGN_TARGETS,
   MAX_PROJECT_DESIGN_FILES,
@@ -12,7 +13,11 @@ import {
   ProjectManifestContract,
   ProjectManifestSchema,
   ResourceLocatorSchema,
+  ResourceLocatorContract,
+  RootGrantContract,
   RootGrantSchema,
+  RunAccessSnapshotContract,
+  RunTargetSetContract,
   WORKSPACE_CONTRACT_VERSION,
   isDesignTarget,
   isDesignFileDescriptor,
@@ -366,6 +371,16 @@ describe("workspace contract schemas", () => {
       }),
     ).toBe(false);
     expect(
+      ResourceLocatorContract.parse({
+        scheme: "root",
+        rootGrantId: "grant_1",
+        relativePath: "references/../../secret",
+      }),
+    ).toMatchObject({
+      ok: false,
+      issues: [expect.objectContaining({ path: "/relativePath" })],
+    });
+    expect(
       isResourceLocator({
         scheme: "root",
         rootGrantId: "grant_1",
@@ -406,6 +421,17 @@ describe("workspace contract schemas", () => {
     ).toBe(false);
     expect(isRootGrant(rootGrant({ lifecycle: "revoked" }))).toBe(false);
     expect(
+      RootGrantContract.parse(rootGrant({ lifecycle: "revoked" })),
+    ).toMatchObject({
+      ok: false,
+      issues: [
+        expect.objectContaining({
+          code: "workspace.revoked_grant_time_missing",
+          path: "/revokedAt",
+        }),
+      ],
+    });
+    expect(
       isRootGrant(rootGrant({ lifecycle: "revoked", revokedAt: now })),
     ).toBe(true);
     expect(isRootGrant(rootGrant({ lifecycle: "expired" }))).toBe(false);
@@ -418,6 +444,15 @@ describe("workspace contract schemas", () => {
     const primaryMismatch = designTarget({ primaryNodeId: "node_elsewhere" });
     expect(Value.Check(ProjectManifestSchema, projectManifest())).toBe(true);
     expect(isDesignTarget(primaryMismatch)).toBe(false);
+    expect(DesignTargetContract.parse(primaryMismatch)).toMatchObject({
+      ok: false,
+      issues: [
+        expect.objectContaining({
+          code: "workspace.primary_selection_invalid",
+          path: "/primaryNodeId",
+        }),
+      ],
+    });
     expect(
       isDesignTarget(
         designTarget({
@@ -448,6 +483,17 @@ describe("workspace contract schemas", () => {
       pageId: "page_2",
     });
     expect(isRunTargetSet(targetSet([first, duplicateFile]))).toBe(false);
+    expect(
+      RunTargetSetContract.parse(targetSet([first, duplicateFile])),
+    ).toMatchObject({
+      ok: false,
+      issues: [
+        expect.objectContaining({
+          code: "workspace.target_design_file_duplicate",
+          path: "/targets/1/designFileId",
+        }),
+      ],
+    });
 
     const duplicateTargetId = designTarget({
       projectId: "project_elsewhere",
@@ -509,6 +555,23 @@ describe("workspace contract schemas", () => {
         ],
       }),
     ).toBe(false);
+    expect(
+      RunAccessSnapshotContract.parse({
+        ...snapshot,
+        resources: [
+          { ...snapshot.resources[0], runId: "run_elsewhere" },
+          snapshot.resources[1],
+        ],
+      }),
+    ).toMatchObject({
+      ok: false,
+      issues: [
+        expect.objectContaining({
+          code: "workspace.reference_run_mismatch",
+          path: "/resources/0/runId",
+        }),
+      ],
+    });
     expect(
       isRunAccessSnapshot({
         ...snapshot,
