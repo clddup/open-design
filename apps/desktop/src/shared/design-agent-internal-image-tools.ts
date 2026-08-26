@@ -8,11 +8,9 @@ import {
   type ImageAssetDerivation,
 } from "@opendesign/design-contracts";
 import {
-  contractDiscriminatedSchemaIssues,
-  contractSchemaIssues,
+  defineContract,
   type ValidationIssue,
   type ValidationIssueValue,
-  type ValidationResult,
 } from "./contract-validation";
 import {
   DESIGN_IMAGE_PLACEMENT_SCHEMA,
@@ -232,66 +230,23 @@ export const INTERNAL_UPDATE_IMAGE_TOOL_INPUT_SCHEMA = executableJsonSchema({
   additionalProperties: false,
 });
 
-function parseRead(
-  input: unknown,
-): ValidationResult<InternalReadImageSourceToolInput> {
-  const issues = contractSchemaIssues(
-    INTERNAL_READ_IMAGE_SOURCE_TOOL_INPUT_SCHEMA,
-    input,
-    {
-      code: "internal_read_image_source.schema_invalid",
-      subject: "internal image source",
-      maximum: 12,
-    },
-  );
-  return issues.length > 0
-    ? { ok: false, issues }
-    : {
-        ok: true,
-        value: structuredClone(input as InternalReadImageSourceToolInput),
-      };
-}
+export const InternalReadImageSourceContract =
+  defineContract<InternalReadImageSourceToolInput>({
+    schema: INTERNAL_READ_IMAGE_SOURCE_TOOL_INPUT_SCHEMA,
+    code: "internal_read_image_source.schema_invalid",
+    subject: "internal image source",
+    maximum: 12,
+  });
 
-export const InternalReadImageSourceContract = {
-  schema: INTERNAL_READ_IMAGE_SOURCE_TOOL_INPUT_SCHEMA,
-  parse: parseRead,
-  issues: (input: unknown): ValidationIssue[] => {
-    const result = parseRead(input);
-    return result.ok ? [] : result.issues;
-  },
-} as const;
-
-function parseUpdate(
-  input: unknown,
-): ValidationResult<InternalUpdateImageToolInput> {
-  const structureIssues = contractDiscriminatedSchemaIssues(
-    INTERNAL_UPDATE_IMAGE_TOOL_INPUT_SCHEMA,
-    input,
-    "action",
-    {
-      code: "internal_update_image.schema_invalid",
-      subject: "internal image update",
-      maximum: 32,
-    },
-  );
-  if (structureIssues.length > 0) {
-    return { ok: false, issues: structureIssues };
-  }
-  const value = input as InternalUpdateImageToolInput;
-  const domainIssues = refineUpdate(value);
-  return domainIssues.length > 0
-    ? { ok: false, issues: domainIssues }
-    : { ok: true, value };
-}
-
-export const InternalUpdateImageContract = {
-  schema: INTERNAL_UPDATE_IMAGE_TOOL_INPUT_SCHEMA,
-  parse: parseUpdate,
-  issues: (input: unknown): ValidationIssue[] => {
-    const result = parseUpdate(input);
-    return result.ok ? [] : result.issues;
-  },
-} as const;
+export const InternalUpdateImageContract =
+  defineContract<InternalUpdateImageToolInput>({
+    schema: INTERNAL_UPDATE_IMAGE_TOOL_INPUT_SCHEMA,
+    code: "internal_update_image.schema_invalid",
+    subject: "internal image update",
+    maximum: 32,
+    refine: refineUpdate,
+    clone: false,
+  });
 
 function refineUpdate(input: InternalUpdateImageToolInput): ValidationIssue[] {
   if (

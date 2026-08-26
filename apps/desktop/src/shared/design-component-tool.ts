@@ -1,46 +1,18 @@
 import type { DesignComponentToolInput } from "./design-component-tool-contract";
 import { DESIGN_COMPONENT_TOOL_INPUT_SCHEMA } from "./design-component-tool-schema";
-import {
-  contractSchemaIssues,
-  type ValidationIssue,
-  type ValidationResult,
-} from "./contract-validation";
+import { defineContract, type ValidationIssue } from "./contract-validation";
 
 export type { DesignComponentToolInput } from "./design-component-tool-contract";
 
-function parseDesignComponent(
-  input: unknown,
-): ValidationResult<DesignComponentToolInput> {
-  const structureIssues = contractSchemaIssues(
-    DESIGN_COMPONENT_TOOL_INPUT_SCHEMA,
-    input,
-    {
-      code: "design_component.schema_invalid",
-      subject: "Component",
-      maximum: 32,
-    },
-  );
-  if (structureIssues.length > 0) {
-    return { ok: false, issues: structureIssues };
-  }
-
-  const value = input as DesignComponentToolInput;
-  const domainIssues = refineDesignComponent(value);
-  return domainIssues.length > 0
-    ? { ok: false, issues: domainIssues }
-    : { ok: true, value: structuredClone(value) };
-}
-
-function designComponentIssues(input: unknown): ValidationIssue[] {
-  const result = parseDesignComponent(input);
-  return result.ok ? [] : result.issues;
-}
-
-export const DesignComponentContract = {
-  schema: DESIGN_COMPONENT_TOOL_INPUT_SCHEMA,
-  parse: parseDesignComponent,
-  issues: designComponentIssues,
-} as const;
+export const DesignComponentContract = defineContract<DesignComponentToolInput>(
+  {
+    schema: DESIGN_COMPONENT_TOOL_INPUT_SCHEMA,
+    code: "design_component.schema_invalid",
+    subject: "Component",
+    maximum: 32,
+    refine: refineDesignComponent,
+  },
+);
 
 function refineDesignComponent(
   input: DesignComponentToolInput,

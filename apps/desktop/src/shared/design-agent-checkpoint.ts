@@ -1,13 +1,14 @@
-import {
-  executableJsonSchema,
-  schemaValidationIssues,
-} from "@opendesign/design-contracts";
+import { executableJsonSchema } from "@opendesign/design-contracts";
 import {
   DesignApplyContract,
   type DesignApplyToolInput,
 } from "./design-apply-input";
 import { DESIGN_APPLY_TOOL_INPUT_SCHEMA } from "./design-agent-operation-schemas";
-import type { ValidationIssue, ValidationResult } from "./contract-validation";
+import {
+  contractSchemaIssues,
+  type ValidationIssue,
+  type ValidationResult,
+} from "./contract-validation";
 
 export type DesignCheckpointToolInput =
   | {
@@ -107,15 +108,11 @@ export const DesignCheckpointContract = {
 } as const;
 
 function checkpointSchemaIssues(input: unknown): ValidationIssue[] {
-  return schemaValidationIssues(DESIGN_CHECKPOINT_TOOL_INPUT_SCHEMA, input)
-    .slice(0, 64)
-    .map((issue) => ({
-      code: "design_checkpoint.schema_invalid",
-      path: issue.path || "/",
-      message: issue.message,
-      recovery:
-        "Correct the reported Checkpoint field and submit one revised call; do not repeat unchanged arguments.",
-    }));
+  return contractSchemaIssues(DESIGN_CHECKPOINT_TOOL_INPUT_SCHEMA, input, {
+    code: "design_checkpoint.schema_invalid",
+    subject: "Checkpoint",
+    maximum: 64,
+  });
 }
 
 function prefixIssues(

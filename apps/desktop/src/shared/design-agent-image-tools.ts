@@ -12,17 +12,12 @@ import {
   type ImageLightingPreset,
   type ImagePaint,
   type ImageAssetDerivation,
-  type TSchema,
 } from "@opendesign/design-contracts";
 import {
   type PlaceableRasterAssetRole,
   type RasterAssetRole,
 } from "./design-agent-plan-review";
-import {
-  contractSchemaIssues,
-  type ValidationIssue,
-  type ValidationResult,
-} from "./contract-validation";
+import { defineContract, type ValidationIssue } from "./contract-validation";
 import {
   exactKeys,
   isRecord,
@@ -650,121 +645,44 @@ export const EDIT_IMAGE_TOOL_INPUT_SCHEMA = executableJsonSchema({
   additionalProperties: false,
 });
 
-function parseReadImage(input: unknown): ValidationResult<ReadImageToolInput> {
-  const issues = imageToolSchemaIssues(
-    READ_IMAGE_TOOL_INPUT_SCHEMA,
-    input,
-    "read_image.schema_invalid",
-    "Read Image",
-  );
-  return issues.length > 0
-    ? { ok: false, issues }
-    : { ok: true, value: structuredClone(input as ReadImageToolInput) };
-}
-
-export const ReadImageContract = {
+export const ReadImageContract = defineContract<ReadImageToolInput>({
   schema: READ_IMAGE_TOOL_INPUT_SCHEMA,
-  parse: parseReadImage,
-  issues: (input: unknown): ValidationIssue[] => {
-    const result = parseReadImage(input);
-    return result.ok ? [] : result.issues;
-  },
-} as const;
+  code: "read_image.schema_invalid",
+  subject: "Read Image",
+});
 
-function parseGenerateImage(
-  input: unknown,
-): ValidationResult<GenerateImageToolInput> {
-  const structureIssues = imageToolSchemaIssues(
-    GENERATE_IMAGE_TOOL_INPUT_SCHEMA,
-    input,
-    "generate_image.schema_invalid",
-    "Generate Image",
-  );
-  if (structureIssues.length > 0) {
-    return { ok: false, issues: structureIssues };
-  }
-
-  const value = input as GenerateImageToolInput;
-  const sizeIssue = explicitImageGenerationSizeIssue(value.size);
-  return sizeIssue
-    ? { ok: false, issues: [sizeIssue] }
-    : { ok: true, value: structuredClone(value) };
-}
-
-export const GenerateImageContract = {
+export const GenerateImageContract = defineContract<GenerateImageToolInput>({
   schema: GENERATE_IMAGE_TOOL_INPUT_SCHEMA,
-  parse: parseGenerateImage,
-  issues: (input: unknown): ValidationIssue[] => {
-    const result = parseGenerateImage(input);
-    return result.ok ? [] : result.issues;
+  code: "generate_image.schema_invalid",
+  subject: "Generate Image",
+  refine: (value) => {
+    const sizeIssue = explicitImageGenerationSizeIssue(value.size);
+    return sizeIssue ? [sizeIssue] : [];
   },
-} as const;
+});
 
-function parsePlaceImage(
-  input: unknown,
-): ValidationResult<PlaceImageToolInput> {
-  const issues = imageToolSchemaIssues(
-    PLACE_IMAGE_TOOL_INPUT_SCHEMA,
-    input,
-    "place_image.schema_invalid",
-    "Place Image",
-  );
-  return issues.length > 0
-    ? { ok: false, issues }
-    : { ok: true, value: structuredClone(input as PlaceImageToolInput) };
-}
-
-export const PlaceImageContract = {
+export const PlaceImageContract = defineContract<PlaceImageToolInput>({
   schema: PLACE_IMAGE_TOOL_INPUT_SCHEMA,
-  parse: parsePlaceImage,
-  issues: (input: unknown): ValidationIssue[] => {
-    const result = parsePlaceImage(input);
-    return result.ok ? [] : result.issues;
-  },
-} as const;
+  code: "place_image.schema_invalid",
+  subject: "Place Image",
+});
 
-function parseUpdateImage(
-  input: unknown,
-): ValidationResult<UpdateImageToolInput> {
-  const issues = imageToolSchemaIssues(
-    UPDATE_IMAGE_TOOL_INPUT_SCHEMA,
-    input,
-    "update_image.schema_invalid",
-    "Update Image",
-  );
-  return issues.length > 0
-    ? { ok: false, issues }
-    : { ok: true, value: structuredClone(input as UpdateImageToolInput) };
-}
-
-export const UpdateImageContract = {
+export const UpdateImageContract = defineContract<UpdateImageToolInput>({
   schema: UPDATE_IMAGE_TOOL_INPUT_SCHEMA,
-  parse: parseUpdateImage,
-  issues: (input: unknown): ValidationIssue[] => {
-    const result = parseUpdateImage(input);
-    return result.ok ? [] : result.issues;
-  },
-} as const;
+  code: "update_image.schema_invalid",
+  subject: "Update Image",
+});
 
-function parseEditImage(input: unknown): ValidationResult<EditImageToolInput> {
-  const structureIssues = imageToolSchemaIssues(
-    EDIT_IMAGE_TOOL_INPUT_SCHEMA,
-    input,
-    "edit_image.schema_invalid",
-    "Edit Image",
-  );
-  if (structureIssues.length > 0) {
-    return { ok: false, issues: structureIssues };
-  }
-
-  const value = input as EditImageToolInput;
-  if (
-    value.action === "expand" &&
-    Object.values(value.expansion).every((edge) => edge === 0)
-  ) {
-    return {
-      ok: false,
-      issues: [
+export const EditImageContract = defineContract<EditImageToolInput>({
+  schema: EDIT_IMAGE_TOOL_INPUT_SCHEMA,
+  code: "edit_image.schema_invalid",
+  subject: "Edit Image",
+  refine: (value) => {
+    if (
+      value.action === "expand" &&
+      Object.values(value.expansion).every((edge) => edge === 0)
+    ) {
+      return [
         {
           code: "edit_image.expansion_empty",
           path: "/expansion",
@@ -773,21 +691,11 @@ function parseEditImage(input: unknown): ValidationResult<EditImageToolInput> {
           recovery:
             "Set the intended outward edge in node-local design units and submit one revised call.",
         },
-      ],
-    };
-  }
-
-  return { ok: true, value: structuredClone(value) };
-}
-
-export const EditImageContract = {
-  schema: EDIT_IMAGE_TOOL_INPUT_SCHEMA,
-  parse: parseEditImage,
-  issues: (input: unknown): ValidationIssue[] => {
-    const result = parseEditImage(input);
-    return result.ok ? [] : result.issues;
+      ];
+    }
+    return [];
   },
-} as const;
+});
 
 export function isPreparedImageEditSource(
   input: unknown,
@@ -876,13 +784,4 @@ function imageGenerationSizeIssue(actual: string): ValidationIssue {
     recovery:
       "Choose a supported explicit size or use auto, then submit one revised call.",
   };
-}
-
-function imageToolSchemaIssues(
-  schema: TSchema,
-  input: unknown,
-  code: string,
-  subject: string,
-): ValidationIssue[] {
-  return contractSchemaIssues(schema, input, { code, subject });
 }

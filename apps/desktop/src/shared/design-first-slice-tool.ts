@@ -1,18 +1,12 @@
 import {
-  schemaValidationIssues,
-  type TSchema,
-} from "@opendesign/design-contracts";
-import {
   builtinDesignSkillRefsForDeliverable,
   isBuiltinDesignSkillRefsForDeliverable,
-  type BuiltinDesignSkillRef,
 } from "@opendesign/design-skills";
 import {
+  defineContract,
   type ValidationIssue,
   type ValidationIssueValue,
-  type ValidationResult,
 } from "./contract-validation";
-import type { DesignIntent, RasterAssetRole } from "./design-agent-tools";
 import type {
   LOGO_CONCEPT_PRINCIPLES,
   DesignLogoOutput,
@@ -39,135 +33,11 @@ export {
   DESIGN_FIRST_SLICE_MAX_STAGES,
 } from "./design-first-slice-budget";
 
-type CompactPaint = {
-  color: string;
-  opacity?: number;
-};
-
-type CompactStroke = CompactPaint & { width: number };
-
-type CompactElementBase = {
-  id: string;
-  name: string;
-  parentId: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  opacity?: number;
-};
-
-export type DesignFirstSliceElement =
-  | (CompactElementBase & { kind: "group" })
-  | (CompactElementBase & {
-      kind: "frame";
-      fill?: CompactPaint;
-      stroke?: CompactStroke;
-      cornerRadius?: number;
-      clipsContent?: boolean;
-    })
-  | (CompactElementBase & {
-      kind: "rectangle";
-      fill: CompactPaint;
-      stroke?: CompactStroke;
-      cornerRadius?: number;
-    })
-  | (CompactElementBase & {
-      kind: "ellipse";
-      fill: CompactPaint;
-      stroke?: CompactStroke;
-    })
-  | (CompactElementBase & {
-      kind: "path";
-      path: string;
-      fill: CompactPaint;
-    })
-  | (CompactElementBase & {
-      kind: "text";
-      text: {
-        content: string;
-        fontFamily: string;
-        fontStyleName: string;
-        fontWeight: number;
-        fontSlant: "normal" | "italic";
-        fontSize: number;
-        lineHeight: number;
-        letterSpacing?: number;
-        color: string;
-        textResize: "auto-width" | "auto-height" | "fixed";
-        align?: "left" | "center" | "right" | "justify";
-      };
-    });
-
-export type DesignFirstSliceQualityProfile =
-  | { kind: "graphic" }
-  | {
-      kind: "ui";
-      platform:
-        "web" | "macos" | "windows" | "ios" | "ipados" | "android" | "other";
-      input: "pointer" | "touch" | "mixed";
-      insets: [number, number, number, number];
-      safeNodeIds: string[];
-      hitNodeIds: string[];
-    };
-
-export type DesignFirstSliceToolInput = {
-  version: 1;
-  deliverable:
-    | "ui"
-    | "poster"
-    | "logo"
-    | "brand-asset"
-    | "illustration"
-    | "presentation-visual"
-    | "other";
-  objective: string;
-  designIntent: DesignIntent;
-  referenceStrategy?: DesignReferenceStrategy;
-  skillRefs: BuiltinDesignSkillRef[];
-  briefFidelity: DesignBriefFidelity;
-  targets: Array<{
-    targetId: string;
-    label: string;
-    pageId: string;
-    objective: string;
-    frame: {
-      frameId: string;
-      x: number;
-      y: number;
-      width: number;
-      height: number;
-    };
-    layout: string;
-    spacing: string;
-    qualityProfile: DesignFirstSliceQualityProfile;
-    regions: Array<{
-      nodeId: string;
-      name: string;
-      role:
-        | "structure"
-        | "content"
-        | "typography"
-        | "media"
-        | "graphic"
-        | "decoration"
-        | "interaction"
-        | "other";
-      parentId: string;
-      x: number;
-      y: number;
-      width: number;
-      height: number;
-    }>;
-  }>;
-  visualSystem: {
-    formLanguage: string;
-    palette: string[];
-    surfaceAndDepth: string;
-    typography: string[];
-    effects?: string[];
-  };
-  rasterAssetRoles: RasterAssetRole[];
+export type DesignFirstSliceElement = DesignFirstSliceElementInput;
+export type DesignFirstSliceToolInput = Omit<
+  DesignFirstSliceCanonicalInput,
+  "logoOutputs" | "logoExploration"
+> & {
   logoOutputs?: DesignLogoOutput[];
   logoExploration?: {
     targetId: string;
@@ -180,85 +50,33 @@ export type DesignFirstSliceToolInput = {
       evidenceNodeIds: [string, string, string, string];
     }>;
   };
-  semanticObjects?: Array<
-    | {
-        decisionId: string;
-        label: string;
-        decision: "ordinary";
-        occurrences: Array<{ targetId: string; nodeId: string }>;
-      }
-    | {
-        decisionId: string;
-        label: string;
-        decision: "component";
-        componentId: string;
-        main: { targetId: string; nodeId: string };
-        instances: Array<{ targetId: string; nodeId: string }>;
-      }
-    | {
-        decisionId: string;
-        label: string;
-        decision: "reuse-component";
-        componentId: string;
-        instances: Array<{ targetId: string; nodeId: string }>;
-      }
-  >;
-  firstSlice: {
-    targetId: string;
-    label: string;
-    stages: Array<{
-      stageId: string;
-      label: string;
-      elements: DesignFirstSliceElement[];
-    }>;
-  };
 };
 
 export type FirstSliceContractContext = {
   authoritativePrompt?: string;
 };
 
-function parseFirstSlice(
-  input: unknown,
-  context: FirstSliceContractContext = {},
-): ValidationResult<DesignFirstSliceToolInput> {
-  const modelIssues = schemaIssues(
-    DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA,
-    input,
-    "first_slice.schema_invalid",
-  );
-  if (modelIssues.length > 0) return { ok: false, issues: modelIssues };
-
-  const canonical = bindFirstSliceHostContext(
-    structuredClone(input) as DesignFirstSliceModelInput,
-    context,
-  );
-  const canonicalIssues = schemaIssues(
-    DESIGN_FIRST_SLICE_CANONICAL_INPUT_SCHEMA,
-    canonical,
-    "first_slice.host_binding_invalid",
-  );
-  if (canonicalIssues.length > 0) {
-    return { ok: false, issues: canonicalIssues };
-  }
-  const value = canonical as DesignFirstSliceCanonicalInput;
-  const domainIssues = refineFirstSlice(value);
-  return domainIssues.length > 0
-    ? { ok: false, issues: domainIssues }
-    : {
-        ok: true,
-        value: structuredClone(value) as DesignFirstSliceToolInput,
-      };
-}
-
-export const FirstSliceContract = {
-  schema: DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA,
-  parse: parseFirstSlice,
-  issues: (input: unknown): ValidationIssue[] => {
-    const result = parseFirstSlice(input);
-    return result.ok ? [] : result.issues;
+export const FirstSliceContract = defineContract<
+  DesignFirstSliceModelInput,
+  DesignFirstSliceToolInput,
+  FirstSliceContractContext
+>(
+  {
+    schema: DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA,
+    code: "first_slice.schema_invalid",
+    subject: "First Slice",
+    maximum: 32,
+    canonical: {
+      schema: DESIGN_FIRST_SLICE_CANONICAL_INPUT_SCHEMA,
+      code: "first_slice.host_binding_invalid",
+      subject: "host-bound First Slice",
+      maximum: 32,
+    },
+    bind: bindFirstSliceHostContext,
+    refine: refineFirstSlice,
   },
-} as const;
+  () => ({}),
+);
 
 export function logoBriefRequiresExploration(prompt: string): boolean {
   return (
@@ -274,11 +92,10 @@ export function logoBriefRequiresExploration(prompt: string): boolean {
 function bindFirstSliceHostContext(
   input: DesignFirstSliceModelInput,
   context: FirstSliceContractContext,
-): unknown {
+): DesignFirstSliceToolInput {
   const objective = input.objective.trim();
   return {
     ...input,
-    designIntent: structuredClone(input.designIntent),
     skillRefs: builtinDesignSkillRefsForDeliverable(input.deliverable),
     briefFidelity: defaultBriefFidelity(
       context.authoritativePrompt ?? objective,
@@ -286,18 +103,14 @@ function bindFirstSliceHostContext(
     targets: input.targets.map((target) =>
       bindFirstSliceTarget(target, input.deliverable),
     ),
-    visualSystem: structuredClone(input.visualSystem),
     rasterAssetRoles: [...input.rasterAssetRoles],
-    ...(input.semanticObjects === undefined
-      ? {}
-      : { semanticObjects: structuredClone(input.semanticObjects) }),
-  };
+  } as DesignFirstSliceToolInput;
 }
 
 function bindFirstSliceTarget(
   target: DesignFirstSliceModelInput["targets"][number],
   deliverable: DesignFirstSliceToolInput["deliverable"],
-): unknown {
+): DesignFirstSliceToolInput["targets"][number] {
   const safeNodeId = target.regions[0]?.nodeId ?? "";
   return {
     ...target,
@@ -307,7 +120,7 @@ function bindFirstSliceTarget(
             kind: "ui",
             platform: "other",
             input: "mixed",
-            insets: [0, 0, 0, 0],
+            insets: [0, 0, 0, 0] as [number, number, number, number],
             safeNodeIds: safeNodeId ? [safeNodeId] : [],
             hitNodeIds: [],
           }
@@ -356,22 +169,6 @@ function chunkRequiredContent(value: string): string[] {
   }
   if (current) chunks.push(current);
   return chunks.slice(0, 24);
-}
-
-function schemaIssues(
-  schema: TSchema,
-  value: unknown,
-  code: string,
-): ValidationIssue[] {
-  return schemaValidationIssues(schema, value)
-    .slice(0, 32)
-    .map((issue) => ({
-      code,
-      path: issue.path || "/",
-      message: issue.message,
-      recovery:
-        "Correct the reported field and submit one revised call; do not repeat unchanged arguments.",
-    }));
 }
 
 function refineFirstSlice(

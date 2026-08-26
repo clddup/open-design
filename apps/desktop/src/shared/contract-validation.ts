@@ -12,6 +12,117 @@ export type ValidationIssueValue = NonNullable<
 export type ValidationResult<T> =
   { ok: true; value: T } | { ok: false; issues: ValidationIssue[] };
 
+export type ContractSchemaPhase = {
+  schema: TSchema;
+  code: string;
+  subject: string;
+  maximum?: number;
+};
+
+export type ContractDefinition<
+  ModelValue,
+  CanonicalValue = ModelValue,
+  Context = undefined,
+> = ContractSchemaPhase & {
+  canonical?: ContractSchemaPhase;
+  bind?: (value: ModelValue, context: Context) => CanonicalValue;
+  refine?: (
+    value: CanonicalValue,
+    context: Context,
+  ) => readonly ValidationIssue[];
+  clone?: boolean;
+};
+
+export type Contract<CanonicalValue, Context = undefined> = {
+  schema: TSchema;
+  canonicalSchema?: TSchema;
+  parse: (
+    input: unknown,
+    context?: Context,
+  ) => ValidationResult<CanonicalValue>;
+  issues: (input: unknown, context?: Context) => ValidationIssue[];
+};
+
+/**
+ * Runs one model-facing structure contract, optional trusted host binding, one
+ * canonical structure contract, and one domain refinement in that order.
+ * Provider disclosure must use `definition.schema`; no parallel shape guard is
+ * permitted around this entry point.
+ */
+export function validateContract<
+  ModelValue,
+  CanonicalValue = ModelValue,
+  Context = undefined,
+>(
+  definition: ContractDefinition<ModelValue, CanonicalValue, Context>,
+  input: unknown,
+  context: Context,
+): ValidationResult<CanonicalValue> {
+  const structureIssues = contractSchemaIssues(
+    definition.schema,
+    input,
+    definition,
+  );
+  if (structureIssues.length > 0) {
+    return { ok: false, issues: structureIssues };
+  }
+
+  const clone = definition.clone !== false;
+  const modelValue = input as ModelValue;
+  const value = definition.bind
+    ? definition.bind(modelValue, context)
+    : (modelValue as unknown as CanonicalValue);
+
+  if (definition.canonical) {
+    const canonicalIssues = contractSchemaIssues(
+      definition.canonical.schema,
+      value,
+      definition.canonical,
+    );
+    if (canonicalIssues.length > 0) {
+      return { ok: false, issues: canonicalIssues };
+    }
+  }
+
+  const domainIssues = definition.refine?.(value, context) ?? [];
+  return domainIssues.length > 0
+    ? { ok: false, issues: [...domainIssues] }
+    : {
+        ok: true,
+        value: clone ? structuredClone(value) : value,
+      };
+}
+
+export function defineContract<
+  ModelValue,
+  CanonicalValue = ModelValue,
+  Context = undefined,
+>(
+  definition: ContractDefinition<ModelValue, CanonicalValue, Context>,
+  defaultContext?: () => Context,
+): Contract<CanonicalValue, Context> {
+  const contextFor = (context: Context | undefined): Context => {
+    if (context !== undefined) return context;
+    return defaultContext ? defaultContext() : (undefined as Context);
+  };
+  const parse = (
+    input: unknown,
+    context?: Context,
+  ): ValidationResult<CanonicalValue> =>
+    validateContract(definition, input, contextFor(context));
+  return {
+    schema: definition.schema,
+    ...(definition.canonical === undefined
+      ? {}
+      : { canonicalSchema: definition.canonical.schema }),
+    parse,
+    issues: (input: unknown, context?: Context): ValidationIssue[] => {
+      const result = parse(input, context);
+      return result.ok ? [] : result.issues;
+    },
+  };
+}
+
 export function contractSchemaIssues(
   schema: TSchema,
   input: unknown,
@@ -39,33 +150,6 @@ export function contractSchemaIssues(
     if (issues.length >= (options.maximum ?? 64)) break;
   }
   return issues;
-}
-
-export function contractDiscriminatedSchemaIssues(
-  schema: TSchema,
-  input: unknown,
-  discriminant: string,
-  options: {
-    code: string;
-    subject: string;
-    maximum?: number;
-  },
-): ValidationIssue[] {
-  if (isRecord(input)) {
-    const branch = discriminatedBranch(
-      schema,
-      discriminant,
-      input[discriminant],
-    );
-    if (branch) return contractSchemaIssues(schema, input, options);
-  }
-
-  const issues = contractSchemaIssues(schema, input, options);
-  const path = `/${escapePointer(discriminant)}`;
-  const discriminantIssues = issues.filter(
-    (issue) => issue.path === path || issue.path.startsWith(`${path}/`),
-  );
-  return discriminantIssues.length > 0 ? discriminantIssues : issues;
 }
 
 export function formatValidationFailure(
@@ -98,30 +182,4 @@ function boundedJson(value: unknown): string {
   } catch {
     return "[unserializable]";
   }
-}
-
-function discriminatedBranch(
-  schema: TSchema,
-  discriminant: string,
-  value: unknown,
-): TSchema | null {
-  const branches = (schema as { anyOf?: unknown }).anyOf;
-  if (!Array.isArray(branches)) return null;
-  for (const branch of branches) {
-    if (!isRecord(branch)) continue;
-    const properties = branch.properties;
-    if (!isRecord(properties)) continue;
-    const property = properties[discriminant];
-    if (!isRecord(property) || property.const !== value) continue;
-    return branch as TSchema;
-  }
-  return null;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function escapePointer(value: string): string {
-  return value.replaceAll("~", "~0").replaceAll("/", "~1");
 }

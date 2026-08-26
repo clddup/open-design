@@ -26,13 +26,15 @@ describe("OpenDesign Agent system prompt", () => {
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).not.toContain(
       "graphic-capture-critic",
     );
-    expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain("current contract");
+    expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
+      "first not-yet-planned target",
+    );
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).not.toContain("briefFidelity");
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).not.toContain(
       "semanticObjects decision",
     );
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
-      "allocate all stable Frame roots now",
+      "Each executable Plan is a one-target rolling stage",
     );
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
       "stages are real semantic commits",
@@ -44,7 +46,7 @@ describe("OpenDesign Agent system prompt", () => {
       "Main owns and creates the real region Frames",
     );
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
-      "one or more meaningful editable regions",
+      "one or more declared planned regions",
     );
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
       "surfaceMode/expressiveness/density",
@@ -53,7 +55,7 @@ describe("OpenDesign Agent system prompt", () => {
       "logoExploration is mandatory in this call",
     );
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
-      "never submit a second full Plan",
+      "deliveryStage.nextTarget",
     );
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
       "Do not claim completion after the first slice",
@@ -222,10 +224,10 @@ describe("OpenDesign Agent system prompt", () => {
       "call opendesign_define_design_plan",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
-      "A successful first-slice call already registered the authoritative host-bound Plan",
+      "A successful first-slice call already registered that bounded stage",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
-      "do not restate or amend the full Plan",
+      "register a new one-target stage",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
       "stateless independent critic",
@@ -264,7 +266,7 @@ describe("OpenDesign Agent system prompt", () => {
       "Call record_visual_review only when reviewEligible is explicitly true",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
-      "A high-confidence new-design Run exposes generate_first_slice",
+      "A high-confidence new-design stage uses generate_first_slice",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
       "with opendesign_design_checkpoint action apply-and-capture",

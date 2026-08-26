@@ -69,6 +69,10 @@ Normalization 只允许绑定当前 Page、权威 Run prompt、固定 skill refs
 
 ## 当前实施状态
 
+上述已迁移工具现在不再各自复制 `parse → schema issues → clone → refine → issues` 流程。`contract-validation.ts` 提供唯一 `validateContract / defineContract` 实现，按固定顺序执行模型结构 Schema、可信宿主绑定、canonical Schema 和单一 domain refinement；各工具只声明自己的 Schema、稳定错误 code/subject、可选绑定与 refinement。first-slice、Delivery Scope、Plan、Visual Review、图片、Page、Component、Style/Variable、Hierarchy/Vector、Arrange、Import/Export、Typography 与 trusted internal image bridge 已改为消费该入口，删除了各文件的重复 parser、局部 discriminant adapter 和错误映射。Checkpoint 因需要组合嵌套 Apply，仍保留薄组合函数，但其结构错误同样只经过共享 issue adapter。
+
+通用 node apply 的 compact DSL 仍需下一轮完整证明“所有 Provider 合法输入都能由编译器确定性生成合法 canonical operation”。当前 deterministic appearance/export defaults 必须作为公开 DSL 编译语义，而不能成为修复非法模型输入的 normalizer；`pointCount/innerRadius`、Text、Image、Path/Vector 等 kind-specific 必填字段必须在模型 Schema 阶段失败，不能等 canonical 校验后才暴露。完成该证明和删除残余二次结构失败路径之前，不把完整生成链标为已收敛。
+
 compact first-slice 已完成首个迁移切片：模型可见输入由可执行 TypeBox schema 直接生成并由 pi 预校验；Main 使用同一 `FirstSliceContract.parse(input, hostContext)` 完成可信宿主绑定与唯一 domain refinement。旧 `isDesignFirstSliceToolInput / normalizeDesignFirstSliceToolInput / explainInvalidDesignFirstSliceToolInput` 已删除，Provider 描述中的 32 元素旧事实也已移除。
 
 通用 node apply 已完成第二个迁移切片：`DesignApplyContract.parse(input, context)` 明确区分模型 compact 输入、Main/Renderer canonical 输入与 trusted internal 操作，但三种阶段共享同一个契约入口和结构化 issue。模型可见 JSON Schema 被原样赋予不可序列化的 TypeBox runtime metadata，Provider JSON 与 Runtime schema 不再复制；宿主只补全 canonical node/export defaults。旧 `normalizeDesignApplyToolInput / isDesignApplyToolInput / isInternalDesignApplyToolInput / explainInvalidDesignApplyToolInput` 已删除。语义 step 顺序、内部字段、允许的 operation、Component Instance 边界与 rebase target 唯一性只在一个 refinement 中维护；Pi 直接消费 `validateInputIssues`，不再回退到字符串 explainer。

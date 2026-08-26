@@ -1,6 +1,5 @@
 import { isSvgInterchangeIssue } from "@opendesign/import-export-service/svg-issues";
 import { SVG_MAX_CHARACTERS } from "@opendesign/import-export-service/limits";
-import type { TSchema } from "@opendesign/design-contracts";
 import {
   RASTER_EXPORT_MAX_ENCODED_BYTES,
   rasterExportMimeType,
@@ -21,12 +20,7 @@ import type {
   PreparedAgentRasterExport,
   PreparedAgentSvgExport,
 } from "./design-agent-import-export-tool-types";
-import {
-  contractDiscriminatedSchemaIssues,
-  contractSchemaIssues,
-  type ValidationIssue,
-  type ValidationResult,
-} from "./contract-validation";
+import { defineContract, type ValidationIssue } from "./contract-validation";
 import {
   boundedText,
   exactKeys,
@@ -50,101 +44,37 @@ export type {
   PreparedAgentSvgExport,
 } from "./design-agent-import-export-tool-types";
 
-export const ImportSvgContract = contract<ImportSvgToolInput>(
-  IMPORT_SVG_TOOL_INPUT_SCHEMA,
-  "design_import_svg.schema_invalid",
-  "SVG import",
-  undefined,
-);
+export const ImportSvgContract = defineContract<ImportSvgToolInput>({
+  schema: IMPORT_SVG_TOOL_INPUT_SCHEMA,
+  code: "design_import_svg.schema_invalid",
+  subject: "SVG import",
+  maximum: 32,
+});
 
-export const InternalImportSvgContract = contract<InternalImportSvgToolInput>(
-  INTERNAL_IMPORT_SVG_TOOL_INPUT_SCHEMA,
-  "internal_import_svg.schema_invalid",
-  "internal SVG import",
-  undefined,
-  false,
-);
+export const InternalImportSvgContract =
+  defineContract<InternalImportSvgToolInput>({
+    schema: INTERNAL_IMPORT_SVG_TOOL_INPUT_SCHEMA,
+    code: "internal_import_svg.schema_invalid",
+    subject: "internal SVG import",
+    maximum: 32,
+    clone: false,
+  });
 
-export const ExportSvgContract = contract<ExportSvgToolInput>(
-  EXPORT_SVG_TOOL_INPUT_SCHEMA,
-  "design_export_svg.schema_invalid",
-  "SVG export",
-  refinePortableSuggestedName,
-);
+export const ExportSvgContract = defineContract<ExportSvgToolInput>({
+  schema: EXPORT_SVG_TOOL_INPUT_SCHEMA,
+  code: "design_export_svg.schema_invalid",
+  subject: "SVG export",
+  maximum: 32,
+  refine: refinePortableSuggestedName,
+});
 
-export const ExportRasterContract =
-  discriminatedContract<ExportRasterToolInput>(
-    EXPORT_RASTER_TOOL_INPUT_SCHEMA,
-    "format",
-    "design_export_raster.schema_invalid",
-    "Raster export",
-    refinePortableSuggestedName,
-  );
-
-function contract<T>(
-  schema: TSchema,
-  code: string,
-  subject: string,
-  refine: ((value: T) => ValidationIssue[]) | undefined,
-  clone = true,
-) {
-  const parse = (input: unknown): ValidationResult<T> => {
-    const structureIssues = contractSchemaIssues(schema, input, {
-      code,
-      subject,
-      maximum: 32,
-    });
-    if (structureIssues.length > 0) {
-      return { ok: false, issues: structureIssues };
-    }
-    const value = (clone ? structuredClone(input) : input) as T;
-    const domainIssues = refine?.(value) ?? [];
-    return domainIssues.length > 0
-      ? { ok: false, issues: domainIssues }
-      : { ok: true, value };
-  };
-  return {
-    schema,
-    parse,
-    issues: (input: unknown): ValidationIssue[] => {
-      const result = parse(input);
-      return result.ok ? [] : result.issues;
-    },
-  };
-}
-
-function discriminatedContract<T>(
-  schema: TSchema,
-  discriminant: string,
-  code: string,
-  subject: string,
-  refine: ((value: T) => ValidationIssue[]) | undefined,
-) {
-  const parse = (input: unknown): ValidationResult<T> => {
-    const structureIssues = contractDiscriminatedSchemaIssues(
-      schema,
-      input,
-      discriminant,
-      { code, subject, maximum: 32 },
-    );
-    if (structureIssues.length > 0) {
-      return { ok: false, issues: structureIssues };
-    }
-    const value = structuredClone(input) as T;
-    const domainIssues = refine?.(value) ?? [];
-    return domainIssues.length > 0
-      ? { ok: false, issues: domainIssues }
-      : { ok: true, value };
-  };
-  return {
-    schema,
-    parse,
-    issues: (input: unknown): ValidationIssue[] => {
-      const result = parse(input);
-      return result.ok ? [] : result.issues;
-    },
-  };
-}
+export const ExportRasterContract = defineContract<ExportRasterToolInput>({
+  schema: EXPORT_RASTER_TOOL_INPUT_SCHEMA,
+  code: "design_export_raster.schema_invalid",
+  subject: "Raster export",
+  maximum: 32,
+  refine: refinePortableSuggestedName,
+});
 
 function refinePortableSuggestedName(value: {
   suggestedName: string;

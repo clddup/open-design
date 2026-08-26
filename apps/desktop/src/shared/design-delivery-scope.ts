@@ -1,5 +1,5 @@
-import { schemaValidationIssues, Type } from "@opendesign/design-contracts";
-import type { ValidationIssue, ValidationResult } from "./contract-validation";
+import { Type, type Static } from "@opendesign/design-contracts";
+import { defineContract, type ValidationIssue } from "./contract-validation";
 
 const CLOSED = { additionalProperties: false } as const;
 const STABLE_ID_PATTERN = "^[A-Za-z0-9][A-Za-z0-9._:-]*$";
@@ -63,51 +63,17 @@ export const DESIGN_DELIVERY_SCOPE_TOOL_INPUT_SCHEMA = Type.Object(
   },
 );
 
-export type DesignDeliveryScope = {
-  version: 1;
-  deliverable:
-    | "ui"
-    | "poster"
-    | "logo"
-    | "brand-asset"
-    | "illustration"
-    | "presentation-visual"
-    | "other";
-  objective: string;
-  targets: Array<{
-    targetId: string;
-    label: string;
-    objective: string;
-    requiredContent: string[];
-  }>;
-  exclusions: string[];
-  assumptions: string[];
-};
+export type DesignDeliveryScope = Static<
+  typeof DESIGN_DELIVERY_SCOPE_TOOL_INPUT_SCHEMA
+>;
 
-export const DeliveryScopeContract = {
-  parse(input: unknown): ValidationResult<DesignDeliveryScope> {
-    const structural = schemaValidationIssues(
-      DESIGN_DELIVERY_SCOPE_TOOL_INPUT_SCHEMA,
-      input,
-    )
-      .slice(0, 32)
-      .map((issue): ValidationIssue => ({
-        code: "delivery_scope.schema_invalid",
-        path: issue.path || "/",
-        message: issue.message,
-        recovery:
-          "Correct the reported field before asking the user to confirm the delivery plan.",
-      }));
-    if (structural.length > 0) return { ok: false, issues: structural };
-    const value = structuredClone(input) as DesignDeliveryScope;
-    const issues = refineDeliveryScope(value);
-    return issues.length > 0 ? { ok: false, issues } : { ok: true, value };
-  },
-  issues(input: unknown): ValidationIssue[] {
-    const parsed = this.parse(input);
-    return parsed.ok ? [] : parsed.issues;
-  },
-} as const;
+export const DeliveryScopeContract = defineContract<DesignDeliveryScope>({
+  schema: DESIGN_DELIVERY_SCOPE_TOOL_INPUT_SCHEMA,
+  code: "delivery_scope.schema_invalid",
+  subject: "Delivery Scope",
+  maximum: 32,
+  refine: refineDeliveryScope,
+});
 
 export function deliveryScopeApprovalPrompt(
   input: unknown,

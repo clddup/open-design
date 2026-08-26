@@ -1,11 +1,7 @@
 import type { AutoLayout, LayoutLimits } from "@opendesign/design-contracts";
 import { DESIGN_ARRANGE_TOOL_INPUT_SCHEMA } from "./design-arrange-tool-schema";
 import type { DesignArrangeToolInput } from "./design-arrange-tool-types";
-import {
-  contractDiscriminatedSchemaIssues,
-  type ValidationIssue,
-  type ValidationResult,
-} from "./contract-validation";
+import { defineContract, type ValidationIssue } from "./contract-validation";
 
 export {
   DESIGN_ARRANGE_ACTIONS,
@@ -13,40 +9,13 @@ export {
 } from "./design-arrange-tool-schema";
 export type { DesignArrangeToolInput } from "./design-arrange-tool-types";
 
-function parseDesignArrange(
-  input: unknown,
-): ValidationResult<DesignArrangeToolInput> {
-  const structureIssues = contractDiscriminatedSchemaIssues(
-    DESIGN_ARRANGE_TOOL_INPUT_SCHEMA,
-    input,
-    "action",
-    {
-      code: "design_arrange.schema_invalid",
-      subject: "Arrange",
-      maximum: 32,
-    },
-  );
-  if (structureIssues.length > 0) {
-    return { ok: false, issues: structureIssues };
-  }
-
-  const value = structuredClone(input) as DesignArrangeToolInput;
-  const domainIssues = refineDesignArrange(value);
-  return domainIssues.length > 0
-    ? { ok: false, issues: domainIssues }
-    : { ok: true, value };
-}
-
-function designArrangeIssues(input: unknown): ValidationIssue[] {
-  const result = parseDesignArrange(input);
-  return result.ok ? [] : result.issues;
-}
-
-export const DesignArrangeContract = {
+export const DesignArrangeContract = defineContract<DesignArrangeToolInput>({
   schema: DESIGN_ARRANGE_TOOL_INPUT_SCHEMA,
-  parse: parseDesignArrange,
-  issues: designArrangeIssues,
-} as const;
+  code: "design_arrange.schema_invalid",
+  subject: "Arrange",
+  maximum: 32,
+  refine: refineDesignArrange,
+});
 
 function refineDesignArrange(input: DesignArrangeToolInput): ValidationIssue[] {
   if (input.action === "set-auto-layout") {

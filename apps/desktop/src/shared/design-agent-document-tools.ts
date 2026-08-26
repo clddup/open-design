@@ -1,9 +1,5 @@
 import { executableJsonSchema } from "@opendesign/design-contracts";
-import {
-  contractSchemaIssues,
-  type ValidationIssue,
-  type ValidationResult,
-} from "./contract-validation";
+import { defineContract } from "./contract-validation";
 
 export type DesignPageToolInput =
   | {
@@ -183,53 +179,17 @@ export const DESIGN_PAGE_TOOL_INPUT_SCHEMA = executableJsonSchema({
   additionalProperties: false,
 });
 
-function parsePageStructureAccess(
-  input: unknown,
-): ValidationResult<PageStructureAccessToolInput> {
-  const issues = contractSchemaIssues(
-    PAGE_STRUCTURE_ACCESS_TOOL_INPUT_SCHEMA,
-    input,
-    {
-      code: "page_structure_access.schema_invalid",
-      subject: "Page Structure Access",
-      maximum: 16,
-    },
-  );
-  return issues.length > 0
-    ? { ok: false, issues }
-    : {
-        ok: true,
-        value: structuredClone(input as PageStructureAccessToolInput),
-      };
-}
-
-export const PageStructureAccessContract = {
-  schema: PAGE_STRUCTURE_ACCESS_TOOL_INPUT_SCHEMA,
-  parse: parsePageStructureAccess,
-  issues: (input: unknown): ValidationIssue[] => {
-    const result = parsePageStructureAccess(input);
-    return result.ok ? [] : result.issues;
-  },
-} as const;
-
-function parseDesignPage(
-  input: unknown,
-): ValidationResult<DesignPageToolInput> {
-  const issues = contractSchemaIssues(DESIGN_PAGE_TOOL_INPUT_SCHEMA, input, {
-    code: "design_page.schema_invalid",
-    subject: "Page",
+export const PageStructureAccessContract =
+  defineContract<PageStructureAccessToolInput>({
+    schema: PAGE_STRUCTURE_ACCESS_TOOL_INPUT_SCHEMA,
+    code: "page_structure_access.schema_invalid",
+    subject: "Page Structure Access",
     maximum: 16,
   });
-  return issues.length > 0
-    ? { ok: false, issues }
-    : { ok: true, value: structuredClone(input as DesignPageToolInput) };
-}
 
-export const DesignPageContract = {
+export const DesignPageContract = defineContract<DesignPageToolInput>({
   schema: DESIGN_PAGE_TOOL_INPUT_SCHEMA,
-  parse: parseDesignPage,
-  issues: (input: unknown): ValidationIssue[] => {
-    const result = parseDesignPage(input);
-    return result.ok ? [] : result.issues;
-  },
-} as const;
+  code: "design_page.schema_invalid",
+  subject: "Page",
+  maximum: 16,
+});

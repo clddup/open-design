@@ -6,12 +6,7 @@ import type {
   DesignFontToolInput,
   DesignTextRangeToolInput,
 } from "./design-agent-typography-tool-types";
-import {
-  contractDiscriminatedSchemaIssues,
-  contractSchemaIssues,
-  type ValidationIssue,
-  type ValidationResult,
-} from "./contract-validation";
+import { defineContract } from "./contract-validation";
 
 export {
   DESIGN_FONT_TOOL_INPUT_SCHEMA,
@@ -22,74 +17,34 @@ export type {
   DesignTextRangeToolInput,
 } from "./design-agent-typography-tool-types";
 
-function parseDesignFont(
-  input: unknown,
-): ValidationResult<DesignFontToolInput> {
-  const issues = contractDiscriminatedSchemaIssues(
-    DESIGN_FONT_TOOL_INPUT_SCHEMA,
-    input,
-    "action",
-    {
-      code: "design_font.schema_invalid",
-      subject: "Font",
-      maximum: 24,
-    },
-  );
-  return issues.length > 0
-    ? { ok: false, issues }
-    : { ok: true, value: structuredClone(input as DesignFontToolInput) };
-}
-
-export const DesignFontContract = {
+export const DesignFontContract = defineContract<DesignFontToolInput>({
   schema: DESIGN_FONT_TOOL_INPUT_SCHEMA,
-  parse: parseDesignFont,
-  issues: (input: unknown): ValidationIssue[] => {
-    const result = parseDesignFont(input);
-    return result.ok ? [] : result.issues;
-  },
-} as const;
+  code: "design_font.schema_invalid",
+  subject: "Font",
+  maximum: 24,
+});
 
-function parseDesignTextRange(
-  input: unknown,
-): ValidationResult<DesignTextRangeToolInput> {
-  const structureIssues = contractSchemaIssues(
-    DESIGN_TEXT_RANGE_TOOL_INPUT_SCHEMA,
-    input,
-    {
-      code: "design_text_range.schema_invalid",
-      subject: "Text Range",
-      maximum: 24,
+export const DesignTextRangeContract = defineContract<DesignTextRangeToolInput>(
+  {
+    schema: DESIGN_TEXT_RANGE_TOOL_INPUT_SCHEMA,
+    code: "design_text_range.schema_invalid",
+    subject: "Text Range",
+    maximum: 24,
+    refine: (value) => {
+      if (value.end <= value.start) {
+        return [
+          {
+            code: "design_text_range.range_empty",
+            path: "/end",
+            message: "end must be greater than start for a non-empty range",
+            expected: { exclusiveMinimum: value.start },
+            actual: value.end,
+            recovery:
+              "Inspect the current Text content and submit a non-empty UTF-16 [start,end) range without guessing offsets.",
+          },
+        ];
+      }
+      return [];
     },
-  );
-  if (structureIssues.length > 0) {
-    return { ok: false, issues: structureIssues };
-  }
-
-  const value = structuredClone(input as DesignTextRangeToolInput);
-  if (value.end <= value.start) {
-    return {
-      ok: false,
-      issues: [
-        {
-          code: "design_text_range.range_empty",
-          path: "/end",
-          message: "end must be greater than start for a non-empty range",
-          expected: { exclusiveMinimum: value.start },
-          actual: value.end,
-          recovery:
-            "Inspect the current Text content and submit a non-empty UTF-16 [start,end) range without guessing offsets.",
-        },
-      ],
-    };
-  }
-  return { ok: true, value };
-}
-
-export const DesignTextRangeContract = {
-  schema: DESIGN_TEXT_RANGE_TOOL_INPUT_SCHEMA,
-  parse: parseDesignTextRange,
-  issues: (input: unknown): ValidationIssue[] => {
-    const result = parseDesignTextRange(input);
-    return result.ok ? [] : result.issues;
   },
-} as const;
+);

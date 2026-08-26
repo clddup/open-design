@@ -1,47 +1,16 @@
 import type { DesignVariableToolInput } from "./design-variable-tool-contract";
 import { DESIGN_VARIABLE_TOOL_INPUT_SCHEMA } from "./design-variable-tool-schema";
-import {
-  contractDiscriminatedSchemaIssues,
-  type ValidationIssue,
-  type ValidationResult,
-} from "./contract-validation";
+import { defineContract, type ValidationIssue } from "./contract-validation";
 
 export type { DesignVariableToolInput } from "./design-variable-tool-contract";
 
-function parseDesignVariable(
-  input: unknown,
-): ValidationResult<DesignVariableToolInput> {
-  const structureIssues = contractDiscriminatedSchemaIssues(
-    DESIGN_VARIABLE_TOOL_INPUT_SCHEMA,
-    input,
-    "action",
-    {
-      code: "design_variable.schema_invalid",
-      subject: "Variable",
-      maximum: 32,
-    },
-  );
-  if (structureIssues.length > 0) {
-    return { ok: false, issues: structureIssues };
-  }
-
-  const value = input as DesignVariableToolInput;
-  const domainIssues = refineDesignVariable(value);
-  return domainIssues.length > 0
-    ? { ok: false, issues: domainIssues }
-    : { ok: true, value: structuredClone(value) };
-}
-
-function designVariableIssues(input: unknown): ValidationIssue[] {
-  const result = parseDesignVariable(input);
-  return result.ok ? [] : result.issues;
-}
-
-export const DesignVariableContract = {
+export const DesignVariableContract = defineContract<DesignVariableToolInput>({
   schema: DESIGN_VARIABLE_TOOL_INPUT_SCHEMA,
-  parse: parseDesignVariable,
-  issues: designVariableIssues,
-} as const;
+  code: "design_variable.schema_invalid",
+  subject: "Variable",
+  maximum: 32,
+  refine: refineDesignVariable,
+});
 
 function refineDesignVariable(
   input: DesignVariableToolInput,

@@ -1,8 +1,4 @@
-import {
-  executableJsonSchema,
-  schemaValidationIssues,
-  type TSchema,
-} from "@opendesign/design-contracts";
+import { executableJsonSchema } from "@opendesign/design-contracts";
 import {
   builtinDesignSkillRefsForDeliverable,
   isBuiltinDesignSkillRefsForDeliverable,
@@ -28,10 +24,10 @@ import {
   type DesignReferenceStrategy,
 } from "./design-reference-strategy";
 import {
-  contractSchemaIssues,
   type ValidationIssue,
   type ValidationIssueValue,
   type ValidationResult,
+  validateContract,
 } from "./contract-validation";
 import { isRecord, substantiveReviewText } from "./design-agent-validation";
 
@@ -882,39 +878,40 @@ function parseDesignPlan(
 ): ValidationResult<DesignPlanToolInput> {
   const canonicalInput = context.canonical === true;
   const modelInput = canonicalInput ? input : removeModelSkillRefs(input);
-  const structureIssues = planSchemaIssues(
-    canonicalInput
-      ? DESIGN_PLAN_CANONICAL_INPUT_SCHEMA
-      : DESIGN_PLAN_TOOL_INPUT_SCHEMA,
+  if (canonicalInput) {
+    return validateContract<DesignPlanToolInput>(
+      {
+        schema: DESIGN_PLAN_CANONICAL_INPUT_SCHEMA,
+        code: "design_plan.canonical_schema_invalid",
+        subject: "canonical Design Plan",
+        maximum: 32,
+        refine: refineDesignPlan,
+      },
+      modelInput,
+      undefined,
+    );
+  }
+  return validateContract<
+    Omit<DesignPlanToolInput, "skillRefs">,
+    DesignPlanToolInput
+  >(
+    {
+      schema: DESIGN_PLAN_TOOL_INPUT_SCHEMA,
+      code: "design_plan.schema_invalid",
+      subject: "Design Plan",
+      maximum: 32,
+      canonical: {
+        schema: DESIGN_PLAN_CANONICAL_INPUT_SCHEMA,
+        code: "design_plan.host_binding_invalid",
+        subject: "host-bound Design Plan",
+        maximum: 32,
+      },
+      bind: bindDesignPlanHostContext,
+      refine: refineDesignPlan,
+    },
     modelInput,
-    canonicalInput
-      ? "design_plan.canonical_schema_invalid"
-      : "design_plan.schema_invalid",
+    undefined,
   );
-  if (structureIssues.length > 0) {
-    return { ok: false, issues: structureIssues };
-  }
-
-  const value = canonicalInput
-    ? (structuredClone(modelInput) as DesignPlanToolInput)
-    : bindDesignPlanHostContext(
-        modelInput as Omit<DesignPlanToolInput, "skillRefs">,
-      );
-  const canonicalIssues = canonicalInput
-    ? []
-    : planSchemaIssues(
-        DESIGN_PLAN_CANONICAL_INPUT_SCHEMA,
-        value,
-        "design_plan.host_binding_invalid",
-      );
-  if (canonicalIssues.length > 0) {
-    return { ok: false, issues: canonicalIssues };
-  }
-
-  const domainIssues = refineDesignPlan(value);
-  return domainIssues.length > 0
-    ? { ok: false, issues: domainIssues }
-    : { ok: true, value: structuredClone(value) };
 }
 
 export const DesignPlanContract = {
@@ -941,25 +938,9 @@ function bindDesignPlanHostContext(
   input: Omit<DesignPlanToolInput, "skillRefs">,
 ): DesignPlanToolInput {
   return {
-    ...structuredClone(input),
+    ...input,
     skillRefs: builtinDesignSkillRefsForDeliverable(input.deliverable),
   };
-}
-
-function planSchemaIssues(
-  schema: TSchema,
-  value: unknown,
-  code: string,
-): ValidationIssue[] {
-  return schemaValidationIssues(schema, value)
-    .slice(0, 32)
-    .map((schemaIssue) => ({
-      code,
-      path: schemaIssue.path || "/",
-      message: schemaIssue.message,
-      recovery:
-        "Correct the reported Plan field and submit one revised call; do not repeat unchanged arguments.",
-    }));
 }
 
 function refineDesignPlan(input: DesignPlanToolInput): ValidationIssue[] {
@@ -1557,23 +1538,17 @@ function parseDesignVisualReviewModel(
   input: unknown,
 ): ValidationResult<DesignVisualReviewModelInput> {
   const modelInput = removeModelSkillRefs(input);
-  const structureIssues = contractSchemaIssues(
-    DESIGN_VISUAL_REVIEW_TOOL_INPUT_SCHEMA,
-    modelInput,
+  return validateContract<DesignVisualReviewModelInput>(
     {
+      schema: DESIGN_VISUAL_REVIEW_TOOL_INPUT_SCHEMA,
       code: "design_visual_review.schema_invalid",
       subject: "Visual Review",
       maximum: 32,
+      refine: refineDesignVisualReview,
     },
+    modelInput,
+    undefined,
   );
-  if (structureIssues.length > 0) {
-    return { ok: false, issues: structureIssues };
-  }
-  const value = modelInput as DesignVisualReviewModelInput;
-  const domainIssues = refineDesignVisualReview(value);
-  return domainIssues.length > 0
-    ? { ok: false, issues: domainIssues }
-    : { ok: true, value: structuredClone(value) };
 }
 
 function parseDesignVisualReview(
@@ -1581,32 +1556,17 @@ function parseDesignVisualReview(
   context: DesignVisualReviewContractContext = {},
 ): ValidationResult<DesignVisualReviewToolInput> {
   if (context.canonical === true) {
-    const structureIssues = contractSchemaIssues(
-      DESIGN_VISUAL_REVIEW_CANONICAL_INPUT_SCHEMA,
-      input,
+    return validateContract<DesignVisualReviewToolInput>(
       {
+        schema: DESIGN_VISUAL_REVIEW_CANONICAL_INPUT_SCHEMA,
         code: "design_visual_review.canonical_schema_invalid",
         subject: "canonical Visual Review",
         maximum: 32,
+        refine: refineCanonicalDesignVisualReview,
       },
+      input,
+      undefined,
     );
-    if (structureIssues.length > 0) {
-      return { ok: false, issues: structureIssues };
-    }
-    const value = input as DesignVisualReviewToolInput;
-    const domainIssues = refineDesignVisualReview(value);
-    if (!isKnownBuiltinDesignSkillRefs(value.skillRefs)) {
-      domainIssues.push(
-        visualReviewIssue(
-          "design_visual_review.skill_refs_invalid",
-          "/skillRefs",
-          "Visual Review skill refs must identify current built-in review methods",
-        ),
-      );
-    }
-    return domainIssues.length > 0
-      ? { ok: false, issues: domainIssues }
-      : { ok: true, value: structuredClone(value) };
   }
 
   const parsed = parseDesignVisualReviewModel(input);
@@ -1626,13 +1586,20 @@ function parseDesignVisualReview(
       ],
     };
   }
-  return {
-    ok: true,
-    value: {
+  return validateContract<DesignVisualReviewToolInput>(
+    {
+      schema: DESIGN_VISUAL_REVIEW_CANONICAL_INPUT_SCHEMA,
+      code: "design_visual_review.host_binding_invalid",
+      subject: "host-bound Visual Review",
+      maximum: 32,
+      refine: refineCanonicalDesignVisualReview,
+    },
+    {
       ...parsed.value,
       skillRefs: structuredClone([...context.skillRefs]),
     },
-  };
+    undefined,
+  );
 }
 
 export const DesignVisualReviewContract = {
@@ -1682,6 +1649,22 @@ function refineDesignVisualReview(
       );
     }
   });
+  return issues;
+}
+
+function refineCanonicalDesignVisualReview(
+  input: DesignVisualReviewToolInput,
+): ValidationIssue[] {
+  const issues = refineDesignVisualReview(input);
+  if (!isKnownBuiltinDesignSkillRefs(input.skillRefs)) {
+    issues.push(
+      visualReviewIssue(
+        "design_visual_review.skill_refs_invalid",
+        "/skillRefs",
+        "Visual Review skill refs must identify current built-in review methods",
+      ),
+    );
+  }
   return issues;
 }
 
