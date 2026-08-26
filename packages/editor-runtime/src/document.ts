@@ -1,6 +1,7 @@
 import {
   DESIGN_FORMAT,
   DESIGN_SCHEMA_VERSION,
+  DesignDocumentContract,
   DesignDocumentSchema,
   type DesignDocument,
   type DesignNode,
@@ -52,8 +53,18 @@ export class DocumentValidationError extends Error {
 export function normalizeDesignDocument(value: unknown): DesignDocument {
   const migrated = migrateDesignDocument(value);
   if (!migrated) {
+    const contractIssues = DesignDocumentContract.issues(value).map(
+      ({ code, path, message, recovery }) => ({
+        code,
+        path,
+        message,
+        ...(recovery === undefined ? {} : { recovery }),
+      }),
+    );
     throw new DocumentValidationError(
-      schemaValidationIssues(DesignDocumentSchema, value),
+      contractIssues.length > 0
+        ? contractIssues
+        : schemaValidationIssues(DesignDocumentSchema, value),
     );
   }
 
@@ -883,6 +894,7 @@ function textNode(
     childIds: [],
     properties: {
       content: options.content,
+      runs: [],
       fontFamily: "Inter",
       fontStyleName: "Semi Bold",
       fontSize: options.fontSize,
@@ -894,6 +906,7 @@ function textNode(
       paragraphSpacing: 0,
       listSpacing: 0,
       hangingList: false,
+      paragraphRuns: [],
       textCase: "original",
       textDecoration: "none",
       textAlignHorizontal: "left",

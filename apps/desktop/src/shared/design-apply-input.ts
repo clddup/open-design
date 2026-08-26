@@ -1,6 +1,8 @@
 import {
   DesignOperationSchema,
+  MAX_TRANSACTION_COMMANDS,
   Type,
+  designCommandListDomainIssues,
   type DesignOperation,
 } from "@opendesign/design-contracts";
 import {
@@ -83,7 +85,7 @@ export const INTERNAL_DESIGN_APPLY_TOOL_INPUT_SCHEMA = Type.Object(
     ),
     commands: Type.Array(DesignOperationSchema, {
       minItems: 1,
-      maxItems: 1_000,
+      maxItems: MAX_TRANSACTION_COMMANDS,
     }),
     executionMode: Type.Optional(Type.Literal("atomic")),
     rebaseGuard: Type.Optional(PLANNED_DESIGN_REBASE_GUARD_SCHEMA),
@@ -443,6 +445,7 @@ function refineDesignApply(
       ),
     );
   }
+  issues.push(...designCommandListDomainIssues(input.commands));
   for (const [index, command] of input.commands.entries()) {
     if (!isPermittedApplyOperation(command, internal)) {
       issues.push(

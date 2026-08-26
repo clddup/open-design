@@ -3,9 +3,8 @@ import {
   resolveComponentInstance,
 } from "@opendesign/component-service";
 import {
-  DesignTransactionSchema,
+  DesignTransactionContract,
   ViewportStateSchema,
-  isDesignTransaction,
   schemaValidationIssues,
   type DesignActor,
   type DesignChangeSet,
@@ -186,9 +185,14 @@ export class EditorRuntime {
    * authoritative input for their next dependent planning step.
    */
   previewProjectedDocument(transaction: unknown): EditorProjectedPreview {
-    const validation = this.#validateTransaction(transaction, "preview");
+    const parsed = this.#parseTransaction(transaction, "preview");
+    if (!parsed.ok) return { ok: false, result: parsed.result };
+    const typedTransaction = parsed.value;
+    const validation = this.#validateTransactionTarget(
+      typedTransaction,
+      "preview",
+    );
     if (validation) return { ok: false, result: validation };
-    const typedTransaction = transaction as DesignTransaction;
     const executed = this.#execute(typedTransaction);
     if (!executed.ok) {
       return {
@@ -213,23 +217,26 @@ export class EditorRuntime {
     transaction: unknown,
     options: EditorApplyOptions = {},
   ): DesignTransactionResult {
-    if (isDesignTransaction(transaction)) {
-      const stored = this.#transactions.get(transaction.transactionId);
-      if (stored) {
-        if (stored.fingerprint === canonicalJsonStringify(transaction)) {
-          return stored.result;
-        }
-        return this.#failure(transaction, "apply", {
-          code: "duplicate",
-          message: `Transaction ${transaction.transactionId} was already used with different content`,
-          retryable: false,
-        });
+    const parsed = this.#parseTransaction(transaction, "apply");
+    if (!parsed.ok) return parsed.result;
+    const typedTransaction = parsed.value;
+    const stored = this.#transactions.get(typedTransaction.transactionId);
+    if (stored) {
+      if (stored.fingerprint === canonicalJsonStringify(typedTransaction)) {
+        return stored.result;
       }
+      return this.#failure(typedTransaction, "apply", {
+        code: "duplicate",
+        message: `Transaction ${typedTransaction.transactionId} was already used with different content`,
+        retryable: false,
+      });
     }
 
-    const validation = this.#validateTransaction(transaction, "apply");
+    const validation = this.#validateTransactionTarget(
+      typedTransaction,
+      "apply",
+    );
     if (validation) return validation;
-    const typedTransaction = transaction as DesignTransaction;
     const historyRejection = this.#history.validateApply(options);
     if (historyRejection) {
       return this.#failure(typedTransaction, "apply", historyRejection);
@@ -429,32 +436,47 @@ export class EditorRuntime {
     this.#emit({ type: "viewport.changed", viewport: this.#viewport });
   }
 
-  #validateTransaction(
+  #parseTransaction(
     transaction: unknown,
     mode: "preview" | "apply",
-  ): DesignTransactionFailure | null {
+  ):
+    | { ok: true; value: DesignTransaction }
+    | { ok: false; result: DesignTransactionFailure } {
     const fallback = transactionEnvelope(transaction, this.#document);
-    if (!isDesignTransaction(transaction)) {
-      const issues = schemaValidationIssues(
-        DesignTransactionSchema,
-        transaction,
-      );
-      return deepFreeze({
+    const parsed = DesignTransactionContract.parse(transaction);
+    if (!parsed.ok) {
+      return {
         ok: false,
-        mode,
-        ...fallback,
-        revision: this.#revision,
-        error: {
-          code: "invalid",
-          message: "Transaction does not match the design schema",
-          retryable: false,
-          details: issues.map((issue) => ({
-            path: issue.path,
-            message: issue.message,
-          })),
-        },
-      });
+        result: deepFreeze({
+          ok: false,
+          mode,
+          ...fallback,
+          revision: this.#revision,
+          error: {
+            code: "invalid",
+            message: "Transaction does not match the design contract",
+            retryable: false,
+            details: parsed.issues.map(
+              ({ code, path, message, expected, actual, recovery }) => ({
+                code,
+                path,
+                message,
+                ...(expected === undefined ? {} : { expected }),
+                ...(actual === undefined ? {} : { actual }),
+                ...(recovery === undefined ? {} : { recovery }),
+              }),
+            ),
+          },
+        }),
+      };
     }
+    return { ok: true, value: parsed.value };
+  }
+
+  #validateTransactionTarget(
+    transaction: DesignTransaction,
+    mode: "preview" | "apply",
+  ): DesignTransactionFailure | null {
     if (transaction.documentId !== this.#document.documentId) {
       return this.#failure(transaction, mode, {
         code: "invalid",
@@ -472,18 +494,6 @@ export class EditorRuntime {
           currentRevision: this.#document.revision,
         },
       });
-    }
-    const commandIds = new Set<string>();
-    for (const command of transaction.commands) {
-      if (commandIds.has(command.commandId)) {
-        return this.#failure(transaction, mode, {
-          code: "invalid",
-          message: `Command id ${command.commandId} is duplicated`,
-          commandId: command.commandId,
-          retryable: false,
-        });
-      }
-      commandIds.add(command.commandId);
     }
     return null;
   }

@@ -142,6 +142,8 @@ function booleanDocument(): DesignDocument {
     stylesById: {},
     interactionsById: {},
     assetsById: {},
+    imageAssetDerivationOrder: [],
+    imageAssetDerivationsById: {},
     extensions: {},
   });
 }

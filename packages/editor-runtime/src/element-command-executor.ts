@@ -65,12 +65,6 @@ function insertElement(
     );
   }
   assertPage(document, command.pageId, command.commandId);
-  if (command.node.parentId !== command.parentId) {
-    throw new OperationError(
-      command.commandId,
-      "Inserted node parentId does not match the target parent",
-    );
-  }
   const target = targetChildren(
     document,
     command.pageId,
@@ -147,12 +141,6 @@ function updateProperties(
     "properties",
     "extensions",
   ] as const;
-  if (!fields.some((field) => command[field] !== undefined)) {
-    throw new OperationError(
-      command.commandId,
-      "Update must change at least one field",
-    );
-  }
   for (const field of fields) {
     const value = command[field];
     if (value === undefined) continue;
@@ -253,19 +241,7 @@ function replaceSubtree(
   const current = document.nodesById[command.rootNodeId];
   if (!current) throw nodeNotFound(command.commandId, command.rootNodeId);
   const replacement = new Map(command.nodes.map((node) => [node.id, node]));
-  if (replacement.size !== command.nodes.length) {
-    throw new OperationError(
-      command.commandId,
-      "Replacement subtree contains duplicate node ids",
-    );
-  }
-  const root = replacement.get(command.rootNodeId);
-  if (!root) {
-    throw new OperationError(
-      command.commandId,
-      "Replacement nodes must include rootNodeId",
-    );
-  }
+  const root = replacement.get(command.rootNodeId)!;
   if (root.parentId !== current.parentId) {
     throw new OperationError(
       command.commandId,
@@ -284,14 +260,6 @@ function replaceSubtree(
         `Node ${node.id} already exists outside the replaced subtree`,
         "duplicate",
       );
-    }
-    for (const childId of node.childIds) {
-      if (!replacement.has(childId)) {
-        throw new OperationError(
-          command.commandId,
-          `Replacement child ${childId} is missing`,
-        );
-      }
     }
   }
   for (const nodeId of oldIds) delete document.nodesById[nodeId];

@@ -1,4 +1,7 @@
-import { executableJsonSchema } from "@opendesign/design-contracts";
+import {
+  MAX_TRANSACTION_COMMANDS,
+  executableJsonSchema,
+} from "@opendesign/design-contracts";
 import { DESIGN_IMAGE_PLACEMENT_SCHEMA } from "./design-agent-image-tools";
 
 const MODEL_BLEND_MODES = [
@@ -828,6 +831,7 @@ const MODEL_NODE_OPERATION_SCHEMA = {
         extensions: { type: "object" },
       },
       required: ["commandId", "type", "nodeId"],
+      minProperties: 4,
       additionalProperties: false,
     },
     {
@@ -880,7 +884,7 @@ const MODEL_APPLY_STEP_SCHEMA = {
     commandIds: {
       type: "array",
       minItems: 1,
-      maxItems: 1_000,
+      maxItems: MAX_TRANSACTION_COMMANDS,
       items: { type: "string", minLength: 1, maxLength: 256 },
     },
   },
@@ -904,7 +908,7 @@ const MODEL_APPLY_TRANSACTION_SCHEMA = {
     commands: {
       type: "array",
       minItems: 1,
-      maxItems: 1_000,
+      maxItems: MAX_TRANSACTION_COMMANDS,
       items: MODEL_NODE_OPERATION_SCHEMA,
     },
   },

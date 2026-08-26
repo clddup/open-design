@@ -8,8 +8,10 @@ import {
 } from "@opendesign/design-contracts";
 
 export interface DocumentInvariantIssue {
+  code?: string;
   path: string;
   message: string;
+  recovery?: string;
 }
 
 export function validateNodeLayoutInvariants(

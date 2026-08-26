@@ -628,6 +628,7 @@ function text(
     kind: "text",
     properties: {
       content,
+      runs: [],
       fontFamily: "Inter",
       fontStyleName: null,
       fontSize: 14,
@@ -639,6 +640,7 @@ function text(
       paragraphSpacing: 0,
       listSpacing: 0,
       hangingList: false,
+      paragraphRuns: [],
       textCase: "original",
       textDecoration: "none",
       textAlignHorizontal: "center",

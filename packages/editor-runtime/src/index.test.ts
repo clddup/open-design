@@ -174,6 +174,27 @@ describe("document normalization", () => {
     );
   });
 
+  it("preserves structured document-contract issues", () => {
+    const document = structuredClone(createWelcomeDocument());
+    document.nodesById.title_welcome!.layoutLimits = {
+      minWidth: 480,
+      maxWidth: 120,
+    };
+
+    try {
+      normalizeDesignDocument(document);
+      throw new Error("Expected document normalization to fail");
+    } catch (error) {
+      if (!(error instanceof DocumentValidationError)) throw error;
+      expect(error.issues).toContainEqual(
+        expect.objectContaining({
+          code: "design.document_layout_limits_invalid",
+          path: "/nodesById/title_welcome/layoutLimits",
+        }),
+      );
+    }
+  });
+
   it("rejects inherited map keys and mismatched asset identities", () => {
     const inheritedPage = structuredClone(createWelcomeDocument());
     inheritedPage.pageOrder = ["toString"];

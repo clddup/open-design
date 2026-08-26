@@ -32,6 +32,8 @@ import {
   TYPOGRAPHY_CORE_V2_DESIGN_SCHEMA_VERSION,
   ComponentOverridePatchSchema,
   DesignNodeSchema,
+  DesignDocumentContract,
+  DesignTransactionContract,
   DesignOperationSchema,
   DesignTransactionSchema,
   EffectSchema,
@@ -1201,6 +1203,11 @@ function textDocumentFixture() {
     },
     componentsById: {},
     variantSetsById: {},
+    libraryComponentsById: {},
+    libraryVariantSetsById: {},
+    libraryStylesById: {},
+    libraryVariableCollectionsById: {},
+    libraryVariablesById: {},
     variableCollectionOrder: [],
     variableCollectionsById: {},
     variablesById: {},
@@ -1321,6 +1328,27 @@ describe("design contract schemas", () => {
         message: "Value contains an unsupported cyclic structure",
       },
     ]);
+  });
+
+  it("reports current document domain failures with stable codes and paths", () => {
+    const document = textDocumentFixture() as unknown as DesignDocument;
+    document.nodesById.text_1!.layoutLimits = {
+      minWidth: 320,
+      maxWidth: 80,
+    };
+
+    const result = DesignDocumentContract.parse(document);
+
+    expect(result).toEqual({
+      ok: false,
+      issues: [
+        expect.objectContaining({
+          code: "design.document_layout_limits_invalid",
+          path: "/nodesById/text_1/layoutLimits",
+        }),
+      ],
+    });
+    expect(migrateDesignDocument(document)).toBeNull();
   });
 
   it("expands discriminated node union failures to actionable fields", () => {
@@ -3068,6 +3096,66 @@ describe("design contract schemas", () => {
         commands: [inverted],
       }),
     ).toBe(false);
+    expect(
+      DesignTransactionContract.parse({
+        transactionId: "transaction_limits",
+        documentId: "document_1",
+        baseRevision: 0,
+        actor,
+        commands: [inverted],
+      }),
+    ).toEqual({
+      ok: false,
+      issues: [
+        expect.objectContaining({
+          code: "design.operation_layout_limits_invalid",
+          path: "/commands/0/layoutLimits",
+        }),
+      ],
+    });
+  });
+
+  it("owns transaction command identity and operation cross-field rules", () => {
+    const command = operation();
+    const duplicate = DesignTransactionContract.parse({
+      transactionId: "transaction_duplicate_commands",
+      documentId: "document_1",
+      baseRevision: 0,
+      actor,
+      commands: [command, command],
+    });
+    expect(duplicate).toEqual({
+      ok: false,
+      issues: [
+        expect.objectContaining({
+          code: "design.transaction_command_id_duplicate",
+          path: "/commands/1/commandId",
+        }),
+      ],
+    });
+
+    const emptyUpdate = DesignTransactionContract.parse({
+      transactionId: "transaction_empty_update",
+      documentId: "document_1",
+      baseRevision: 0,
+      actor,
+      commands: [
+        {
+          commandId: "empty_update",
+          type: "update_properties",
+          nodeId: "node_1",
+        },
+      ],
+    });
+    expect(emptyUpdate).toEqual({
+      ok: false,
+      issues: [
+        expect.objectContaining({
+          code: "design.transaction_structure_invalid",
+          path: "/commands/0",
+        }),
+      ],
+    });
   });
 
   it("validates explicit constraints and nullable update removal", () => {

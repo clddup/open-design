@@ -887,6 +887,7 @@ function text(id: string, parentId: string, content: string): TextNode {
     kind: "text",
     properties: {
       content,
+      runs: [],
       fontFamily: "Inter",
       fontStyleName: null,
       fontSize: 14,
@@ -898,6 +899,7 @@ function text(id: string, parentId: string, content: string): TextNode {
       paragraphSpacing: 0,
       listSpacing: 0,
       hangingList: false,
+      paragraphRuns: [],
       textCase: "original",
       textDecoration: "none",
       textAlignHorizontal: "center",

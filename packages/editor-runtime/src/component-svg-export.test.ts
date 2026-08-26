@@ -231,6 +231,7 @@ function fixture(): DesignDocument {
     kind: "text",
     properties: {
       content: "Continue",
+      runs: [],
       fontFamily: "Inter",
       fontStyleName: null,
       fontSize: 14,
@@ -242,6 +243,7 @@ function fixture(): DesignDocument {
       paragraphSpacing: 0,
       listSpacing: 0,
       hangingList: false,
+      paragraphRuns: [],
       textCase: "original",
       textDecoration: "none",
       textAlignHorizontal: "center",

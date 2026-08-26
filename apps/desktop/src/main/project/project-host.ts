@@ -1,10 +1,12 @@
 import {
-  isDesignDocument,
   migrateLibraryReleaseSnapshot,
-  migrateDesignDocument,
   type DesignDocument,
   type LibraryReleaseSnapshot,
 } from "@opendesign/design-contracts";
+import {
+  DocumentValidationError,
+  normalizeDesignDocument,
+} from "@opendesign/editor-runtime";
 import { createLibraryReleaseSnapshot } from "@opendesign/library-service";
 import {
   PROJECT_MANIFEST_VERSION,
@@ -381,8 +383,8 @@ export class ProjectHost {
       MAX_DESIGN_FILE_BYTES,
       "INVALID_DESIGN_FILE",
     );
-    const document = migrateDesignDocument(value);
-    if (!document) {
+    const document = parseDesignDocument(value);
+    if (document === null) {
       throw new ProjectHostError(
         "INVALID_DESIGN_FILE",
         `${descriptor.name} is not a valid OpenDesign document`,
@@ -413,7 +415,7 @@ export class ProjectHost {
           `Unknown design file: ${designFileId}`,
         );
       }
-      if (!isDesignDocument(document)) {
+      if (!isValidDesignDocument(document)) {
         throw new ProjectHostError(
           "INVALID_DESIGN_FILE",
           "Cannot save an invalid OpenDesign document",
@@ -945,7 +947,7 @@ async function migrateLegacyStarterProject(
       "INVALID_DESIGN_FILE",
     );
     if (
-      isDesignDocument(value) &&
+      isValidDesignDocument(value) &&
       value.documentId === descriptor.documentId &&
       value.revision === 0 &&
       value.extensions.template === "starter-project"
@@ -1007,9 +1009,22 @@ function assertDesignFileDescriptor(descriptor: DesignFileDescriptor): void {
   }
 }
 
+function parseDesignDocument(value: unknown): DesignDocument | null {
+  try {
+    return normalizeDesignDocument(value);
+  } catch (error) {
+    if (!(error instanceof DocumentValidationError)) throw error;
+    return null;
+  }
+}
+
+function isValidDesignDocument(value: unknown): value is DesignDocument {
+  return parseDesignDocument(value) !== null;
+}
+
 function assertDesignFile(file: CreateDesignFileRequest): void {
   assertDesignFileDescriptor(file.descriptor);
-  if (!isDesignDocument(file.document)) {
+  if (!isValidDesignDocument(file.document)) {
     throw new ProjectHostError(
       "INVALID_DESIGN_FILE",
       "Cannot create an invalid OpenDesign document",
@@ -1377,7 +1392,7 @@ function isProjectSaveJournal(value: unknown): value is ProjectSaveJournal {
     !isNormalizedRelativePath(journal.relativePath) ||
     !isContentHash(journal.nextDocumentHash) ||
     !isContentHash(journal.previousManifestHash) ||
-    !isDesignDocument(journal.nextDocument) ||
+    !isValidDesignDocument(journal.nextDocument) ||
     (journal.operation === "create"
       ? journal.previousDocumentHash !== null
       : !isContentHash(journal.previousDocumentHash))
@@ -1409,7 +1424,7 @@ function areJournalDesignFilesValid(
       !isStableId(file.documentId) ||
       !isNormalizedRelativePath(file.relativePath) ||
       !isContentHash(file.nextDocumentHash) ||
-      !isDesignDocument(file.nextDocument)
+      !isValidDesignDocument(file.nextDocument)
     ) {
       return false;
     }

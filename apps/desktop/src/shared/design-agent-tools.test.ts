@@ -596,6 +596,48 @@ describe("design Agent tool contract", () => {
     ).toBe(false);
   });
 
+  it("rejects operation-domain failures before the Runtime transaction", () => {
+    const emptyUpdate = DesignApplyContract.parse({
+      label: "Empty update",
+      commands: [
+        {
+          commandId: "empty_update",
+          type: "update_properties",
+          nodeId: "hero",
+        },
+      ],
+    });
+    expect(emptyUpdate).toEqual({
+      ok: false,
+      issues: [
+        expect.objectContaining({
+          code: "design_apply.schema_invalid",
+          path: "/commands/0",
+        }),
+      ],
+    });
+
+    const duplicateCommand = {
+      commandId: "duplicate_command",
+      type: "update_properties",
+      nodeId: "hero",
+      opacity: 0.9,
+    } as const;
+    const duplicate = DesignApplyContract.parse({
+      label: "Duplicate commands",
+      commands: [duplicateCommand, duplicateCommand],
+    });
+    expect(duplicate).toEqual({
+      ok: false,
+      issues: [
+        expect.objectContaining({
+          code: "design.transaction_command_id_duplicate",
+          path: "/commands/1/commandId",
+        }),
+      ],
+    });
+  });
+
   it("exposes a path-free versioned raster delivery tool with format-specific validation", () => {
     const tool = DESIGN_AGENT_TOOL_SPECS.find(
       (candidate) => candidate.name === EXPORT_RASTER_TOOL_NAME,

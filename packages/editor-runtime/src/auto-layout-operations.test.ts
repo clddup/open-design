@@ -3113,6 +3113,7 @@ function autoHeightText(
     opacity: 1,
     properties: {
       content: "Responsive copy",
+      runs: [],
       fontFamily: "Inter",
       fontStyleName: null,
       fontSize: 16,
@@ -3124,6 +3125,7 @@ function autoHeightText(
       paragraphSpacing: 0,
       listSpacing: 0,
       hangingList: false,
+      paragraphRuns: [],
       textCase: "original",
       textDecoration: "none",
       textAlignHorizontal: "left",

@@ -13,10 +13,11 @@ export { Type, type Static, type TSchema };
 import { checkSchema } from "./schema-check.js";
 export { executableJsonSchema } from "./schema-check.js";
 import * as layout from "./layout.js";
+import { createDesignDocumentContract } from "./document-contract.js";
 import {
-  designDocumentHasValidLayoutLimits,
-  designOperationHasValidLayoutLimits,
-} from "./layout-limits-validation.js";
+  createDesignOperationContract,
+  createDesignTransactionContract,
+} from "./operation-contract.js";
 import * as limits from "./limits.js";
 import * as versions from "./versions.js";
 import {
@@ -75,6 +76,11 @@ export {
 } from "./regular-geometry.js";
 export * from "./layout.js";
 export * from "./limits.js";
+export {
+  designCommandListDomainIssues,
+  designOperationDomainIssues,
+  designTransactionDomainIssues,
+} from "./operation-domain.js";
 export const DESIGN_FORMAT = "dev.opendesign.document" as const;
 export const NodeKindSchema = Type.Union([
   Type.Literal("frame"),
@@ -1206,7 +1212,7 @@ export const UpdatePropertiesCommandSchema = Type.Object(
     properties: Type.Optional(JsonObjectSchema),
     extensions: Type.Optional(JsonObjectSchema),
   },
-  { additionalProperties: false },
+  { additionalProperties: false, minProperties: 4 },
 );
 
 export const MoveElementCommandSchema = Type.Object(
@@ -2567,13 +2573,11 @@ export type DesignCommand = DesignOperation;
 export type RunAtomicDesignBatchCommand = DesignTransaction;
 
 export function isDesignDocument(value: unknown): value is DesignDocument {
-  return (
-    checkSchema(DesignDocumentSchema, value) &&
-    designDocumentHasValidLayoutLimits(value as DesignDocument) &&
-    designDocumentHasValidTextRuns(value as DesignDocument) &&
-    designDocumentHasValidParagraphRuns(value as DesignDocument)
-  );
+  return DesignDocumentContract.parse(value).ok;
 }
+
+export const DesignDocumentContract =
+  createDesignDocumentContract(DesignDocumentSchema);
 
 export function isDesignAsset(value: unknown): value is DesignAsset {
   return checkSchema(DesignAssetSchema, value);
@@ -2697,11 +2701,8 @@ export function isImagePaint(value: unknown): value is ImagePaint {
   return checkSchema(ImagePaintSchema, value);
 }
 export function migrateDesignDocument(value: unknown): DesignDocument | null {
-  if (checkSchema(DesignDocumentSchema, value)) {
-    const normalized = structuredClone(value) as Record<string, unknown>;
-    migrateTextNodes(normalized);
-    return isDesignDocument(normalized) ? normalized : null;
-  }
+  const current = DesignDocumentContract.parse(value);
+  if (current.ok) return structuredClone(current.value);
   const schemaVersion =
     typeof value === "object" && value !== null && !Array.isArray(value)
       ? (value as { schemaVersion?: unknown }).schemaVersion
@@ -2717,17 +2718,7 @@ export function migrateDesignDocument(value: unknown): DesignDocument | null {
   ) {
     return null;
   }
-  if (schemaVersion === versions.DESIGN_SCHEMA_VERSION) {
-    const normalized = structuredClone(value) as Record<string, unknown>;
-    normalized.libraryComponentsById ??= {};
-    normalized.libraryVariantSetsById ??= {};
-    normalized.libraryStylesById ??= {};
-    normalized.libraryVariableCollectionsById ??= {};
-    normalized.libraryVariablesById ??= {};
-    normalized.imageAssetDerivationOrder ??= [];
-    normalized.imageAssetDerivationsById ??= {};
-    return isDesignDocument(normalized) ? normalized : null;
-  }
+  if (schemaVersion === versions.DESIGN_SCHEMA_VERSION) return null;
   try {
     const migrated = structuredClone(value) as Record<string, unknown>;
     migrated.schemaVersion = versions.DESIGN_SCHEMA_VERSION;
@@ -2853,111 +2844,6 @@ function migrateTextNodes(document: Record<string, unknown>): void {
       textProperties.paragraphRuns = merged;
     }
   }
-}
-
-function designDocumentHasValidParagraphRuns(
-  document: DesignDocument,
-): boolean {
-  for (const node of Object.values(document.nodesById)) {
-    if (node.kind !== "text") continue;
-    const runs = node.properties.paragraphRuns;
-    if (!runs) return false;
-    if (node.properties.content.length === 0) {
-      if (runs.length !== 0) return false;
-      continue;
-    }
-    if (runs.length === 0) continue;
-    let expectedStart = 0;
-    let previousStyle: string | undefined;
-    for (const run of runs) {
-      const style = JSON.stringify(run.style);
-      if (
-        run.start !== expectedStart ||
-        run.end <= run.start ||
-        run.end > node.properties.content.length ||
-        !isParagraphStart(node.properties.content, run.start) ||
-        !isParagraphEnd(node.properties.content, run.end) ||
-        (run.style.listOptions.type !== "none" &&
-          run.style.indentation === 0) ||
-        style === previousStyle
-      ) {
-        return false;
-      }
-      expectedStart = run.end;
-      previousStyle = style;
-    }
-    if (expectedStart !== node.properties.content.length) return false;
-  }
-  return true;
-}
-
-function isParagraphStart(content: string, index: number): boolean {
-  if (index === 0) return true;
-  const previous = content.charCodeAt(index - 1);
-  if (previous === 0x0a) return true;
-  return previous === 0x0d && content.charCodeAt(index) !== 0x0a;
-}
-
-function isParagraphEnd(content: string, index: number): boolean {
-  if (index === content.length) return true;
-  const previous = content.charCodeAt(index - 1);
-  if (previous === 0x0a) return true;
-  return previous === 0x0d && content.charCodeAt(index) !== 0x0a;
-}
-
-function designDocumentHasValidTextRuns(document: DesignDocument): boolean {
-  for (const node of Object.values(document.nodesById)) {
-    if (node.kind !== "text") continue;
-    const runs = node.properties.runs;
-    if (!runs) return false;
-    if (node.properties.content.length === 0) {
-      if (runs.length !== 0) return false;
-      continue;
-    }
-    if (runs.length === 0) continue;
-    let expectedStart = 0;
-    let previousStyle: string | undefined;
-    for (const run of runs) {
-      const style = JSON.stringify(run.style);
-      if (
-        run.start !== expectedStart ||
-        run.end <= run.start ||
-        run.end > node.properties.content.length ||
-        !isUtf16Boundary(node.properties.content, run.start) ||
-        !isUtf16Boundary(node.properties.content, run.end) ||
-        style === previousStyle ||
-        (run.style.textStyleId !== undefined &&
-          documentStyle(document, run.style.textStyleId)?.styleType !==
-            "TEXT") ||
-        (run.style.fillStyleId !== undefined &&
-          documentStyle(document, run.style.fillStyleId)?.styleType !== "PAINT")
-      ) {
-        return false;
-      }
-      expectedStart = run.end;
-      previousStyle = style;
-    }
-    if (expectedStart !== node.properties.content.length) return false;
-  }
-  return true;
-}
-
-function documentStyle(document: DesignDocument, styleId: string) {
-  return (
-    document.stylesById[styleId] ?? document.libraryStylesById[styleId]?.style
-  );
-}
-
-function isUtf16Boundary(content: string, index: number): boolean {
-  if (index === 0 || index === content.length) return true;
-  const before = content.charCodeAt(index - 1);
-  const after = content.charCodeAt(index);
-  return !(
-    before >= 0xd800 &&
-    before <= 0xdbff &&
-    after >= 0xdc00 &&
-    after <= 0xdfff
-  );
 }
 
 function isRecordValue(value: unknown): value is Record<string, unknown> {
@@ -3091,19 +2977,22 @@ function migratePathNodes(
 }
 
 export function isDesignOperation(value: unknown): value is DesignOperation {
-  return checkSchema(DesignOperationSchema, value)
-    ? designOperationHasValidLayoutLimits(value as DesignOperation)
-    : false;
+  return DesignOperationContract.parse(value).ok;
 }
+
+export const DesignOperationContract = createDesignOperationContract(
+  DesignOperationSchema,
+);
 
 export function isDesignTransaction(
   value: unknown,
 ): value is DesignTransaction {
-  if (!checkSchema(DesignTransactionSchema, value)) return false;
-  return (value as DesignTransaction).commands.every(
-    designOperationHasValidLayoutLimits,
-  );
+  return DesignTransactionContract.parse(value).ok;
 }
+
+export const DesignTransactionContract = createDesignTransactionContract(
+  DesignTransactionSchema,
+);
 
 export function isDesignTransactionResult(
   value: unknown,
