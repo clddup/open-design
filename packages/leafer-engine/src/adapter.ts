@@ -47,7 +47,6 @@ import type {
   LeaferCanvasTool,
   LeaferEngineAdapter,
   LeaferEngineCallbacks,
-  LeaferLayerHoverTarget,
   LeaferEngineOptions,
   LeaferEngineSyncInput,
   LeaferRasterExportResult,
@@ -67,19 +66,22 @@ import { SceneReconciler } from "./scene-reconciler.js";
 import { GenerationPresentationController } from "./generation-presentation-controller.js";
 import { SceneProjectionController } from "./scene-projection-controller.js";
 import { LeaferFrameScheduler } from "./frame-scheduler.js";
+import { LeaferAdapterEventController } from "./adapter-event-controller.js";
+import {
+  LayerHoverController,
+  type LayerHoverChromeResource,
+} from "./layer-hover-controller.js";
 
 type LeaferModule = typeof LeaferEditorModule;
 type LeaferApp = InstanceType<LeaferModule["App"]>;
 type LeaferElement = InstanceType<LeaferModule["UI"]>;
 type LeaferGroup = InstanceType<LeaferModule["Group"]>;
 type LeaferEditor = InstanceType<LeaferModule["Editor"]>;
-type LeaferStroker = InstanceType<LeaferModule["Stroker"]>;
 
 const MATRIX_EPSILON = 0.000_001;
 const MIN_VIEWPORT_ZOOM = 0.1;
 const MAX_VIEWPORT_ZOOM = 8;
 const WHEEL_ZOOM_SPEED = 0.16;
-const LAYER_HOVER_COLOR = "#4f7fff";
 const MAX_CAPTURE_WIDTH = 1_280;
 const MAX_CAPTURE_HEIGHT = 960;
 
@@ -101,7 +103,8 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   readonly #host: HTMLElement;
   readonly #leafer: LeaferModule;
   readonly #editor: LeaferEditor;
-  readonly #layerHoverStroker: LeaferStroker;
+  readonly #events: LeaferAdapterEventController;
+  readonly #layerHover: LayerHoverController<LeaferElement>;
   readonly #generationPresentation: GenerationPresentationController;
   readonly #generationPresentationRoot: LeaferGroup;
   readonly #editorOverlays: EditorOverlayController;
@@ -432,17 +435,169 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       root: this.#app.tree as unknown as LeaferGroup,
     });
     this.#generationPresentation.mountForeground();
-    this.#layerHoverStroker = new leafer.Stroker();
-    this.#layerHoverStroker.set({
-      hittable: false,
-      opacity: 0,
-      stroke: LAYER_HOVER_COLOR,
-      strokeAlign: "center",
-      strokePathType: "render-path",
-      strokeWidth: 1,
+    this.#layerHover = new LayerHoverController<LeaferElement>({
+      createChrome: () => {
+        const stroker = new leafer.Stroker();
+        return {
+          get target() {
+            return stroker.target as LeaferElement | null;
+          },
+          get opacity() {
+            return stroker.opacity ?? 0;
+          },
+          mount: (style) => {
+            stroker.set({
+              hittable: false,
+              opacity: style.opacity,
+              stroke: style.color,
+              strokeAlign: "center",
+              strokePathType: "render-path",
+              strokeWidth: style.strokeWidth,
+            });
+            this.#editor.add(stroker);
+          },
+          show: (element, style) =>
+            stroker.setTarget(element, {
+              opacity: style.opacity,
+              stroke: style.color,
+              strokeWidth: style.strokeWidth,
+            }),
+          clearTarget: () => {
+            stroker.target = null as never;
+          },
+          setOpacity: (opacity) => {
+            stroker.opacity = opacity;
+          },
+          update: () => stroker.update(),
+          dispose: () => {
+            stroker.remove();
+            stroker.destroy();
+          },
+        } satisfies LayerHoverChromeResource<LeaferElement>;
+      },
+      componentElement: (target) => this.#componentTargetElement(target),
+      element: (nodeId) => this.#scene.element(nodeId),
+      projectionId: (element) => this.#scene.projectionId(element),
     });
-    this.#editor.add(this.#layerHoverStroker);
-    this.#listen();
+    // Real pan/zoom gestures are emitted by App, while tree is only the
+    // transformed viewport layer. Keep all adjacent sky overlays synchronized
+    // from that event boundary rather than waiting for another React sync.
+    const viewportChanged = () => {
+      this.#scheduleViewport();
+      this.#scheduleEditorRefresh();
+      this.#vectorEditController.syncViewport();
+      this.#editorOverlays.syncViewport();
+      this.#imageCropController.syncViewport();
+      this.#generationPresentation.syncViewport();
+      this.#generationPresentation.scheduleViewportSync();
+    };
+    this.#events = new LeaferAdapterEventController({
+      app: this.#app,
+      editor: this.#editor,
+      editBox: this.#editor.editBox,
+      host: this.#host,
+      keyboardTarget: window,
+      events: {
+        dragStart: leafer.DragEvent.START,
+        drag: leafer.DragEvent.DRAG,
+        dragEnd: leafer.DragEvent.END,
+        editorSelect: leafer.EditorEvent.SELECT,
+        beforeMove: leafer.EditorMoveEvent.BEFORE_MOVE,
+        beforeScale: leafer.EditorScaleEvent.BEFORE_SCALE,
+        beforeRotate: leafer.EditorRotateEvent.BEFORE_ROTATE,
+        beforeSkew: leafer.EditorSkewEvent.BEFORE_SKEW,
+        move: leafer.EditorMoveEvent.MOVE,
+        scale: leafer.EditorScaleEvent.SCALE,
+        rotate: leafer.EditorRotateEvent.ROTATE,
+        skew: leafer.EditorSkewEvent.SKEW,
+        beforeInnerOpen: leafer.InnerEditorEvent.BEFORE_OPEN,
+        innerOpen: leafer.InnerEditorEvent.OPEN,
+        beforeInnerClose: leafer.InnerEditorEvent.BEFORE_CLOSE,
+        innerClose: leafer.InnerEditorEvent.CLOSE,
+        pointerDown: leafer.PointerEvent.DOWN,
+        pointerMove: leafer.PointerEvent.MOVE,
+        pointerUp: leafer.PointerEvent.UP,
+        viewportMove: leafer.MoveEvent.MOVE,
+        viewportMoveEnd: leafer.MoveEvent.END,
+        viewportZoom: leafer.ZoomEvent.ZOOM,
+        viewportZoomEnd: leafer.ZoomEvent.END,
+        viewportResize: leafer.ResizeEvent.RESIZE,
+        renderChildStart: leafer.RenderEvent.CHILD_START,
+      },
+      callbacks: {
+        onSelection: () => this.#emitSelection(),
+        onEditBoxDragStart: () => this.#directTransformController.begin(),
+        onEditBoxDragEnd: (event) => {
+          if (gestureWasCancelled(event)) {
+            this.#directTransformController.cancel(true);
+            return;
+          }
+          this.#directTransformController.finish();
+        },
+        onBeforeTransform: (mode) =>
+          this.#directTransformController.begin(mode),
+        onTransformChanged: () => this.#directTransformController.markChanged(),
+        onBeforeInnerOpen: (event) => {
+          const element =
+            (event as { editTarget?: LeaferElement } | undefined)?.editTarget ??
+            this.#editor.list[0];
+          const nodeId = element && this.#nodeId(element as LeaferElement);
+          if (
+            nodeId &&
+            element === this.#scene.element(nodeId) &&
+            this.#textRunEditor.begin(nodeId)
+          ) {
+            this.#generationPresentation.finishNode(nodeId);
+          }
+        },
+        onInnerOpen: (event) => {
+          const root = (
+            event as { innerEditor?: { editDom?: HTMLDivElement } } | undefined
+          )?.innerEditor?.editDom;
+          if (root) this.#textEditDomController.attach(root);
+        },
+        onBeforeInnerClose: () => this.#textEditDomController.detach(true),
+        onInnerClose: () => this.#finishTextEdit(),
+        onDragStart: (event) => {
+          this.#boxSelectController.start(event);
+          this.#boxDrawController.start(event);
+        },
+        onDrag: (event) => this.#boxDrawController.update(event),
+        onDragEnd: (event) => {
+          this.#boxSelectController.finish(event);
+          this.#boxDrawController.finish(event);
+        },
+        onPointerDown: (event) => {
+          if (this.#editorOverlays.pointerDown(asLeaferEvent(event))) return;
+          this.#imageCropController.pointerDown(event);
+          this.#penToolController.pointerDown(event);
+          this.#vectorEditController.pointerDown(event);
+        },
+        onPointerMove: (event) => {
+          if (this.#editorOverlays.pointerMove(asLeaferEvent(event))) return;
+          this.#imageCropController.pointerMove(event);
+          this.#penToolController.pointerMove(event);
+          this.#vectorEditController.pointerMove(event);
+        },
+        onPointerUp: (event) => {
+          if (this.#editorOverlays.pointerUp(asLeaferEvent(event))) return;
+          this.#imageCropController.pointerUp(event);
+          this.#penToolController.pointerUp(event);
+          this.#vectorEditController.pointerUp(event);
+        },
+        onViewportChanged: viewportChanged,
+        // Programmatic viewport sync may settle tree and sky in different
+        // callbacks; reconcile adjacent chrome at the actual render boundary.
+        onRenderChildStart: () => {
+          this.#editorOverlays.syncViewport();
+          this.#imageCropController.syncViewport();
+          this.#generationPresentation.syncViewport();
+        },
+        onKeyDown: (event) => this.#onWindowKeyDown(event),
+        onKeyUp: (event) => this.#onWindowKeyUp(event),
+        onContextLost: (event) => this.#onContextLost(event),
+      },
+    });
   }
 
   sync(input: LeaferEngineSyncInput): void {
@@ -631,7 +786,13 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       this.#syncTool(input.tool);
       this.#syncViewport(input.viewport);
       this.#syncSelection(input.selection);
-      this.#syncLayerHover(input.layerHoverTarget);
+      this.#layerHover.sync(input.layerHoverTarget, {
+        tool: input.tool,
+        vectorEditing: input.vectorEditScope !== undefined,
+        imageCropActive: this.#imageCropController.active,
+        projection: this.#scene.projection,
+        selectedElements: this.#editor.list as LeaferElement[],
+      });
       this.#textRunEditor.syncPresentation();
       this.#editorOverlays.sync(input);
       this.#generationPresentation.syncSkeleton(input.generationSkeleton);
@@ -735,6 +896,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   dispose(): void {
     if (this.#disposed) return;
     this.#disposed = true;
+    this.#events.dispose();
     this.#sceneProjection.dispose();
     this.#textEditDomController.dispose();
     this.#textRunEditor.clear();
@@ -747,11 +909,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     this.#generationPresentation.dispose();
     this.#frameScheduler.dispose();
     this.#editorOverlays.dispose();
-    this.#layerHoverStroker.remove();
-    this.#layerHoverStroker.destroy();
-    window.removeEventListener("keydown", this.#onWindowKeyDown, true);
-    window.removeEventListener("keyup", this.#onWindowKeyUp, true);
-    this.#host.removeEventListener("contextlost", this.#onContextLost, true);
+    this.#layerHover.dispose();
     this.#app.destroy();
     this.#scene.dispose();
   }
@@ -791,140 +949,6 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   updateTextEditingStyle(style: LeaferTextStyleUpdate): boolean {
     if (this.#disposed) return false;
     return this.#textEditDomController.updateStyle(style);
-  }
-
-  #listen(): void {
-    const {
-      DragEvent,
-      EditorEvent,
-      EditorMoveEvent,
-      EditorRotateEvent,
-      EditorScaleEvent,
-      EditorSkewEvent,
-      InnerEditorEvent,
-      MoveEvent,
-      PointerEvent,
-      RenderEvent,
-      ResizeEvent,
-      ZoomEvent,
-    } = this.#leafer;
-
-    this.#editor.on(EditorEvent.SELECT, () => this.#emitSelection());
-    this.#editor.editBox.on(DragEvent.START, () =>
-      this.#directTransformController.begin(),
-    );
-    this.#editor.editBox.on(DragEvent.END, (event: unknown) => {
-      if (gestureWasCancelled(event)) {
-        this.#directTransformController.cancel(true);
-        return;
-      }
-      this.#directTransformController.finish();
-    });
-
-    const changed = () => this.#directTransformController.markChanged();
-    this.#editor.on(EditorMoveEvent.BEFORE_MOVE, () =>
-      this.#directTransformController.begin("move"),
-    );
-    this.#editor.on(EditorScaleEvent.BEFORE_SCALE, () =>
-      this.#directTransformController.begin("resize"),
-    );
-    this.#editor.on(EditorRotateEvent.BEFORE_ROTATE, () =>
-      this.#directTransformController.begin("rotate"),
-    );
-    this.#editor.on(EditorSkewEvent.BEFORE_SKEW, () =>
-      this.#directTransformController.begin("skew"),
-    );
-    this.#editor.on(EditorMoveEvent.MOVE, changed);
-    this.#editor.on(EditorScaleEvent.SCALE, changed);
-    this.#editor.on(EditorRotateEvent.ROTATE, changed);
-    this.#editor.on(EditorSkewEvent.SKEW, changed);
-
-    this.#editor.on(InnerEditorEvent.BEFORE_OPEN, (event: unknown) => {
-      const element =
-        (event as { editTarget?: LeaferElement } | undefined)?.editTarget ??
-        this.#editor.list[0];
-      const nodeId = element && this.#nodeId(element as LeaferElement);
-      if (
-        nodeId &&
-        element === this.#scene.element(nodeId) &&
-        this.#textRunEditor.begin(nodeId)
-      ) {
-        this.#generationPresentation.finishNode(nodeId);
-      }
-    });
-    this.#editor.on(InnerEditorEvent.OPEN, (event: unknown) => {
-      const root = (
-        event as { innerEditor?: { editDom?: HTMLDivElement } } | undefined
-      )?.innerEditor?.editDom;
-      if (root) this.#textEditDomController.attach(root);
-    });
-    this.#editor.on(InnerEditorEvent.BEFORE_CLOSE, () => {
-      this.#textEditDomController.detach(true);
-    });
-    this.#editor.on(InnerEditorEvent.CLOSE, () => this.#finishTextEdit());
-
-    this.#app.on(DragEvent.START, (event: unknown) => {
-      this.#boxSelectController.start(event);
-      this.#boxDrawController.start(event);
-    });
-    this.#app.on(DragEvent.DRAG, (event: unknown) =>
-      this.#boxDrawController.update(event),
-    );
-    this.#app.on(DragEvent.END, (event: unknown) => {
-      this.#boxSelectController.finish(event);
-      this.#boxDrawController.finish(event);
-    });
-    this.#app.on(PointerEvent.DOWN, (event: unknown) => {
-      if (this.#editorOverlays.pointerDown(asLeaferEvent(event))) return;
-      this.#imageCropController.pointerDown(event);
-      this.#penToolController.pointerDown(event);
-      this.#vectorEditController.pointerDown(event);
-    });
-    this.#app.on(PointerEvent.MOVE, (event: unknown) => {
-      if (this.#editorOverlays.pointerMove(asLeaferEvent(event))) return;
-      this.#imageCropController.pointerMove(event);
-      this.#penToolController.pointerMove(event);
-      this.#vectorEditController.pointerMove(event);
-    });
-    this.#app.on(PointerEvent.UP, (event: unknown) => {
-      if (this.#editorOverlays.pointerUp(asLeaferEvent(event))) return;
-      this.#imageCropController.pointerUp(event);
-      this.#penToolController.pointerUp(event);
-      this.#vectorEditController.pointerUp(event);
-    });
-
-    const viewportChanged = () => {
-      this.#scheduleViewport();
-      this.#scheduleEditorRefresh();
-      this.#vectorEditController.syncViewport();
-      this.#editorOverlays.syncViewport();
-      this.#imageCropController.syncViewport();
-      this.#generationPresentation.syncViewport();
-      this.#generationPresentation.scheduleViewportSync();
-    };
-    // Viewport gestures are emitted by the App interaction dispatcher. The
-    // tree is the transformed zoom layer, not the event owner. Listening on
-    // the tree happened to cover programmatic syncs in unit tests but missed
-    // real pan/zoom gestures, leaving sky-layer presentation at the previous
-    // viewport transform until the next React sync.
-    this.#app.on(MoveEvent.MOVE, viewportChanged);
-    this.#app.on(MoveEvent.END, viewportChanged);
-    this.#app.on(ZoomEvent.ZOOM, viewportChanged);
-    this.#app.on(ZoomEvent.END, viewportChanged);
-    this.#app.on(ResizeEvent.RESIZE, viewportChanged);
-    // Read the sky transform at its actual render boundary. Programmatic
-    // viewport sync and gesture propagation can update tree/sky in different
-    // callbacks, but no Agent child is rendered until this reconciliation has
-    // expressed it relative to the sky's settled transform.
-    this.#app.on(RenderEvent.CHILD_START, () => {
-      this.#editorOverlays.syncViewport();
-      this.#imageCropController.syncViewport();
-      this.#generationPresentation.syncViewport();
-    });
-
-    window.addEventListener("keydown", this.#onWindowKeyDown, true);
-    window.addEventListener("keyup", this.#onWindowKeyUp, true);
-    this.#host.addEventListener("contextlost", this.#onContextLost, true);
   }
 
   #syncTool(tool: LeaferCanvasTool): void {
@@ -979,59 +1003,6 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     }
     this.#editor.target = target.length === 0 ? (null as never) : target;
     this.#scheduleEditorRefresh();
-  }
-
-  #syncLayerHover(target: LeaferLayerHoverTarget | undefined): void {
-    const input = this.#input;
-    const projection = this.#scene.projection;
-    const element = target?.componentTarget
-      ? this.#componentTargetElement(target.componentTarget)
-      : target
-        ? this.#scene.element(target.nodeId)
-        : undefined;
-    const projectionId = element
-      ? this.#scene.projectionId(element)
-      : undefined;
-    const visible =
-      projection && projectionId
-        ? lineage(projectionId, projection).every(
-            (nodeId) =>
-              projection.elementsById.get(nodeId)?.data.visible !== false,
-          )
-        : false;
-    const show =
-      input?.tool === "select" &&
-      !input.vectorEditScope &&
-      !this.#imageCropController.active &&
-      element !== undefined &&
-      visible &&
-      !this.#editor.list.includes(element);
-    if (!show) {
-      this.#clearLayerHover();
-      return;
-    }
-    if (this.#layerHoverStroker.target !== element) {
-      this.#layerHoverStroker.setTarget(element, {
-        opacity: 1,
-        stroke: LAYER_HOVER_COLOR,
-        strokeWidth: 1,
-      });
-    } else if (this.#layerHoverStroker.opacity !== 1) {
-      this.#layerHoverStroker.opacity = 1;
-      this.#layerHoverStroker.update();
-    }
-  }
-
-  #clearLayerHover(): void {
-    if (
-      this.#layerHoverStroker.target === null &&
-      this.#layerHoverStroker.opacity === 0
-    ) {
-      return;
-    }
-    this.#layerHoverStroker.target = null as never;
-    this.#layerHoverStroker.opacity = 0;
-    this.#layerHoverStroker.update();
   }
 
   #emitSelection(): void {
@@ -1424,18 +1395,6 @@ function sameStringList(left: readonly string[], right: readonly string[]) {
     left.length === right.length &&
     left.every((value, index) => value === right[index])
   );
-}
-
-function lineage(nodeId: string, projection: LeaferSceneProjection): string[] {
-  const result: string[] = [];
-  const visited = new Set<string>();
-  let currentId: string | null = nodeId;
-  while (currentId && !visited.has(currentId)) {
-    visited.add(currentId);
-    result.push(currentId);
-    currentId = projection.elementsById.get(currentId)?.parentId ?? null;
-  }
-  return result;
 }
 
 function sameViewport(left: ViewportState, right: ViewportState): boolean {

@@ -51,6 +51,10 @@ class FakeEventTarget {
     this.listeners.set(type, listeners);
   }
 
+  off(type: string, listener: (event?: unknown) => void): void {
+    this.listeners.get(type)?.delete(listener);
+  }
+
   emit(type: string, event?: unknown): void {
     this.listeners.get(type)?.forEach((listener) => listener(event));
   }

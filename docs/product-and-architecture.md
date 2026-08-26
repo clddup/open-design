@@ -387,7 +387,7 @@ OpenPencil vendor/runtime、旧 Canvas2D 产品包、手写 React 画布交互�
 
 指针、键盘、缩放和选区更新不得等待 Agent 或远程服务。长任务异步执行、可取消，并以渐进状态更新 UI。
 
-当前 Leafer adapter 直接消费 `DesignTransaction` 的 `DesignChangeSet`。相邻 revision 只遍历活动 Page 的结构 ID，并为 added/changed/removed 节点及引用变更 asset 的节点重建投影 spec；未变 spec 保持引用稳定，reconcile 只访问该 affected set，只对实际变化的 data、transform 和父子顺序调用 Leafer。普通 revision 不再隐藏 Editor、重放整棵场景或强制更新 tree bounds；只有变化与当前选区存在祖先/后代关系时，才刷新对应选中元素的 bounds。首次挂载、Design File/Page 切换、revision 断档和交互失败恢复仍使用全量可丢弃投影作为正确性回退。固定节点规模、效果复杂度和帧时间的真实 Electron 基准仍需持续记录；不能通过建立第二份可写状态、跳过 revision 或牺牲选区准确性换取表面流畅。
+当前 Leafer adapter 直接消费 `DesignTransaction` 的 `DesignChangeSet`。相邻 revision 只遍历活动 Page 的结构 ID，并为 added/changed/removed 节点及引用变更 asset 的节点重建投影 spec；未变 spec 保持引用稳定，reconcile 只访问该 affected set，只对实际变化的 data、transform 和父子顺序调用 Leafer。普通 revision 不再隐藏 Editor、重放整棵场景或强制更新 tree bounds；只有变化与当前选区存在祖先/后代关系时，才刷新对应选中元素的 bounds。首次挂载、Design File/Page 切换、revision 断档和交互失败恢复仍使用全量可丢弃投影作为正确性回退。Mapping、projection、reconcile、frame scheduler、generation presentation 与七组交互 session 各自拥有完整资源生命周期；`LeaferAdapterEventController` 显式成对管理 Editor/App/Window/host listener，adapter teardown 先停止事件再释放其他 owner；`LayerHoverController` 独占 Layers panel 的不可命中普通/Component-derived hover Stroker 和 visibility/tool/edit-mode 门禁。所有 hover、DOM、marker、preview 与 Leafer element 都是可丢弃投影，不进入 document/history/save/export。固定节点规模、效果复杂度和帧时间的真实 Electron 基准仍需持续记录；不能通过建立第二份可写状态、跳过 revision 或牺牲选区准确性换取表面流畅。见 [ADR-0166](adr/0166-leafer-host-events-and-layer-hover-ownership.md)。
 
 ### 可恢复性
 
