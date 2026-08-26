@@ -5,7 +5,6 @@ import {
   type DesignDocument,
   type DesignNode,
   type LineEndpoint,
-  type Paint,
   type Rect,
   type Transform,
 } from "@opendesign/design-contracts";
@@ -23,7 +22,12 @@ import { DOMImplementation, XMLSerializer } from "@xmldom/xmldom";
 import { applyToPoint, compose, translate } from "transformation-matrix";
 import { SVG_MAX_CHARACTERS } from "./limits.js";
 import {
-  appendSvgEffectFilter,
+  applyExportNodeAppearance,
+  applyExportShapeAppearance,
+  collectSvgGradientDefinitions,
+  importSvgShapeProperties,
+} from "./svg-appearance.js";
+import {
   collectSvgFilterDefinitions,
   readSvgFilterEffects,
 } from "./svg-filter-effects.js";
@@ -76,12 +80,16 @@ import {
   readSvgLength,
   readSvgOpacity,
   readSvgStyleOrAttribute,
-  readSvgUnitInterval,
   rebaseImportedSvgChildren,
   transformFromSvgMatrix,
   transformToSvgMatrix,
   type ImportedSvgStyle,
 } from "./svg-normalize.js";
+import {
+  formatSvgNumber,
+  sanitizeSvgXmlId,
+  serializeSvgMatrixAttribute,
+} from "./svg-serialize.js";
 
 export * from "./svg-issues.js";
 
@@ -286,11 +294,11 @@ export function exportSvg(request: SvgExportRequest): SvgExportResult {
       request.viewport.width,
       request.viewport.height,
     ]
-      .map(formatNumber)
+      .map(formatSvgNumber)
       .join(" "),
   );
-  root.setAttribute("width", formatNumber(request.viewport.width));
-  root.setAttribute("height", formatNumber(request.viewport.height));
+  root.setAttribute("width", formatSvgNumber(request.viewport.width));
+  root.setAttribute("height", formatSvgNumber(request.viewport.height));
   root.setAttribute(
     "data-opendesign-svg-version",
     String(SVG_INTERCHANGE_VERSION),
@@ -385,7 +393,7 @@ export function importSvg(
     activeMaskReferences: new Set(),
     filterDefinitions: collectSvgFilterDefinitions(root),
     geometry,
-    gradientDefinitions: collectGradientDefinitions(root),
+    gradientDefinitions: collectSvgGradientDefinitions(root),
     idPrefix: request.idPrefix,
     issues,
     maskDefinitions,
@@ -503,11 +511,11 @@ function exportNode(
           SVG_NAMESPACE,
           "rect",
         );
-        background.setAttribute("width", formatNumber(node.size.width));
-        background.setAttribute("height", formatNumber(node.size.height));
+        background.setAttribute("width", formatSvgNumber(node.size.width));
+        background.setAttribute("height", formatSvgNumber(node.size.height));
         background.setAttribute(
           "rx",
-          formatNumber(node.properties.cornerRadius),
+          formatSvgNumber(node.properties.cornerRadius),
         );
         background.setAttribute("data-opendesign-frame-background", "true");
         applyExportShapeAppearance(
@@ -581,23 +589,23 @@ function exportNode(
     let element: Element;
     if (node.kind === "rectangle") {
       element = context.document.createElementNS(SVG_NAMESPACE, "rect");
-      element.setAttribute("width", formatNumber(node.size.width));
-      element.setAttribute("height", formatNumber(node.size.height));
-      element.setAttribute("rx", formatNumber(node.properties.cornerRadius));
+      element.setAttribute("width", formatSvgNumber(node.size.width));
+      element.setAttribute("height", formatSvgNumber(node.size.height));
+      element.setAttribute("rx", formatSvgNumber(node.properties.cornerRadius));
     } else if (node.kind === "ellipse") {
       element = context.document.createElementNS(SVG_NAMESPACE, "ellipse");
-      element.setAttribute("cx", formatNumber(node.size.width / 2));
-      element.setAttribute("cy", formatNumber(node.size.height / 2));
-      element.setAttribute("rx", formatNumber(node.size.width / 2));
-      element.setAttribute("ry", formatNumber(node.size.height / 2));
+      element.setAttribute("cx", formatSvgNumber(node.size.width / 2));
+      element.setAttribute("cy", formatSvgNumber(node.size.height / 2));
+      element.setAttribute("rx", formatSvgNumber(node.size.width / 2));
+      element.setAttribute("ry", formatSvgNumber(node.size.height / 2));
     } else if (node.kind === "line") {
       element = context.document.createElementNS(SVG_NAMESPACE, "line");
       const start = resolveLineEndpointPoint(node.size, node.properties.start);
       const end = resolveLineEndpointPoint(node.size, node.properties.end);
-      element.setAttribute("x1", formatNumber(start.x));
-      element.setAttribute("y1", formatNumber(start.y));
-      element.setAttribute("x2", formatNumber(end.x));
-      element.setAttribute("y2", formatNumber(end.y));
+      element.setAttribute("x1", formatSvgNumber(start.x));
+      element.setAttribute("y1", formatSvgNumber(start.y));
+      element.setAttribute("x2", formatSvgNumber(end.x));
+      element.setAttribute("y2", formatSvgNumber(end.y));
       applyExportLineEndpoints(context, element, node);
     } else if (node.kind === "polygon" || node.kind === "star") {
       if (node.properties.cornerRadius > 0) {
@@ -718,7 +726,7 @@ function applyExportLineEndpoints(
 ): void {
   const append = (position: "start" | "end", endpoint: LineEndpoint): void => {
     if (endpoint === "none") return;
-    const id = `od_line_marker_${++context.markerSequence}_${sanitizeXmlId(node.id)}_${position}`;
+    const id = `od_line_marker_${++context.markerSequence}_${sanitizeSvgXmlId(node.id)}_${position}`;
     appendSvgLineEndpointDefinition({
       definitions: context.definitions,
       document: context.document,
@@ -761,7 +769,7 @@ function exportContainerChildren(
       continue;
     }
 
-    const referenceId = `od_${mode === "outline" ? "clip" : "mask"}_${++context.maskSequence}_${sanitizeXmlId(childId)}`;
+    const referenceId = `od_${mode === "outline" ? "clip" : "mask"}_${++context.maskSequence}_${sanitizeSvgXmlId(childId)}`;
     source.setAttribute("data-opendesign-mask-source", "true");
     source.setAttribute("data-opendesign-mask-mode", mode);
     source.setAttribute("data-opendesign-mask-reference", referenceId);
@@ -792,7 +800,7 @@ function exportContainerChildren(
       `url(#${referenceId})`,
     );
     if (mode === "outline" && childNode && childNode.opacity !== 1) {
-      run.setAttribute("opacity", formatNumber(childNode.opacity));
+      run.setAttribute("opacity", formatSvgNumber(childNode.opacity));
     }
     for (const maskedNodeId of maskedNodeIds) {
       const masked = exportNode(context, maskedNodeId);
@@ -807,7 +815,7 @@ function appendFrameClipDefinition(
   context: ExportContext,
   node: Extract<DesignNode, { kind: "frame" | "slot" }>,
 ): string {
-  const clipId = `od_frame_clip_${++context.frameClipSequence}_${sanitizeXmlId(node.id)}`;
+  const clipId = `od_frame_clip_${++context.frameClipSequence}_${sanitizeSvgXmlId(node.id)}`;
   appendSvgFrameClipDefinition({
     definitions: context.definitions,
     document: context.document,
@@ -944,7 +952,7 @@ function applyExportMetadata(
   node: DesignNode,
 ): void {
   if (context.request.includeLayerIds) {
-    element.setAttribute("id", sanitizeXmlId(node.id));
+    element.setAttribute("id", sanitizeSvgXmlId(node.id));
     element.setAttribute("data-opendesign-id", node.id);
   }
   element.setAttribute("data-name", node.name);
@@ -961,183 +969,7 @@ function applyExportTransform(
     selectedRoot && context.request.rootTransformOverrides?.[node.id]
       ? context.request.rootTransformOverrides[node.id]!
       : node.transform;
-  element.setAttribute("transform", matrixAttribute(transform));
-}
-
-function applyExportNodeAppearance(
-  context: ExportContext,
-  element: Element,
-  node: DesignNode,
-  maskSource: boolean,
-): void {
-  if (node.opacity !== 1) {
-    element.setAttribute("opacity", formatNumber(node.opacity));
-  }
-  if (!node.visible) element.setAttribute("display", "none");
-  if (node.blendMode && node.blendMode !== "pass-through") {
-    element.setAttribute("style", `mix-blend-mode:${node.blendMode}`);
-  }
-  if ((node.effects?.length ?? 0) > 0) {
-    const result = appendSvgEffectFilter({
-      definitions: context.definitions,
-      document: context.document,
-      filterId: `od_filter_${++context.filterSequence}_${sanitizeXmlId(node.id)}`,
-      node,
-    });
-    context.issues.push(...result.issues);
-    if (result.filterId) {
-      element.setAttribute("filter", `url(#${result.filterId})`);
-    }
-  }
-  if (!maskSource && node.maskMode && node.maskMode !== "none") {
-    context.issues.push(
-      svgIssue(
-        "mask-omitted",
-        "warning",
-        `Mask source ${node.id} was exported without its parent sibling run, so mode ${node.maskMode} could not be preserved`,
-        { nodeId: node.id },
-      ),
-    );
-  }
-}
-
-function applyExportShapeAppearance(
-  context: ExportContext,
-  element: Element,
-  nodeId: string,
-  properties: ShapeProperties,
-): void {
-  applyExportPaint(context, element, nodeId, "fill", properties.fills);
-  applyExportPaint(context, element, nodeId, "stroke", properties.strokes);
-  if (properties.strokes.length > 0) {
-    element.setAttribute("stroke-width", formatNumber(properties.strokeWidth));
-    element.setAttribute(
-      "stroke-linecap",
-      properties.strokeCap === "round"
-        ? "round"
-        : properties.strokeCap === "square"
-          ? "square"
-          : "butt",
-    );
-    element.setAttribute("stroke-linejoin", properties.strokeJoin ?? "miter");
-    if (properties.dashPattern?.length) {
-      element.setAttribute(
-        "stroke-dasharray",
-        properties.dashPattern.map(formatNumber).join(" "),
-      );
-    }
-    if (properties.strokeAlign && properties.strokeAlign !== "center") {
-      context.issues.push(
-        svgIssue(
-          "stroke-alignment-flattened",
-          "warning",
-          `${properties.strokeAlign} stroke on ${nodeId} requires outline-stroke conversion for standard SVG fidelity`,
-          { nodeId },
-        ),
-      );
-    }
-  }
-}
-
-function applyExportPaint(
-  context: ExportContext,
-  element: Element,
-  nodeId: string,
-  role: "fill" | "stroke",
-  paints: readonly Paint[],
-): void {
-  const visible = paints.filter((paint) => paint.visible !== false);
-  if (visible.length === 0) {
-    element.setAttribute(role, "none");
-    return;
-  }
-  if (visible.length > 1) {
-    context.issues.push(
-      svgIssue(
-        "multiple-paints-flattened",
-        "warning",
-        `SVG ${role} on ${nodeId} keeps only the first of ${visible.length} visible paints`,
-        { nodeId },
-      ),
-    );
-  }
-  const paint = visible[0]!;
-  if (paint.type === "solid") {
-    element.setAttribute(role, paint.color);
-    if (paint.opacity !== 1) {
-      element.setAttribute(`${role}-opacity`, formatNumber(paint.opacity));
-    }
-    return;
-  }
-  if (paint.type === "angular-gradient") {
-    const first = paint.stops[0];
-    element.setAttribute(role, first?.color ?? "none");
-    if (first && first.opacity !== 1) {
-      element.setAttribute(`${role}-opacity`, formatNumber(first.opacity));
-    }
-    context.issues.push(
-      svgIssue(
-        "angular-gradient-flattened",
-        "warning",
-        `Angular gradient ${role} on ${nodeId} has no standard SVG 1.1 equivalent and is reduced to its first stop`,
-        { nodeId },
-      ),
-    );
-    return;
-  }
-  if (paint.type === "image") {
-    element.setAttribute(role, "none");
-    context.issues.push(
-      svgIssue(
-        "unsupported-paint",
-        "error",
-        `Image ${role} on ${nodeId} is not supported by the current SVG vector slice`,
-        { nodeId },
-      ),
-    );
-    return;
-  }
-
-  const gradientId = `od_gradient_${sanitizeXmlId(nodeId)}_${role}_${context.gradientSequence++}`;
-  const gradient = context.document.createElementNS(
-    SVG_NAMESPACE,
-    paint.type === "linear-gradient" ? "linearGradient" : "radialGradient",
-  );
-  gradient.setAttribute("id", gradientId);
-  gradient.setAttribute("gradientUnits", "objectBoundingBox");
-  if (paint.type === "linear-gradient") {
-    gradient.setAttribute("x1", formatNumber(paint.from?.x ?? 0));
-    gradient.setAttribute("y1", formatNumber(paint.from?.y ?? 0.5));
-    gradient.setAttribute("x2", formatNumber(paint.to?.x ?? 1));
-    gradient.setAttribute("y2", formatNumber(paint.to?.y ?? 0.5));
-  } else {
-    const center = paint.from ?? { x: 0.5, y: 0.5 };
-    const edge = paint.to ?? { x: 1, y: 0.5 };
-    gradient.setAttribute("cx", formatNumber(center.x));
-    gradient.setAttribute("cy", formatNumber(center.y));
-    gradient.setAttribute(
-      "r",
-      formatNumber(Math.hypot(edge.x - center.x, edge.y - center.y)),
-    );
-  }
-  if (paint.rotation !== undefined) {
-    gradient.setAttribute(
-      "gradientTransform",
-      `rotate(${formatNumber(paint.rotation)} 0.5 0.5)`,
-    );
-  }
-  for (const stop of paint.stops) {
-    const stopElement = context.document.createElementNS(SVG_NAMESPACE, "stop");
-    stopElement.setAttribute("offset", formatNumber(stop.offset));
-    stopElement.setAttribute("stop-color", stop.color);
-    stopElement.setAttribute("stop-opacity", formatNumber(stop.opacity));
-    gradient.appendChild(stopElement);
-  }
-  context.definitions.appendChild(gradient);
-  element.setAttribute(role, `url(#${gradientId})`);
-  if (paint.opacity !== 1) {
-    element.setAttribute(`${role}-opacity`, formatNumber(paint.opacity));
-  }
+  element.setAttribute("transform", serializeSvgMatrixAttribute(transform));
 }
 
 function importContainerChildren(
@@ -1715,7 +1547,12 @@ function importElement(
       );
       return null;
     }
-    const shape = importShapeProperties(context, element, localStyle, nodeId);
+    const shape = importSvgShapeProperties(
+      context,
+      element,
+      localStyle,
+      nodeId,
+    );
     if (!shape) return null;
     if (!svgTextShapeMatches(serializedText.value.properties, shape)) {
       context.issues.push(
@@ -1742,7 +1579,7 @@ function importElement(
     return nodeId;
   }
 
-  const properties = importShapeProperties(
+  const properties = importSvgShapeProperties(
     context,
     element,
     localStyle,
@@ -2128,7 +1965,7 @@ function importFrameElement(
     inheritedStyle,
     context.issues,
   );
-  const shape = importShapeProperties(
+  const shape = importSvgShapeProperties(
     context,
     background,
     backgroundStyle,
@@ -2221,175 +2058,6 @@ function importFrameElement(
   return nodeId;
 }
 
-function importShapeProperties(
-  context: ImportContext,
-  element: Element,
-  style: ImportedSvgStyle,
-  nodeId: string,
-): ShapeProperties | null {
-  if (!Number.isFinite(style.strokeWidth) || style.strokeWidth < 0) {
-    context.issues.push(
-      svgIssue(
-        "invalid-dimension",
-        "error",
-        `SVG stroke width on ${nodeId} must be finite and non-negative`,
-        { nodeId, sourceElement: element.localName },
-      ),
-    );
-    return null;
-  }
-  const fill = importPaint(
-    context,
-    element,
-    style.fill,
-    style.fillOpacity,
-    nodeId,
-  );
-  const stroke = importPaint(
-    context,
-    element,
-    style.stroke,
-    style.strokeOpacity,
-    nodeId,
-  );
-  if (fill === null || stroke === null) return null;
-  return {
-    fills: fill ? [fill] : [],
-    strokes: stroke ? [stroke] : [],
-    strokeWidth: style.stroke === "none" ? 0 : style.strokeWidth,
-    strokeAlign: "center",
-    strokeCap: style.strokeCap,
-    strokeJoin: style.strokeJoin,
-    dashPattern: style.dashPattern,
-  };
-}
-
-function importPaint(
-  context: ImportContext,
-  element: Element,
-  value: string,
-  opacity: number,
-  nodeId: string,
-): Paint | undefined | null {
-  const paint = value.trim();
-  if (paint === "none") return undefined;
-  if (
-    paint === "currentColor" ||
-    paint === "context-fill" ||
-    paint === "context-stroke"
-  ) {
-    context.issues.push(
-      svgIssue(
-        "unsupported-paint",
-        "error",
-        `SVG paint ${paint} on ${nodeId} depends on an unsupported external style context`,
-        { nodeId, sourceElement: element.localName },
-      ),
-    );
-    return null;
-  }
-  const reference = /^url\(\s*#([^\s)]+)\s*\)$/.exec(paint);
-  if (!reference) {
-    if (/^url\(/i.test(paint)) {
-      context.issues.push(
-        svgIssue(
-          "external-reference",
-          "error",
-          `SVG paint on ${nodeId} references an external resource`,
-          { nodeId, sourceElement: element.localName },
-        ),
-      );
-      return null;
-    }
-    return { type: "solid", color: paint, opacity };
-  }
-  const definition = context.gradientDefinitions.get(reference[1]!);
-  if (!definition) {
-    context.issues.push(
-      svgIssue(
-        "unsupported-gradient",
-        "error",
-        `SVG gradient #${reference[1]} is missing`,
-        { nodeId, sourceElement: element.localName },
-      ),
-    );
-    return null;
-  }
-  if (
-    definition.getAttribute("gradientUnits") &&
-    definition.getAttribute("gradientUnits") !== "objectBoundingBox"
-  ) {
-    context.issues.push(
-      svgIssue(
-        "unsupported-gradient",
-        "error",
-        `SVG gradient #${reference[1]} uses unsupported user-space coordinates`,
-        { nodeId, sourceElement: element.localName },
-      ),
-    );
-    return null;
-  }
-  const stops = elementChildren(definition)
-    .filter((child) => child.localName.toLowerCase() === "stop")
-    .map((stop) => ({
-      offset: readSvgUnitInterval(readSvgStyleOrAttribute(stop, "offset"), 0),
-      color: readSvgStyleOrAttribute(stop, "stop-color") || "#000000",
-      opacity: readSvgOpacity(readSvgStyleOrAttribute(stop, "stop-opacity"), 1),
-    }));
-  if (stops.length < 2) {
-    context.issues.push(
-      svgIssue(
-        "unsupported-gradient",
-        "error",
-        `SVG gradient #${reference[1]} requires at least two stops`,
-        { nodeId },
-      ),
-    );
-    return null;
-  }
-  const rotation = readGradientRotation(definition, context.issues);
-  if (definition.localName.toLowerCase() === "lineargradient") {
-    return {
-      type: "linear-gradient",
-      opacity,
-      stops,
-      from: {
-        x: readSvgUnitInterval(definition.getAttribute("x1"), 0),
-        y: readSvgUnitInterval(definition.getAttribute("y1"), 0.5),
-      },
-      to: {
-        x: readSvgUnitInterval(definition.getAttribute("x2"), 1),
-        y: readSvgUnitInterval(definition.getAttribute("y2"), 0.5),
-      },
-      ...(rotation === undefined ? {} : { rotation }),
-    };
-  }
-  if (definition.localName.toLowerCase() === "radialgradient") {
-    const center = {
-      x: readSvgUnitInterval(definition.getAttribute("cx"), 0.5),
-      y: readSvgUnitInterval(definition.getAttribute("cy"), 0.5),
-    };
-    const radius = readSvgUnitInterval(definition.getAttribute("r"), 0.5);
-    return {
-      type: "radial-gradient",
-      opacity,
-      stops,
-      from: center,
-      to: { x: center.x + radius, y: center.y },
-      ...(rotation === undefined ? {} : { rotation }),
-    };
-  }
-  context.issues.push(
-    svgIssue(
-      "unsupported-gradient",
-      "error",
-      `SVG gradient #${reference[1]} is not linear or radial`,
-      { nodeId },
-    ),
-  );
-  return null;
-}
-
 function readElementPath(
   element: Element,
   tag: string,
@@ -2402,7 +2070,7 @@ function readElementPath(
     const x2 = readSvgLength(element, "x2", 0, issues);
     const y2 = readSvgLength(element, "y2", 0, issues);
     if ([x1, y1, x2, y2].some((value) => value === null)) return null;
-    return `M ${formatNumber(x1!)} ${formatNumber(y1!)} L ${formatNumber(x2!)} ${formatNumber(y2!)}`;
+    return `M ${formatSvgNumber(x1!)} ${formatSvgNumber(y1!)} L ${formatSvgNumber(x2!)} ${formatSvgNumber(y2!)}`;
   }
   if (tag === "polygon" || tag === "polyline") {
     const values = (element.getAttribute("points") ?? "")
@@ -2420,7 +2088,7 @@ function readElementPath(
     const commands: string[] = [];
     for (let index = 0; index < values.length; index += 2) {
       commands.push(
-        `${index === 0 ? "M" : "L"} ${formatNumber(values[index]!)} ${formatNumber(values[index + 1]!)}`,
+        `${index === 0 ? "M" : "L"} ${formatSvgNumber(values[index]!)} ${formatSvgNumber(values[index + 1]!)}`,
       );
     }
     if (tag === "polygon") commands.push("Z");
@@ -2466,48 +2134,6 @@ function reportUnsupportedElementAttributes(
   }
 }
 
-function collectGradientDefinitions(
-  root: Element,
-): ReadonlyMap<string, Element> {
-  const definitions = new Map<string, Element>();
-  const pending = [root];
-  while (pending.length > 0) {
-    const element = pending.pop();
-    if (!element) break;
-    const tag = element.localName.toLowerCase();
-    const id = element.getAttribute("id");
-    if (id && (tag === "lineargradient" || tag === "radialgradient")) {
-      definitions.set(id, element);
-    }
-    pending.push(...elementChildren(element));
-  }
-  return definitions;
-}
-
-function readGradientRotation(
-  definition: Element,
-  issues: SvgInterchangeIssue[],
-): number | undefined {
-  const value = definition.getAttribute("gradientTransform")?.trim();
-  if (!value) return undefined;
-  const match =
-    /^rotate\(\s*([+-]?(?:\d+\.?\d*|\.\d+))(?:[ ,]+0\.5[ ,]+0\.5)?\s*\)$/i.exec(
-      value,
-    );
-  if (!match) {
-    issues.push(
-      svgIssue(
-        "unsupported-gradient",
-        "error",
-        "SVG gradientTransform currently supports only rotate(angle 0.5 0.5)",
-        { sourceElement: definition.localName },
-      ),
-    );
-    return undefined;
-  }
-  return Number(match[1]);
-}
-
 function elementChildren(element: Element): Element[] {
   const children: Element[] = [];
   for (let index = 0; index < element.childNodes.length; index += 1) {
@@ -2528,7 +2154,7 @@ function readSvgName(element: Element): string {
 
 function nextImportedNodeId(context: ImportContext, tag: string): string {
   context.nodeSequence += 1;
-  return `${context.idPrefix}_${context.nodeSequence.toString().padStart(4, "0")}_${sanitizeXmlId(tag)}`;
+  return `${context.idPrefix}_${context.nodeSequence.toString().padStart(4, "0")}_${sanitizeSvgXmlId(tag)}`;
 }
 
 function isFinitePositiveRect(value: Rect): boolean {
@@ -2544,21 +2170,6 @@ function isFinitePositiveRect(value: Rect): boolean {
 
 function hasErrors(issues: readonly SvgInterchangeIssue[]): boolean {
   return issues.some((issue) => issue.severity === "error");
-}
-
-function matrixAttribute(transform: Transform): string {
-  return `matrix(${transform.map(formatNumber).join(" ")})`;
-}
-
-function sanitizeXmlId(value: string): string {
-  const sanitized = value.replace(/[^A-Za-z0-9_.-]/g, "_");
-  return /^[A-Za-z_]/.test(sanitized) ? sanitized : `od_${sanitized}`;
-}
-
-function formatNumber(value: number): string {
-  if (!Number.isFinite(value)) return "0";
-  const rounded = Math.round(value * 1_000_000) / 1_000_000;
-  return Object.is(rounded, -0) ? "0" : String(rounded);
 }
 
 function capitalize(value: string): string {
@@ -2590,20 +2201,3 @@ function failed(issues: readonly SvgInterchangeIssue[]): SvgFailureResult {
     issues,
   };
 }
-
-// These aliases keep the public service tied to OpenDesign's versioned
-// contracts without exposing third-party DOM or matrix values.
-type ShapeProperties = Extract<
-  DesignNode,
-  {
-    kind:
-      | "boolean"
-      | "ellipse"
-      | "frame"
-      | "line"
-      | "path"
-      | "rectangle"
-      | "text"
-      | "vector";
-  }
->["properties"];
