@@ -55,6 +55,14 @@ export interface EditorSnapshot {
   state: EditorState;
 }
 
+export type EditorProjectedPreview =
+  | {
+      ok: true;
+      result: DesignTransactionSuccess;
+      document: DesignDocument;
+    }
+  | { ok: false; result: DesignTransactionFailure };
+
 export type EditorRuntimeListener = (
   event: EditorEvent,
   snapshot: EditorSnapshot,
@@ -168,20 +176,37 @@ export class EditorRuntime {
   }
 
   preview(transaction: unknown): DesignTransactionResult {
+    return this.previewProjectedDocument(transaction).result;
+  }
+
+  /**
+   * Projects a transaction through the exact Runtime command, text, and
+   * Auto Layout pipeline without mutating document, history, selection, or
+   * revision state. Multi-intent planners use the projected document as the
+   * authoritative input for their next dependent planning step.
+   */
+  previewProjectedDocument(transaction: unknown): EditorProjectedPreview {
     const validation = this.#validateTransaction(transaction, "preview");
-    if (validation) return validation;
+    if (validation) return { ok: false, result: validation };
     const typedTransaction = transaction as DesignTransaction;
     const executed = this.#execute(typedTransaction);
     if (!executed.ok) {
-      return this.#failure(typedTransaction, "preview", executed.error);
+      return {
+        ok: false,
+        result: this.#failure(typedTransaction, "preview", executed.error),
+      };
     }
-    return this.#success(
-      typedTransaction,
-      "preview",
-      executed.document,
-      executed.changes,
-      executed.warnings,
-    );
+    return {
+      ok: true,
+      result: this.#success(
+        typedTransaction,
+        "preview",
+        executed.document,
+        executed.changes,
+        executed.warnings,
+      ),
+      document: executed.document,
+    };
   }
 
   apply(

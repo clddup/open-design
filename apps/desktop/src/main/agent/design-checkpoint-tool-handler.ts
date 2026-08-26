@@ -5,8 +5,8 @@ import type {
 } from "@opendesign/agent-contracts";
 import { isTrustedToolFailure } from "@opendesign/agent-contracts";
 import {
-  DESIGN_APPLY_TOOL_NAME,
   DESIGN_CAPTURE_TOOL_NAME,
+  INTERNAL_DESIGN_APPLY_TOOL_NAME,
   DesignCheckpointContract,
   type DesignApplyToolInput,
   type DesignCheckpointToolInput,
@@ -65,7 +65,7 @@ export async function handleDesignCheckpointTool(
   const input = parsed.value;
   if (input.action === "apply-and-capture") {
     const applied = await dependencies.apply(
-      subcall(call, "apply", DESIGN_APPLY_TOOL_NAME, input.apply),
+      subcall(call, "apply", INTERNAL_DESIGN_APPLY_TOOL_NAME, input.apply),
       input.apply,
       scaleProgress(reportProgress, 0, 0.58),
     );
@@ -83,7 +83,7 @@ export async function handleDesignCheckpointTool(
 
   dependencies.assertRefinementReady();
   const applied = await dependencies.apply(
-    subcall(call, "refine", DESIGN_APPLY_TOOL_NAME, input.refinement),
+    subcall(call, "refine", INTERNAL_DESIGN_APPLY_TOOL_NAME, input.refinement),
     input.refinement,
     scaleProgress(reportProgress, 0, 0.62),
   );

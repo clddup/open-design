@@ -7,6 +7,7 @@ export const DESIGN_DELIVERY_SCOPE_TOOL_NAME =
 export const DESIGN_FIRST_SLICE_TOOL_NAME = "opendesign_generate_first_slice";
 export const DESIGN_REVIEW_TOOL_NAME = "opendesign_record_visual_review";
 export const DESIGN_CHECKPOINT_TOOL_NAME = "opendesign_design_checkpoint";
+export const DESIGN_EDIT_TOOL_NAME = "opendesign_edit_design";
 export const DESIGN_APPLY_TOOL_NAME = "opendesign_apply_transaction";
 export const DESIGN_HIERARCHY_TOOL_NAME = "opendesign_edit_hierarchy";
 export const DESIGN_ARRANGE_TOOL_NAME = "opendesign_arrange_layers";

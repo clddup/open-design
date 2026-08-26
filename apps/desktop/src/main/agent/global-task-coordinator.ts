@@ -27,7 +27,7 @@ import {
 import type { ProjectHost } from "../project/project-host.js";
 import type { WorkspaceStore } from "../project/workspace-store.js";
 import {
-  DESIGN_ARRANGE_TOOL_NAME,
+  DESIGN_EDIT_TOOL_NAME,
   designApplyRequiresPlan,
   activeVisualReferenceIds,
   designPlanComponentStrategy,
@@ -802,11 +802,20 @@ export class GlobalTaskCoordinator {
         nextAction: "repair-layout-overflow",
         reviewEligible: false,
         repair: {
-          toolName: DESIGN_ARRANGE_TOOL_NAME,
+          toolName: DESIGN_EDIT_TOOL_NAME,
           input: {
-            action: "repair-overflow",
-            pageId: target.planned.pageId,
-            frameId: target.planned.artboard.frameId,
+            label: "Repair delivery overflow",
+            edits: [
+              {
+                kind: "arrange",
+                input: {
+                  action: "repair-overflow",
+                  label: "Expand safe trailing overflow",
+                  pageId: target.planned.pageId,
+                  frameId: target.planned.artboard.frameId,
+                },
+              },
+            ],
           },
           errorCount: layoutQuality.errorCount,
         },

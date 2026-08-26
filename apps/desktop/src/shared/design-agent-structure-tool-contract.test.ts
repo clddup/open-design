@@ -2,8 +2,8 @@ import { schemaValidationIssues } from "@opendesign/design-contracts";
 import { describe, expect, it } from "vitest";
 import {
   DESIGN_AGENT_TOOL_SPECS,
+  DESIGN_EDIT_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_INPUT_SCHEMA,
-  DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_VECTOR_TOOL_INPUT_SCHEMA,
   DESIGN_VECTOR_TOOL_NAME,
   DesignHierarchyContract,
@@ -333,16 +333,13 @@ describe("Hierarchy and Vector Agent contracts", () => {
   });
 
   it("wires Pi validation to the same contracts", () => {
-    const hierarchy = DESIGN_AGENT_TOOL_SPECS.find(
-      (tool) => tool.name === DESIGN_HIERARCHY_TOOL_NAME,
+    const editDesign = DESIGN_AGENT_TOOL_SPECS.find(
+      (tool) => tool.name === DESIGN_EDIT_TOOL_NAME,
     );
     const vector = DESIGN_AGENT_TOOL_SPECS.find(
       (tool) => tool.name === DESIGN_VECTOR_TOOL_NAME,
     );
-    expect(hierarchy).toHaveProperty(
-      "validateInputIssues",
-      DesignHierarchyContract.issues,
-    );
+    expect(editDesign?.description).toContain("Hierarchy edits support");
     expect(vector).toHaveProperty(
       "validateInputIssues",
       DesignVectorContract.issues,

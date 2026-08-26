@@ -15,6 +15,7 @@ import {
   DESIGN_CAPTURE_TOOL_NAME,
   DESIGN_COMPONENT_TOOL_NAME,
   DESIGN_DELIVERY_SCOPE_TOOL_NAME,
+  DESIGN_EDIT_TOOL_NAME,
   DESIGN_FIRST_SLICE_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
@@ -390,8 +391,9 @@ function editableInsertedLayerCount(
       count += compactFirstSliceMaterialCount(call.input);
       continue;
     }
-    if (call.toolName !== DESIGN_APPLY_TOOL_NAME) continue;
-    for (const command of readCommands(call.input)) {
+    const commands = materialNodeCommands(call);
+    if (commands.length === 0) continue;
+    for (const command of commands) {
       if (command.type !== "insert_element" || !isRecord(command.node)) {
         continue;
       }
@@ -422,8 +424,7 @@ function findMaterialWriteIndex(
     ) {
       return index;
     }
-    if (call.toolName !== DESIGN_APPLY_TOOL_NAME) continue;
-    const commands = readCommands(call.input);
+    const commands = materialNodeCommands(call);
     if (commands.length === 0) continue;
     if (firstStructuralWriteIndex < 0) firstStructuralWriteIndex = index;
     if (commands.some((command) => command.type === "replace_subtree")) {
@@ -447,11 +448,26 @@ function isSuccessfulDesignWrite(call: AgentToolCallRecord): boolean {
     call.toolName === EDIT_IMAGE_TOOL_NAME ||
     call.toolName === DESIGN_ARRANGE_TOOL_NAME ||
     call.toolName === DESIGN_HIERARCHY_TOOL_NAME ||
+    call.toolName === DESIGN_EDIT_TOOL_NAME ||
     call.toolName === DESIGN_FIRST_SLICE_TOOL_NAME ||
     (call.toolName === DESIGN_COMPONENT_TOOL_NAME &&
       isMaterialComponentWrite(call.input)) ||
     (call.toolName === DESIGN_APPLY_TOOL_NAME &&
       readCommands(call.input).length > 0)
+  );
+}
+
+function materialNodeCommands(call: AgentToolCallRecord) {
+  if (call.toolName === DESIGN_APPLY_TOOL_NAME) return readCommands(call.input);
+  if (call.toolName !== DESIGN_EDIT_TOOL_NAME || !isRecord(call.input)) {
+    return [];
+  }
+  const edits = call.input.edits;
+  if (!Array.isArray(edits)) return [];
+  return edits.flatMap((edit) =>
+    isRecord(edit) && edit.kind === "node" && isRecord(edit.input)
+      ? readCommands(edit.input)
+      : [],
   );
 }
 

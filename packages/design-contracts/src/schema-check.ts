@@ -72,7 +72,16 @@ function cloneSchemaKeyword(key: string, value: unknown): unknown {
       }),
     );
   }
-  if (key === "items" || key === "additionalProperties") {
+  if (key === "items") {
+    if (Array.isArray(value)) {
+      if (!value.every(isRecord)) {
+        throw new TypeError("JSON Schema tuple items must contain schemas");
+      }
+      return value.map(decorateSchema);
+    }
+    return isRecord(value) ? decorateSchema(value) : value;
+  }
+  if (key === "additionalProperties") {
     return isRecord(value) ? decorateSchema(value) : value;
   }
   if (key === "anyOf") {
@@ -94,6 +103,7 @@ function cloneJsonValue(value: unknown): unknown {
 
 function schemaKind(schema: JsonSchema): string {
   if (Object.keys(schema).length === 0) return "Any";
+  if (schema.type === "array" && Array.isArray(schema.items)) return "Tuple";
   if (Array.isArray(schema.anyOf) && typeof schema.type === "string") {
     return "Intersect";
   }

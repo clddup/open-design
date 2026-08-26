@@ -4,7 +4,7 @@ import {
   DESIGN_AGENT_TOOL_SPECS,
   DESIGN_ARRANGE_ACTIONS,
   DESIGN_ARRANGE_TOOL_INPUT_SCHEMA,
-  DESIGN_ARRANGE_TOOL_NAME,
+  DESIGN_EDIT_TOOL_NAME,
   DesignArrangeContract,
   type DesignArrangeToolInput,
 } from "./design-agent-tools.js";
@@ -156,10 +156,9 @@ describe("Arrange Agent contract", () => {
       });
     }
     const spec = DESIGN_AGENT_TOOL_SPECS.find(
-      (candidate) => candidate.name === DESIGN_ARRANGE_TOOL_NAME,
+      (candidate) => candidate.name === DESIGN_EDIT_TOOL_NAME,
     );
-    expect(spec?.inputSchema).toBe(DesignArrangeContract.schema);
-    expect(spec?.validateInputIssues).toBe(DesignArrangeContract.issues);
+    expect(spec?.description).toContain("Arrange edits support");
     expect(JSON.stringify(DESIGN_ARRANGE_TOOL_INPUT_SCHEMA)).not.toContain(
       '"oneOf"',
     );

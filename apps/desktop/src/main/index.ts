@@ -106,12 +106,11 @@ import type { RendererDesignCaptureTarget } from "@/shared/design-tool-bridge";
 import { registerRendererDesignToolIpc } from "./agent/renderer-design-tool-ipc";
 import { channels } from "@/shared/desktop-api";
 import { handleDesignSystemTool } from "./agent/design-system-tool-handler.js";
-import { handleDesignStructureTool } from "./agent/design-structure-tool-handler.js";
-import { handleDesignArrangeTool } from "./agent/design-arrange-tool-handler.js";
+import { handleDesignVectorTool } from "./agent/design-vector-tool-handler.js";
+import { handleEditDesignTool } from "./agent/design-edit-tool-handler.js";
 import { handleDesignTypographyTool } from "./agent/design-typography-tool-handler.js";
 import { translate } from "@/shared/i18n/messages";
 import {
-  DESIGN_APPLY_TOOL_NAME,
   DESIGN_CAPTURE_TOOL_NAME,
   DESIGN_CHECKPOINT_TOOL_NAME,
   DESIGN_COMPONENT_TOOL_NAME,
@@ -904,18 +903,16 @@ async function startDesktopApplication(
         );
         const resolvedInput = authorization?.input ?? normalizedInput;
         const result = await executeRendererTool(
-          authorization
-            ? {
-                ...applyCall,
-                toolName: INTERNAL_DESIGN_APPLY_TOOL_NAME,
-                input: {
-                  ...resolvedInput,
-                  ...(authorization.rebaseGuard
-                    ? { rebaseGuard: authorization.rebaseGuard }
-                    : {}),
-                },
-              }
-            : { ...applyCall, input: normalizedInput },
+          {
+            ...applyCall,
+            toolName: INTERNAL_DESIGN_APPLY_TOOL_NAME,
+            input: {
+              ...resolvedInput,
+              ...(authorization?.rebaseGuard
+                ? { rebaseGuard: authorization.rebaseGuard }
+                : {}),
+            },
+          },
           stageProgress ? { reportProgress: stageProgress } : {},
         );
         globalTaskCoordinator!.assertDesignApplyResult(
@@ -1645,13 +1642,14 @@ async function startDesktopApplication(
         );
         return withDesignDelivery(result, context.runId);
       }
-      if (call.toolName === DESIGN_APPLY_TOOL_NAME) {
-        const parsedInput = DesignApplyContract.parse(call.input);
-        if (!parsedInput.ok) {
-          throw new TypeError("Invalid design apply tool input");
-        }
-        return await executeDesignApply(call, parsedInput.value);
-      }
+      const editDesignResult = await handleEditDesignTool({
+        call,
+        context,
+        coordinator: globalTaskCoordinator,
+        execute: executeRendererTool,
+        withDelivery: withDesignDelivery,
+      });
+      if (editDesignResult) return editDesignResult;
       const designTypographyResult = await handleDesignTypographyTool({
         call,
         context,
@@ -1744,22 +1742,14 @@ async function startDesktopApplication(
         withDelivery: withDesignDelivery,
       });
       if (designSystemResult) return designSystemResult;
-      const designStructureResult = await handleDesignStructureTool({
+      const designVectorResult = await handleDesignVectorTool({
         call,
         context,
         coordinator: globalTaskCoordinator,
         execute: executeRendererTool,
         withDelivery: withDesignDelivery,
       });
-      if (designStructureResult) return designStructureResult;
-      const designArrangeResult = await handleDesignArrangeTool({
-        call,
-        context,
-        coordinator: globalTaskCoordinator,
-        execute: executeRendererTool,
-        withDelivery: withDesignDelivery,
-      });
-      if (designArrangeResult) return designArrangeResult;
+      if (designVectorResult) return designVectorResult;
       if (call.toolName === DESIGN_CAPTURE_TOOL_NAME) {
         return await executeCanvasCapture(call);
       }

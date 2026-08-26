@@ -18,29 +18,17 @@ import {
   diagnoseDesignPages,
   planClearPage,
   planCreatePage,
-  planCreateBooleanGroup,
-  planCreateMaskGroup,
   planDeletePage,
   planDuplicatePage,
-  planGroupNodes,
   planImageNodeUpdate,
   planImagePaintFilterUpdate,
-  planReparentNodes,
-  planReorderNodes,
   planRenamePage,
   planReorderPage,
   planSvgImport,
-  planSetBooleanOperation,
-  planSetMaskType,
-  planRemoveMask,
-  planUngroupBooleanGroup,
-  planUngroupNode,
   planVectorLayersLineCut,
   planVectorLayersVertexTransform,
   planVectorSemanticEdit,
   type EditorRuntime,
-  type BooleanOperationPlan,
-  type LayerOperationPlan,
 } from "@opendesign/editor-runtime";
 import {
   DESIGN_ARRANGE_TOOL_NAME,
@@ -49,6 +37,7 @@ import {
   EXPORT_RASTER_TOOL_NAME,
   EXPORT_SVG_TOOL_NAME,
   DESIGN_APPLY_TOOL_NAME,
+  DESIGN_EDIT_TOOL_NAME,
   DESIGN_FONT_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
@@ -64,6 +53,7 @@ import {
   DesignComponentContract,
   DesignFontContract,
   DesignHierarchyContract,
+  EditDesignContract,
   DesignPageContract,
   DesignTextRangeContract,
   DesignVectorContract,
@@ -77,6 +67,7 @@ import {
   type DesignPageToolInput,
   type DesignTextRangeToolInput,
   type InternalDesignApplyToolInput,
+  type InternalDesignEditToolInput,
 } from "@/shared/design-agent-tools";
 import { formatValidationFailure } from "@/shared/contract-validation";
 import { createAgentDesignIdAllocation } from "@/shared/design-id-allocation";
@@ -94,6 +85,7 @@ import { normalizeAgentTextContent } from "./agent-text-normalization";
 import { throwIfAgentGenerationAborted } from "./agent-generation-timing";
 import { executeSemanticDesignTransaction } from "./design-transaction-steps";
 import { planDesignArrangeTool } from "./design-arrange-tool-plan";
+import { planDesignHierarchyTool } from "./design-hierarchy-tool-plan";
 import { planDesignComponentTool } from "./design-component-tool-plan";
 import { createScopedComponentInspection } from "./design-component-inspection";
 import { createScopedVariableInspection } from "./design-variable-inspection";
@@ -785,6 +777,19 @@ async function executeDesignToolRequestUnsafe(
     };
   }
 
+  if (request.call.toolName === DESIGN_EDIT_TOOL_NAME) {
+    const parsed = EditDesignContract.parse(request.call.input, {
+      canonical: true,
+      internal: true,
+    });
+    if (!parsed.ok) {
+      throw new TypeError(
+        formatValidationFailure("Edit Design", parsed.issues),
+      );
+    }
+    return executeAtomicEditDesign(request, runtime, parsed.value, options);
+  }
+
   if (request.call.toolName === DESIGN_HIERARCHY_TOOL_NAME) {
     const parsed = DesignHierarchyContract.parse(request.call.input);
     if (!parsed.ok) {
@@ -800,95 +805,7 @@ async function executeDesignToolRequestUnsafe(
     );
     const commandPrefix =
       `hierarchy_${input.action}_${request.call.toolCallId}`.slice(0, 200);
-    let plan: LayerOperationPlan | BooleanOperationPlan;
-    switch (input.action) {
-      case "group":
-        plan = planGroupNodes(document, input.pageId, input.nodeIds, {
-          groupId: input.groupId,
-          name: input.name,
-          commandPrefix,
-        });
-        break;
-      case "ungroup":
-        plan = planUngroupNode(
-          document,
-          input.pageId,
-          input.groupId,
-          commandPrefix,
-        );
-        break;
-      case "create-mask":
-        plan = planCreateMaskGroup(document, input.pageId, input.nodeIds, {
-          groupId: input.groupId,
-          name: input.name,
-          maskType: input.maskType,
-          commandPrefix,
-        });
-        break;
-      case "set-mask-type":
-        plan = planSetMaskType(
-          document,
-          input.pageId,
-          input.maskNodeId,
-          input.maskType,
-          commandPrefix,
-        );
-        break;
-      case "remove-mask":
-        plan = planRemoveMask(
-          document,
-          input.pageId,
-          input.maskNodeId,
-          commandPrefix,
-        );
-        break;
-      case "create-boolean":
-        plan = planCreateBooleanGroup(
-          document,
-          input.pageId,
-          input.nodeIds,
-          input.operation,
-          {
-            booleanId: input.booleanId,
-            name: input.name,
-            commandPrefix,
-          },
-        );
-        break;
-      case "set-boolean-operation":
-        plan = planSetBooleanOperation(
-          document,
-          input.pageId,
-          input.booleanId,
-          input.operation,
-          commandPrefix,
-        );
-        break;
-      case "ungroup-boolean":
-        plan = planUngroupBooleanGroup(
-          document,
-          input.pageId,
-          input.booleanId,
-          commandPrefix,
-        );
-        break;
-      case "reorder":
-        plan = planReorderNodes(
-          document,
-          input.pageId,
-          input.nodeIds,
-          input.order,
-          commandPrefix,
-        );
-        break;
-      case "reparent":
-        plan = planReparentNodes(document, input.pageId, input.nodeIds, {
-          parentId: input.parentId,
-          index: input.index,
-          commandPrefix,
-        });
-        break;
-    }
+    const plan = planDesignHierarchyTool(document, input, commandPrefix);
     if (!plan.ok) {
       throw new Error(`hierarchy.${plan.code}: ${plan.message}`);
     }
@@ -1678,6 +1595,171 @@ async function executeDesignToolRequestUnsafe(
   });
 }
 
+function executeAtomicEditDesign(
+  request: RendererDesignToolRequest,
+  runtime: EditorRuntime,
+  input: InternalDesignEditToolInput,
+  options: ExecuteDesignToolOptions,
+): RendererDesignToolResponse {
+  const document = runtime.getSnapshot().document;
+  const transactionId =
+    `transaction_agent_edit_${request.call.toolCallId}_${Date.now()}`.slice(
+      0,
+      256,
+    );
+  const commands: DesignOperation[] = [];
+  const summaries: Array<Record<string, unknown>> = [];
+  let workingDocument = document;
+
+  input.edits.forEach((edit, index) => {
+    const commandPrefix = `edit_${index}_${request.call.toolCallId}`.slice(
+      0,
+      200,
+    );
+    let nextCommands: readonly DesignOperation[];
+    if (edit.kind === "node") {
+      nextCommands = normalizeAgentTextContent(
+        normalizeAgentInsertHierarchy(edit.input.commands),
+      );
+      assertAgentDoesNotBypassAutoLayout(workingDocument, nextCommands);
+      assertAgentDoesNotBypassImageWorkflow(workingDocument, nextCommands);
+      summaries.push({
+        kind: edit.kind,
+        label: edit.input.label,
+        commandCount: nextCommands.length,
+      });
+    } else if (edit.kind === "hierarchy") {
+      assertPageWithinMutationTarget(
+        edit.input.pageId,
+        request.context.mutationTarget,
+        "Edit Design hierarchy",
+      );
+      const plan = planDesignHierarchyTool(
+        workingDocument,
+        edit.input,
+        commandPrefix,
+      );
+      if (!plan.ok) {
+        throw new Error(`edit-design.hierarchy.${plan.code}: ${plan.message}`);
+      }
+      nextCommands = plan.commands;
+      summaries.push({
+        kind: edit.kind,
+        action: edit.input.action,
+        label: edit.input.label,
+      });
+    } else {
+      assertPageWithinMutationTarget(
+        edit.input.pageId,
+        request.context.mutationTarget,
+        "Edit Design arrangement",
+      );
+      const plan = planDesignArrangeTool(
+        workingDocument,
+        edit.input,
+        commandPrefix,
+      );
+      if (!plan.ok) {
+        throw new Error(`edit-design.arrange.${plan.code}: ${plan.message}`);
+      }
+      nextCommands = plan.commands;
+      summaries.push({
+        kind: edit.kind,
+        action: edit.input.action,
+        label: edit.input.label,
+      });
+    }
+
+    assertCommandsWithinMutationTarget(
+      workingDocument,
+      nextCommands,
+      request.context.mutationTarget,
+    );
+    commands.push(...nextCommands);
+    const transaction = editDesignTransaction(
+      request,
+      input.label,
+      transactionId,
+      document,
+      commands,
+    );
+    throwIfAgentGenerationAborted(options.signal);
+    const projected = runtime.previewProjectedDocument(transaction);
+    if (!projected.ok) {
+      throw designTransactionToolError(projected.result.error, commands);
+    }
+    workingDocument = projected.document;
+  });
+
+  if (commands.length === 0) {
+    throw new Error("Edit Design did not produce a valid projected document");
+  }
+  const transaction = editDesignTransaction(
+    request,
+    input.label,
+    transactionId,
+    document,
+    commands,
+  );
+  throwIfAgentGenerationAborted(options.signal);
+  const result = runtime.apply(transaction);
+  if (!result.ok) {
+    throw designTransactionToolError(result.error, transaction.commands);
+  }
+  const committedSteps = input.edits.flatMap((edit) =>
+    edit.kind !== "node" || edit.input.steps === undefined
+      ? []
+      : edit.input.steps.map((step) => ({
+          stepIds: [step.stepId],
+          label: step.label,
+          revision: result.revision.revision,
+        })),
+  );
+  return {
+    requestId: request.requestId,
+    ok: true,
+    result: {
+      content: {
+        ok: true,
+        action: "edit-design",
+        label: input.label,
+        edits: summaries,
+        revision: result.revision.revision,
+        atomic: true,
+        changes: result.changes,
+        warnings: result.warnings,
+        ...(committedSteps.length > 0 ? { committedSteps } : {}),
+      },
+      designRevision: {
+        previousRevision: transaction.baseRevision,
+        revision: result.revision.revision,
+        transactionId: transaction.transactionId,
+      },
+    },
+  };
+}
+
+function editDesignTransaction(
+  request: RendererDesignToolRequest,
+  label: string,
+  transactionId: string,
+  document: DesignDocument,
+  commands: readonly DesignOperation[],
+): DesignTransaction {
+  return {
+    transactionId,
+    documentId: document.documentId,
+    baseRevision: document.revision,
+    actor: {
+      type: "agent",
+      id: `agent_${request.context.sessionId}`,
+      displayName: "OpenDesign Agent",
+    },
+    label,
+    commands: [...commands],
+  };
+}
+
 function designApplyInput(
   request: RendererDesignToolRequest,
 ): InternalDesignApplyToolInput | undefined {
@@ -1734,12 +1816,12 @@ function assertAgentDoesNotBypassAutoLayout(
           : [];
     if (commandNodes.some((node) => node.layoutPositioning !== undefined)) {
       throw new Error(
-        `design_workflow.auto_layout_requires_layout_tool: Configure flow or absolute positioning with opendesign_arrange_layers action set-layout-positioning`,
+        `design_workflow.auto_layout_requires_layout_tool: Configure flow or absolute positioning with opendesign_edit_design arrange edit action set-layout-positioning`,
       );
     }
     if (commandNodes.some((node) => node.gridPlacement !== undefined)) {
       throw new Error(
-        `design_workflow.auto_layout_requires_layout_tool: Configure Grid cells and spans with opendesign_arrange_layers action set-grid-placement`,
+        `design_workflow.auto_layout_requires_layout_tool: Configure Grid cells and spans with opendesign_edit_design arrange edit action set-grid-placement`,
       );
     }
     const writesLayoutGuides =
@@ -1752,7 +1834,7 @@ function assertAgentDoesNotBypassAutoLayout(
         Object.hasOwn(command.properties, "layoutGuides"));
     if (writesLayoutGuides) {
       throw new Error(
-        `design_workflow.layout_guides_requires_layout_tool: Configure Frame layout guides with opendesign_arrange_layers action set-layout-guides`,
+        `design_workflow.layout_guides_requires_layout_tool: Configure Frame layout guides with opendesign_edit_design arrange edit action set-layout-guides`,
       );
     }
     if (
@@ -1760,7 +1842,7 @@ function assertAgentDoesNotBypassAutoLayout(
       command.layoutSizing !== undefined
     ) {
       throw new Error(
-        `design_workflow.auto_layout_requires_layout_tool: Configure flow-child sizing with opendesign_arrange_layers action set-layout-sizing`,
+        `design_workflow.auto_layout_requires_layout_tool: Configure flow-child sizing with opendesign_edit_design arrange edit action set-layout-sizing`,
       );
     }
     if (
@@ -1768,7 +1850,7 @@ function assertAgentDoesNotBypassAutoLayout(
       command.layoutPositioning !== undefined
     ) {
       throw new Error(
-        `design_workflow.auto_layout_requires_layout_tool: Configure flow or absolute positioning with opendesign_arrange_layers action set-layout-positioning`,
+        `design_workflow.auto_layout_requires_layout_tool: Configure flow or absolute positioning with opendesign_edit_design arrange edit action set-layout-positioning`,
       );
     }
     if (
@@ -1776,7 +1858,7 @@ function assertAgentDoesNotBypassAutoLayout(
       command.layoutLimits !== undefined
     ) {
       throw new Error(
-        `design_workflow.auto_layout_requires_layout_tool: Configure Auto Layout min/max sizing with opendesign_arrange_layers action set-layout-limits`,
+        `design_workflow.auto_layout_requires_layout_tool: Configure Auto Layout min/max sizing with opendesign_edit_design arrange edit action set-layout-limits`,
       );
     }
     if (
@@ -1784,7 +1866,7 @@ function assertAgentDoesNotBypassAutoLayout(
       command.gridPlacement !== undefined
     ) {
       throw new Error(
-        `design_workflow.auto_layout_requires_layout_tool: Configure Grid cells and spans with opendesign_arrange_layers action set-grid-placement`,
+        `design_workflow.auto_layout_requires_layout_tool: Configure Grid cells and spans with opendesign_edit_design arrange edit action set-grid-placement`,
       );
     }
     if (
@@ -1793,7 +1875,7 @@ function assertAgentDoesNotBypassAutoLayout(
       Object.hasOwn(command.properties, "autoLayout")
     ) {
       throw new Error(
-        `design_workflow.auto_layout_requires_layout_tool: Configure Frame Auto Layout with opendesign_arrange_layers action set-auto-layout`,
+        `design_workflow.auto_layout_requires_layout_tool: Configure Frame Auto Layout with opendesign_edit_design arrange edit action set-auto-layout`,
       );
     }
   }
@@ -1948,10 +2030,8 @@ function canRebasePlannedInsert(
   request: RendererDesignToolRequest,
   document: DesignDocument,
 ): boolean {
-  const input = internalDesignApplyInput(request);
-  if (request.call.toolName !== INTERNAL_DESIGN_APPLY_TOOL_NAME || !input) {
-    return false;
-  }
+  const input = plannedRebaseApplyInput(request);
+  if (!input) return false;
   const guard = input.rebaseGuard;
   if (
     !guard ||
@@ -1993,6 +2073,22 @@ function canRebasePlannedInsert(
       ),
     );
   });
+}
+
+function plannedRebaseApplyInput(
+  request: RendererDesignToolRequest,
+): InternalDesignApplyToolInput | undefined {
+  if (request.call.toolName === INTERNAL_DESIGN_APPLY_TOOL_NAME) {
+    return internalDesignApplyInput(request);
+  }
+  if (request.call.toolName !== DESIGN_EDIT_TOOL_NAME) return undefined;
+  const parsed = EditDesignContract.parse(request.call.input, {
+    canonical: true,
+    internal: true,
+  });
+  if (!parsed.ok || parsed.value.edits.length !== 1) return undefined;
+  const edit = parsed.value.edits[0];
+  return edit?.kind === "node" ? edit.input : undefined;
 }
 
 function currentParentChainReaches(

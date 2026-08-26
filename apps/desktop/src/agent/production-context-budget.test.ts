@@ -26,8 +26,8 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   DESIGN_AGENT_TOOL_SPECS,
-  DESIGN_APPLY_TOOL_NAME,
-  DESIGN_BOOTSTRAP_APPLY_INPUT_SCHEMA,
+  DESIGN_EDIT_TOOL_NAME,
+  DESIGN_BOOTSTRAP_EDIT_TOOL_INPUT_SCHEMA,
   DESIGN_CAPABILITIES_TOOL_NAME,
   DESIGN_CAPTURE_TOOL_NAME,
   DESIGN_COMPONENT_TOOL_NAME,
@@ -131,7 +131,7 @@ describe("production Agent context budget", () => {
         expect.objectContaining({ name: DESIGN_FIRST_SLICE_TOOL_NAME }),
       );
       expect(gateway.requests[0]?.tools).not.toContainEqual(
-        expect.objectContaining({ name: DESIGN_APPLY_TOOL_NAME }),
+        expect.objectContaining({ name: DESIGN_EDIT_TOOL_NAME }),
       );
       expect(
         (gateway.requests[0]?.system.length ?? 0) +
@@ -313,7 +313,7 @@ describe("production Agent context budget", () => {
         expect.objectContaining({ name: DESIGN_INSPECT_TOOL_NAME }),
       );
       expect(gateway.requests[0]?.tools).toContainEqual(
-        expect.objectContaining({ name: DESIGN_APPLY_TOOL_NAME }),
+        expect.objectContaining({ name: DESIGN_EDIT_TOOL_NAME }),
       );
       expect(gateway.requests[0]?.tools).not.toContainEqual(
         expect.objectContaining({ name: DESIGN_DELIVERY_SCOPE_TOOL_NAME }),
@@ -331,9 +331,9 @@ describe("production Agent context budget", () => {
       );
       expect(
         gateway.requests[0]?.tools.find(
-          (tool) => tool.name === DESIGN_APPLY_TOOL_NAME,
+          (tool) => tool.name === DESIGN_EDIT_TOOL_NAME,
         )?.inputSchema,
-      ).toEqual(DESIGN_BOOTSTRAP_APPLY_INPUT_SCHEMA);
+      ).toEqual(DESIGN_BOOTSTRAP_EDIT_TOOL_INPUT_SCHEMA);
       expect(events).not.toContainEqual(
         expect.objectContaining({ type: "agent.error" }),
       );

@@ -288,6 +288,7 @@ export {
   EditorRuntime,
   type EditorRuntimeListener,
   type EditorRuntimeOptions,
+  type EditorProjectedPreview,
   type EditorSnapshot,
 } from "./runtime.js";
 export { diffDocuments } from "./document-diff.js";

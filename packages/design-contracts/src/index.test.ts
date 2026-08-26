@@ -240,6 +240,43 @@ describe("executable JSON Schema", () => {
     ).toHaveLength(0);
   });
 
+  it("preserves tuple item metadata when executable schemas are composed", () => {
+    const transform = executableJsonSchema({
+      type: "array",
+      minItems: 6,
+      maxItems: 6,
+      items: [
+        { type: "number" },
+        { type: "number" },
+        { type: "number" },
+        { type: "number" },
+        { type: "number" },
+        { type: "number" },
+      ],
+    } as const);
+    const composed = executableJsonSchema({
+      type: "object",
+      properties: { transform },
+      required: ["transform"],
+      additionalProperties: false,
+    } as const);
+
+    expect(
+      schemaValidationIssues(composed, {
+        transform: [1, 0, 0, 1, 32, 48],
+      }),
+    ).toHaveLength(0);
+    expect(
+      schemaValidationIssues(composed, {
+        transform: [1, 0, "invalid", 1, 32, 48],
+      }),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: "/transform/2" }),
+      ]),
+    );
+  });
+
   it("recomposes nested executable discriminated intersections", () => {
     const nested = executableJsonSchema({
       type: "object",

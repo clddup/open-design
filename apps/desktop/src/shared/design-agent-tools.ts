@@ -1,4 +1,3 @@
-import { DESIGN_BOOTSTRAP_APPLY_INPUT_SCHEMA } from "./design-bootstrap-apply-schema";
 import {
   DeliveryScopeContract,
   DESIGN_DELIVERY_SCOPE_TOOL_INPUT_SCHEMA,
@@ -10,9 +9,10 @@ import {
 } from "./design-first-slice-tool";
 import { DesignApplyContract } from "./design-apply-input";
 import {
-  DesignArrangeContract,
-  DESIGN_ARRANGE_TOOL_INPUT_SCHEMA,
-} from "./design-arrange-tool";
+  DESIGN_BOOTSTRAP_EDIT_TOOL_INPUT_SCHEMA,
+  DESIGN_EDIT_TOOL_INPUT_SCHEMA,
+  EditDesignContract,
+} from "./design-edit-tool";
 import {
   DesignPlanContract,
   DesignVisualReviewContract,
@@ -21,16 +21,14 @@ import {
 } from "./design-agent-plan-review";
 import { isRecord } from "./design-agent-validation";
 import {
-  DESIGN_APPLY_TOOL_NAME,
-  DESIGN_ARRANGE_TOOL_NAME,
   DESIGN_CAPABILITIES_TOOL_NAME,
   DESIGN_CAPTURE_TOOL_NAME,
   DESIGN_CHECKPOINT_TOOL_NAME,
   DESIGN_COMPONENT_TOOL_NAME,
   DESIGN_DELIVERY_SCOPE_TOOL_NAME,
+  DESIGN_EDIT_TOOL_NAME,
   DESIGN_FIRST_SLICE_TOOL_NAME,
   DESIGN_FONT_TOOL_NAME,
-  DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
   DESIGN_PAGE_TOOL_NAME,
   DESIGN_PLAN_TOOL_NAME,
@@ -79,12 +77,9 @@ import {
   IMPORT_SVG_TOOL_INPUT_SCHEMA,
 } from "./design-agent-import-export-tools";
 import {
-  DesignHierarchyContract,
   DesignVectorContract,
-  DESIGN_HIERARCHY_TOOL_INPUT_SCHEMA,
   DESIGN_VECTOR_TOOL_INPUT_SCHEMA,
 } from "./design-agent-structure-tools";
-import { DESIGN_APPLY_TOOL_INPUT_SCHEMA } from "./design-agent-operation-schemas";
 import {
   DesignFontContract,
   DesignTextRangeContract,
@@ -111,6 +106,19 @@ export {
   DesignApplyContract,
   designApplyRequiresPlan,
 } from "./design-apply-input";
+export {
+  DESIGN_BOOTSTRAP_EDIT_TOOL_INPUT_SCHEMA,
+  DESIGN_EDIT_TOOL_INPUT_SCHEMA,
+  EditDesignContract,
+  INTERNAL_DESIGN_EDIT_TOOL_INPUT_SCHEMA,
+} from "./design-edit-tool";
+export type {
+  DesignEditContractContext,
+  DesignEditToolEdit,
+  DesignEditToolInput,
+  InternalDesignEditToolEdit,
+  InternalDesignEditToolInput,
+} from "./design-edit-tool";
 export { DESIGN_BOOTSTRAP_APPLY_INPUT_SCHEMA } from "./design-bootstrap-apply-schema";
 export type { DesignBriefFidelity } from "./design-brief-fidelity";
 export {
@@ -382,7 +390,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     name: DESIGN_CAPTURE_TOOL_NAME,
     modelDisclosure: { bootstrap: "deferred" as const },
     description:
-      "Capture the Main-selected target in the Run-bound OpenDesign document as a bounded image and return it as multimodal content together with captureTarget, the observed document revision, and reviewWorkflow. After the planned artboard exists, captureTarget is that exact Frame; otherwise it is the bound Page. Frame captures return layoutQuality, a trusted exact-revision report over the complete rendered Component projection, clipping ancestor chain, artboard containment, quality profile, and production text layout. A componentTarget is the stable instanceId + sourcePath repair identity; projection node IDs are capture-only and must never be reused as persistent mutation targets. Overflow issues include world-space bounds plus parent-local repair geometry. When reviewWorkflow.nextAction is repair-layout-overflow, call the returned opendesign_arrange repair-overflow action first; it expands safe trailing-edge delivery and persistent clipping Frames in one undoable revision, then capture again. If that bounded repair fails, inspect and explicitly correct the unsafe structure. The first representative new UI target and identity work receive the stateless exact-revision critic; later UI targets reuse that reviewed visual system but still fail deterministic verification when they are empty, flattened into one Text layer, structurally incomplete, or geometrically invalid. Follow reviewWorkflow.nextAction. Call record_visual_review only when reviewEligible is explicitly true as a legacy recovery path. Final verification may include a bounded non-blocking componentStrategy report when actual Component/Instance bindings differ from the model-authored plan; it is maintainability guidance and does not invalidate an otherwise useful visual delivery. The capture uses an isolated Leafer projection of the captured revision, so user pan, zoom, selection, window size, or switching to another open Design File cannot change its pixels or mutation target. Use this after a successful material design write to evaluate the rendered composition, hierarchy, spacing, proportions, and effects before recording the required visual review. A baseline capture before a write may inform planning but does not unlock review. This does not capture other applications, windows, files, or screens.",
+      "Capture the Main-selected target in the Run-bound OpenDesign document as a bounded image and return it as multimodal content together with captureTarget, the observed document revision, and reviewWorkflow. After the planned artboard exists, captureTarget is that exact Frame; otherwise it is the bound Page. Frame captures return layoutQuality, a trusted exact-revision report over the complete rendered Component projection, clipping ancestor chain, artboard containment, quality profile, and production text layout. A componentTarget is the stable instanceId + sourcePath repair identity; projection node IDs are capture-only and must never be reused as persistent mutation targets. Overflow issues include world-space bounds plus parent-local repair geometry. When reviewWorkflow.nextAction is repair-layout-overflow, call the returned opendesign_edit_design arrange repair-overflow entry first; it expands safe trailing-edge delivery and persistent clipping Frames in one undoable revision, then capture again. If that bounded repair fails, inspect and explicitly correct the unsafe structure. The first representative new UI target and identity work receive the stateless exact-revision critic; later UI targets reuse that reviewed visual system but still fail deterministic verification when they are empty, flattened into one Text layer, structurally incomplete, or geometrically invalid. Follow reviewWorkflow.nextAction. Call record_visual_review only when reviewEligible is explicitly true as a legacy recovery path. Final verification may include a bounded non-blocking componentStrategy report when actual Component/Instance bindings differ from the model-authored plan; it is maintainability guidance and does not invalidate an otherwise useful visual delivery. The capture uses an isolated Leafer projection of the captured revision, so user pan, zoom, selection, window size, or switching to another open Design File cannot change its pixels or mutation target. Use this after a successful material design write to evaluate the rendered composition, hierarchy, spacing, proportions, and effects before recording the required visual review. A baseline capture before a write may inform planning but does not unlock review. This does not capture other applications, windows, files, or screens.",
     inputSchema: {
       type: "object",
       properties: {},
@@ -526,30 +534,21 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     validateInputIssues: ExportRasterContract.issues,
   },
   {
-    name: DESIGN_HIERARCHY_TOOL_NAME,
+    name: DESIGN_EDIT_TOOL_NAME,
     modelDisclosure: {
-      bootstrap: "deferred" as const,
+      bootstrap: "available" as const,
+      beforePlan: "available" as const,
       role: "material-write" as const,
+      bootstrapDescription:
+        "Perform one basic inspected node edit inside an existing planned artboard. Use one node edit entry and the compact insert, property update, move, and delete command schema. New artboard roots still use opendesign_generate_first_slice. After a material revision, this same tool expands to hierarchy and layout edits without changing tool names.",
+      bootstrapInputSchema: DESIGN_BOOTSTRAP_EDIT_TOOL_INPUT_SCHEMA,
     },
     description:
-      "Edit existing layer hierarchy, Figma-style non-destructive sibling masks, and non-destructive Boolean groups in the currently bound Design File without asking the model to calculate low-level moves, transforms, or derived paths. It can group or ungroup, create one contained mask object from explicit siblings with the bottom layer as Alpha/Vector/Luminance source, change or remove that mask, create/change/ungroup Boolean geometry, reorder siblings, or reparent layers to an explicit Page-root, Frame, or Group insertion index. Masked content and Boolean operands remain editable; derived rendering is never model-authored or persisted. Reparenting preserves world transforms and dynamically recomputes affected Group bounds; Frame sizes remain fixed. Targets are explicit stable node IDs on an explicit existing Page, never the send-time or live user selection. The host previews the complete change and applies it as one atomic undoable OpenDesign transaction. It rejects locked layers, mixed parents, stale revisions, out-of-scope nodes, duplicate IDs, ambiguous nested masks, unsupported mask sources or Boolean operands, cycles, empty source Groups, non-invertible targets, no-op changes, and visually lossy ungrouping; inherited clipping or appearance changes return a visual-review warning.",
-    inputSchema: DESIGN_HIERARCHY_TOOL_INPUT_SCHEMA,
+      "Edit the current OpenDesign document through one ordered atomic operation. Combine one direct node transaction with related hierarchy or layout edits when they belong together; the host projects every edit in order, routes hierarchy and arrangement through the existing Figma-style planners, then commits the complete command set as one revision and one undo step. Node edits support insert, property update, move, delete, and subtree replacement, including properties.network for editable vectors and exact imported SVG path data; never provide path and network together. Text node edits use the trusted provider that measures Auto Size and derived ending ellipsis. Hierarchy edits support group/ungroup, masks, Boolean groups, sibling order, and reparent while preserving world geometry. Arrange edits support host-computed geometry for alignment, distribution, spacing, two-dimensional Tidy up, responsive Frame resize, Constraints v1, Auto gap, linear/Wrap/Grid Auto Layout, first-line baseline, Fill child's minimum width, stretched rows, counterAxisAlignContent, min/max clamping, absolute child positioning, Grid placement/track order, Layout Guides, and overflow repair. Smart Selection canvas handles remain a human canvas surface. Use stable IDs from inspection, keep all edits inside one delivery artboard, and order dependent edits exactly as they should execute. Do not calculate planner-owned transforms or derived layout geometry yourself. Component, Style, Variable, Vector, typography, image, Page, and export semantics remain dedicated tools.",
+    inputSchema: DESIGN_EDIT_TOOL_INPUT_SCHEMA,
     risk: "design_write" as const,
     approval: "never" as const,
-    validateInputIssues: DesignHierarchyContract.issues,
-  },
-  {
-    name: DESIGN_ARRANGE_TOOL_NAME,
-    modelDisclosure: {
-      bootstrap: "deferred" as const,
-      role: "material-write" as const,
-    },
-    description:
-      "Precisely arrange explicit existing layers in the currently bound Design File using host-computed geometry. It aligns selection bounds, distributes or sets exact spacing, performs deterministic one- or two-dimensional Tidy up, assigns Constraints v1 to an ordinary Frame child, resizes a Frame while resolving constraints, configures Frame-owned linear, wrapped, or Grid Auto Layout, direct flow-child sizing, bounded min/max width and height, an absolute child that ignores Auto Layout flow, Grid child placement/track ordering, or non-exported Frame Layout Guides. Uniform, Columns, and Rows guides are visual editing aids only: they never change child geometry, participate in Auto Layout, or appear in capture/export. Columns/Rows accept count/gutter and either stretch + margin or fixed start/center/end + sectionSize with edge offset. Auto Layout supports per-axis Frame Fixed/Hug, child Fixed/Fill, fixed or Auto gap, min/max clamping, bounded Fill redistribution, padding minimums, hidden-child exclusion, nested convergence, horizontal Fill + Auto Height text remeasurement, Figma-compatible first-line baseline alignment on horizontal flow/Wrap rows, and two-dimensional Fixed/Fill/Hug Grid tracks with manual or row-auto-flow placement. Set counterAlignment=baseline to align text first-line metrics and ordinary layer bottom edges; vertical Auto Layout rejects baseline. Set primaryAlignment=space-between for primary-axis Auto gap; it never becomes negative and starts a single child at the leading padding. Horizontal Wrap packs from each Fill child's minimum width, distributes the current row's remaining width across Fill children within min/max bounds, stretches rows when every child fills the counter axis, resolves primary Auto gap independently per row, and supports counterAxisAlignContent=space-between across fixed counter-axis space. Wrap requires Fixed Frame width; Hug counter-axis Frames cannot contain counter-axis Fill children. Child geometry is always host-derived. The host previews the complete change and applies one atomic undoable transaction. Targets are stable Page and layer IDs returned by inspection, never the send-time or live user selection. It rejects locked, missing, stale, out-of-scope, non-invertible, ambiguous, lossy, no-op, inverted limits, and over-limit operations. Snapping, Grid auto track gap, Smart Selection canvas handles, and reflow handles remain separate capabilities.",
-    inputSchema: DESIGN_ARRANGE_TOOL_INPUT_SCHEMA,
-    risk: "design_write" as const,
-    approval: "never" as const,
-    validateInputIssues: DesignArrangeContract.issues,
+    validateInputIssues: EditDesignContract.issues,
   },
   {
     name: DESIGN_VECTOR_TOOL_NAME,
@@ -658,23 +657,6 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     approval: "never" as const,
     validateInputIssues: DesignFontContract.issues,
   },
-  {
-    name: DESIGN_APPLY_TOOL_NAME,
-    modelDisclosure: {
-      bootstrap: "available" as const,
-      beforePlan: "available" as const,
-      role: "material-write" as const,
-      bootstrapDescription:
-        "Perform a basic inspected edit inside an existing planned artboard. For new artboard roots, use opendesign_generate_first_slice instead so allocation and visible content land in one call without duplicated Plan prose. Never place this call before an existing-artboard Plan or bundle it across Page approval, image reading, or another prerequisite whose result must be inspected first. This compact phase supports Frame, Group, Rectangle, Ellipse, and Text with solid paints plus insert, basic property update, move, and delete commands. Every Text insert must include the complete Typography Core fields shown by the schema, including paragraphIndent, paragraphSpacing, listSpacing, hangingList, textCase, textDecoration, textTruncation, and maxLines; disabled truncation uses maxLines null, while ending truncation on Auto Size needs a positive maxLines. Prefer one region such as navigation, hero, primary mark, or core content instead of waiting to emit an entire page. Ordered steps must represent real semantic units and cover every command exactly once. The trusted host still validates and applies these commands through the same OpenDesign transaction, revision, history, scope, and recovery boundary. After a successful material revision, the complete apply schema and advanced professional tools become available automatically.",
-      bootstrapInputSchema: DESIGN_BOOTSTRAP_APPLY_INPUT_SCHEMA,
-    },
-    description:
-      "Apply one validated OpenDesign node transaction to the currently bound Design File and an existing Page. Supports insert_element, update_properties, move_element, delete_element, and replace_subtree. Use opendesign_style_text_range for an inspected non-empty rich-text range and opendesign_manage_fonts for explicit file-font reflow or replacement, keeping the general node schema compact. For a planned multi-screen UI delivery, write only the current active target and capture it before continuing; several regions of that target may share ordered semantic steps such as navigation, hero, content, and footer. Never bulk-fill several screens or encode headings, rows, buttons, navigation, and data into one multiline Text layer. The host commits each valid step as a real revision inside one rollback-safe history group and reports the committed step revisions; without steps it applies the transaction once. update_properties must match the inspected target kind; Group properties are empty, and the host validates the merged discriminated node before writing. Text must declare textResize auto-width/auto-height/fixed plus paragraphIndent, paragraphSpacing, listSpacing, hangingList, textCase, textDecoration, textTruncation, and maxLines. List type and indentation are paragraph-range facts applied with opendesign_style_text_range, never fake marker characters. Auto Width uses textWrap none + textOverflow visible; Auto Height keeps width and uses word/character wrapping + visible overflow; Fixed supports all textWrap choices and visible/clip overflow. The trusted host measures Auto Size and derived ending ellipsis with the versioned Text providers while preserving complete authored content and concrete authoritative size. A size update without an explicit non-fixed textResize switches that text layer to Fixed. For editable organic silhouettes, mascots, logos, custom icons, wings, limbs, fabric, and other non-geometric contours, use path or vector nodes with properties.network. Use properties.path only when exact imported SVG path data must be preserved and node-level point editing is not required; never provide path and network together. Coordinates are parent-local and must fit the node's declared size. Plan-created artboard Frames are already allocated; add real content inside declared Frames and do not recreate them. Composite designs should create a named Frame or Group together with its children; do not flatten parts into Page-root layers. This tool does not manage Projects, Design Files, or Pages. Use stable unique IDs. Recoverable invariant failures return structured commandId/nodeId/path issues; inspect and revise instead of repeating the same transaction.",
-    inputSchema: DESIGN_APPLY_TOOL_INPUT_SCHEMA,
-    risk: "design_write" as const,
-    approval: "never" as const,
-    validateInputIssues: DesignApplyContract.issues,
-  },
 ] as const;
 
 export function validateDesignAgentToolInput(
@@ -686,6 +668,9 @@ export function validateDesignAgentToolInput(
   }
   if (toolName === DESIGN_DELIVERY_SCOPE_TOOL_NAME) {
     return DeliveryScopeContract.parse(input).ok;
+  }
+  if (toolName === DESIGN_EDIT_TOOL_NAME) {
+    return EditDesignContract.parse(input).ok;
   }
   if (toolName === DESIGN_CAPABILITIES_TOOL_NAME) {
     return isRecord(input) && Object.keys(input).length === 0;
@@ -738,12 +723,6 @@ export function validateDesignAgentToolInput(
   if (toolName === INTERNAL_READ_IMAGE_SOURCE_TOOL_NAME) {
     return InternalReadImageSourceContract.parse(input).ok;
   }
-  if (toolName === DESIGN_HIERARCHY_TOOL_NAME) {
-    return DesignHierarchyContract.parse(input).ok;
-  }
-  if (toolName === DESIGN_ARRANGE_TOOL_NAME) {
-    return DesignArrangeContract.parse(input).ok;
-  }
   if (toolName === DESIGN_VECTOR_TOOL_NAME) {
     return DesignVectorContract.parse(input).ok;
   }
@@ -768,14 +747,6 @@ export function validateDesignAgentToolInput(
   if (toolName === PAGE_STRUCTURE_ACCESS_TOOL_NAME) {
     return PageStructureAccessContract.parse(input).ok;
   }
-  if (
-    toolName !== DESIGN_APPLY_TOOL_NAME &&
-    toolName !== INTERNAL_DESIGN_APPLY_TOOL_NAME
-  ) {
-    return false;
-  }
-  if (toolName === DESIGN_APPLY_TOOL_NAME) {
-    return DesignApplyContract.parse(input).ok;
-  }
+  if (toolName !== INTERNAL_DESIGN_APPLY_TOOL_NAME) return false;
   return DesignApplyContract.parse(input, { internal: true }).ok;
 }

@@ -2583,11 +2583,20 @@ describe("GlobalTaskCoordinator", () => {
       nextAction: "repair-layout-overflow",
       reviewEligible: false,
       repair: {
-        toolName: "opendesign_arrange_layers",
+        toolName: "opendesign_edit_design",
         input: {
-          action: "repair-overflow",
-          pageId,
-          frameId: "frame_home",
+          label: "Repair delivery overflow",
+          edits: [
+            {
+              kind: "arrange",
+              input: {
+                action: "repair-overflow",
+                label: "Expand safe trailing overflow",
+                pageId,
+                frameId: "frame_home",
+              },
+            },
+          ],
         },
         errorCount: failingHomeQuality.errorCount,
       },

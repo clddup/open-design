@@ -3,15 +3,13 @@ import { schemaValidationIssues } from "@opendesign/design-contracts";
 import { BUILTIN_UI_DESIGN_SKILL_REFS } from "@opendesign/design-skills";
 import {
   DESIGN_AGENT_TOOL_SPECS,
-  DESIGN_APPLY_TOOL_NAME,
-  DESIGN_ARRANGE_TOOL_NAME,
-  DESIGN_BOOTSTRAP_APPLY_INPUT_SCHEMA,
+  DESIGN_BOOTSTRAP_EDIT_TOOL_INPUT_SCHEMA,
   DESIGN_CAPABILITIES_TOOL_NAME,
   DESIGN_CHECKPOINT_TOOL_NAME,
   DESIGN_COMPONENT_TOOL_NAME,
   DESIGN_FIRST_SLICE_TOOL_NAME,
+  DESIGN_EDIT_TOOL_NAME,
   DESIGN_FONT_TOOL_NAME,
-  DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_TEXT_RANGE_TOOL_NAME,
   DESIGN_VECTOR_TOOL_NAME,
   DESIGN_PAGE_TOOL_NAME,
@@ -29,10 +27,12 @@ import {
   PLACE_IMAGE_TOOL_NAME,
   UPDATE_IMAGE_TOOL_NAME,
   DesignApplyContract,
+  DesignArrangeContract,
   DesignCheckpointContract,
   DesignComponentContract,
   DesignPageContract,
   DesignPlanContract,
+  DesignHierarchyContract,
   DesignVisualReviewContract,
   FirstSliceContract,
   isAgentSvgImportResult,
@@ -175,9 +175,7 @@ describe("design Agent tool contract", () => {
       ],
     };
 
-    expect(
-      validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, compactInput),
-    ).toBe(true);
+    expect(DesignApplyContract.parse(compactInput).ok).toBe(true);
     expect(parsedApply(compactInput)).toMatchObject({
       commands: [
         {
@@ -407,15 +405,7 @@ describe("design Agent tool contract", () => {
     ).toEqual([]);
   });
 
-  it("rejects missing kind fields at the provider schema boundary", () => {
-    const apply = DESIGN_AGENT_TOOL_SPECS.find(
-      (tool) => tool.name === DESIGN_APPLY_TOOL_NAME,
-    );
-    expect(apply).not.toHaveProperty("explainInvalidInput");
-    expect(apply).toHaveProperty(
-      "validateInputIssues",
-      DesignApplyContract.issues,
-    );
+  it("rejects missing kind fields at the node-edit contract boundary", () => {
     const issues = DesignApplyContract.issues({
       label: "Create incomplete star",
       commands: [
@@ -519,9 +509,7 @@ describe("design Agent tool contract", () => {
       ],
     };
 
-    expect(validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, input)).toBe(
-      true,
-    );
+    expect(DesignApplyContract.parse(input).ok).toBe(true);
     expect(DesignApplyContract.issues(input)).toHaveLength(0);
   });
 
@@ -592,21 +580,19 @@ describe("design Agent tool contract", () => {
         },
       ],
     };
-    expect(validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, input)).toBe(
-      true,
-    );
+    expect(DesignApplyContract.parse(input).ok).toBe(true);
     expect(parsedApply(input).steps).toEqual(input.steps);
     expect(
-      validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, {
+      DesignApplyContract.parse({
         ...input,
         steps: [input.steps[1], input.steps[0]],
-      }),
+      }).ok,
     ).toBe(false);
     expect(
-      validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, {
+      DesignApplyContract.parse({
         ...input,
         steps: [input.steps[0]],
-      }),
+      }).ok,
     ).toBe(false);
   });
 
@@ -761,7 +747,7 @@ describe("design Agent tool contract", () => {
       }),
     ).toBe(false);
     expect(
-      validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, {
+      DesignApplyContract.parse({
         label: "Bypass Page tool",
         commands: [
           {
@@ -777,7 +763,7 @@ describe("design Agent tool contract", () => {
             nodes: [],
           },
         ],
-      }),
+      }).ok,
     ).toBe(false);
   });
 
@@ -1050,7 +1036,7 @@ describe("design Agent tool contract", () => {
       }),
     ).toBe(true);
     expect(
-      validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, {
+      DesignApplyContract.parse({
         label: "Bypass component tool",
         commands: [
           {
@@ -1064,10 +1050,10 @@ describe("design Agent tool contract", () => {
             },
           },
         ],
-      }),
+      }).ok,
     ).toBe(false);
     expect(
-      validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, {
+      DesignApplyContract.parse({
         label: "Bypass instance creation",
         commands: [
           {
@@ -1095,7 +1081,7 @@ describe("design Agent tool contract", () => {
             },
           },
         ],
-      }),
+      }).ok,
     ).toBe(false);
   });
 
@@ -1126,9 +1112,7 @@ describe("design Agent tool contract", () => {
     expect(
       validateDesignAgentToolInput(INTERNAL_DESIGN_APPLY_TOOL_NAME, input),
     ).toBe(true);
-    expect(validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, input)).toBe(
-      false,
-    );
+    expect(DesignApplyContract.parse(input).ok).toBe(false);
     expect(
       validateDesignAgentToolInput(INTERNAL_DESIGN_APPLY_TOOL_NAME, {
         ...input,
@@ -1666,7 +1650,7 @@ describe("design Agent tool contract", () => {
 
   it("exposes mutually exclusive path-data and editable-network semantics to the model", () => {
     const apply = DESIGN_AGENT_TOOL_SPECS.find(
-      (tool) => tool.name === DESIGN_APPLY_TOOL_NAME,
+      (tool) => tool.name === DESIGN_EDIT_TOOL_NAME,
     );
     const schema = JSON.stringify(apply?.inputSchema);
 
@@ -1688,23 +1672,23 @@ describe("design Agent tool contract", () => {
     expect(schema).toContain(
       '"required":["type","color","opacity","offset","blur","spread"]',
     );
-    expect(schema.length).toBeLessThan(64_000);
+    expect(schema.length).toBeLessThan(110_000);
     expect(schema).not.toContain('"$ref"');
     expect(schema).not.toContain('"$defs"');
   });
 
   it("keeps the first visible design transaction compact and basic", () => {
     const apply = DESIGN_AGENT_TOOL_SPECS.find(
-      (tool) => tool.name === DESIGN_APPLY_TOOL_NAME,
+      (tool) => tool.name === DESIGN_EDIT_TOOL_NAME,
     );
-    const bootstrap = JSON.stringify(DESIGN_BOOTSTRAP_APPLY_INPUT_SCHEMA);
+    const bootstrap = JSON.stringify(DESIGN_BOOTSTRAP_EDIT_TOOL_INPUT_SCHEMA);
     const complete = JSON.stringify(apply?.inputSchema);
 
     expect(apply?.modelDisclosure).toMatchObject({
       bootstrap: "available",
       beforePlan: "available",
       role: "material-write",
-      bootstrapInputSchema: DESIGN_BOOTSTRAP_APPLY_INPUT_SCHEMA,
+      bootstrapInputSchema: DESIGN_BOOTSTRAP_EDIT_TOOL_INPUT_SCHEMA,
     });
     expect(bootstrap.length).toBeLessThan(12_000);
     expect(bootstrap.length * 4).toBeLessThan(complete.length);
@@ -1737,7 +1721,7 @@ describe("design Agent tool contract", () => {
     expect(complete).not.toContain('"reflow_text"');
     expect(complete).not.toContain('"const":"update_text_range_style"');
     expect(complete).not.toContain('"const":"commit_text_edit"');
-    expect(complete.length).toBeLessThan(64_000);
+    expect(complete.length).toBeLessThan(110_000);
     const textRange = DESIGN_AGENT_TOOL_SPECS.find(
       (tool) => tool.name === DESIGN_TEXT_RANGE_TOOL_NAME,
     );
@@ -1769,9 +1753,7 @@ describe("design Agent tool contract", () => {
     };
 
     expect(DesignApplyContract.parse(input).ok).toBe(false);
-    expect(validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, input)).toBe(
-      false,
-    );
+    expect(DesignApplyContract.parse(input).ok).toBe(false);
     expect(
       validateDesignAgentToolInput(INTERNAL_DESIGN_APPLY_TOOL_NAME, input),
     ).toBe(false);
@@ -1795,9 +1777,7 @@ describe("design Agent tool contract", () => {
     expect(
       validateDesignAgentToolInput(DESIGN_TEXT_RANGE_TOOL_NAME, input),
     ).toBe(true);
-    expect(validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, input)).toBe(
-      false,
-    );
+    expect(DesignApplyContract.parse(input).ok).toBe(false);
     expect(
       validateDesignAgentToolInput(DESIGN_TEXT_RANGE_TOOL_NAME, {
         ...input,
@@ -1856,7 +1836,7 @@ describe("design Agent tool contract", () => {
       }),
     ).toBe(false);
     expect(
-      validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, {
+      DesignApplyContract.parse({
         label: "Bypass font tool",
         commands: [
           {
@@ -1866,13 +1846,13 @@ describe("design Agent tool contract", () => {
             expectedFont: reflow.expectedFont,
           },
         ],
-      }),
+      }).ok,
     ).toBe(false);
   });
 
   it("exposes Typography Core v2 through the complete text transaction", () => {
     const apply = DESIGN_AGENT_TOOL_SPECS.find(
-      (tool) => tool.name === DESIGN_APPLY_TOOL_NAME,
+      (tool) => tool.name === DESIGN_EDIT_TOOL_NAME,
     );
     const schema = JSON.stringify(apply?.inputSchema);
     const input = {
@@ -1939,11 +1919,9 @@ describe("design Agent tool contract", () => {
     expect(apply?.description).toContain(
       "measures Auto Size and derived ending ellipsis",
     );
-    expect(validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, input)).toBe(
-      true,
-    );
+    expect(DesignApplyContract.parse(input).ok).toBe(true);
     expect(
-      validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, {
+      DesignApplyContract.parse({
         ...input,
         commands: [
           {
@@ -1958,7 +1936,7 @@ describe("design Agent tool contract", () => {
             },
           },
         ],
-      }),
+      }).ok,
     ).toBe(false);
   });
 
@@ -2171,11 +2149,9 @@ describe("design Agent tool contract", () => {
       ],
     };
 
-    expect(validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, input)).toBe(
-      true,
-    );
+    expect(DesignApplyContract.parse(input).ok).toBe(true);
     expect(
-      validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, {
+      DesignApplyContract.parse({
         ...input,
         commands: [
           {
@@ -2189,7 +2165,7 @@ describe("design Agent tool contract", () => {
             },
           },
         ],
-      }),
+      }).ok,
     ).toBe(false);
   });
 
@@ -2269,11 +2245,9 @@ describe("design Agent tool contract", () => {
       ],
     };
 
-    expect(validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, input)).toBe(
-      true,
-    );
+    expect(DesignApplyContract.parse(input).ok).toBe(true);
     expect(
-      validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, {
+      DesignApplyContract.parse({
         ...input,
         commands: [
           {
@@ -2287,7 +2261,7 @@ describe("design Agent tool contract", () => {
             },
           },
         ],
-      }),
+      }).ok,
     ).toBe(false);
   });
 
@@ -2332,11 +2306,9 @@ describe("design Agent tool contract", () => {
       ],
     };
 
-    expect(validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, input)).toBe(
-      true,
-    );
+    expect(DesignApplyContract.parse(input).ok).toBe(true);
     expect(
-      validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, {
+      DesignApplyContract.parse({
         ...input,
         commands: [
           {
@@ -2350,10 +2322,10 @@ describe("design Agent tool contract", () => {
             },
           },
         ],
-      }),
+      }).ok,
     ).toBe(false);
     expect(
-      validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, {
+      DesignApplyContract.parse({
         ...input,
         commands: [
           {
@@ -2367,7 +2339,7 @@ describe("design Agent tool contract", () => {
             },
           },
         ],
-      }),
+      }).ok,
     ).toBe(false);
   });
 
@@ -2407,11 +2379,9 @@ describe("design Agent tool contract", () => {
       ],
     };
 
-    expect(validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, input)).toBe(
-      true,
-    );
+    expect(DesignApplyContract.parse(input).ok).toBe(true);
     expect(
-      validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, {
+      DesignApplyContract.parse({
         ...input,
         commands: [
           {
@@ -2422,10 +2392,10 @@ describe("design Agent tool contract", () => {
             },
           },
         ],
-      }),
+      }).ok,
     ).toBe(false);
     expect(
-      validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, {
+      DesignApplyContract.parse({
         ...input,
         commands: [
           {
@@ -2436,7 +2406,7 @@ describe("design Agent tool contract", () => {
             },
           },
         ],
-      }),
+      }).ok,
     ).toBe(false);
 
     const polygon = {
@@ -2452,7 +2422,7 @@ describe("design Agent tool contract", () => {
       },
     };
     expect(
-      validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, {
+      DesignApplyContract.parse({
         ...input,
         commands: [
           {
@@ -2460,7 +2430,7 @@ describe("design Agent tool contract", () => {
             node: polygon,
           },
         ],
-      }),
+      }).ok,
     ).toBe(true);
   });
 
@@ -3068,8 +3038,8 @@ describe("design Agent tool contract", () => {
   });
 
   it("exposes strict semantic group and ungroup inputs without selection-derived targets", () => {
-    const hierarchy = DESIGN_AGENT_TOOL_SPECS.find(
-      (tool) => tool.name === DESIGN_HIERARCHY_TOOL_NAME,
+    const editDesign = DESIGN_AGENT_TOOL_SPECS.find(
+      (tool) => tool.name === DESIGN_EDIT_TOOL_NAME,
     );
     const group = {
       action: "group",
@@ -3145,155 +3115,132 @@ describe("design Agent tool contract", () => {
       booleanId: "logo_boolean",
     };
 
-    expect(hierarchy).toMatchObject({
+    expect(editDesign).toMatchObject({
       risk: "design_write",
       approval: "never",
     });
-    expect(hierarchy?.description).toContain("explicit stable node IDs");
-    expect(hierarchy?.description).toContain("one atomic undoable");
-    expect(hierarchy?.description).toContain("non-destructive Boolean");
-    expect(hierarchy?.description).toContain("sibling masks");
+    expect(editDesign?.description).toContain("stable IDs");
+    expect(editDesign?.description).toContain("one revision and one undo");
+    expect(editDesign?.description).toContain("Boolean groups");
+    expect(editDesign?.description).toContain("masks");
+    expect(DesignHierarchyContract.parse(group).ok).toBe(true);
+    expect(DesignHierarchyContract.parse(ungroup).ok).toBe(true);
+    expect(DesignHierarchyContract.parse(createMask).ok).toBe(true);
+    expect(DesignHierarchyContract.parse(setMaskType).ok).toBe(true);
+    expect(DesignHierarchyContract.parse(removeMask).ok).toBe(true);
+    expect(DesignHierarchyContract.parse(reorder).ok).toBe(true);
+    expect(DesignHierarchyContract.parse(reparent).ok).toBe(true);
+    expect(DesignHierarchyContract.parse(createBoolean).ok).toBe(true);
+    expect(DesignHierarchyContract.parse(setBooleanOperation).ok).toBe(true);
+    expect(DesignHierarchyContract.parse(ungroupBoolean).ok).toBe(true);
     expect(
-      validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, group),
-    ).toBe(true);
-    expect(
-      validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, ungroup),
-    ).toBe(true);
-    expect(
-      validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, createMask),
-    ).toBe(true);
-    expect(
-      validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, setMaskType),
-    ).toBe(true);
-    expect(
-      validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, removeMask),
-    ).toBe(true);
-    expect(
-      validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, reorder),
-    ).toBe(true);
-    expect(
-      validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, reparent),
-    ).toBe(true);
-    expect(
-      validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, createBoolean),
-    ).toBe(true);
-    expect(
-      validateDesignAgentToolInput(
-        DESIGN_HIERARCHY_TOOL_NAME,
-        setBooleanOperation,
-      ),
-    ).toBe(true);
-    expect(
-      validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, ungroupBoolean),
-    ).toBe(true);
-    expect(
-      validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, {
+      DesignHierarchyContract.parse({
         ...reparent,
         parentId: null,
         index: 0,
-      }),
+      }).ok,
     ).toBe(true);
     expect(
-      validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, {
+      DesignHierarchyContract.parse({
         ...group,
         nodeIds: ["body", "body"],
-      }),
+      }).ok,
     ).toBe(false);
     expect(
-      validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, {
+      DesignHierarchyContract.parse({
         ...group,
         nodeIds: Array.from({ length: 250 }, (_, index) => `node_${index}`),
-      }),
+      }).ok,
     ).toBe(false);
     expect(
-      validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, {
+      DesignHierarchyContract.parse({
         ...group,
         selectedNodeIds: ["different_live_selection"],
-      }),
+      }).ok,
     ).toBe(false);
     expect(
-      validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, {
+      DesignHierarchyContract.parse({
         ...ungroup,
         nodeIds: ["body"],
-      }),
+      }).ok,
     ).toBe(false);
     expect(
-      validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, {
+      DesignHierarchyContract.parse({
         ...reorder,
         order: "move-up-somehow",
-      }),
+      }).ok,
     ).toBe(false);
     expect(
-      validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, {
+      DesignHierarchyContract.parse({
         ...reorder,
         nodeIds: [],
-      }),
+      }).ok,
     ).toBe(false);
     expect(
-      validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, {
+      DesignHierarchyContract.parse({
         ...reorder,
         groupId: "must_not_be_accepted",
-      }),
+      }).ok,
     ).toBe(false);
     expect(
-      validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, {
+      DesignHierarchyContract.parse({
         ...reparent,
         nodeIds: ["mascot_group", "mascot_group"],
-      }),
+      }).ok,
     ).toBe(false);
     expect(
-      validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, {
+      DesignHierarchyContract.parse({
         ...reparent,
         index: -1,
-      }),
+      }).ok,
     ).toBe(false);
     expect(
-      validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, {
+      DesignHierarchyContract.parse({
         ...reparent,
         groupId: "not_part_of_reparent",
-      }),
+      }).ok,
     ).toBe(false);
     expect(
-      validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, {
+      DesignHierarchyContract.parse({
         ...createBoolean,
         nodeIds: ["logo_base", "logo_base"],
-      }),
+      }).ok,
     ).toBe(false);
     expect(
-      validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, {
+      DesignHierarchyContract.parse({
         ...setBooleanOperation,
         operation: "divide",
-      }),
+      }).ok,
     ).toBe(false);
     expect(
-      validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, {
+      DesignHierarchyContract.parse({
         ...ungroupBoolean,
         groupId: "wrong_field",
-      }),
+      }).ok,
     ).toBe(false);
     expect(
-      validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, {
+      DesignHierarchyContract.parse({
         ...createMask,
         maskType: "clipping",
-      }),
+      }).ok,
     ).toBe(false);
     expect(
-      validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, {
+      DesignHierarchyContract.parse({
         ...setMaskType,
         groupId: "wrong_field",
-      }),
+      }).ok,
     ).toBe(false);
     expect(
-      validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, {
+      DesignHierarchyContract.parse({
         ...removeMask,
         maskType: "alpha",
-      }),
+      }).ok,
     ).toBe(false);
   });
 
   it("exposes bounded deterministic arrangement without model-computed transforms", () => {
-    const arrange = DESIGN_AGENT_TOOL_SPECS.find(
-      (tool) => tool.name === DESIGN_ARRANGE_TOOL_NAME,
+    const editDesign = DESIGN_AGENT_TOOL_SPECS.find(
+      (tool) => tool.name === DESIGN_EDIT_TOOL_NAME,
     );
     const distribute = {
       action: "distribute-horizontal",
@@ -3414,57 +3361,45 @@ describe("design Agent tool contract", () => {
       ],
     };
 
-    expect(arrange).toMatchObject({
+    expect(editDesign).toMatchObject({
       risk: "design_write",
       approval: "never",
     });
-    expect(arrange?.description).toContain("host-computed geometry");
-    expect(arrange?.description).toContain("two-dimensional Tidy up");
-    expect(arrange?.description).toContain("Smart Selection canvas handles");
-    expect(arrange?.description).toContain("Constraints v1");
-    expect(arrange?.description).toContain("Auto Layout supports");
-    expect(arrange?.description).toContain("Auto gap");
-    expect(arrange?.description).toContain("counterAxisAlignContent");
-    expect(arrange?.description).toContain("Fill child's minimum width");
-    expect(arrange?.description).toContain("stretches rows");
-    expect(arrange?.description).toContain("first-line baseline");
-    expect(arrange?.description).toContain("min/max clamping");
-    expect(arrange?.description).toContain("absolute child");
+    expect(editDesign?.description).toContain("host-computed geometry");
+    expect(editDesign?.description).toContain("two-dimensional Tidy up");
+    expect(editDesign?.description).toContain("Smart Selection canvas handles");
+    expect(editDesign?.description).toContain("Constraints v1");
+    expect(editDesign?.description).toContain("Auto Layout");
+    expect(editDesign?.description).toContain("Auto gap");
+    expect(editDesign?.description).toContain("counterAxisAlignContent");
+    expect(editDesign?.description).toContain("Fill child's minimum width");
+    expect(editDesign?.description).toContain("stretched rows");
+    expect(editDesign?.description).toContain("first-line baseline");
+    expect(editDesign?.description).toContain("min/max clamping");
+    expect(editDesign?.description).toContain("absolute child");
+    expect(DesignArrangeContract.parse(distribute).ok).toBe(true);
+    expect(DesignArrangeContract.parse(spacing).ok).toBe(true);
+    expect(DesignArrangeContract.parse(tidyUp).ok).toBe(true);
+    expect(DesignArrangeContract.parse(constraints).ok).toBe(true);
+    expect(DesignArrangeContract.parse(resizeFrame).ok).toBe(true);
+    expect(DesignArrangeContract.parse(autoLayout).ok).toBe(true);
     expect(
-      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, distribute),
-    ).toBe(true);
-    expect(
-      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, spacing),
-    ).toBe(true);
-    expect(validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, tidyUp)).toBe(
-      true,
-    );
-    expect(
-      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, constraints),
-    ).toBe(true);
-    expect(
-      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, resizeFrame),
-    ).toBe(true);
-    expect(
-      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, autoLayout),
-    ).toBe(true);
-    expect(
-      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
+      DesignArrangeContract.parse({
         ...autoLayout,
         autoLayout: {
           ...autoLayout.autoLayout,
           counterAlignment: "baseline",
         },
-      }),
+      }).ok,
     ).toBe(true);
     expect(
-      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
+      DesignArrangeContract.parse({
         ...autoLayout,
         autoLayout: {
           ...autoLayout.autoLayout,
           primaryAlignment: "space-between",
         },
-      }),
+      }).ok,
     ).toBe(true);
     const wrapAutoLayout = {
       ...autoLayout,
@@ -3474,11 +3409,9 @@ describe("design Agent tool contract", () => {
         wrap: { mode: "wrap", counterGap: 12 },
       },
     };
+    expect(DesignArrangeContract.parse(wrapAutoLayout).ok).toBe(true);
     expect(
-      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, wrapAutoLayout),
-    ).toBe(true);
-    expect(
-      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
+      DesignArrangeContract.parse({
         ...wrapAutoLayout,
         autoLayout: {
           ...wrapAutoLayout.autoLayout,
@@ -3488,106 +3421,91 @@ describe("design Agent tool contract", () => {
             counterAxisAlignContent: "space-between",
           },
         },
-      }),
+      }).ok,
     ).toBe(true);
+    expect(DesignArrangeContract.parse(layoutSizing).ok).toBe(true);
+    expect(DesignArrangeContract.parse(layoutLimits).ok).toBe(true);
+    expect(DesignArrangeContract.parse(layoutPositioning).ok).toBe(true);
+    expect(DesignArrangeContract.parse(layoutGuides).ok).toBe(true);
+    expect(DesignArrangeContract.parse(columnStretchGuide).ok).toBe(true);
+    expect(DesignArrangeContract.parse(rowEndGuide).ok).toBe(true);
     expect(
-      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, layoutSizing),
-    ).toBe(true);
-    expect(
-      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, layoutLimits),
-    ).toBe(true);
-    expect(
-      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, layoutPositioning),
-    ).toBe(true);
-    expect(
-      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, layoutGuides),
-    ).toBe(true);
-    expect(
-      validateDesignAgentToolInput(
-        DESIGN_ARRANGE_TOOL_NAME,
-        columnStretchGuide,
-      ),
-    ).toBe(true);
-    expect(
-      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, rowEndGuide),
-    ).toBe(true);
-    expect(
-      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
+      DesignArrangeContract.parse({
         ...columnStretchGuide,
         layoutGuides: [
           { ...columnStretchGuide.layoutGuides[0], margin: undefined },
         ],
-      }),
+      }).ok,
     ).toBe(false);
     expect(
-      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
+      DesignArrangeContract.parse({
         ...rowEndGuide,
         layoutGuides: [{ ...rowEndGuide.layoutGuides[0], count: 2.5 }],
-      }),
+      }).ok,
     ).toBe(false);
     expect(
-      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
+      DesignArrangeContract.parse({
         ...rowEndGuide,
         layoutGuides: [{ ...rowEndGuide.layoutGuides[0], offset: undefined }],
-      }),
+      }).ok,
     ).toBe(false);
     expect(
-      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
+      DesignArrangeContract.parse({
         ...layoutGuides,
         layoutGuides: [
           layoutGuides.layoutGuides[0],
           layoutGuides.layoutGuides[0],
         ],
-      }),
+      }).ok,
     ).toBe(false);
     expect(
-      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
+      DesignArrangeContract.parse({
         ...layoutPositioning,
         positioning: "flow",
         constraints: { horizontal: "right", vertical: "top" },
-      }),
+      }).ok,
     ).toBe(false);
     expect(
-      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
+      DesignArrangeContract.parse({
         action: "set-layout-positioning",
         label: "Return badge to flow",
         pageId: "page_1",
         nodeId: "navigation_badge",
         positioning: "flow",
-      }),
+      }).ok,
     ).toBe(true);
     expect(
-      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
+      DesignArrangeContract.parse({
         ...layoutLimits,
         limits: null,
-      }),
+      }).ok,
     ).toBe(true);
     expect(
-      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
+      DesignArrangeContract.parse({
         ...layoutLimits,
         limits: { minWidth: 720, maxWidth: 240 },
-      }),
+      }).ok,
     ).toBe(false);
     expect(
-      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
+      DesignArrangeContract.parse({
         ...layoutLimits,
         limits: { minWidth: 240, future: 1 },
-      }),
+      }).ok,
     ).toBe(false);
     expect(
-      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
+      DesignArrangeContract.parse({
         ...autoLayout,
         autoLayout: { ...autoLayout.autoLayout, wrap: true },
-      }),
+      }).ok,
     ).toBe(false);
     expect(
-      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
+      DesignArrangeContract.parse({
         ...wrapAutoLayout,
         autoLayout: { ...wrapAutoLayout.autoLayout, mode: "vertical" },
-      }),
+      }).ok,
     ).toBe(false);
     expect(
-      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
+      DesignArrangeContract.parse({
         ...wrapAutoLayout,
         autoLayout: {
           ...wrapAutoLayout.autoLayout,
@@ -3597,79 +3515,79 @@ describe("design Agent tool contract", () => {
             counterAxisAlignContent: "space-evenly",
           },
         },
-      }),
+      }).ok,
     ).toBe(false);
     expect(
-      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
+      DesignArrangeContract.parse({
         ...wrapAutoLayout,
         autoLayout: {
           ...wrapAutoLayout.autoLayout,
           wrap: { mode: "wrap", counterGap: -1 },
         },
-      }),
+      }).ok,
     ).toBe(false);
     expect(
-      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
+      DesignArrangeContract.parse({
         ...wrapAutoLayout,
         autoLayout: {
           ...wrapAutoLayout.autoLayout,
           wrap: { mode: "wrap", counterGap: 12, columns: 3 },
         },
-      }),
+      }).ok,
     ).toBe(false);
     expect(
-      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
+      DesignArrangeContract.parse({
         ...layoutSizing,
         sizing: { horizontal: "hug", vertical: "fixed" },
-      }),
+      }).ok,
     ).toBe(false);
     expect(
-      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
+      DesignArrangeContract.parse({
         ...constraints,
         constraints: { horizontal: "stretch", vertical: "bottom" },
-      }),
+      }).ok,
     ).toBe(false);
     expect(
-      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
+      DesignArrangeContract.parse({
         ...resizeFrame,
         width: 0,
-      }),
+      }).ok,
     ).toBe(false);
     expect(
-      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
+      DesignArrangeContract.parse({
         ...distribute,
         nodeIds: ["card_one", "card_two"],
-      }),
+      }).ok,
     ).toBe(false);
     expect(
-      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
+      DesignArrangeContract.parse({
         ...tidyUp,
         nodeIds: ["card_one", "card_two"],
-      }),
+      }).ok,
     ).toBe(false);
     expect(
-      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
+      DesignArrangeContract.parse({
         ...spacing,
         spacing: Number.NaN,
-      }),
+      }).ok,
     ).toBe(false);
     expect(
-      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
+      DesignArrangeContract.parse({
         ...spacing,
         spacing: 1_000_001,
-      }),
+      }).ok,
     ).toBe(false);
     expect(
-      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
+      DesignArrangeContract.parse({
         ...distribute,
         spacing: undefined,
-      }),
+      }).ok,
     ).toBe(false);
     expect(
-      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
+      DesignArrangeContract.parse({
         ...spacing,
         selectedNodeIds: ["live_selection"],
-      }),
+      }).ok,
     ).toBe(false);
   });
 

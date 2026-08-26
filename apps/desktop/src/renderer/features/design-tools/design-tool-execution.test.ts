@@ -13,6 +13,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   DESIGN_ARRANGE_TOOL_NAME,
   DESIGN_COMPONENT_TOOL_NAME,
+  DESIGN_EDIT_TOOL_NAME,
   DESIGN_FONT_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
   DESIGN_VARIABLE_TOOL_NAME,
@@ -114,6 +115,101 @@ function plannedInsertRequest(nodeId: string): RendererDesignToolRequest {
 }
 
 describe("Renderer design tool scope", () => {
+  it("projects dependent hierarchy and layout edits before one atomic commit", async () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    const response = await executeDesignToolRequest(
+      {
+        requestId: "atomic_edit_design",
+        call: {
+          toolCallId: "tool_atomic_edit_design",
+          toolName: DESIGN_EDIT_TOOL_NAME,
+          input: {
+            label: "Group and align feature cards",
+            edits: [
+              {
+                kind: "node",
+                input: {
+                  label: "Add another feature card",
+                  commands: [
+                    {
+                      commandId: "insert_feature_atomic",
+                      type: "insert_element",
+                      pageId: "page_welcome",
+                      parentId: "feature_group",
+                      index: 3,
+                      node: {
+                        id: "feature_atomic",
+                        kind: "rectangle",
+                        name: "Feature three",
+                        parentId: "feature_group",
+                        childIds: [],
+                        visible: true,
+                        locked: false,
+                        transform: [1, 0, 0, 1, 720, 420],
+                        size: { width: 240, height: 120 },
+                        exportSettings: [],
+                        opacity: 1,
+                        properties: {
+                          fills: [
+                            {
+                              type: "solid",
+                              color: "#7c6ee6",
+                              opacity: 1,
+                            },
+                          ],
+                          strokes: [],
+                          strokeWidth: 0,
+                          cornerRadius: 12,
+                        },
+                        extensions: {},
+                      },
+                    },
+                  ],
+                },
+              },
+              {
+                kind: "hierarchy",
+                input: {
+                  action: "group",
+                  label: "Group feature cards",
+                  pageId: "page_welcome",
+                  nodeIds: ["feature_one", "feature_atomic"],
+                  groupId: "combined_features",
+                  name: "Feature cards",
+                },
+              },
+              {
+                kind: "arrange",
+                input: {
+                  action: "set-horizontal-spacing",
+                  label: "Space grouped cards",
+                  pageId: "page_welcome",
+                  nodeIds: ["feature_one", "feature_atomic"],
+                  spacing: 24,
+                },
+              },
+            ],
+          },
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_welcome",
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      result: {
+        content: { action: "edit-design", atomic: true, revision: 1 },
+        designRevision: { previousRevision: 0, revision: 1 },
+      },
+    });
+    expect(
+      runtime.getSnapshot().document.nodesById.combined_features?.childIds,
+    ).toEqual(["feature_one", "feature_atomic"]);
+    expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
+  });
+
   it("fails closed on invalid canonical design-system and structure bridge inputs", async () => {
     const runtime = new EditorRuntime(createWelcomeDocument());
     const request = (

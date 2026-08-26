@@ -305,7 +305,7 @@ describe("OpenDesign Agent system prompt", () => {
       "editable network of vertices and cubic segment tangents",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
-      "use opendesign_edit_hierarchy with the explicit stable Page and node IDs",
+      "use a hierarchy edit in opendesign_edit_design with the explicit stable Page and node IDs",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
       "Do not calculate reparenting transforms yourself",
@@ -320,7 +320,7 @@ describe("OpenDesign Agent system prompt", () => {
       "recomputes affected Group bounds",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
-      "use opendesign_arrange_layers with explicit stable Page and node IDs",
+      "use an arrange edit in opendesign_edit_design with explicit stable Page and node IDs",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
       "preserves the two outermost layers",
