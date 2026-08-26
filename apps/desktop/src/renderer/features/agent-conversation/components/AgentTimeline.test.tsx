@@ -52,6 +52,13 @@ describe("AgentTimeline", () => {
         risk: "design_write",
         status: "completed",
         result: {
+          committedSteps: [
+            {
+              stepIds: ["hero"],
+              label: "Build navigation and hero",
+              revision: 2,
+            },
+          ],
           planRevision: 1,
           plan: {
             targets: [
@@ -110,6 +117,10 @@ describe("AgentTimeline", () => {
     expect(screen.getByText("Current plan · Stage 1/12")).toBeInTheDocument();
     expect(screen.getByText("Home")).toBeInTheDocument();
     expect(screen.getByText("Build navigation and hero")).toBeInTheDocument();
+    expect(screen.getByText("r2")).toBeInTheDocument();
+    const activePlan = document.querySelector("[data-agent-active-plan]");
+    expect(activePlan).not.toBeNull();
+    expect(activePlan?.closest("ol")).toBeNull();
     expect(
       document.querySelector("details[data-agent-plan]")?.hasAttribute("open"),
     ).toBe(true);
@@ -1739,7 +1750,7 @@ describe("AgentTimeline", () => {
     expect(container).not.toHaveTextContent("registered page scope");
   });
 
-  it("shows the exact invariant target and retry recovery state", () => {
+  it("summarizes recoverable invariant failures without exposing protocol details", () => {
     const events: AgentEvent[] = [
       {
         type: "tool.requested",
@@ -1793,15 +1804,10 @@ describe("AgentTimeline", () => {
       />,
     );
 
-    expect(screen.getByText(/command update_card/)).toHaveTextContent(
-      "node card_1",
-    );
-    expect(screen.getByText(/command update_card/)).toHaveTextContent(
-      "/nodesById/card_1/properties",
-    );
-    expect(container).toHaveTextContent(
-      "Inspect the current document before another retry",
-    );
+    expect(screen.getByText("Correcting design structure · 1")).toBeVisible();
+    expect(container).not.toHaveTextContent("command update_card");
+    expect(container).not.toHaveTextContent("node card_1");
+    expect(container).not.toHaveTextContent("/nodesById/card_1/properties");
   });
 
   it("keeps recoverable design workflow guard retries out of the visible timeline", () => {

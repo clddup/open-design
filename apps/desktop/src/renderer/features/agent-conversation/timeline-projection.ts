@@ -8,6 +8,7 @@ import {
   DESIGN_PLAN_TOOL_NAME,
 } from "@/shared/design-agent-tools";
 import {
+  committedStepsFromResult,
   latestDeliveryLedger,
   parseCommittedDesignStep,
   projectDurableDesignSteps,
@@ -36,6 +37,43 @@ export interface AgentTimelineProjectionInput {
   timeline: readonly SessionTimelineItem[];
   t: Translate;
 }
+
+export interface AgentTimelineProjection {
+  activePlan: AgentTimelineItem | null;
+  items: AgentTimelineItem[];
+}
+
+/**
+ * Active task state is spatially separate from the immutable Conversation
+ * journal. Historical Plans stay in the journal; only the latest Plan owned by
+ * the running task is projected into the fixed task surface.
+ */
+export function projectAgentTimelineView(
+  input: AgentTimelineProjectionInput,
+): AgentTimelineProjection {
+  const projected = projectAgentTimeline(input);
+  const activePlan = input.activeRunId
+    ? ([...projected]
+        .reverse()
+        .find(
+          (item) => item.kind === "plan" && item.runId === input.activeRunId,
+        ) ?? null)
+    : null;
+  return {
+    activePlan,
+    items: activePlan
+      ? projected.filter(
+          (item) =>
+            item.id !== activePlan.id &&
+            !(
+              item.runId === input.activeRunId &&
+              item.id.startsWith("design-step:")
+            ),
+        )
+      : projected,
+  };
+}
+
 export function projectAgentTimeline({
   activeRunId,
   events,
@@ -90,21 +128,79 @@ export function projectAgentTimeline({
   const latestRunId = [...runOrder.keys()].at(-1);
   const normalized = [...merged.values()].map((item) => {
     if (item.kind === "plan" && item.plan && item.runId) {
+      const plan = item.plan;
       const delivery = latestDeliveryLedger(timeline, events, item.runId);
-      if (delivery) {
+      const allCommittedSteps = [...merged.values()]
+        .filter(
+          (candidate) =>
+            candidate.runId === item.runId &&
+            candidate.id.startsWith("design-step:") &&
+            (candidate.toolCallId === item.toolCallId ||
+              candidate.order > item.order),
+        )
+        .flatMap((candidate) => {
+          const revision = Number(candidate.time.replace(/^r/, ""));
+          return Number.isSafeInteger(revision)
+            ? [{ label: candidate.title.trim(), revision }]
+            : [];
+        });
+      const committedSteps = [
+        ...new Map(
+          allCommittedSteps
+            .sort((left, right) => left.revision - right.revision)
+            .map((step) => [step.label, step]),
+        ).values(),
+      ];
+      if (delivery || committedSteps.length > 0) {
         const statusByTargetId = new Map(
-          delivery.targets.map((target) => [target.targetId, target.status]),
+          delivery?.targets.map((target) => [target.targetId, target.status]) ??
+            [],
         );
-        const targets = item.plan.targets.map((target) => ({
-          ...target,
-          ...(statusByTargetId.has(target.targetId)
-            ? { status: statusByTargetId.get(target.targetId) }
-            : {}),
-        }));
+        const targets = plan.targets.map((target, targetIndex) => {
+          const status = statusByTargetId.get(target.targetId) ?? target.status;
+          const projectedSteps = target.implementationSteps.map((step) => {
+            const committed = committedSteps.find(
+              (candidate) => candidate.label === step.label.trim(),
+            );
+            const verifiedReview =
+              status === "verified" &&
+              /review|refine|审查|精修/i.test(step.label);
+            return committed || verifiedReview
+              ? {
+                  ...step,
+                  status: "committed" as const,
+                  ...(committed ? { revision: committed.revision } : {}),
+                }
+              : step;
+          });
+          const knownLabels = new Set(
+            projectedSteps.map((step) => step.label.trim()),
+          );
+          const ownsUnmatchedCommittedSteps =
+            plan.targets.length === 1 ||
+            delivery?.activeTargetId === target.targetId ||
+            (delivery?.activeTargetId === null && targetIndex === 0);
+          return {
+            ...target,
+            ...(status ? { status } : {}),
+            implementationSteps: [
+              ...projectedSteps,
+              ...(ownsUnmatchedCommittedSteps
+                ? committedSteps
+                    .filter((step) => !knownLabels.has(step.label))
+                    .map((step) => ({
+                      label: step.label,
+                      status: "committed" as const,
+                      revision: step.revision,
+                    }))
+                : []),
+            ],
+          };
+        });
         return {
           ...item,
           plan: {
-            ...item.plan,
+            ...plan,
             status: targets.every((target) => target.status === "verified")
               ? ("verified" as const)
               : ("active" as const),
@@ -211,9 +307,6 @@ function collapseRecoverableFailures(
         item.runId === runId && item.kind === "run" && item.state !== "active",
     );
     const active = runId === activeRunId && !recovered && !terminal;
-    const structuredFailure = orderedFailures.find(
-      (failure) => failure.structuredFailure && failure.detail,
-    );
     visible.push({
       id: `design-recovery:${runId}`,
       runId,
@@ -232,9 +325,6 @@ function collapseRecoverableFailures(
           : t("agent.designCorrectionRecorded", {
               count: orderedFailures.length,
             }),
-      ...(structuredFailure?.detail
-        ? { detail: structuredFailure.detail }
-        : {}),
     });
   }
   return visible;
@@ -294,7 +384,7 @@ export function timelineRenderMarker(
   return items
     .map(
       (item) =>
-        `${item.id}:${item.state}:${item.title.length}:${item.detail?.length ?? 0}:${item.reasoning?.length ?? 0}:${item.plan?.status ?? ""}:${item.plan?.targets.map((target) => target.status ?? "").join(",") ?? ""}`,
+        `${item.id}:${item.state}:${item.title.length}:${item.detail?.length ?? 0}:${item.reasoning?.length ?? 0}:${item.plan?.status ?? ""}:${item.plan?.targets.map((target) => `${target.status ?? ""}:${target.implementationSteps.map((step) => `${step.status}:${step.revision ?? ""}`).join(";")}`).join(",") ?? ""}`,
     )
     .join("|");
 }
@@ -422,8 +512,8 @@ function projectDurableTimeline(
         recoverableFailure:
           item.status === "failed" &&
           item.error?.recoverable === true &&
-          isDesignCorrectionFailure(item.error.code, item.error.message),
-        structuredFailure: item.error?.details !== undefined,
+          (isNativeDesignTool(item.toolName) ||
+            isDesignCorrectionFailure(item.error.code, item.error.message)),
         ...(item.error?.code ? { failureCode: item.error.code } : {}),
         ...(item.error?.message ? { failureMessage: item.error.message } : {}),
         routine:
@@ -775,6 +865,7 @@ function projectLiveEvents(
           updateEvent(`design-step:${event.toolCallId}:${parsed.revision}`, {
             state: "done",
             kind: "system",
+            toolCallId: event.toolCallId,
             time: `r${parsed.revision}`,
             title: parsed.label,
           });
@@ -802,6 +893,7 @@ function projectLiveEvents(
             runId: event.runId,
             state: "done",
             kind: "plan",
+            toolCallId: event.toolCallId,
             time: t("common.done"),
             title: planTitle(plan, t),
             plan,
@@ -812,6 +904,7 @@ function projectLiveEvents(
     }
     if (event.type === "tool.failed") {
       if (event.code === "run_cancelled") return;
+      const existingTool = items.get(`tool:${event.toolCallId}`);
       const routine = isRoutineRecoverableToolFailure(
         event.code,
         event.message,
@@ -820,8 +913,8 @@ function projectLiveEvents(
         routine,
         recoverableFailure:
           event.recoverable === true &&
-          isDesignCorrectionFailure(event.code, event.message),
-        structuredFailure: event.details !== undefined,
+          (isNativeDesignTool(existingTool?.toolName) ||
+            isDesignCorrectionFailure(event.code, event.message)),
         failureCode: event.code,
         failureMessage: event.message,
         state: "error",
@@ -941,6 +1034,7 @@ function projectDurablePlans(
         order: item.sequence + 0.1,
         state: "done" as const,
         kind: "plan" as const,
+        toolCallId: item.toolCallId,
         time: t("common.done"),
         title: planTitle(plan, t),
         plan,
@@ -965,6 +1059,7 @@ function designPlanTimeline(
     return undefined;
   }
   const delivery = asRecord(record?.delivery);
+  const committedSteps = committedStepsFromResult(result);
   const statuses = new Map<string, string>();
   if (Array.isArray(delivery?.targets)) {
     for (const candidate of delivery.targets) {
@@ -987,9 +1082,18 @@ function designPlanTimeline(
       return [];
     }
     const implementationSteps = Array.isArray(target.implementationSteps)
-      ? target.implementationSteps.filter(
-          (step): step is string => typeof step === "string",
-        )
+      ? target.implementationSteps
+          .filter((step): step is string => typeof step === "string")
+          .map((label) => {
+            const committed = committedSteps.find(
+              (step) => step.label.trim() === label.trim(),
+            );
+            return {
+              label,
+              status: committed ? ("committed" as const) : ("pending" as const),
+              ...(committed ? { revision: committed.revision } : {}),
+            };
+          })
       : [];
     const status = statuses.get(target.targetId);
     return [

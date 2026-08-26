@@ -45,15 +45,25 @@ export async function handleDesignFirstSliceTool(
     );
   }
   const compiled = compileDesignFirstSliceToolInput(input);
-  if (!DesignPlanContract.parse(compiled.plan, { canonical: true }).ok) {
-    throw new TypeError("Compiled first-slice plan is invalid");
+  const parsedPlan = DesignPlanContract.parse(compiled.plan, {
+    canonical: true,
+  });
+  if (!parsedPlan.ok) {
+    throw new TypeError(
+      formatValidationFailure("compiled first-slice Plan", parsedPlan.issues),
+    );
   }
   const parsedApply = DesignApplyContract.parse(compiled.apply, {
     canonical: true,
     internal: true,
   });
   if (!parsedApply.ok) {
-    throw new TypeError("Compiled first-slice transaction is invalid");
+    throw new TypeError(
+      formatValidationFailure(
+        "compiled first-slice transaction",
+        parsedApply.issues,
+      ),
+    );
   }
   const normalizedApply = parsedApply.value;
 

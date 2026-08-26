@@ -29,7 +29,6 @@ export interface AgentTimelineItem {
   toolName?: string;
   routine?: boolean;
   recoverableFailure?: boolean;
-  structuredFailure?: boolean;
   failureCode?: string;
   failureMessage?: string;
   order: number;
@@ -44,7 +43,11 @@ export interface AgentTimelineItem {
       targetId: string;
       label: string;
       objective: string;
-      implementationSteps: string[];
+      implementationSteps: Array<{
+        label: string;
+        status: "pending" | "committed";
+        revision?: number;
+      }>;
       status?: DesignDeliveryStatus;
     }>;
   };

@@ -3781,6 +3781,41 @@ describe("Renderer design tool scope", () => {
         "page_welcome",
       ),
     ).rejects.toThrow("image_paint_update_requires_image_tool");
+
+    const replacedPaint = await executeDesignToolRequest(
+      {
+        requestId: "replace_image_paint",
+        call: {
+          toolCallId: "tool_replace_image_paint",
+          toolName: INTERNAL_DESIGN_APPLY_TOOL_NAME,
+          input: {
+            label: "Replace the old image treatment",
+            commands: [
+              {
+                commandId: "replace_image_paint",
+                type: "update_properties",
+                nodeId: "feature_one",
+                properties: {
+                  fills: [{ type: "solid", color: "#0f766e", opacity: 1 }],
+                },
+              },
+            ],
+          },
+        },
+        context: { ...selectionContext, revision: 1 },
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(replacedPaint).toMatchObject({
+      ok: true,
+      result: { designRevision: { previousRevision: 1, revision: 2 } },
+    });
+    expect(
+      runtime.getSnapshot().document.nodesById.feature_one?.properties,
+    ).toMatchObject({
+      fills: [{ type: "solid", color: "#0f766e", opacity: 1 }],
+    });
   });
 
   it("returns bounded image asset metadata without copying source bytes into model context", async () => {
@@ -5739,32 +5774,36 @@ describe("Renderer semantic hierarchy tool", () => {
       runtime.getSnapshot().document.nodesById.title_welcome?.size.width,
     ).toBe(1200);
     expect(runtime.getSnapshot().state.history.undo).toHaveLength(2);
-    await expect(
-      executeDesignToolRequest(
-        {
-          requestId: "constraints_bypass",
-          call: {
-            toolCallId: "tool_constraints_bypass",
-            toolName: INTERNAL_DESIGN_APPLY_TOOL_NAME,
-            input: {
-              label: "Bypass responsive resize",
-              commands: [
-                {
-                  commandId: "bypass_resize",
-                  type: "update_properties",
-                  nodeId: "frame_welcome",
-                  size: { width: 1800, height: 1000 },
-                },
-              ],
-            },
+    const directResize = await executeDesignToolRequest(
+      {
+        requestId: "direct_frame_resize",
+        call: {
+          toolCallId: "tool_direct_frame_resize",
+          toolName: INTERNAL_DESIGN_APPLY_TOOL_NAME,
+          input: {
+            label: "Resize the existing frame",
+            commands: [
+              {
+                commandId: "resize_existing_frame",
+                type: "update_properties",
+                nodeId: "frame_welcome",
+                size: { width: 1800, height: 1000 },
+              },
+            ],
           },
-          context: { ...pageContext, revision: 2 },
         },
-        runtime,
-        "page_welcome",
-      ),
-    ).rejects.toThrow("frame_resize_requires_layout_tool");
-    expect(runtime.getSnapshot().document.revision).toBe(2);
+        context: { ...pageContext, revision: 2 },
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(directResize).toMatchObject({
+      ok: true,
+      result: { designRevision: { previousRevision: 2, revision: 3 } },
+    });
+    expect(
+      runtime.getSnapshot().document.nodesById.frame_welcome?.size,
+    ).toEqual({ width: 1800, height: 1000 });
   });
 
   it("repairs trailing delivery overflow through one bounded Agent transaction", async () => {
@@ -5963,31 +6002,33 @@ describe("Renderer semantic hierarchy tool", () => {
     if (invalidLimits.ok) throw new Error("Absolute limits were accepted");
     expect(invalidLimits.error.message).toContain("flow child");
 
-    await expect(
-      executeDesignToolRequest(
-        {
-          requestId: "auto_layout_bypass",
-          call: {
-            toolCallId: "tool_auto_layout_bypass",
-            toolName: INTERNAL_DESIGN_APPLY_TOOL_NAME,
-            input: {
-              label: "Bypass flow geometry",
-              commands: [
-                {
-                  commandId: "move_flow_child",
-                  type: "update_properties",
-                  nodeId: "subtitle_welcome",
-                  transform: [1, 0, 0, 1, 500, 500],
-                },
-              ],
-            },
+    const directFlowGeometry = await executeDesignToolRequest(
+      {
+        requestId: "auto_layout_direct_geometry",
+        call: {
+          toolCallId: "tool_auto_layout_direct_geometry",
+          toolName: INTERNAL_DESIGN_APPLY_TOOL_NAME,
+          input: {
+            label: "Edit existing flow child geometry",
+            commands: [
+              {
+                commandId: "move_flow_child",
+                type: "update_properties",
+                nodeId: "subtitle_welcome",
+                transform: [1, 0, 0, 1, 500, 500],
+              },
+            ],
           },
-          context: { ...pageContext, revision: 3 },
         },
-        runtime,
-        "page_welcome",
-      ),
-    ).rejects.toThrow("auto_layout_requires_layout_tool");
+        context: { ...pageContext, revision: 3 },
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(directFlowGeometry).toMatchObject({
+      ok: true,
+      result: { designRevision: { previousRevision: 3, revision: 4 } },
+    });
     await expect(
       executeDesignToolRequest(
         {
@@ -6007,7 +6048,7 @@ describe("Renderer semantic hierarchy tool", () => {
               ],
             },
           },
-          context: { ...pageContext, revision: 3 },
+          context: { ...pageContext, revision: 4 },
         },
         runtime,
         "page_welcome",
@@ -6039,13 +6080,13 @@ describe("Renderer semantic hierarchy tool", () => {
               ],
             },
           },
-          context: { ...pageContext, revision: 3 },
+          context: { ...pageContext, revision: 4 },
         },
         runtime,
         "page_welcome",
       ),
     ).rejects.toThrow("set-grid-placement");
-    expect(runtime.getSnapshot().document.revision).toBe(3);
+    expect(runtime.getSnapshot().document.revision).toBe(4);
     await expect(
       executeDesignToolRequest(
         {
@@ -6075,13 +6116,13 @@ describe("Renderer semantic hierarchy tool", () => {
               ],
             },
           },
-          context: { ...pageContext, revision: 3 },
+          context: { ...pageContext, revision: 4 },
         },
         runtime,
         "page_welcome",
       ),
     ).rejects.toThrow("set-layout-guides");
-    expect(runtime.getSnapshot().document.revision).toBe(3);
+    expect(runtime.getSnapshot().document.revision).toBe(4);
     const frameWithGuides = {
       ...runtime.getSnapshot().document.nodesById.frame_welcome,
       id: "frame_with_guides",
@@ -6142,13 +6183,13 @@ describe("Renderer semantic hierarchy tool", () => {
               toolName: INTERNAL_DESIGN_APPLY_TOOL_NAME,
               input: { label: "Bypass layout guides", commands },
             },
-            context: { ...pageContext, revision: 3 },
+            context: { ...pageContext, revision: 4 },
           },
           runtime,
           "page_welcome",
         ),
       ).rejects.toThrow("set-layout-guides");
-      expect(runtime.getSnapshot().document.revision).toBe(3);
+      expect(runtime.getSnapshot().document.revision).toBe(4);
     }
 
     await expect(
@@ -6170,13 +6211,13 @@ describe("Renderer semantic hierarchy tool", () => {
               ],
             },
           },
-          context: { ...pageContext, revision: 3 },
+          context: { ...pageContext, revision: 4 },
         },
         runtime,
         "page_welcome",
       ),
     ).rejects.toThrow("set-layout-limits");
-    expect(runtime.getSnapshot().document.revision).toBe(3);
+    expect(runtime.getSnapshot().document.revision).toBe(4);
 
     const absoluteNode = {
       ...runtime.getSnapshot().document.nodesById.subtitle_welcome,
@@ -6237,13 +6278,13 @@ describe("Renderer semantic hierarchy tool", () => {
               toolName: INTERNAL_DESIGN_APPLY_TOOL_NAME,
               input: { label: "Bypass layout positioning", commands },
             },
-            context: { ...pageContext, revision: 3 },
+            context: { ...pageContext, revision: 4 },
           },
           runtime,
           "page_welcome",
         ),
       ).rejects.toThrow("set-layout-positioning");
-      expect(runtime.getSnapshot().document.revision).toBe(3);
+      expect(runtime.getSnapshot().document.revision).toBe(4);
     }
 
     const guides = await executeDesignToolRequest(
@@ -6268,7 +6309,7 @@ describe("Renderer semantic hierarchy tool", () => {
             ],
           },
         },
-        context: { ...pageContext, revision: 3 },
+        context: { ...pageContext, revision: 4 },
       },
       runtime,
       "page_welcome",
@@ -6278,7 +6319,7 @@ describe("Renderer semantic hierarchy tool", () => {
       result: {
         content: {
           action: "set-layout-guides",
-          revision: 4,
+          revision: 5,
           atomic: true,
         },
       },

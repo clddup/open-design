@@ -20,7 +20,14 @@ export function compileValidatedDesignFirstSliceToolInput(
   apply: DesignApplyToolInput;
   insertedNodeIds: string[];
 } {
-  const targets = input.targets.map(compileTarget);
+  const targets = input.targets.map((target, index) =>
+    compileTarget(
+      target,
+      index === 0
+        ? input.firstSlice.stages.map((stage) => stage.label)
+        : undefined,
+    ),
+  );
   const componentStrategy = compileComponentStrategy(
     input.semanticObjects ?? [],
   );
@@ -122,6 +129,7 @@ export function compileValidatedDesignFirstSliceToolInput(
 
 function compileTarget(
   target: DesignFirstSliceToolInput["targets"][number],
+  firstSliceSteps?: readonly string[],
 ): DesignPlanTarget {
   const regionNames = target.regions.map((region) => region.name);
   return {
@@ -151,7 +159,7 @@ function compileTarget(
     },
     editableLayers: unique([...regionNames, "Typography and controls"]),
     implementationSteps: unique([
-      ...regionNames.map((name) => `Build ${name}`),
+      ...(firstSliceSteps ?? regionNames.map((name) => `Build ${name}`)),
       "Review and refine the rendered target",
     ]),
     validationChecks: [

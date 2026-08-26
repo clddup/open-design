@@ -1642,7 +1642,6 @@ async function executeDesignToolRequestUnsafe(
   const commands = normalizeAgentTextContent(
     normalizeAgentInsertHierarchy(applyInput.commands),
   );
-  assertAgentDoesNotBypassFrameConstraints(document, commands);
   assertAgentDoesNotBypassAutoLayout(document, commands);
   assertAgentDoesNotBypassImageWorkflow(document, commands);
   assertCommandsWithinMutationTarget(
@@ -1797,43 +1796,6 @@ function assertAgentDoesNotBypassAutoLayout(
         `design_workflow.auto_layout_requires_layout_tool: Configure Frame Auto Layout with opendesign_arrange_layers action set-auto-layout`,
       );
     }
-    if (
-      command.type !== "update_properties" ||
-      (command.transform === undefined && command.size === undefined)
-    ) {
-      continue;
-    }
-    const node = document.nodesById[command.nodeId];
-    const parent = node?.parentId
-      ? document.nodesById[node.parentId]
-      : undefined;
-    if (
-      parent?.kind !== "frame" ||
-      parent.properties.autoLayout === undefined ||
-      parent.properties.autoLayout.mode === "none" ||
-      node.layoutPositioning === "absolute"
-    ) {
-      continue;
-    }
-    throw new Error(
-      `design_workflow.auto_layout_requires_layout_tool: Layer ${node.id} participates in Frame ${parent.id} Auto Layout; change the parent with opendesign_arrange_layers action set-auto-layout or reorder hierarchy instead of setting child geometry`,
-    );
-  }
-}
-
-function assertAgentDoesNotBypassFrameConstraints(
-  document: DesignDocument,
-  commands: readonly DesignOperation[],
-): void {
-  for (const command of commands) {
-    if (command.type !== "update_properties" || command.size === undefined) {
-      continue;
-    }
-    const node = document.nodesById[command.nodeId];
-    if (node?.kind !== "frame" || node.childIds.length === 0) continue;
-    throw new Error(
-      `design_workflow.frame_resize_requires_layout_tool: Frame ${node.id} has children; resize it with opendesign_arrange_layers action resize-frame so constraints are resolved in one atomic transaction`,
-    );
   }
 }
 
@@ -1870,23 +1832,29 @@ function assertAgentDoesNotBypassImageWorkflow(
     for (const field of ["fills", "strokes"] as const) {
       const next = command.properties[field];
       if (!Array.isArray(next)) continue;
-      const currentFilters = node.properties[field].map((paint) =>
-        paint.type === "image" ? (paint.filters ?? {}) : null,
+      const changesRetainedImageFilters = node.properties[field].some(
+        (paint, index) => {
+          if (paint.type !== "image") return false;
+          const nextPaint = next[index];
+          if (
+            typeof nextPaint !== "object" ||
+            nextPaint === null ||
+            Array.isArray(nextPaint) ||
+            nextPaint.type !== "image" ||
+            nextPaint.assetId !== paint.assetId
+          ) {
+            // Removing or replacing an entire paint is ordinary editable
+            // appearance work. Only an in-place filter edit needs the
+            // stale-safe image-paint workflow.
+            return false;
+          }
+          return (
+            JSON.stringify(paint.filters ?? {}) !==
+            JSON.stringify(nextPaint.filters ?? {})
+          );
+        },
       );
-      const nextFilters = next.map((paint) => {
-        if (
-          typeof paint !== "object" ||
-          paint === null ||
-          Array.isArray(paint) ||
-          paint.type !== "image"
-        ) {
-          return null;
-        }
-        return typeof paint.filters === "object" && paint.filters !== null
-          ? paint.filters
-          : {};
-      });
-      if (JSON.stringify(currentFilters) !== JSON.stringify(nextFilters)) {
+      if (changesRetainedImageFilters) {
         throw new Error(
           `design_workflow.image_paint_update_requires_image_tool: Update an existing image ${field} on node ${node.id} with opendesign_update_image action set-paint-filters so the exact paint identity remains non-destructive and stale-safe`,
         );

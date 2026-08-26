@@ -86,6 +86,13 @@ describe("Agent continuation timeline projection", () => {
         risk: "design_write",
         status: "completed",
         result: {
+          committedSteps: [
+            {
+              stepIds: ["real_navigation"],
+              label: "完成真实导航结构",
+              revision: 3,
+            },
+          ],
           delivery: {
             ...delivery,
             targets: [
@@ -124,7 +131,11 @@ describe("Agent continuation timeline projection", () => {
     expect(visiblePlan?.plan?.targets[0]).toMatchObject({
       label: "首页",
       status: "verified",
-      implementationSteps: ["构建导航与首屏层级", "完成核心内容与底部状态"],
+      implementationSteps: [
+        { label: "构建导航与首屏层级", status: "pending" },
+        { label: "完成核心内容与底部状态", status: "pending" },
+        { label: "完成真实导航结构", status: "committed", revision: 3 },
+      ],
     });
   });
 

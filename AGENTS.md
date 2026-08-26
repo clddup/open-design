@@ -59,6 +59,8 @@ OpenDesign 是跨平台桌面产品。macOS 与 Windows 是同级一级支持平
 - 所有契约失败统一返回结构化 `code/path/message/expected/actual/recovery`；Timeline、诊断、恢复和测试使用稳定 `code/path`，不得通过解析错误文本推断类型。Union 必须先按 discriminant 选择真实分支，错误必须指向具体字段。
 - 契约迁移只有在旧结构校验、重复 normalizer 和错误解释路径被删除，Provider/Runtime 一致性测试、真实复杂 fixture 与失败字段路径测试通过后才算完成。只新增 `Contract.parse()` 但保留旧事实源，不得声称已经整改。
 - 用户可以容忍偶发一次模型参数错误，但同一 fingerprint 不得连续消耗完整 Provider 往返。首次错误必须返回准确字段路径与可执行恢复；重复错误必须抑制并保留已提交 revision，不得长时间零画布变化地循环。
+- OpenDesign 是编辑器而不是流程管理系统。当前 Design File 中的用户内容和历史 Agent 产物都保持同等可编辑，不得按创建 Run、Conversation、模型或工具建立写入所有权。Run `targetSet` 只限定本次作用域，revision 只处理并发，二者都不得阻止用户重构已存在的设计。
+- Typed 专用工具是原子语义、并发安全和效率入口，不是互斥权限孤岛。普通 Figma 式编辑（选择、移动、缩放、重组、替换外观、删除、重建）不得仅因“应改用另一个 OpenDesign 工具”而失败；宿主应自动编译/路由，或让通用事务直接执行。只有 capability、approval、stale revision、外部资产授权和文档 invariant 可以形成硬拒绝。
 
 ## UI 质量基线
 

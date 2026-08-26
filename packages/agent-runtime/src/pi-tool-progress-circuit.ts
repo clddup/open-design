@@ -1,16 +1,16 @@
 import type { TrustedToolFailure } from "@opendesign/agent-contracts";
 
 const MAX_CONSECUTIVE_INVALID_INPUTS_PER_TOOL = 2;
-const MAX_RECOVERABLE_FAILURES_WITHOUT_REVISION = 4;
+const MAX_REPEATED_RECOVERABLE_FAILURES = 2;
 
 /**
- * Bounds model-driven recovery by user-visible document progress rather than
- * exact input fingerprints. Different malformed arguments are still the same
- * stalled recovery when no trusted design revision advances.
+ * Bounds model-driven recovery by stable root cause. Unrelated deterministic
+ * failures must not be accumulated into a fake loop merely because no write
+ * occurred between them; repeating one contract fingerprint is a real loop.
  */
 export class PiToolProgressCircuit {
-  readonly #invalidInputsByTool = new Map<string, number>();
-  #recoverableFailuresWithoutRevision = 0;
+  readonly #invalidInputsByFingerprint = new Map<string, number>();
+  readonly #recoverableFailuresByFingerprint = new Map<string, number>();
 
   recordFailure(
     toolName: string,
@@ -18,10 +18,17 @@ export class PiToolProgressCircuit {
   ): TrustedToolFailure {
     if (!failure.recoverable || failure.runTerminal) return failure;
 
-    this.#recoverableFailuresWithoutRevision += 1;
+    const fingerprint = failureFingerprint(toolName, failure);
+    const recoverableFailures =
+      (this.#recoverableFailuresByFingerprint.get(fingerprint) ?? 0) + 1;
+    this.#recoverableFailuresByFingerprint.set(
+      fingerprint,
+      recoverableFailures,
+    );
     if (failure.code === "invalid_tool_input") {
-      const invalidInputs = (this.#invalidInputsByTool.get(toolName) ?? 0) + 1;
-      this.#invalidInputsByTool.set(toolName, invalidInputs);
+      const invalidInputs =
+        (this.#invalidInputsByFingerprint.get(fingerprint) ?? 0) + 1;
+      this.#invalidInputsByFingerprint.set(fingerprint, invalidInputs);
       if (invalidInputs >= MAX_CONSECUTIVE_INVALID_INPUTS_PER_TOOL) {
         return terminalFailure(
           "tool_protocol_no_progress",
@@ -30,24 +37,32 @@ export class PiToolProgressCircuit {
       }
     }
 
-    if (
-      this.#recoverableFailuresWithoutRevision >=
-      MAX_RECOVERABLE_FAILURES_WITHOUT_REVISION
-    ) {
+    if (recoverableFailures >= MAX_REPEATED_RECOVERABLE_FAILURES) {
       return terminalFailure(
         "design_recovery_no_progress",
-        `The run produced ${this.#recoverableFailuresWithoutRevision} recoverable tool failures without advancing the design document. The run was stopped instead of continuing an invisible recovery loop. Already committed revisions are preserved.`,
+        `The run repeated the same recoverable design failure ${recoverableFailures} times without advancing the design document. The run was stopped instead of continuing an invisible recovery loop. Already committed revisions are preserved.`,
       );
     }
     return failure;
   }
 
-  recordSuccess(toolName: string, revisionAdvanced: boolean): void {
-    this.#invalidInputsByTool.delete(toolName);
+  recordSuccess(_toolName: string, revisionAdvanced: boolean): void {
     if (!revisionAdvanced) return;
-    this.#recoverableFailuresWithoutRevision = 0;
-    this.#invalidInputsByTool.clear();
+    this.#recoverableFailuresByFingerprint.clear();
+    this.#invalidInputsByFingerprint.clear();
   }
+}
+
+function failureFingerprint(
+  toolName: string,
+  failure: TrustedToolFailure,
+): string {
+  const structured = failure.details?.fingerprint;
+  if (structured) return `${toolName}:${structured}`;
+  const workflowCode = /^(design(?:_workflow)?\.[a-z0-9_.-]+):/i.exec(
+    failure.message,
+  )?.[1];
+  return `${toolName}:${failure.code}:${workflowCode ?? failure.message}`;
 }
 
 function terminalFailure(code: string, message: string): TrustedToolFailure {

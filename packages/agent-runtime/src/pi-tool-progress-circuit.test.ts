@@ -32,12 +32,25 @@ describe("PiToolProgressCircuit", () => {
     });
   });
 
-  it("stops a cross-tool recovery loop after four failures without a revision", () => {
+  it("does not combine unrelated recovery failures into a fake loop", () => {
     const circuit = new PiToolProgressCircuit();
-    let result = recoverableFailure;
     for (let index = 0; index < 4; index += 1) {
-      result = circuit.recordFailure(`tool_${index}`, recoverableFailure);
+      expect(
+        circuit.recordFailure(`tool_${index}`, {
+          ...recoverableFailure,
+          message: `design_workflow.issue_${index}: Revise transaction`,
+        }),
+      ).not.toHaveProperty("runTerminal");
     }
+  });
+
+  it("stops one repeated recoverable root cause without a revision", () => {
+    const circuit = new PiToolProgressCircuit();
+    circuit.recordFailure("opendesign_design_checkpoint", recoverableFailure);
+    const result = circuit.recordFailure(
+      "opendesign_design_checkpoint",
+      recoverableFailure,
+    );
     expect(result).toMatchObject({
       code: "design_recovery_no_progress",
       recoverable: false,

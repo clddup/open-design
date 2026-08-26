@@ -41,6 +41,7 @@ export function projectDurableDesignSteps(
       order: item.sequence + (index + 1) / (steps.length + 1),
       state: "done" as const,
       kind: "system" as const,
+      toolCallId: item.toolCallId,
       time: `r${step.revision}`,
       title: step.label,
     }));
@@ -56,7 +57,7 @@ export function parseCommittedDesignStep(
   return Number.isSafeInteger(revision) ? { label: match[1], revision } : null;
 }
 
-function committedStepsFromResult(
+export function committedStepsFromResult(
   value: unknown,
 ): Array<{ label: string; revision: number }> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return [];

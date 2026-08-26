@@ -204,6 +204,29 @@ describe("compact first-slice tool", () => {
     });
   });
 
+  it("rejects semantic occurrences that reuse planned or material node identities before compilation", () => {
+    const modelInput = providerInput(fixture());
+    modelInput.semanticObjects = [
+      {
+        decisionId: "login_form_semantics",
+        label: "Login form",
+        decision: "ordinary",
+        occurrences: [{ targetId: "home", nodeId: "home_hero" }],
+      },
+    ];
+
+    const result = FirstSliceContract.parse(modelInput);
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("Expected semantic identity failure");
+    expect(result.issues).toContainEqual(
+      expect.objectContaining({
+        code: "first_slice.semantic_occurrence_reuses_node_id",
+        path: "/semanticObjects/0/occurrences/0/nodeId",
+        actual: "home_hero",
+      }),
+    );
+  });
+
   it("uses the element kind discriminator to report the concrete invalid field", () => {
     const modelInput = providerInput(fixture());
     const firstSlice = modelInput.firstSlice as {

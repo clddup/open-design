@@ -13,7 +13,7 @@ import {
 } from "@/shared/design-agent-tools";
 import { formatBytes, isImageAttachment } from "../attachment-format";
 import {
-  projectAgentTimeline,
+  projectAgentTimelineView,
   timelineRenderMarker,
 } from "../timeline-projection";
 import {
@@ -153,8 +153,20 @@ function PlanDisclosure({
                 <ol>
                   {target.implementationSteps.map((step, index) => (
                     <li key={`${target.targetId}:${index}`}>
-                      <span aria-hidden="true" />
-                      {step}
+                      <span
+                        aria-hidden="true"
+                        className={
+                          step.status === "committed"
+                            ? styles.planStepCommitted
+                            : undefined
+                        }
+                      >
+                        {step.status === "committed" ? "✓" : ""}
+                      </span>
+                      <span className={styles.planStepLabel}>{step.label}</span>
+                      {step.revision !== undefined && (
+                        <small>{`r${step.revision}`}</small>
+                      )}
                     </li>
                   ))}
                 </ol>
@@ -313,7 +325,7 @@ export function AgentTimeline({
     submissionAvailable,
   });
 
-  const items = projectAgentTimeline({
+  const projection = projectAgentTimelineView({
     activeRunId,
     events,
     locale,
@@ -321,6 +333,7 @@ export function AgentTimeline({
     timeline,
     t,
   });
+  const { activePlan, items } = projection;
   const renderEntries = groupAgentTimelineItems(items, t);
   const runExperience = projectAgentRunExperience({
     activeRunId,
@@ -334,10 +347,9 @@ export function AgentTimeline({
     .map((item) => item.approvalId)
     .filter(Boolean)
     .join("|");
-  const renderMarker = timelineRenderMarker(items);
-  const latestPlanId = [...items]
-    .filter((item) => item.kind === "plan")
-    .at(-1)?.id;
+  const renderMarker = timelineRenderMarker(
+    activePlan ? [...items, activePlan] : items,
+  );
   const hasConversation = composer.hasConversation;
 
   useLayoutEffect(() => {
@@ -499,6 +511,11 @@ export function AgentTimeline({
         {runExperience?.active && (
           <AgentRunStatus experience={runExperience} t={t} />
         )}
+        {activePlan && (
+          <div className={styles.activePlan} data-agent-active-plan="">
+            <PlanDisclosure current item={activePlan} t={t} />
+          </div>
+        )}
         <ol
           aria-live="polite"
           className={styles.thread}
@@ -563,11 +580,7 @@ export function AgentTimeline({
                   key={item.id}
                 >
                   {item.kind === "plan" ? (
-                    <PlanDisclosure
-                      current={item.id === latestPlanId}
-                      item={item}
-                      t={t}
-                    />
+                    <PlanDisclosure current={false} item={item} t={t} />
                   ) : item.kind === "reasoning" ? (
                     <ReasoningDisclosure item={item} t={t} />
                   ) : item.kind === "user" || item.kind === "assistant" ? (

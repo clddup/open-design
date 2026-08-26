@@ -82,6 +82,18 @@
   flex: 1;
 }
 
+.activePlan {
+  min-width: 0;
+  max-height: min(42%, 280px);
+  flex: none;
+  overflow: auto;
+  padding: 8px 9px;
+  border-bottom: 1px solid var(--ui-border-subtle);
+  background: var(--ui-surface);
+  scrollbar-color: var(--ui-border-strong) transparent;
+  scrollbar-width: thin;
+}
+
 .deleteAction {
   color: var(--ui-danger);
 }
@@ -369,22 +381,44 @@
 
   li {
     display: grid;
-    grid-template-columns: 6px minmax(0, 1fr);
+    grid-template-columns: 12px minmax(0, 1fr) auto;
     align-items: start;
     gap: 6px;
     color: var(--ui-text-muted);
     font-size: 9px;
     line-height: 1.4;
 
-    > span {
+    > span:first-child {
+      display: grid;
       width: 5px;
       height: 5px;
       margin-top: 4px;
+      place-items: center;
       border: 1px solid var(--ui-border-strong);
       border-radius: 50%;
       background: var(--ui-surface);
     }
+
+    > small {
+      color: var(--ui-text-faint);
+      font-size: 8px;
+    }
   }
+}
+
+.planStepLabel {
+  min-width: 0;
+}
+
+.planSteps li > .planStepCommitted {
+  width: 11px;
+  height: 11px;
+  margin-top: 1px;
+  border-color: var(--ui-success);
+  color: var(--ui-surface);
+  background: var(--ui-success);
+  font-size: 7px;
+  line-height: 1;
 }
 
 .toolGroupItems {

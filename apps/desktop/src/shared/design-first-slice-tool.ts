@@ -405,7 +405,12 @@ function refineFirstSlice(
     materializedRegions,
     issues,
   );
-  refineSemanticObjects(input, new Set(targetIds.keys()), issues);
+  refineSemanticObjects(
+    input,
+    new Set(targetIds.keys()),
+    new Set([...allFrameIds, ...allRegionIds, ...elementIds.keys()]),
+    issues,
+  );
   refineReferenceStrategy(input.referenceStrategy, issues);
   return issues.slice(0, 64);
 }
@@ -603,6 +608,7 @@ function refineLogoExploration(
 function refineSemanticObjects(
   input: DesignFirstSliceCanonicalInput,
   targetIds: ReadonlySet<string>,
+  reservedNodeIds: ReadonlySet<string>,
   issues: ValidationIssue[],
 ): void {
   if (!input.semanticObjects) return;
@@ -631,12 +637,23 @@ function refineSemanticObjects(
     }
     const occurrences =
       object.decision === "ordinary"
-        ? object.occurrences
+        ? object.occurrences.map((occurrence, index) => ({
+            occurrence,
+            path: `${path}/occurrences/${index}`,
+          }))
         : object.decision === "component"
-          ? [object.main, ...object.instances]
-          : object.instances;
-    for (const [occurrenceIndex, occurrence] of occurrences.entries()) {
-      const occurrencePath = `${path}/occurrences/${occurrenceIndex}`;
+          ? [
+              { occurrence: object.main, path: `${path}/main` },
+              ...object.instances.map((occurrence, index) => ({
+                occurrence,
+                path: `${path}/instances/${index}`,
+              })),
+            ]
+          : object.instances.map((occurrence, index) => ({
+              occurrence,
+              path: `${path}/instances/${index}`,
+            }));
+    for (const { occurrence, path: occurrencePath } of occurrences) {
       if (!targetIds.has(occurrence.targetId)) {
         issues.push(
           issue(
@@ -656,6 +673,17 @@ function refineSemanticObjects(
         "Semantic occurrence node ID",
         issues,
       );
+      if (reservedNodeIds.has(occurrence.nodeId)) {
+        issues.push(
+          issue(
+            "first_slice.semantic_occurrence_reuses_node_id",
+            `${occurrencePath}/nodeId`,
+            "Semantic occurrence cannot reuse a delivery Frame, planned region, or first-slice content node ID",
+            "a unique semantic node ID",
+            occurrence.nodeId,
+          ),
+        );
+      }
     }
   }
 }
