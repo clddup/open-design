@@ -943,6 +943,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       nearlyEqual(current.b, 0) &&
       nearlyEqual(current.c, 0)
     ) {
+      if (!this.#synchronizing) this.#editorOverlays.syncViewport(viewport);
       return;
     }
     this.#app.tree.setTransform({
@@ -954,7 +955,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       f: viewport.panY,
     });
     this.#generationPresentation.syncViewport();
-    if (this.#input) this.#editorOverlays.sync(this.#input);
+    if (!this.#synchronizing) this.#editorOverlays.syncViewport(viewport);
     this.#generationPresentation.scheduleViewportSync();
     this.#scheduleEditorRefresh();
   }

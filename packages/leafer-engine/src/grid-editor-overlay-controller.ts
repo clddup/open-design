@@ -3,6 +3,7 @@ import {
   type DesignDocument,
   type GridChildPlacement,
   type LayoutSizing,
+  type ViewportState,
 } from "@opendesign/design-contracts";
 import type * as LeaferEditorModule from "leafer-editor";
 import {
@@ -13,6 +14,7 @@ import {
 } from "./affine.js";
 import {
   createGridEditorOverlayPlan,
+  createGridEditorViewportProjection,
   gridAreaForPlacement,
   gridChildSpanTargetFromBounds,
   gridTrackSelectionReorderChangesOrder,
@@ -113,7 +115,7 @@ export class GridEditorOverlayController {
   #childDropCell: GridEditorCellSpec | null = null;
   #documentId: string | null = null;
   #drag: GridDragSession | null = null;
-  #fingerprint: string | null = null;
+  #frameId: string | undefined;
   readonly #guide: LeaferElement;
   readonly #reorderHitTracks = new WeakMap<object, GridEditorTrackSpec>();
   readonly #resizeHitTracks = new WeakMap<object, GridEditorTrackSpec>();
@@ -133,6 +135,7 @@ export class GridEditorOverlayController {
   #selection: GridTrackSelection | null = null;
   readonly #tracks = new Map<string, GridTrackElements>();
   readonly #viewportRoot: LeaferGroup;
+  #viewportSize = { height: 0, width: 0 };
 
   constructor(options: {
     layerIndex: number;
@@ -481,7 +484,15 @@ export class GridEditorOverlayController {
     return true;
   }
 
-  sync(input: { document: DesignDocument; frameId?: string }): void {
+  sync(input: {
+    document: DesignDocument;
+    frameId?: string;
+    viewport: ViewportState;
+  }): void {
+    const planInputUnchanged =
+      this.#documentId === input.document.documentId &&
+      this.#revision === input.document.revision &&
+      this.#frameId === input.frameId;
     if (
       this.#drag &&
       (this.#drag.documentId !== input.document.documentId ||
@@ -508,10 +519,18 @@ export class GridEditorOverlayController {
     }
     this.#documentId = input.document.documentId;
     this.#revision = input.document.revision;
+    this.#frameId = input.frameId;
+    this.#viewportSize = {
+      height: input.viewport.height,
+      width: input.viewport.width,
+    };
+    if (planInputUnchanged) {
+      this.syncViewport();
+      return;
+    }
     const plan = createGridEditorOverlayPlan(input.document, input.frameId);
     this.#plan = plan;
     if (!plan) {
-      this.#fingerprint = null;
       this.#selection = null;
       this.#destroyTracks();
       this.#guide.visible = false;
@@ -521,14 +540,16 @@ export class GridEditorOverlayController {
       return;
     }
     this.#reconcileSelection(plan);
-    if (plan.fingerprint !== this.#fingerprint) {
-      this.#reconcileTracks(plan);
-      this.#fingerprint = plan.fingerprint;
-    }
     this.syncViewport();
   }
 
-  syncViewport(): void {
+  syncViewport(viewport?: Pick<ViewportState, "height" | "width">): void {
+    if (viewport) {
+      this.#viewportSize = {
+        height: viewport.height,
+        width: viewport.width,
+      };
+    }
     const plan = this.#plan;
     if (!plan) return;
     const desired = multiplyAffine(
@@ -551,12 +572,43 @@ export class GridEditorOverlayController {
     this.#scaleX = scaleX;
     this.#scaleY = scaleY;
     this.#renderScale = Math.max(scaleX, scaleY);
+    const viewportProjection = createGridEditorViewportProjection(
+      plan,
+      {
+        height: this.#viewportSize.height,
+        transform: [
+          desired.a,
+          desired.b,
+          desired.c,
+          desired.d,
+          desired.e,
+          desired.f,
+        ],
+        width: this.#viewportSize.width,
+      },
+      this.#drag
+        ? {
+            axis: this.#drag.axis,
+            index:
+              this.#drag.kind === "resize"
+                ? this.#drag.index
+                : this.#drag.fromIndex,
+          }
+        : undefined,
+    );
+    const visibleTracks = [
+      ...viewportProjection.controlColumns,
+      ...viewportProjection.controlRows,
+    ];
+    this.#reconcileTracks(visibleTracks);
     this.#guide.set({
-      path: gridGuidePath(plan),
+      path: gridGuidePath(plan, viewportProjection),
       strokeWidth: 1 / Math.max(scaleX, scaleY),
-      visible: true,
+      visible:
+        viewportProjection.guideColumns.length > 0 ||
+        viewportProjection.guideRows.length > 0,
     });
-    for (const spec of [...plan.columns, ...plan.rows]) {
+    for (const spec of visibleTracks) {
       const elements = this.#tracks.get(spec.id);
       if (!elements) continue;
       const label = this.#displayLabel(spec);
@@ -685,9 +737,9 @@ export class GridEditorOverlayController {
     this.#tracks.clear();
   }
 
-  #reconcileTracks(plan: GridEditorOverlayPlan): void {
+  #reconcileTracks(specs: readonly GridEditorTrackSpec[]): void {
     const expected = new Set<string>();
-    for (const spec of [...plan.columns, ...plan.rows]) {
+    for (const spec of specs) {
       if (!spec.editable) continue;
       expected.add(spec.id);
       const existing = this.#tracks.get(spec.id);
@@ -870,15 +922,21 @@ export class GridEditorOverlayController {
   }
 }
 
-function gridGuidePath(plan: GridEditorOverlayPlan): string {
+function gridGuidePath(
+  plan: GridEditorOverlayPlan,
+  viewport: {
+    guideColumns: readonly GridEditorTrackSpec[];
+    guideRows: readonly GridEditorTrackSpec[];
+  },
+): string {
   const parts: string[] = [];
-  for (const track of plan.columns) {
+  for (const track of viewport.guideColumns) {
     parts.push(
       `M ${track.start} 0 L ${track.start} ${plan.frameSize.height}`,
       `M ${track.end} 0 L ${track.end} ${plan.frameSize.height}`,
     );
   }
-  for (const track of plan.rows) {
+  for (const track of viewport.guideRows) {
     parts.push(
       `M 0 ${track.start} L ${plan.frameSize.width} ${track.start}`,
       `M 0 ${track.end} L ${plan.frameSize.width} ${track.end}`,

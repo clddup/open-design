@@ -85,6 +85,14 @@ Grid editor sky 继续使用 Frame-local 轨道、cell 与 span 几何，然后�
 
 轨道标签、命中区、引导线、目标高亮和 insertion indicator 全部随 Frame 旋转；固定屏幕尺寸按旋转后两条局部轴的真实 scale 分别补偿。resize cursor 根据当前轨道变化轴的屏幕方向映射到水平、垂直或两条对角 cursor。正向正交矩阵才进入该路径；mirror 会反转标签与顺序，skew 会破坏正交轨道心智，因此二者继续明确使用 Inspector，不能以错误 overlay 冒充支持。Frame 的 transform、Grid 文档事实、事务和 history 均不因本切片变化。
 
+### Viewport virtualization
+
+Grid 文档与 Layout Service 继续允许每轴最多 4,096 条轨道，editor sky 不再以“行列总数超过 512”整体关闭画布能力。文档/revision 变化时仍完整求解一次权威 track/cell/span 几何；pan、zoom 和窗口尺寸变化只把当前 viewport 四角连同 64 screen-px overscan 反解到 Frame-local，使用已排序 track 的二分窗口选择可见范围，不重新调用 Layout Service。
+
+可见轨道标签/命中区按局部轴 screen scale 保持至少 18 px 密度，引导线保持至少 2 px 密度；极宽视口仍分别按候选比例约束在最多 512 个可交互 track controls 和 1,024 个 guide tracks。低 zoom 下未投影标签的轨道不会伪装成可命中，用户 zoom/pan 到该区域后再增量创建。当前 drag track 即使移出 overscan 也临时 pin 在同一 session，Escape、pointer cancel、revision/Frame 变化后立即释放；普通 offscreen 控件会 remove/destroy，不留隐藏 Leafer 节点、监听器或第二份选择状态。
+
+虚拟化只裁剪 editor-sky presentation resources。完整 track arrays、selection indices、reorder insertion、child placement、Inspector、save/export/capture 与事务输入不被抽样；目标 cell/span 命中仍消费完整计划。Frame 完全离开视口时 overlay layer 可保留空壳但不创建可命中节点。
+
 ### 事务语义
 
 pointer up 只发送：
@@ -105,7 +113,7 @@ Fixed、Fill、Hug 都遵循同一行为；用户通过手动边缘缩放明确�
 
 ### 未纳入本切片
 
-超大 Grid viewport virtualization 继续作为独立完整切片。Grid row/column gap 按 Figma 公开行为仍只使用 Inspector，不借轨道边缘手势增加未定义的画布控件。
+Grid row/column gap 按 Figma 公开行为仍只使用 Inspector，不借轨道边缘手势增加未定义的画布控件。镜像/倾斜 Grid 的可读标签与轨道交互仍需独立设计，不在本切片伪装支持。
 
 ## 后果
 
@@ -125,6 +133,7 @@ Fixed、Fill、Hug 都遵循同一行为；用户通过手动边缘缩放明确�
 - Grid child 测试覆盖 Manual 空 cell/占用 cell、多选相对位置、span/alignment、必要 row 扩展、locked obstruction、row-auto-flow resolved occupant 映射、spanning anchor 稳定 offset、hidden/absolute 固定 slot、混合 span 预求解失败、超大矩阵有界拒绝、目标 cell 高亮、Escape/pointer cancel/stale、一次 revision/undo/redo 和 save/reopen。
 - Grid span 测试覆盖真实 track 边缘吸附、Fill/Fixed 混合轴、Manual obstruction 安置、row-auto 固定容量失败与自动行扩展、完整 span 高亮、leading-edge 失败封闭、变换后视觉 bounds、Line Fixed counter-axis、最终非法 target、Escape/pointer cancel/stale、一次 revision/undo 和 Fixed 轴 size 保留。
 - 旋转 Grid 测试覆盖 90° world transform、Frame-local track resize/cell move/span、方向化 cursor 与 overlay affine；mirror、skew、退化矩阵继续失败封闭。
+- Grid virtualization 测试覆盖 4,096 列完整权威计划、首屏/中段 pan/90° 旋转可见窗口、512 control/1,024 guide 上限、active drag pin、offscreen remove/destroy，以及 pan/zoom 不重建文档事实。
 
 ## 参考
 

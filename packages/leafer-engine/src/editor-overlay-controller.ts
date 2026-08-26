@@ -1,6 +1,7 @@
 import {
   DEFAULT_LAYOUT_SIZING,
   type DesignDocument,
+  type ViewportState,
 } from "@opendesign/design-contracts";
 import type * as LeaferEditorModule from "leafer-editor";
 import {
@@ -212,6 +213,7 @@ export class EditorOverlayController {
     gridEditorFrameId?: string;
     layoutGuideFrameId?: string;
     pageId: string;
+    viewport: ViewportState;
   }): void {
     this.#document = input.document;
     this.#guideFrameId = input.layoutGuideFrameId;
@@ -226,9 +228,10 @@ export class EditorOverlayController {
     });
     this.#gridEditor.sync({
       document: input.document,
+      viewport: input.viewport,
       ...(input.gridEditorFrameId ? { frameId: input.gridEditorFrameId } : {}),
     });
-    this.syncViewport();
+    this.syncViewport(input.viewport);
   }
 
   pointerDown(event: LeaferEventLike): boolean {
@@ -250,12 +253,12 @@ export class EditorOverlayController {
     );
   }
 
-  syncViewport(): void {
+  syncViewport(viewport?: ViewportState): void {
     this.#syncGuideViewport();
     this.#syncSlotViewport();
     this.#syncSliceViewport();
     this.#autoLayoutSpacing.syncViewport();
-    this.#gridEditor.syncViewport();
+    this.#gridEditor.syncViewport(viewport);
   }
 
   #createLayer(index: number): LeaferGroup {

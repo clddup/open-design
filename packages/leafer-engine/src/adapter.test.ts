@@ -926,6 +926,54 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
+  it("virtualizes large Grid controls across pan while pinning an active drag", async () => {
+    const input = withGridFixture(createInput());
+    const frame = input.document.nodesById.frame_welcome;
+    const grid =
+      frame?.kind === "frame" ? frame.properties.autoLayout : undefined;
+    if (frame?.kind !== "frame" || !grid || grid.mode !== "grid") {
+      throw new Error("Missing large Grid fixture");
+    }
+    grid.columns = Array.from({ length: 1_024 }, () => ({
+      type: "fixed" as const,
+      value: 100,
+    }));
+    frame.size.width = 114_688;
+    const adapter = await createLeaferEngineAdapter(
+      createHost(),
+      createCallbacks(),
+    );
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    const prefix = "__opendesign_grid_track_hit__:frame_welcome:";
+    const first =
+      app &&
+      findElement(
+        app.sky,
+        "__opendesign_grid_track_hit__:frame_welcome:columns:0",
+      );
+    if (!app || !first) throw new Error("Missing first virtual Grid control");
+    expect(findElementIds(app.sky, prefix).length).toBeLessThan(64);
+
+    app.emit("pointer.down", pointerEvent(70, -20, first));
+    const panned = {
+      ...input,
+      viewport: { ...input.viewport, panX: -56_000 },
+    };
+    adapter.sync(panned);
+    expect(findElement(app.sky, first.id!)).toBe(first);
+    expect(first.destroy).not.toHaveBeenCalled();
+    expect(
+      findElementIds(app.sky, prefix).some((id) => /:columns:5\d\d$/.test(id)),
+    ).toBe(true);
+    expect(findElementIds(app.sky, prefix).length).toBeLessThan(64);
+
+    emitWindowKey("Escape");
+    expect(findElement(app.sky, first.id!)).toBeUndefined();
+    expect(first.destroy).toHaveBeenCalledOnce();
+    adapter.dispose();
+  });
+
   it("reorders the selected Grid track set through the existing semantic callback", async () => {
     const onGridTrackReorder = vi.fn(() => true);
     const adapter = await createLeaferEngineAdapter(createHost(), {
@@ -8382,6 +8430,15 @@ function findElement(group: FakeGroup, id: string): FakeElement | undefined {
     }
   }
   return undefined;
+}
+
+function findElementIds(group: FakeGroup, prefix: string): string[] {
+  const ids: string[] = [];
+  for (const child of group.children) {
+    if (child.id?.startsWith(prefix)) ids.push(child.id);
+    if (child instanceof FakeGroup) ids.push(...findElementIds(child, prefix));
+  }
+  return ids;
 }
 
 function changedNodeSet(

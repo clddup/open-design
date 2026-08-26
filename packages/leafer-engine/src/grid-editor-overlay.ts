@@ -19,6 +19,8 @@ import {
 import { getVisibleWorldTransform } from "./scene-node-transform.js";
 
 export const MAX_GRID_EDITOR_TRACK_CONTROLS = 512;
+export const MAX_GRID_EDITOR_GUIDE_TRACKS = 1_024;
+export const GRID_EDITOR_VIEWPORT_OVERSCAN = 64;
 
 export type GridEditorAxis = "rows" | "columns";
 
@@ -44,7 +46,6 @@ export interface GridEditorInsertionSpec {
 export interface GridEditorOverlayPlan {
   columnInsertions: readonly GridEditorInsertionSpec[];
   columns: readonly GridEditorTrackSpec[];
-  fingerprint: string;
   frameId: string;
   frameSize: { height: number; width: number };
   itemsPositioning: "manual" | "row-auto-flow";
@@ -63,6 +64,13 @@ export interface GridEditorCellSpec {
   y: number;
 }
 
+export interface GridEditorViewportProjection {
+  controlColumns: readonly GridEditorTrackSpec[];
+  controlRows: readonly GridEditorTrackSpec[];
+  guideColumns: readonly GridEditorTrackSpec[];
+  guideRows: readonly GridEditorTrackSpec[];
+}
+
 export function createGridEditorOverlayPlan(
   document: DesignDocument,
   frameId: string | undefined,
@@ -77,7 +85,6 @@ export function createGridEditorOverlayPlan(
     (frame.kind !== "frame" && frame.kind !== "slot") ||
     !grid ||
     grid.mode !== "grid" ||
-    grid.rows.length + grid.columns.length > MAX_GRID_EDITOR_TRACK_CONTROLS ||
     frame.size.width <= 0 ||
     frame.size.height <= 0 ||
     effectivelyLockedForEditorOverlay(document, frame.id)
@@ -116,13 +123,6 @@ export function createGridEditorOverlayPlan(
     children,
   });
   if (!resolution.ok) return null;
-  if (
-    resolution.rowSizes.length + resolution.columnSizes.length >
-    MAX_GRID_EDITOR_TRACK_CONTROLS
-  ) {
-    return null;
-  }
-
   const rows = createTrackSpecs(
     frame.id,
     "rows",
@@ -152,7 +152,200 @@ export function createGridEditorOverlayPlan(
     rowInsertions: createInsertionSpecs("rows", rows),
     columnInsertions: createInsertionSpecs("columns", columns),
   };
-  return { ...plan, fingerprint: JSON.stringify(plan) };
+  return plan;
+}
+
+export function createGridEditorViewportProjection(
+  plan: GridEditorOverlayPlan,
+  viewport: {
+    height: number;
+    transform: Transform;
+    width: number;
+  },
+  pinned?: { axis: GridEditorAxis; index: number },
+): GridEditorViewportProjection {
+  const bounds = frameLocalViewportBounds(viewport);
+  if (!bounds) return emptyViewportProjection();
+  const scaleX = Math.hypot(viewport.transform[0], viewport.transform[1]);
+  const scaleY = Math.hypot(viewport.transform[2], viewport.transform[3]);
+  const visibleColumns = tracksIntersecting(
+    plan.columns,
+    bounds.left,
+    bounds.right,
+  );
+  const visibleRows = tracksIntersecting(plan.rows, bounds.top, bounds.bottom);
+  const controlColumns = spacedTracks(visibleColumns, scaleX, 18);
+  const controlRows = spacedTracks(visibleRows, scaleY, 18);
+  const guideColumns = spacedTracks(visibleColumns, scaleX, 2);
+  const guideRows = spacedTracks(visibleRows, scaleY, 2);
+  const controlBudgets = axisBudgets(
+    controlColumns.length,
+    controlRows.length,
+    MAX_GRID_EDITOR_TRACK_CONTROLS,
+  );
+  if (pinned?.axis === "columns" && controlBudgets.columns === 0) {
+    controlBudgets.columns = 1;
+    controlBudgets.rows = Math.max(0, controlBudgets.rows - 1);
+  } else if (pinned?.axis === "rows" && controlBudgets.rows === 0) {
+    controlBudgets.rows = 1;
+    controlBudgets.columns = Math.max(0, controlBudgets.columns - 1);
+  }
+  const guideBudgets = axisBudgets(
+    guideColumns.length,
+    guideRows.length,
+    MAX_GRID_EDITOR_GUIDE_TRACKS,
+  );
+  return {
+    controlColumns: pinTrack(
+      sampledTracks(controlColumns, controlBudgets.columns),
+      pinned?.axis === "columns" ? plan.columns[pinned.index] : undefined,
+      controlBudgets.columns,
+    ),
+    controlRows: pinTrack(
+      sampledTracks(controlRows, controlBudgets.rows),
+      pinned?.axis === "rows" ? plan.rows[pinned.index] : undefined,
+      controlBudgets.rows,
+    ),
+    guideColumns: sampledTracks(guideColumns, guideBudgets.columns),
+    guideRows: sampledTracks(guideRows, guideBudgets.rows),
+  };
+}
+
+function frameLocalViewportBounds(viewport: {
+  height: number;
+  transform: Transform;
+  width: number;
+}): { bottom: number; left: number; right: number; top: number } | null {
+  const [a, b, c, d, e, f] = viewport.transform;
+  const determinant = a * d - b * c;
+  if (
+    viewport.width <= 0 ||
+    viewport.height <= 0 ||
+    !Number.isFinite(determinant) ||
+    Math.abs(determinant) <= Number.EPSILON
+  ) {
+    return null;
+  }
+  const inverse: Transform = [
+    d / determinant,
+    -b / determinant,
+    -c / determinant,
+    a / determinant,
+    (c * f - d * e) / determinant,
+    (b * e - a * f) / determinant,
+  ];
+  const overscan = GRID_EDITOR_VIEWPORT_OVERSCAN;
+  const points = [
+    { x: -overscan, y: -overscan },
+    { x: viewport.width + overscan, y: -overscan },
+    { x: viewport.width + overscan, y: viewport.height + overscan },
+    { x: -overscan, y: viewport.height + overscan },
+  ].map(({ x, y }) => ({
+    x: inverse[0] * x + inverse[2] * y + inverse[4],
+    y: inverse[1] * x + inverse[3] * y + inverse[5],
+  }));
+  return {
+    bottom: Math.max(...points.map((point) => point.y)),
+    left: Math.min(...points.map((point) => point.x)),
+    right: Math.max(...points.map((point) => point.x)),
+    top: Math.min(...points.map((point) => point.y)),
+  };
+}
+
+function tracksIntersecting(
+  tracks: readonly GridEditorTrackSpec[],
+  minimum: number,
+  maximum: number,
+): GridEditorTrackSpec[] {
+  if (tracks.length === 0 || maximum < minimum) return [];
+  let low = 0;
+  let high = tracks.length;
+  while (low < high) {
+    const middle = Math.floor((low + high) / 2);
+    if (tracks[middle]!.end < minimum) low = middle + 1;
+    else high = middle;
+  }
+  const visible: GridEditorTrackSpec[] = [];
+  for (let index = low; index < tracks.length; index += 1) {
+    const track = tracks[index]!;
+    if (track.start > maximum) break;
+    visible.push(track);
+  }
+  return visible;
+}
+
+function spacedTracks(
+  tracks: readonly GridEditorTrackSpec[],
+  screenScale: number,
+  minimumScreenDistance: number,
+): GridEditorTrackSpec[] {
+  if (tracks.length <= 1) return [...tracks];
+  const scale = Math.max(0.000_001, screenScale);
+  const minimumDistance = minimumScreenDistance / scale;
+  const result: GridEditorTrackSpec[] = [];
+  let lastCoordinate = Number.NEGATIVE_INFINITY;
+  for (const track of tracks) {
+    if (track.center - lastCoordinate < minimumDistance) continue;
+    result.push(track);
+    lastCoordinate = track.center;
+  }
+  const last = tracks.at(-1)!;
+  if (result.at(-1)?.id !== last.id) result.push(last);
+  return result;
+}
+
+function axisBudgets(
+  columns: number,
+  rows: number,
+  total: number,
+): { columns: number; rows: number } {
+  if (columns === 0) return { columns: 0, rows: total };
+  if (rows === 0) return { columns: total, rows: 0 };
+  const columnBudget = Math.max(
+    1,
+    Math.min(total - 1, Math.round((total * columns) / (columns + rows))),
+  );
+  return { columns: columnBudget, rows: total - columnBudget };
+}
+
+function sampledTracks(
+  tracks: readonly GridEditorTrackSpec[],
+  budget: number,
+): GridEditorTrackSpec[] {
+  if (tracks.length <= budget) return [...tracks];
+  if (budget <= 0) return [];
+  if (budget === 1) return [tracks[0]!];
+  const sampled: GridEditorTrackSpec[] = [];
+  for (let index = 0; index < budget; index += 1) {
+    const sourceIndex = Math.round(
+      (index * (tracks.length - 1)) / (budget - 1),
+    );
+    const track = tracks[sourceIndex]!;
+    if (sampled.at(-1)?.id !== track.id) sampled.push(track);
+  }
+  return sampled;
+}
+
+function pinTrack(
+  tracks: readonly GridEditorTrackSpec[],
+  pinned: GridEditorTrackSpec | undefined,
+  budget: number,
+): GridEditorTrackSpec[] {
+  if (!pinned || tracks.some((track) => track.id === pinned.id)) {
+    return [...tracks];
+  }
+  const result = [...tracks];
+  if (result.length >= budget) result.pop();
+  return [...result, pinned].sort((left, right) => left.index - right.index);
+}
+
+function emptyViewportProjection(): GridEditorViewportProjection {
+  return {
+    controlColumns: [],
+    controlRows: [],
+    guideColumns: [],
+    guideRows: [],
+  };
 }
 
 export function nearestGridInsertionIndex(

@@ -2,6 +2,7 @@ import { createWelcomeDocument } from "@opendesign/editor-runtime";
 import { describe, expect, it } from "vitest";
 import {
   createGridEditorOverlayPlan,
+  createGridEditorViewportProjection,
   gridAreaForPlacement,
   gridChildSpanTargetFromBounds,
   gridTrackReorderChangesOrder,
@@ -179,17 +180,88 @@ describe("Grid editor overlay geometry", () => {
     ).toBeNull();
   });
 
-  it("keeps pathological track counts on the Inspector path", () => {
+  it("keeps all large-Grid geometry authoritative while virtualizing visible controls", () => {
     const document = gridDocument();
     const frame = document.nodesById.frame_welcome;
     if (frame?.kind !== "frame") throw new Error("Missing welcome Frame");
     const grid = frame.properties.autoLayout;
     if (grid?.mode !== "grid") throw new Error("Missing Grid Auto Layout");
-    grid.columns = Array.from({ length: 511 }, () => ({
+    grid.columns = Array.from({ length: 4_096 }, () => ({
       type: "fixed",
-      value: 1,
+      value: 100,
     }));
-    expect(createGridEditorOverlayPlan(document, frame.id)).toBeNull();
+    frame.size.width = 458_752;
+    const plan = createGridEditorOverlayPlan(document, frame.id);
+    if (!plan) throw new Error("Missing virtualized Grid plan");
+    expect(plan.columns).toHaveLength(4_096);
+
+    const first = createGridEditorViewportProjection(plan, {
+      height: 768,
+      transform: [1, 0, 0, 1, 0, 0],
+      width: 1_024,
+    });
+    expect(first.controlColumns.length).toBeLessThan(64);
+    expect(first.controlColumns[0]?.index).toBe(0);
+    expect(first.guideColumns.length).toBeLessThan(64);
+
+    const middle = createGridEditorViewportProjection(plan, {
+      height: 768,
+      transform: [1, 0, 0, 1, -224_000, 0],
+      width: 1_024,
+    });
+    expect(middle.controlColumns[0]!.index).toBeGreaterThan(1_900);
+    expect(middle.controlColumns.at(-1)!.index).toBeLessThan(2_100);
+    expect(middle.controlColumns.some((track) => track.index === 0)).toBe(
+      false,
+    );
+
+    const rotated = createGridEditorViewportProjection(plan, {
+      height: 768,
+      transform: [0, 1, -1, 0, 600, -224_000],
+      width: 1_024,
+    });
+    expect(rotated.controlColumns[0]!.index).toBeGreaterThan(1_900);
+    expect(rotated.controlColumns.length).toBeLessThan(64);
+
+    const pinned = createGridEditorViewportProjection(
+      plan,
+      {
+        height: 768,
+        transform: [1, 0, 0, 1, -224_000, 0],
+        width: 1_024,
+      },
+      { axis: "columns", index: 0 },
+    );
+    expect(pinned.controlColumns.some((track) => track.index === 0)).toBe(true);
+    expect(
+      pinned.controlColumns.length + pinned.controlRows.length,
+    ).toBeLessThanOrEqual(512);
+
+    const extremeViewport = createGridEditorViewportProjection(plan, {
+      height: 1_000_000,
+      transform: [1, 0, 0, 1, 0, 0],
+      width: 1_000_000,
+    });
+    expect(
+      extremeViewport.controlColumns.length +
+        extremeViewport.controlRows.length,
+    ).toBeLessThanOrEqual(512);
+    expect(
+      extremeViewport.guideColumns.length + extremeViewport.guideRows.length,
+    ).toBeLessThanOrEqual(1_024);
+
+    expect(
+      createGridEditorViewportProjection(plan, {
+        height: 0,
+        transform: [1, 0, 0, 1, 0, 0],
+        width: 0,
+      }),
+    ).toEqual({
+      controlColumns: [],
+      controlRows: [],
+      guideColumns: [],
+      guideRows: [],
+    });
   });
 });
 
