@@ -33,6 +33,22 @@ export function supportsAxisAlignedEditorOverlay(
   );
 }
 
+export function supportsOrientedEditorOverlay(transform: Transform): boolean {
+  const [a, b, c, d, e, f] = transform;
+  if (![a, b, c, d, e, f].every(Number.isFinite)) return false;
+  const scaleX = Math.hypot(a, b);
+  const scaleY = Math.hypot(c, d);
+  const determinant = a * d - b * c;
+  if (
+    scaleX <= MATRIX_EPSILON ||
+    scaleY <= MATRIX_EPSILON ||
+    determinant <= MATRIX_EPSILON
+  ) {
+    return false;
+  }
+  return Math.abs(a * c + b * d) <= MATRIX_EPSILON * scaleX * scaleY;
+}
+
 export function hasTranslationOnlyTransform(transform: Transform): boolean {
   return (
     transform[0] === 1 &&

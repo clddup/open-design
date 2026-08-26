@@ -63,14 +63,28 @@ describe("Grid editor overlay geometry", () => {
     expect(nearestGridInsertionIndex(plan!, "rows", 118)).toBe(1);
   });
 
-  it("fails closed for locked, rotated, or unresolved Grid frames", () => {
+  it("supports rotated Grid frames and fails closed for locked, mirrored, skewed, or unresolved frames", () => {
     const locked = gridDocument();
     locked.nodesById.frame_welcome!.locked = true;
     expect(createGridEditorOverlayPlan(locked, "frame_welcome")).toBeNull();
 
     const rotated = gridDocument();
     rotated.nodesById.frame_welcome!.transform = [0, 1, -1, 0, 80, 64];
-    expect(createGridEditorOverlayPlan(rotated, "frame_welcome")).toBeNull();
+    expect(
+      createGridEditorOverlayPlan(rotated, "frame_welcome")?.transform,
+    ).toEqual([0, 1, -1, 0, 80, 64]);
+
+    const mirrored = gridDocument();
+    mirrored.nodesById.frame_welcome!.transform = [-1, 0, 0, 1, 80, 64];
+    expect(createGridEditorOverlayPlan(mirrored, "frame_welcome")).toBeNull();
+
+    const skewed = gridDocument();
+    skewed.nodesById.frame_welcome!.transform = [1, 0.25, 0, 1, 80, 64];
+    expect(createGridEditorOverlayPlan(skewed, "frame_welcome")).toBeNull();
+
+    const degenerate = gridDocument();
+    degenerate.nodesById.frame_welcome!.transform = [0, 0, 0, 0, 80, 64];
+    expect(createGridEditorOverlayPlan(degenerate, "frame_welcome")).toBeNull();
 
     const invalid = gridDocument();
     invalid.nodesById.feature_one!.transform = [2, 0, 0, 1, 0, 0];

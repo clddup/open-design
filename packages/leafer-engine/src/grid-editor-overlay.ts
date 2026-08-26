@@ -14,7 +14,7 @@ import {
 import {
   effectivelyLockedForEditorOverlay,
   hasTranslationOnlyTransform,
-  supportsAxisAlignedEditorOverlay,
+  supportsOrientedEditorOverlay,
 } from "./editor-overlay-support.js";
 import { getVisibleWorldTransform } from "./scene-node-transform.js";
 
@@ -85,7 +85,7 @@ export function createGridEditorOverlayPlan(
     return null;
   }
   const transform = getVisibleWorldTransform(document.nodesById, frame.id);
-  if (!transform || !supportsAxisAlignedEditorOverlay(transform)) return null;
+  if (!transform || !supportsOrientedEditorOverlay(transform)) return null;
 
   const children = [];
   for (const childId of frame.childIds) {

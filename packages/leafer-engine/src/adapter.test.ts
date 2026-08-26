@@ -1071,6 +1071,98 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
+  it("keeps rotated Grid track, cell, and span interactions in Frame-local coordinates", async () => {
+    const onGridTrackResize = vi.fn(() => true);
+    const onGridChildMove = vi.fn(() => true);
+    const onGridChildSpan = vi.fn(() => true);
+    const input = withGridChildFixture(createInput());
+    const frame = input.document.nodesById.frame_welcome;
+    const source = input.document.nodesById.feature_one;
+    if (frame?.kind !== "frame" || !source) {
+      throw new Error("Missing rotated Grid fixture");
+    }
+    frame.transform = [0, 1, -1, 0, 600, 40];
+    source.layoutSizing = { horizontal: "fill", vertical: "fixed" };
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onGridChildMove,
+      onGridChildSpan,
+      onGridTrackResize,
+    });
+    adapter.sync(input);
+    flushAnimationFrames();
+    const app = leaferHarness.app;
+    const resizeHit =
+      app &&
+      findElement(
+        app.sky,
+        "__opendesign_grid_track_resize_hit__:frame_welcome:columns:0",
+      );
+    const child = app && findElement(app.tree, "feature_one");
+    const drop = app && findElement(app.sky, "__opendesign_grid_child_drop__");
+    if (!app || !resizeHit || !child || !drop || !resizeHit.parent) {
+      throw new Error("Missing rotated Grid controls");
+    }
+    expect(resizeHit.parent.localTransform).toMatchObject({
+      a: 0,
+      b: 1,
+      c: -1,
+      d: 0,
+      e: 600,
+      f: 40,
+    });
+    expect((resizeHit as FakeElement & { cursor?: string }).cursor).toBe(
+      "row-resize",
+    );
+
+    app.emit("pointer.down", pointerEvent(140, 80, resizeHit));
+    app.emit("pointer.move", pointerEvent(220, 80, app.sky));
+    app.emit("pointer.up", pointerEvent(220, 80, app.sky));
+    expect(onGridTrackResize).toHaveBeenCalledWith({
+      axis: "columns",
+      expectedRevision: input.document.revision,
+      frameId: "frame_welcome",
+      index: 0,
+      value: 200,
+    });
+
+    app.editor.target = [child];
+    app.editor.moving = true;
+    app.editor.editBox.dragging = true;
+    app.editor.emit("editor.before-move");
+    child.localTransform.e = 700;
+    app.editor.emit("editor.move");
+    expect(drop.visible).toBe(true);
+    app.editor.editBox.dragging = false;
+    app.editor.editBox.emit("drag.end");
+    expect(onGridChildMove).toHaveBeenCalledWith({
+      anchorNodeId: "feature_one",
+      expectedRevision: input.document.revision,
+      frameId: "frame_welcome",
+      nodeIds: ["feature_one"],
+      target: { row: 0, column: 1 },
+    });
+
+    app.editor.moving = false;
+    app.editor.resizing = true;
+    app.editor.editBox.dragging = true;
+    app.editor.emit("editor.before-scale");
+    child.width = 1_180 - child.localTransform.e;
+    app.editor.emit("editor.scale");
+    expect(drop.visible).toBe(true);
+    app.editor.editBox.dragging = false;
+    app.editor.editBox.emit("drag.end");
+    expect(onGridChildSpan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        expectedRevision: input.document.revision,
+        frameId: "frame_welcome",
+        nodeId: "feature_one",
+        target: { row: 0, column: 0, rowSpan: 1, columnSpan: 2 },
+      }),
+    );
+    adapter.dispose();
+  });
+
   it("previews and commits a selected Grid child move as one exact-revision semantic request", async () => {
     const onGridChildMove = vi.fn(() => true);
     const adapter = await createLeaferEngineAdapter(createHost(), {

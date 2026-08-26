@@ -594,14 +594,14 @@ export class GridEditorOverlayController {
       elements.resizeHit.set(
         spec.axis === "columns"
           ? {
-              cursor: "col-resize",
+              cursor: gridResizeCursor(spec.axis, desired),
               height: plan.frameSize.height,
               width: RESIZE_HIT_SIZE / scaleX,
               x: spec.end - RESIZE_HIT_SIZE / scaleX / 2,
               y: 0,
             }
           : {
-              cursor: "row-resize",
+              cursor: gridResizeCursor(spec.axis, desired),
               height: RESIZE_HIT_SIZE / scaleY,
               width: plan.frameSize.width,
               x: 0,
@@ -896,6 +896,19 @@ function multiplyAffine(left: AffineMatrix, right: AffineMatrix): AffineMatrix {
     e: left.a * right.e + left.c * right.f + left.e,
     f: left.b * right.e + left.d * right.f + left.f,
   };
+}
+
+function gridResizeCursor(
+  axis: GridEditorAxis,
+  transform: AffineMatrix,
+): "col-resize" | "row-resize" | "nesw-resize" | "nwse-resize" {
+  const x = axis === "columns" ? transform.a : transform.c;
+  const y = axis === "columns" ? transform.b : transform.d;
+  const angle = ((Math.atan2(y, x) * 180) / Math.PI + 180) % 180;
+  if (angle < 22.5 || angle >= 157.5) return "col-resize";
+  if (angle < 67.5) return "nwse-resize";
+  if (angle < 112.5) return "row-resize";
+  return "nesw-resize";
 }
 
 function setTransform(element: LeaferElement, transform: AffineMatrix): void {

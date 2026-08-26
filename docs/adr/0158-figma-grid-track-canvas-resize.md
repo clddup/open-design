@@ -16,7 +16,7 @@ OpenDesign 已能通过 Inspector 编辑 Grid 的 Fixed、Fill 与 Hug 轨道，
 
 ### 画布交互
 
-当单个、未锁定、轴对齐且行列总数不超过 512 的 Grid Frame 在 Select 工具下被选中时，既有 Grid editor sky 为每条可见行列轨道增加远端边缘命中区：
+当单个、未锁定、world transform 可逆且保持正向正交、行列总数不超过 512 的 Grid Frame 在 Select 工具下被选中时，既有 Grid editor sky 为每条可见行列轨道增加远端边缘命中区。正向正交包含任意旋转和非退化轴缩放；mirror、skew 与退化矩阵继续失败封闭：
 
 - 列使用 `col-resize`，行使用 `row-resize`；
 - 命中宽度保持固定屏幕尺寸，不随 zoom 变细；
@@ -58,7 +58,7 @@ OpenDesign 已能通过 Inspector 编辑 Grid 的 Fixed、Fill 与 Hug 轨道，
 
 ### 子层 Cell 拖拽
 
-当 Select 工具下的当前选区全部是同一个轴对齐、未锁定 Grid Frame 的可见直属 flow child 时，普通 move 手势切换为 cell 语义，而不是把 Layout Service 派生的 x/y 写回文档：
+当 Select 工具下的当前选区全部是同一个可编辑、未锁定 Grid Frame 的可见直属 flow child 时，普通 move 手势切换为 cell 语义，而不是把 Layout Service 派生的 x/y 写回文档：
 
 - pointer move 保留 Leafer 的实时对象预览。宿主记录 anchor 初始 Frame-local 视觉中心命中 cell 与 placement 起点之间的稳定 offset，后续命中 Layout Service 已求得的最近真实 cell 后换算回同一 placement-origin 坐标域，避免 spanning/Fill anchor 轻微移动就跨格；editor sky 同时显示固定屏幕描边和轻量填充的目标 cell，高亮是 disposable overlay；
 - 多选以 selection anchor 为命中基准，保持选区在 layer order 中的稳定顺序。Manual Grid 按 row/column delta 平移整组，保留 span 和横纵 alignment；目标冲突时把未选 child 确定性安置到最近空 cell，无可用空间时按最后一条 authored row 的规格增加必要行；
@@ -78,6 +78,12 @@ Figma 的公开 Grid 行为要求 child 在目标轴使用 Fill container 后，
 - pointer up 先恢复权威 Leafer 投影，再发送 `frameId + nodeId + target placement + size + expectedRevision`。Renderer 调用 `planResizeGridChildSpan`；placement、Fixed 轴 size、被安置 child 和必要 tracks 合成一条事务、一个 revision/undo。Group/Boolean/Instance 不伪造不属于其契约的显式 size；Line 使用变换后端点边界保留 Fixed counter-axis 尺寸；两轴 Fill 且没有跨越 cell 边界时直接吸附回原 span。
 
 Escape、pointer cancel、Page/工具/选区/revision 变化、非 Fill 轴、非法或反向 span、locked child、超大 Grid 和 stale callback 都失败封闭。resize 预览与 span 高亮仍为 session-only，不进入 document/history/save/capture/export。
+
+### 旋转 Frame
+
+Grid editor sky 继续使用 Frame-local 轨道、cell 与 span 几何，然后把完整 world transform 与 viewport transform 一次组合到 overlay layer；pointer 事件由 Leafer `getInnerPoint(layer)` 反解回同一 Frame-local 坐标。这样 track reorder/resize、cell move 与 Fill span 不需要维护旋转后的第二份几何，也不会把 world 坐标误写入 placement。
+
+轨道标签、命中区、引导线、目标高亮和 insertion indicator 全部随 Frame 旋转；固定屏幕尺寸按旋转后两条局部轴的真实 scale 分别补偿。resize cursor 根据当前轨道变化轴的屏幕方向映射到水平、垂直或两条对角 cursor。正向正交矩阵才进入该路径；mirror 会反转标签与顺序，skew 会破坏正交轨道心智，因此二者继续明确使用 Inspector，不能以错误 overlay 冒充支持。Frame 的 transform、Grid 文档事实、事务和 history 均不因本切片变化。
 
 ### 事务语义
 
@@ -99,7 +105,7 @@ Fixed、Fill、Hug 都遵循同一行为；用户通过手动边缘缩放明确�
 
 ### 未纳入本切片
 
-旋转 Grid 控件和超大 Grid viewport virtualization 继续作为独立完整切片。Grid row/column gap 仍只使用 Inspector，不借轨道边缘手势增加未由 Figma 公共行为支持的画布控件。
+超大 Grid viewport virtualization 继续作为独立完整切片。Grid row/column gap 按 Figma 公开行为仍只使用 Inspector，不借轨道边缘手势增加未定义的画布控件。
 
 ## 后果
 
@@ -118,6 +124,7 @@ Fixed、Fill、Hug 都遵循同一行为；用户通过手动边缘缩放明确�
 - Runtime/Leafer/Renderer 测试覆盖单选与多选删除、contained child 删除、跨轨道 span 收缩、后续 placement 平移、Component Main 删除与外部 Instance detach、至少保留一条轨道、自动行无无效控件、Delete/Backspace、Inspector 复用、exact revision 和一次 undo。
 - Grid child 测试覆盖 Manual 空 cell/占用 cell、多选相对位置、span/alignment、必要 row 扩展、locked obstruction、row-auto-flow resolved occupant 映射、spanning anchor 稳定 offset、hidden/absolute 固定 slot、混合 span 预求解失败、超大矩阵有界拒绝、目标 cell 高亮、Escape/pointer cancel/stale、一次 revision/undo/redo 和 save/reopen。
 - Grid span 测试覆盖真实 track 边缘吸附、Fill/Fixed 混合轴、Manual obstruction 安置、row-auto 固定容量失败与自动行扩展、完整 span 高亮、leading-edge 失败封闭、变换后视觉 bounds、Line Fixed counter-axis、最终非法 target、Escape/pointer cancel/stale、一次 revision/undo 和 Fixed 轴 size 保留。
+- 旋转 Grid 测试覆盖 90° world transform、Frame-local track resize/cell move/span、方向化 cursor 与 overlay affine；mirror、skew、退化矩阵继续失败封闭。
 
 ## 参考
 
