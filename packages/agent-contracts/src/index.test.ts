@@ -1,6 +1,7 @@
 import { Value } from "@sinclair/typebox/value";
 import { describe, expect, it } from "vitest";
 import {
+  AgentEventContract,
   AgentEventSchema,
   AgentRequestSchema,
   MAX_INITIAL_DESIGN_INSPECTION_CHARACTERS,
@@ -43,7 +44,86 @@ describe("Agent contracts", () => {
         messageId: "message_1",
         blocks: "invalid",
       }),
-    ).toContain("message.completed at /blocks");
+    ).toContain("agent_event.schema_invalid at /blocks");
+  });
+
+  it("reports stable paths for Agent event domain failures", () => {
+    const failure = {
+      code: "provider_timeout",
+      message: "Provider timed out",
+      retryable: true,
+    } as const;
+    const mismatch = AgentEventContract.parse({
+      type: "agent.error",
+      code: failure.code,
+      message: failure.message,
+      failure: { ...failure, code: "different", message: "Different" },
+    });
+    expect(mismatch).toMatchObject({
+      ok: false,
+      issues: [
+        {
+          code: "agent_event.failure_code_mismatch",
+          path: "/failure/code",
+        },
+        {
+          code: "agent_event.failure_message_mismatch",
+          path: "/failure/message",
+        },
+      ],
+    });
+
+    const history = AgentEventContract.parse({
+      type: "session.history",
+      requestId: "history_1",
+      sessionId: "session_1",
+      timeline: [
+        {
+          itemId: "message:user_1",
+          sessionId: "session_1",
+          runId: "run_1",
+          sequence: 1,
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+          type: "user.message",
+          messageId: "user_1",
+          content: "Design a page",
+          documentId: "document_1",
+          revision: 0,
+          scope: {
+            kind: "selection",
+            selectedNodeIds: ["node_1"],
+            primaryNodeId: "node_2",
+          },
+        },
+        {
+          itemId: "run:run_1",
+          sessionId: "session_1",
+          runId: "run_1",
+          sequence: 2,
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:01.000Z",
+          type: "run",
+          status: "completed",
+          startedAt: "2026-01-01T00:00:00.000Z",
+          stopReason: "complete",
+          failure,
+        },
+      ],
+    });
+    expect(history).toMatchObject({
+      ok: false,
+      issues: [
+        {
+          code: "agent_event.history_primary_selection_invalid",
+          path: "/timeline/0/scope/primaryNodeId",
+        },
+        {
+          code: "agent_event.history_failure_state_invalid",
+          path: "/timeline/1/failure",
+        },
+      ],
+    });
   });
 
   it("accepts a strict host-bound selection snapshot", () => {

@@ -273,13 +273,36 @@ describe("AgentHost model bridge", () => {
       type: "agent.error",
       code: "invalid_event",
       message:
-        "Agent returned an invalid event: message.completed at /blocks: Expected array",
+        "Agent returned an invalid event: Invalid Agent event. agent_event.schema_invalid at /blocks: Expected array. Correct the reported Agent event field before retrying.",
       runId: "run_invalid_event",
     });
     expect(electron.child.postMessage).toHaveBeenCalledWith({
       type: "run.cancel",
       runId: "run_invalid_event",
     });
+  });
+
+  it("preserves a bounded request identity on an invalid history event", () => {
+    const host = new AgentHost();
+    const events: unknown[] = [];
+    host.on((event) => events.push(event));
+    void host.start();
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    postToHost({
+      type: "session.history",
+      requestId: "history_invalid_1",
+      sessionId: "session_1",
+      timeline: "invalid",
+    });
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "agent.error",
+        code: "invalid_event",
+        requestId: "history_invalid_1",
+      }),
+    );
   });
 
   it("terminates a Run when its trusted host binding no longer exists", async () => {

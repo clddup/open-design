@@ -1,8 +1,9 @@
 import { app, utilityProcess } from "electron";
 import {
-  agentEventValidationError,
+  agentEventRequestId,
+  agentEventRunId,
   designToolBridgeRequestId,
-  isAgentEvent,
+  formatRuntimeContractFailure,
   isDesignToolBridgeCancel,
   isDesignToolBridgeRequest,
   isTrustedToolFailure,
@@ -14,6 +15,7 @@ import {
   type TrustedToolContext,
   type TrustedToolFailure,
   type TrustedToolResult,
+  type RuntimeContractResult,
 } from "@opendesign/agent-contracts";
 import type {
   CanonicalStreamEvent,
@@ -165,7 +167,8 @@ export class AgentHost {
           message: failure.message,
         });
       },
-      onMessage: (message, generation) => this.onMessage(message, generation),
+      onMessage: (message, generation, agentEventResult) =>
+        this.onMessage(message, generation, agentEventResult),
       onProcessTerminated: () => this.resetProcessState(),
     });
   }
@@ -236,7 +239,11 @@ export class AgentHost {
     return this.#supervisor.stop();
   }
 
-  private onMessage(message: unknown, generation: number): void {
+  private onMessage(
+    message: unknown,
+    generation: number,
+    agentEventResult: RuntimeContractResult<AgentEvent>,
+  ): void {
     if (isSessionStoreBridgeRequest(message)) {
       void this.handleSessionStoreRequest(message, generation);
       return;
@@ -315,26 +322,30 @@ export class AgentHost {
       }
       return;
     }
-    if (!isAgentEvent(message)) {
-      const validationError =
-        agentEventValidationError(message) ?? "unknown validation failure";
+    if (!agentEventResult.ok) {
+      const validationError = formatRuntimeContractFailure(
+        "Agent event",
+        agentEventResult.issues,
+      );
       console.error(`Rejected invalid Agent event: ${validationError}`);
-      const run = candidateRunId(message);
-      if (run.runId) {
+      const runId = agentEventRunId(message);
+      const requestId = agentEventRequestId(message);
+      if (runId) {
         this.#supervisor.postMessageForGeneration(generation, {
           type: "run.cancel",
-          runId: run.runId,
+          runId,
         } satisfies AgentRequest);
       }
       this.emit({
         type: "agent.error",
         code: "invalid_event",
         message: `Agent returned an invalid event: ${validationError}`,
-        ...run,
+        ...(runId ? { runId } : {}),
+        ...(requestId ? { requestId } : {}),
       });
       return;
     }
-    const event = message;
+    const event = agentEventResult.value;
     if (event.type === "tool.requested") {
       this.#toolRequests.set(`${event.runId}:${event.toolCallId}`, {
         input: structuredClone(event.input),
@@ -629,12 +640,4 @@ function trustedToolFailureFromError(error: unknown): TrustedToolFailure {
     retryable: false,
     recoverable: !fatal,
   };
-}
-
-function candidateRunId(value: unknown): { runId?: string } {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-  const runId = (value as { runId?: unknown }).runId;
-  return typeof runId === "string" && runId.length > 0 && runId.length <= 256
-    ? { runId }
-    : {};
 }

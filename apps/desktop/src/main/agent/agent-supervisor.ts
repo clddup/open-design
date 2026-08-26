@@ -1,7 +1,9 @@
 import {
   AGENT_PROTOCOL_VERSION,
-  isAgentEvent,
+  AgentEventContract,
+  type AgentEvent,
   type AgentRequest,
+  type RuntimeContractResult,
 } from "@opendesign/agent-contracts";
 
 export type AgentSupervisorFailure = {
@@ -39,7 +41,11 @@ export interface AgentSupervisorOptions {
   fork(): AgentUtilityProcess;
   forceKill(pid: number): void;
   onFailure(failure: AgentSupervisorFailure): void;
-  onMessage(message: unknown, generation: number): void;
+  onMessage(
+    message: unknown,
+    generation: number,
+    agentEventResult: RuntimeContractResult<AgentEvent>,
+  ): void;
   onProcessTerminated(generation: number): void;
   readyTimeoutMs?: number;
   stopTimeoutMs?: number;
@@ -179,7 +185,9 @@ export class AgentSupervisor {
 
   #handleMessage(lease: ProcessLease, message: unknown): void {
     if (!this.#isCurrent(lease)) return;
-    if (isAgentEvent(message) && message.type === "agent.ready") {
+    const agentEventResult = AgentEventContract.parse(message);
+    const event = agentEventResult.ok ? agentEventResult.value : undefined;
+    if (event?.type === "agent.ready") {
       if (this.#state.status !== "starting") {
         this.#fail(
           lease,
@@ -188,11 +196,11 @@ export class AgentSupervisor {
         );
         return;
       }
-      if (message.protocolVersion !== AGENT_PROTOCOL_VERSION) {
+      if (event.protocolVersion !== AGENT_PROTOCOL_VERSION) {
         this.#fail(
           lease,
           "protocol_mismatch",
-          `Agent protocol mismatch: ${message.protocolVersion} != ${AGENT_PROTOCOL_VERSION}`,
+          `Agent protocol mismatch: ${event.protocolVersion} != ${AGENT_PROTOCOL_VERSION}`,
         );
         return;
       }
@@ -202,7 +210,7 @@ export class AgentSupervisor {
         protocolVersion: AGENT_PROTOCOL_VERSION,
         clientVersion: this.#options.clientVersion,
       } satisfies AgentRequest);
-    } else if (isAgentEvent(message) && message.type === "agent.connected") {
+    } else if (event?.type === "agent.connected") {
       if (this.#state.status !== "handshaking") {
         this.#fail(
           lease,
@@ -211,11 +219,11 @@ export class AgentSupervisor {
         );
         return;
       }
-      if (message.protocolVersion !== AGENT_PROTOCOL_VERSION) {
+      if (event.protocolVersion !== AGENT_PROTOCOL_VERSION) {
         this.#fail(
           lease,
           "protocol_mismatch",
-          `Agent protocol mismatch: ${message.protocolVersion} != ${AGENT_PROTOCOL_VERSION}`,
+          `Agent protocol mismatch: ${event.protocolVersion} != ${AGENT_PROTOCOL_VERSION}`,
         );
         return;
       }
@@ -223,7 +231,7 @@ export class AgentSupervisor {
       this.#state = { status: "ready", generation: lease.generation };
       this.#resolveStart();
     }
-    this.#options.onMessage(message, lease.generation);
+    this.#options.onMessage(message, lease.generation, agentEventResult);
   }
 
   #handleExit(lease: ProcessLease, code: number): void {

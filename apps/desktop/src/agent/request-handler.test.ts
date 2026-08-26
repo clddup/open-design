@@ -132,7 +132,7 @@ describe("dispatchAgentRequest", () => {
     expect(error?.type).toBe("agent.error");
     if (error?.type !== "agent.error") return;
     expect(error.message).toContain(
-      "Agent produced an invalid event: message.completed",
+      "Agent produced an invalid event: Invalid Agent event. agent_event.schema_invalid at /blocks",
     );
     expect(isAgentEvent(error)).toBe(true);
   });

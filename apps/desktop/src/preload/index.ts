@@ -4,11 +4,11 @@ import {
   type LibraryReleaseSnapshot,
 } from "@opendesign/design-contracts";
 import {
-  isAgentEvent,
   isAgentRequest,
   type AgentEvent,
   type AgentRequest,
 } from "@opendesign/agent-contracts";
+import { projectAgentEvent } from "./agent-event";
 import type {
   ConversationDescriptor,
   GlobalTaskProjection,
@@ -880,7 +880,7 @@ const desktopApi: DesktopApi = Object.freeze({
   },
   onAgentEvent: (listener: (event: AgentEvent) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, event: unknown) => {
-      if (isAgentEvent(event)) listener(event);
+      listener(projectAgentEvent(event));
     };
     ipcRenderer.on(channels.agentEvent, handler);
     return () => ipcRenderer.removeListener(channels.agentEvent, handler);

@@ -1,7 +1,18 @@
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import { AgentContinuationSchemas } from "./continuation.js";
+import {
+  defineRuntimeContract,
+  formatRuntimeContractFailure,
+  type RuntimeContractIssue,
+} from "./runtime-contract.js";
 export type { AgentRunContinuation } from "./continuation.js";
+export { formatRuntimeContractFailure } from "./runtime-contract.js";
+export type {
+  RuntimeContract,
+  RuntimeContractIssue,
+  RuntimeContractResult,
+} from "./runtime-contract.js";
 
 export const AGENT_PROTOCOL_VERSION = "3.12.0" as const;
 export const MAX_SELECTED_NODE_IDS = 512;
@@ -1059,6 +1070,15 @@ export const AgentEventSchema = Type.Union([
   ),
 ]);
 
+const AgentEventRunIdentitySchema = Type.Object(
+  { runId: RunIdSchema },
+  { additionalProperties: true },
+);
+const AgentEventRequestIdentitySchema = Type.Object(
+  { requestId: IdSchema },
+  { additionalProperties: true },
+);
+
 export type SelectionScope = Static<typeof SelectionScopeSchema>;
 export type DesignMutationTarget = Static<typeof DesignMutationTargetSchema>;
 export type ToolCallRequest = Static<typeof ToolCallRequestSchema>;
@@ -1107,6 +1127,14 @@ export type AgentToolFailureDetails = Static<
   typeof AgentToolFailureDetailsSchema
 >;
 export type AgentRunFailure = Static<typeof AgentRunFailureSchema>;
+
+export const AgentEventContract = defineRuntimeContract<AgentEvent>({
+  schema: AgentEventSchema,
+  code: "agent_event.schema_invalid",
+  subject: "Agent event",
+  selectSchema: agentEventSchemaForInput,
+  refine: agentEventDomainIssues,
+});
 
 export function isAgentRunFailure(value: unknown): value is AgentRunFailure {
   return Value.Check(AgentRunFailureSchema, value);
@@ -1266,21 +1294,7 @@ export function isAgentRequest(value: unknown): value is AgentRequest {
 }
 
 export function isAgentEvent(value: unknown): value is AgentEvent {
-  return (
-    Value.Check(AgentEventSchema, value) &&
-    (value.type !== "agent.error" ||
-      value.failure === undefined ||
-      (value.failure.code === value.code &&
-        value.failure.message === value.message)) &&
-    (value.type !== "session.history" ||
-      value.timeline.every(
-        (item) =>
-          (item.type !== "user.message" || isSelectionScope(item.scope)) &&
-          (item.type !== "run" ||
-            item.failure === undefined ||
-            (item.status === "error" && item.stopReason === "error")),
-      ))
-  );
+  return AgentEventContract.parse(value).ok;
 }
 
 export function isSessionTimelineItem(
@@ -1290,22 +1304,103 @@ export function isSessionTimelineItem(
 }
 
 export function agentEventValidationError(value: unknown): string | null {
-  if (isAgentEvent(value)) return null;
-  const type =
-    typeof value === "object" &&
+  const result = AgentEventContract.parse(value);
+  if (result.ok) return null;
+  return formatRuntimeContractFailure(
+    `Agent event ${agentEventType(value)}`,
+    result.issues,
+  );
+}
+
+export function agentEventRunId(value: unknown): string | null {
+  return Value.Check(AgentEventRunIdentitySchema, value) ? value.runId : null;
+}
+
+export function agentEventRequestId(value: unknown): string | null {
+  return Value.Check(AgentEventRequestIdentitySchema, value)
+    ? value.requestId
+    : null;
+}
+
+function agentEventDomainIssues(value: AgentEvent): RuntimeContractIssue[] {
+  const issues: RuntimeContractIssue[] = [];
+  if (value.type === "agent.error" && value.failure !== undefined) {
+    if (value.failure.code !== value.code) {
+      issues.push(
+        agentEventIssue(
+          "agent_event.failure_code_mismatch",
+          "/failure/code",
+          "Nested failure code must match the Agent error code",
+        ),
+      );
+    }
+    if (value.failure.message !== value.message) {
+      issues.push(
+        agentEventIssue(
+          "agent_event.failure_message_mismatch",
+          "/failure/message",
+          "Nested failure message must match the Agent error message",
+        ),
+      );
+    }
+  }
+  if (value.type === "session.history") {
+    value.timeline.forEach((item, index) => {
+      if (
+        item.type === "user.message" &&
+        item.scope.primaryNodeId !== undefined &&
+        !item.scope.selectedNodeIds.includes(item.scope.primaryNodeId)
+      ) {
+        issues.push(
+          agentEventIssue(
+            "agent_event.history_primary_selection_invalid",
+            `/timeline/${index}/scope/primaryNodeId`,
+            "Primary node must belong to the selected node snapshot",
+          ),
+        );
+      }
+      if (
+        item.type === "run" &&
+        item.failure !== undefined &&
+        (item.status !== "error" || item.stopReason !== "error")
+      ) {
+        issues.push(
+          agentEventIssue(
+            "agent_event.history_failure_state_invalid",
+            `/timeline/${index}/failure`,
+            "Run failure details require error status and error stop reason",
+          ),
+        );
+      }
+    });
+  }
+  return issues;
+}
+
+function agentEventIssue(
+  code: string,
+  path: string,
+  message: string,
+): RuntimeContractIssue {
+  return {
+    code,
+    path,
+    message,
+    recovery: "Correct the reported Agent event field before retrying.",
+  };
+}
+
+function agentEventSchemaForInput(value: unknown): TSchema | undefined {
+  return agentEventVariant(agentEventType(value));
+}
+
+function agentEventType(value: unknown): string {
+  return typeof value === "object" &&
     value !== null &&
     "type" in value &&
     typeof value.type === "string"
-      ? value.type.slice(0, 256)
-      : "unknown";
-  const schema = agentEventVariant(type) ?? AgentEventSchema;
-  const first = [...Value.Errors(schema, value)].find(
-    (error) => error.path.length > 0,
-  );
-  if (first) {
-    return `${type} at ${first.path}: ${first.message}`.slice(0, 2_000);
-  }
-  return `${type} violates AgentEvent semantic invariants`;
+    ? value.type.slice(0, 256)
+    : "unknown";
 }
 
 function agentEventVariant(type: string): TSchema | undefined {
