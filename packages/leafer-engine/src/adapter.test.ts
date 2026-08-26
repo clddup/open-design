@@ -1776,6 +1776,7 @@ describe("Leafer engine selection bounds synchronization", () => {
       documentId: input.document.documentId,
       expectedRevision: input.document.revision,
       insertionIndex: 1,
+      kind: "linear",
       movedNodeIds: ["feature_one", "feature_two"],
       nodeIds: ["feature_one", "feature_two", "feature_three"],
       pageId: input.pageId,
@@ -1790,6 +1791,59 @@ describe("Leafer engine selection bounds synchronization", () => {
     expect(second.localTransform.e).toBe(before[1]);
     expect(third.localTransform.e).toBe(before[2]);
     expect(onSmartSelectionReorder).toHaveBeenCalledTimes(1);
+    adapter.dispose();
+  });
+
+  it("rearranges or swaps one layer in a two-dimensional Smart Selection", async () => {
+    const onSmartSelectionReorder = vi.fn(() => true);
+    const input = withSmartGridFixture(createInput());
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onSmartSelectionReorder,
+    });
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    const ringA =
+      app &&
+      findElement(app.sky, "__opendesign_smart_selection_ring__:smart-ring:a");
+    const itemA = app && findElement(app.tree, "a");
+    const itemE = app && findElement(app.tree, "e");
+    const target =
+      app && findElement(app.sky, "__opendesign_smart_selection_insertion__");
+    if (!app || !ringA || !itemA || !itemE || !target) {
+      throw new Error("Missing two-dimensional Smart Selection controls");
+    }
+    const beforeA = { ...itemA.localTransform };
+    const beforeE = { ...itemE.localTransform };
+
+    app.emit("pointer.down", pointerEvent(159, 414, ringA));
+    app.emit("pointer.move", pointerEvent(209, 484, app.sky));
+    expect(target.visible).toBe(true);
+    expect(itemA.localTransform.f).toBe(beforeA.f + 80);
+    expect(itemE.localTransform.e).toBe(beforeE.e + 10);
+    app.emit("pointer.up", pointerEvent(209, 484, app.sky));
+    expect(itemA.localTransform).toEqual(beforeA);
+    expect(itemE.localTransform).toEqual(beforeE);
+    expect(onSmartSelectionReorder).toHaveBeenLastCalledWith({
+      documentId: input.document.documentId,
+      expectedRevision: input.document.revision,
+      kind: "grid",
+      mode: "insert",
+      movedNodeId: "a",
+      nodeIds: ["a", "b", "c", "d", "e", "f"],
+      pageId: input.pageId,
+      targetNodeId: "e",
+    });
+
+    app.emit("pointer.down", pointerEvent(159, 414, ringA));
+    app.emit(
+      "pointer.move",
+      pointerEvent(209, 484, app.sky, { ctrlKey: true }),
+    );
+    app.emit("pointer.up", pointerEvent(209, 484, app.sky, { ctrlKey: true }));
+    expect(onSmartSelectionReorder).toHaveBeenLastCalledWith(
+      expect.objectContaining({ kind: "grid", mode: "swap" }),
+    );
     adapter.dispose();
   });
 
@@ -7898,6 +7952,43 @@ function withSmartSelectionFixture(
       nodeIds: ["feature_one", "feature_two", "feature_three"],
       anchorNodeId: "feature_three",
     },
+    tool: "select",
+  };
+}
+
+function withSmartGridFixture(
+  input: LeaferEngineSyncInput,
+): LeaferEngineSyncInput {
+  const document = structuredClone(input.document);
+  const group = document.nodesById.feature_group;
+  const template = document.nodesById.feature_one;
+  if (group?.kind !== "group" || !template) throw new Error("Missing group");
+  const placements = [
+    ["a", 0, 0, 30, 20],
+    ["b", 50, 0, 40, 30],
+    ["c", 110, 0, 20, 25],
+    ["d", 0, 70, 20, 40],
+    ["e", 50, 70, 30, 20],
+    ["f", 110, 70, 50, 35],
+  ] as const;
+  for (const [id, x, y, width, height] of placements) {
+    document.nodesById[id] = {
+      ...structuredClone(template),
+      id,
+      name: id,
+      transform: [1, 0, 0, 1, x, y],
+      size: { width, height },
+    };
+  }
+  group.childIds = placements.map(([id]) => id);
+  group.size = { width: 160, height: 110 };
+  delete document.nodesById.feature_one;
+  delete document.nodesById.feature_two;
+  delete document.nodesById.feature_three;
+  return {
+    ...input,
+    document,
+    selection: { nodeIds: placements.map(([id]) => id), anchorNodeId: "f" },
     tool: "select",
   };
 }

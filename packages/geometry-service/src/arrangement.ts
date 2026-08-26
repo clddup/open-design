@@ -438,6 +438,93 @@ export function reorderSmartSelection(
   return finalize(axis, orderedIds, placements, spacing);
 }
 
+export function rearrangeSmartSelectionGrid(
+  items: readonly ArrangementItem[],
+  movedId: string,
+  targetId: string,
+  mode: "insert" | "swap",
+): TidyUpPlan {
+  const analysis = analyzeSmartSelection(items);
+  if (!analysis.ok) return analysis;
+  if (
+    analysis.dimension !== "grid" ||
+    movedId === targetId ||
+    !analysis.orderedIds.includes(movedId) ||
+    !analysis.orderedIds.includes(targetId)
+  ) {
+    return failure(
+      "invalid-input",
+      "Grid Smart selection rearrange requires distinct current cell layers",
+    );
+  }
+  const orderedIds = [...analysis.orderedIds];
+  const movedIndex = orderedIds.indexOf(movedId);
+  const targetIndex = orderedIds.indexOf(targetId);
+  if (mode === "swap") {
+    [orderedIds[movedIndex], orderedIds[targetIndex]] = [
+      orderedIds[targetIndex]!,
+      orderedIds[movedIndex]!,
+    ];
+  } else {
+    orderedIds.splice(movedIndex, 1);
+    orderedIds.splice(orderedIds.indexOf(targetId), 0, movedId);
+  }
+  const byId = new Map(items.map((item) => [item.id, item] as const));
+  const rowById = indexedIds(analysis.rows);
+  const columnById = indexedIds(analysis.columns);
+  const slots = analysis.orderedIds.map((id) => ({
+    row: rowById.get(id)!,
+    column: columnById.get(id)!,
+  }));
+  const assigned = orderedIds.map((id, index) => ({
+    item: byId.get(id)!,
+    slot: slots[index]!,
+  }));
+  const columnWidths = analysis.columns.map((_, column) =>
+    Math.max(
+      ...assigned
+        .filter((entry) => entry.slot.column === column)
+        .map((entry) => entry.item.bounds.width),
+    ),
+  );
+  const rowHeights = analysis.rows.map((_, row) =>
+    Math.max(
+      ...assigned
+        .filter((entry) => entry.slot.row === row)
+        .map((entry) => entry.item.bounds.height),
+    ),
+  );
+  const left = Math.min(...items.map((item) => item.bounds.x));
+  const top = Math.min(...items.map((item) => item.bounds.y));
+  const columnTargets = cumulativeTargets(
+    left,
+    columnWidths,
+    analysis.horizontalSpacing!,
+  );
+  const rowTargets = cumulativeTargets(
+    top,
+    rowHeights,
+    analysis.verticalSpacing!,
+  );
+  return finalizeTidy(
+    "grid",
+    orderedIds,
+    assigned.map(({ item, slot }) => {
+      const target = {
+        x: columnTargets[slot.column]!,
+        y: rowTargets[slot.row]!,
+      };
+      return {
+        id: item.id,
+        target,
+        delta: { x: target.x - item.bounds.x, y: target.y - item.bounds.y },
+      };
+    }),
+    analysis.horizontalSpacing,
+    analysis.verticalSpacing,
+  );
+}
+
 /**
  * Produces a Figma-style Tidy up placement without mutating document state.
  * One-dimensional selections only change their arrangement axis. A proven

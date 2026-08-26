@@ -24,6 +24,7 @@ import {
   planReorderNodes,
   planSetBooleanOperation,
   planSmartSelectionSpacing,
+  planSmartSelectionGridRearrange,
   planSmartSelectionReorder,
   planToggleMaskNodes,
   planUngroupBooleanGroup,
@@ -536,14 +537,25 @@ export function useLayerCommandController({
         return false;
       }
       const operationId = `smart_reorder_${Date.now()}_${++transactionCounter.current}`;
-      const plan = planSmartSelectionReorder(
-        current.document,
-        activePageId,
-        request.nodeIds,
-        request.movedNodeIds,
-        request.insertionIndex,
-        operationId,
-      );
+      const plan =
+        request.kind === "linear"
+          ? planSmartSelectionReorder(
+              current.document,
+              activePageId,
+              request.nodeIds,
+              request.movedNodeIds,
+              request.insertionIndex,
+              operationId,
+            )
+          : planSmartSelectionGridRearrange(
+              current.document,
+              activePageId,
+              request.nodeIds,
+              request.movedNodeId,
+              request.targetNodeId,
+              request.mode,
+              operationId,
+            );
       if (!plan.ok) {
         setEditorError(plan.code === "no-op" ? null : plan.message);
         return false;

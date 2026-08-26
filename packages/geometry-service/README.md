@@ -8,6 +8,7 @@ OpenDesign-owned, versioned geometry provider boundary. Contract v7 contains det
 - infer and Tidy up a row, column, or unequal/sparse two-dimensional grid from the existing gap mode, anchoring a grid at the selection top-left;
 - analyze a Figma-compatible one- or two-dimensional Smart Selection and change one uniform spacing axis without flattening the other axis;
 - reorder a marked proper subset of a one-dimensional Smart Selection while preserving spatial spacing and hierarchy;
+- rearrange or swap one layer across stable occupied cells in a two-dimensional Smart Selection, recomputing unequal row and column extents;
 - measure uniform spacing or a repeated gap without mutating design state.
 
 Tidy up and Smart Selection reject selections whose overlap graph cannot prove stable rows and columns, including diagonal-only placement, one object bridging multiple rows/columns, or multiple objects occupying one inferred grid cell. One-dimensional operations change only the inferred axis. Gap modes use deterministic spatial order to break equal-frequency ties (topmost row for horizontal gaps, then leftmost column for vertical gaps); no pixel-grid tolerance is implied. Smart Selection spacing supports negative gaps for a one-dimensional selection. Reorder accepts stable marked IDs plus an insertion index in the remaining spatial order; it changes placement only, never layer hierarchy. The current surface does not claim two-dimensional rearrange/swap, structural reflow after duplicate/delete/resize, snapping, or Auto Layout.

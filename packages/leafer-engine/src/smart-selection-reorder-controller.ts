@@ -1,5 +1,8 @@
 import type { DesignDocument, Transform } from "@opendesign/design-contracts";
-import { reorderSmartSelection } from "@opendesign/geometry-service";
+import {
+  rearrangeSmartSelectionGrid,
+  reorderSmartSelection,
+} from "@opendesign/geometry-service";
 import type * as LeaferEditorModule from "leafer-editor";
 import { matrixRelativeToParent } from "./affine.js";
 import { eventClientPoint, type LeaferEventLike } from "./pointer-event.js";
@@ -32,6 +35,20 @@ interface SmartSelectionReorderDragSession {
   valid: boolean;
 }
 
+interface SmartSelectionGridDragSession {
+  before: ReadonlyMap<string, Transform>;
+  documentId: string;
+  expectedRevision: number;
+  mode: "insert" | "swap";
+  moved: boolean;
+  movedNodeId: string;
+  nodeIds: readonly string[];
+  pageId: string;
+  startClientPoint: { x: number; y: number };
+  targetNodeId: string;
+  valid: boolean;
+}
+
 const MATRIX_EPSILON = 0.000_001;
 const SMART_COLOR = "#f24e8a";
 const SMART_INSERTION_COLOR = "#0d99ff";
@@ -42,6 +59,7 @@ const RING_HIT_SIZE = 20;
 export class SmartSelectionReorderController {
   #document: DesignDocument | null = null;
   #drag: SmartSelectionReorderDragSession | null = null;
+  #gridDrag: SmartSelectionGridDragSession | null = null;
   readonly #element: (nodeId: string) => LeaferElement | undefined;
   readonly #finishNodePresentation: (nodeId: string) => void;
   readonly #hitRingNodeIds = new WeakMap<object, string>();
@@ -92,12 +110,13 @@ export class SmartSelectionReorderController {
   }
 
   get dragging(): boolean {
-    return this.#drag !== null;
+    return this.#drag !== null || this.#gridDrag !== null;
   }
 
   cancelDrag(restore = true): boolean {
-    if (!this.#drag) return false;
+    if (!this.#drag && !this.#gridDrag) return false;
     this.#drag = null;
+    this.#gridDrag = null;
     this.#insertionIndicator.visible = false;
     if (restore) this.#restoreProjection();
     this.#syncAppearance();
@@ -131,9 +150,24 @@ export class SmartSelectionReorderController {
       this.#markedNodeIds.add(nodeId);
     }
     this.#syncAppearance();
-    if (plan.dimension === "grid") return true;
     const before = this.#captureTransforms(plan.nodeIds);
     if (!before) return true;
+    if (plan.dimension === "grid") {
+      this.#gridDrag = {
+        before,
+        documentId: plan.documentId,
+        expectedRevision: plan.revision,
+        mode: event.metaKey || event.ctrlKey ? "swap" : "insert",
+        moved: false,
+        movedNodeId: nodeId,
+        nodeIds: plan.nodeIds,
+        pageId: plan.pageId,
+        startClientPoint: eventClientPoint(event),
+        targetNodeId: nodeId,
+        valid: false,
+      };
+      return true;
+    }
     this.#drag = {
       axis: plan.dimension,
       before,
@@ -151,6 +185,45 @@ export class SmartSelectionReorderController {
   }
 
   pointerMove(event: LeaferEventLike): boolean {
+    const gridDrag = this.#gridDrag;
+    const gridPlan = this.#plan;
+    if (gridDrag && gridPlan && this.#document) {
+      if (event.isCancel) {
+        this.cancelDrag(true);
+        return true;
+      }
+      const clientPoint = eventClientPoint(event);
+      if (
+        Math.hypot(
+          clientPoint.x - gridDrag.startClientPoint.x,
+          clientPoint.y - gridDrag.startClientPoint.y,
+        ) >= 3
+      ) {
+        gridDrag.moved = true;
+      }
+      if (!gridDrag.moved) return true;
+      const point = event.getInnerPoint(this.#layer);
+      const target = nearestGridItem(gridPlan, gridDrag.movedNodeId, point);
+      if (!target) return true;
+      gridDrag.mode = event.metaKey || event.ctrlKey ? "swap" : "insert";
+      gridDrag.targetNodeId = target.id;
+      const preview = rearrangeSmartSelectionGrid(
+        gridPlan.items,
+        gridDrag.movedNodeId,
+        target.id,
+        gridDrag.mode,
+      );
+      if (!preview.ok) {
+        this.#restorePreview(gridDrag.before);
+        gridDrag.valid = false;
+        this.#insertionIndicator.visible = false;
+        return true;
+      }
+      if (!this.#applyPreview(preview.placements, gridDrag.before)) return true;
+      gridDrag.valid = true;
+      this.#syncGridTarget(target.bounds);
+      return true;
+    }
     const drag = this.#drag;
     const plan = this.#plan;
     if (!drag || !plan || !this.#document) return false;
@@ -187,33 +260,32 @@ export class SmartSelectionReorderController {
       this.#insertionIndicator.visible = false;
       return true;
     }
-    for (const placement of preview.placements) {
-      const before = drag.before.get(placement.id);
-      const element = this.#element(placement.id);
-      const localDelta = documentDeltaToNodeParent(
-        this.#document,
-        placement.id,
-        placement.delta,
-      );
-      if (!before || !element || !localDelta) {
-        this.cancelDrag(true);
-        return true;
-      }
-      element.setTransform({
-        a: before[0],
-        b: before[1],
-        c: before[2],
-        d: before[3],
-        e: before[4] + localDelta.x,
-        f: before[5] + localDelta.y,
-      });
-    }
+    if (!this.#applyPreview(preview.placements, drag.before)) return true;
     drag.valid = true;
     this.#syncInsertionIndicator(plan, drag, insertionIndex);
     return true;
   }
 
   pointerUp(event: LeaferEventLike): boolean {
+    const gridDrag = this.#gridDrag;
+    if (gridDrag) {
+      if (!event.isCancel) this.pointerMove(event);
+      const current = this.#gridDrag;
+      this.cancelDrag(true);
+      if (!event.isCancel && current?.moved && current.valid) {
+        this.#onReorder({
+          documentId: current.documentId,
+          expectedRevision: current.expectedRevision,
+          kind: "grid",
+          mode: current.mode,
+          movedNodeId: current.movedNodeId,
+          nodeIds: current.nodeIds,
+          pageId: current.pageId,
+          targetNodeId: current.targetNodeId,
+        });
+      }
+      return true;
+    }
     const drag = this.#drag;
     if (!drag) return false;
     if (!event.isCancel) this.pointerMove(event);
@@ -224,6 +296,7 @@ export class SmartSelectionReorderController {
         documentId: current.documentId,
         expectedRevision: current.expectedRevision,
         insertionIndex: current.insertionIndex,
+        kind: "linear",
         movedNodeIds: current.movedNodeIds,
         nodeIds: current.nodeIds,
         pageId: current.pageId,
@@ -245,6 +318,15 @@ export class SmartSelectionReorderController {
         this.#drag.documentId !== plan.documentId ||
         this.#drag.expectedRevision !== plan.revision ||
         !sameStringSet(this.#drag.nodeIds, plan.nodeIds))
+    ) {
+      this.cancelDrag(true);
+    }
+    if (
+      this.#gridDrag &&
+      (!plan ||
+        this.#gridDrag.documentId !== plan.documentId ||
+        this.#gridDrag.expectedRevision !== plan.revision ||
+        !sameStringSet(this.#gridDrag.nodeIds, plan.nodeIds))
     ) {
       this.cancelDrag(true);
     }
@@ -299,6 +381,12 @@ export class SmartSelectionReorderController {
     if (this.#drag?.valid) {
       this.#syncInsertionIndicator(plan, this.#drag, this.#drag.insertionIndex);
     }
+    if (this.#gridDrag?.valid) {
+      const target = plan.items.find(
+        (item) => item.id === this.#gridDrag?.targetNodeId,
+      );
+      if (target) this.#syncGridTarget(target.bounds);
+    }
     this.#syncAppearance();
   }
 
@@ -321,6 +409,35 @@ export class SmartSelectionReorderController {
       ]);
     }
     return before;
+  }
+
+  #applyPreview(
+    placements: readonly { id: string; delta: { x: number; y: number } }[],
+    beforeById: ReadonlyMap<string, Transform>,
+  ): boolean {
+    if (!this.#document) return false;
+    for (const placement of placements) {
+      const before = beforeById.get(placement.id);
+      const element = this.#element(placement.id);
+      const localDelta = documentDeltaToNodeParent(
+        this.#document,
+        placement.id,
+        placement.delta,
+      );
+      if (!before || !element || !localDelta) {
+        this.cancelDrag(true);
+        return false;
+      }
+      element.setTransform({
+        a: before[0],
+        b: before[1],
+        c: before[2],
+        d: before[3],
+        e: before[4] + localDelta.x,
+        f: before[5] + localDelta.y,
+      });
+    }
+    return true;
   }
 
   #createRing(id: string, nodeId: string): SmartRingElements {
@@ -419,6 +536,9 @@ export class SmartSelectionReorderController {
     this.#insertionIndicator.set(
       drag.axis === "horizontal"
         ? {
+            fill: SMART_INSERTION_COLOR,
+            stroke: "rgba(0, 0, 0, 0)",
+            strokeWidth: 0,
             x: coordinate - thickness / 2,
             y: plan.bounds.y - overhang,
             width: thickness,
@@ -426,6 +546,9 @@ export class SmartSelectionReorderController {
             visible: true,
           }
         : {
+            fill: SMART_INSERTION_COLOR,
+            stroke: "rgba(0, 0, 0, 0)",
+            strokeWidth: 0,
             x: plan.bounds.x - overhang,
             y: coordinate - thickness / 2,
             width: plan.bounds.width + overhang * 2,
@@ -433,6 +556,26 @@ export class SmartSelectionReorderController {
             visible: true,
           },
     );
+  }
+
+  #syncGridTarget(bounds: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }): void {
+    const zoom = this.#zoom();
+    this.#insertionIndicator.set({
+      x: bounds.x,
+      y: bounds.y,
+      width: bounds.width,
+      height: bounds.height,
+      cornerRadius: 4 / zoom,
+      fill: "rgba(13, 153, 255, 0.12)",
+      stroke: SMART_INSERTION_COLOR,
+      strokeWidth: 2 / zoom,
+      visible: true,
+    });
   }
 
   #zoom(): number {
@@ -482,4 +625,24 @@ function smartInsertionIndex(
         : item.bounds.y + item.bounds.height / 2,
     )
     .filter((center) => coordinate > center).length;
+}
+
+function nearestGridItem(
+  plan: SmartSelectionOverlayPlan,
+  movedNodeId: string,
+  point: { x: number; y: number },
+): SmartSelectionOverlayPlan["items"][number] | null {
+  let nearest: SmartSelectionOverlayPlan["items"][number] | null = null;
+  let distance = Number.POSITIVE_INFINITY;
+  for (const item of plan.items) {
+    if (item.id === movedNodeId) continue;
+    const dx = point.x - (item.bounds.x + item.bounds.width / 2);
+    const dy = point.y - (item.bounds.y + item.bounds.height / 2);
+    const nextDistance = dx * dx + dy * dy;
+    if (nextDistance < distance) {
+      nearest = item;
+      distance = nextDistance;
+    }
+  }
+  return nearest;
 }

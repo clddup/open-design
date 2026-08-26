@@ -8,6 +8,7 @@ import {
   alignItems,
   distributeItems,
   measureItemSpacing,
+  rearrangeSmartSelectionGrid,
   reorderSmartSelection,
   setItemSpacing,
   setSmartSelectionSpacing,
@@ -57,7 +58,7 @@ export type ArrangeOperationFailureCode =
 export type ArrangeOperationPlan =
   | {
       ok: true;
-      action: ArrangeAction | "smart-reorder";
+      action: ArrangeAction | "smart-grid-rearrange" | "smart-reorder";
       commands: DesignOperation[];
       orderedNodeIds: string[];
       selectionNodeIds: string[];
@@ -169,11 +170,43 @@ export function planSmartSelectionReorder(
   );
 }
 
+export function planSmartSelectionGridRearrange(
+  document: DesignDocument,
+  pageId: string,
+  nodeIds: readonly string[],
+  movedNodeId: string,
+  targetNodeId: string,
+  mode: "insert" | "swap",
+  commandPrefix: string,
+): ArrangeOperationPlan {
+  const selection = analyzeArrangeSelection(document, pageId, nodeIds);
+  if (!selection.ok) return selection;
+  const geometryPlan = rearrangeSmartSelectionGrid(
+    selection.items,
+    movedNodeId,
+    targetNodeId,
+    mode,
+  );
+  if (!geometryPlan.ok) {
+    return failure(
+      geometryPlan.code === "no-op" ? "no-op" : "invalid-selection",
+      geometryPlan.message,
+    );
+  }
+  return arrangementCommands(
+    document,
+    selection,
+    geometryPlan,
+    "smart-grid-rearrange",
+    commandPrefix,
+  );
+}
+
 function arrangementCommands(
   document: DesignDocument,
   selection: ArrangeSelection,
   geometryPlan: Extract<ArrangementPlan | TidyUpPlan, { ok: true }>,
-  action: ArrangeAction | "smart-reorder",
+  action: ArrangeAction | "smart-grid-rearrange" | "smart-reorder",
   commandPrefix: string,
 ): ArrangeOperationPlan {
   const projected = structuredClone(document);

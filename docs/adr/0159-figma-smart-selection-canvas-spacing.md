@@ -1,6 +1,6 @@
 # ADR-0159：Figma-compatible Smart Selection 画布间距手柄
 
-- 状态：Accepted，画布间距手柄与一维 marked subset 重排已实施；二维重排和结构变化后的回流待后续
+- 状态：Accepted，画布间距手柄、一维 marked subset 重排与二维单层 rearrange/swap 已实施；结构变化后的回流待后续
 - 日期：2026-08-26
 
 ## 背景
@@ -22,11 +22,13 @@ pointer up 先恢复 projection，再发送 `documentId + pageId + expectedRevis
 
 中心 ring 同时承担真实的一维重排入口。单击 ring 标记单层，`Shift` 单击追加或移除标记；marked ring 使用实心粉色填充。拖动 marked subset 时，Geometry Service 从当前一维空间顺序中移除 marked IDs，再按 remaining-order insertion index 插回，保留 marked 内部顺序与现有统一间距。Leafer 连续预览全部选中图层并显示蓝色插入线，pointer up 恢复 projection 后只发送稳定 IDs 和 insertion index。`planSmartSelectionReorder` 只更新 transform 和必要的 Group bounds，不改变 parent、childIds 或 Layers panel 顺序，并与 spacing 共用 exact scope、单事务和失败恢复语义。
 
+二维选区允许单层拖到另一个已占用 cell。默认 rearrange 按现有 row-major occupied slots 插入并移动中间层；按住 macOS Command 或 Windows Control 时交换 moved/target cell。每次候选都按新的 cell ownership 重新求 column max width、row max height 和既有双轴间距，不假定等尺寸。Leafer 用蓝色目标框显示候选 cell；pointer up 只提交 `movedNodeId + targetNodeId + insert/swap`，Runtime 重新分析当前稳定二维选区后形成单事务。
+
 中心标记、handle、tooltip 和 preview 均不进入 `DesignDocument`、history、save、capture 或 export。Component 派生目标、locked layer、Auto Layout flow child、不可逆 transform、歧义 overlap graph 和预算失败继续关闭该入口，不以错误坐标冒充支持。
 
 ## 当前边界
 
-本切片完成普通 Smart Selection 的水平/垂直统一间距，以及一维选区的单击/Shift marked subset 画布重排。二维单层 rearrange、Command/Ctrl swap、双击整行/列/全选标记、duplicate/delete/resize 后的自动 reflow、吸附和键盘等价入口仍需独立设计；这些能力不得因已有中心 ring 或 spacing handle 被描述为完成。
+本切片完成普通 Smart Selection 的水平/垂直统一间距、一维选区的单击/Shift marked subset 重排，以及二维单层 rearrange/Command-Ctrl swap。双击整行/列/全选标记、duplicate/delete/resize 后的自动 reflow、吸附和键盘等价入口仍需独立设计；这些能力不得因已有中心 ring 或 spacing handle 被描述为完成。
 
 ## 验证
 

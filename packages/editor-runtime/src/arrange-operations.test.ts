@@ -9,6 +9,7 @@ import {
   normalizeDesignDocument,
   planArrangeNodes,
   planSmartSelectionSpacing,
+  planSmartSelectionGridRearrange,
   planSmartSelectionReorder,
 } from "./index.js";
 
@@ -281,6 +282,26 @@ describe("arrange operations", () => {
     expect(getNodeBounds(runtime.getSnapshot().document, "smart_e")?.x).toBe(
       194,
     );
+
+    const rearrange = planSmartSelectionGridRearrange(
+      runtime.getSnapshot().document,
+      "page_welcome",
+      placements.map(([id]) => id),
+      "smart_a",
+      "smart_e",
+      "swap",
+      "smart_swap",
+    );
+    if (!rearrange.ok) throw new Error(rearrange.message);
+    expect(
+      runtime.apply(transaction(runtime, "smart_swap", rearrange.commands)).ok,
+    ).toBe(true);
+    expect(
+      getNodeBounds(runtime.getSnapshot().document, "smart_a"),
+    ).toMatchObject({
+      x: 194,
+      y: 474,
+    });
   });
 
   it("reorders a Smart row through one reversible transform transaction", () => {

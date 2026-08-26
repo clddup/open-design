@@ -6,6 +6,7 @@ export {
   distributeItems,
   MAX_ARRANGEMENT_SPACING,
   measureItemSpacing,
+  rearrangeSmartSelectionGrid,
   reorderSmartSelection,
   setItemSpacing,
   setSmartSelectionSpacing,

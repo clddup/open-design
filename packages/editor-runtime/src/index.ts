@@ -65,6 +65,7 @@ export {
   getArrangementSelectionMetrics,
   planArrangeNodes,
   planSmartSelectionSpacing,
+  planSmartSelectionGridRearrange,
   planSmartSelectionReorder,
   type ArrangeAction,
   type ArrangeOperation,

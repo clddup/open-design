@@ -6,6 +6,7 @@ import {
   GEOMETRY_SERVICE_CONTRACT_VERSION,
   MAX_ARRANGEMENT_SPACING,
   measureItemSpacing,
+  rearrangeSmartSelectionGrid,
   reorderSmartSelection,
   setItemSpacing,
   setSmartSelectionSpacing,
@@ -238,6 +239,36 @@ describe("geometry arrangement", () => {
         { id: "f", target: { x: 110, y: 42 } },
       ],
     });
+  });
+
+  it("rearranges or swaps a single layer across a two-dimensional Smart grid", () => {
+    const grid = items(
+      ["a", 0, 0, 30, 20],
+      ["b", 50, 0, 40, 30],
+      ["c", 110, 0, 20, 25],
+      ["d", 0, 70, 20, 40],
+      ["e", 50, 70, 30, 20],
+      ["f", 110, 70, 50, 35],
+    );
+    expect(rearrangeSmartSelectionGrid(grid, "a", "e", "insert")).toMatchObject(
+      {
+        ok: true,
+        dimension: "grid",
+        orderedIds: ["b", "c", "d", "a", "e", "f"],
+      },
+    );
+    const swap = rearrangeSmartSelectionGrid(grid, "a", "e", "swap");
+    expect(swap).toMatchObject({
+      ok: true,
+      orderedIds: ["e", "b", "c", "d", "a", "f"],
+    });
+    if (!swap.ok) return;
+    expect(swap.placements).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "a", target: { x: 50, y: 70 } }),
+        expect.objectContaining({ id: "e", target: { x: 0, y: 0 } }),
+      ]),
+    );
   });
 
   it("tidies a one-dimensional row using the leading gap mode without changing y", () => {

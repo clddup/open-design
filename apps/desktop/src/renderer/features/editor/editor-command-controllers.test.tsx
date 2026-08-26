@@ -322,6 +322,7 @@ describe("editor command controllers", () => {
         documentId: snapshot.document.documentId,
         expectedRevision: reorderRevision,
         insertionIndex: 2,
+        kind: "linear",
         movedNodeIds: ["feature_one"],
         nodeIds: ["feature_one", "feature_two", "feature_three"],
         pageId: "page_welcome",

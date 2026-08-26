@@ -166,14 +166,28 @@ export interface LeaferSmartSelectionSpacingRequest {
   spacing: number;
 }
 
-export interface LeaferSmartSelectionReorderRequest {
+type LeaferSmartSelectionReorderScope = {
   documentId: string;
   expectedRevision: number;
-  insertionIndex: number;
-  movedNodeIds: readonly string[];
   nodeIds: readonly string[];
   pageId: string;
-}
+};
+
+export type LeaferSmartSelectionReorderRequest =
+  LeaferSmartSelectionReorderScope &
+    (
+      | {
+          insertionIndex: number;
+          kind: "linear";
+          movedNodeIds: readonly string[];
+        }
+      | {
+          kind: "grid";
+          mode: "insert" | "swap";
+          movedNodeId: string;
+          targetNodeId: string;
+        }
+    );
 
 export type LeaferAutoLayoutSpacingChange =
   | {
