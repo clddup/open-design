@@ -39,6 +39,7 @@
     "@opendesign/ui": "workspace:*",
     "@opendesign/variable-service": "workspace:*",
     "@opendesign/workspace-contracts": "workspace:*",
+    "@sinclair/typebox": "^0.34.41",
     "mammoth": "1.12.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
