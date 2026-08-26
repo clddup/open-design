@@ -132,20 +132,26 @@ describe("registerModelServiceIpc", () => {
       invoke(fixture, channels.saveGlobalImageGenerationSettings, {
         enabled: true,
       }),
-    ).toThrow("Invalid global image-generation settings");
+    ).toThrow("Invalid global image-generation settings request input");
     expect(() =>
       invoke(fixture, channels.saveModelProviderProfile, { providerId: "bad" }),
-    ).toThrow("Invalid model provider profile");
+    ).toThrow("Invalid model Provider save request input");
+    expect(() =>
+      invoke(fixture, channels.saveModelProviderProfile, {
+        ...saveProvider,
+        baseUrl: "https://secret@models.example/v1",
+      }),
+    ).toThrow("provider_config.base_url_invalid at /baseUrl");
     expect(() =>
       invoke(fixture, channels.deleteModelProviderProfile, {
         providerId: "bad id",
       }),
-    ).toThrow("Invalid model provider delete request");
+    ).toThrow("Invalid model Provider delete request input");
     expect(() =>
       invoke(fixture, channels.testModelProviderConnection, {
         providerId: "provider-local",
       }),
-    ).toThrow("Invalid model provider test request");
+    ).toThrow("Invalid model Provider connection test request input");
     expect(fixture.publishModelProviderCatalog).not.toHaveBeenCalled();
     expect(fixture.modelHost.saveProfile).not.toHaveBeenCalled();
     expect(fixture.imageHost.saveSettings).not.toHaveBeenCalled();

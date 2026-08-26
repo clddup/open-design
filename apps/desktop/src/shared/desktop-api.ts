@@ -1,10 +1,4 @@
 import type { AgentEvent, AgentRequest } from "@opendesign/agent-contracts";
-import type {
-  ModelApiFormat,
-  ModelAuthMode,
-  ModelReasoningEffort,
-  ModelSelection,
-} from "@opendesign/model-gateway";
 import {
   isDesignDocument,
   type DesignDocument,
@@ -45,10 +39,39 @@ export {
   type FontBinaryReadRequest,
 } from "./font-binary-contract";
 export {
+  GLOBAL_IMAGE_GENERATION_SETTINGS_VERSION,
+  isDeleteModelProviderProfileRequest,
+  isGlobalImageGenerationSettings,
+  isModelProviderCatalog,
+  isModelProviderProfile,
+  isModelSelection,
   isProviderConnectionResult,
+  isSaveGlobalImageGenerationSettingsRequest,
+  isSaveModelProviderProfileRequest,
+  isTestModelProviderConnectionRequest,
+  MODEL_PROVIDER_CATALOG_VERSION,
+  normalizeProviderBaseUrl,
+  type DeleteModelProviderProfileRequest,
+  type GlobalImageGenerationSettings,
+  type ImageGenerationApiFormat,
+  type ModelCapabilities,
+  type ModelProfile,
+  type ModelProviderCatalog,
+  type ModelProviderProfile,
   type ProviderConnectionResult,
-} from "./provider-connection";
-import type { ProviderConnectionResult } from "./provider-connection";
+  type SaveGlobalImageGenerationSettingsRequest,
+  type SaveModelProviderProfileRequest,
+  type TestModelProviderConnectionRequest,
+} from "./provider-config-contract";
+import type {
+  DeleteModelProviderProfileRequest,
+  GlobalImageGenerationSettings,
+  ModelProviderCatalog,
+  ProviderConnectionResult,
+  SaveGlobalImageGenerationSettingsRequest,
+  SaveModelProviderProfileRequest,
+  TestModelProviderConnectionRequest,
+} from "./provider-config-contract";
 import type {
   OpenDesignFile,
   OpenSvgFile,
@@ -167,82 +190,6 @@ export type ThemePreference = "light" | "dark" | "system";
 export type PlatformInfo = { platform: NodeJS.Platform; version: string };
 
 export type WindowAction = "minimize" | "toggle-maximize" | "close";
-
-export const MODEL_PROVIDER_CATALOG_VERSION = 3 as const;
-export const GLOBAL_IMAGE_GENERATION_SETTINGS_VERSION = 1 as const;
-
-export type ImageGenerationApiFormat = "openai-images";
-
-export type ModelCapabilities = {
-  toolUse: boolean;
-  imageInput: boolean;
-  reasoning: boolean;
-};
-
-export type ModelProfile = {
-  modelId: string;
-  name: string;
-  contextWindow: number;
-  maxOutputTokens: number;
-  capabilities: ModelCapabilities;
-  reasoningEfforts: ModelReasoningEffort[];
-};
-
-export type ModelProviderProfile = {
-  providerId: string;
-  name: string;
-  enabled: boolean;
-  apiFormat: ModelApiFormat;
-  authMode: ModelAuthMode;
-  baseUrl: string;
-  models: ModelProfile[];
-  hasApiKey: boolean;
-  updatedAt: string | null;
-};
-
-export type ModelProviderCatalog = {
-  version: typeof MODEL_PROVIDER_CATALOG_VERSION;
-  providers: ModelProviderProfile[];
-  defaultSelection?: ModelSelection;
-};
-
-export type SaveModelProviderProfileRequest = {
-  providerId: string;
-  name: string;
-  enabled: boolean;
-  apiFormat: ModelApiFormat;
-  authMode: ModelAuthMode;
-  baseUrl: string;
-  models: ModelProfile[];
-  apiKey?: string;
-  clearApiKey?: boolean;
-  setAsDefault?: boolean;
-};
-
-export type DeleteModelProviderProfileRequest = { providerId: string };
-
-export type GlobalImageGenerationSettings = {
-  version: typeof GLOBAL_IMAGE_GENERATION_SETTINGS_VERSION;
-  enabled: boolean;
-  apiFormat: ImageGenerationApiFormat;
-  authMode: ModelAuthMode;
-  baseUrl: string;
-  modelId: string;
-  hasApiKey: boolean;
-  updatedAt: string | null;
-};
-
-export type SaveGlobalImageGenerationSettingsRequest = {
-  enabled: boolean;
-  apiFormat: ImageGenerationApiFormat;
-  authMode: ModelAuthMode;
-  baseUrl: string;
-  modelId: string;
-  apiKey?: string;
-  clearApiKey?: boolean;
-};
-
-export type TestModelProviderConnectionRequest = ModelSelection;
 
 export type CreateProjectRequest = {
   projectId: string;
@@ -516,236 +463,6 @@ export function isLocalePreference(value: unknown): value is AppLocale {
   return isAppLocale(value);
 }
 
-export function isModelProviderCatalog(
-  value: unknown,
-): value is ModelProviderCatalog {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const catalog = value as Record<string, unknown>;
-  const allowedKeys = ["version", "providers", "defaultSelection"];
-  const providers = catalog.providers;
-  const defaultSelection = catalog.defaultSelection;
-  return (
-    catalog.version === MODEL_PROVIDER_CATALOG_VERSION &&
-    Array.isArray(providers) &&
-    providers.length <= 64 &&
-    providers.every(isModelProviderProfile) &&
-    new Set(providers.map((provider) => provider.providerId)).size ===
-      providers.length &&
-    (defaultSelection === undefined ||
-      (isModelSelection(defaultSelection) &&
-        providers.some(
-          (provider) =>
-            provider.enabled &&
-            provider.providerId === defaultSelection.providerId &&
-            provider.models.some(
-              (model) =>
-                model.modelId === defaultSelection.modelId &&
-                model.capabilities.toolUse,
-            ),
-        ))) &&
-    Object.keys(catalog).every((key) => allowedKeys.includes(key))
-  );
-}
-
-export function migrateModelProviderCatalog(
-  value: unknown,
-): ModelProviderCatalog | null {
-  if (isModelProviderCatalog(value)) return snapshotCatalog(value);
-  if (!isRecord(value) || (value.version !== 1 && value.version !== 2)) {
-    return null;
-  }
-  if (!Array.isArray(value.providers) || value.providers.length > 64) {
-    return null;
-  }
-  const providers = value.providers.map(
-    value.version === 1 ? migrateV1Provider : migrateV2Provider,
-  );
-  if (providers.some((provider) => provider === null)) return null;
-  const candidate = {
-    version: MODEL_PROVIDER_CATALOG_VERSION,
-    providers: providers as ModelProviderProfile[],
-    ...(value.defaultSelection === undefined
-      ? {}
-      : { defaultSelection: value.defaultSelection }),
-  };
-  const allowedKeys =
-    value.version === 1
-      ? ["version", "providers", "defaultSelection"]
-      : [
-          "version",
-          "providers",
-          "defaultSelection",
-          "defaultImageGenerationSelection",
-        ];
-  if (
-    !Object.keys(value).every((key) => allowedKeys.includes(key)) ||
-    !isModelProviderCatalog(candidate)
-  ) {
-    return null;
-  }
-  return snapshotCatalog(candidate);
-}
-
-export function isModelProviderProfile(
-  value: unknown,
-): value is ModelProviderProfile {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const profile = value as Record<string, unknown>;
-  return (
-    isProviderId(profile.providerId) &&
-    isDisplayName(profile.name) &&
-    typeof profile.enabled === "boolean" &&
-    isModelApiFormat(profile.apiFormat) &&
-    isModelAuthMode(profile.authMode) &&
-    isProviderBaseUrl(profile.baseUrl) &&
-    Array.isArray(profile.models) &&
-    profile.models.length <= 128 &&
-    profile.models.every(isModelProfile) &&
-    new Set(profile.models.map((model) => model.modelId)).size ===
-      profile.models.length &&
-    typeof profile.hasApiKey === "boolean" &&
-    isNullableTimestamp(profile.updatedAt) &&
-    Object.keys(profile).every((key) =>
-      [
-        "providerId",
-        "name",
-        "enabled",
-        "apiFormat",
-        "authMode",
-        "baseUrl",
-        "models",
-        "hasApiKey",
-        "updatedAt",
-      ].includes(key),
-    )
-  );
-}
-
-export function isSaveModelProviderProfileRequest(
-  value: unknown,
-): value is SaveModelProviderProfileRequest {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const request = value as Record<string, unknown>;
-  const allowedKeys = [
-    "providerId",
-    "name",
-    "enabled",
-    "apiFormat",
-    "authMode",
-    "baseUrl",
-    "models",
-    "apiKey",
-    "clearApiKey",
-    "setAsDefault",
-  ];
-  return (
-    isProviderId(request.providerId) &&
-    isDisplayName(request.name) &&
-    typeof request.enabled === "boolean" &&
-    isModelApiFormat(request.apiFormat) &&
-    isModelAuthMode(request.authMode) &&
-    isProviderBaseUrl(request.baseUrl) &&
-    Array.isArray(request.models) &&
-    request.models.length > 0 &&
-    request.models.length <= 128 &&
-    request.models.every(isModelProfile) &&
-    new Set(request.models.map((model) => model.modelId)).size ===
-      request.models.length &&
-    (request.apiKey === undefined || isApiKey(request.apiKey)) &&
-    (request.clearApiKey === undefined ||
-      typeof request.clearApiKey === "boolean") &&
-    (request.setAsDefault === undefined ||
-      typeof request.setAsDefault === "boolean") &&
-    !(request.apiKey !== undefined && request.clearApiKey === true) &&
-    Object.keys(request).every((key) => allowedKeys.includes(key))
-  );
-}
-
-export function isDeleteModelProviderProfileRequest(
-  value: unknown,
-): value is DeleteModelProviderProfileRequest {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const request = value as Record<string, unknown>;
-  return (
-    isProviderId(request.providerId) && hasExactKeys(request, ["providerId"])
-  );
-}
-
-export function isModelSelection(value: unknown): value is ModelSelection {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const selection = value as Record<string, unknown>;
-  const allowedKeys = ["providerId", "modelId", "reasoningEffort"];
-  return (
-    isProviderId(selection.providerId) &&
-    isModelName(selection.modelId, false) &&
-    (selection.reasoningEffort === undefined ||
-      isModelReasoningEffort(selection.reasoningEffort)) &&
-    Object.keys(selection).every((key) => allowedKeys.includes(key))
-  );
-}
-
-export const isTestModelProviderConnectionRequest = isModelSelection;
-
-export function isGlobalImageGenerationSettings(
-  value: unknown,
-): value is GlobalImageGenerationSettings {
-  if (!isRecord(value)) return false;
-  return (
-    value.version === GLOBAL_IMAGE_GENERATION_SETTINGS_VERSION &&
-    typeof value.enabled === "boolean" &&
-    isImageGenerationApiFormat(value.apiFormat) &&
-    isModelAuthMode(value.authMode) &&
-    isProviderBaseUrl(value.baseUrl) &&
-    isModelName(value.modelId, !value.enabled) &&
-    typeof value.hasApiKey === "boolean" &&
-    isNullableTimestamp(value.updatedAt) &&
-    hasExactKeys(value, [
-      "version",
-      "enabled",
-      "apiFormat",
-      "authMode",
-      "baseUrl",
-      "modelId",
-      "hasApiKey",
-      "updatedAt",
-    ])
-  );
-}
-
-export function isSaveGlobalImageGenerationSettingsRequest(
-  value: unknown,
-): value is SaveGlobalImageGenerationSettingsRequest {
-  if (!isRecord(value)) return false;
-  return (
-    typeof value.enabled === "boolean" &&
-    isImageGenerationApiFormat(value.apiFormat) &&
-    isModelAuthMode(value.authMode) &&
-    isProviderBaseUrl(value.baseUrl) &&
-    isModelName(value.modelId, !value.enabled) &&
-    (value.apiKey === undefined || isApiKey(value.apiKey)) &&
-    (value.clearApiKey === undefined ||
-      typeof value.clearApiKey === "boolean") &&
-    !(value.apiKey !== undefined && value.clearApiKey === true) &&
-    Object.keys(value).every((key) =>
-      [
-        "enabled",
-        "apiFormat",
-        "authMode",
-        "baseUrl",
-        "modelId",
-        "apiKey",
-        "clearApiKey",
-      ].includes(key),
-    )
-  );
-}
-
-export function normalizeProviderBaseUrl(value: string): string {
-  const url = new URL(value.trim());
-  url.pathname = url.pathname.replace(/\/+$/, "");
-  return url.toString().replace(/\/$/, "");
-}
-
 export function isWindowAction(value: unknown): value is WindowAction {
   return (
     value === "minimize" || value === "toggle-maximize" || value === "close"
@@ -940,256 +657,6 @@ function isDisplayName(value: unknown): value is string {
   );
 }
 
-function isProviderBaseUrl(value: unknown): value is string {
-  if (typeof value !== "string" || value.length === 0 || value.length > 2_048)
-    return false;
-  try {
-    const url = new URL(value);
-    const localHttp =
-      url.protocol === "http:" &&
-      ["localhost", "127.0.0.1", "::1"].includes(url.hostname);
-    return (
-      (url.protocol === "https:" || localHttp) &&
-      url.username === "" &&
-      url.password === "" &&
-      url.search === "" &&
-      url.hash === ""
-    );
-  } catch {
-    return false;
-  }
-}
-
-function isProviderId(value: unknown): value is string {
-  return (
-    typeof value === "string" &&
-    /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(value)
-  );
-}
-
-function isModelApiFormat(value: unknown): value is ModelApiFormat {
-  return (
-    value === "openai-responses" ||
-    value === "openai-chat-completions" ||
-    value === "anthropic-messages"
-  );
-}
-
-function isImageGenerationApiFormat(
-  value: unknown,
-): value is ImageGenerationApiFormat {
-  return value === "openai-images";
-}
-
-function isModelAuthMode(value: unknown): value is ModelAuthMode {
-  return value === "bearer" || value === "x-api-key" || value === "none";
-}
-
-function isModelReasoningEffort(value: unknown): value is ModelReasoningEffort {
-  return (
-    value === "off" ||
-    value === "minimal" ||
-    value === "low" ||
-    value === "medium" ||
-    value === "high" ||
-    value === "xhigh" ||
-    value === "max"
-  );
-}
-
-function isModelProfile(value: unknown): value is ModelProfile {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const model = value as Record<string, unknown>;
-  const capabilities = model.capabilities;
-  return (
-    isModelName(model.modelId, false) &&
-    isDisplayName(model.name) &&
-    Number.isInteger(model.contextWindow) &&
-    (model.contextWindow as number) >= 1_024 &&
-    (model.contextWindow as number) <= 10_000_000 &&
-    Number.isInteger(model.maxOutputTokens) &&
-    (model.maxOutputTokens as number) >= 1 &&
-    (model.maxOutputTokens as number) <= 2_000_000 &&
-    Boolean(capabilities) &&
-    typeof capabilities === "object" &&
-    !Array.isArray(capabilities) &&
-    typeof (capabilities as Record<string, unknown>).toolUse === "boolean" &&
-    typeof (capabilities as Record<string, unknown>).imageInput === "boolean" &&
-    typeof (capabilities as Record<string, unknown>).reasoning === "boolean" &&
-    hasExactKeys(capabilities as Record<string, unknown>, [
-      "toolUse",
-      "imageInput",
-      "reasoning",
-    ]) &&
-    Array.isArray(model.reasoningEfforts) &&
-    model.reasoningEfforts.length > 0 &&
-    model.reasoningEfforts.length <= 7 &&
-    model.reasoningEfforts.every(isModelReasoningEffort) &&
-    new Set(model.reasoningEfforts).size === model.reasoningEfforts.length &&
-    (capabilities as ModelCapabilities).reasoning ===
-      model.reasoningEfforts.some((effort) => effort !== "off") &&
-    hasExactKeys(model, [
-      "modelId",
-      "name",
-      "contextWindow",
-      "maxOutputTokens",
-      "capabilities",
-      "reasoningEfforts",
-    ])
-  );
-}
-
-function migrateV1Provider(value: unknown): ModelProviderProfile | null {
-  if (!isRecord(value) || !Array.isArray(value.models)) return null;
-  if (
-    !hasExactKeys(value, [
-      "providerId",
-      "name",
-      "enabled",
-      "apiFormat",
-      "authMode",
-      "baseUrl",
-      "models",
-      "hasApiKey",
-      "updatedAt",
-    ])
-  ) {
-    return null;
-  }
-  const models = value.models.map(migrateV1Model);
-  if (models.some((model) => model === null)) return null;
-  const candidate = { ...value, models };
-  return isModelProviderProfile(candidate) ? candidate : null;
-}
-
-function migrateV1Model(value: unknown): ModelProfile | null {
-  if (!isRecord(value) || !isRecord(value.capabilities)) return null;
-  if (
-    !hasExactKeys(value, [
-      "modelId",
-      "name",
-      "contextWindow",
-      "maxOutputTokens",
-      "capabilities",
-      "reasoningEfforts",
-    ]) ||
-    !hasExactKeys(value.capabilities, ["toolUse", "imageInput", "reasoning"])
-  ) {
-    return null;
-  }
-  const candidate = { ...value, capabilities: { ...value.capabilities } };
-  return isModelProfile(candidate) ? candidate : null;
-}
-
-function migrateV2Provider(value: unknown): ModelProviderProfile | null {
-  if (!isRecord(value) || !Array.isArray(value.models)) return null;
-  if (
-    !Object.keys(value).every((key) =>
-      [
-        "providerId",
-        "name",
-        "enabled",
-        "apiFormat",
-        "imageGenerationApiFormat",
-        "authMode",
-        "baseUrl",
-        "models",
-        "hasApiKey",
-        "updatedAt",
-      ].includes(key),
-    )
-  ) {
-    return null;
-  }
-  const models = value.models.map(migrateV2Model);
-  if (models.some((model) => model === null)) return null;
-  const candidate = {
-    providerId: value.providerId,
-    name: value.name,
-    enabled: value.enabled,
-    apiFormat: value.apiFormat,
-    authMode: value.authMode,
-    baseUrl: value.baseUrl,
-    models,
-    hasApiKey: value.hasApiKey,
-    updatedAt: value.updatedAt,
-  };
-  return isModelProviderProfile(candidate) ? candidate : null;
-}
-
-function migrateV2Model(value: unknown): ModelProfile | null {
-  if (!isRecord(value) || !isRecord(value.capabilities)) return null;
-  if (
-    !hasExactKeys(value, [
-      "modelId",
-      "name",
-      "contextWindow",
-      "maxOutputTokens",
-      "capabilities",
-      "reasoningEfforts",
-    ]) ||
-    !hasExactKeys(value.capabilities, [
-      "toolUse",
-      "imageInput",
-      "imageGeneration",
-      "reasoning",
-    ])
-  ) {
-    return null;
-  }
-  const candidate = {
-    ...value,
-    capabilities: {
-      toolUse: value.capabilities.toolUse,
-      imageInput: value.capabilities.imageInput,
-      reasoning: value.capabilities.reasoning,
-    },
-  };
-  return isModelProfile(candidate) ? candidate : null;
-}
-
-function snapshotCatalog(catalog: ModelProviderCatalog): ModelProviderCatalog {
-  return {
-    ...catalog,
-    providers: catalog.providers.map((provider) => ({
-      ...provider,
-      models: provider.models.map((model) => ({
-        ...model,
-        capabilities: { ...model.capabilities },
-        reasoningEfforts: [...model.reasoningEfforts],
-      })),
-    })),
-    ...(catalog.defaultSelection === undefined
-      ? {}
-      : { defaultSelection: { ...catalog.defaultSelection } }),
-  };
-}
-
-function isNullableTimestamp(value: unknown): value is string | null {
-  return (
-    value === null ||
-    (typeof value === "string" && Number.isFinite(Date.parse(value)))
-  );
-}
-
-function isModelName(value: unknown, allowEmpty: boolean): value is string {
-  return (
-    typeof value === "string" &&
-    (allowEmpty || value.length > 0) &&
-    value.length <= 256 &&
-    !hasControlCharacter(value)
-  );
-}
-
-function isApiKey(value: unknown): value is string {
-  return (
-    typeof value === "string" &&
-    value.length > 0 &&
-    value.length <= 8_192 &&
-    !hasControlCharacter(value)
-  );
-}
-
 function isTitle(value: unknown): value is string {
   return (
     typeof value === "string" &&
@@ -1214,8 +681,4 @@ function hasControlCharacter(value: string): boolean {
     const codePoint = character.codePointAt(0);
     return codePoint !== undefined && (codePoint <= 31 || codePoint === 127);
   });
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
 }

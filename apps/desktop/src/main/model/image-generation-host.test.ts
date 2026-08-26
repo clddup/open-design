@@ -6,7 +6,6 @@ import {
   ImageGenerationHost,
 } from "./image-generation-host";
 import {
-  ModelProviderHost,
   modelProviderCredentialKey,
   type CredentialCipher,
 } from "./model-provider-host";
@@ -551,89 +550,6 @@ describe("ImageGenerationHost", () => {
       ),
     ).rejects.toThrow("trusted source target");
     expect(fetch).toHaveBeenCalledTimes(1);
-    store.close();
-  });
-
-  it("migrates the old v2 selection and copies its credential before catalog cleanup", () => {
-    const store = new WorkspaceStore(":memory:");
-    store.setPreference(
-      "model.provider.catalog.v2",
-      JSON.stringify({
-        version: 2,
-        providers: [
-          {
-            providerId: "legacy-images",
-            name: "Legacy images",
-            enabled: true,
-            apiFormat: "openai-responses",
-            imageGenerationApiFormat: "openai-images",
-            authMode: "bearer",
-            baseUrl: "https://legacy-images.example/v1",
-            models: [
-              {
-                modelId: "gpt-image-2",
-                name: "GPT Image 2",
-                contextWindow: 128_000,
-                maxOutputTokens: 16_384,
-                capabilities: {
-                  toolUse: false,
-                  imageInput: true,
-                  imageGeneration: true,
-                  reasoning: false,
-                },
-                reasoningEfforts: ["off"],
-              },
-            ],
-            hasApiKey: false,
-            updatedAt: "2026-08-10T00:00:00.000Z",
-          },
-        ],
-        defaultImageGenerationSelection: {
-          providerId: "legacy-images",
-          modelId: "gpt-image-2",
-        },
-      }),
-    );
-    store.setPreference(
-      modelProviderCredentialKey("legacy-images"),
-      cipher.encrypt("legacy-secret").toString("base64"),
-    );
-
-    const settings = new ImageGenerationHost(store, cipher).getSettings();
-    const catalog = new ModelProviderHost(store, cipher).getCatalog();
-
-    expect(settings).toMatchObject({
-      version: 1,
-      enabled: true,
-      apiFormat: "openai-images",
-      authMode: "bearer",
-      baseUrl: "https://legacy-images.example/v1",
-      modelId: "gpt-image-2",
-      hasApiKey: true,
-    });
-    expect(catalog).toMatchObject({
-      version: 3,
-      providers: [
-        {
-          providerId: "legacy-images",
-          models: [
-            {
-              modelId: "gpt-image-2",
-              capabilities: {
-                toolUse: false,
-                imageInput: true,
-                reasoning: false,
-              },
-            },
-          ],
-        },
-      ],
-    });
-    expect(store.getPreference("model.provider.catalog.v2")).toBeNull();
-    expect(store.getPreference("image-generation.settings.v1")).not.toBeNull();
-    expect(
-      store.getPreference("image-generation.credential.v1"),
-    ).not.toBeNull();
     store.close();
   });
 

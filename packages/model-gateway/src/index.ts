@@ -13,50 +13,31 @@ import { streamSimple as streamAnthropicMessages } from "@earendil-works/pi-ai/a
 import { streamSimple as streamOpenAICompletions } from "@earendil-works/pi-ai/api/openai-completions";
 import { streamSimple as streamOpenAIResponses } from "@earendil-works/pi-ai/api/openai-responses";
 import { Type, type Static } from "@sinclair/typebox";
+import {
+  ModelApiFormatSchema,
+  ModelSelectionSchema,
+  ModelWireIdSchema,
+  ModelWireTextSchema,
+  type ModelApiFormat,
+  type ModelAuthMode,
+} from "./provider-config.js";
 import { exposesReasoningSummary } from "./reasoning-visibility.js";
-export const MODEL_API_FORMATS = [
-  "openai-responses",
-  "openai-chat-completions",
-  "anthropic-messages",
-] as const;
-export const MODEL_AUTH_MODES = ["bearer", "x-api-key", "none"] as const;
-export const MODEL_REASONING_EFFORTS = [
-  "off",
-  "minimal",
-  "low",
-  "medium",
-  "high",
-  "xhigh",
-  "max",
-] as const;
-
-export type ModelApiFormat = (typeof MODEL_API_FORMATS)[number];
-export type ModelAuthMode = (typeof MODEL_AUTH_MODES)[number];
-export type ModelReasoningEffort = (typeof MODEL_REASONING_EFFORTS)[number];
+export {
+  MODEL_API_FORMATS,
+  MODEL_AUTH_MODES,
+  MODEL_REASONING_EFFORTS,
+  ModelApiFormatSchema,
+  ModelAuthModeSchema,
+  ModelReasoningEffortSchema,
+  ModelSelectionSchema,
+  ModelWireIdSchema,
+  ModelWireTextSchema,
+  type ModelApiFormat,
+  type ModelAuthMode,
+  type ModelReasoningEffort,
+  type ModelSelection,
+} from "./provider-config.js";
 export type ModelLatencyProfile = "interactive" | "extended";
-
-const ModelWireIdSchema = Type.String({
-  minLength: 1,
-  maxLength: 512,
-  pattern: "^[^\\u0000-\\u001F\\u007F]+$",
-});
-const ModelWireTextSchema = (maximum: number) =>
-  Type.String({ maxLength: maximum });
-const ModelReasoningEffortSchema = Type.Union(
-  MODEL_REASONING_EFFORTS.map((value) => Type.Literal(value)),
-);
-const ModelApiFormatSchema = Type.Union(
-  MODEL_API_FORMATS.map((value) => Type.Literal(value)),
-);
-
-export const ModelSelectionSchema = Type.Object(
-  {
-    providerId: ModelWireIdSchema,
-    modelId: ModelWireTextSchema(256),
-    reasoningEffort: Type.Optional(ModelReasoningEffortSchema),
-  },
-  { additionalProperties: false },
-);
 
 export const ResolvedModelIdentitySchema = Type.Object(
   {
@@ -356,7 +337,6 @@ export const CanonicalStreamEventSchema = Type.Union([
   ),
 ]);
 
-export type ModelSelection = Static<typeof ModelSelectionSchema>;
 export type ResolvedModelIdentity = Static<typeof ResolvedModelIdentitySchema>;
 export type ModelUsage = Static<typeof ModelUsageSchema>;
 export type ModelError = Static<typeof ModelErrorSchema>;

@@ -1,12 +1,12 @@
 import type { IpcMainInvokeEvent } from "electron";
+import { channels, type ModelProviderCatalog } from "@/shared/desktop-api.js";
 import {
-  channels,
-  isDeleteModelProviderProfileRequest,
-  isSaveGlobalImageGenerationSettingsRequest,
-  isSaveModelProviderProfileRequest,
-  isTestModelProviderConnectionRequest,
-  type ModelProviderCatalog,
-} from "@/shared/desktop-api.js";
+  DeleteModelProviderProfileRequestContract,
+  SaveGlobalImageGenerationSettingsRequestContract,
+  SaveModelProviderProfileRequestContract,
+  TestModelProviderConnectionRequestContract,
+} from "@/shared/provider-config-contract.js";
+import { formatValidationFailure } from "@/shared/contract-validation.js";
 import type { ImageGenerationHost } from "./image-generation-host.js";
 import type { ModelProviderHost } from "./model-provider-host.js";
 
@@ -55,11 +55,18 @@ export function registerModelServiceIpc(options: {
     (event, ...args: unknown[]) => {
       options.assertRenderer(event);
       assertArgumentCount(args, 1);
-      const request = args[0];
-      if (!isSaveGlobalImageGenerationSettingsRequest(request)) {
-        throw new TypeError("Invalid global image-generation settings");
+      const parsed = SaveGlobalImageGenerationSettingsRequestContract.parse(
+        args[0],
+      );
+      if (!parsed.ok) {
+        throw new TypeError(
+          formatValidationFailure(
+            "global image-generation settings request",
+            parsed.issues,
+          ),
+        );
       }
-      return options.getImageGenerationHost().saveSettings(request);
+      return options.getImageGenerationHost().saveSettings(parsed.value);
     },
   );
   options.ipc.handle(
@@ -67,11 +74,13 @@ export function registerModelServiceIpc(options: {
     (event, ...args: unknown[]) => {
       options.assertRenderer(event);
       assertArgumentCount(args, 1);
-      const request = args[0];
-      if (!isSaveModelProviderProfileRequest(request)) {
-        throw new TypeError("Invalid model provider profile");
+      const parsed = SaveModelProviderProfileRequestContract.parse(args[0]);
+      if (!parsed.ok) {
+        throw new TypeError(
+          formatValidationFailure("model Provider save request", parsed.issues),
+        );
       }
-      const catalog = options.getModelProviderHost().saveProfile(request);
+      const catalog = options.getModelProviderHost().saveProfile(parsed.value);
       options.publishModelProviderCatalog(catalog);
       return catalog;
     },
@@ -81,11 +90,18 @@ export function registerModelServiceIpc(options: {
     (event, ...args: unknown[]) => {
       options.assertRenderer(event);
       assertArgumentCount(args, 1);
-      const request = args[0];
-      if (!isDeleteModelProviderProfileRequest(request)) {
-        throw new TypeError("Invalid model provider delete request");
+      const parsed = DeleteModelProviderProfileRequestContract.parse(args[0]);
+      if (!parsed.ok) {
+        throw new TypeError(
+          formatValidationFailure(
+            "model Provider delete request",
+            parsed.issues,
+          ),
+        );
       }
-      const catalog = options.getModelProviderHost().deleteProfile(request);
+      const catalog = options
+        .getModelProviderHost()
+        .deleteProfile(parsed.value);
       options.publishModelProviderCatalog(catalog);
       return catalog;
     },
@@ -95,11 +111,16 @@ export function registerModelServiceIpc(options: {
     (event, ...args: unknown[]) => {
       options.assertRenderer(event);
       assertArgumentCount(args, 1);
-      const request = args[0];
-      if (!isTestModelProviderConnectionRequest(request)) {
-        throw new TypeError("Invalid model provider test request");
+      const parsed = TestModelProviderConnectionRequestContract.parse(args[0]);
+      if (!parsed.ok) {
+        throw new TypeError(
+          formatValidationFailure(
+            "model Provider connection test request",
+            parsed.issues,
+          ),
+        );
       }
-      return options.getModelProviderHost().testConnection(request);
+      return options.getModelProviderHost().testConnection(parsed.value);
     },
   );
 }

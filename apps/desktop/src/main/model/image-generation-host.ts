@@ -9,7 +9,6 @@ import {
 import {
   GLOBAL_IMAGE_GENERATION_SETTINGS_VERSION,
   isGlobalImageGenerationSettings,
-  isSaveGlobalImageGenerationSettingsRequest,
   normalizeProviderBaseUrl,
 } from "@/shared/desktop-api";
 import type {
@@ -20,14 +19,10 @@ import type {
 } from "@/shared/design-agent-tools";
 import { resolveImageUpscaleSize } from "@opendesign/image-service";
 import type { WorkspaceStore } from "../project/workspace-store";
-import {
-  modelProviderCredentialKey,
-  type CredentialCipher,
-} from "./model-provider-host";
+import type { CredentialCipher } from "./model-provider-host";
 
 const settingsKey = "image-generation.settings.v1";
 const credentialKey = "image-generation.credential.v1";
-const legacyCatalogKey = "model.provider.catalog.v2";
 const IMAGE_GENERATION_TIMEOUT_MS = 10 * 60_000;
 const MAX_IMAGE_GENERATION_RESPONSE_BYTES = 24 * 1024 * 1024;
 const MAX_GENERATED_IMAGE_BYTES = 16 * 1024 * 1024;
@@ -162,15 +157,12 @@ export class ImageGenerationHost {
         // Invalid persisted settings are ignored without exposing their contents.
       }
     }
-    return this.migrateLegacyCatalog() ?? { ...defaultSettings };
+    return { ...defaultSettings };
   }
 
   saveSettings(
     request: SaveGlobalImageGenerationSettingsRequest,
   ): GlobalImageGenerationSettings {
-    if (!isSaveGlobalImageGenerationSettingsRequest(request)) {
-      throw new TypeError("Invalid global image-generation settings");
-    }
     if (request.apiKey !== undefined) {
       if (!this.cipher.available()) {
         throw new Error("Secure credential storage is unavailable");
@@ -677,110 +669,6 @@ export class ImageGenerationHost {
       hasApiKey: this.store.getPreference(credentialKey) !== null,
     };
   }
-
-  private migrateLegacyCatalog(): GlobalImageGenerationSettings | null {
-    const raw = this.store.getPreference(legacyCatalogKey);
-    if (!raw) return null;
-    try {
-      const source = legacyImageGenerationSource(JSON.parse(raw));
-      if (!source) return null;
-      const oldCredential = this.store.getPreference(
-        modelProviderCredentialKey(source.providerId),
-      );
-      if (oldCredential && !this.store.getPreference(credentialKey)) {
-        this.store.setPreference(credentialKey, oldCredential);
-      }
-      const settings: GlobalImageGenerationSettings = {
-        version: GLOBAL_IMAGE_GENERATION_SETTINGS_VERSION,
-        enabled: true,
-        apiFormat: "openai-images",
-        authMode: source.authMode,
-        baseUrl: normalizeProviderBaseUrl(source.baseUrl),
-        modelId: source.modelId,
-        hasApiKey: this.store.getPreference(credentialKey) !== null,
-        updatedAt: source.updatedAt,
-      };
-      if (!isGlobalImageGenerationSettings(settings)) return null;
-      this.persist(settings);
-      return settings;
-    } catch {
-      return null;
-    }
-  }
-}
-
-type LegacyImageGenerationSource = {
-  providerId: string;
-  authMode: GlobalImageGenerationSettings["authMode"];
-  baseUrl: string;
-  modelId: string;
-  updatedAt: string | null;
-};
-
-function legacyImageGenerationSource(
-  value: unknown,
-): LegacyImageGenerationSource | null {
-  if (
-    !record(value) ||
-    value.version !== 2 ||
-    !Array.isArray(value.providers)
-  ) {
-    return null;
-  }
-  const selection = value.defaultImageGenerationSelection;
-  if (
-    !record(selection) ||
-    typeof selection.providerId !== "string" ||
-    typeof selection.modelId !== "string"
-  ) {
-    return null;
-  }
-  const providers: unknown[] = value.providers;
-  const provider = providers.find(
-    (candidate) =>
-      record(candidate) && candidate.providerId === selection.providerId,
-  );
-  if (
-    !record(provider) ||
-    provider.enabled !== true ||
-    provider.imageGenerationApiFormat !== "openai-images" ||
-    (provider.authMode !== "bearer" &&
-      provider.authMode !== "x-api-key" &&
-      provider.authMode !== "none") ||
-    typeof provider.baseUrl !== "string" ||
-    !Array.isArray(provider.models)
-  ) {
-    return null;
-  }
-  const models: unknown[] = provider.models;
-  const model = models.find(
-    (candidate) => record(candidate) && candidate.modelId === selection.modelId,
-  );
-  if (
-    !record(model) ||
-    !record(model.capabilities) ||
-    model.capabilities.imageGeneration !== true
-  ) {
-    return null;
-  }
-  const source: LegacyImageGenerationSource = {
-    providerId: selection.providerId,
-    authMode: provider.authMode,
-    baseUrl: provider.baseUrl,
-    modelId: selection.modelId,
-    updatedAt:
-      provider.updatedAt === null || typeof provider.updatedAt === "string"
-        ? provider.updatedAt
-        : null,
-  };
-  const request = {
-    enabled: true,
-    apiFormat: "openai-images" as const,
-    authMode: source.authMode,
-    baseUrl: source.baseUrl,
-    modelId: source.modelId,
-  };
-  return isSaveGlobalImageGenerationSettingsRequest(request) ? source : null;
 }
 
 async function readBoundedResponseText(

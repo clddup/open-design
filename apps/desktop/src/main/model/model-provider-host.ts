@@ -10,8 +10,6 @@ import type { AgentModelContext } from "@opendesign/agent-contracts";
 import {
   MODEL_PROVIDER_CATALOG_VERSION,
   isModelProviderCatalog,
-  isSaveModelProviderProfileRequest,
-  migrateModelProviderCatalog,
   normalizeProviderBaseUrl,
   type DeleteModelProviderProfileRequest,
   type ModelProfile,
@@ -31,13 +29,6 @@ import {
 } from "./model-provider-stream";
 
 const catalogKey = "model.provider.catalog.v3";
-const previousCatalogKeys = [
-  "model.provider.catalog.v2",
-  "model.provider.catalog.v1",
-] as const;
-const legacySettingsKey = "model.provider.settings";
-const legacyCredentialKey = "model.provider.credential";
-const legacyProviderId = "migrated-openai-compatible";
 const emptyCatalog: ModelProviderCatalog = {
   version: MODEL_PROVIDER_CATALOG_VERSION,
   providers: [],
@@ -113,12 +104,7 @@ export class ModelProviderHost {
         // Invalid persisted settings are ignored without exposing their contents.
       }
     }
-    return (
-      this.migratePreviousCatalog(previousCatalogKeys[0]) ??
-      this.migratePreviousCatalog(previousCatalogKeys[1]) ??
-      this.migrateLegacyCatalog() ??
-      emptyCatalog
-    );
+    return emptyCatalog;
   }
 
   resolveModelContext(selection: ModelSelection): AgentModelContext {
@@ -130,9 +116,6 @@ export class ModelProviderHost {
   }
 
   saveProfile(request: SaveModelProviderProfileRequest): ModelProviderCatalog {
-    if (!isSaveModelProviderProfileRequest(request)) {
-      throw new TypeError("Invalid model provider profile");
-    }
     if (request.apiKey !== undefined) {
       if (!this.cipher.available()) {
         throw new Error("Secure credential storage is unavailable");
@@ -526,83 +509,6 @@ export class ModelProviderHost {
     };
     this.store.setPreference(catalogKey, JSON.stringify(redacted));
   }
-
-  private migrateLegacyCatalog(): ModelProviderCatalog | null {
-    const raw = this.store.getPreference(legacySettingsKey);
-    if (!raw) return null;
-    try {
-      const legacy: unknown = JSON.parse(raw);
-      if (!isLegacySettings(legacy)) return null;
-      const models = legacy.model
-        ? [
-            {
-              modelId: legacy.model,
-              name: legacy.model,
-              contextWindow: 128_000,
-              maxOutputTokens: 16_384,
-              capabilities: {
-                toolUse: true,
-                imageInput: false,
-                reasoning: false,
-              },
-              reasoningEfforts: ["off" as const],
-            },
-          ]
-        : [];
-      const profile: ModelProviderProfile = {
-        providerId: legacyProviderId,
-        name: "OpenAI compatible",
-        enabled: true,
-        apiFormat: "openai-chat-completions",
-        authMode: "bearer",
-        baseUrl: normalizeProviderBaseUrl(legacy.baseUrl),
-        models,
-        hasApiKey: false,
-        updatedAt: legacy.updatedAt,
-      };
-      const catalog = normalizeCatalog({
-        version: MODEL_PROVIDER_CATALOG_VERSION,
-        providers: [profile],
-        ...(models[0] === undefined
-          ? {}
-          : {
-              defaultSelection: {
-                providerId: legacyProviderId,
-                modelId: models[0].modelId,
-                reasoningEffort: "off",
-              },
-            }),
-      });
-      const oldCredential = this.store.getPreference(legacyCredentialKey);
-      if (oldCredential) {
-        this.store.setPreference(
-          modelProviderCredentialKey(legacyProviderId),
-          oldCredential,
-        );
-      }
-      this.persistCatalog(catalog);
-      this.store.deletePreference(legacySettingsKey);
-      this.store.deletePreference(legacyCredentialKey);
-      return this.withCredentialState(catalog);
-    } catch {
-      return null;
-    }
-  }
-
-  private migratePreviousCatalog(key: string): ModelProviderCatalog | null {
-    const raw = this.store.getPreference(key);
-    if (!raw) return null;
-    try {
-      const migrated = migrateModelProviderCatalog(JSON.parse(raw));
-      if (!migrated) return null;
-      const catalog = normalizeCatalog(migrated);
-      this.persistCatalog(catalog);
-      this.store.deletePreference(key);
-      return this.withCredentialState(catalog);
-    } catch {
-      return null;
-    }
-  }
 }
 
 function documentContextBlock(
@@ -634,7 +540,11 @@ function normalizeCatalog(catalog: ModelProviderCatalog): ModelProviderCatalog {
         provider.models.some(
           (model) =>
             model.modelId === catalog.defaultSelection?.modelId &&
-            model.capabilities.toolUse,
+            model.capabilities.toolUse &&
+            (catalog.defaultSelection?.reasoningEffort === undefined ||
+              model.reasoningEfforts.includes(
+                catalog.defaultSelection.reasoningEffort,
+              )),
         ),
     )
       ? catalog.defaultSelection
@@ -714,22 +624,4 @@ function elapsed(startedAt: number): number {
 export function modelProviderCredentialKey(providerId: string): string {
   const digest = createHash("sha256").update(providerId).digest("hex");
   return `model.provider.credential.${digest.slice(0, 32)}`;
-}
-
-function isLegacySettings(value: unknown): value is {
-  provider: "openai-compatible";
-  baseUrl: string;
-  model: string;
-  hasApiKey: boolean;
-  updatedAt: string | null;
-} {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const settings = value as Record<string, unknown>;
-  return (
-    settings.provider === "openai-compatible" &&
-    typeof settings.baseUrl === "string" &&
-    typeof settings.model === "string" &&
-    typeof settings.hasApiKey === "boolean" &&
-    (settings.updatedAt === null || typeof settings.updatedAt === "string")
-  );
 }

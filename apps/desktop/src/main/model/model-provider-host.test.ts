@@ -1062,6 +1062,30 @@ describe("ModelProviderHost", () => {
     store.close();
   });
 
+  it("repairs the default reasoning effort when a model profile changes", () => {
+    const store = new WorkspaceStore(":memory:");
+    const host = new ModelProviderHost(store, cipher);
+    host.saveProfile({ ...profile, apiKey: "provider-secret" });
+
+    const saved = host.saveProfile({
+      ...profile,
+      models: profile.models.map((model) => ({
+        ...model,
+        capabilities: { ...model.capabilities, reasoning: false },
+        reasoningEfforts: ["off"],
+      })),
+      setAsDefault: false,
+    });
+
+    expect(saved.defaultSelection).toEqual({
+      providerId: "provider_1",
+      modelId: "design-model",
+      reasoningEffort: "off",
+    });
+    expect(host.getCatalog()).toEqual(saved);
+    store.close();
+  });
+
   it("resolves trusted context limits for the selected model", () => {
     const store = new WorkspaceStore(":memory:");
     const host = new ModelProviderHost(store, cipher);
@@ -1139,83 +1163,6 @@ describe("ModelProviderHost", () => {
     expect(typeof result.textLatencyMs).toBe("number");
     expect(typeof result.toolLatencyMs).toBe("number");
     expect(fetch).toHaveBeenCalledTimes(2);
-    store.close();
-  });
-
-  it("migrates the legacy single-provider settings once", () => {
-    const store = new WorkspaceStore(":memory:");
-    store.setPreference(
-      "model.provider.settings",
-      JSON.stringify({
-        provider: "openai-compatible",
-        baseUrl: "https://legacy.example/v1",
-        model: "legacy-model",
-        hasApiKey: true,
-        updatedAt: "2026-08-09T00:00:00.000Z",
-      }),
-    );
-    store.setPreference(
-      "model.provider.credential",
-      cipher.encrypt("legacy-secret").toString("base64"),
-    );
-
-    const catalog = new ModelProviderHost(store, cipher).getCatalog();
-
-    expect(catalog).toMatchObject({
-      providers: [
-        {
-          providerId: "migrated-openai-compatible",
-          apiFormat: "openai-chat-completions",
-          hasApiKey: true,
-          models: [{ modelId: "legacy-model" }],
-        },
-      ],
-    });
-    expect(store.getPreference("model.provider.settings")).toBeNull();
-    expect(store.getPreference("model.provider.credential")).toBeNull();
-    store.close();
-  });
-
-  it("migrates the v1 provider catalog into the conversation-only v3 catalog", () => {
-    const store = new WorkspaceStore(":memory:");
-    store.setPreference(
-      "model.provider.catalog.v1",
-      JSON.stringify({
-        version: 1,
-        providers: [
-          {
-            providerId: "provider_1",
-            name: "Primary",
-            enabled: true,
-            apiFormat: "openai-chat-completions",
-            authMode: "bearer",
-            baseUrl: "https://models.example/v1",
-            models: profile.models.map((model) => ({
-              ...model,
-              capabilities: {
-                toolUse: model.capabilities.toolUse,
-                imageInput: model.capabilities.imageInput,
-                reasoning: model.capabilities.reasoning,
-              },
-            })),
-            hasApiKey: false,
-            updatedAt: "2026-08-09T00:00:00.000Z",
-          },
-        ],
-        defaultSelection: selection,
-      }),
-    );
-
-    const catalog = new ModelProviderHost(store, cipher).getCatalog();
-
-    expect(catalog.version).toBe(3);
-    expect(catalog.providers[0]?.models[0]?.capabilities).toEqual({
-      toolUse: true,
-      imageInput: false,
-      reasoning: true,
-    });
-    expect(store.getPreference("model.provider.catalog.v1")).toBeNull();
-    expect(store.getPreference("model.provider.catalog.v3")).not.toBeNull();
     store.close();
   });
 
