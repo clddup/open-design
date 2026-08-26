@@ -19,7 +19,7 @@ import {
   resolvePathPropertiesData,
   vectorNetworkHasFillRegion,
 } from "@opendesign/geometry-service/editable-vector";
-import { DOMImplementation, DOMParser, XMLSerializer } from "@xmldom/xmldom";
+import { DOMImplementation, XMLSerializer } from "@xmldom/xmldom";
 import {
   applyToPoint,
   compose,
@@ -70,6 +70,12 @@ import {
   readSvgEditableVector,
   writeSvgEditableVector,
 } from "./svg-editable-vector.js";
+import {
+  parseSvgImportSource,
+  parseSvgLength,
+  SVG_IMPORT_MAX_DEPTH as MAX_SVG_DEPTH,
+  SVG_IMPORT_MAX_NODES as MAX_IMPORTED_NODES,
+} from "./svg-parse.js";
 
 export * from "./svg-issues.js";
 
@@ -77,16 +83,6 @@ export const SVG_INTERCHANGE_VERSION = 1 as const;
 export const SVG_MIME_TYPE = "image/svg+xml" as const;
 
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
-const MAX_SVG_DEPTH = 64;
-const MAX_IMPORTED_NODES = 8_192;
-// OpenDesign mask/clip serialization adds bounded definition and wrapper
-// elements without adding editable nodes. Keep the XML budget high enough for
-// a maximum-size editable tree while the character and node budgets remain the
-// decisive memory limits.
-const MAX_SVG_ELEMENTS = MAX_IMPORTED_NODES * 4;
-const MAX_ID_PREFIX_CHARACTERS = 80;
-const SAFE_ID_PREFIX = /^[A-Za-z][A-Za-z0-9_-]*$/;
-const BLOCKED_XML_PATTERN = /<!\s*(?:DOCTYPE|ENTITY)\b/i;
 
 export interface SvgResolvedBooleanPath {
   bounds: Rect | null;
@@ -379,55 +375,9 @@ export function importSvg(
   request: SvgImportRequest,
   geometry: VectorGeometryProvider,
 ): SvgImportResult {
-  if (request.svg.length === 0 || request.svg.length > SVG_MAX_CHARACTERS) {
-    return failure(
-      "size-limit",
-      `SVG import must contain between 1 and ${SVG_MAX_CHARACTERS} characters`,
-    );
-  }
-  if (
-    request.idPrefix.length > MAX_ID_PREFIX_CHARACTERS ||
-    !SAFE_ID_PREFIX.test(request.idPrefix)
-  ) {
-    return failure(
-      "invalid-root",
-      "SVG import idPrefix must start with a letter and contain only letters, digits, underscore, or hyphen",
-    );
-  }
-  if (BLOCKED_XML_PATTERN.test(request.svg)) {
-    return failure(
-      "unsafe-xml",
-      "SVG import rejects DOCTYPE and ENTITY declarations",
-    );
-  }
-
-  const parseMessages: string[] = [];
-  const parsed = new DOMParser({
-    errorHandler: {
-      warning: (message) => parseMessages.push(String(message)),
-      error: (message) => parseMessages.push(String(message)),
-      fatalError: (message) => parseMessages.push(String(message)),
-    },
-  }).parseFromString(request.svg, SVG_MIME_TYPE);
-  if (parseMessages.length > 0) {
-    return failure(
-      "malformed-svg",
-      `SVG XML is malformed: ${parseMessages[0] ?? "parse failure"}`,
-    );
-  }
-  const root = parsed.documentElement;
-  if (root.localName.toLowerCase() !== "svg") {
-    return failure("invalid-root", "SVG import root element must be <svg>");
-  }
-  const structureIssue = validateSvgStructure(root);
-  if (structureIssue) return failed([structureIssue]);
-  const sourceViewport = readSvgViewport(root);
-  if (!sourceViewport) {
-    return failure(
-      "invalid-dimension",
-      "SVG import requires a finite positive viewBox or width and height",
-    );
-  }
+  const parsed = parseSvgImportSource(request);
+  if (!parsed.ok) return failed(parsed.issues);
+  const { root, sourceViewport } = parsed.value;
 
   const issues: SvgInterchangeIssue[] = [];
   const rootStyle = readImportedStyle(root, DEFAULT_IMPORTED_STYLE, issues);
@@ -2687,86 +2637,6 @@ function reportUnsupportedElementAttributes(
   }
 }
 
-function validateSvgStructure(root: Element): SvgInterchangeIssue | null {
-  let count = 0;
-  const pending: Array<{ element: Element; depth: number }> = [
-    { element: root, depth: 0 },
-  ];
-  while (pending.length > 0) {
-    const current = pending.pop();
-    if (!current) break;
-    const tag = current.element.localName.toLowerCase();
-    if (tag === "script" || tag === "foreignobject") {
-      return svgIssue(
-        "unsupported-element",
-        "error",
-        `SVG <${tag}> is not accepted by the editable import boundary`,
-        { sourceElement: tag },
-      );
-    }
-    if (tag === "style") {
-      return svgIssue(
-        "unsupported-css",
-        "error",
-        "SVG stylesheets are not accepted; use presentation attributes or inline style",
-        { sourceElement: tag },
-      );
-    }
-    if (tag === "use") {
-      return svgIssue(
-        "external-reference",
-        "error",
-        "SVG <use> references are not accepted by the editable import boundary",
-        { sourceElement: tag },
-      );
-    }
-    for (
-      let attributeIndex = 0;
-      attributeIndex < current.element.attributes.length;
-      attributeIndex += 1
-    ) {
-      const attribute = current.element.attributes.item(attributeIndex);
-      if (!attribute) continue;
-      const name = attribute.name.toLowerCase();
-      if (name.startsWith("on")) {
-        return svgIssue(
-          "unsafe-xml",
-          "error",
-          `SVG event attribute ${attribute.name} is not accepted`,
-          { sourceElement: tag },
-        );
-      }
-      if (name === "href" || name === "xlink:href") {
-        return svgIssue(
-          "external-reference",
-          "error",
-          `SVG reference attribute ${attribute.name} is not accepted`,
-          { sourceElement: tag },
-        );
-      }
-    }
-    count += 1;
-    if (count > MAX_SVG_ELEMENTS) {
-      return svgIssue(
-        "element-limit",
-        "error",
-        `SVG import exceeds ${MAX_SVG_ELEMENTS} XML elements`,
-      );
-    }
-    if (current.depth > MAX_SVG_DEPTH) {
-      return svgIssue(
-        "depth-limit",
-        "error",
-        `SVG import exceeds ${MAX_SVG_DEPTH} nested levels`,
-      );
-    }
-    for (const child of elementChildren(current.element)) {
-      pending.push({ element: child, depth: current.depth + 1 });
-    }
-  }
-  return null;
-}
-
 function collectGradientDefinitions(
   root: Element,
 ): ReadonlyMap<string, Element> {
@@ -2783,32 +2653,6 @@ function collectGradientDefinitions(
     pending.push(...elementChildren(element));
   }
   return definitions;
-}
-
-function readSvgViewport(root: Element): Rect | null {
-  const viewBox = root.getAttribute("viewBox")?.trim();
-  if (viewBox) {
-    const values = viewBox.split(/[\s,]+/).map(Number);
-    if (
-      values.length === 4 &&
-      values.every(Number.isFinite) &&
-      values[2]! > 0 &&
-      values[3]! > 0
-    ) {
-      return {
-        x: values[0]!,
-        y: values[1]!,
-        width: values[2]!,
-        height: values[3]!,
-      };
-    }
-    return null;
-  }
-  const width = parseSvgLength(root.getAttribute("width"));
-  const height = parseSvgLength(root.getAttribute("height"));
-  return isPositive(width) && isPositive(height)
-    ? { x: 0, y: 0, width, height }
-    : null;
 }
 
 function readLength(
@@ -2831,16 +2675,6 @@ function readLength(
     );
   }
   return parsed;
-}
-
-function parseSvgLength(value: string | null): number | null {
-  if (value === null) return null;
-  const match = /^([+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?)(?:px)?$/i.exec(
-    value.trim(),
-  );
-  if (!match) return null;
-  const result = Number(match[1]);
-  return Number.isFinite(result) ? result : null;
 }
 
 function readGradientRotation(
