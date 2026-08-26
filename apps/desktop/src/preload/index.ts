@@ -9,10 +9,8 @@ import {
   type AgentRequest,
 } from "@opendesign/agent-contracts";
 import { projectAgentEvent } from "./agent-event";
-import type {
-  ConversationDescriptor,
-  GlobalTaskProjection,
-} from "@opendesign/workspace-contracts";
+import type { GlobalTaskProjection } from "@opendesign/workspace-contracts";
+import { createConversationApi } from "./conversation-api";
 import {
   channels,
   isAgentAttachmentPreviewRequest,
@@ -27,10 +25,6 @@ import {
   isFontBinaryPayload,
   isFontBinaryReadRequest,
   isDesignFileDescriptorResult,
-  isConversationDescriptorResult,
-  isConversationOpenContext,
-  isCreateConversationRequest,
-  isDeleteConversationRequest,
   isCreateProjectDesignFileRequest,
   isCreateProjectRequest,
   isGlobalTaskProjectionResult,
@@ -67,9 +61,6 @@ import {
   isDiagnosticEvent,
   isRendererDiagnosticReport,
   isTestModelProviderConnectionRequest,
-  type CreateConversationRequest,
-  type ConversationOpenContext,
-  type DeleteConversationRequest,
   type AgentAttachmentPreviewRequest,
   type AgentAttachmentPreviewResult,
   type AgentAttachmentSelection,
@@ -632,66 +623,9 @@ const desktopApi: DesktopApi = Object.freeze({
       "Invalid open Projects response",
     );
   },
-  createConversation: async (request: CreateConversationRequest) => {
-    validate(
-      request,
-      isCreateConversationRequest,
-      "Invalid Conversation create request",
-    );
-    const result: unknown = await ipcRenderer.invoke(
-      channels.createConversation,
-      request,
-    );
-    return validate<ConversationDescriptor>(
-      result,
-      isConversationDescriptorResult,
-      "Invalid Conversation response",
-    );
-  },
-  deleteConversation: async (request: DeleteConversationRequest) => {
-    validate(
-      request,
-      isDeleteConversationRequest,
-      "Invalid Conversation delete request",
-    );
-    const result: unknown = await ipcRenderer.invoke(
-      channels.deleteConversation,
-      request,
-    );
-    return validate<ConversationDescriptor>(
-      result,
-      isConversationDescriptorResult,
-      "Invalid deleted Conversation response",
-    );
-  },
-  resolveConversationOpenContext: async (
-    request: DeleteConversationRequest,
-  ) => {
-    validate(
-      request,
-      isDeleteConversationRequest,
-      "Invalid Conversation open request",
-    );
-    const result: unknown = await ipcRenderer.invoke(
-      channels.resolveConversationOpenContext,
-      request,
-    );
-    return validate<ConversationOpenContext>(
-      result,
-      isConversationOpenContext,
-      "Invalid Conversation open context",
-    );
-  },
-  listConversations: async () => {
-    const result: unknown = await ipcRenderer.invoke(
-      channels.listConversations,
-    );
-    return validateArray<ConversationDescriptor>(
-      result,
-      isConversationDescriptorResult,
-      "Invalid Conversations response",
-    );
-  },
+  ...createConversationApi((channel, ...args) =>
+    ipcRenderer.invoke(channel, ...args),
+  ),
   listGlobalTasks: async () => {
     const result: unknown = await ipcRenderer.invoke(channels.listGlobalTasks);
     return validateArray<GlobalTaskProjection>(

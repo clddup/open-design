@@ -22,6 +22,7 @@
     "@opendesign/agent-contracts": "workspace:*",
     "@opendesign/agent-runtime": "workspace:*",
     "@opendesign/component-service": "workspace:*",
+    "@opendesign/contract-runtime": "workspace:*",
     "@opendesign/design-capabilities": "workspace:*",
     "@opendesign/design-contracts": "workspace:*",
     "@opendesign/design-skills": "workspace:*",

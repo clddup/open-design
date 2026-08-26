@@ -1,18 +1,18 @@
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
-import { AgentContinuationSchemas } from "./continuation.js";
 import {
-  defineRuntimeContract,
-  formatRuntimeContractFailure,
-  type RuntimeContractIssue,
-} from "./runtime-contract.js";
+  defineContract,
+  formatContractFailure,
+  type ValidationIssue,
+} from "@opendesign/contract-runtime";
+import { AgentContinuationSchemas } from "./continuation.js";
 export type { AgentRunContinuation } from "./continuation.js";
-export { formatRuntimeContractFailure } from "./runtime-contract.js";
+export { formatContractFailure as formatRuntimeContractFailure } from "@opendesign/contract-runtime";
 export type {
-  RuntimeContract,
-  RuntimeContractIssue,
-  RuntimeContractResult,
-} from "./runtime-contract.js";
+  Contract as RuntimeContract,
+  ValidationIssue as RuntimeContractIssue,
+  ValidationResult as RuntimeContractResult,
+} from "@opendesign/contract-runtime";
 
 export const AGENT_PROTOCOL_VERSION = "3.12.0" as const;
 export const MAX_SELECTED_NODE_IDS = 512;
@@ -1128,12 +1128,14 @@ export type AgentToolFailureDetails = Static<
 >;
 export type AgentRunFailure = Static<typeof AgentRunFailureSchema>;
 
-export const AgentEventContract = defineRuntimeContract<AgentEvent>({
+export const AgentEventContract = defineContract<AgentEvent>({
   schema: AgentEventSchema,
   code: "agent_event.schema_invalid",
   subject: "Agent event",
+  recovery: "Correct the reported Agent event field before retrying.",
   selectSchema: agentEventSchemaForInput,
   refine: agentEventDomainIssues,
+  clone: false,
 });
 
 export function isAgentRunFailure(value: unknown): value is AgentRunFailure {
@@ -1306,7 +1308,7 @@ export function isSessionTimelineItem(
 export function agentEventValidationError(value: unknown): string | null {
   const result = AgentEventContract.parse(value);
   if (result.ok) return null;
-  return formatRuntimeContractFailure(
+  return formatContractFailure(
     `Agent event ${agentEventType(value)}`,
     result.issues,
   );
@@ -1322,8 +1324,8 @@ export function agentEventRequestId(value: unknown): string | null {
     : null;
 }
 
-function agentEventDomainIssues(value: AgentEvent): RuntimeContractIssue[] {
-  const issues: RuntimeContractIssue[] = [];
+function agentEventDomainIssues(value: AgentEvent): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
   if (value.type === "agent.error" && value.failure !== undefined) {
     if (value.failure.code !== value.code) {
       issues.push(
@@ -1381,7 +1383,7 @@ function agentEventIssue(
   code: string,
   path: string,
   message: string,
-): RuntimeContractIssue {
+): ValidationIssue {
   return {
     code,
     path,

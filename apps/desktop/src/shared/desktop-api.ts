@@ -5,18 +5,25 @@ import {
   type LibraryReleaseSnapshot,
 } from "@opendesign/design-contracts";
 import {
-  isConversationDescriptor,
-  isDesignTarget,
+  ConversationDescriptorContract,
+  ConversationIdentityRequestContract,
+  CreateConversationRequestContract,
   isDesignFileDescriptor,
   isGlobalTaskProjection,
   isProjectManifest,
   isStableId,
   type ConversationDescriptor,
+  type ConversationIdentityRequest,
+  type CreateConversationRequest,
+  type DeleteConversationRequest,
   type DesignFileDescriptor,
-  type DesignTarget,
   type GlobalTaskProjection,
   type ProjectManifest,
 } from "@opendesign/workspace-contracts";
+import {
+  ConversationOpenContextContract,
+  type ConversationOpenContext,
+} from "./conversation-contract";
 import { isAppLocale, type AppLocale } from "./i18n/locale";
 import type {
   RendererDesignToolRequest,
@@ -205,33 +212,12 @@ export type RecentProject = {
   lastOpenedAt: string;
 };
 
-export type CreateConversationRequest = {
-  conversationId: string;
-  filedProjectId: string;
-  title: string;
+export type {
+  ConversationIdentityRequest,
+  ConversationOpenContext,
+  CreateConversationRequest,
+  DeleteConversationRequest,
 };
-
-export type DeleteConversationRequest = {
-  conversationId: string;
-};
-
-export type ConversationOpenContext =
-  | {
-      kind: "target-available";
-      conversationId: string;
-      source: "active-task" | "recent-task" | "filed-project";
-      target: DesignTarget;
-    }
-  | {
-      kind: "target-unavailable";
-      conversationId: string;
-      reason:
-        | "project-unavailable"
-        | "design-file-unavailable"
-        | "page-unavailable"
-        | "no-target";
-      target?: DesignTarget;
-    };
 
 export type CreateProjectDesignFileRequest = {
   projectId: string;
@@ -351,7 +337,7 @@ export interface DesktopApi {
     request: DeleteConversationRequest,
   ) => Promise<ConversationDescriptor>;
   resolveConversationOpenContext: (
-    request: DeleteConversationRequest,
+    request: ConversationIdentityRequest,
   ) => Promise<ConversationOpenContext>;
   listConversations: () => Promise<ConversationDescriptor[]>;
   listGlobalTasks: () => Promise<GlobalTaskProjection[]>;
@@ -488,68 +474,25 @@ export function isOpenRecentProjectRequest(
 export function isCreateConversationRequest(
   value: unknown,
 ): value is CreateConversationRequest {
-  if (!value || typeof value !== "object") return false;
-  const request = value as Record<string, unknown>;
-  return (
-    isStableId(request.conversationId) &&
-    isStableId(request.filedProjectId) &&
-    isTitle(request.title) &&
-    hasExactKeys(request, ["conversationId", "filedProjectId", "title"])
-  );
+  return CreateConversationRequestContract.parse(value).ok;
 }
 
 export function isDeleteConversationRequest(
   value: unknown,
 ): value is DeleteConversationRequest {
-  if (!value || typeof value !== "object") return false;
-  const request = value as Record<string, unknown>;
-  return (
-    isStableId(request.conversationId) &&
-    hasExactKeys(request, ["conversationId"])
-  );
+  return ConversationIdentityRequestContract.parse(value).ok;
 }
 
 export function isConversationDescriptorResult(
   value: unknown,
 ): value is ConversationDescriptor {
-  return isConversationDescriptor(value);
+  return ConversationDescriptorContract.parse(value).ok;
 }
 
 export function isConversationOpenContext(
   value: unknown,
 ): value is ConversationOpenContext {
-  if (!value || typeof value !== "object") return false;
-  const context = value as Record<string, unknown>;
-  if (
-    !isStableId(context.conversationId) ||
-    (context.kind !== "target-available" &&
-      context.kind !== "target-unavailable")
-  ) {
-    return false;
-  }
-  if (context.kind === "target-available") {
-    return (
-      (context.source === "active-task" ||
-        context.source === "recent-task" ||
-        context.source === "filed-project") &&
-      isDesignTarget(context.target) &&
-      hasExactKeys(context, ["kind", "conversationId", "source", "target"])
-    );
-  }
-  const reason = context.reason;
-  return (
-    (reason === "project-unavailable" ||
-      reason === "design-file-unavailable" ||
-      reason === "page-unavailable" ||
-      reason === "no-target") &&
-    (context.target === undefined || isDesignTarget(context.target)) &&
-    hasExactKeys(
-      context,
-      context.target === undefined
-        ? ["kind", "conversationId", "reason"]
-        : ["kind", "conversationId", "reason", "target"],
-    )
-  );
+  return ConversationOpenContextContract.parse(value).ok;
 }
 
 export function isGlobalTaskProjectionResult(
@@ -653,15 +596,6 @@ function isDisplayName(value: unknown): value is string {
     typeof value === "string" &&
     value.length > 0 &&
     value.length <= 256 &&
-    !hasControlCharacter(value)
-  );
-}
-
-function isTitle(value: unknown): value is string {
-  return (
-    typeof value === "string" &&
-    value.length > 0 &&
-    value.length <= 2_000 &&
     !hasControlCharacter(value)
   );
 }

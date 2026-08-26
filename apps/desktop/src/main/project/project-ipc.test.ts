@@ -433,6 +433,112 @@ describe("ProjectIpcService", () => {
     store.close();
   });
 
+  it("resolves filed, active, recent, and unfiled Conversation targets", async () => {
+    const root = await projectRoot();
+    const store = new WorkspaceStore(":memory:");
+    const service = new ProjectIpcService(new ProjectHost(store), store, () =>
+      Promise.resolve(root),
+    );
+    const manifest = await service.createProject({
+      projectId: "project_acme",
+    });
+    if (!manifest) throw new Error("Project selection was cancelled");
+    const file = manifest.designFiles[0];
+    if (!file) throw new Error("Starter design file is missing");
+    const opened = await service.readDesignFile({
+      projectId: manifest.projectId,
+      designFileId: file.designFileId,
+    });
+    const pageId = opened.document.pageOrder[0];
+    if (!pageId) throw new Error("Starter design page is missing");
+    const conversation = service.createConversation({
+      conversationId: "conversation_mobile",
+      filedProjectId: manifest.projectId,
+      title: "Refine the mobile experience",
+    });
+
+    await expect(
+      service.resolveConversationOpenContext({
+        conversationId: conversation.conversationId,
+      }),
+    ).resolves.toMatchObject({
+      kind: "target-available",
+      source: "filed-project",
+      conversationId: conversation.conversationId,
+      target: {
+        projectId: manifest.projectId,
+        designFileId: file.designFileId,
+        pageId,
+      },
+    });
+
+    const primaryTarget = {
+      targetId: "target_mobile",
+      projectId: manifest.projectId,
+      designFileId: file.designFileId,
+      documentId: file.documentId,
+      pageId,
+      selectedNodeIds: [],
+      baseRevision: opened.document.revision,
+    };
+    const task: GlobalTaskProjection = {
+      version: WORKSPACE_CONTRACT_VERSION,
+      taskId: "task_mobile",
+      conversationId: conversation.conversationId,
+      runId: "run_mobile",
+      title: conversation.title,
+      lifecycle: "running",
+      targetSet: { targets: [primaryTarget], primaryTarget },
+      createdAt: now,
+      updatedAt: now,
+    };
+    store.saveGlobalTask(task);
+    await expect(
+      service.resolveConversationOpenContext({
+        conversationId: conversation.conversationId,
+      }),
+    ).resolves.toMatchObject({
+      kind: "target-available",
+      source: "active-task",
+    });
+
+    store.saveGlobalTask({ ...task, lifecycle: "completed" });
+    await expect(
+      service.resolveConversationOpenContext({
+        conversationId: conversation.conversationId,
+      }),
+    ).resolves.toMatchObject({
+      kind: "target-available",
+      source: "recent-task",
+    });
+
+    store.saveConversation({
+      ...conversation,
+      filedProjectId: null,
+      updatedAt: conversation.updatedAt,
+    });
+    const unfiled = service.createConversation({
+      conversationId: "conversation_unfiled",
+      filedProjectId: manifest.projectId,
+      title: "Unfiled work",
+    });
+    store.saveConversation({
+      ...unfiled,
+      filedProjectId: null,
+      updatedAt: unfiled.updatedAt,
+    });
+    await expect(
+      service.resolveConversationOpenContext({
+        conversationId: unfiled.conversationId,
+      }),
+    ).resolves.toEqual({
+      kind: "target-unavailable",
+      conversationId: unfiled.conversationId,
+      reason: "no-target",
+    });
+    store.close();
+  });
+
   it("tombstones terminal Conversations and rejects deleting active work", async () => {
     const root = await projectRoot();
     const store = new WorkspaceStore(":memory:");

@@ -2,10 +2,18 @@ import type {
   ConversationDescriptor,
   DesignTarget,
 } from "@opendesign/workspace-contracts";
+import {
+  ConversationDescriptorContract,
+  ConversationDescriptorListContract,
+  ConversationIdentityRequestContract,
+  CreateConversationRequestContract,
+} from "@opendesign/workspace-contracts";
+import {
+  formatContractFailure,
+  type Contract,
+} from "@opendesign/contract-runtime";
 import { basename } from "node:path";
 import {
-  isCreateConversationRequest,
-  isDeleteConversationRequest,
   isCreateProjectDesignFileRequest,
   isCreateProjectRequest,
   isOpenRecentProjectRequest,
@@ -13,6 +21,7 @@ import {
   isRenameProjectDesignFileRequest,
   isSaveProjectDesignFileRequest,
 } from "@/shared/desktop-api.js";
+import { ConversationOpenContextContract } from "@/shared/conversation-contract.js";
 import {
   isListProjectLibrariesRequest,
   isPublishProjectLibraryRequest,
@@ -109,63 +118,104 @@ export class ProjectIpcService {
   }
 
   createConversation(request: unknown) {
-    if (!isCreateConversationRequest(request)) {
-      throw new TypeError("Invalid Conversation create request");
-    }
-    if (!this.workspaceStore.getProjectRoot(request.filedProjectId)) {
+    const canonicalRequest = requireContract(
+      CreateConversationRequestContract,
+      request,
+      "Conversation create request",
+    );
+    if (!this.workspaceStore.getProjectRoot(canonicalRequest.filedProjectId)) {
       throw new Error("Conversation Project is not registered");
     }
     const timestamp = new Date().toISOString();
     const conversation: ConversationDescriptor = {
-      conversationId: request.conversationId,
-      originProjectId: request.filedProjectId,
-      filedProjectId: request.filedProjectId,
-      title: request.title,
+      conversationId: canonicalRequest.conversationId,
+      originProjectId: canonicalRequest.filedProjectId,
+      filedProjectId: canonicalRequest.filedProjectId,
+      title: canonicalRequest.title,
       createdAt: timestamp,
       updatedAt: timestamp,
       lifecycle: "active",
     };
     this.workspaceStore.createConversation(conversation);
-    return conversation;
+    return requireContract(
+      ConversationDescriptorContract,
+      conversation,
+      "Conversation create response",
+      { kind: "create-response", request: canonicalRequest },
+    );
   }
 
   deleteConversation(request: unknown) {
-    if (!isDeleteConversationRequest(request)) {
-      throw new TypeError("Invalid Conversation delete request");
-    }
+    const canonicalRequest = requireContract(
+      ConversationIdentityRequestContract,
+      request,
+      "Conversation delete request",
+    );
     const conversation = this.workspaceStore.getConversation(
-      request.conversationId,
+      canonicalRequest.conversationId,
     );
     if (!conversation) throw new Error("Conversation does not exist");
     if (this.hasActiveConversationRun(conversation.conversationId)) {
       throw new Error("A Conversation with an active task cannot be deleted");
     }
-    if (conversation.lifecycle === "deleted") return conversation;
+    if (conversation.lifecycle === "deleted") {
+      return requireContract(
+        ConversationDescriptorContract,
+        conversation,
+        "Conversation delete response",
+        {
+          kind: "delete-response",
+          conversationId: canonicalRequest.conversationId,
+        },
+      );
+    }
     const deleted: ConversationDescriptor = {
       ...conversation,
       lifecycle: "deleted",
       updatedAt: new Date().toISOString(),
     };
     this.workspaceStore.saveConversation(deleted);
-    return deleted;
+    return requireContract(
+      ConversationDescriptorContract,
+      deleted,
+      "Conversation delete response",
+      {
+        kind: "delete-response",
+        conversationId: canonicalRequest.conversationId,
+      },
+    );
   }
 
   listConversations() {
-    return this.workspaceStore
+    const conversations = this.workspaceStore
       .listConversations()
       .filter((conversation) => conversation.lifecycle === "active");
+    return requireContract(
+      ConversationDescriptorListContract,
+      conversations,
+      "Conversation descriptor list",
+    );
   }
 
   async resolveConversationOpenContext(request: unknown) {
-    if (!isDeleteConversationRequest(request)) {
-      throw new TypeError("Invalid Conversation open request");
-    }
+    const canonicalRequest = requireContract(
+      ConversationIdentityRequestContract,
+      request,
+      "Conversation open request",
+    );
     const conversation = this.workspaceStore.getConversation(
-      request.conversationId,
+      canonicalRequest.conversationId,
     );
     if (!conversation || conversation.lifecycle !== "active") {
       throw new Error("Conversation does not exist");
     }
+    const validateContext = (value: unknown) =>
+      requireContract(
+        ConversationOpenContextContract,
+        value,
+        "Conversation open context",
+        { conversationId: canonicalRequest.conversationId },
+      );
     const tasks = this.workspaceStore
       .listGlobalTasks()
       .filter((task) => task.conversationId === conversation.conversationId);
@@ -174,18 +224,20 @@ export class ProjectIpcService {
     );
     const task = activeTask ?? tasks[0];
     if (task) {
-      return this.#resolveConversationTarget(
-        conversation.conversationId,
-        task.targetSet.primaryTarget,
-        activeTask ? "active-task" : "recent-task",
+      return validateContext(
+        await this.#resolveConversationTarget(
+          conversation.conversationId,
+          task.targetSet.primaryTarget,
+          activeTask ? "active-task" : "recent-task",
+        ),
       );
     }
     if (!conversation.filedProjectId) {
-      return {
+      return validateContext({
         kind: "target-unavailable" as const,
         conversationId: conversation.conversationId,
         reason: "no-target" as const,
-      };
+      });
     }
     let manifest;
     try {
@@ -193,21 +245,21 @@ export class ProjectIpcService {
         conversation.filedProjectId,
       );
     } catch {
-      return {
+      return validateContext({
         kind: "target-unavailable" as const,
         conversationId: conversation.conversationId,
         reason: "project-unavailable" as const,
-      };
+      });
     }
     const descriptor = manifest.designFiles.find(
       (file) => file.lifecycle === "active",
     );
     if (!descriptor) {
-      return {
+      return validateContext({
         kind: "target-unavailable" as const,
         conversationId: conversation.conversationId,
         reason: "design-file-unavailable" as const,
-      };
+      });
     }
     const opened = await this.projectHost.readDesignFile(
       manifest.projectId,
@@ -215,11 +267,11 @@ export class ProjectIpcService {
     );
     const pageId = opened.document.pageOrder[0];
     if (!pageId) {
-      return {
+      return validateContext({
         kind: "target-unavailable" as const,
         conversationId: conversation.conversationId,
         reason: "page-unavailable" as const,
-      };
+      });
     }
     const target: DesignTarget = {
       targetId: `resume_${conversation.conversationId}`,
@@ -230,12 +282,12 @@ export class ProjectIpcService {
       selectedNodeIds: [],
       baseRevision: opened.document.revision,
     };
-    return {
+    return validateContext({
       kind: "target-available" as const,
       conversationId: conversation.conversationId,
       source: "filed-project" as const,
       target,
-    };
+    });
   }
 
   async #resolveConversationTarget(
@@ -398,4 +450,17 @@ export class ProjectIpcService {
       request.releaseId,
     );
   }
+}
+
+function requireContract<T, Context>(
+  contract: Contract<T, Context>,
+  value: unknown,
+  subject: string,
+  context?: Context,
+): T {
+  const result = contract.parse(value, context);
+  if (!result.ok) {
+    throw new TypeError(formatContractFailure(subject, result.issues));
+  }
+  return result.value;
 }

@@ -5,7 +5,10 @@ import {
   type TSchema,
   type TUnion,
 } from "@sinclair/typebox";
-import { Value } from "@sinclair/typebox/value";
+export {
+  schemaValidationIssues,
+  type SchemaValidationIssue,
+} from "@opendesign/contract-runtime";
 export { Type, type Static, type TSchema };
 import { checkSchema } from "./schema-check.js";
 export { executableJsonSchema } from "./schema-check.js";
@@ -2562,153 +2565,6 @@ export type ExportArtifact = Static<typeof ExportArtifactSchema>;
 export type AtomicChildCommand = DesignOperation;
 export type DesignCommand = DesignOperation;
 export type RunAtomicDesignBatchCommand = DesignTransaction;
-
-export interface SchemaValidationIssue {
-  path: string;
-  message: string;
-}
-
-export function schemaValidationIssues(
-  schema: TSchema,
-  value: unknown,
-): SchemaValidationIssue[] {
-  try {
-    return [...Value.Errors(schema, value)].flatMap((error) =>
-      actionableSchemaErrors(error).map((actionable) => ({
-        path: actionable.path,
-        message: actionable.message,
-      })),
-    );
-  } catch (error) {
-    return [
-      {
-        path: "",
-        message:
-          error instanceof RangeError
-            ? "Value contains an unsupported cyclic structure"
-            : error instanceof Error
-              ? `Schema validation failed: ${error.message}`
-              : "Schema validation failed",
-      },
-    ];
-  }
-}
-
-type NestedSchemaError = {
-  path: string;
-  message: string;
-  schema: TSchema;
-  value: unknown;
-  errors: Iterable<Iterable<NestedSchemaError>>;
-};
-
-function actionableSchemaErrors(error: NestedSchemaError): NestedSchemaError[] {
-  const branches = [...error.errors].map((branch) =>
-    [...branch].flatMap(actionableSchemaErrors),
-  );
-  if (branches.length === 0) return [error];
-
-  const variants = Array.isArray((error.schema as { anyOf?: unknown }).anyOf)
-    ? ((error.schema as unknown as { anyOf: TSchema[] }).anyOf ?? [])
-    : [];
-  const discriminatedBranch = variants.findIndex((variant) =>
-    schemaDiscriminatorMatches(variant, error),
-  );
-  if (discriminatedBranch >= 0) {
-    return branches[discriminatedBranch] ?? [error];
-  }
-
-  if (
-    typeof error.value === "object" &&
-    error.value !== null &&
-    !Array.isArray(error.value)
-  ) {
-    const unknownDiscriminant = unknownSchemaDiscriminant(
-      variants,
-      error.value as Record<string, unknown>,
-    );
-    if (unknownDiscriminant) {
-      const path = `${error.path}/${escapeSchemaPointer(unknownDiscriminant)}`;
-      const discriminatorIssues = branches
-        .flat()
-        .filter((issue) => issue.path === path);
-      if (discriminatorIssues.length > 0)
-        return discriminatorIssues.slice(0, 1);
-    }
-    return (
-      branches
-        .filter((branch) => branch.length > 0)
-        .sort(compareSchemaErrorBranches)[0] ?? [error]
-    );
-  }
-  return [error];
-}
-
-function unknownSchemaDiscriminant(
-  variants: readonly TSchema[],
-  value: Record<string, unknown>,
-): string | null {
-  if (variants.length < 2) return null;
-  const firstProperties = (
-    variants[0] as { properties?: Record<string, unknown> } | undefined
-  )?.properties;
-  if (!firstProperties) return null;
-  for (const key of Object.keys(firstProperties)) {
-    if (!Object.hasOwn(value, key)) continue;
-    const expected = variants.map((variant) => {
-      const properties = (variant as { properties?: Record<string, unknown> })
-        .properties;
-      return (properties?.[key] as { const?: unknown } | undefined)?.const;
-    });
-    if (expected.some((candidate) => candidate === undefined)) continue;
-    if (!expected.includes(value[key])) return key;
-  }
-  return null;
-}
-
-function escapeSchemaPointer(value: string): string {
-  return value.replaceAll("~", "~0").replaceAll("/", "~1");
-}
-
-function schemaDiscriminatorMatches(
-  schema: TSchema,
-  error: NestedSchemaError,
-): boolean {
-  const value = error.value;
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return false;
-  }
-  const variants = (schema as { anyOf?: unknown }).anyOf;
-  if (Array.isArray(variants)) {
-    return variants.some(
-      (variant) =>
-        typeof variant === "object" &&
-        variant !== null &&
-        schemaDiscriminatorMatches(variant as TSchema, error),
-    );
-  }
-  const properties = (schema as { properties?: Record<string, unknown> })
-    .properties;
-  if (!properties) return false;
-  return Object.entries(properties).some(([key, property]) => {
-    const expected = (property as { const?: unknown } | undefined)?.const;
-    return (
-      expected !== undefined &&
-      Object.prototype.hasOwnProperty.call(value, key) &&
-      (value as Record<string, unknown>)[key] === expected
-    );
-  });
-}
-
-function compareSchemaErrorBranches(
-  left: readonly NestedSchemaError[],
-  right: readonly NestedSchemaError[],
-): number {
-  if (left.length !== right.length) return left.length - right.length;
-  const leftDepth = left.reduce((sum, issue) => sum + issue.path.length, 0);
-  const rightDepth = right.reduce((sum, issue) => sum + issue.path.length, 0);
-  return rightDepth - leftDepth;
-}
 
 export function isDesignDocument(value: unknown): value is DesignDocument {
   return (

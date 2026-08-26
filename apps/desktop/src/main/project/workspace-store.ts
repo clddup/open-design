@@ -4,11 +4,13 @@ import type {
   RootGrant,
 } from "@opendesign/workspace-contracts";
 import {
-  isConversationDescriptor,
+  ConversationDescriptorContract,
+  ConversationDescriptorListContract,
   isGlobalTaskProjection,
   isRootGrant,
   normalizeGlobalTaskProjection,
 } from "@opendesign/workspace-contracts";
+import { formatContractFailure } from "@opendesign/contract-runtime";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -247,9 +249,7 @@ export class WorkspaceStore {
   }
 
   createConversation(conversation: ConversationDescriptor): void {
-    if (!isConversationDescriptor(conversation)) {
-      throw new TypeError("Invalid conversation descriptor");
-    }
+    const canonical = requireConversationDescriptor(conversation);
     this.#database
       .prepare(
         `
@@ -263,76 +263,78 @@ export class WorkspaceStore {
         `,
       )
       .run(
-        conversation.conversationId,
-        conversation.originProjectId,
-        conversation.filedProjectId,
-        JSON.stringify(conversation),
-        conversation.updatedAt,
+        canonical.conversationId,
+        canonical.originProjectId,
+        canonical.filedProjectId,
+        JSON.stringify(canonical),
+        canonical.updatedAt,
       );
   }
 
   saveConversation(conversation: ConversationDescriptor): void {
-    if (!isConversationDescriptor(conversation)) {
-      throw new TypeError("Invalid conversation descriptor");
-    }
+    const canonical = requireConversationDescriptor(conversation);
     const existing = this.#database
       .prepare(
         "SELECT origin_project_id FROM conversations WHERE conversation_id = ?",
       )
-      .get(conversation.conversationId) as
+      .get(canonical.conversationId) as
       { origin_project_id: string | null } | undefined;
-    if (
-      existing &&
-      existing.origin_project_id !== conversation.originProjectId
-    ) {
+    if (!existing) {
+      throw new Error("Conversation does not exist");
+    }
+    if (existing.origin_project_id !== canonical.originProjectId) {
       throw new Error("Conversation origin Project cannot be changed by save");
     }
     this.#database
       .prepare(
         `
-          INSERT INTO conversations(
-            conversation_id,
-            origin_project_id,
-            filed_project_id,
-            descriptor_json,
-            updated_at
-          ) VALUES (?, ?, ?, ?, ?)
-          ON CONFLICT(conversation_id) DO UPDATE SET
-            filed_project_id = excluded.filed_project_id,
-            descriptor_json = excluded.descriptor_json,
-            updated_at = excluded.updated_at
+          UPDATE conversations
+          SET filed_project_id = ?, descriptor_json = ?, updated_at = ?
+          WHERE conversation_id = ?
         `,
       )
       .run(
-        conversation.conversationId,
-        conversation.originProjectId,
-        conversation.filedProjectId,
-        JSON.stringify(conversation),
-        conversation.updatedAt,
+        canonical.filedProjectId,
+        JSON.stringify(canonical),
+        canonical.updatedAt,
+        canonical.conversationId,
       );
   }
 
   getConversation(conversationId: string): ConversationDescriptor | null {
     const row = this.#database
       .prepare(
-        "SELECT descriptor_json FROM conversations WHERE conversation_id = ?",
+        `
+          SELECT conversation_id, origin_project_id, filed_project_id,
+                 descriptor_json, updated_at
+          FROM conversations
+          WHERE conversation_id = ?
+        `,
       )
-      .get(conversationId) as { descriptor_json: string } | undefined;
+      .get(conversationId) as ConversationRow | undefined;
     if (!row) return null;
-    return parseRows([row], isConversationDescriptor)[0] ?? null;
+    return parseConversationRow(row);
   }
 
   listConversations(): ConversationDescriptor[] {
     const rows = this.#database
       .prepare(
         `
-          SELECT descriptor_json
+          SELECT conversation_id, origin_project_id, filed_project_id,
+                 descriptor_json, updated_at
           FROM conversations
           ORDER BY updated_at DESC, conversation_id ASC
         `,
       )
-      .all() as Array<{ descriptor_json: string }>;
-    return parseRows(rows, isConversationDescriptor);
+      .all() as ConversationRow[];
+    const conversations = rows.map(parseConversationRow);
+    const result = ConversationDescriptorListContract.parse(conversations);
+    if (!result.ok) {
+      throw new TypeError(
+        formatContractFailure("Conversation descriptor list", result.issues),
+      );
+    }
+    return result.value;
   }
 
   saveRootGrant(grant: RootGrant): void {
@@ -461,6 +463,54 @@ function assertPreferenceKey(key: string): void {
   if (!/^[a-z][a-z0-9.-]{0,127}$/.test(key)) {
     throw new TypeError("Invalid preference key");
   }
+}
+
+type ConversationRow = {
+  conversation_id: string;
+  origin_project_id: string | null;
+  filed_project_id: string | null;
+  descriptor_json: string;
+  updated_at: string;
+};
+
+function requireConversationDescriptor(value: unknown): ConversationDescriptor {
+  const result = ConversationDescriptorContract.parse(value);
+  if (!result.ok) {
+    throw new TypeError(
+      formatContractFailure("Conversation descriptor", result.issues),
+    );
+  }
+  return result.value;
+}
+
+function parseConversationRow(row: ConversationRow): ConversationDescriptor {
+  let value: unknown;
+  try {
+    value = JSON.parse(row.descriptor_json);
+  } catch {
+    throw new TypeError("Invalid persisted Conversation JSON");
+  }
+  const descriptor = requireConversationDescriptor(value);
+  const mismatches = [
+    descriptor.conversationId === row.conversation_id
+      ? null
+      : "/conversationId",
+    descriptor.originProjectId === row.origin_project_id
+      ? null
+      : "/originProjectId",
+    descriptor.filedProjectId === row.filed_project_id
+      ? null
+      : "/filedProjectId",
+    descriptor.updatedAt === row.updated_at ? null : "/updatedAt",
+  ].filter((path): path is string => path !== null);
+  if (mismatches.length > 0) {
+    throw new TypeError(
+      `Persisted Conversation columns disagree with descriptor JSON at ${mismatches.join(
+        ", ",
+      )}`,
+    );
+  }
+  return descriptor;
 }
 
 function parseRows<T>(

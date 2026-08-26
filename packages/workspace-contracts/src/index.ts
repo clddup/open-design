@@ -1,20 +1,21 @@
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
+import {
+  ConversationTitleSchema,
+  RelativePathSchema,
+  StableIdSchema,
+  TimestampSchema,
+  WorkspaceNameSchema,
+  isNormalizedRelativePath,
+} from "./descriptors.js";
+export * from "./descriptors.js";
 
 export const WORKSPACE_CONTRACT_VERSION = 2 as const;
-export const PROJECT_MANIFEST_VERSION = "1.0.0" as const;
 export const DESIGN_DELIVERY_LEDGER_VERSION = 3 as const;
-export const MAX_PROJECT_DESIGN_FILES = 4_096;
 export const MAX_DESIGN_TARGETS = 128;
 export const MAX_SELECTED_NODE_IDS = 512;
 export const MAX_ROOT_GRANTS = 128;
 export const MAX_RESOURCE_REFERENCES = 1_024;
-
-export const StableIdSchema = Type.String({
-  minLength: 1,
-  maxLength: 128,
-  pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
-});
 
 // DesignDocument entity IDs predate the workspace contract and may contain
 // provider-generated separators such as `|`. They remain opaque map keys, not
@@ -25,41 +26,6 @@ export const DesignEntityIdSchema = Type.String({
   maxLength: 512,
   pattern: "^[^\\u0000-\\u001F\\u007F]+$",
 });
-
-export const TimestampSchema = Type.String({
-  minLength: 20,
-  maxLength: 32,
-  pattern:
-    "^\\d{4}-(0[1-9]|1[0-2])-([0-2]\\d|3[01])T([01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d{1,9})?Z$",
-});
-
-export const RelativePathSchema = Type.String({
-  minLength: 1,
-  maxLength: 1_024,
-  pattern:
-    "^(?!/)(?![A-Za-z]:)(?!.*\\\\)(?!.*//)(?!.*(?:^|/)\\.{1,2}(?:/|$))[^/]+(?:/[^/]+)*$",
-});
-
-const NameSchema = Type.String({ minLength: 1, maxLength: 256 });
-const TitleSchema = Type.String({ minLength: 1, maxLength: 2_000 });
-
-export const ProjectLifecycleSchema = Type.Union([
-  Type.Literal("active"),
-  Type.Literal("archived"),
-  Type.Literal("deleted"),
-]);
-
-export const DesignFileLifecycleSchema = Type.Union([
-  Type.Literal("active"),
-  Type.Literal("archived"),
-  Type.Literal("deleted"),
-]);
-
-export const ConversationLifecycleSchema = Type.Union([
-  Type.Literal("active"),
-  Type.Literal("archived"),
-  Type.Literal("deleted"),
-]);
 
 export const ResourcePermissionSchema = Type.Union([
   Type.Literal("read"),
@@ -99,7 +65,7 @@ export const DesignDeliveryStatusSchema = Type.Union([
 export const DesignDeliveryTargetSchema = Type.Object(
   {
     targetId: StableIdSchema,
-    label: NameSchema,
+    label: WorkspaceNameSchema,
     pageId: DesignEntityIdSchema,
     rootNodeId: DesignEntityIdSchema,
     reservedNodeIds: Type.Array(DesignEntityIdSchema, {
@@ -135,49 +101,6 @@ const ResourcePermissionsSchema = Type.Array(ResourcePermissionSchema, {
   maxItems: 4,
   uniqueItems: true,
 });
-
-export const DesignFileDescriptorSchema = Type.Object(
-  {
-    designFileId: StableIdSchema,
-    documentId: StableIdSchema,
-    name: NameSchema,
-    relativePath: RelativePathSchema,
-    createdAt: TimestampSchema,
-    updatedAt: TimestampSchema,
-    lifecycle: DesignFileLifecycleSchema,
-  },
-  { additionalProperties: false },
-);
-
-export const ProjectManifestSchema = Type.Object(
-  {
-    manifestVersion: Type.Literal(PROJECT_MANIFEST_VERSION),
-    projectId: StableIdSchema,
-    name: NameSchema,
-    createdAt: TimestampSchema,
-    updatedAt: TimestampSchema,
-    lifecycle: ProjectLifecycleSchema,
-    designFiles: Type.Array(DesignFileDescriptorSchema, {
-      maxItems: MAX_PROJECT_DESIGN_FILES,
-    }),
-  },
-  { additionalProperties: false },
-);
-
-export const ProjectDescriptorSchema = ProjectManifestSchema;
-
-export const ConversationDescriptorSchema = Type.Object(
-  {
-    conversationId: StableIdSchema,
-    originProjectId: Type.Union([StableIdSchema, Type.Null()]),
-    filedProjectId: Type.Union([StableIdSchema, Type.Null()]),
-    title: TitleSchema,
-    createdAt: TimestampSchema,
-    updatedAt: TimestampSchema,
-    lifecycle: ConversationLifecycleSchema,
-  },
-  { additionalProperties: false },
-);
 
 export const ProjectResourceLocatorSchema = Type.Object(
   {
@@ -275,7 +198,7 @@ export const RootGrantSchema = Type.Object(
     version: Type.Literal(WORKSPACE_CONTRACT_VERSION),
     rootGrantId: StableIdSchema,
     rootId: StableIdSchema,
-    name: NameSchema,
+    name: WorkspaceNameSchema,
     scope: RootGrantScopeSchema,
     permissions: ResourcePermissionsSchema,
     discoverProjectConfig: Type.Literal(false, { default: false }),
@@ -370,7 +293,7 @@ export const GlobalTaskProjectionSchema = Type.Object(
     taskId: StableIdSchema,
     conversationId: StableIdSchema,
     runId: Type.Optional(StableIdSchema),
-    title: TitleSchema,
+    title: ConversationTitleSchema,
     lifecycle: GlobalTaskLifecycleSchema,
     targetSet: RunTargetSetSchema,
     delivery: Type.Optional(DesignDeliveryLedgerSchema),
@@ -380,22 +303,12 @@ export const GlobalTaskProjectionSchema = Type.Object(
   { additionalProperties: false },
 );
 
-export type StableId = Static<typeof StableIdSchema>;
-export type ProjectLifecycle = Static<typeof ProjectLifecycleSchema>;
-export type DesignFileLifecycle = Static<typeof DesignFileLifecycleSchema>;
-export type ConversationLifecycle = Static<typeof ConversationLifecycleSchema>;
 export type ResourcePermission = Static<typeof ResourcePermissionSchema>;
 export type RootGrantLifecycle = Static<typeof RootGrantLifecycleSchema>;
 export type GlobalTaskLifecycle = Static<typeof GlobalTaskLifecycleSchema>;
 export type DesignDeliveryStatus = Static<typeof DesignDeliveryStatusSchema>;
 export type DesignDeliveryTarget = Static<typeof DesignDeliveryTargetSchema>;
 export type DesignDeliveryLedger = Static<typeof DesignDeliveryLedgerSchema>;
-export type DesignFileDescriptor = Static<typeof DesignFileDescriptorSchema>;
-export type ProjectManifest = Static<typeof ProjectManifestSchema>;
-export type ProjectDescriptor = Static<typeof ProjectDescriptorSchema>;
-export type ConversationDescriptor = Static<
-  typeof ConversationDescriptorSchema
->;
 export type ProjectResourceLocator = Static<
   typeof ProjectResourceLocatorSchema
 >;
@@ -419,58 +332,6 @@ export type DesignTarget = Static<typeof DesignTargetSchema>;
 export type RunTargetSet = Static<typeof RunTargetSetSchema>;
 export type RunAccessSnapshot = Static<typeof RunAccessSnapshotSchema>;
 export type GlobalTaskProjection = Static<typeof GlobalTaskProjectionSchema>;
-
-export function isStableId(value: unknown): value is StableId {
-  return checkSchema(StableIdSchema, value);
-}
-
-export function isNormalizedRelativePath(value: unknown): value is string {
-  if (!checkSchema(RelativePathSchema, value)) return false;
-  const segments = value.split("/");
-  return (
-    !value.startsWith("/") &&
-    !/^[A-Za-z]:/.test(value) &&
-    !value.includes("\\") &&
-    !value.includes("\0") &&
-    segments.every(
-      (segment) => segment !== "" && segment !== "." && segment !== "..",
-    )
-  );
-}
-
-export function isDesignFileDescriptor(
-  value: unknown,
-): value is DesignFileDescriptor {
-  return (
-    checkSchema(DesignFileDescriptorSchema, value) &&
-    isNormalizedRelativePath(value.relativePath)
-  );
-}
-
-export function isProjectManifest(value: unknown): value is ProjectManifest {
-  if (!checkSchema(ProjectManifestSchema, value)) return false;
-  if (!value.designFiles.every(isDesignFileDescriptor)) return false;
-
-  return (
-    hasUniqueValues(
-      value.designFiles.map(({ designFileId }) => designFileId),
-    ) &&
-    hasUniqueValues(value.designFiles.map(({ documentId }) => documentId)) &&
-    hasUniqueValues(value.designFiles.map(({ relativePath }) => relativePath))
-  );
-}
-
-export function isProjectDescriptor(
-  value: unknown,
-): value is ProjectDescriptor {
-  return isProjectManifest(value);
-}
-
-export function isConversationDescriptor(
-  value: unknown,
-): value is ConversationDescriptor {
-  return checkSchema(ConversationDescriptorSchema, value);
-}
 
 export function isResourceLocator(value: unknown): value is ResourceLocator {
   if (!checkSchema(ResourceLocatorSchema, value)) return false;

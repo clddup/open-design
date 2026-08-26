@@ -34,7 +34,6 @@ import { createHash } from "node:crypto";
 import {
   basename,
   dirname,
-  extname,
   isAbsolute,
   relative,
   resolve,
@@ -47,7 +46,6 @@ export const PROJECT_MANIFEST_NAME = "opendesign.project.json";
 export const PROJECT_SAVE_JOURNAL_NAME = ".opendesign-save-journal.json";
 export const PROJECT_LIBRARY_CATALOG_PATH = ".opendesign/libraries.json";
 export const PROJECT_LIBRARY_RELEASE_DIRECTORY = ".opendesign/libraries";
-const DESIGN_FILE_EXTENSION = ".opendesign";
 const MAX_MANIFEST_BYTES = 4 * 1024 * 1024;
 const MAX_DESIGN_FILE_BYTES = 64 * 1024 * 1024;
 const MAX_SAVE_JOURNAL_BYTES =
@@ -1001,11 +999,7 @@ async function migrateLegacyStarterProject(
 }
 
 function assertDesignFileDescriptor(descriptor: DesignFileDescriptor): void {
-  if (
-    !isDesignFileDescriptor(descriptor) ||
-    !isNormalizedRelativePath(descriptor.relativePath) ||
-    extname(descriptor.relativePath).toLowerCase() !== DESIGN_FILE_EXTENSION
-  ) {
+  if (!isDesignFileDescriptor(descriptor)) {
     throw new ProjectHostError(
       "INVALID_DESIGN_FILE",
       "Design files must use a safe relative .opendesign path",

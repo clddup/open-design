@@ -1308,6 +1308,43 @@ describe("WorkspaceStore", () => {
         updatedAt: "2026-08-07T14:00:00.000Z",
       }),
     ).toThrow("Conversation origin Project cannot be changed by save");
+    expect(() =>
+      store.saveConversation({
+        ...conversation,
+        conversationId: "conversation_missing",
+      }),
+    ).toThrow("Conversation does not exist");
     store.close();
+  });
+
+  it("fails visibly when persisted Conversation columns disagree with JSON", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "opendesign-workspace-"));
+    const databasePath = join(directory, "workspace.sqlite");
+    const conversation: ConversationDescriptor = {
+      conversationId: "conversation_1",
+      originProjectId: "project_acme",
+      filedProjectId: "project_acme",
+      title: "Refine the mobile experience",
+      createdAt: now,
+      updatedAt: now,
+      lifecycle: "active",
+    };
+    const initial = new WorkspaceStore(databasePath);
+    initial.createConversation(conversation);
+    initial.close();
+
+    const database = new DatabaseSync(databasePath);
+    database
+      .prepare(
+        "UPDATE conversations SET filed_project_id = ? WHERE conversation_id = ?",
+      )
+      .run("project_other", conversation.conversationId);
+    database.close();
+
+    const reopened = new WorkspaceStore(databasePath);
+    expect(() => reopened.listConversations()).toThrow(
+      "Persisted Conversation columns disagree with descriptor JSON at /filedProjectId",
+    );
+    reopened.close();
   });
 });

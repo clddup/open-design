@@ -1,5 +1,5 @@
 {
-  "name": "@opendesign/design-contracts",
+  "name": "@opendesign/contract-runtime",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -10,7 +10,6 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@opendesign/contract-runtime": "workspace:*",
     "@sinclair/typebox": "^0.34.41"
   },
   "devDependencies": {

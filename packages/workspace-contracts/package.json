@@ -4,12 +4,14 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./descriptors": "./src/descriptors.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@opendesign/contract-runtime": "workspace:*",
     "@sinclair/typebox": "^0.34.41"
   },
   "devDependencies": {

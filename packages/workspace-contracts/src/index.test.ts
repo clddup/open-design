@@ -2,16 +2,20 @@ import { Value } from "@sinclair/typebox/value";
 import { describe, expect, it } from "vitest";
 import {
   DESIGN_DELIVERY_LEDGER_VERSION,
+  ConversationDescriptorContract,
+  ConversationDescriptorListContract,
   GlobalTaskProjectionSchema,
   MAX_DESIGN_TARGETS,
   MAX_PROJECT_DESIGN_FILES,
   MAX_SELECTED_NODE_IDS,
   PROJECT_MANIFEST_VERSION,
+  ProjectManifestContract,
   ProjectManifestSchema,
   ResourceLocatorSchema,
   RootGrantSchema,
   WORKSPACE_CONTRACT_VERSION,
   isDesignTarget,
+  isDesignFileDescriptor,
   isDesignDeliveryLedger,
   normalizeDesignDeliveryLedger,
   normalizeGlobalTaskProjection,
@@ -222,6 +226,19 @@ describe("workspace contract schemas", () => {
     expect(
       isProjectManifest(projectManifest({ designFiles: duplicatePath })),
     ).toBe(false);
+    expect(
+      ProjectManifestContract.parse(
+        projectManifest({ designFiles: duplicateId }),
+      ),
+    ).toMatchObject({
+      ok: false,
+      issues: [
+        expect.objectContaining({
+          code: "workspace.design_file_id_duplicate",
+          path: "/designFiles/1/designFileId",
+        }),
+      ],
+    });
   });
 
   it("accepts normalized nested POSIX paths and rejects unsafe paths", () => {
@@ -240,9 +257,67 @@ describe("workspace contract schemas", () => {
       "designs//mobile-ui.opendesign",
       "designs/mobile-ui.opendesign/",
       "designs/\0mobile-ui.opendesign",
+      "designs/mobile\nui.opendesign",
     ]) {
       expect(isNormalizedRelativePath(path), path).toBe(false);
     }
+    expect(
+      isDesignFileDescriptor(
+        designFile({ relativePath: "designs/mobile-ui.json" }),
+      ),
+    ).toBe(false);
+  });
+
+  it("owns Conversation descriptor relationships and list identity", () => {
+    const conversation = {
+      conversationId: "conversation_1",
+      originProjectId: "project_home",
+      filedProjectId: "project_home",
+      title: "Homepage exploration",
+      createdAt: now,
+      updatedAt: now,
+      lifecycle: "active",
+    } as const;
+    expect(ConversationDescriptorContract.parse(conversation)).toMatchObject({
+      ok: true,
+    });
+    expect(
+      ConversationDescriptorContract.parse({
+        ...conversation,
+        title: "Homepage\nexploration",
+      }),
+    ).toMatchObject({
+      ok: false,
+      issues: [expect.objectContaining({ path: "/title" })],
+    });
+    expect(
+      ConversationDescriptorContract.parse({
+        ...conversation,
+        updatedAt: "2026-08-07T11:59:59.000Z",
+      }),
+    ).toMatchObject({
+      ok: false,
+      issues: [
+        expect.objectContaining({
+          code: "conversation.timestamp_order_invalid",
+          path: "/updatedAt",
+        }),
+      ],
+    });
+    expect(
+      ConversationDescriptorListContract.parse([
+        conversation,
+        { ...conversation, title: "Duplicate" },
+      ]),
+    ).toMatchObject({
+      ok: false,
+      issues: [
+        expect.objectContaining({
+          code: "conversation.id_duplicate",
+          path: "/1/conversationId",
+        }),
+      ],
+    });
   });
 
   it("supports typed resource schemes without accepting bare paths", () => {
