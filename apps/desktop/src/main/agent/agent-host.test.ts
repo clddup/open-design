@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AGENT_PROTOCOL_VERSION } from "@opendesign/agent-contracts";
+import { modelBridgeRequestValidationError } from "@/shared/model-bridge";
 import type { SessionStoreBridgeRequest } from "@/shared/session-store-bridge";
 import {
   AgentHost,
@@ -146,7 +147,7 @@ describe("AgentHost model bridge", () => {
       .spyOn(console, "error")
       .mockImplementation(() => undefined);
 
-    postToHost({
+    const invalidRequest = {
       ...modelRequest,
       request: {
         ...modelRequest.request,
@@ -161,17 +162,26 @@ describe("AgentHost model bridge", () => {
           },
         ],
       },
-    });
+    };
+    const rejection = modelBridgeRequestValidationError(invalidRequest);
+    if (!rejection) {
+      throw new TypeError("Expected the oversized tool schema to be rejected");
+    }
+
+    postToHost(invalidRequest);
 
     expect(handler).not.toHaveBeenCalled();
+    expect(rejection).toContain(
+      "model_bridge_request.tool_schema_too_large at /request/tools/0/inputSchema",
+    );
     expect(error).toHaveBeenCalledWith(
-      "Rejected invalid model request: tools[0] is invalid",
+      `Rejected invalid model request: ${rejection}`,
     );
     expect(electron.child.postMessage).toHaveBeenCalledWith({
       type: "model.response",
       requestId: "model_request_1",
       ok: false,
-      error: "Model request rejected by the host: tools[0] is invalid",
+      error: `Model request rejected by the host: ${rejection}`,
     });
   });
 
