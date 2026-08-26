@@ -1,16 +1,99 @@
-import type {
-  CanonicalContentBlock,
-  CanonicalMessage,
-  CanonicalStreamEvent,
-  CanonicalTool,
-  ModelRequest,
+import {
+  CanonicalStreamEventSchema,
+  SerializableModelRequestSchema,
+  type CanonicalStreamEvent,
+  type SerializableModelRequest,
 } from "@opendesign/model-gateway";
-import { MAX_AGENT_ATTACHMENT_BYTES } from "@opendesign/agent-contracts";
+import { Type } from "@sinclair/typebox";
+import {
+  defineContract,
+  formatValidationFailure,
+  type ValidationIssue,
+} from "./contract-validation";
 
 const MAX_MODEL_TOOL_SCHEMA_BYTES = 512_000;
 const MAX_MODEL_TOOLS_BYTES = 2_000_000;
-
-export type SerializableModelRequest = Omit<ModelRequest, "signal">;
+const MAX_MODEL_CONTENT_BYTES = 2_000_000;
+const MODEL_IMAGE_REFERENCE_MIME_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/gif",
+]);
+const MODEL_DOCUMENT_REFERENCE_MIME_TYPES = new Set([
+  "application/pdf",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "text/plain",
+  "text/markdown",
+  "text/csv",
+  "text/html",
+  "application/json",
+  "application/yaml",
+]);
+const ModelBridgeIdSchema = Type.String({
+  minLength: 1,
+  maxLength: 512,
+  pattern: "^[^\\u0000-\\u001F\\u007F]+$",
+});
+const ModelBridgeRequestSchema = Type.Object(
+  {
+    type: Type.Literal("model.request"),
+    requestId: ModelBridgeIdSchema,
+    request: SerializableModelRequestSchema,
+  },
+  { additionalProperties: false },
+);
+const ModelBridgeCancelSchema = Type.Object(
+  {
+    type: Type.Literal("model.cancel"),
+    requestId: ModelBridgeIdSchema,
+  },
+  { additionalProperties: false },
+);
+const ModelBridgeResponseSchema = Type.Union([
+  Type.Object(
+    {
+      type: Type.Literal("model.event"),
+      requestId: ModelBridgeIdSchema,
+      event: CanonicalStreamEventSchema,
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      type: Type.Literal("model.response"),
+      requestId: ModelBridgeIdSchema,
+      ok: Type.Literal(true),
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      type: Type.Literal("model.response"),
+      requestId: ModelBridgeIdSchema,
+      ok: Type.Literal(false),
+      error: Type.String({ maxLength: 20_000 }),
+    },
+    { additionalProperties: false },
+  ),
+]);
+const ModelBridgeRequestIdentitySchema = Type.Object(
+  {
+    type: Type.Literal("model.request"),
+    requestId: ModelBridgeIdSchema,
+  },
+  { additionalProperties: true },
+);
+const ModelBridgeResponseIdentitySchema = Type.Object(
+  {
+    type: Type.Union([
+      Type.Literal("model.event"),
+      Type.Literal("model.response"),
+    ]),
+    requestId: ModelBridgeIdSchema,
+  },
+  { additionalProperties: true },
+);
 
 export type ModelBridgeRequest = {
   type: "model.request";
@@ -41,365 +124,195 @@ export type ModelBridgeResponse =
       error: string;
     };
 
+const ModelBridgeRequestContract = defineContract<ModelBridgeRequest>({
+  schema: ModelBridgeRequestSchema,
+  code: "model_bridge_request.schema_invalid",
+  subject: "model bridge request",
+  clone: false,
+  refine: (value) => modelRequestBudgetIssues(value.request),
+});
+const ModelBridgeCancelContract = defineContract<ModelBridgeCancel>({
+  schema: ModelBridgeCancelSchema,
+  code: "model_bridge_cancel.schema_invalid",
+  subject: "model bridge cancel",
+  clone: false,
+});
+const ModelBridgeResponseContract = defineContract<ModelBridgeResponse>({
+  schema: ModelBridgeResponseSchema,
+  code: "model_bridge_response.schema_invalid",
+  subject: "model bridge response",
+  clone: false,
+  refine: (value) =>
+    value.type === "model.event" ? modelEventBudgetIssues(value.event) : [],
+});
+const ModelBridgeRequestIdentityContract = defineContract<{
+  type: "model.request";
+  requestId: string;
+}>({
+  schema: ModelBridgeRequestIdentitySchema,
+  code: "model_bridge_request_identity.schema_invalid",
+  subject: "model bridge request identity",
+  clone: false,
+});
+const ModelBridgeResponseIdentityContract = defineContract<{
+  type: "model.event" | "model.response";
+  requestId: string;
+}>({
+  schema: ModelBridgeResponseIdentitySchema,
+  code: "model_bridge_response_identity.schema_invalid",
+  subject: "model bridge response identity",
+  clone: false,
+});
+
 export function isModelBridgeRequest(
   value: unknown,
 ): value is ModelBridgeRequest {
-  return modelBridgeRequestValidationError(value) === null;
+  return ModelBridgeRequestContract.parse(value).ok;
 }
 
 export function modelBridgeRequestValidationError(
   value: unknown,
 ): string | null {
-  if (!record(value) || value.type !== "model.request") {
-    return "message is not a model.request object";
-  }
-  const request = value.request;
-  if (!safeId(value.requestId)) return "requestId is invalid";
-  if (!record(request)) return "request is not an object";
-  if (!safeId(request.attemptId)) return "attemptId is invalid";
-  if (request.sessionId !== undefined && !safeId(request.sessionId)) {
-    return "sessionId is invalid";
-  }
-  if (
-    request.latencyProfile !== undefined &&
-    request.latencyProfile !== "interactive" &&
-    request.latencyProfile !== "extended"
-  ) {
-    return "latencyProfile is invalid";
-  }
-  if (!isModelSelection(request.modelSelection)) {
-    return "modelSelection is invalid";
-  }
-  if (!safeText(request.system, 200_000)) return "system is invalid";
-  if (!Array.isArray(request.messages) || request.messages.length > 1_000) {
-    return "messages are invalid";
-  }
-  const invalidMessage = request.messages.findIndex(
-    (message) => !isCanonicalMessage(message),
-  );
-  if (invalidMessage >= 0) return `messages[${invalidMessage}] is invalid`;
-  if (!Array.isArray(request.tools) || request.tools.length > 256) {
-    return "tools are invalid";
-  }
-  if (!jsonSizeWithin(request.tools, MAX_MODEL_TOOLS_BYTES)) {
-    return "tools exceed the aggregate size limit";
-  }
-  const invalidTool = request.tools.findIndex((tool) => !isCanonicalTool(tool));
-  if (invalidTool >= 0) return `tools[${invalidTool}] is invalid`;
-  return null;
+  const result = ModelBridgeRequestContract.parse(value);
+  return result.ok
+    ? null
+    : formatValidationFailure("model bridge request", result.issues);
 }
 
 export function modelBridgeRequestId(value: unknown): string | null {
-  return record(value) &&
-    value.type === "model.request" &&
-    safeId(value.requestId)
-    ? value.requestId
-    : null;
+  const result = ModelBridgeRequestIdentityContract.parse(value);
+  return result.ok ? result.value.requestId : null;
 }
 
 export function isModelBridgeCancel(
   value: unknown,
 ): value is ModelBridgeCancel {
-  return (
-    record(value) && value.type === "model.cancel" && safeId(value.requestId)
-  );
+  return ModelBridgeCancelContract.parse(value).ok;
 }
 
 export function isModelBridgeResponse(
   value: unknown,
 ): value is ModelBridgeResponse {
-  return modelBridgeResponseValidationError(value) === null;
+  return ModelBridgeResponseContract.parse(value).ok;
 }
 
 export function modelBridgeResponseValidationError(
   value: unknown,
 ): string | null {
-  if (
-    !record(value) ||
-    !safeId(value.requestId) ||
-    (value.type !== "model.event" && value.type !== "model.response")
-  ) {
-    return "message is not a correlated model response";
-  }
-  if (value.type === "model.event") {
-    return isCanonicalStreamEvent(value.event) ? null : "event is invalid";
-  }
-  if (typeof value.ok !== "boolean") return "response status is invalid";
-  if (value.ok) {
-    return Object.keys(value).every((key) =>
-      ["type", "requestId", "ok"].includes(key),
-    )
-      ? null
-      : "successful response contains unexpected fields";
-  }
-  return safeText(value.error, 20_000) ? null : "response error is invalid";
+  const result = ModelBridgeResponseContract.parse(value);
+  return result.ok
+    ? null
+    : formatValidationFailure("model bridge response", result.issues);
 }
 
 export function modelBridgeResponseId(value: unknown): string | null {
-  return record(value) &&
-    (value.type === "model.event" || value.type === "model.response") &&
-    safeId(value.requestId)
-    ? value.requestId
-    : null;
+  const result = ModelBridgeResponseIdentityContract.parse(value);
+  return result.ok ? result.value.requestId : null;
 }
 
-function isCanonicalMessage(value: unknown): value is CanonicalMessage {
-  if (!record(value)) return false;
-  if (value.role === "user") {
-    return (
-      safeText(value.content, 2_000_000) ||
-      (Array.isArray(value.content) &&
-        value.content.length <= 16 &&
-        value.content.every(isCanonicalUserContentBlock))
+function modelRequestBudgetIssues(
+  request: SerializableModelRequest,
+): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+  if (!jsonSizeWithin(request.tools, MAX_MODEL_TOOLS_BYTES)) {
+    issues.push(
+      bridgeIssue(
+        "model_bridge_request.tools_too_large",
+        "/request/tools",
+        `Tool definitions exceed the ${MAX_MODEL_TOOLS_BYTES} byte aggregate limit`,
+      ),
     );
   }
-  if (value.role === "tool") {
-    return (
-      safeId(value.toolCallId) &&
-      (value.toolName === undefined || safeId(value.toolName)) &&
-      typeof value.isError === "boolean" &&
-      jsonSizeWithin(value.content, 2_000_000)
-    );
-  }
-  return (
-    value.role === "assistant" &&
-    Array.isArray(value.blocks) &&
-    value.blocks.length <= 2_000 &&
-    value.blocks.every(isCanonicalBlock) &&
-    (value.source === undefined || isResolvedModelIdentity(value.source))
-  );
-}
-
-function isCanonicalUserContentBlock(value: unknown): boolean {
-  if (!record(value)) return false;
-  if (value.type === "text") {
-    return (
-      safeText(value.text, 250_000) &&
-      Object.keys(value).every((key) => ["type", "text"].includes(key))
-    );
-  }
-  const exactAttachmentKeys = Object.keys(value).every((key) =>
-    ["type", "attachmentId", "name", "mimeType", "byteSize"].includes(key),
-  );
-  const commonAttachment =
-    safeText(value.name, 255) &&
-    Number.isInteger(value.byteSize) &&
-    Number(value.byteSize) > 0 &&
-    Number(value.byteSize) <= MAX_AGENT_ATTACHMENT_BYTES &&
-    exactAttachmentKeys;
-  if (!commonAttachment || typeof value.attachmentId !== "string") {
-    return false;
-  }
-  if (value.type === "image_ref") {
-    return (
-      /^image_[a-f0-9]{64}$/.test(value.attachmentId) &&
-      ["image/png", "image/jpeg", "image/webp", "image/gif"].includes(
-        String(value.mimeType),
-      )
-    );
-  }
-  return (
-    value.type === "document_ref" &&
-    /^file_[a-f0-9]{64}$/.test(value.attachmentId) &&
-    [
-      "application/pdf",
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      "text/plain",
-      "text/markdown",
-      "text/csv",
-      "text/html",
-      "application/json",
-      "application/yaml",
-    ].includes(String(value.mimeType))
-  );
-}
-
-function isCanonicalTool(value: unknown): value is CanonicalTool {
-  return (
-    record(value) &&
-    safeId(value.name) &&
-    safeText(value.description, 20_000) &&
-    record(value.inputSchema) &&
-    jsonSizeWithin(value.inputSchema, MAX_MODEL_TOOL_SCHEMA_BYTES)
-  );
-}
-
-function isCanonicalBlock(value: unknown): value is CanonicalContentBlock {
-  if (!record(value) || !safeId(value.id)) return false;
-  if (value.type === "text") return safeText(value.text, 2_000_000);
-  if (value.type === "reasoning_summary") {
-    return (
-      (value.status === "completed" || value.status === "omitted") &&
-      (value.summary === undefined || safeText(value.summary, 2_000_000)) &&
-      (value.signature === undefined || safeText(value.signature, 200_000))
-    );
-  }
-  return (
-    value.type === "tool_call" &&
-    safeId(value.toolCallId) &&
-    safeId(value.name) &&
-    jsonSizeWithin(value.input, 2_000_000)
-  );
-}
-
-function isCanonicalStreamEvent(value: unknown): value is CanonicalStreamEvent {
-  if (!record(value) || !safeId(value.attemptId)) return false;
-  if (value.type === "attempt.started") {
-    return (
-      safeText(value.model, 256) &&
-      isResolvedModelIdentity(value.identity) &&
-      (value.providerRequestId === undefined || safeId(value.providerRequestId))
-    );
-  }
-  if (value.type === "attempt.retrying") {
-    return (
-      Number.isInteger(value.retry) &&
-      Number(value.retry) >= 1 &&
-      Number(value.retry) <= 5 &&
-      value.maxRetries === 5 &&
-      Number.isInteger(value.delayMs) &&
-      Number(value.delayMs) > 0 &&
-      Number(value.delayMs) <= 60_000
-    );
-  }
-  if (value.type === "attempt.recovered") {
-    return (
-      Number.isInteger(value.retriesUsed) &&
-      Number(value.retriesUsed) >= 1 &&
-      Number(value.retriesUsed) <= 5 &&
-      value.maxRetries === 5
-    );
-  }
-  if (value.type === "block.started") {
-    return (
-      safeId(value.blockId) &&
-      ["text", "reasoning_summary", "tool_call"].includes(String(value.kind))
-    );
-  }
-  if (value.type === "block.delta") {
-    return safeId(value.blockId) && safeText(value.delta, 2_000_000);
-  }
-  if (value.type === "block.completed") return isCanonicalBlock(value.block);
-  if (value.type === "attempt.completed") {
-    return (
-      [
-        "complete",
-        "tool_use",
-        "length",
-        "cancelled",
-        "content_filter",
-        "error",
-        "other",
-      ].includes(String(value.stopReason)) &&
-      isUsage(value.usage) &&
-      (value.providerRequestId === undefined || safeId(value.providerRequestId))
-    );
-  }
-  return (
-    value.type === "attempt.failed" &&
-    record(value.error) &&
-    safeText(value.error.code, 256) &&
-    safeText(value.error.message, 20_000) &&
-    typeof value.error.retryable === "boolean" &&
-    (value.error.provider === undefined || safeId(value.error.provider)) &&
-    (value.error.providerRequestId === undefined ||
-      safeId(value.error.providerRequestId)) &&
-    (value.error.modelRequestId === undefined ||
-      safeId(value.error.modelRequestId)) &&
-    (value.error.timeout === undefined ||
-      isModelTimeout(value.error.timeout)) &&
-    Object.keys(value.error).every((key) =>
-      [
-        "code",
-        "message",
-        "retryable",
-        "provider",
-        "providerRequestId",
-        "modelRequestId",
-        "timeout",
-      ].includes(key),
-    )
-  );
-}
-
-function isModelTimeout(value: unknown): boolean {
-  return (
-    record(value) &&
-    ["first-response", "stream-idle", "total"].includes(String(value.phase)) &&
-    Number.isInteger(value.thresholdMs) &&
-    Number(value.thresholdMs) > 0 &&
-    Number(value.thresholdMs) <= 86_400_000 &&
-    Object.keys(value).every((key) => ["phase", "thresholdMs"].includes(key))
-  );
-}
-
-function isModelSelection(value: unknown): boolean {
-  if (!record(value)) return false;
-  return (
-    safeId(value.providerId) &&
-    safeText(value.modelId, 256) &&
-    (value.reasoningEffort === undefined ||
-      isReasoningEffort(value.reasoningEffort))
-  );
-}
-
-function isResolvedModelIdentity(value: unknown): boolean {
-  return (
-    isModelSelection(value) &&
-    record(value) &&
-    isApiFormat(value.apiFormat) &&
-    (value.responseId === undefined || safeId(value.responseId))
-  );
-}
-
-function isUsage(value: unknown): boolean {
-  if (!record(value)) return false;
-  return [
-    value.inputTokens,
-    value.outputTokens,
-    value.cacheReadTokens,
-    value.cacheWriteTokens,
-    value.reasoningTokens,
-  ].every((item) => typeof item === "number" && Number.isFinite(item));
-}
-
-function record(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function safeId(value: unknown): value is string {
-  return safeText(value, 512) && !hasControlCharacter(value);
-}
-
-function isReasoningEffort(value: unknown): boolean {
-  return (
-    value === "off" ||
-    value === "minimal" ||
-    value === "low" ||
-    value === "medium" ||
-    value === "high" ||
-    value === "xhigh" ||
-    value === "max"
-  );
-}
-
-function isApiFormat(value: unknown): boolean {
-  return (
-    value === "openai-responses" ||
-    value === "openai-chat-completions" ||
-    value === "anthropic-messages"
-  );
-}
-
-function hasControlCharacter(value: string): boolean {
-  return [...value].some((character) => {
-    const codePoint = character.codePointAt(0);
-    return codePoint !== undefined && (codePoint <= 31 || codePoint === 127);
+  request.tools.forEach((tool, index) => {
+    if (!jsonSizeWithin(tool.inputSchema, MAX_MODEL_TOOL_SCHEMA_BYTES)) {
+      issues.push(
+        bridgeIssue(
+          "model_bridge_request.tool_schema_too_large",
+          `/request/tools/${index}/inputSchema`,
+          `Tool schema exceeds the ${MAX_MODEL_TOOL_SCHEMA_BYTES} byte limit`,
+        ),
+      );
+    }
   });
+  request.messages.forEach((message, messageIndex) => {
+    if (message.role === "user") {
+      if (typeof message.content === "string") return;
+      message.content.forEach((block, blockIndex) => {
+        if (block.type === "image") {
+          issues.push(
+            bridgeIssue(
+              "model_bridge_request.inline_image_forbidden",
+              `/request/messages/${messageIndex}/content/${blockIndex}`,
+              "Agent utility requests must use a content-addressed image_ref instead of inline image data",
+            ),
+          );
+          return;
+        }
+        if (block.type === "text") return;
+        const allowed =
+          block.type === "image_ref"
+            ? MODEL_IMAGE_REFERENCE_MIME_TYPES.has(block.mimeType)
+            : MODEL_DOCUMENT_REFERENCE_MIME_TYPES.has(block.mimeType);
+        if (!allowed) {
+          issues.push(
+            bridgeIssue(
+              "model_bridge_request.attachment_mime_invalid",
+              `/request/messages/${messageIndex}/content/${blockIndex}/mimeType`,
+              `Attachment MIME type ${JSON.stringify(block.mimeType)} does not match ${block.type}`,
+            ),
+          );
+        }
+      });
+      return;
+    }
+    if (message.role === "tool") {
+      if (!jsonSizeWithin(message.content, MAX_MODEL_CONTENT_BYTES)) {
+        issues.push(
+          bridgeIssue(
+            "model_bridge_request.tool_content_too_large",
+            `/request/messages/${messageIndex}/content`,
+            `Tool content exceeds the ${MAX_MODEL_CONTENT_BYTES} byte limit`,
+          ),
+        );
+      }
+      return;
+    }
+    if (message.role !== "assistant") return;
+    message.blocks.forEach((block, blockIndex) => {
+      if (
+        block.type === "tool_call" &&
+        !jsonSizeWithin(block.input, MAX_MODEL_CONTENT_BYTES)
+      ) {
+        issues.push(
+          bridgeIssue(
+            "model_bridge_request.tool_input_too_large",
+            `/request/messages/${messageIndex}/blocks/${blockIndex}/input`,
+            `Tool-call input exceeds the ${MAX_MODEL_CONTENT_BYTES} byte limit`,
+          ),
+        );
+      }
+    });
+  });
+  return issues;
 }
 
-function safeText(value: unknown, maximum: number): value is string {
-  return typeof value === "string" && value.length <= maximum;
+function modelEventBudgetIssues(
+  event: CanonicalStreamEvent,
+): ValidationIssue[] {
+  if (
+    event.type !== "block.completed" ||
+    event.block.type !== "tool_call" ||
+    jsonSizeWithin(event.block.input, MAX_MODEL_CONTENT_BYTES)
+  ) {
+    return [];
+  }
+  return [
+    bridgeIssue(
+      "model_bridge_response.tool_input_too_large",
+      "/event/block/input",
+      `Completed tool-call input exceeds the ${MAX_MODEL_CONTENT_BYTES} byte limit`,
+    ),
+  ];
 }
 
 function jsonSizeWithin(value: unknown, maximum: number): boolean {
@@ -408,4 +321,18 @@ function jsonSizeWithin(value: unknown, maximum: number): boolean {
   } catch {
     return false;
   }
+}
+
+function bridgeIssue(
+  code: string,
+  path: string,
+  message: string,
+): ValidationIssue {
+  return {
+    code,
+    path,
+    message,
+    recovery:
+      "Reject the malformed model bridge payload and resend one value produced by the authoritative canonical wire contract.",
+  };
 }

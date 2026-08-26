@@ -107,6 +107,8 @@ Internal image/SVG materialization 已完成第十五个 trusted Renderer bridge
 
 Renderer design-tool bridge 已完成第十六个 trusted bridge 切片：Request、Cancel、Progress 与 Response 的 envelope 分别由一个 executable Schema + `defineContract` 拥有。Request 复用 `ToolCallRequestSchema / TrustedToolContextSchema` 与权威 Quality Profile JSON Schema，Response 复用 Trusted result/failure Schema；旧 `record/safeId/safeText/exact-key/bounded-performance/isRendererDesignCaptureTarget` 结构遍历已删除。工具输入 Contract、selection/mutation-target 关系、capture-only target 和 prepared Raster/Image content 只作为一次 domain refinement。Preload、Main IPC 和 Renderer 继续消费原 type guard 名称，但不存在旧 validator fallback。详见 ADR-0173。
 
+Canonical Model Bridge 已完成第十七个跨进程切片：`@opendesign/model-gateway` 直接拥有 Selection、Resolved Identity、Usage/Error、Message/Block、Tool、Serializable Request 与八类 Stream Event 的 TypeBox Schema，并由同一 Schema 导出 canonical 类型。Desktop 的 Request/Cancel/Response 只组合这些权威 schema 与 envelope Contract；旧 `isCanonicalMessage/isCanonicalBlock/isCanonicalStreamEvent/isModelSelection/isUsage/isModelTimeout` 等手写结构遍历已删除。工具总量、单 schema、Tool content/input 字节预算，以及 Agent utility 禁止 inline image 与 reference MIME family 是仅存的 bridge refinements。畸形事件现在返回稳定 code/path，而不是仅有 `event is invalid`。详见 ADR-0174。
+
 `ValidationIssue` 的稳定 `code/path/expected/actual/recovery` 通过 `tool-validation` failure details 进入 Agent event、journal 和 Timeline；这种参数修正使用 `correct-and-retry`，不冒充需要文档 inspection 的事务错误。Design transaction 仍保留独立 `inspect-and-revise` 恢复语义。
 
 其余 Agent tools、trusted internal Renderer bridge、IPC 与持久化契约尚未全部迁移，不得据此宣称全仓已实现单一验证入口。

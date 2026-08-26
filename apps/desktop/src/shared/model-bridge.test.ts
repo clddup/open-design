@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { DESIGN_AGENT_TOOL_SPECS } from "./design-agent-tools";
-import { isModelBridgeRequest, isModelBridgeResponse } from "./model-bridge";
+import {
+  isModelBridgeCancel,
+  isModelBridgeRequest,
+  isModelBridgeResponse,
+  modelBridgeRequestId,
+  modelBridgeRequestValidationError,
+  modelBridgeResponseId,
+  modelBridgeResponseValidationError,
+} from "./model-bridge";
 
 const attachmentId = `image_${"a".repeat(64)}`;
 const documentId = `file_${"b".repeat(64)}`;
@@ -25,6 +33,34 @@ function requestWith(content: unknown, tools: unknown[] = []) {
 }
 
 describe("Model bridge request guard", () => {
+  it("uses one strict correlation contract for request, response and cancel", () => {
+    expect(
+      modelBridgeRequestId({
+        type: "model.request",
+        requestId: "model_request_1",
+      }),
+    ).toBe("model_request_1");
+    expect(
+      modelBridgeResponseId({
+        type: "model.event",
+        requestId: "model_request_1",
+      }),
+    ).toBe("model_request_1");
+    expect(
+      isModelBridgeCancel({
+        type: "model.cancel",
+        requestId: "model_request_1",
+      }),
+    ).toBe(true);
+    expect(
+      isModelBridgeCancel({
+        type: "model.cancel",
+        requestId: "model_request_1",
+        processId: 42,
+      }),
+    ).toBe(false);
+  });
+
   it("accepts only declared Provider latency profiles", () => {
     const request = requestWith("Create one mark");
     expect(
@@ -109,6 +145,37 @@ describe("Model bridge request guard", () => {
       }),
     ).toBe(false);
   });
+
+  it("accepts canonical completed blocks and rejects unknown event fields", () => {
+    const response = {
+      type: "model.event",
+      requestId: "model_request_1",
+      event: {
+        type: "block.completed",
+        attemptId: "attempt_1",
+        block: {
+          id: "tool_block_1",
+          type: "tool_call",
+          toolCallId: "tool_1",
+          name: "design.edit",
+          input: { target: "frame_1" },
+        },
+      },
+    };
+    expect(isModelBridgeResponse(response)).toBe(true);
+    expect(
+      isModelBridgeResponse({
+        ...response,
+        event: { ...response.event, providerCredential: "secret" },
+      }),
+    ).toBe(false);
+    expect(
+      modelBridgeResponseValidationError({
+        ...response,
+        event: { ...response.event, providerCredential: "secret" },
+      }),
+    ).toContain("model_bridge_response.schema_invalid");
+  });
   it("accepts a bounded content-addressed image reference", () => {
     expect(
       isModelBridgeRequest(
@@ -152,6 +219,19 @@ describe("Model bridge request guard", () => {
             attachmentId: "../../product-brief.md",
             name: "product-brief.md",
             mimeType: "text/markdown",
+            byteSize: 2048,
+          },
+        ]),
+      ),
+    ).toBe(false);
+    expect(
+      isModelBridgeRequest(
+        requestWith([
+          {
+            type: "image_ref",
+            attachmentId,
+            name: "product-brief.pdf",
+            mimeType: "application/pdf",
             byteSize: 2048,
           },
         ]),
@@ -214,5 +294,8 @@ describe("Model bridge request guard", () => {
     );
 
     expect(isModelBridgeRequest(request)).toBe(false);
+    expect(modelBridgeRequestValidationError(request)).toContain(
+      "model_bridge_request.tools_too_large",
+    );
   });
 });
