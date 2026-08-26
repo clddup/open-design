@@ -58,6 +58,48 @@ describe("PiToolProgressCircuit", () => {
     });
   });
 
+  it("does not count the required inspection guard as a repeated document failure", () => {
+    const circuit = new PiToolProgressCircuit();
+    const details: TrustedToolFailure["details"] = {
+      kind: "design-transaction",
+      fingerprint: "design_deadbeef",
+      issues: [
+        {
+          path: "/nodesById/card/size",
+          message: "width must be positive",
+        },
+      ],
+      recovery: {
+        action: "inspect-and-revise",
+        toolName: "opendesign_inspect_document",
+        required: true,
+      },
+    };
+
+    expect(
+      circuit.recordFailure("opendesign_apply_transaction", {
+        ...recoverableFailure,
+        details,
+      }),
+    ).not.toHaveProperty("runTerminal");
+    expect(
+      circuit.recordFailure("opendesign_apply_transaction", {
+        ...recoverableFailure,
+        code: "design_inspection_required",
+        details,
+      }),
+    ).not.toHaveProperty("runTerminal");
+    expect(
+      circuit.recordFailure("opendesign_apply_transaction", {
+        ...recoverableFailure,
+        details,
+      }),
+    ).toMatchObject({
+      code: "design_recovery_no_progress",
+      runTerminal: true,
+    });
+  });
+
   it("resets the run circuit only when a trusted revision advances", () => {
     const circuit = new PiToolProgressCircuit();
     circuit.recordFailure("opendesign_manage_components", invalidInput);

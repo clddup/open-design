@@ -686,9 +686,19 @@ describe("OpenDesign Pi tool adapter", () => {
       details: { retrySuppressed: true },
     });
     expect(failures[2]).toMatchObject({
-      code: "design.invalid",
-      recoverable: true,
+      code: "design_recovery_no_progress",
+      recoverable: false,
       details: { attempt: 2, maxAttempts: 2, retrySuppressed: true },
+    });
+    expect(result.events).toContainEqual(
+      expect.objectContaining({
+        type: "agent.error",
+        code: "design_recovery_no_progress",
+      }),
+    );
+    expect(result.events.at(-1)).toMatchObject({
+      type: "run.completed",
+      stopReason: "error",
     });
     expect(result.adapter.unresolvedDesignWriteFailure).toMatchObject({
       toolCallId: "invalid_design_call_3",
