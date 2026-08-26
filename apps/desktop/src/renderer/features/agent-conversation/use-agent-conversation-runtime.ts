@@ -20,6 +20,7 @@ import {
   type SetStateAction,
 } from "react";
 import type { MessageKey, MessageParameters } from "@/shared/i18n/messages";
+import type { AgentRequestErrorCode } from "@/shared/agent-request-contract";
 import { reportRendererError } from "../diagnostics/diagnostics";
 import {
   EMPTY_GENERATION_PLAN_PRESENTATION_STATE,
@@ -193,7 +194,7 @@ export function useAgentConversationRuntime({
         })),
       );
       try {
-        await window.desktop.sendAgentRequest({
+        await sendAgentRequest({
           type: "session.history",
           requestId,
           sessionId: conversationId,
@@ -512,18 +513,14 @@ export function useAgentConversationRuntime({
         ),
       );
       try {
-        await window.desktop.sendAgentRequest(request);
+        await sendAgentRequest(request);
         setConversations((current) =>
           touchConversationList(current, conversationId, createdAt),
         );
         void refreshGlobalTasks();
         return true;
       } catch (error) {
-        const reportedError =
-          error instanceof Error &&
-          error.message.startsWith("agent_run.conversation_busy:")
-            ? new Error(t("agent.conversationBusy"))
-            : error;
+        const reportedError = localizeAgentRequestError(error, t);
         conversationIdByRunId.current.delete(runId);
         workspace.releaseFileForRun(
           activeFile.projectId,
@@ -574,7 +571,7 @@ export function useAgentConversationRuntime({
     if (!runId || !activeConversation || !window.desktop) return false;
     const conversationId = activeConversation.conversationId;
     try {
-      await window.desktop.sendAgentRequest({ type: "run.cancel", runId });
+      await sendAgentRequest({ type: "run.cancel", runId });
       setGenerationPlanPresentation((current) =>
         clearGenerationPlanPresentationRun(current, runId),
       );
@@ -608,7 +605,7 @@ export function useAgentConversationRuntime({
       );
       if (!conversationId) return false;
       try {
-        await window.desktop.sendAgentRequest({
+        await sendAgentRequest({
           type: "approval.resolve",
           ...resolution,
         });
@@ -667,4 +664,37 @@ function activeGlobalTaskRunId(
         ["queued", "running", "waiting_approval"].includes(task.lifecycle),
     )?.runId ?? null
   );
+}
+
+class AgentRequestRejectedError extends Error {
+  constructor(
+    readonly code: AgentRequestErrorCode,
+    message: string,
+  ) {
+    super(message);
+    this.name = "AgentRequestRejectedError";
+  }
+}
+
+async function sendAgentRequest(request: AgentRequest): Promise<void> {
+  const desktop = window.desktop;
+  if (!desktop) throw new Error("Agent request bridge is unavailable");
+  const result = await desktop.sendAgentRequest(request);
+  if (!result.ok) {
+    throw new AgentRequestRejectedError(
+      result.error.code,
+      result.error.message,
+    );
+  }
+}
+
+function localizeAgentRequestError(error: unknown, t: Translate): unknown {
+  if (!(error instanceof AgentRequestRejectedError)) return error;
+  if (error.code === "conversation_busy") {
+    return new Error(t("agent.conversationBusy"));
+  }
+  if (error.code === "preflight_stale") {
+    return new Error(t("agent.preflightStale"));
+  }
+  return error;
 }

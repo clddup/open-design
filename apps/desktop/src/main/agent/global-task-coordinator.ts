@@ -68,6 +68,7 @@ import type {
   DesignVisualCriticContext,
   DesignVisualCriticResult,
 } from "./design-visual-critic.js";
+import { AgentRunAdmissionError } from "./agent-run-admission-error.js";
 
 type RunStartRequest = Extract<AgentRequest, { type: "run.start" }>;
 
@@ -298,8 +299,9 @@ export class GlobalTaskCoordinator {
       opened.document.documentId !== target.documentId ||
       opened.document.revision > target.baseRevision
     ) {
-      throw new Error(
-        `agent_run.preflight_stale: Design File advanced from revision ${target.baseRevision} to ${opened.document.revision} before the task started. Send the message again against the current design.`,
+      throw new AgentRunAdmissionError(
+        "preflight_stale",
+        `Design File advanced from revision ${target.baseRevision} to ${opened.document.revision} before the task started. Send the message again against the current design.`,
       );
     }
   }

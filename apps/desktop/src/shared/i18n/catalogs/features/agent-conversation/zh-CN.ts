@@ -78,6 +78,8 @@ export const agentConversationMessages = {
   "agent.defaultConversationTitle": "设计会话 {{count}}",
   "agent.continueTask": "继续任务",
   "agent.conversationBusy": "当前会话已有任务在运行，请先停止再发送新消息。",
+  "agent.preflightStale":
+    "任务启动前设计已发生变化，请重新发送以使用最新画布。",
   "agent.selectConversationPlaceholder": "选择会话以开始…",
   "agent.workingPlaceholder": "可以先输入下一条消息，停止当前任务后即可发送…",
   "agent.promptPlaceholder": "让 Agent 调整当前设计…",

@@ -16,7 +16,7 @@
 ## 决策
 
 - Conversation 仍保持单 Run 串行执行，避免同一会话上下文并发写入。
-- 同一 Conversation 已有显式 Run 时，第二条显式消息必须在 Main admission 立即拒绝，不能利用 utility-process session lock 静默排队。Renderer 以 Main-owned Global Task 作为活动状态兜底，不展示未被 Main 接受的 optimistic user message；真正的用户可见排队发送仍须独立建模。
+- 同一 Conversation 已有显式 Run 时，第二条显式消息必须在 Main admission 立即返回结构化 `conversation_busy`，不能利用 utility-process session lock 静默排队。Renderer 以 Main-owned Global Task 作为活动状态兜底，不展示未被 Main 接受的 optimistic user message；真正的用户可见排队发送仍须独立建模。结果契约见 ADR-0187。
 - Renderer 发起的显式用户 `run.start` 在注册前，取消同 Conversation 中 active 或 queued 的所有 automatic continuation；取消意图沿 parent→latest child 链传播。
 - 自动 continuation 不取代显式用户消息，也不能在新消息之后恢复旧 prompt。已提交 revision 和 unfinished delivery ledger 保留，新显式 Run 可通过 inspection 决定是否继续。
 - 无可信 revision 进展时，单工具连续 invalid input 从四次收紧为两次，跨工具 recoverable failure 从八次收紧为四次；达到阈值进入明确 terminal failure，不再继续 provider 空转。

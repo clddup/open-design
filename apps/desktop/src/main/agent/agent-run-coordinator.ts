@@ -9,6 +9,7 @@ import { prepareAgentContinuation } from "./agent-continuation-host.js";
 import { AgentContinuationScheduler } from "./agent-continuation-scheduler.js";
 import type { AgentHost } from "./agent-host.js";
 import type { AgentReferenceHost } from "./agent-reference-host.js";
+import { AgentRunAdmissionError } from "./agent-run-admission-error.js";
 import { handleAgentRunControlRequest } from "./agent-run-starter.js";
 import type { GlobalTaskCoordinator } from "./global-task-coordinator.js";
 
@@ -68,8 +69,9 @@ export class AgentRunCoordinator {
       request.continuation === undefined &&
       this.#continuations.hasActiveExplicitConversationRun(request.sessionId)
     ) {
-      throw new Error(
-        "agent_run.conversation_busy: This Conversation already has an active task. Stop it before sending another message.",
+      throw new AgentRunAdmissionError(
+        "conversation_busy",
+        "This Conversation already has an active task. Stop it before sending another message.",
       );
     }
     const services = this.#requireRunServices();

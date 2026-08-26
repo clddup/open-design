@@ -31,6 +31,8 @@ import type {
   RendererDesignToolProgress,
   RendererDesignToolResponse,
 } from "./design-tool-bridge";
+import type { AgentRequestResult } from "./agent-request-contract";
+export type { AgentRequestResult } from "./agent-request-contract";
 import type { DiagnosticEvent, RendererDiagnosticReport } from "./diagnostics";
 import type {
   FontBinaryDescriptor,
@@ -371,7 +373,7 @@ export interface DesktopApi {
   setProjectLibraryUpdateAccepted: (
     request: SetProjectLibraryUpdateAcceptedRequest,
   ) => Promise<ProjectLibraryCatalog>;
-  sendAgentRequest: (request: AgentRequest) => Promise<void>;
+  sendAgentRequest: (request: AgentRequest) => Promise<AgentRequestResult>;
   onAgentEvent: (listener: (event: AgentEvent) => void) => () => void;
 }
 

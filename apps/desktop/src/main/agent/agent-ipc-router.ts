@@ -6,10 +6,12 @@ import {
 import type { IpcMainInvokeEvent } from "electron";
 import { channels } from "@/shared/desktop-api.js";
 import type { DiagnosticContext } from "@/shared/diagnostics.js";
+import type { AgentRequestResult } from "@/shared/agent-request-contract.js";
 import { handleAgentApprovalRequest } from "./agent-approval-handler.js";
 import type { AgentHost } from "./agent-host.js";
 import type { AgentRunCoordinator } from "./agent-run-coordinator.js";
 import type { GlobalTaskCoordinator } from "./global-task-coordinator.js";
+import { AgentRunAdmissionError } from "./agent-run-admission-error.js";
 
 type AgentIpcHandler = (
   event: IpcMainInvokeEvent,
@@ -56,7 +58,7 @@ export class AgentIpcRouter {
       if (!isAgentRequest(request)) {
         throw new TypeError("Invalid Agent request");
       }
-      return this.#handleRequest(request);
+      return this.#handleRequestResult(request);
     });
     this.#detachAgentListener = this.#options.agentHost.on((event) => {
       this.#handleEvent(event);
@@ -71,6 +73,26 @@ export class AgentIpcRouter {
     this.clear();
     this.#detachAgentListener?.();
     this.#detachAgentListener = null;
+  }
+
+  async #handleRequestResult(
+    request: AgentRequest,
+  ): Promise<AgentRequestResult> {
+    try {
+      await this.#handleRequest(request);
+      return { ok: true };
+    } catch (error) {
+      return {
+        ok: false,
+        error: {
+          code:
+            error instanceof AgentRunAdmissionError
+              ? error.code
+              : "request_rejected",
+          message: agentRequestFailureMessage(error),
+        },
+      };
+    }
   }
 
   async #handleRequest(request: AgentRequest): Promise<void> {
@@ -149,6 +171,12 @@ export class AgentIpcRouter {
     }
     return coordinator;
   }
+}
+
+function agentRequestFailureMessage(error: unknown): string {
+  const message =
+    error instanceof Error ? error.message : "Agent request failed";
+  return (message.trim() || "Agent request failed").slice(0, 20_000);
 }
 
 function assertArgumentCount(args: unknown[], count: number): void {

@@ -5,6 +5,7 @@ import { channels } from "@/shared/desktop-api.js";
 import type { AgentHost, AgentHostListener } from "./agent-host.js";
 import { AgentIpcRouter, type AgentIpcRegistrar } from "./agent-ipc-router.js";
 import type { AgentRunCoordinator } from "./agent-run-coordinator.js";
+import { AgentRunAdmissionError } from "./agent-run-admission-error.js";
 
 type Handler = Parameters<AgentIpcRegistrar["handle"]>[1];
 const event = {} as IpcMainInvokeEvent;
@@ -24,7 +25,13 @@ describe("AgentIpcRouter", () => {
         protocolVersion: "3.10",
         clientVersion: "0.0.0",
       }),
-    ).rejects.toThrow("Agent handshake is host-internal");
+    ).resolves.toEqual({
+      ok: false,
+      error: {
+        code: "request_rejected",
+        message: "Agent handshake is host-internal",
+      },
+    });
 
     expect(assertRenderer).toHaveBeenCalledTimes(3);
     expect(send).not.toHaveBeenCalled();
@@ -52,7 +59,7 @@ describe("AgentIpcRouter", () => {
       sessionId: "conversation_1",
     };
 
-    await expect(handler(event, request)).resolves.toBeUndefined();
+    await expect(handler(event, request)).resolves.toEqual({ ok: true });
     expect(send).toHaveBeenCalledWith(request);
 
     const historyEvent: AgentEvent = {
@@ -94,7 +101,13 @@ describe("AgentIpcRouter", () => {
         requestId: "history_2",
         sessionId: "conversation_2",
       }),
-    ).rejects.toThrow("Agent process is not ready");
+    ).resolves.toEqual({
+      ok: false,
+      error: {
+        code: "request_rejected",
+        message: "Agent process is not ready",
+      },
+    });
 
     const errorEvent: AgentEvent = {
       type: "agent.error",
@@ -113,7 +126,7 @@ describe("AgentIpcRouter", () => {
     const handler = requireAgentRequestHandler(handlers);
     const cancel: AgentRequest = { type: "run.cancel", runId: "run_1" };
 
-    await expect(handler(event, cancel)).resolves.toBeUndefined();
+    await expect(handler(event, cancel)).resolves.toEqual({ ok: true });
     expect(handleRunRequest).toHaveBeenCalledWith(cancel);
     expect(send).not.toHaveBeenCalled();
 
@@ -125,6 +138,39 @@ describe("AgentIpcRouter", () => {
     };
     emit(completed);
     expect(handleRunEvent).toHaveBeenCalledWith(completed);
+  });
+
+  it("returns a structured admission failure without parsing Error messages", async () => {
+    const handleRunRequest = vi.fn(() =>
+      Promise.reject(
+        new AgentRunAdmissionError(
+          "conversation_busy",
+          "Conversation already has an active task",
+        ),
+      ),
+    );
+    const { handlers } = setup({ handleRunRequest });
+    const handler = requireAgentRequestHandler(handlers);
+
+    await expect(
+      handler(event, {
+        type: "run.start",
+        runId: "run_second",
+        sessionId: "conversation_1",
+        prompt: "继续",
+        documentId: "document_1",
+        revision: 4,
+        scope: { kind: "page", pageId: "page_1", selectedNodeIds: [] },
+        mutationTarget: { kind: "page", pageId: "page_1" },
+        modelSelection: { providerId: "provider_1", modelId: "model_1" },
+      }),
+    ).resolves.toEqual({
+      ok: false,
+      error: {
+        code: "conversation_busy",
+        message: "Conversation already has an active task",
+      },
+    });
   });
 
   it("registers once and detaches the Agent listener on dispose", () => {
@@ -150,6 +196,7 @@ describe("AgentIpcRouter", () => {
 
 function setup(overrides?: {
   assertRenderer?: (event: IpcMainInvokeEvent, message?: string) => void;
+  handleRunRequest?: (request: AgentRequest) => Promise<void>;
   send?: (request: AgentRequest) => void;
 }) {
   const handlers = new Map<string, Handler>();
@@ -167,7 +214,8 @@ function setup(overrides?: {
   const observeEvent = vi.fn();
   const publish = vi.fn();
   const handleRunEvent = vi.fn();
-  const handleRunRequest = vi.fn(() => Promise.resolve());
+  const handleRunRequest =
+    overrides?.handleRunRequest ?? vi.fn(() => Promise.resolve());
   const runCoordinator = {
     conversationIdForRun: vi.fn(),
     handleEvent: handleRunEvent,

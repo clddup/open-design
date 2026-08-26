@@ -883,7 +883,7 @@ describe("GlobalTaskCoordinator", () => {
     });
     await expect(
       coordinator.assertRunRevisionCurrent("run_preflight_revision"),
-    ).rejects.toThrow("agent_run.preflight_stale");
+    ).rejects.toMatchObject({ code: "preflight_stale" });
   });
 
   it("binds the accepted Plan v6 quality profile to the active Frame capture target", async () => {

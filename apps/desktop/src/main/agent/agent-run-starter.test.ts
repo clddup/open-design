@@ -6,6 +6,7 @@ import {
   handleAgentRunControlRequest,
   startAgentRun,
 } from "./agent-run-starter";
+import { AgentRunAdmissionError } from "./agent-run-admission-error";
 
 type RunStartRequest = Extract<AgentRequest, { type: "run.start" }>;
 
@@ -86,7 +87,9 @@ describe("Agent Run starter", () => {
     const handleAgentEvent = vi.fn();
     const assertRunRevisionCurrent = vi
       .fn()
-      .mockRejectedValue(new Error("agent_run.preflight_stale"));
+      .mockRejectedValue(
+        new AgentRunAdmissionError("preflight_stale", "Design File advanced"),
+      );
 
     await expect(
       startAgentRun(source, {
@@ -106,7 +109,7 @@ describe("Agent Run starter", () => {
           releaseRun: vi.fn(),
         } as never,
       }),
-    ).rejects.toThrow("agent_run.preflight_stale");
+    ).rejects.toMatchObject({ code: "preflight_stale" });
 
     expect(assertRunRevisionCurrent).toHaveBeenCalledWith(source.runId);
     expect(send).not.toHaveBeenCalled();

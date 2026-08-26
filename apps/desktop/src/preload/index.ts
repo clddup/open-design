@@ -11,6 +11,7 @@ import {
 import { projectAgentEvent } from "./agent-event";
 import type { GlobalTaskProjection } from "@opendesign/workspace-contracts";
 import { createConversationApi } from "./conversation-api";
+import { AgentRequestResultContract } from "@/shared/agent-request-contract";
 import {
   channels,
   isAgentAttachmentPreviewRequest,
@@ -808,9 +809,15 @@ const desktopApi: DesktopApi = Object.freeze({
     ipcRenderer.on(channels.themeChanged, handler);
     return () => ipcRenderer.removeListener(channels.themeChanged, handler);
   },
-  sendAgentRequest: (request: AgentRequest) => {
+  sendAgentRequest: async (request: AgentRequest) => {
     validate(request, isAgentRequest, "Invalid Agent request");
-    return ipcRenderer.invoke(channels.agentRequest, request);
+    const result: unknown = await ipcRenderer.invoke(
+      channels.agentRequest,
+      request,
+    );
+    const parsed = AgentRequestResultContract.parse(result);
+    if (!parsed.ok) throw new TypeError("Invalid Agent request result");
+    return parsed.value;
   },
   onAgentEvent: (listener: (event: AgentEvent) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, event: unknown) => {

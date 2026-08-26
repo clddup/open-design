@@ -88,6 +88,8 @@ export const agentConversationMessages = {
   "agent.continueTask": "Continue the task",
   "agent.conversationBusy":
     "This conversation already has a running task. Stop it before sending another message.",
+  "agent.preflightStale":
+    "The design changed before this task started. Send the message again to use the latest canvas.",
   "agent.selectConversationPlaceholder": "Select a Conversation to begin…",
   "agent.workingPlaceholder":
     "Draft the next message, then stop the current run to send it…",

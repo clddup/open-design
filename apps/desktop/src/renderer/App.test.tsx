@@ -367,7 +367,7 @@ beforeEach(() => {
     setProjectLibraryEnabled: vi.fn(),
     setProjectLibraryUpdateIgnored: vi.fn(),
     setProjectLibraryUpdateAccepted: vi.fn(),
-    sendAgentRequest: vi.fn().mockResolvedValue(undefined),
+    sendAgentRequest: vi.fn().mockResolvedValue({ ok: true }),
     onAgentEvent: vi
       .fn()
       .mockImplementation((listener: (event: AgentEvent) => void) => {
@@ -6471,7 +6471,7 @@ describe("App", () => {
       (request) =>
         request.type === "run.start"
           ? Promise.reject(new Error("Agent process is not ready"))
-          : Promise.resolve(),
+          : Promise.resolve({ ok: true as const }),
     );
 
     const prompt = screen.getByLabelText("Continue the task");
@@ -6487,6 +6487,33 @@ describe("App", () => {
         message.textContent?.includes("Create a pricing card"),
       ),
     ).toBe(false);
+  });
+
+  it("uses the structured busy code for a rejected follow-up message", async () => {
+    const { user } = await openProjectConversation();
+    vi.mocked(window.desktop!.sendAgentRequest).mockImplementationOnce(
+      (request) =>
+        request.type === "run.start"
+          ? Promise.resolve({
+              ok: false,
+              error: {
+                code: "conversation_busy",
+                message: "Internal admission message",
+              },
+            })
+          : Promise.resolve({ ok: true as const }),
+    );
+
+    const prompt = screen.getByLabelText("Continue the task");
+    await user.type(prompt, "Continue the current design");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(
+      await screen.findByText(
+        "This conversation already has a running task. Stop it before sending another message.",
+      ),
+    ).toBeInTheDocument();
+    expect(prompt).toHaveValue("Continue the current design");
   });
 
   it("keeps the composer bound to a Main-owned active Conversation task", async () => {

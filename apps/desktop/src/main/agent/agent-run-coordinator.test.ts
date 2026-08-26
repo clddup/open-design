@@ -100,9 +100,9 @@ describe("AgentRunCoordinator", () => {
       prompt: "继续",
     };
 
-    await expect(fixture.coordinator.handleRequest(second)).rejects.toThrow(
-      "agent_run.conversation_busy",
-    );
+    await expect(
+      fixture.coordinator.handleRequest(second),
+    ).rejects.toMatchObject({ code: "conversation_busy" });
     expect(fixture.globalTaskCoordinator.registerRun).toHaveBeenCalledTimes(1);
     expect(fixture.send).not.toHaveBeenCalledWith(
       expect.objectContaining({ runId: second.runId }),
