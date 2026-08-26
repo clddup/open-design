@@ -39,6 +39,10 @@ import {
   isSaveRasterFileRequest,
   isSaveRasterFileResult,
 } from "./desktop-api";
+import {
+  FontBinaryPayloadContract,
+  FontBinaryReadRequestContract,
+} from "./font-binary-contract";
 
 const now = "2026-08-07T12:00:00.000Z";
 
@@ -736,6 +740,30 @@ describe("Font binary desktop API guards", () => {
       isFontBinaryPayload({ ...descriptor, bytes: new Uint8Array(11) }),
     ).toBe(false);
     expect(isFontBinaryReadRequest({ fontId: "../../font.ttf" })).toBe(false);
+  });
+
+  it("reports structure and byte-length failures through the contract owner", () => {
+    expect(
+      FontBinaryReadRequestContract.issues({ fontId: "../../font.ttf" }),
+    ).toEqual([
+      expect.objectContaining({
+        code: "font_binary_read_request.schema_invalid",
+        path: "/fontId",
+      }),
+    ]);
+    expect(
+      FontBinaryPayloadContract.issues({
+        ...descriptor,
+        bytes: new Uint8Array(11),
+      }),
+    ).toEqual([
+      expect.objectContaining({
+        code: "font_binary_payload.byte_size_mismatch",
+        path: "/bytes",
+        expected: 12,
+        actual: 11,
+      }),
+    ]);
   });
 });
 

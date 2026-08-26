@@ -1,3 +1,47 @@
+import { Type } from "@sinclair/typebox";
+import { defineContract, type ValidationIssue } from "./contract-validation";
+
+const FontBinaryIdSchema = Type.String({
+  pattern: "^font_[a-f0-9]{64}$",
+});
+const FontBinaryNameSchema = Type.String({
+  minLength: 1,
+  maxLength: 255,
+  pattern: "^[^\\u0000-\\u001F\\u007F]+$",
+});
+const FontBinaryByteSizeSchema = Type.Integer({
+  minimum: 12,
+  maximum: 32 * 1024 * 1024,
+});
+const FontBinaryFormatSchema = Type.Union([
+  Type.Literal("otf"),
+  Type.Literal("ttc"),
+  Type.Literal("ttf"),
+]);
+
+export const FontBinaryDescriptorSchema = Type.Object(
+  {
+    byteSize: FontBinaryByteSizeSchema,
+    fontId: FontBinaryIdSchema,
+    format: FontBinaryFormatSchema,
+    name: FontBinaryNameSchema,
+  },
+  { additionalProperties: false },
+);
+
+export const FontBinaryPayloadSchema = Type.Object(
+  {
+    ...FontBinaryDescriptorSchema.properties,
+    bytes: Type.Uint8Array(),
+  },
+  { additionalProperties: false },
+);
+
+export const FontBinaryReadRequestSchema = Type.Object(
+  { fontId: FontBinaryIdSchema },
+  { additionalProperties: false },
+);
+
 export type FontBinaryDescriptor = {
   byteSize: number;
   fontId: `font_${string}`;
@@ -11,73 +55,73 @@ export type FontBinaryPayload = FontBinaryDescriptor & {
 
 export type FontBinaryReadRequest = { fontId: `font_${string}` };
 
+export const FontBinaryDescriptorContract =
+  defineContract<FontBinaryDescriptor>({
+    schema: FontBinaryDescriptorSchema,
+    code: "font_binary_descriptor.schema_invalid",
+    subject: "font binary descriptor",
+    clone: false,
+  });
+
+export const FontBinaryPayloadContract = defineContract<FontBinaryPayload>({
+  schema: FontBinaryPayloadSchema,
+  code: "font_binary_payload.schema_invalid",
+  subject: "font binary payload",
+  clone: false,
+  refine: (value) =>
+    value.bytes.byteLength === value.byteSize
+      ? []
+      : [
+          issue(
+            "font_binary_payload.byte_size_mismatch",
+            "/bytes",
+            "Font binary byte length must match the declared byteSize",
+            value.byteSize,
+            value.bytes.byteLength,
+          ),
+        ],
+});
+
+export const FontBinaryReadRequestContract =
+  defineContract<FontBinaryReadRequest>({
+    schema: FontBinaryReadRequestSchema,
+    code: "font_binary_read_request.schema_invalid",
+    subject: "font binary read request",
+    clone: false,
+  });
+
 export function isFontBinaryDescriptor(
   value: unknown,
 ): value is FontBinaryDescriptor {
-  return (
-    isRecord(value) &&
-    hasFontBinaryDescriptorFields(value) &&
-    hasExactKeys(value, ["fontId", "name", "byteSize", "format"])
-  );
+  return FontBinaryDescriptorContract.parse(value).ok;
 }
 
 export function isFontBinaryPayload(
   value: unknown,
 ): value is FontBinaryPayload {
-  return (
-    isRecord(value) &&
-    hasFontBinaryDescriptorFields(value) &&
-    value.bytes instanceof Uint8Array &&
-    value.bytes.byteLength === value.byteSize &&
-    hasExactKeys(value, ["fontId", "name", "byteSize", "format", "bytes"])
-  );
+  return FontBinaryPayloadContract.parse(value).ok;
 }
 
 export function isFontBinaryReadRequest(
   value: unknown,
 ): value is FontBinaryReadRequest {
-  return (
-    isRecord(value) &&
-    typeof value.fontId === "string" &&
-    /^font_[a-f0-9]{64}$/.test(value.fontId) &&
-    hasExactKeys(value, ["fontId"])
-  );
+  return FontBinaryReadRequestContract.parse(value).ok;
 }
 
-function hasFontBinaryDescriptorFields(
-  value: Record<string, unknown>,
-): boolean {
-  return (
-    typeof value.fontId === "string" &&
-    /^font_[a-f0-9]{64}$/.test(value.fontId) &&
-    typeof value.name === "string" &&
-    value.name.length > 0 &&
-    value.name.length <= 255 &&
-    !hasControlCharacter(value.name) &&
-    Number.isSafeInteger(value.byteSize) &&
-    Number(value.byteSize) >= 12 &&
-    Number(value.byteSize) <= 32 * 1024 * 1024 &&
-    (value.format === "ttf" || value.format === "otf" || value.format === "ttc")
-  );
-}
-
-function hasControlCharacter(value: string): boolean {
-  return [...value].some((character) => {
-    const code = character.codePointAt(0) ?? 0;
-    return code <= 0x1f || code === 0x7f;
-  });
-}
-
-function hasExactKeys(
-  value: Record<string, unknown>,
-  keys: readonly string[],
-): boolean {
-  return (
-    Object.keys(value).length === keys.length &&
-    keys.every((key) => Object.prototype.hasOwnProperty.call(value, key))
-  );
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+function issue(
+  code: string,
+  path: string,
+  message: string,
+  expected: number,
+  actual: number,
+): ValidationIssue {
+  return {
+    code,
+    path,
+    message,
+    expected,
+    actual,
+    recovery:
+      "Return the complete font bytes together with their exact byte length.",
+  };
 }
