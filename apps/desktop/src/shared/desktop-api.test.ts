@@ -29,8 +29,10 @@ import {
   isProjectManifestResult,
   isRecentProject,
   isRenameProjectDesignFileRequest,
+  isOpenDesignFile,
   isOpenSvgFile,
   isSaveDesignFileRequest,
+  isSaveDesignFileResult,
   isSaveGlobalImageGenerationSettingsRequest,
   isSaveModelProviderProfileRequest,
   isSaveProjectDesignFileRequest,
@@ -43,6 +45,11 @@ import {
   FontBinaryPayloadContract,
   FontBinaryReadRequestContract,
 } from "./font-binary-contract";
+import {
+  SaveDesignFileRequestContract,
+  SaveRasterFileRequestContract,
+  SaveSvgFileResultContract,
+} from "./native-file-contract";
 
 const now = "2026-08-07T12:00:00.000Z";
 
@@ -1001,6 +1008,13 @@ describe("isSaveDesignFileRequest", () => {
         contents: '{"format":"dev.opendesign.document"}',
       }),
     ).toBe(true);
+    expect(
+      isOpenDesignFile({
+        name: "Current.opendesign",
+        contents: '{"format":"dev.opendesign.document"}',
+      }),
+    ).toBe(true);
+    expect(isSaveDesignFileResult({ name: "Current.opendesign" })).toBe(true);
   });
 
   it("allows Save As without accepting renderer-selected paths", () => {
@@ -1045,6 +1059,32 @@ describe("isSaveDesignFileRequest", () => {
         contents: "x".repeat(64 * 1024 * 1024 + 1),
       }),
     ).toBe(false);
+  });
+
+  it("returns stable paths for privileged fields and non-portable names", () => {
+    expect(
+      SaveDesignFileRequestContract.issues({
+        suggestedName: "Untitled",
+        contents: "{}",
+        path: "/tmp/forged.opendesign",
+      }),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "save_design_file_request.schema_invalid",
+        path: "/path",
+      }),
+    );
+    expect(
+      SaveDesignFileRequestContract.issues({
+        suggestedName: "CON",
+        contents: "{}",
+      }),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "native_file.name_invalid",
+        path: "/suggestedName",
+      }),
+    );
   });
 });
 
@@ -1105,6 +1145,15 @@ describe("SVG file desktop API guards", () => {
       }),
     ).toBe(false);
   });
+
+  it("locates invalid SVG result extensions", () => {
+    expect(SaveSvgFileResultContract.issues({ name: "Brand.png" })).toEqual([
+      expect.objectContaining({
+        code: "native_file.svg_extension_invalid",
+        path: "/name",
+      }),
+    ]);
+  });
 });
 
 describe("raster file desktop API guards", () => {
@@ -1129,5 +1178,19 @@ describe("raster file desktop API guards", () => {
       false,
     );
     expect(isSaveRasterFileRequest({ ...request, width: 20_000 })).toBe(false);
+  });
+
+  it("uses the format discriminant to locate MIME drift", () => {
+    expect(
+      SaveRasterFileRequestContract.issues({
+        ...request,
+        mimeType: "image/png",
+      }),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "save_raster_file_request.mime_type_mismatch",
+        path: "/mimeType",
+      }),
+    );
   });
 });

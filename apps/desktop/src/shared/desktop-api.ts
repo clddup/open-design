@@ -9,14 +9,6 @@ import type {
   ModelReasoningEffort,
   ModelSelection,
 } from "@opendesign/model-gateway";
-import { SVG_MAX_CHARACTERS } from "@opendesign/import-export-service/limits";
-import {
-  RASTER_EXPORT_MAX_ENCODED_BYTES,
-  isRasterExportFormat,
-  rasterExportMimeType,
-  type RasterExportFormat,
-  type RasterExportMimeType,
-} from "@opendesign/import-export-service/raster";
 import {
   isDesignAsset,
   isImageAssetDerivation,
@@ -52,7 +44,6 @@ import type {
   RendererDesignToolResponse,
 } from "./design-tool-bridge";
 import type { DiagnosticEvent, RendererDiagnosticReport } from "./diagnostics";
-import { isPortableFileName } from "./portable-file-name";
 import type {
   FontBinaryDescriptor,
   FontBinaryPayload,
@@ -71,6 +62,16 @@ export {
   type ProviderConnectionResult,
 } from "./provider-connection";
 import type { ProviderConnectionResult } from "./provider-connection";
+import type {
+  OpenDesignFile,
+  OpenSvgFile,
+  SaveDesignFileRequest,
+  SaveDesignFileResult,
+  SaveRasterFileRequest,
+  SaveRasterFileResult,
+  SaveSvgFileRequest,
+  SaveSvgFileResult,
+} from "./native-file-contract";
 import type {
   ListProjectLibrariesRequest,
   ProjectLibraryCatalog,
@@ -115,6 +116,25 @@ export {
 } from "./diagnostics";
 
 export {
+  isOpenDesignFile,
+  isOpenSvgFile,
+  isSaveDesignFileRequest,
+  isSaveDesignFileResult,
+  isSaveRasterFileRequest,
+  isSaveRasterFileResult,
+  isSaveSvgFileRequest,
+  isSaveSvgFileResult,
+  type OpenDesignFile,
+  type OpenSvgFile,
+  type SaveDesignFileRequest,
+  type SaveDesignFileResult,
+  type SaveRasterFileRequest,
+  type SaveRasterFileResult,
+  type SaveSvgFileRequest,
+  type SaveSvgFileResult,
+} from "./native-file-contract";
+
+export {
   DEFAULT_APP_LOCALE,
   isAppLocale,
   SUPPORTED_LOCALES,
@@ -126,47 +146,6 @@ export type ThemePreference = "light" | "dark" | "system";
 export type PlatformInfo = { platform: NodeJS.Platform; version: string };
 
 export type WindowAction = "minimize" | "toggle-maximize" | "close";
-
-export type OpenDesignFile = {
-  name: string;
-  contents: string;
-};
-
-export type SaveDesignFileRequest = {
-  suggestedName: string;
-  contents: string;
-  saveAs?: boolean;
-};
-
-export type SaveDesignFileResult = { name: string };
-
-export type OpenSvgFile = {
-  name: string;
-  contents: string;
-};
-
-export type SaveSvgFileRequest = {
-  suggestedName: string;
-  contents: string;
-};
-
-export type SaveSvgFileResult = {
-  name: string;
-};
-
-export type SaveRasterFileRequest = {
-  suggestedName: string;
-  format: RasterExportFormat;
-  mimeType: RasterExportMimeType;
-  bytes: Uint8Array;
-  width: number;
-  height: number;
-};
-
-export type SaveRasterFileResult = {
-  name: string;
-  byteSize: number;
-};
 
 export const MODEL_PROVIDER_CATALOG_VERSION = 3 as const;
 export const GLOBAL_IMAGE_GENERATION_SETTINGS_VERSION = 1 as const;
@@ -1241,95 +1220,6 @@ export function isWindowAction(value: unknown): value is WindowAction {
   );
 }
 
-export function isSaveDesignFileRequest(
-  value: unknown,
-): value is SaveDesignFileRequest {
-  if (!value || typeof value !== "object") return false;
-  const request = value as Record<string, unknown>;
-  return (
-    typeof request.suggestedName === "string" &&
-    request.suggestedName.length > 0 &&
-    request.suggestedName.length <= 255 &&
-    !request.suggestedName.includes("/") &&
-    !request.suggestedName.includes("\\") &&
-    !hasControlCharacter(request.suggestedName) &&
-    typeof request.contents === "string" &&
-    request.contents.length > 0 &&
-    request.contents.length <= 64 * 1024 * 1024 &&
-    (request.saveAs === undefined || typeof request.saveAs === "boolean") &&
-    Object.keys(request).every((key) =>
-      ["suggestedName", "contents", "saveAs"].includes(key),
-    )
-  );
-}
-
-export function isOpenSvgFile(value: unknown): value is OpenSvgFile {
-  if (!isRecord(value)) return false;
-  return (
-    isSvgFileName(value.name) &&
-    isBoundedSvgContents(value.contents) &&
-    hasExactKeys(value, ["name", "contents"])
-  );
-}
-
-export function isSaveSvgFileRequest(
-  value: unknown,
-): value is SaveSvgFileRequest {
-  if (!isRecord(value)) return false;
-  return (
-    isSuggestedFileName(value.suggestedName) &&
-    isBoundedSvgContents(value.contents) &&
-    hasExactKeys(value, ["suggestedName", "contents"])
-  );
-}
-
-export function isSaveSvgFileResult(
-  value: unknown,
-): value is SaveSvgFileResult {
-  return (
-    isRecord(value) &&
-    isSvgFileName(value.name) &&
-    hasExactKeys(value, ["name"])
-  );
-}
-
-export function isSaveRasterFileRequest(
-  value: unknown,
-): value is SaveRasterFileRequest {
-  if (!isRecord(value)) return false;
-  return (
-    isSuggestedFileName(value.suggestedName) &&
-    isRasterExportFormat(value.format) &&
-    value.mimeType === rasterExportMimeType(value.format) &&
-    value.bytes instanceof Uint8Array &&
-    value.bytes.byteLength > 0 &&
-    value.bytes.byteLength <= RASTER_EXPORT_MAX_ENCODED_BYTES &&
-    isRasterDimension(value.width) &&
-    isRasterDimension(value.height) &&
-    hasExactKeys(value, [
-      "suggestedName",
-      "format",
-      "mimeType",
-      "bytes",
-      "width",
-      "height",
-    ])
-  );
-}
-
-export function isSaveRasterFileResult(
-  value: unknown,
-): value is SaveRasterFileResult {
-  return (
-    isRecord(value) &&
-    isSuggestedFileName(value.name) &&
-    Number.isInteger(value.byteSize) &&
-    Number(value.byteSize) > 0 &&
-    Number(value.byteSize) <= RASTER_EXPORT_MAX_ENCODED_BYTES &&
-    hasExactKeys(value, ["name", "byteSize"])
-  );
-}
-
 export function isCreateProjectRequest(
   value: unknown,
 ): value is CreateProjectRequest {
@@ -1792,25 +1682,6 @@ function hasControlCharacter(value: string): boolean {
     const codePoint = character.codePointAt(0);
     return codePoint !== undefined && (codePoint <= 31 || codePoint === 127);
   });
-}
-
-function isBoundedSvgContents(value: unknown): value is string {
-  if (typeof value !== "string") return false;
-  return value.length > 0 && value.length <= SVG_MAX_CHARACTERS;
-}
-
-function isSuggestedFileName(value: unknown): value is string {
-  return isPortableFileName(value);
-}
-
-function isSvgFileName(value: unknown): value is string {
-  return isSuggestedFileName(value) && value.toLowerCase().endsWith(".svg");
-}
-
-function isRasterDimension(value: unknown): value is number {
-  return (
-    Number.isInteger(value) && Number(value) > 0 && Number(value) <= 16_384
-  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -1,25 +1,53 @@
+import { Type } from "@sinclair/typebox";
+import { defineContract, type ValidationIssue } from "./contract-validation";
+
 const WINDOWS_RESERVED_FILE_NAME =
   /^(?:con|prn|aux|nul|com[1-9\u00b9\u00b2\u00b3]|lpt[1-9\u00b9\u00b2\u00b3])(?:\..*)?$/i;
-const WINDOWS_FORBIDDEN_FILE_NAME_CHARACTER = /[<>:"/\\|?*]/;
+
+export const PortableFileNameSchema = Type.String({
+  minLength: 1,
+  maxLength: 255,
+  pattern: '^[^<>:"/\\\\|?*\\u0000-\\u001F\\u007F]+$',
+});
+
+export const PortableFileNameContract = defineContract<string>({
+  schema: PortableFileNameSchema,
+  code: "portable_file_name.schema_invalid",
+  subject: "portable file name",
+  clone: false,
+  refine: portableFileNameIssues,
+});
 
 /**
  * Accepts a path-free file name that behaves consistently on macOS and
  * Windows. Native dialogs remain responsible for choosing the directory.
  */
 export function isPortableFileName(value: unknown): value is string {
-  return (
-    typeof value === "string" &&
-    value.length > 0 &&
-    value.length <= 255 &&
-    value.trim().length > 0 &&
-    value !== "." &&
-    value !== ".." &&
-    !WINDOWS_FORBIDDEN_FILE_NAME_CHARACTER.test(value) &&
-    !/[. ]$/.test(value) &&
-    !WINDOWS_RESERVED_FILE_NAME.test(value) &&
-    ![...value].some((character) => {
-      const code = character.codePointAt(0) ?? 0;
-      return code < 32 || code === 127;
-    })
-  );
+  return PortableFileNameContract.parse(value).ok;
+}
+
+function portableFileNameIssues(value: string): ValidationIssue[] {
+  if (value.trim().length === 0 || value === "." || value === "..") {
+    return [issue("portable_file_name.empty", "File name must contain text")];
+  }
+  if (/[. ]$/.test(value)) {
+    return [
+      issue(
+        "portable_file_name.trailing_character",
+        "File name must not end in a dot or space",
+      ),
+    ];
+  }
+  return WINDOWS_RESERVED_FILE_NAME.test(value)
+    ? [issue("portable_file_name.reserved", "File name is reserved by Windows")]
+    : [];
+}
+
+function issue(code: string, message: string): ValidationIssue {
+  return {
+    code,
+    path: "/",
+    message,
+    recovery: "Choose a path-free file name valid on both macOS and Windows.",
+  };
 }

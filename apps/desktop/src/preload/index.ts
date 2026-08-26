@@ -50,7 +50,10 @@ import {
   isSetProjectLibraryUpdateAcceptedRequest,
   isSetProjectLibraryUpdateIgnoredRequest,
   isRecentProject,
+  isOpenDesignFile,
   isOpenSvgFile,
+  isSaveDesignFileRequest,
+  isSaveDesignFileResult,
   isSaveProjectDesignFileRequest,
   isSaveSvgFileRequest,
   isSaveSvgFileResult,
@@ -98,6 +101,8 @@ import {
   type SetProjectLibraryUpdateIgnoredRequest,
   type RecentProject,
   type SaveDesignFileRequest,
+  type SaveDesignFileResult,
+  type OpenDesignFile,
   type OpenSvgFile,
   type SaveModelProviderProfileRequest,
   type SaveGlobalImageGenerationSettingsRequest,
@@ -496,9 +501,28 @@ const desktopApi: DesktopApi = Object.freeze({
   },
   windowAction: (action: WindowAction) =>
     ipcRenderer.invoke(channels.windowAction, action),
-  openDesignFile: () => ipcRenderer.invoke(channels.openDesignFile),
-  saveDesignFile: (request: SaveDesignFileRequest) =>
-    ipcRenderer.invoke(channels.saveDesignFile, request),
+  openDesignFile: async () => {
+    const result: unknown = await ipcRenderer.invoke(channels.openDesignFile);
+    if (result === null) return null;
+    return validate<OpenDesignFile>(
+      result,
+      isOpenDesignFile,
+      "Invalid Design File response",
+    );
+  },
+  saveDesignFile: async (request: SaveDesignFileRequest) => {
+    validate(request, isSaveDesignFileRequest, "Invalid Design File request");
+    const result: unknown = await ipcRenderer.invoke(
+      channels.saveDesignFile,
+      request,
+    );
+    if (result === null) return null;
+    return validate<SaveDesignFileResult>(
+      result,
+      isSaveDesignFileResult,
+      "Invalid Design File save response",
+    );
+  },
   openSvgFile: async () => {
     const result: unknown = await ipcRenderer.invoke(channels.openSvgFile);
     if (result === null) return null;
