@@ -23,6 +23,7 @@ import {
   planReparentNodes,
   planReorderNodes,
   planSetBooleanOperation,
+  planSmartSelectionSpacing,
   planToggleMaskNodes,
   planUngroupBooleanGroup,
   planUngroupNode,
@@ -31,6 +32,7 @@ import {
   type LayerOrderAction,
   type LayerRenameInput,
 } from "@opendesign/editor-runtime";
+import type { LeaferSmartSelectionSpacingRequest } from "@opendesign/leafer-engine";
 import { useCallback, useMemo } from "react";
 import type { MessageKey, MessageParameters } from "@/shared/i18n/messages";
 import type {
@@ -478,6 +480,44 @@ export function useLayerCommandController({
     ],
   );
 
+  const adjustSmartSelectionSpacing = useCallback(
+    (request: LeaferSmartSelectionSpacingRequest): boolean => {
+      const current = runtime.getSnapshot();
+      if (
+        current.document.documentId !== request.documentId ||
+        current.document.revision !== request.expectedRevision ||
+        activePageId !== request.pageId ||
+        !sameNodeSet(current.state.selection.nodeIds, request.nodeIds) ||
+        current.state.selection.componentTarget
+      ) {
+        setEditorError(t("canvas.smartSelectionStale"));
+        return false;
+      }
+      const operationId = `smart_spacing_${Date.now()}_${++transactionCounter.current}`;
+      const plan = planSmartSelectionSpacing(
+        current.document,
+        activePageId,
+        request.nodeIds,
+        request.axis,
+        request.spacing,
+        operationId,
+      );
+      if (!plan.ok) {
+        setEditorError(plan.code === "no-op" ? null : plan.message);
+        return false;
+      }
+      return applyCommands(t("history.setLayerSpacing"), plan.commands);
+    },
+    [
+      activePageId,
+      applyCommands,
+      runtime,
+      setEditorError,
+      t,
+      transactionCounter,
+    ],
+  );
+
   const renameLayers = useCallback(
     (
       nodeIds: readonly string[],
@@ -534,6 +574,7 @@ export function useLayerCommandController({
   return {
     ...capabilities,
     applyBooleanOperation,
+    adjustSmartSelectionSpacing,
     arrangeSelection,
     deleteNodes,
     duplicateSelection,
@@ -562,6 +603,18 @@ function filterTopLevelNodeIds(
     }
     return true;
   });
+}
+
+function sameNodeSet(
+  left: readonly string[],
+  right: readonly string[],
+): boolean {
+  if (left.length !== right.length) return false;
+  const rightSet = new Set(right);
+  return (
+    rightSet.size === left.length &&
+    left.every((nodeId) => rightSet.has(nodeId))
+  );
 }
 
 function duplicateNodes(

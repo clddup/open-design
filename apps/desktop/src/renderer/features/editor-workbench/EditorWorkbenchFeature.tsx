@@ -206,6 +206,7 @@ export function EditorWorkbenchFeature({
   });
   const {
     applyBooleanOperation,
+    adjustSmartSelectionSpacing,
     arrangementMetrics,
     arrangeSelection,
     canChangeSelectedBoolean,
@@ -633,6 +634,7 @@ export function EditorWorkbenchFeature({
               }
               onTransactionError={setEditorError}
               onAdjustAutoLayoutSpacing={editorCommands.adjustAutoLayoutSpacing}
+              onAdjustSmartSelectionSpacing={adjustSmartSelectionSpacing}
               onAssetDrop={placeImageAssetAtPoint}
               onImageAreaEdit={(nodeId, action, selection) =>
                 void runImageEdit(nodeId, { action, selection })

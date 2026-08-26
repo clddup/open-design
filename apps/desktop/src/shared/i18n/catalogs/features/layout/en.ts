@@ -15,6 +15,8 @@ export const layoutMessages = {
     "The selected Auto Layout changed while spacing was being adjusted. Drag the current canvas handle again.",
   "canvas.gridTrackStale":
     "The selected Grid changed while its track was being resized. Drag the current track edge again.",
+  "canvas.smartSelectionStale":
+    "The selection changed while spacing was being adjusted. Drag the current spacing handle again.",
   "agent.canvasCircuitOpen": "Canvas renderer repeatedly stalled",
   "agent.canvasCircuitOpenDetail":
     "OpenDesign stopped this task after repeated canvas stalls. Committed design revisions were preserved; restart OpenDesign before retrying visual generation.",

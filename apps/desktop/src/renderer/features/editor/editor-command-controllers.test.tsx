@@ -249,6 +249,74 @@ describe("editor command controllers", () => {
     ).toMatchObject({ properties: { autoLayout: before } });
   });
 
+  it("commits Smart Selection spacing for the exact document, page, revision, and selection", () => {
+    const document = structuredClone(createWelcomeDocument());
+    document.nodesById.feature_one.transform = [1, 0, 0, 1, 0, 0];
+    document.nodesById.feature_two.transform = [1, 0, 0, 1, 280, 0];
+    document.nodesById.feature_three.transform = [1, 0, 0, 1, 560, 0];
+    document.nodesById.feature_one.size = { width: 260, height: 100 };
+    document.nodesById.feature_two.size = { width: 260, height: 80 };
+    document.nodesById.feature_three.size = { width: 260, height: 120 };
+    const runtime = new EditorRuntime(document);
+    runtime.setSelection(
+      ["feature_three", "feature_one", "feature_two"],
+      "feature_two",
+    );
+    const before = structuredClone(runtime.getSnapshot().document);
+    const { result, setEditorError } = renderControllers(runtime);
+    let accepted = false;
+
+    act(() => {
+      accepted = result.current.layer.adjustSmartSelectionSpacing({
+        axis: "horizontal",
+        documentId: before.documentId,
+        expectedRevision: before.revision,
+        nodeIds: ["feature_one", "feature_two", "feature_three"],
+        pageId: "page_welcome",
+        spacing: 40,
+      });
+    });
+
+    expect(accepted).toBe(true);
+    let snapshot = runtime.getSnapshot();
+    expect(snapshot.document.revision).toBe(1);
+    expect(snapshot.state.history.undo).toHaveLength(1);
+    expect(snapshot.document.nodesById.feature_two?.transform[4]).toBe(
+      (before.nodesById.feature_two?.transform[4] ?? 0) + 20,
+    );
+    expect(snapshot.document.nodesById.feature_three?.transform[4]).toBe(
+      (before.nodesById.feature_three?.transform[4] ?? 0) + 40,
+    );
+    expect(setEditorError).toHaveBeenLastCalledWith(null);
+
+    act(() => {
+      accepted = result.current.layer.adjustSmartSelectionSpacing({
+        axis: "horizontal",
+        documentId: before.documentId,
+        expectedRevision: before.revision,
+        nodeIds: ["feature_one", "feature_two", "feature_three"],
+        pageId: "page_welcome",
+        spacing: 60,
+      });
+    });
+    expect(accepted).toBe(false);
+    expect(runtime.getSnapshot().document.revision).toBe(1);
+    expect(setEditorError).toHaveBeenLastCalledWith(
+      "中文:canvas.smartSelectionStale",
+    );
+
+    act(() => {
+      runtime.undo();
+    });
+    snapshot = runtime.getSnapshot();
+    expect(snapshot.document.nodesById.feature_two?.transform).toEqual(
+      before.nodesById.feature_two?.transform,
+    );
+    expect(snapshot.document.nodesById.feature_three?.transform).toEqual(
+      before.nodesById.feature_three?.transform,
+    );
+  });
+
   it("routes flow-child Fill sizing through the dedicated planner", () => {
     const document = structuredClone(createWelcomeDocument());
     const frame = document.nodesById.frame_welcome;

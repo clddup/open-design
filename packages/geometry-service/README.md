@@ -6,9 +6,10 @@ OpenDesign-owned, versioned geometry provider boundary. Contract v7 contains det
 - distribute one-dimensional gaps while preserving distinct outermost anchors;
 - set an exact positive, zero, or negative one-dimensional gap from the leading item;
 - infer and Tidy up a row, column, or unequal/sparse two-dimensional grid from the existing gap mode, anchoring a grid at the selection top-left;
+- analyze a Figma-compatible one- or two-dimensional Smart Selection and change one uniform spacing axis without flattening the other axis;
 - measure uniform spacing or a repeated gap without mutating design state.
 
-Tidy up rejects selections whose overlap graph cannot prove stable rows and columns, including diagonal-only placement, one object bridging multiple rows/columns, or multiple objects occupying one inferred grid cell. One-dimensional Tidy up changes only the inferred axis. Gap modes use deterministic spatial order to break equal-frequency ties (topmost row for horizontal gaps, then leftmost column for vertical gaps); no pixel-grid tolerance is implied. The arrangement surface deliberately does not claim Smart Selection canvas handles, reflow editing, snapping, or Auto Layout.
+Tidy up and Smart Selection reject selections whose overlap graph cannot prove stable rows and columns, including diagonal-only placement, one object bridging multiple rows/columns, or multiple objects occupying one inferred grid cell. One-dimensional operations change only the inferred axis. Gap modes use deterministic spatial order to break equal-frequency ties (topmost row for horizontal gaps, then leftmost column for vertical gaps); no pixel-grid tolerance is implied. Smart Selection spacing supports negative gaps for a one-dimensional selection; the current surface does not claim mark/reorder controls, structural reflow after duplicate/delete/resize, snapping, or Auto Layout.
 
 The root entry accepts plain IDs and bounds and returns pure placement deltas. It does not read or save `DesignDocument`, modify Leafer objects, infer the live selection, or own history. `EditorRuntime` resolves world/parent transforms, maintains dynamic Group bounds, validates the resulting `DesignOperation[]`, and applies one transaction.
 

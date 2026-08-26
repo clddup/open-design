@@ -8,6 +8,7 @@ import {
   getWorldTransform,
   normalizeDesignDocument,
   planArrangeNodes,
+  planSmartSelectionSpacing,
 } from "./index.js";
 
 function transaction(
@@ -214,6 +215,70 @@ describe("arrange operations", () => {
     expect(runtime.redo().ok).toBe(true);
     expect(getNodeBounds(runtime.getSnapshot().document, "grid_e")?.x).toBe(
       304,
+    );
+  });
+
+  it("changes one Smart grid spacing axis in one revision without flattening rows", () => {
+    const document = structuredClone(createWelcomeDocument());
+    const template = document.nodesById.feature_one!;
+    const placements = [
+      ["smart_a", 0, 0, 30, 20],
+      ["smart_b", 50, 0, 40, 30],
+      ["smart_c", 110, 0, 20, 25],
+      ["smart_d", 0, 70, 20, 40],
+      ["smart_e", 50, 70, 30, 20],
+      ["smart_f", 110, 70, 50, 35],
+    ] as const;
+    for (const [id, x, y, width, height] of placements) {
+      document.nodesById[id] = {
+        ...structuredClone(template),
+        id,
+        name: id,
+        transform: [1, 0, 0, 1, x, y],
+        size: { width, height },
+      };
+    }
+    document.nodesById.feature_group!.childIds = placements.map(([id]) => id);
+    document.nodesById.feature_group!.size = { width: 160, height: 110 };
+    delete document.nodesById.feature_one;
+    delete document.nodesById.feature_two;
+    delete document.nodesById.feature_three;
+    const runtime = new EditorRuntime(normalizeDesignDocument(document));
+    const before = runtime.getSnapshot();
+    const plan = planSmartSelectionSpacing(
+      before.document,
+      "page_welcome",
+      placements.map(([id]) => id),
+      "horizontal",
+      10,
+      "smart_horizontal",
+    );
+    if (!plan.ok) throw new Error(plan.message);
+    expect(plan).toMatchObject({
+      action: "set-horizontal-spacing",
+      resolvedHorizontalSpacing: 10,
+      resolvedVerticalSpacing: 40,
+      tidyUpDimension: "grid",
+    });
+    expect(runtime.apply(transaction(runtime, "smart", plan.commands)).ok).toBe(
+      true,
+    );
+    const result = runtime.getSnapshot();
+    expect(getNodeBounds(result.document, "smart_b")).toMatchObject({
+      x: 184,
+      y: 404,
+    });
+    expect(getNodeBounds(result.document, "smart_e")).toMatchObject({
+      x: 184,
+      y: 474,
+    });
+    expect(result.document.revision).toBe(before.document.revision + 1);
+    expect(result.state.history.undo).toHaveLength(
+      before.state.history.undo.length + 1,
+    );
+    expect(runtime.undo().ok).toBe(true);
+    expect(getNodeBounds(runtime.getSnapshot().document, "smart_e")?.x).toBe(
+      194,
     );
   });
 

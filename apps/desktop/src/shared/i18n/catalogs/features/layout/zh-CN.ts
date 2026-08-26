@@ -17,6 +17,8 @@ export const layoutMessages = {
     "调整间距时所选 Auto Layout 已发生变化，请重新拖动当前画布手柄。",
   "canvas.gridTrackStale":
     "调整轨道时所选网格已发生变化，请重新拖动当前轨道边缘。",
+  "canvas.smartSelectionStale":
+    "调整间距时选区已发生变化，请重新拖动当前间距手柄。",
   "agent.canvasCircuitOpen": "画布渲染连续停滞",
   "agent.canvasCircuitOpenDetail":
     "OpenDesign 已在画布连续停滞后停止本次任务。已提交的设计 revision 均已保留，请重启 OpenDesign 后再尝试视觉生成。",

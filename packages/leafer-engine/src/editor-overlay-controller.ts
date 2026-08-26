@@ -1,6 +1,7 @@
 import {
   DEFAULT_LAYOUT_SIZING,
   type DesignDocument,
+  type SelectionState,
   type ViewportState,
 } from "@opendesign/design-contracts";
 import type * as LeaferEditorModule from "leafer-editor";
@@ -31,10 +32,12 @@ import {
   type SliceOverlaySpec,
 } from "./slice-overlay.js";
 import type { LeaferEventLike } from "./pointer-event.js";
+import { SmartSelectionOverlayController } from "./smart-selection-overlay-controller.js";
 import type {
   LeaferAutoLayoutSpacingCommitRequest,
   LeaferAutoLayoutSpacingInputRequest,
   LeaferGridTrackInputRequest,
+  LeaferSmartSelectionSpacingRequest,
 } from "./types.js";
 
 type LeaferModule = typeof LeaferEditorModule;
@@ -65,9 +68,12 @@ export class EditorOverlayController {
   #sliceFingerprint: string | null = null;
   readonly #sliceLayer: LeaferGroup;
   readonly #sliceSpecs = new Map<string, SliceOverlaySpec>();
+  readonly #smartSelection: SmartSelectionOverlayController;
   readonly #viewportRoot: LeaferGroup;
 
   constructor(options: {
+    element: (nodeId: string) => LeaferElement | undefined;
+    finishNodePresentation: (nodeId: string) => void;
     leafer: LeaferModule;
     onGridTrackDelete: (request: {
       axis: GridEditorAxis;
@@ -95,7 +101,11 @@ export class EditorOverlayController {
       index: number;
       value: number;
     }) => boolean;
+    onSmartSelectionSpacing: (
+      request: LeaferSmartSelectionSpacingRequest,
+    ) => boolean;
     presentationRoot: LeaferGroup;
+    restoreProjection: () => void;
     viewportRoot: LeaferGroup;
   }) {
     this.#leafer = options.leafer;
@@ -122,6 +132,16 @@ export class EditorOverlayController {
       presentationRoot: options.presentationRoot,
       viewportRoot: options.viewportRoot,
     });
+    this.#smartSelection = new SmartSelectionOverlayController({
+      element: options.element,
+      finishNodePresentation: options.finishNodePresentation,
+      layerIndex: 6,
+      leafer: options.leafer,
+      onCommit: options.onSmartSelectionSpacing,
+      presentationRoot: options.presentationRoot,
+      restoreProjection: options.restoreProjection,
+      viewportRoot: options.viewportRoot,
+    });
   }
 
   get active(): boolean {
@@ -130,17 +150,24 @@ export class EditorOverlayController {
       this.#slotElements.size > 0 ||
       this.#sliceElements.size > 0 ||
       this.#autoLayoutSpacing.active ||
-      this.#gridEditor.active
+      this.#gridEditor.active ||
+      this.#smartSelection.active
     );
   }
 
   get dragging(): boolean {
-    return this.#autoLayoutSpacing.dragging || this.#gridEditor.dragging;
+    return (
+      this.#autoLayoutSpacing.dragging ||
+      this.#gridEditor.dragging ||
+      this.#smartSelection.dragging
+    );
   }
 
   cancelDrag(): boolean {
     return (
-      this.#autoLayoutSpacing.cancelDrag() || this.#gridEditor.cancelDrag()
+      this.#autoLayoutSpacing.cancelDrag() ||
+      this.#gridEditor.cancelDrag() ||
+      this.#smartSelection.cancelDrag()
     );
   }
 
@@ -199,6 +226,7 @@ export class EditorOverlayController {
     this.#sliceSpecs.clear();
     this.#autoLayoutSpacing.dispose();
     this.#gridEditor.dispose();
+    this.#smartSelection.dispose();
     this.#guideLayer.remove();
     this.#guideLayer.destroy();
     this.#slotLayer.remove();
@@ -213,6 +241,8 @@ export class EditorOverlayController {
     gridEditorFrameId?: string;
     layoutGuideFrameId?: string;
     pageId: string;
+    selection: SelectionState;
+    tool: string;
     viewport: ViewportState;
   }): void {
     this.#document = input.document;
@@ -231,25 +261,35 @@ export class EditorOverlayController {
       viewport: input.viewport,
       ...(input.gridEditorFrameId ? { frameId: input.gridEditorFrameId } : {}),
     });
+    this.#smartSelection.sync({
+      componentTargetActive: input.selection.componentTarget !== undefined,
+      document: input.document,
+      pageId: input.pageId,
+      selectedNodeIds: input.selection.nodeIds,
+      tool: input.tool,
+    });
     this.syncViewport(input.viewport);
   }
 
   pointerDown(event: LeaferEventLike): boolean {
     return (
       this.#autoLayoutSpacing.pointerDown(event) ||
-      this.#gridEditor.pointerDown(event)
+      this.#gridEditor.pointerDown(event) ||
+      this.#smartSelection.pointerDown(event)
     );
   }
 
   pointerMove(event: LeaferEventLike): boolean {
     if (this.#autoLayoutSpacing.pointerMove(event)) return true;
-    return this.#gridEditor.pointerMove(event);
+    if (this.#gridEditor.pointerMove(event)) return true;
+    return this.#smartSelection.pointerMove(event);
   }
 
   pointerUp(event: LeaferEventLike): boolean {
     return (
       this.#autoLayoutSpacing.pointerUp(event) ||
-      this.#gridEditor.pointerUp(event)
+      this.#gridEditor.pointerUp(event) ||
+      this.#smartSelection.pointerUp(event)
     );
   }
 
@@ -259,6 +299,7 @@ export class EditorOverlayController {
     this.#syncSliceViewport();
     this.#autoLayoutSpacing.syncViewport();
     this.#gridEditor.syncViewport(viewport);
+    this.#smartSelection.syncViewport();
   }
 
   #createLayer(index: number): LeaferGroup {

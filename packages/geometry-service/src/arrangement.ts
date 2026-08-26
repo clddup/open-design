@@ -70,6 +70,20 @@ export type SpacingMeasurement =
     }
   | ArrangementFailure;
 
+export type SmartSelectionAnalysis =
+  | {
+      ok: true;
+      columns: readonly (readonly string[])[];
+      dimension: TidyUpDimension;
+      horizontalSpacing?: number;
+      orderedIds: string[];
+      rows: readonly (readonly string[])[];
+      verticalSpacing?: number;
+    }
+  | ArrangementFailure;
+
+export type SmartSelectionSpacingPlan = ArrangementPlan | TidyUpPlan;
+
 type AxisItem = ArrangementItem & {
   center: number;
   end: number;
@@ -208,6 +222,147 @@ export function measureItemSpacing(
   };
 }
 
+export function analyzeSmartSelection(
+  items: readonly ArrangementItem[],
+): SmartSelectionAnalysis {
+  const validated = validateItems(items, 2);
+  if (!validated.ok) return validated;
+  const rowClusters = clusterByOverlap(validated.items, "vertical");
+  if (!rowClusters.ok) return rowClusters;
+  const columnClusters = clusterByOverlap(validated.items, "horizontal");
+  if (!columnClusters.ok) return columnClusters;
+
+  if (rowClusters.clusters.length === 1 && columnClusters.clusters.length > 1) {
+    return analyzeSmartSelectionLine(validated.items, "horizontal");
+  }
+  if (columnClusters.clusters.length === 1 && rowClusters.clusters.length > 1) {
+    return analyzeSmartSelectionLine(validated.items, "vertical");
+  }
+  if (
+    rowClusters.clusters.length === 1 &&
+    columnClusters.clusters.length === 1
+  ) {
+    const horizontalSpread = centerSpread(validated.items, "horizontal");
+    const verticalSpread = centerSpread(validated.items, "vertical");
+    if (nearlyEqual(horizontalSpread, verticalSpread)) {
+      return failure(
+        "ambiguous-anchors",
+        "Smart selection cannot infer a stable row or column from fully overlapping layers",
+      );
+    }
+    return analyzeSmartSelectionLine(
+      validated.items,
+      horizontalSpread > verticalSpread ? "horizontal" : "vertical",
+    );
+  }
+
+  const grid = inferSmartSelectionGrid(
+    validated.items,
+    rowClusters.clusters,
+    columnClusters.clusters,
+  );
+  if (!grid.ok) return grid;
+  return {
+    ok: true,
+    columns: grid.columns.map((column) => column.map((item) => item.id)),
+    dimension: "grid",
+    horizontalSpacing: grid.horizontalSpacing,
+    orderedIds: grid.ordered.map((item) => item.id),
+    rows: grid.rows.map((row) => row.map((item) => item.id)),
+    verticalSpacing: grid.verticalSpacing,
+  };
+}
+
+export function setSmartSelectionSpacing(
+  items: readonly ArrangementItem[],
+  axis: ArrangeAxis,
+  spacing: number,
+): SmartSelectionSpacingPlan {
+  if (
+    !Number.isFinite(spacing) ||
+    Math.abs(spacing) > MAX_ARRANGEMENT_SPACING
+  ) {
+    return failure(
+      "invalid-input",
+      `Spacing must be finite and within ±${MAX_ARRANGEMENT_SPACING}`,
+    );
+  }
+  const analysis = analyzeSmartSelection(items);
+  if (!analysis.ok) return analysis;
+  if (analysis.dimension !== "grid") {
+    if (analysis.dimension !== axis) {
+      return failure(
+        "invalid-input",
+        `A ${analysis.dimension} Smart selection cannot change ${axis} spacing`,
+      );
+    }
+    return setItemSpacing(items, axis, spacing);
+  }
+
+  const byId = new Map(items.map((item) => [item.id, item] as const));
+  const rows = analysis.rows.map((row) =>
+    row.map((id) => byId.get(id)!).filter(Boolean),
+  );
+  const columns = analysis.columns.map((column) =>
+    column.map((id) => byId.get(id)!).filter(Boolean),
+  );
+  const rowIndex = indexedIds(analysis.rows);
+  const columnIndex = indexedIds(analysis.columns);
+  const left = Math.min(...items.map((item) => item.bounds.x));
+  const top = Math.min(...items.map((item) => item.bounds.y));
+  const columnWidths = columns.map((column) =>
+    Math.max(...column.map((item) => item.bounds.width)),
+  );
+  const rowHeights = rows.map((row) =>
+    Math.max(...row.map((item) => item.bounds.height)),
+  );
+  const horizontalSpacing =
+    axis === "horizontal" ? spacing : analysis.horizontalSpacing;
+  const verticalSpacing =
+    axis === "vertical" ? spacing : analysis.verticalSpacing;
+  if (horizontalSpacing === undefined || verticalSpacing === undefined) {
+    return failure(
+      "invalid-input",
+      "Grid Smart selection spacing is unavailable",
+    );
+  }
+  const columnTargets = cumulativeTargets(
+    left,
+    columnWidths,
+    horizontalSpacing,
+  );
+  const rowTargets = cumulativeTargets(top, rowHeights, verticalSpacing);
+  const ordered = analysis.orderedIds
+    .map((id) => byId.get(id)!)
+    .filter(Boolean);
+  return finalizeTidy(
+    "grid",
+    ordered.map((item) => item.id),
+    ordered.map((item) => {
+      const target = {
+        x:
+          axis === "horizontal"
+            ? (columnTargets[columnIndex.get(item.id) ?? 0] ?? item.bounds.x)
+            : item.bounds.x,
+        y:
+          axis === "vertical"
+            ? (rowTargets[rowIndex.get(item.id) ?? 0] ?? item.bounds.y)
+            : item.bounds.y,
+      };
+      return {
+        id: item.id,
+        target,
+        delta: {
+          x: target.x - item.bounds.x,
+          y: target.y - item.bounds.y,
+        },
+      };
+    }),
+    horizontalSpacing,
+    verticalSpacing,
+  );
+}
+
 /**
  * Produces a Figma-style Tidy up placement without mutating document state.
  * One-dimensional selections only change their arrangement axis. A proven
@@ -338,6 +493,200 @@ export function tidyUpItems(items: readonly ArrangementItem[]): TidyUpPlan {
     horizontalSpacing,
     verticalSpacing,
   );
+}
+
+function analyzeSmartSelectionLine(
+  items: readonly ArrangementItem[],
+  axis: ArrangeAxis,
+): SmartSelectionAnalysis {
+  const ordered = projectAxis(items, axis).sort(compareLeading);
+  const gaps = ordered.slice(1).map((item, index) => {
+    const previous = ordered[index];
+    return previous ? item.start - previous.end : 0;
+  });
+  const spacing = uniformGap(gaps);
+  if (spacing === null) {
+    return failure(
+      "ambiguous-anchors",
+      `Smart selection requires uniform ${axis} spacing`,
+    );
+  }
+  const ids = ordered.map((item) => item.id);
+  return {
+    ok: true,
+    columns: axis === "horizontal" ? ids.map((id) => [id]) : [[...ids]],
+    dimension: axis,
+    ...(axis === "horizontal"
+      ? { horizontalSpacing: spacing }
+      : { verticalSpacing: spacing }),
+    orderedIds: ids,
+    rows: axis === "horizontal" ? [[...ids]] : ids.map((id) => [id]),
+  };
+}
+
+type SmartSelectionGrid = {
+  ok: true;
+  columns: ArrangementItem[][];
+  horizontalSpacing: number;
+  ordered: ArrangementItem[];
+  rows: ArrangementItem[][];
+  verticalSpacing: number;
+};
+
+function inferSmartSelectionGrid(
+  items: readonly ArrangementItem[],
+  rowClusters: readonly OverlapCluster[],
+  columnClusters: readonly OverlapCluster[],
+): SmartSelectionGrid | ArrangementFailure {
+  const rows = sortClusters(rowClusters);
+  const columns = sortClusters(columnClusters);
+  if (
+    !rows.some((cluster) => cluster.items.length > 1) ||
+    !columns.some((cluster) => cluster.items.length > 1)
+  ) {
+    return failure(
+      "ambiguous-anchors",
+      "Smart selection requires overlapping row and column relationships",
+    );
+  }
+  const rowIndex = clusterIndex(rows);
+  const columnIndex = clusterIndex(columns);
+  const occupied = new Set<string>();
+  for (const item of items) {
+    const row = rowIndex.get(item.id);
+    const column = columnIndex.get(item.id);
+    if (row === undefined || column === undefined) {
+      return failure(
+        "invalid-input",
+        `Layer ${item.id} could not be assigned to a Smart selection cell`,
+      );
+    }
+    const key = `${row}:${column}`;
+    if (occupied.has(key)) {
+      return failure(
+        "ambiguous-anchors",
+        "Smart selection requires at most one layer in each inferred cell",
+      );
+    }
+    occupied.add(key);
+  }
+  const rowItems = rows.map((row) =>
+    [...row.items].sort(
+      (left, right) =>
+        (columnIndex.get(left.id) ?? 0) - (columnIndex.get(right.id) ?? 0) ||
+        compareId(left.id, right.id),
+    ),
+  );
+  const columnItems = columns.map((column) =>
+    [...column.items].sort(
+      (left, right) =>
+        (rowIndex.get(left.id) ?? 0) - (rowIndex.get(right.id) ?? 0) ||
+        compareId(left.id, right.id),
+    ),
+  );
+  const left = Math.min(...items.map((item) => item.bounds.x));
+  const top = Math.min(...items.map((item) => item.bounds.y));
+  const columnWidths = columnItems.map((column) =>
+    Math.max(...column.map((item) => item.bounds.width)),
+  );
+  const rowHeights = rowItems.map((row) =>
+    Math.max(...row.map((item) => item.bounds.height)),
+  );
+  const horizontalSpacing = inferIndexedSpacing(
+    items,
+    columnIndex,
+    columnWidths,
+    left,
+    "horizontal",
+  );
+  const verticalSpacing = inferIndexedSpacing(
+    items,
+    rowIndex,
+    rowHeights,
+    top,
+    "vertical",
+  );
+  if (horizontalSpacing === null || verticalSpacing === null) {
+    return failure(
+      "ambiguous-anchors",
+      "Smart selection layers do not share stable row and column spacing",
+    );
+  }
+  const columnTargets = cumulativeTargets(
+    left,
+    columnWidths,
+    horizontalSpacing,
+  );
+  const rowTargets = cumulativeTargets(top, rowHeights, verticalSpacing);
+  if (
+    items.some(
+      (item) =>
+        !nearlyEqual(
+          item.bounds.x,
+          columnTargets[columnIndex.get(item.id) ?? 0] ?? item.bounds.x,
+        ) ||
+        !nearlyEqual(
+          item.bounds.y,
+          rowTargets[rowIndex.get(item.id) ?? 0] ?? item.bounds.y,
+        ),
+    )
+  ) {
+    return failure(
+      "ambiguous-anchors",
+      "Smart selection layers are not aligned to inferred row and column starts",
+    );
+  }
+  const ordered = [...items].sort(
+    (leftItem, rightItem) =>
+      (rowIndex.get(leftItem.id) ?? 0) - (rowIndex.get(rightItem.id) ?? 0) ||
+      (columnIndex.get(leftItem.id) ?? 0) -
+        (columnIndex.get(rightItem.id) ?? 0) ||
+      compareId(leftItem.id, rightItem.id),
+  );
+  return {
+    ok: true,
+    columns: columnItems,
+    horizontalSpacing,
+    ordered,
+    rows: rowItems,
+    verticalSpacing,
+  };
+}
+
+function inferIndexedSpacing(
+  items: readonly ArrangementItem[],
+  indices: ReadonlyMap<string, number>,
+  extents: readonly number[],
+  leading: number,
+  axis: ArrangeAxis,
+): number | null {
+  const candidates = items.flatMap((item) => {
+    const index = indices.get(item.id) ?? 0;
+    if (index === 0) return [];
+    const start = axis === "horizontal" ? item.bounds.x : item.bounds.y;
+    const precedingExtent = extents
+      .slice(0, index)
+      .reduce((sum, extent) => sum + extent, 0);
+    return [(start - leading - precedingExtent) / index];
+  });
+  return uniformGap(candidates);
+}
+
+function indexedIds(
+  groups: readonly (readonly string[])[],
+): Map<string, number> {
+  const result = new Map<string, number>();
+  groups.forEach((group, index) => {
+    group.forEach((id) => result.set(id, index));
+  });
+  return result;
+}
+
+function uniformGap(gaps: readonly number[]): number | null {
+  const first = gaps[0];
+  return first !== undefined && gaps.every((gap) => nearlyEqual(gap, first))
+    ? first
+    : null;
 }
 
 function validateItems(

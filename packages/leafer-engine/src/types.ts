@@ -157,6 +157,15 @@ export interface LeaferGridChildSpanRequest {
   };
 }
 
+export interface LeaferSmartSelectionSpacingRequest {
+  axis: "horizontal" | "vertical";
+  documentId: string;
+  expectedRevision: number;
+  nodeIds: readonly string[];
+  pageId: string;
+  spacing: number;
+}
+
 export type LeaferAutoLayoutSpacingChange =
   | {
       kind: "padding";
@@ -240,6 +249,9 @@ export interface LeaferEngineCallbacks {
     anchorNodeId?: string,
     componentTarget?: ComponentSelectionTarget,
   ): void;
+  onSmartSelectionSpacing?(
+    request: LeaferSmartSelectionSpacingRequest,
+  ): boolean;
   onTextRangeSelectionChange?(selection: LeaferTextRangeSelection | null): void;
   onVectorCut?(request: LeaferVectorCutRequest): LeaferVectorCutResponse;
   onVectorLineCut?(

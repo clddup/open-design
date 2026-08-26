@@ -50,6 +50,7 @@ import {
   type LeaferGenerationActivity,
   type LeaferGridChildMoveRequest,
   type LeaferGridChildSpanRequest,
+  type LeaferSmartSelectionSpacingRequest,
   type LeaferImageCropCommitRequest,
   type LeaferImageCropState,
   type LeaferOperationKind,
@@ -122,6 +123,7 @@ export function Canvas({
   onDeleteGridTracks,
   onMoveGridChildren,
   onResizeGridChildSpan,
+  onAdjustSmartSelectionSpacing,
   onReorderGridTracks,
   onSetGridTracks,
   onResizeFrame,
@@ -193,6 +195,9 @@ export function Canvas({
   ) => boolean;
   onMoveGridChildren: (request: LeaferGridChildMoveRequest) => boolean;
   onResizeGridChildSpan: (request: LeaferGridChildSpanRequest) => boolean;
+  onAdjustSmartSelectionSpacing: (
+    request: LeaferSmartSelectionSpacingRequest,
+  ) => boolean;
   onSetGridTracks: (
     frameId: string,
     expectedRevision: number,
@@ -1161,6 +1166,7 @@ export function Canvas({
       onSelectionChange: (nodeIds, anchorNodeId, componentTarget) => {
         runtime.setSelection(nodeIds, anchorNodeId, componentTarget);
       },
+      onSmartSelectionSpacing: onAdjustSmartSelectionSpacing,
       onTextRangeSelectionChange,
       onVectorCut: applyVectorCut,
       onVectorEdit: applyVectorEdit,
@@ -1253,6 +1259,7 @@ export function Canvas({
     onReorderGridTracks,
     onSetGridTracks,
     onAdjustAutoLayoutSpacing,
+    onAdjustSmartSelectionSpacing,
     onTextLayoutProviderReady,
     onTextEditingStyleControllerChange,
     onTextRangeSelectionChange,

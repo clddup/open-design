@@ -275,6 +275,9 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       viewportRoot: this.#app.tree as unknown as LeaferGroup,
     });
     this.#editorOverlays = new EditorOverlayController({
+      element: (nodeId) => this.#scene.element(nodeId),
+      finishNodePresentation: (nodeId) =>
+        this.#generationPresentation.finishNode(nodeId),
       leafer,
       onAutoLayoutSpacingCommit: (request) =>
         this.#callbacks.onAutoLayoutSpacingCommit?.(request) ?? false,
@@ -288,7 +291,10 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         this.#callbacks.onGridTrackInputRequest?.(request),
       onGridTrackResize: (request) =>
         this.#callbacks.onGridTrackResize?.(request) ?? false,
+      onSmartSelectionSpacing: (request) =>
+        this.#callbacks.onSmartSelectionSpacing?.(request) ?? false,
       presentationRoot: this.#generationPresentationRoot,
+      restoreProjection: () => this.#restoreProjection(),
       viewportRoot: this.#app.tree as unknown as LeaferGroup,
     });
     this.#textRunEditor = new TextRunEditController({

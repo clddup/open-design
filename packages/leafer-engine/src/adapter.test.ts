@@ -1642,6 +1642,111 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
+  it("previews and commits Smart Selection spacing through one semantic request", async () => {
+    const onSmartSelectionSpacing = vi.fn(() => true);
+    const input = withSmartSelectionFixture(createInput());
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onSmartSelectionSpacing,
+    });
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    const hit =
+      app &&
+      findElement(
+        app.sky,
+        "__opendesign_smart_selection_gap__:smart-gap:horizontal:row-0:0",
+      );
+    const ring =
+      app &&
+      findElement(
+        app.sky,
+        "__opendesign_smart_selection_ring__:smart-ring:feature_one",
+      );
+    const second = app && findElement(app.tree, "feature_two");
+    if (!app || !hit || !ring || !second) {
+      throw new Error("Missing Smart Selection controls");
+    }
+    adapter.sync({
+      ...input,
+      selection: {
+        ...input.selection,
+        nodeIds: ["feature_three", "feature_one", "feature_two"],
+      },
+    });
+    expect(
+      findElement(
+        app.sky,
+        "__opendesign_smart_selection_gap__:smart-gap:horizontal:row-0:0",
+      ),
+    ).toBe(hit);
+    expect(ring.opacity).toBe(0.72);
+    const authoritativeX = second.localTransform.e;
+
+    app.emit("pointer.move", pointerEvent(414, 454, app.sky));
+    expect(ring.opacity).toBe(1);
+    app.emit("pointer.down", pointerEvent(414, 454, hit));
+    app.emit("pointer.move", pointerEvent(434, 454, app.sky));
+    expect(second.localTransform.e).toBe(authoritativeX + 20);
+    app.emit("pointer.up", pointerEvent(434, 454, app.sky));
+
+    expect(second.localTransform.e).toBe(authoritativeX);
+    expect(onSmartSelectionSpacing).toHaveBeenCalledWith({
+      axis: "horizontal",
+      documentId: input.document.documentId,
+      expectedRevision: input.document.revision,
+      nodeIds: ["feature_one", "feature_two", "feature_three"],
+      pageId: input.pageId,
+      spacing: 40,
+    });
+    adapter.dispose();
+  });
+
+  it("restores Smart Selection previews on negative no-op, Escape, pointer cancel, or stale revision", async () => {
+    const onSmartSelectionSpacing = vi.fn(() => true);
+    const input = withSmartSelectionFixture(createInput());
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onSmartSelectionSpacing,
+    });
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    const hit =
+      app &&
+      findElement(
+        app.sky,
+        "__opendesign_smart_selection_gap__:smart-gap:horizontal:row-0:0",
+      );
+    const second = app && findElement(app.tree, "feature_two");
+    if (!app || !hit || !second) {
+      throw new Error("Missing Smart Selection controls");
+    }
+    const authoritativeX = second.localTransform.e;
+
+    app.emit("pointer.down", pointerEvent(414, 454, hit));
+    app.emit("pointer.move", pointerEvent(384, 454, app.sky));
+    expect(second.localTransform.e).toBe(authoritativeX - 30);
+    emitWindowKey("Escape");
+    expect(second.localTransform.e).toBe(authoritativeX);
+
+    app.emit("pointer.down", pointerEvent(414, 454, hit));
+    app.emit("pointer.move", pointerEvent(444, 454, app.sky));
+    app.emit("pointer.up", {
+      ...pointerEvent(444, 454, app.sky),
+      isCancel: true,
+    });
+    expect(second.localTransform.e).toBe(authoritativeX);
+
+    app.emit("pointer.down", pointerEvent(414, 454, hit));
+    app.emit("pointer.move", pointerEvent(444, 454, app.sky));
+    const changed = structuredClone(input);
+    changed.document.revision += 1;
+    adapter.sync(changed);
+    expect(second.localTransform.e).toBe(authoritativeX);
+    expect(onSmartSelectionSpacing).not.toHaveBeenCalled();
+    adapter.dispose();
+  });
+
   it("requests one numeric input for an Auto Layout spacing handle click", async () => {
     const onAutoLayoutSpacingCommit = vi.fn(() => true);
     const onAutoLayoutSpacingInputRequest = vi.fn();
@@ -7680,6 +7785,28 @@ function withGridLineFixture(
     document,
     gridEditorFrameId: frame.id,
     selection: { nodeIds: [line.id], anchorNodeId: line.id },
+    tool: "select",
+  };
+}
+
+function withSmartSelectionFixture(
+  input: LeaferEngineSyncInput,
+): LeaferEngineSyncInput {
+  const document = structuredClone(input.document);
+  document.nodesById.feature_one!.transform = [1, 0, 0, 1, 0, 0];
+  document.nodesById.feature_two!.transform = [1, 0, 0, 1, 280, 0];
+  document.nodesById.feature_three!.transform = [1, 0, 0, 1, 560, 0];
+  document.nodesById.feature_one!.size = { width: 260, height: 100 };
+  document.nodesById.feature_two!.size = { width: 260, height: 80 };
+  document.nodesById.feature_three!.size = { width: 260, height: 120 };
+  document.nodesById.feature_group!.size = { width: 820, height: 120 };
+  return {
+    ...input,
+    document,
+    selection: {
+      nodeIds: ["feature_one", "feature_two", "feature_three"],
+      anchorNodeId: "feature_three",
+    },
     tool: "select",
   };
 }

@@ -2,10 +2,12 @@ export const GEOMETRY_SERVICE_CONTRACT_VERSION = 13 as const;
 
 export {
   alignItems,
+  analyzeSmartSelection,
   distributeItems,
   MAX_ARRANGEMENT_SPACING,
   measureItemSpacing,
   setItemSpacing,
+  setSmartSelectionSpacing,
   tidyUpItems,
   type AlignAction,
   type ArrangeAxis,
@@ -15,6 +17,8 @@ export {
   type ArrangementPlacement,
   type ArrangementPlan,
   type SpacingMeasurement,
+  type SmartSelectionAnalysis,
+  type SmartSelectionSpacingPlan,
   type TidyUpDimension,
   type TidyUpPlacement,
   type TidyUpPlan,

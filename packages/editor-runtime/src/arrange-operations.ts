@@ -9,6 +9,7 @@ import {
   distributeItems,
   measureItemSpacing,
   setItemSpacing,
+  setSmartSelectionSpacing,
   tidyUpItems,
   type AlignAction,
   type ArrangementItem,
@@ -102,6 +103,48 @@ export function planArrangeNodes(
       geometryPlan.message,
     );
   }
+  return arrangementCommands(
+    document,
+    selection,
+    geometryPlan,
+    operation.action,
+    commandPrefix,
+  );
+}
+
+export function planSmartSelectionSpacing(
+  document: DesignDocument,
+  pageId: string,
+  nodeIds: readonly string[],
+  axis: "horizontal" | "vertical",
+  spacing: number,
+  commandPrefix: string,
+): ArrangeOperationPlan {
+  const selection = analyzeArrangeSelection(document, pageId, nodeIds);
+  if (!selection.ok) return selection;
+  const geometryPlan = setSmartSelectionSpacing(selection.items, axis, spacing);
+  if (!geometryPlan.ok) {
+    return failure(
+      geometryPlan.code === "no-op" ? "no-op" : "invalid-selection",
+      geometryPlan.message,
+    );
+  }
+  return arrangementCommands(
+    document,
+    selection,
+    geometryPlan,
+    axis === "horizontal" ? "set-horizontal-spacing" : "set-vertical-spacing",
+    commandPrefix,
+  );
+}
+
+function arrangementCommands(
+  document: DesignDocument,
+  selection: ArrangeSelection,
+  geometryPlan: Extract<ArrangementPlan | TidyUpPlan, { ok: true }>,
+  action: ArrangeAction,
+  commandPrefix: string,
+): ArrangeOperationPlan {
   const projected = structuredClone(document);
   for (const placement of geometryPlan.placements) {
     if (placement.delta.x === 0 && placement.delta.y === 0) continue;
@@ -157,7 +200,7 @@ export function planArrangeNodes(
   }
   return {
     ok: true,
-    action: operation.action,
+    action,
     commands,
     orderedNodeIds: geometryPlan.orderedIds,
     selectionNodeIds: selection.nodeIds,

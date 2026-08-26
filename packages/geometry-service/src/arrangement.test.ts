@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   alignItems,
+  analyzeSmartSelection,
   distributeItems,
   GEOMETRY_SERVICE_CONTRACT_VERSION,
   MAX_ARRANGEMENT_SPACING,
   measureItemSpacing,
   setItemSpacing,
+  setSmartSelectionSpacing,
   tidyUpItems,
   type ArrangementItem,
 } from "./index.js";
@@ -111,6 +113,97 @@ describe("geometry arrangement", () => {
         "horizontal",
       ),
     ).toMatchObject({ ok: true, gaps: [10, 15], uniform: false, value: null });
+  });
+
+  it("recognizes only uniform one-dimensional Smart selections and preserves negative spacing", () => {
+    const row = items(
+      ["one", 0, 4, 30, 20],
+      ["two", 50, 0, 20, 30],
+      ["three", 90, 6, 40, 18],
+    );
+    expect(analyzeSmartSelection(row)).toMatchObject({
+      ok: true,
+      dimension: "horizontal",
+      horizontalSpacing: 20,
+      orderedIds: ["one", "two", "three"],
+      rows: [["one", "two", "three"]],
+    });
+    expect(setSmartSelectionSpacing(row, "horizontal", -8)).toMatchObject({
+      ok: true,
+      resolvedSpacing: -8,
+      placements: [
+        { id: "one", delta: { x: 0, y: 0 } },
+        { id: "two", targetLeadingEdge: 22 },
+        { id: "three", targetLeadingEdge: 34 },
+      ],
+    });
+    expect(setSmartSelectionSpacing(row, "vertical", 12)).toMatchObject({
+      ok: false,
+      code: "invalid-input",
+    });
+    expect(
+      analyzeSmartSelection(
+        items(
+          ["one", 0, 0, 10, 10],
+          ["two", 20, 0, 10, 10],
+          ["three", 45, 0, 10, 10],
+        ),
+      ),
+    ).toMatchObject({ ok: false, code: "ambiguous-anchors" });
+  });
+
+  it("adjusts one axis of an unequal Smart grid without flattening the other axis", () => {
+    const grid = items(
+      ["a", 0, 0, 30, 20],
+      ["b", 50, 0, 40, 30],
+      ["c", 110, 0, 20, 25],
+      ["d", 0, 70, 20, 40],
+      ["e", 50, 70, 30, 20],
+      ["f", 110, 70, 50, 35],
+    );
+    expect(analyzeSmartSelection(grid)).toMatchObject({
+      ok: true,
+      dimension: "grid",
+      horizontalSpacing: 20,
+      verticalSpacing: 40,
+      rows: [
+        ["a", "b", "c"],
+        ["d", "e", "f"],
+      ],
+      columns: [
+        ["a", "d"],
+        ["b", "e"],
+        ["c", "f"],
+      ],
+    });
+    expect(setSmartSelectionSpacing(grid, "horizontal", 10)).toMatchObject({
+      ok: true,
+      dimension: "grid",
+      horizontalSpacing: 10,
+      verticalSpacing: 40,
+      placements: [
+        { id: "a", target: { x: 0, y: 0 } },
+        { id: "b", target: { x: 40, y: 0 } },
+        { id: "c", target: { x: 90, y: 0 } },
+        { id: "d", target: { x: 0, y: 70 } },
+        { id: "e", target: { x: 40, y: 70 } },
+        { id: "f", target: { x: 90, y: 70 } },
+      ],
+    });
+    expect(setSmartSelectionSpacing(grid, "vertical", 12)).toMatchObject({
+      ok: true,
+      dimension: "grid",
+      horizontalSpacing: 20,
+      verticalSpacing: 12,
+      placements: [
+        { id: "a", target: { x: 0, y: 0 } },
+        { id: "b", target: { x: 50, y: 0 } },
+        { id: "c", target: { x: 110, y: 0 } },
+        { id: "d", target: { x: 0, y: 42 } },
+        { id: "e", target: { x: 50, y: 42 } },
+        { id: "f", target: { x: 110, y: 42 } },
+      ],
+    });
   });
 
   it("tidies a one-dimensional row using the leading gap mode without changing y", () => {
