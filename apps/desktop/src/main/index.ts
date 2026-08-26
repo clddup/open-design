@@ -44,11 +44,6 @@ import {
   MainDesignToolRuntime,
   mainDesignToolAuditDiagnostic,
 } from "./agent/main-design-tool-runtime";
-import { requireCanvasCaptureLayoutQuality } from "./agent/canvas-capture-quality";
-import {
-  requireDesignVisualCriticAttachment,
-  runIndependentDesignVisualCritic,
-} from "./agent/design-visual-critic";
 import { createApplicationMenuTemplate } from "./application-menu";
 import { ApplicationLifecycle } from "./application-lifecycle";
 import { ApplicationPreferencesHost } from "./application-preferences-host";
@@ -89,6 +84,7 @@ import { handleEditDesignTool } from "./agent/design-edit-tool-handler.js";
 import { handleDesignTypographyTool } from "./agent/design-typography-tool-handler.js";
 import { DesignImageEditService } from "./agent/design-image-edit-service.js";
 import { handleDesignImageTool } from "./agent/design-image-tool-handler.js";
+import { createDesignCaptureReviewSession } from "./agent/design-capture-review-tool-handler.js";
 import { translate } from "@/shared/i18n/messages";
 import {
   DESIGN_CAPTURE_TOOL_NAME,
@@ -100,7 +96,6 @@ import {
   DESIGN_PAGE_TOOL_NAME,
   PAGE_STRUCTURE_ACCESS_TOOL_NAME,
   DESIGN_PLAN_TOOL_NAME,
-  DESIGN_REVIEW_TOOL_NAME,
   EXPORT_SVG_TOOL_NAME,
   EXPORT_RASTER_TOOL_NAME,
   IMPORT_SVG_TOOL_NAME,
@@ -109,13 +104,11 @@ import {
   DesignComponentContract,
   DesignPageContract,
   DeliveryScopeContract,
-  DesignVisualReviewContract,
   ExportRasterContract,
   ExportSvgContract,
   ImportSvgContract,
   PageStructureAccessContract,
   type DesignApplyToolInput,
-  type DesignVisualReviewToolInput,
 } from "@/shared/design-agent-tools";
 import { formatValidationFailure } from "@/shared/contract-validation.js";
 import {
@@ -842,19 +835,6 @@ async function startDesktopApplication(
             : {}),
           reportProgress: options.reportProgress ?? reportProgress,
         });
-      const recordVisualReview = (
-        review: DesignVisualReviewToolInput,
-      ): TrustedToolResult => {
-        globalTaskCoordinator!.registerVisualReview(context, review);
-        return {
-          content: {
-            ok: true,
-            status: "accepted",
-            refinements: review.refinements,
-            delivery: globalTaskCoordinator!.getDeliveryLedger(context.runId),
-          },
-        };
-      };
       const executeDesignApply = async (
         applyCall: ToolCallRequest,
         input: DesignApplyToolInput,
@@ -899,90 +879,13 @@ async function startDesktopApplication(
         );
         return withDesignDelivery(result, context.runId);
       };
-      const executeCanvasCapture = async (
-        captureCall: ToolCallRequest,
-        stageProgress?: (message: string, progress: number) => void,
-      ): Promise<TrustedToolResult> => {
-        const captureTarget =
-          globalTaskCoordinator!.resolveCanvasCaptureTarget(context);
-        const result = await executeRendererTool(captureCall, {
-          captureTarget,
-          ...(stageProgress ? { reportProgress: stageProgress } : {}),
-        });
-        if (!isRecordValue(result.content)) {
-          throw new TypeError(
-            "Canvas capture returned invalid structured content",
-          );
-        }
-        const observedRevision = result.observedRevision;
-        if (
-          !Number.isSafeInteger(observedRevision) ||
-          observedRevision == null
-        ) {
-          throw new Error(
-            "design_workflow.capture_revision_invalid: Canvas capture did not return a valid document revision",
-          );
-        }
-        const layoutQuality = requireCanvasCaptureLayoutQuality(
-          result,
-          context.documentId,
-          captureTarget,
-        );
-        const inspection = await executeRendererTool({
-          toolCallId: `${captureCall.toolCallId}_delivery_inspection`.slice(
-            0,
-            256,
-          ),
-          toolName: DESIGN_INSPECT_TOOL_NAME,
-          input: {},
-        });
-        globalTaskCoordinator!.recordDocumentInspection(context, inspection);
-        if (inspection.observedRevision !== observedRevision) {
-          throw new Error(
-            "design_workflow.capture_revision_invalid: The document changed between the rendered capture and its authoritative verification; capture the current target again",
-          );
-        }
-        let visualCritic:
-          | Awaited<ReturnType<typeof runIndependentDesignVisualCritic>>
-          | undefined;
-        if (layoutQuality === undefined || layoutQuality.errorCount === 0) {
-          const attachment = requireDesignVisualCriticAttachment(
-            result.content,
-          );
-          const criticContext =
-            globalTaskCoordinator!.resolveVisualCriticContext(
-              context,
-              observedRevision,
-              attachment,
-            );
-          if (criticContext) {
-            stageProgress?.("Running independent visual critic", 0.94);
-            visualCritic = await runIndependentDesignVisualCritic(
-              requireModelProviderHost(),
-              criticContext,
-              signal,
-            );
-          }
-        }
-        const reviewWorkflow = globalTaskCoordinator!.recordCanvasCapture(
-          context,
-          observedRevision,
-          layoutQuality,
-          visualCritic,
-        );
-        return {
-          ...result,
-          content: {
-            ...result.content,
-            captureTarget,
-            reviewWorkflow,
-            delivery: globalTaskCoordinator!.getDeliveryLedger(context.runId),
-            deliveryStage: globalTaskCoordinator!.getDeliveryStageContext(
-              context.runId,
-            ),
-          },
-        };
-      };
+      const captureReviewSession = createDesignCaptureReviewSession({
+        context,
+        signal,
+        coordinator: globalTaskCoordinator,
+        execute: executeRendererTool,
+        getModelProviderHost: requireModelProviderHost,
+      });
       if (call.toolName === PAGE_STRUCTURE_ACCESS_TOOL_NAME) {
         const parsed = PageStructureAccessContract.parse(call.input);
         if (!parsed.ok) {
@@ -1023,7 +926,7 @@ async function startDesktopApplication(
                 stageProgress,
               ),
             capture: (stageProgress) =>
-              executeCanvasCapture(
+              captureReviewSession.capture(
                 {
                   ...call,
                   toolCallId: `${call.toolCallId.slice(0, 248)}_capture`,
@@ -1045,7 +948,8 @@ async function startDesktopApplication(
             apply: executeDesignApply,
             assertRefinementReady: () =>
               globalTaskCoordinator!.assertDesignRefinementReady(context),
-            capture: executeCanvasCapture,
+            capture: (captureCall, stageProgress) =>
+              captureReviewSession.capture(captureCall, stageProgress),
             getDelivery: () =>
               globalTaskCoordinator!.getDeliveryLedger(context.runId),
           },
@@ -1063,18 +967,8 @@ async function startDesktopApplication(
           reportProgress,
         );
       }
-      if (call.toolName === DESIGN_REVIEW_TOOL_NAME) {
-        const parsed = DesignVisualReviewContract.parse(call.input, {
-          skillRefs:
-            globalTaskCoordinator.resolveVisualReviewSkillRefs(context),
-        });
-        if (!parsed.ok) {
-          throw new TypeError(
-            formatValidationFailure("Visual Review", parsed.issues),
-          );
-        }
-        return recordVisualReview(parsed.value);
-      }
+      const captureReviewResult = await captureReviewSession.handle(call);
+      if (captureReviewResult) return captureReviewResult;
       if (call.toolName === EXPORT_SVG_TOOL_NAME) {
         const parsed = ExportSvgContract.parse(call.input);
         if (!parsed.ok) {
@@ -1252,9 +1146,6 @@ async function startDesktopApplication(
         withDelivery: withDesignDelivery,
       });
       if (designVectorResult) return designVectorResult;
-      if (call.toolName === DESIGN_CAPTURE_TOOL_NAME) {
-        return await executeCanvasCapture(call);
-      }
       const result = await executeRendererTool(call);
       if (call.toolName === DESIGN_INSPECT_TOOL_NAME) {
         globalTaskCoordinator.recordDocumentInspection(context, result);
