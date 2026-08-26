@@ -114,4 +114,98 @@ describe("defineContract", () => {
       ],
     });
   });
+
+  it("runs model cross-field refinement before trusted binding", () => {
+    let bound = false;
+    const contract = defineContract<ModelValue, CanonicalValue, Context>({
+      schema: MODEL_SCHEMA,
+      code: "example.schema_invalid",
+      subject: "example",
+      refineModel: (value) =>
+        value.label === "ambiguous"
+          ? [
+              {
+                code: "example.model_relationship_invalid",
+                path: "/label",
+                message: "Model relationship is ambiguous",
+              },
+            ]
+          : [],
+      bind: (value, context) => {
+        bound = true;
+        return { ...value, pageId: context.pageId };
+      },
+    });
+
+    expect(
+      contract.parse(
+        { action: "create", label: "ambiguous" },
+        { pageId: "page_1" },
+      ),
+    ).toEqual({
+      ok: false,
+      issues: [
+        expect.objectContaining({
+          code: "example.model_relationship_invalid",
+          path: "/label",
+        }),
+      ],
+    });
+    expect(bound).toBe(false);
+  });
+
+  it("keeps actionable descendant paths instead of generic ancestor summaries", () => {
+    const nested = executableJsonSchema({
+      type: "object",
+      properties: {
+        node: {
+          type: "object",
+          properties: {
+            kind: { enum: ["star", "rectangle"] },
+            properties: { type: "object" },
+          },
+          required: ["kind", "properties"],
+          additionalProperties: false,
+          anyOf: [
+            {
+              type: "object",
+              properties: {
+                kind: { const: "star" },
+                properties: {
+                  type: "object",
+                  properties: { pointCount: {} },
+                  required: ["pointCount"],
+                },
+              },
+              required: ["kind", "properties"],
+            },
+            {
+              type: "object",
+              properties: {
+                kind: { const: "rectangle" },
+                properties: { type: "object" },
+              },
+              required: ["kind", "properties"],
+            },
+          ],
+        },
+      },
+      required: ["node"],
+      additionalProperties: false,
+    } as const);
+    const contract = defineContract<unknown>({
+      schema: nested,
+      code: "nested.schema_invalid",
+      subject: "nested node",
+    });
+
+    expect(contract.issues({ node: { kind: "star", properties: {} } })).toEqual(
+      [
+        expect.objectContaining({
+          code: "nested.schema_invalid",
+          path: "/node/properties/pointCount",
+        }),
+      ],
+    );
+  });
 });

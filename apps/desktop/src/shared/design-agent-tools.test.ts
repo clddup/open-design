@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { schemaValidationIssues } from "@opendesign/design-contracts";
 import { BUILTIN_UI_DESIGN_SKILL_REFS } from "@opendesign/design-skills";
 import {
   DESIGN_AGENT_TOOL_SPECS,
@@ -133,7 +134,7 @@ describe("design Agent tool contract", () => {
     );
   });
 
-  it("normalizes model insert defaults before the trusted design boundary", () => {
+  it("compiles model insert defaults before the trusted design boundary", () => {
     const compactInput = {
       label: "Create poster background",
       commands: [
@@ -214,7 +215,199 @@ describe("design Agent tool contract", () => {
     ).toBe(false);
   });
 
-  it("returns exact command and node paths for invalid apply input", () => {
+  it("compiles every public node kind into the canonical document contract", () => {
+    const textProperties = {
+      content: "Canonical",
+      fontFamily: "Inter",
+      fontStyleName: "Regular",
+      fontSize: 16,
+      fontWeight: 400,
+      fontSlant: "normal",
+      lineHeight: 24,
+      letterSpacing: 0,
+      paragraphIndent: 0,
+      paragraphSpacing: 0,
+      listSpacing: 0,
+      hangingList: false,
+      textCase: "original",
+      textDecoration: "none",
+      textAlignHorizontal: "left",
+      textAlignVertical: "top",
+      textResize: "auto-height",
+      textWrap: "word",
+      textOverflow: "visible",
+      textTruncation: "disabled",
+      maxLines: null,
+    };
+    const network = {
+      vertices: [
+        { id: "v0", x: 0, y: 0 },
+        { id: "v1", x: 100, y: 100 },
+      ],
+      segments: [{ id: "s0", startVertexId: "v0", endVertexId: "v1" }],
+      paths: [
+        {
+          id: "p0",
+          closed: false,
+          segments: [{ segmentId: "s0", reversed: false }],
+        },
+      ],
+      regions: [],
+    };
+    const kinds = [
+      ["frame", {}],
+      ["group", {}],
+      ["rectangle", {}],
+      ["ellipse", {}],
+      [
+        "line",
+        {
+          start: { x: 0, y: 0 },
+          end: { x: 1, y: 1 },
+          startEndpoint: "none",
+          endEndpoint: "none",
+        },
+      ],
+      ["polygon", { pointCount: 5 }],
+      ["star", { pointCount: 5, innerRadius: 0.5 }],
+      ["text", textProperties],
+      [
+        "image",
+        { assetId: "asset_image", placement: { mode: "stretch" }, altText: "" },
+      ],
+      ["vector", { path: "M0 0 L100 100" }],
+      ["path", { network }],
+      ["slice", {}],
+    ] as const;
+    const input = {
+      label: "Compile every public node kind",
+      commands: kinds.map(([kind, properties], index) => ({
+        commandId: `insert_${kind}_${index}`,
+        type: "insert_element",
+        pageId: "page_1",
+        parentId: "artboard_1",
+        index,
+        node: {
+          id: `node_${kind}_${index}`,
+          name: `Node ${kind}`,
+          transform: [1, 0, 0, 1, index * 12, index * 12],
+          size: { width: 100, height: 100 },
+          kind,
+          properties,
+        },
+      })),
+    };
+
+    expect(schemaValidationIssues(DesignApplyContract.schema, input)).toEqual(
+      [],
+    );
+    const parsed = DesignApplyContract.parse(input);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(
+      schemaValidationIssues(DesignApplyContract.internalSchema, parsed.value),
+    ).toEqual([]);
+  });
+
+  it("rejects cross-kind node and Paint fields before canonical compilation", () => {
+    const issues = DesignApplyContract.issues({
+      label: "Reject ambiguous model structure",
+      commands: [
+        {
+          commandId: "insert_group",
+          type: "insert_element",
+          pageId: "page_1",
+          parentId: "artboard_1",
+          index: 0,
+          node: {
+            id: "group_1",
+            name: "Group",
+            transform: [1, 0, 0, 1, 0, 0],
+            size: { width: 100, height: 100 },
+            kind: "group",
+            properties: {
+              fills: [
+                {
+                  type: "solid",
+                  color: "#FFFFFF",
+                  opacity: 1,
+                  stops: [
+                    { offset: 0, color: "#FFFFFF", opacity: 1 },
+                    { offset: 1, color: "#000000", opacity: 1 },
+                  ],
+                },
+              ],
+            },
+          },
+        },
+      ],
+    });
+
+    expect(issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "design_apply.node_property_not_supported",
+          path: "/commands/0/node/properties/fills",
+        }),
+        expect.objectContaining({
+          code: "design_apply.paint_property_not_supported",
+          path: "/commands/0/node/properties/fills/0/stops",
+        }),
+      ]),
+    );
+  });
+
+  it("compiles every public Paint branch without a second structural failure", () => {
+    const stops = [
+      { offset: 0, color: "#FFFFFF", opacity: 1 },
+      { offset: 1, color: "#000000", opacity: 1 },
+    ];
+    const input = {
+      label: "Compile Paint branches",
+      commands: [
+        {
+          commandId: "insert_paint_specimen",
+          type: "insert_element",
+          pageId: "page_1",
+          parentId: "artboard_1",
+          index: 0,
+          node: {
+            id: "paint_specimen",
+            name: "Paint specimen",
+            transform: [1, 0, 0, 1, 0, 0],
+            size: { width: 100, height: 100 },
+            kind: "rectangle",
+            properties: {
+              fills: [
+                { type: "solid", color: "#FFFFFF", opacity: 1 },
+                { type: "linear-gradient", stops, opacity: 1 },
+                { type: "radial-gradient", stops, opacity: 1 },
+                { type: "angular-gradient", stops, opacity: 1 },
+                {
+                  type: "image",
+                  assetId: "asset_paint",
+                  fit: "cover",
+                  opacity: 1,
+                },
+              ],
+            },
+          },
+        },
+      ],
+    };
+
+    expect(schemaValidationIssues(DesignApplyContract.schema, input)).toEqual(
+      [],
+    );
+    const parsed = DesignApplyContract.parse(input);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(
+      schemaValidationIssues(DesignApplyContract.internalSchema, parsed.value),
+    ).toEqual([]);
+  });
+
+  it("rejects missing kind fields at the provider schema boundary", () => {
     const apply = DESIGN_AGENT_TOOL_SPECS.find(
       (tool) => tool.name === DESIGN_APPLY_TOOL_NAME,
     );
@@ -249,7 +442,7 @@ describe("design Agent tool contract", () => {
     expect(
       issues.some(
         (issue) =>
-          issue.code === "design_apply.canonical_invalid" &&
+          issue.code === "design_apply.schema_invalid" &&
           issue.path.startsWith("/commands/0/node/properties"),
       ),
     ).toBe(true);
@@ -332,7 +525,7 @@ describe("design Agent tool contract", () => {
     expect(DesignApplyContract.issues(input)).toHaveLength(0);
   });
 
-  it("normalizes compact Agent export settings to the full document contract", () => {
+  it("compiles compact Agent export settings to the full document contract", () => {
     const input = {
       label: "Configure exports",
       commands: [
@@ -1490,7 +1683,8 @@ describe("design Agent tool contract", () => {
     expect(schema).toContain('"fills"');
     expect(schema).toContain('"strokes"');
     expect(schema).toContain('"const":"solid"');
-    expect(schema).toContain('"required":["type","color","opacity"]');
+    expect(schema).toContain('"required":["type","opacity"]');
+    expect(schema).toContain('"required":["type","color"]');
     expect(schema).toContain(
       '"required":["type","color","opacity","offset","blur","spread"]',
     );

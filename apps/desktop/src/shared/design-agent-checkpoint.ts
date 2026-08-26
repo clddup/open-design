@@ -112,7 +112,11 @@ function checkpointSchemaIssues(input: unknown): ValidationIssue[] {
     code: "design_checkpoint.schema_invalid",
     subject: "Checkpoint",
     maximum: 64,
-  });
+  }).map((issue) =>
+    issue.path.startsWith("/apply/") || issue.path.startsWith("/refinement/")
+      ? { ...issue, code: "design_apply.schema_invalid" }
+      : issue,
+  );
 }
 
 function prefixIssues(

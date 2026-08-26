@@ -1,20 +1,19 @@
 import {
-  DesignNodeSchema,
   DesignOperationSchema,
-  NodeDesignOperationSchema,
   Type,
-  schemaValidationIssues,
   type DesignOperation,
-  type TSchema,
 } from "@opendesign/design-contracts";
 import {
   type ValidationIssue,
   type ValidationIssueValue,
   type ValidationResult,
+  validateContract,
 } from "./contract-validation";
 import {
   DESIGN_APPLY_STEP_SCHEMA,
   DESIGN_APPLY_TOOL_INPUT_SCHEMA,
+  DESIGN_MODEL_NODE_PROPERTY_KEYS_BY_KIND,
+  DESIGN_MODEL_PAINT_PROPERTY_KEYS_BY_TYPE,
 } from "./design-agent-operation-schemas";
 
 export type DesignApplyToolInput = {
@@ -105,34 +104,47 @@ function parseDesignApply(
 ): ValidationResult<InternalDesignApplyToolInput> {
   const internal = context.internal === true;
   const canonicalInput = context.canonical === true || internal;
-  const structureIssues = context.modelSchemaValidated
-    ? []
-    : schemaIssues(
-        canonicalInput
-          ? INTERNAL_DESIGN_APPLY_TOOL_INPUT_SCHEMA
-          : DESIGN_APPLY_TOOL_INPUT_SCHEMA,
-        input,
-        "design_apply.schema_invalid",
-      );
-  if (structureIssues.length > 0) {
-    return { ok: false, issues: structureIssues };
+  if (canonicalInput) {
+    return validateContract<
+      InternalDesignApplyToolInput,
+      InternalDesignApplyToolInput,
+      DesignApplyContractContext
+    >(
+      {
+        schema: INTERNAL_DESIGN_APPLY_TOOL_INPUT_SCHEMA,
+        code: "design_apply.schema_invalid",
+        subject: "canonical Design Apply",
+        maximum: 64,
+        refine: (value) => refineDesignApply(value, internal),
+      },
+      input,
+      context,
+    );
   }
-
-  const canonical = canonicalInput
-    ? (structuredClone(input) as InternalDesignApplyToolInput)
-    : canonicalizeModelApply(input as DesignApplyToolInput);
-  const canonicalIssues = canonicalInput
-    ? []
-    : canonicalCommandIssues(canonical);
-  if (canonicalIssues.length > 0) {
-    return { ok: false, issues: canonicalIssues };
-  }
-
-  const value = canonical;
-  const domainIssues = refineDesignApply(value, internal);
-  return domainIssues.length > 0
-    ? { ok: false, issues: domainIssues }
-    : { ok: true, value: structuredClone(value) };
+  return validateContract<
+    DesignApplyToolInput,
+    InternalDesignApplyToolInput,
+    DesignApplyContractContext
+  >(
+    {
+      schema: DESIGN_APPLY_TOOL_INPUT_SCHEMA,
+      code: "design_apply.schema_invalid",
+      subject: "Design Apply",
+      maximum: 64,
+      refineModel: refineModelApplyNodeProperties,
+      bind: compileModelApply,
+      canonical: {
+        schema: INTERNAL_DESIGN_APPLY_TOOL_INPUT_SCHEMA,
+        code: "design_apply.compiler_invariant_failed",
+        subject: "compiled Design Apply",
+        maximum: 64,
+      },
+      refine: (value) => refineDesignApply(value, false),
+    },
+    input,
+    context,
+    { structureValidated: context.modelSchemaValidated === true },
+  );
 }
 
 export const DesignApplyContract = {
@@ -148,7 +160,126 @@ export const DesignApplyContract = {
   },
 } as const;
 
-function canonicalizeModelApply(
+function refineModelApplyNodeProperties(
+  input: DesignApplyToolInput,
+): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+  input.commands.forEach((command, commandIndex) => {
+    if (command.type === "insert_element") {
+      refineModelNodeProperties(
+        command.node,
+        `/commands/${commandIndex}/node`,
+        issues,
+      );
+      return;
+    }
+    if (command.type === "update_properties") {
+      refineModelPaintCollections(
+        command.properties,
+        `/commands/${commandIndex}/properties`,
+        issues,
+      );
+      return;
+    }
+    if (command.type !== "replace_subtree") return;
+    command.nodes.forEach((node, nodeIndex) =>
+      refineModelNodeProperties(
+        node,
+        `/commands/${commandIndex}/nodes/${nodeIndex}`,
+        issues,
+      ),
+    );
+  });
+  return issues;
+}
+
+function refineModelNodeProperties(
+  node: unknown,
+  path: string,
+  issues: ValidationIssue[],
+): void {
+  if (!isRecord(node) || typeof node.kind !== "string") return;
+  if (!Object.hasOwn(DESIGN_MODEL_NODE_PROPERTY_KEYS_BY_KIND, node.kind)) {
+    return;
+  }
+  if (!isRecord(node.properties)) return;
+  const kind =
+    node.kind as keyof typeof DESIGN_MODEL_NODE_PROPERTY_KEYS_BY_KIND;
+  const allowed = new Set(DESIGN_MODEL_NODE_PROPERTY_KEYS_BY_KIND[kind]);
+  for (const key of Object.keys(node.properties)) {
+    if (allowed.has(key)) continue;
+    issues.push({
+      code: "design_apply.node_property_not_supported",
+      path: `${path}/properties/${escapePointer(key)}`,
+      message: `Property ${key} is not supported by ${kind} nodes`,
+      expected: [...allowed],
+      actual: key,
+      recovery:
+        "Remove the unrelated property or use the node kind that owns it; do not rely on canonical validation to reinterpret the node.",
+    });
+  }
+  refineModelPaintCollections(node.properties, `${path}/properties`, issues);
+  if (kind !== "path" && kind !== "vector") return;
+  if (
+    Object.hasOwn(node.properties, "path") &&
+    Object.hasOwn(node.properties, "network")
+  ) {
+    issues.push({
+      code: "design_apply.geometry_source_ambiguous",
+      path: `${path}/properties`,
+      message: `${kind} properties require exactly one geometry source`,
+      expected: "path or network",
+      actual: "path and network",
+      recovery:
+        "Keep path for exact imported SVG data or network for editable topology, never both.",
+    });
+  }
+}
+
+function refineModelPaintCollections(
+  properties: unknown,
+  path: string,
+  issues: ValidationIssue[],
+): void {
+  if (!isRecord(properties)) return;
+  for (const field of ["fills", "strokes"] as const) {
+    const paints = properties[field];
+    if (!Array.isArray(paints)) continue;
+    paints.forEach((paint, index) =>
+      refineModelPaint(paint, `${path}/${field}/${index}`, issues),
+    );
+  }
+}
+
+function refineModelPaint(
+  paint: unknown,
+  path: string,
+  issues: ValidationIssue[],
+): void {
+  if (!isRecord(paint) || typeof paint.type !== "string") return;
+  if (!Object.hasOwn(DESIGN_MODEL_PAINT_PROPERTY_KEYS_BY_TYPE, paint.type)) {
+    return;
+  }
+  const type =
+    paint.type as keyof typeof DESIGN_MODEL_PAINT_PROPERTY_KEYS_BY_TYPE;
+  const allowed = new Set<string>(
+    DESIGN_MODEL_PAINT_PROPERTY_KEYS_BY_TYPE[type],
+  );
+  for (const key of Object.keys(paint)) {
+    if (allowed.has(key)) continue;
+    issues.push({
+      code: "design_apply.paint_property_not_supported",
+      path: `${path}/${escapePointer(key)}`,
+      message: `Property ${key} is not supported by ${type} paints`,
+      expected: [...allowed],
+      actual: key,
+      recovery:
+        "Remove the field or use the Paint type that owns it; keep each Paint branch structurally unambiguous.",
+    });
+  }
+}
+
+function compileModelApply(
   input: DesignApplyToolInput,
 ): InternalDesignApplyToolInput {
   return {
@@ -158,12 +289,16 @@ function canonicalizeModelApply(
       ? {}
       : { steps: structuredClone(input.steps) }),
     commands: input.commands.map((command) =>
-      normalizeModelDesignOperation(command),
+      compileModelDesignOperation(command),
     ) as DesignOperation[],
   };
 }
 
-function normalizeModelDesignOperation(command: unknown): unknown {
+function escapePointer(value: string): string {
+  return value.replaceAll("~", "~0").replaceAll("/", "~1");
+}
+
+function compileModelDesignOperation(command: unknown): unknown {
   if (!isRecord(command)) {
     return command;
   }
@@ -176,7 +311,7 @@ function normalizeModelDesignOperation(command: unknown): unknown {
           ? {
               exportSettings: [],
               ...node,
-              properties: normalizeModelNodeProperties(
+              properties: compileModelNodeProperties(
                 node.kind,
                 node.properties,
               ),
@@ -191,17 +326,17 @@ function normalizeModelDesignOperation(command: unknown): unknown {
     Array.isArray(command.exportSettings)
   ) {
     const exportSettings = command.exportSettings.map(
-      normalizeModelExportSetting,
+      compileModelExportSetting,
     );
     return { ...command, exportSettings };
   }
   if (command.type !== "insert_element") {
     return structuredClone(command);
   }
-  return normalizeModelInsertOperation(command);
+  return compileModelInsertOperation(command);
 }
 
-function normalizeModelInsertOperation(
+function compileModelInsertOperation(
   command: Record<string, unknown>,
 ): Record<string, unknown> | undefined {
   if (!isRecord(command.node)) return undefined;
@@ -216,7 +351,7 @@ function normalizeModelInsertOperation(
       ...command.node,
       parentId: command.parentId,
       childIds: command.node.childIds ?? [],
-      properties: normalizeModelNodeProperties(
+      properties: compileModelNodeProperties(
         command.node.kind,
         command.node.properties,
       ),
@@ -224,7 +359,7 @@ function normalizeModelInsertOperation(
   };
 }
 
-function normalizeModelNodeProperties(kind: unknown, value: unknown): unknown {
+function compileModelNodeProperties(kind: unknown, value: unknown): unknown {
   if (!isRecord(value)) return value;
   const shapeDefaults = { fills: [], strokes: [], strokeWidth: 0 };
   if (kind === "frame") {
@@ -253,7 +388,7 @@ function normalizeModelNodeProperties(kind: unknown, value: unknown): unknown {
   return value;
 }
 
-function normalizeModelExportSetting(value: unknown): unknown {
+function compileModelExportSetting(value: unknown): unknown {
   if (!isRecord(value) || typeof value.suffix !== "string") return undefined;
   const common = {
     suffix: value.suffix,
@@ -384,50 +519,6 @@ function refineDesignApply(
   return issues;
 }
 
-function canonicalCommandIssues(
-  input: InternalDesignApplyToolInput,
-): ValidationIssue[] {
-  return input.commands.flatMap((command, commandIndex) => {
-    if (command.type === "insert_element") {
-      return prefixedSchemaIssues(
-        DesignNodeSchema,
-        command.node,
-        `/commands/${commandIndex}/node`,
-      );
-    }
-    if (command.type === "replace_subtree") {
-      return command.nodes.flatMap((node, nodeIndex) =>
-        prefixedSchemaIssues(
-          DesignNodeSchema,
-          node,
-          `/commands/${commandIndex}/nodes/${nodeIndex}`,
-        ),
-      );
-    }
-    return prefixedSchemaIssues(
-      NodeDesignOperationSchema,
-      command,
-      `/commands/${commandIndex}`,
-    );
-  });
-}
-
-function prefixedSchemaIssues(
-  schema: TSchema,
-  value: unknown,
-  prefix: string,
-): ValidationIssue[] {
-  return schemaValidationIssues(schema, value)
-    .slice(0, 64)
-    .map((validation) => ({
-      code: "design_apply.canonical_invalid",
-      path: `${prefix}${validation.path}`,
-      message: validation.message,
-      recovery:
-        "Correct the reported field and submit one revised call; do not repeat unchanged arguments.",
-    }));
-}
-
 function isPermittedApplyOperation(
   command: DesignOperation,
   internal: boolean,
@@ -469,22 +560,6 @@ function operationWritesInstanceDirectly(command: DesignOperation): boolean {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function schemaIssues(
-  schema: TSchema,
-  value: unknown,
-  code: string,
-): ValidationIssue[] {
-  return schemaValidationIssues(schema, value)
-    .slice(0, 64)
-    .map((validation) => ({
-      code,
-      path: validation.path || "/",
-      message: validation.message,
-      recovery:
-        "Correct the reported field and submit one revised call; do not repeat unchanged arguments.",
-    }));
 }
 
 function issue(

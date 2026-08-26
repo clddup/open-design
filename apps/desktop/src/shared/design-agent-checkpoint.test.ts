@@ -197,7 +197,7 @@ describe("design checkpoint contract", () => {
     expect(extraField.some((issue) => issue.path === "/refinement")).toBe(true);
   });
 
-  it("prefixes canonical Apply errors with the nested branch path", () => {
+  it("prefixes provider Apply errors with the nested branch path", () => {
     const issues = DesignCheckpointContract.issues({
       version: 1,
       action: "apply-and-capture",
@@ -228,7 +228,7 @@ describe("design checkpoint contract", () => {
     expect(
       issues.some(
         (issue) =>
-          issue.code === "design_apply.canonical_invalid" &&
+          issue.code === "design_apply.schema_invalid" &&
           issue.path.startsWith("/apply/commands/0/node/properties"),
       ),
     ).toBe(true);

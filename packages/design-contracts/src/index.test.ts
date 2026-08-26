@@ -239,6 +239,106 @@ describe("executable JSON Schema", () => {
       }),
     ).toHaveLength(0);
   });
+
+  it("recomposes nested executable discriminated intersections", () => {
+    const nested = executableJsonSchema({
+      type: "object",
+      properties: {
+        kind: { enum: ["text", "shape"] },
+        properties: { type: "object" },
+      },
+      required: ["kind", "properties"],
+      additionalProperties: false,
+      anyOf: [
+        {
+          type: "object",
+          properties: {
+            kind: { const: "text" },
+            properties: {
+              type: "object",
+              properties: {
+                mode: { enum: ["fixed", "auto"] },
+                maxLines: { anyOf: [{ type: "integer" }, { type: "null" }] },
+              },
+              required: ["mode", "maxLines"],
+              additionalProperties: false,
+              anyOf: [
+                {
+                  type: "object",
+                  properties: {
+                    mode: { const: "fixed" },
+                    maxLines: { type: "null" },
+                  },
+                  required: ["mode", "maxLines"],
+                },
+                {
+                  type: "object",
+                  properties: {
+                    mode: { const: "auto" },
+                    maxLines: { type: "integer", minimum: 1 },
+                  },
+                  required: ["mode", "maxLines"],
+                },
+              ],
+            },
+          },
+          required: ["kind", "properties"],
+        },
+        {
+          type: "object",
+          properties: {
+            kind: { const: "shape" },
+            properties: {
+              type: "object",
+              properties: {},
+              additionalProperties: false,
+            },
+          },
+          required: ["kind", "properties"],
+        },
+      ],
+    } as const);
+
+    expect(() =>
+      executableJsonSchema({
+        type: "object",
+        properties: { node: nested },
+        required: ["node"],
+        additionalProperties: false,
+      } as const),
+    ).not.toThrow();
+  });
+
+  it("supports standard empty schemas for compact shared-field branches", () => {
+    const schema = executableJsonSchema({
+      type: "object",
+      properties: {
+        kind: { enum: ["text", "shape"] },
+        value: { type: "string", minLength: 1 },
+      },
+      required: ["kind", "value"],
+      additionalProperties: false,
+      anyOf: [
+        {
+          type: "object",
+          properties: { kind: { const: "text" }, value: {} },
+          required: ["kind", "value"],
+        },
+        {
+          type: "object",
+          properties: { kind: { const: "shape" }, value: {} },
+          required: ["kind", "value"],
+        },
+      ],
+    } as const);
+
+    expect(
+      schemaValidationIssues(schema, { kind: "text", value: "A" }),
+    ).toEqual([]);
+    expect(schemaValidationIssues(schema, { kind: "text", value: "" })).toEqual(
+      expect.arrayContaining([expect.objectContaining({ path: "/value" })]),
+    );
+  });
 });
 
 it("validates typed image asset derivation commands", () => {

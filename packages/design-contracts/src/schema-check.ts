@@ -93,6 +93,7 @@ function cloneJsonValue(value: unknown): unknown {
 }
 
 function schemaKind(schema: JsonSchema): string {
+  if (Object.keys(schema).length === 0) return "Any";
   if (Array.isArray(schema.anyOf) && typeof schema.type === "string") {
     return "Intersect";
   }
@@ -120,7 +121,9 @@ function schemaKind(schema: JsonSchema): string {
 
 function rejectUnsupportedKeywords(schema: JsonSchema): void {
   const unsupported = ["$ref", "allOf", "oneOf", "not", "if", "then", "else"];
-  const found = unsupported.find((key) => Object.hasOwn(schema, key));
+  const found = unsupported.find((key) =>
+    Object.prototype.propertyIsEnumerable.call(schema, key),
+  );
   if (found) {
     throw new TypeError(`Unsupported executable JSON Schema keyword: ${found}`);
   }

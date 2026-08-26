@@ -25,6 +25,10 @@ export type ContractDefinition<
   Context = undefined,
 > = ContractSchemaPhase & {
   canonical?: ContractSchemaPhase;
+  refineModel?: (
+    value: ModelValue,
+    context: Context,
+  ) => readonly ValidationIssue[];
   bind?: (value: ModelValue, context: Context) => CanonicalValue;
   refine?: (
     value: CanonicalValue,
@@ -43,9 +47,15 @@ export type Contract<CanonicalValue, Context = undefined> = {
   issues: (input: unknown, context?: Context) => ValidationIssue[];
 };
 
+export type ContractValidationOptions = {
+  /** Trusted schema composition only: an enclosing executable schema checked the exact same value. */
+  structureValidated?: boolean;
+};
+
 /**
- * Runs one model-facing structure contract, optional trusted host binding, one
- * canonical structure contract, and one domain refinement in that order.
+ * Runs one model-facing structure contract, one cross-field model refinement,
+ * optional trusted host binding/compiler, one canonical structure contract,
+ * and one canonical domain refinement in that order.
  * Provider disclosure must use `definition.schema`; no parallel shape guard is
  * permitted around this entry point.
  */
@@ -57,18 +67,21 @@ export function validateContract<
   definition: ContractDefinition<ModelValue, CanonicalValue, Context>,
   input: unknown,
   context: Context,
+  options: ContractValidationOptions = {},
 ): ValidationResult<CanonicalValue> {
-  const structureIssues = contractSchemaIssues(
-    definition.schema,
-    input,
-    definition,
-  );
+  const structureIssues = options.structureValidated
+    ? []
+    : contractSchemaIssues(definition.schema, input, definition);
   if (structureIssues.length > 0) {
     return { ok: false, issues: structureIssues };
   }
 
   const clone = definition.clone !== false;
   const modelValue = input as ModelValue;
+  const modelDomainIssues = definition.refineModel?.(modelValue, context) ?? [];
+  if (modelDomainIssues.length > 0) {
+    return { ok: false, issues: [...modelDomainIssues] };
+  }
   const value = definition.bind
     ? definition.bind(modelValue, context)
     : (modelValue as unknown as CanonicalValue);
@@ -133,12 +146,20 @@ export function contractSchemaIssues(
   },
 ): ValidationIssue[] {
   const raw = schemaValidationIssues(schema, input);
-  const hasSpecificPath = raw.some((issue) => issue.path.length > 0);
+  const normalizedPaths = raw.map((issue) => issue.path || "/");
   const seenPaths = new Set<string>();
   const issues: ValidationIssue[] = [];
   for (const issue of raw) {
     const path = issue.path || "/";
-    if (hasSpecificPath && path === "/") continue;
+    const descendantPrefix = path === "/" ? "/" : `${path}/`;
+    if (
+      normalizedPaths.some(
+        (candidate) =>
+          candidate !== path && candidate.startsWith(descendantPrefix),
+      )
+    ) {
+      continue;
+    }
     if (seenPaths.has(path)) continue;
     seenPaths.add(path);
     issues.push({

@@ -84,17 +84,37 @@ const MODEL_GRADIENT_PROPERTIES = {
   stretch: { type: "number", exclusiveMinimum: 0 },
 } as const;
 
+const MODEL_PAINT_PROPERTIES = {
+  type: {
+    enum: [
+      "solid",
+      "linear-gradient",
+      "radial-gradient",
+      "angular-gradient",
+      "image",
+    ],
+  },
+  color: { type: "string", minLength: 1 },
+  ...MODEL_GRADIENT_PROPERTIES,
+  assetId: { type: "string", minLength: 1 },
+  fit: { enum: ["fill", "contain", "cover", "tile"] },
+  scale: MODEL_POINT_SCHEMA,
+  offset: MODEL_POINT_SCHEMA,
+} as const;
+
 const MODEL_PAINT_SCHEMA = {
+  type: "object",
+  properties: MODEL_PAINT_PROPERTIES,
+  required: ["type", "opacity"],
+  additionalProperties: false,
   anyOf: [
     {
       type: "object",
       properties: {
         type: { const: "solid" },
-        color: { type: "string", minLength: 1 },
-        ...MODEL_PAINT_BASE_PROPERTIES,
+        color: {},
       },
-      required: ["type", "color", "opacity"],
-      additionalProperties: false,
+      required: ["type", "color"],
     },
     ...(
       ["linear-gradient", "radial-gradient", "angular-gradient"] as const
@@ -102,25 +122,67 @@ const MODEL_PAINT_SCHEMA = {
       type: "object" as const,
       properties: {
         type: { const: type },
-        ...MODEL_GRADIENT_PROPERTIES,
+        stops: {},
       },
-      required: ["type", "opacity", "stops"],
-      additionalProperties: false,
+      required: ["type", "stops"],
     })),
     {
       type: "object",
       properties: {
         type: { const: "image" },
-        assetId: { type: "string", minLength: 1 },
-        fit: { enum: ["fill", "contain", "cover", "tile"] },
-        ...MODEL_PAINT_BASE_PROPERTIES,
-        rotation: { type: "number" },
-        scale: MODEL_POINT_SCHEMA,
-        offset: MODEL_POINT_SCHEMA,
+        assetId: {},
+        fit: {},
       },
-      required: ["type", "assetId", "fit", "opacity"],
-      additionalProperties: false,
+      required: ["type", "assetId", "fit"],
     },
+  ],
+} as const;
+
+export const DESIGN_MODEL_PAINT_PROPERTY_KEYS_BY_TYPE = {
+  solid: ["type", "color", "opacity", "visible", "blendMode"],
+  "linear-gradient": [
+    "type",
+    "opacity",
+    "visible",
+    "blendMode",
+    "stops",
+    "from",
+    "to",
+    "rotation",
+    "stretch",
+  ],
+  "radial-gradient": [
+    "type",
+    "opacity",
+    "visible",
+    "blendMode",
+    "stops",
+    "from",
+    "to",
+    "rotation",
+    "stretch",
+  ],
+  "angular-gradient": [
+    "type",
+    "opacity",
+    "visible",
+    "blendMode",
+    "stops",
+    "from",
+    "to",
+    "rotation",
+    "stretch",
+  ],
+  image: [
+    "type",
+    "assetId",
+    "fit",
+    "opacity",
+    "visible",
+    "blendMode",
+    "rotation",
+    "scale",
+    "offset",
   ],
 } as const;
 
@@ -373,56 +435,274 @@ const MODEL_PATH_PROPERTY = {
   description: "Portable SVG path data in the node's local coordinates.",
 } as const;
 
-const MODEL_NODE_KIND_PROPERTIES_SCHEMA = {
+const MODEL_NODE_PROPERTY_FIELDS = {
+  ...MODEL_SHAPE_PROPERTIES,
+  cornerRadius: { type: "number", minimum: 0 },
+  clipsContent: { type: "boolean" },
+  content: MODEL_TEXT_PROPERTIES.content,
+  fontFamily: MODEL_TEXT_PROPERTIES.fontFamily,
+  fontStyleName: MODEL_TEXT_PROPERTIES.fontStyleName,
+  fontSize: MODEL_TEXT_PROPERTIES.fontSize,
+  fontWeight: MODEL_TEXT_PROPERTIES.fontWeight,
+  fontSlant: MODEL_TEXT_PROPERTIES.fontSlant,
+  lineHeight: MODEL_TEXT_PROPERTIES.lineHeight,
+  letterSpacing: MODEL_TEXT_PROPERTIES.letterSpacing,
+  paragraphIndent: MODEL_TEXT_PROPERTIES.paragraphIndent,
+  paragraphSpacing: MODEL_TEXT_PROPERTIES.paragraphSpacing,
+  listSpacing: MODEL_TEXT_PROPERTIES.listSpacing,
+  hangingList: MODEL_TEXT_PROPERTIES.hangingList,
+  textCase: MODEL_TEXT_PROPERTIES.textCase,
+  textDecoration: MODEL_TEXT_PROPERTIES.textDecoration,
+  textAlignHorizontal: MODEL_TEXT_PROPERTIES.textAlignHorizontal,
+  textAlignVertical: MODEL_TEXT_PROPERTIES.textAlignVertical,
+  textResize: MODEL_TEXT_PROPERTIES.textResize,
+  textWrap: MODEL_TEXT_PROPERTIES.textWrap,
+  textOverflow: MODEL_TEXT_PROPERTIES.textOverflow,
+  textTruncation: MODEL_TEXT_PROPERTIES.textTruncation,
+  maxLines: MODEL_TEXT_PROPERTIES.maxLines,
+  assetId: { type: "string", minLength: 1 },
+  placement: DESIGN_IMAGE_PLACEMENT_SCHEMA,
+  altText: { type: "string" },
+  path: MODEL_PATH_PROPERTY,
+  network: MODEL_VECTOR_NETWORK_SCHEMA,
+  fillRule: { enum: ["nonzero", "evenodd"] },
+  start: MODEL_LINE_PROPERTIES.start,
+  end: MODEL_LINE_PROPERTIES.end,
+  startEndpoint: MODEL_LINE_PROPERTIES.startEndpoint,
+  endEndpoint: MODEL_LINE_PROPERTIES.endEndpoint,
+  pointCount: { type: "integer", minimum: 3, maximum: 60 },
+  innerRadius: { type: "number", minimum: 0, maximum: 1 },
+} as const;
+
+const MODEL_NODE_PROPERTIES_SCHEMA = {
   type: "object",
   description:
-    "Properties must match the inspected node kind; Path/Vector require exactly one geometry source. On insert, the host defaults omitted no-op appearance fields by kind: fills/strokes to [], strokeWidth/cornerRadius to 0, and Frame clipsContent to false. The host validates the complete discriminated node before writing.",
-  properties: {
-    ...MODEL_SHAPE_PROPERTIES,
-    cornerRadius: { type: "number", minimum: 0 },
-    clipsContent: { type: "boolean" },
-    content: MODEL_TEXT_PROPERTIES.content,
-    fontFamily: MODEL_TEXT_PROPERTIES.fontFamily,
-    fontStyleName: MODEL_TEXT_PROPERTIES.fontStyleName,
-    fontSize: MODEL_TEXT_PROPERTIES.fontSize,
-    fontWeight: MODEL_TEXT_PROPERTIES.fontWeight,
-    fontSlant: MODEL_TEXT_PROPERTIES.fontSlant,
-    lineHeight: MODEL_TEXT_PROPERTIES.lineHeight,
-    letterSpacing: MODEL_TEXT_PROPERTIES.letterSpacing,
-    paragraphIndent: MODEL_TEXT_PROPERTIES.paragraphIndent,
-    paragraphSpacing: MODEL_TEXT_PROPERTIES.paragraphSpacing,
-    listSpacing: MODEL_TEXT_PROPERTIES.listSpacing,
-    hangingList: MODEL_TEXT_PROPERTIES.hangingList,
-    textCase: MODEL_TEXT_PROPERTIES.textCase,
-    textDecoration: MODEL_TEXT_PROPERTIES.textDecoration,
-    textAlignHorizontal: MODEL_TEXT_PROPERTIES.textAlignHorizontal,
-    textAlignVertical: MODEL_TEXT_PROPERTIES.textAlignVertical,
-    textResize: MODEL_TEXT_PROPERTIES.textResize,
-    textWrap: MODEL_TEXT_PROPERTIES.textWrap,
-    textOverflow: MODEL_TEXT_PROPERTIES.textOverflow,
-    textTruncation: MODEL_TEXT_PROPERTIES.textTruncation,
-    maxLines: MODEL_TEXT_PROPERTIES.maxLines,
-    assetId: { type: "string", minLength: 1 },
-    placement: DESIGN_IMAGE_PLACEMENT_SCHEMA,
-    altText: { type: "string" },
-    path: MODEL_PATH_PROPERTY,
-    network: MODEL_VECTOR_NETWORK_SCHEMA,
-    fillRule: { enum: ["nonzero", "evenodd"] },
-    start: MODEL_LINE_PROPERTIES.start,
-    end: MODEL_LINE_PROPERTIES.end,
-    startEndpoint: MODEL_LINE_PROPERTIES.startEndpoint,
-    endEndpoint: MODEL_LINE_PROPERTIES.endEndpoint,
-    pointCount: { type: "integer", minimum: 3, maximum: 60 },
-    innerRadius: { type: "number", minimum: 0, maximum: 1 },
-  },
+    "Kind fields: Group/Slice {}; Frame shape+cornerRadius+clipsContent; Rectangle shape+cornerRadius; Ellipse shape; Line shape+start/end/endpoints; Polygon shape+pointCount+cornerRadius; Star shape+pointCount+innerRadius+cornerRadius; Text typography+shape; Image assetId+placement+altText+cornerRadius; Path/Vector shape plus exactly one of path or network.",
+  properties: MODEL_NODE_PROPERTY_FIELDS,
   additionalProperties: false,
 } as const;
 
 const MODEL_NODE_PROPERTY_PATCH_SCHEMA = {
-  ...MODEL_NODE_KIND_PROPERTIES_SCHEMA,
+  ...MODEL_NODE_PROPERTIES_SCHEMA,
   description:
-    "A partial property patch. It must contain only fields supported by the inspected target node kind; the host validates the merged node before any revision is written.",
+    "A partial property patch. Use only fields supported by the inspected target kind; the host validates the patch against that current node before writing.",
 } as const;
+
+const MODEL_SHAPE_PROPERTY_KEYS = Object.keys(MODEL_SHAPE_PROPERTIES);
+
+function requiredPropertiesSchema(
+  required: readonly string[] = [],
+  anyOf?: readonly Record<string, unknown>[],
+) {
+  return {
+    type: "object" as const,
+    properties: Object.fromEntries(required.map((key) => [key, {}])),
+    ...(required.length === 0 ? {} : { required }),
+    ...(anyOf === undefined ? {} : { anyOf }),
+  };
+}
+
+const MODEL_FRAME_PROPERTY_KEYS = [
+  ...MODEL_SHAPE_PROPERTY_KEYS,
+  "cornerRadius",
+  "clipsContent",
+] as const;
+const MODEL_FRAME_PROPERTIES_SCHEMA = requiredPropertiesSchema();
+
+const MODEL_GROUP_PROPERTY_KEYS: readonly string[] = [];
+const MODEL_GROUP_PROPERTIES_SCHEMA = requiredPropertiesSchema();
+
+const MODEL_RECTANGLE_PROPERTY_KEYS = [
+  ...MODEL_SHAPE_PROPERTY_KEYS,
+  "cornerRadius",
+] as const;
+const MODEL_RECTANGLE_PROPERTIES_SCHEMA = requiredPropertiesSchema();
+
+const MODEL_ELLIPSE_PROPERTY_KEYS = MODEL_SHAPE_PROPERTY_KEYS;
+const MODEL_ELLIPSE_PROPERTIES_SCHEMA = requiredPropertiesSchema();
+
+const MODEL_LINE_PROPERTY_KEYS = Object.keys(MODEL_LINE_PROPERTIES);
+const MODEL_LINE_PROPERTIES_SCHEMA = requiredPropertiesSchema([
+  "start",
+  "end",
+  "startEndpoint",
+  "endEndpoint",
+]);
+
+const MODEL_POLYGON_PROPERTY_KEYS = [
+  ...MODEL_SHAPE_PROPERTY_KEYS,
+  "pointCount",
+  "cornerRadius",
+] as const;
+const MODEL_POLYGON_PROPERTIES_SCHEMA = requiredPropertiesSchema([
+  "pointCount",
+]);
+
+const MODEL_STAR_PROPERTY_KEYS = [
+  ...MODEL_SHAPE_PROPERTY_KEYS,
+  "pointCount",
+  "innerRadius",
+  "cornerRadius",
+] as const;
+const MODEL_STAR_PROPERTIES_SCHEMA = requiredPropertiesSchema([
+  "pointCount",
+  "innerRadius",
+]);
+
+const MODEL_TEXT_CORE_REQUIRED = [
+  "content",
+  "fontFamily",
+  "fontStyleName",
+  "fontSize",
+  "fontWeight",
+  "fontSlant",
+  "lineHeight",
+  "letterSpacing",
+  "paragraphIndent",
+  "paragraphSpacing",
+  "listSpacing",
+  "hangingList",
+  "textCase",
+  "textDecoration",
+  "textAlignHorizontal",
+  "textAlignVertical",
+  "textResize",
+  "textWrap",
+  "textOverflow",
+  "textTruncation",
+  "maxLines",
+] as const;
+
+function textMode(
+  textResize: "fixed" | "auto-width" | "auto-height",
+  textWrap: readonly ("none" | "word" | "character")[],
+  textOverflow: readonly ("visible" | "clip")[],
+  textTruncation: "disabled" | "ending",
+  maxLines: Record<string, unknown>,
+) {
+  return {
+    type: "object" as const,
+    properties: {
+      textResize: { const: textResize },
+      textWrap: { enum: textWrap },
+      textOverflow: { enum: textOverflow },
+      textTruncation: { const: textTruncation },
+      maxLines,
+    },
+    required: [
+      "textResize",
+      "textWrap",
+      "textOverflow",
+      "textTruncation",
+      "maxLines",
+    ],
+  };
+}
+
+const MODEL_TEXT_PROPERTY_KEYS = Object.keys(MODEL_TEXT_PROPERTIES);
+const MODEL_TEXT_PROPERTIES_SCHEMA = requiredPropertiesSchema(
+  MODEL_TEXT_CORE_REQUIRED,
+  [
+    textMode(
+      "fixed",
+      ["none", "word", "character"],
+      ["visible", "clip"],
+      "disabled",
+      { type: "null" },
+    ),
+    textMode("fixed", ["none", "word", "character"], ["clip"], "ending", {
+      anyOf: [{ type: "null" }, { type: "integer", minimum: 1 }],
+    }),
+    textMode("auto-width", ["none"], ["visible"], "disabled", { type: "null" }),
+    textMode("auto-width", ["none"], ["visible"], "ending", {
+      type: "integer",
+      minimum: 1,
+    }),
+    textMode("auto-height", ["word", "character"], ["visible"], "disabled", {
+      type: "null",
+    }),
+    textMode("auto-height", ["word", "character"], ["visible"], "ending", {
+      type: "integer",
+      minimum: 1,
+    }),
+  ],
+);
+
+const MODEL_IMAGE_PROPERTY_KEYS = [
+  "assetId",
+  "placement",
+  "altText",
+  "cornerRadius",
+] as const;
+const MODEL_IMAGE_PROPERTIES_SCHEMA = requiredPropertiesSchema([
+  "assetId",
+  "placement",
+  "altText",
+]);
+
+const MODEL_PATH_PROPERTY_KEYS = [
+  ...MODEL_SHAPE_PROPERTY_KEYS,
+  "path",
+  "network",
+  "fillRule",
+] as const;
+const MODEL_PATH_DATA_PROPERTIES_SCHEMA = requiredPropertiesSchema(["path"]);
+
+const MODEL_VECTOR_NETWORK_PROPERTIES_SCHEMA = requiredPropertiesSchema([
+  "network",
+]);
+
+const MODEL_PATH_PROPERTIES_SCHEMA = {
+  anyOf: [
+    MODEL_PATH_DATA_PROPERTIES_SCHEMA,
+    MODEL_VECTOR_NETWORK_PROPERTIES_SCHEMA,
+  ],
+} as const;
+
+const MODEL_SLICE_PROPERTIES_SCHEMA = MODEL_GROUP_PROPERTIES_SCHEMA;
+
+export const DESIGN_MODEL_NODE_PROPERTY_KEYS_BY_KIND = {
+  frame: MODEL_FRAME_PROPERTY_KEYS,
+  group: MODEL_GROUP_PROPERTY_KEYS,
+  rectangle: MODEL_RECTANGLE_PROPERTY_KEYS,
+  ellipse: MODEL_ELLIPSE_PROPERTY_KEYS,
+  line: MODEL_LINE_PROPERTY_KEYS,
+  polygon: MODEL_POLYGON_PROPERTY_KEYS,
+  star: MODEL_STAR_PROPERTY_KEYS,
+  text: MODEL_TEXT_PROPERTY_KEYS,
+  image: MODEL_IMAGE_PROPERTY_KEYS,
+  vector: MODEL_PATH_PROPERTY_KEYS,
+  path: MODEL_PATH_PROPERTY_KEYS,
+  slice: MODEL_GROUP_PROPERTY_KEYS,
+} as const;
+
+const MODEL_NODE_KIND_BRANCHES = [
+  ["frame", MODEL_FRAME_PROPERTIES_SCHEMA],
+  ["group", MODEL_GROUP_PROPERTIES_SCHEMA],
+  ["rectangle", MODEL_RECTANGLE_PROPERTIES_SCHEMA],
+  ["ellipse", MODEL_ELLIPSE_PROPERTIES_SCHEMA],
+  ["line", MODEL_LINE_PROPERTIES_SCHEMA],
+  ["polygon", MODEL_POLYGON_PROPERTIES_SCHEMA],
+  ["star", MODEL_STAR_PROPERTIES_SCHEMA],
+  ["text", MODEL_TEXT_PROPERTIES_SCHEMA],
+  ["image", MODEL_IMAGE_PROPERTIES_SCHEMA],
+  ["vector", MODEL_PATH_PROPERTIES_SCHEMA],
+  ["path", MODEL_PATH_PROPERTIES_SCHEMA],
+  ["slice", MODEL_SLICE_PROPERTIES_SCHEMA],
+] as const;
+
+const MODEL_NODE_KINDS = MODEL_NODE_KIND_BRANCHES.map(([kind]) => kind);
+
+const MODEL_NODE_DISCRIMINATED_BRANCHES = MODEL_NODE_KIND_BRANCHES.map(
+  ([kind, properties]) => ({
+    type: "object" as const,
+    properties: {
+      kind: { const: kind },
+      properties,
+    },
+    required: ["kind", "properties"],
+  }),
+);
 
 const MODEL_EXPORT_SETTINGS_SCHEMA = {
   type: "array",
@@ -449,7 +729,8 @@ const MODEL_EXPORT_SETTINGS_SCHEMA = {
 
 const MODEL_NODE_SCHEMA = {
   type: "object",
-  description: "OpenDesign node. Set exportSettings with update_properties.",
+  description:
+    "OpenDesign node with kind-discriminated properties. No-op appearance defaults are compiled deterministically; kind-specific semantic fields are required here. Set exportSettings with update_properties.",
   properties: {
     id: { type: "string", minLength: 1, maxLength: 256 },
     name: { type: "string" },
@@ -477,24 +758,8 @@ const MODEL_NODE_SCHEMA = {
       enum: ["none", "alpha", "luminance", "clipping", "outline"],
     },
     extensions: { type: "object" },
-    kind: {
-      enum: [
-        "frame",
-        "group",
-        "rectangle",
-        "ellipse",
-        "line",
-        "polygon",
-        "star",
-        "text",
-        "image",
-        "vector",
-        "path",
-        "instance",
-        "slice",
-      ],
-    },
-    properties: MODEL_NODE_KIND_PROPERTIES_SCHEMA,
+    kind: { enum: MODEL_NODE_KINDS },
+    properties: MODEL_NODE_PROPERTIES_SCHEMA,
   },
   required: [
     "id",
@@ -511,6 +776,7 @@ const MODEL_NODE_SCHEMA = {
     "properties",
   ],
   additionalProperties: false,
+  anyOf: MODEL_NODE_DISCRIMINATED_BRANCHES,
 } as const;
 
 const MODEL_INSERT_NODE_SCHEMA = {
