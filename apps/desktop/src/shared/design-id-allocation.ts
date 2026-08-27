@@ -1,8 +1,36 @@
+import { Type } from "@sinclair/typebox";
+import { defineContract, type ValidationIssue } from "./contract-validation";
+
 export type AgentDesignIdAllocation = {
   version: 1;
   scope: "run";
   newNodeIdPrefix: string;
 };
+
+export const AgentDesignIdAllocationSchema = Type.Object(
+  {
+    version: Type.Literal(1),
+    scope: Type.Literal("run"),
+    newNodeIdPrefix: Type.String({
+      minLength: 6,
+      maxLength: 54,
+      pattern: "^odr_[A-Za-z0-9_-]+_$",
+    }),
+  },
+  { additionalProperties: false },
+);
+
+export const AgentDesignIdAllocationContract = defineContract<
+  AgentDesignIdAllocation,
+  AgentDesignIdAllocation,
+  { runId: string }
+>({
+  schema: AgentDesignIdAllocationSchema,
+  code: "agent_design_id_allocation.schema_invalid",
+  subject: "Agent design ID allocation",
+  clone: false,
+  refine: (value, context) => allocationIdentityIssues(value, context.runId),
+});
 
 export function createAgentDesignIdAllocation(
   runId: string,
@@ -26,15 +54,25 @@ export function isAgentDesignIdAllocation(
   value: unknown,
   runId: string,
 ): value is AgentDesignIdAllocation {
-  if (!isRecord(value)) return false;
-  return (
-    value.version === 1 &&
-    value.scope === "run" &&
-    value.newNodeIdPrefix === agentDesignNodeIdPrefix(runId) &&
-    Object.keys(value).length === 3
-  );
+  return AgentDesignIdAllocationContract.parse(value, { runId }).ok;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+function allocationIdentityIssues(
+  value: AgentDesignIdAllocation,
+  runId: string,
+): ValidationIssue[] {
+  const expected = agentDesignNodeIdPrefix(runId);
+  return value.newNodeIdPrefix === expected
+    ? []
+    : [
+        {
+          code: "agent_design_id_allocation.run_mismatch",
+          path: "/newNodeIdPrefix",
+          message: "newNodeIdPrefix must be derived from the current Run ID",
+          expected,
+          actual: value.newNodeIdPrefix,
+          recovery:
+            "Use the host-provided ID allocation for this Run; do not reuse a namespace from another Run.",
+        },
+      ];
 }

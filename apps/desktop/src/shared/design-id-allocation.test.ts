@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  AgentDesignIdAllocationContract,
   agentDesignNodeIdPrefix,
   createAgentDesignIdAllocation,
   isAgentDesignIdAllocation,
@@ -21,5 +22,27 @@ describe("Agent design ID allocation", () => {
     const allocation = createAgentDesignIdAllocation("run_1");
     expect(isAgentDesignIdAllocation(allocation, "run_1")).toBe(true);
     expect(isAgentDesignIdAllocation(allocation, "run_2")).toBe(false);
+    expect(
+      AgentDesignIdAllocationContract.issues(allocation, { runId: "run_2" }),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "agent_design_id_allocation.run_mismatch",
+        path: "/newNodeIdPrefix",
+      }),
+    );
+  });
+
+  it("rejects unknown structure before Run identity refinement", () => {
+    expect(
+      AgentDesignIdAllocationContract.issues(
+        {
+          ...createAgentDesignIdAllocation("run_1"),
+          owner: "model",
+        },
+        { runId: "run_1" },
+      ),
+    ).toEqual(
+      expect.arrayContaining([expect.objectContaining({ path: "/owner" })]),
+    );
   });
 });
