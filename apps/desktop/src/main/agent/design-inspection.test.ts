@@ -230,7 +230,7 @@ describe("Agent design inspection component strategy", () => {
         details: {
           issues: [
             {
-              path: "/componentCatalog/components/0/scopeUsageCount",
+              path: "/content/document/componentCatalog/components/0/scopeUsageCount",
             },
           ],
         },
