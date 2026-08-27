@@ -44,6 +44,10 @@ import {
   LAYOUT_GUIDE_DESIGN_SCHEMA_VERSION,
   LayoutGuideSchema,
   PaintSchema,
+  DesignCapabilitiesSchema,
+  EditorEventSchema,
+  ExportArtifactSchema,
+  HistoryStateSchema,
   SelectionStateSchema,
   SharedStyleDefinitionSchema,
   isDesignDocument,
@@ -478,6 +482,125 @@ it("validates bounded derived Component selection targets", () => {
       },
     }),
   ).not.toEqual([]);
+});
+
+describe("editor wire schemas", () => {
+  const eventBase = {
+    eventId: "event_1",
+    sequence: 1,
+    occurredAt: "2026-08-27T00:00:00.000Z",
+    documentId: "document_1",
+    revision: 0,
+  };
+
+  it("selects the concrete event branch before reporting field errors", () => {
+    expect(
+      schemaValidationIssues(EditorEventSchema, {
+        ...eventBase,
+        type: "viewport.changed",
+        viewport: { panX: 0, panY: 0, zoom: 0, width: 100, height: 100 },
+      }),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: "/viewport/zoom" }),
+      ]),
+    );
+    expect(
+      schemaValidationIssues(EditorEventSchema, {
+        ...eventBase,
+        type: "unknown.changed",
+      }),
+    ).toEqual([expect.objectContaining({ path: "/type" })]);
+  });
+
+  it("keeps injected transaction, history, and export schemas authoritative", () => {
+    expect(
+      schemaValidationIssues(EditorEventSchema, {
+        ...eventBase,
+        type: "document.changed",
+        result: { ok: true },
+      }),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: "/result/mode" }),
+      ]),
+    );
+    expect(
+      schemaValidationIssues(EditorEventSchema, {
+        ...eventBase,
+        type: "runtime.error",
+        error: {
+          code: "invalid",
+          message: "invalid transaction",
+          retryable: false,
+          issues: [],
+        },
+      }),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: "/error/issues" }),
+      ]),
+    );
+    expect(
+      schemaValidationIssues(HistoryStateSchema, {
+        canUndo: true,
+        canRedo: false,
+        undo: [{}],
+        redo: [],
+      }),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: "/undo/0/transactionId" }),
+      ]),
+    );
+    expect(
+      schemaValidationIssues(ExportArtifactSchema, {
+        artifactId: "artifact_1",
+        mimeType: "image/svg+xml",
+        path: "/tmp/artifact.svg",
+        fidelity: {
+          status: "degraded",
+          warnings: [{ feature: "", fallback: "path", message: "fallback" }],
+        },
+      }),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: "/fidelity/warnings/0/feature" }),
+      ]),
+    );
+  });
+
+  it("keeps capability literals and closed fields unchanged", () => {
+    const capability = {
+      schemaVersion: DESIGN_SCHEMA_VERSION,
+      nodeKinds: ["frame"],
+      operations: ["insert_element"],
+      limits: { maxCommandsPerTransaction: 32 },
+      features: {
+        preview: true,
+        atomicTransactions: true,
+        undoRedo: true,
+        hitTesting: true,
+        displayList: true,
+      },
+      importFormats: ["svg"],
+      exportFormats: ["svg"],
+      extensions: {},
+    };
+    expect(
+      schemaValidationIssues(DesignCapabilitiesSchema, capability),
+    ).toEqual([]);
+    expect(
+      schemaValidationIssues(DesignCapabilitiesSchema, {
+        ...capability,
+        unsupported: true,
+      }),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: "/unsupported" }),
+      ]),
+    );
+  });
 });
 
 it("keeps Auto Layout and Layout Guide schema milestones distinct", () => {
