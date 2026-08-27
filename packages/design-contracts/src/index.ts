@@ -23,6 +23,8 @@ import {
 } from "./operation-contract.js";
 import { createDesignTransactionResultContract } from "./transaction-result-contract.js";
 import { createEditorWireSchemas } from "./editor-wire-schema.js";
+import { createChangeSetSchemas } from "./change-set-schema.js";
+import { createTransactionWireSchemas } from "./transaction-wire-schema.js";
 import * as limits from "./limits.js";
 import * as versions from "./versions.js";
 import {
@@ -1651,487 +1653,90 @@ export const DesignOperationSchema: TUnion<
   DeletePageCommandSchema,
 ]);
 
-export const DesignActorSchema = Type.Object(
-  {
-    type: Type.Union([
-      Type.Literal("user"),
-      Type.Literal("agent"),
-      Type.Literal("system"),
-      Type.Literal("plugin"),
-    ]),
-    id: Type.String({ minLength: 1 }),
-    displayName: Type.Optional(Type.String()),
-  },
-  { additionalProperties: false },
-);
+const changeSetSchemas: ReturnType<
+  typeof createChangeSetSchemas<
+    typeof DesignNodeSchema,
+    typeof DesignPageSchema,
+    typeof ComponentDefinitionSchema,
+    typeof LibraryComponentSourceSchema,
+    typeof LibraryVariantSetSourceSchema,
+    typeof LibraryStyleSourceSchema,
+    typeof LibraryVariableCollectionSourceSchema,
+    typeof LibraryVariableSourceSchema,
+    typeof VariantSetChangeSchema,
+    typeof SharedStyleChangeSchema,
+    typeof variables.VariableChangeSetProperties
+  >
+> = createChangeSetSchemas({
+  designNodeSchema: DesignNodeSchema,
+  designPageSchema: DesignPageSchema,
+  componentDefinitionSchema: ComponentDefinitionSchema,
+  libraryComponentSourceSchema: LibraryComponentSourceSchema,
+  libraryVariantSetSourceSchema: LibraryVariantSetSourceSchema,
+  libraryStyleSourceSchema: LibraryStyleSourceSchema,
+  libraryVariableCollectionSourceSchema: LibraryVariableCollectionSourceSchema,
+  libraryVariableSourceSchema: LibraryVariableSourceSchema,
+  variantSetChangeSchema: VariantSetChangeSchema,
+  sharedStyleChangeSchema: SharedStyleChangeSchema,
+  variableChangeSetProperties: variables.VariableChangeSetProperties,
+});
+export const NodeChangeSchema: (typeof changeSetSchemas)["NodeChangeSchema"] =
+  changeSetSchemas.NodeChangeSchema;
+export const PageChangeSchema: (typeof changeSetSchemas)["PageChangeSchema"] =
+  changeSetSchemas.PageChangeSchema;
+export const ComponentChangeSchema: (typeof changeSetSchemas)["ComponentChangeSchema"] =
+  changeSetSchemas.ComponentChangeSchema;
+export const LibraryComponentSourceChangeSchema: (typeof changeSetSchemas)["LibraryComponentSourceChangeSchema"] =
+  changeSetSchemas.LibraryComponentSourceChangeSchema;
+export const LibraryVariantSetSourceChangeSchema: (typeof changeSetSchemas)["LibraryVariantSetSourceChangeSchema"] =
+  changeSetSchemas.LibraryVariantSetSourceChangeSchema;
+export const LibraryStyleSourceChangeSchema: (typeof changeSetSchemas)["LibraryStyleSourceChangeSchema"] =
+  changeSetSchemas.LibraryStyleSourceChangeSchema;
+export const LibraryVariableCollectionSourceChangeSchema: (typeof changeSetSchemas)["LibraryVariableCollectionSourceChangeSchema"] =
+  changeSetSchemas.LibraryVariableCollectionSourceChangeSchema;
+export const LibraryVariableSourceChangeSchema: (typeof changeSetSchemas)["LibraryVariableSourceChangeSchema"] =
+  changeSetSchemas.LibraryVariableSourceChangeSchema;
+export const DesignChangeSetSchema: (typeof changeSetSchemas)["DesignChangeSetSchema"] =
+  changeSetSchemas.DesignChangeSetSchema;
 
-type DesignTransactionValue = {
-  transactionId: string;
-  documentId: string;
-  baseRevision: number;
-  actor: Static<typeof DesignActorSchema>;
-  label?: string;
-  summary?: string;
-  commands: Array<Static<typeof DesignOperationSchema>>;
-  extensions?: Static<typeof JsonObjectSchema>;
-};
-
-export const DesignTransactionSchema: TSchema & {
-  static: DesignTransactionValue;
-} = Type.Object(
-  {
-    transactionId: Type.String({ minLength: 1 }),
-    documentId: Type.String({ minLength: 1 }),
-    baseRevision: Type.Integer({ minimum: 0 }),
-    actor: DesignActorSchema,
-    label: Type.Optional(Type.String()),
-    summary: Type.Optional(Type.String()),
-    commands: Type.Array(DesignOperationSchema, {
-      minItems: 1,
-      maxItems: limits.MAX_TRANSACTION_COMMANDS,
-    }),
-    extensions: Type.Optional(JsonObjectSchema),
-  },
-  { additionalProperties: false },
-);
-
-export const DesignErrorCodeSchema = Type.Union([
-  Type.Literal("unsupported"),
-  Type.Literal("conflict"),
-  Type.Literal("invalid"),
-  Type.Literal("permission-denied"),
-  Type.Literal("cancelled"),
-  Type.Literal("not-found"),
-  Type.Literal("duplicate"),
-  Type.Literal("engine-failure"),
-]);
-
-export const DesignIssueSchema = Type.Object(
-  {
-    code: Type.String({ minLength: 1, maxLength: 256 }),
-    path: Type.String({ maxLength: 4_000 }),
-    message: Type.String({ minLength: 1, maxLength: 20_000 }),
-    commandId: Type.Optional(Type.String({ minLength: 1, maxLength: 256 })),
-    nodeId: Type.Optional(Type.String({ minLength: 1, maxLength: 256 })),
-    expected: Type.Optional(JsonValueSchema),
-    actual: Type.Optional(JsonValueSchema),
-    recovery: Type.Optional(Type.String({ minLength: 1, maxLength: 4_000 })),
-    details: Type.Optional(JsonValueSchema),
-  },
-  { additionalProperties: false },
-);
-
-export const DesignErrorSchema = Type.Object(
-  {
-    code: DesignErrorCodeSchema,
-    message: Type.String({ minLength: 1 }),
-    retryable: Type.Boolean(),
-    issues: Type.Array(DesignIssueSchema, { minItems: 1, maxItems: 128 }),
-    context: Type.Optional(JsonValueSchema),
-  },
-  { additionalProperties: false },
-);
-
-export const RevisionSchema = Type.Object(
-  {
-    revision: Type.Integer({ minimum: 0 }),
-    createdAt: Type.String({ minLength: 1 }),
-    label: Type.Optional(Type.String()),
-    transactionId: Type.Optional(Type.String({ minLength: 1 })),
-    actor: Type.Optional(DesignActorSchema),
-  },
-  { additionalProperties: false },
-);
-
-type NodeChangeValue = {
-  type: "added" | "updated" | "moved" | "removed";
-  nodeId: string;
-  before?: Static<typeof DesignNodeSchema>;
-  after?: Static<typeof DesignNodeSchema>;
-  changedFields: string[];
-};
-
-export const NodeChangeSchema: TSchema & { static: NodeChangeValue } =
-  Type.Object(
-    {
-      type: Type.Union([
-        Type.Literal("added"),
-        Type.Literal("updated"),
-        Type.Literal("moved"),
-        Type.Literal("removed"),
-      ]),
-      nodeId: Type.String({ minLength: 1 }),
-      before: Type.Optional(DesignNodeSchema),
-      after: Type.Optional(DesignNodeSchema),
-      changedFields: Type.Array(Type.String(), { uniqueItems: true }),
-    },
-    { additionalProperties: false },
-  );
-
-export const PageChangeSchema = Type.Object(
-  {
-    type: Type.Union([
-      Type.Literal("added"),
-      Type.Literal("updated"),
-      Type.Literal("moved"),
-      Type.Literal("removed"),
-    ]),
-    pageId: Type.String({ minLength: 1 }),
-    before: Type.Optional(DesignPageSchema),
-    after: Type.Optional(DesignPageSchema),
-    changedFields: Type.Array(Type.String(), { uniqueItems: true }),
-  },
-  { additionalProperties: false },
-);
-
-export const ComponentChangeSchema = Type.Object(
-  {
-    type: Type.Union([
-      Type.Literal("added"),
-      Type.Literal("updated"),
-      Type.Literal("removed"),
-    ]),
-    componentId: Type.String({ minLength: 1 }),
-    before: Type.Optional(ComponentDefinitionSchema),
-    after: Type.Optional(ComponentDefinitionSchema),
-    changedFields: Type.Array(Type.String(), { uniqueItems: true }),
-  },
-  { additionalProperties: false },
-);
-
-type LibraryComponentSourceChangeValue = {
-  type: "added" | "updated" | "removed";
-  componentId: string;
-  before?: Static<typeof LibraryComponentSourceSchema>;
-  after?: Static<typeof LibraryComponentSourceSchema>;
-  changedFields: string[];
-};
-
-export const LibraryComponentSourceChangeSchema: TSchema & {
-  static: LibraryComponentSourceChangeValue;
-} = Type.Object(
-  {
-    type: Type.Union([
-      Type.Literal("added"),
-      Type.Literal("updated"),
-      Type.Literal("removed"),
-    ]),
-    componentId: Type.String({ minLength: 1 }),
-    before: Type.Optional(LibraryComponentSourceSchema),
-    after: Type.Optional(LibraryComponentSourceSchema),
-    changedFields: Type.Array(Type.String(), { uniqueItems: true }),
-  },
-  { additionalProperties: false },
-);
-
-type LibraryVariantSetSourceChangeValue = {
-  type: "added" | "updated" | "removed";
-  variantSetId: string;
-  before?: Static<typeof LibraryVariantSetSourceSchema>;
-  after?: Static<typeof LibraryVariantSetSourceSchema>;
-  changedFields: string[];
-};
-
-export const LibraryVariantSetSourceChangeSchema: TSchema & {
-  static: LibraryVariantSetSourceChangeValue;
-} = Type.Object(
-  {
-    type: Type.Union([
-      Type.Literal("added"),
-      Type.Literal("updated"),
-      Type.Literal("removed"),
-    ]),
-    variantSetId: Type.String({ minLength: 1 }),
-    before: Type.Optional(LibraryVariantSetSourceSchema),
-    after: Type.Optional(LibraryVariantSetSourceSchema),
-    changedFields: Type.Array(Type.String(), { uniqueItems: true }),
-  },
-  { additionalProperties: false },
-);
-
-type LibraryStyleSourceChangeValue = {
-  type: "added" | "updated" | "removed";
-  styleId: string;
-  before?: Static<typeof LibraryStyleSourceSchema>;
-  after?: Static<typeof LibraryStyleSourceSchema>;
-  changedFields: string[];
-};
-
-export const LibraryStyleSourceChangeSchema: TSchema & {
-  static: LibraryStyleSourceChangeValue;
-} = Type.Object(
-  {
-    type: Type.Union([
-      Type.Literal("added"),
-      Type.Literal("updated"),
-      Type.Literal("removed"),
-    ]),
-    styleId: Type.String({ minLength: 1 }),
-    before: Type.Optional(LibraryStyleSourceSchema),
-    after: Type.Optional(LibraryStyleSourceSchema),
-    changedFields: Type.Array(Type.String(), { uniqueItems: true }),
-  },
-  { additionalProperties: false },
-);
-
-type LibraryVariableCollectionSourceChangeValue = {
-  type: "added" | "updated" | "removed";
-  collectionId: string;
-  before?: Static<typeof LibraryVariableCollectionSourceSchema>;
-  after?: Static<typeof LibraryVariableCollectionSourceSchema>;
-  changedFields: string[];
-};
-
-export const LibraryVariableCollectionSourceChangeSchema: TSchema & {
-  static: LibraryVariableCollectionSourceChangeValue;
-} = Type.Object(
-  {
-    type: Type.Union([
-      Type.Literal("added"),
-      Type.Literal("updated"),
-      Type.Literal("removed"),
-    ]),
-    collectionId: Type.String({ minLength: 1 }),
-    before: Type.Optional(LibraryVariableCollectionSourceSchema),
-    after: Type.Optional(LibraryVariableCollectionSourceSchema),
-    changedFields: Type.Array(Type.String(), { uniqueItems: true }),
-  },
-  { additionalProperties: false },
-);
-
-type LibraryVariableSourceChangeValue = {
-  type: "added" | "updated" | "removed";
-  variableId: string;
-  before?: Static<typeof LibraryVariableSourceSchema>;
-  after?: Static<typeof LibraryVariableSourceSchema>;
-  changedFields: string[];
-};
-
-export const LibraryVariableSourceChangeSchema: TSchema & {
-  static: LibraryVariableSourceChangeValue;
-} = Type.Object(
-  {
-    type: Type.Union([
-      Type.Literal("added"),
-      Type.Literal("updated"),
-      Type.Literal("removed"),
-    ]),
-    variableId: Type.String({ minLength: 1 }),
-    before: Type.Optional(LibraryVariableSourceSchema),
-    after: Type.Optional(LibraryVariableSourceSchema),
-    changedFields: Type.Array(Type.String(), { uniqueItems: true }),
-  },
-  { additionalProperties: false },
-);
-
-const DesignChangeSetCoreProperties = {
-  documentId: Type.String({ minLength: 1 }),
-  fromRevision: Type.Integer({ minimum: 0 }),
-  toRevision: Type.Integer({ minimum: 0 }),
-  addedNodeIds: Type.Array(Type.String(), { uniqueItems: true }),
-  changedNodeIds: Type.Array(Type.String(), { uniqueItems: true }),
-  removedNodeIds: Type.Array(Type.String(), { uniqueItems: true }),
-  addedAssetIds: Type.Optional(
-    Type.Array(Type.String(), { uniqueItems: true }),
-  ),
-  changedAssetIds: Type.Optional(
-    Type.Array(Type.String(), { uniqueItems: true }),
-  ),
-  removedAssetIds: Type.Optional(
-    Type.Array(Type.String(), { uniqueItems: true }),
-  ),
-  addedImageAssetDerivationIds: Type.Optional(
-    Type.Array(Type.String(), { uniqueItems: true }),
-  ),
-  changedImageAssetDerivationIds: Type.Optional(
-    Type.Array(Type.String(), { uniqueItems: true }),
-  ),
-  removedImageAssetDerivationIds: Type.Optional(
-    Type.Array(Type.String(), { uniqueItems: true }),
-  ),
-  addedPageIds: Type.Optional(Type.Array(Type.String(), { uniqueItems: true })),
-  changedPageIds: Type.Optional(
-    Type.Array(Type.String(), { uniqueItems: true }),
-  ),
-  removedPageIds: Type.Optional(
-    Type.Array(Type.String(), { uniqueItems: true }),
-  ),
-  addedComponentIds: Type.Optional(
-    Type.Array(Type.String(), { uniqueItems: true }),
-  ),
-  changedComponentIds: Type.Optional(
-    Type.Array(Type.String(), { uniqueItems: true }),
-  ),
-  removedComponentIds: Type.Optional(
-    Type.Array(Type.String(), { uniqueItems: true }),
-  ),
-  addedLibraryComponentIds: Type.Optional(
-    Type.Array(Type.String(), { uniqueItems: true }),
-  ),
-  changedLibraryComponentIds: Type.Optional(
-    Type.Array(Type.String(), { uniqueItems: true }),
-  ),
-  removedLibraryComponentIds: Type.Optional(
-    Type.Array(Type.String(), { uniqueItems: true }),
-  ),
-  addedLibraryVariantSetIds: Type.Optional(
-    Type.Array(Type.String(), { uniqueItems: true }),
-  ),
-  changedLibraryVariantSetIds: Type.Optional(
-    Type.Array(Type.String(), { uniqueItems: true }),
-  ),
-  removedLibraryVariantSetIds: Type.Optional(
-    Type.Array(Type.String(), { uniqueItems: true }),
-  ),
-  addedVariantSetIds: Type.Optional(
-    Type.Array(Type.String(), { uniqueItems: true }),
-  ),
-  changedVariantSetIds: Type.Optional(
-    Type.Array(Type.String(), { uniqueItems: true }),
-  ),
-  removedVariantSetIds: Type.Optional(
-    Type.Array(Type.String(), { uniqueItems: true }),
-  ),
-};
-
-const DesignChangeSetDetailProperties = {
-  pageChanges: Type.Optional(Type.Array(PageChangeSchema)),
-  componentChanges: Type.Optional(Type.Array(ComponentChangeSchema)),
-  libraryComponentChanges: Type.Optional(
-    Type.Array(LibraryComponentSourceChangeSchema),
-  ),
-  libraryVariantSetChanges: Type.Optional(
-    Type.Array(LibraryVariantSetSourceChangeSchema),
-  ),
-  addedLibraryStyleIds: Type.Optional(
-    Type.Array(Type.String(), { uniqueItems: true }),
-  ),
-  changedLibraryStyleIds: Type.Optional(
-    Type.Array(Type.String(), { uniqueItems: true }),
-  ),
-  removedLibraryStyleIds: Type.Optional(
-    Type.Array(Type.String(), { uniqueItems: true }),
-  ),
-  libraryStyleChanges: Type.Optional(
-    Type.Array(LibraryStyleSourceChangeSchema),
-  ),
-  addedLibraryVariableCollectionIds: Type.Optional(
-    Type.Array(Type.String(), { uniqueItems: true }),
-  ),
-  changedLibraryVariableCollectionIds: Type.Optional(
-    Type.Array(Type.String(), { uniqueItems: true }),
-  ),
-  removedLibraryVariableCollectionIds: Type.Optional(
-    Type.Array(Type.String(), { uniqueItems: true }),
-  ),
-  libraryVariableCollectionChanges: Type.Optional(
-    Type.Array(LibraryVariableCollectionSourceChangeSchema),
-  ),
-  addedLibraryVariableIds: Type.Optional(
-    Type.Array(Type.String(), { uniqueItems: true }),
-  ),
-  changedLibraryVariableIds: Type.Optional(
-    Type.Array(Type.String(), { uniqueItems: true }),
-  ),
-  removedLibraryVariableIds: Type.Optional(
-    Type.Array(Type.String(), { uniqueItems: true }),
-  ),
-  libraryVariableChanges: Type.Optional(
-    Type.Array(LibraryVariableSourceChangeSchema),
-  ),
-  variantSetChanges: Type.Optional(Type.Array(VariantSetChangeSchema)),
-  addedStyleIds: Type.Optional(
-    Type.Array(Type.String(), { uniqueItems: true }),
-  ),
-  changedStyleIds: Type.Optional(
-    Type.Array(Type.String(), { uniqueItems: true }),
-  ),
-  removedStyleIds: Type.Optional(
-    Type.Array(Type.String(), { uniqueItems: true }),
-  ),
-  styleChanges: Type.Optional(Type.Array(SharedStyleChangeSchema)),
-  changes: Type.Array(NodeChangeSchema),
-};
-
-type DesignChangeSetProperties = typeof DesignChangeSetCoreProperties &
-  typeof DesignChangeSetDetailProperties &
-  typeof variables.VariableChangeSetProperties;
-
-export const DesignChangeSetSchema: TObject<DesignChangeSetProperties> =
-  Type.Object(
-    {
-      ...DesignChangeSetCoreProperties,
-      ...DesignChangeSetDetailProperties,
-      ...variables.VariableChangeSetProperties,
-    },
-    { additionalProperties: false },
-  );
-
-export const FidelityWarningSchema = Type.Object(
-  {
-    nodeId: Type.Optional(Type.String({ minLength: 1 })),
-    feature: Type.String({ minLength: 1 }),
-    fallback: Type.String(),
-    message: Type.String({ minLength: 1 }),
-  },
-  { additionalProperties: false },
-);
-
-export const TransactionModeSchema = Type.Union([
-  Type.Literal("preview"),
-  Type.Literal("apply"),
-  Type.Literal("undo"),
-  Type.Literal("redo"),
-]);
-
-export const DesignTransactionSuccessSchema = Type.Object(
-  {
-    ok: Type.Literal(true),
-    mode: TransactionModeSchema,
-    transactionId: Type.String({ minLength: 1 }),
-    documentId: Type.String({ minLength: 1 }),
-    baseRevision: Type.Integer({ minimum: 0 }),
-    revision: RevisionSchema,
-    changes: DesignChangeSetSchema,
-    warnings: Type.Array(FidelityWarningSchema),
-  },
-  { additionalProperties: false },
-);
-
-export const DesignTransactionFailureSchema = Type.Object(
-  {
-    ok: Type.Literal(false),
-    mode: TransactionModeSchema,
-    transactionId: Type.String({ minLength: 1 }),
-    documentId: Type.String({ minLength: 1 }),
-    baseRevision: Type.Integer({ minimum: 0 }),
-    revision: RevisionSchema,
-    error: DesignErrorSchema,
-  },
-  { additionalProperties: false },
-);
-
-type DesignTransactionResultValue =
-  | Static<typeof DesignTransactionSuccessSchema>
-  | Static<typeof DesignTransactionFailureSchema>;
-
-export const DesignTransactionResultSchema: TSchema & {
-  static: DesignTransactionResultValue;
-} = Type.Union([
-  DesignTransactionSuccessSchema,
-  DesignTransactionFailureSchema,
-]);
-
-export const HistoryEntrySchema = Type.Object(
-  {
-    transactionId: Type.String({ minLength: 1 }),
-    label: Type.String(),
-    actor: DesignActorSchema,
-    revision: RevisionSchema,
-    changes: DesignChangeSetSchema,
-  },
-  { additionalProperties: false },
-);
+const transactionWireSchemas: ReturnType<
+  typeof createTransactionWireSchemas<
+    typeof DesignOperationSchema,
+    typeof JsonObjectSchema,
+    typeof JsonValueSchema,
+    typeof DesignChangeSetSchema
+  >
+> = createTransactionWireSchemas({
+  designOperationSchema: DesignOperationSchema,
+  jsonObjectSchema: JsonObjectSchema,
+  jsonValueSchema: JsonValueSchema,
+  designChangeSetSchema: DesignChangeSetSchema,
+  maxTransactionCommands: limits.MAX_TRANSACTION_COMMANDS,
+});
+export const DesignActorSchema: (typeof transactionWireSchemas)["DesignActorSchema"] =
+  transactionWireSchemas.DesignActorSchema;
+export const DesignTransactionSchema: (typeof transactionWireSchemas)["DesignTransactionSchema"] =
+  transactionWireSchemas.DesignTransactionSchema;
+export const DesignErrorCodeSchema: (typeof transactionWireSchemas)["DesignErrorCodeSchema"] =
+  transactionWireSchemas.DesignErrorCodeSchema;
+export const DesignIssueSchema: (typeof transactionWireSchemas)["DesignIssueSchema"] =
+  transactionWireSchemas.DesignIssueSchema;
+export const DesignErrorSchema: (typeof transactionWireSchemas)["DesignErrorSchema"] =
+  transactionWireSchemas.DesignErrorSchema;
+export const RevisionSchema: (typeof transactionWireSchemas)["RevisionSchema"] =
+  transactionWireSchemas.RevisionSchema;
+export const FidelityWarningSchema: (typeof transactionWireSchemas)["FidelityWarningSchema"] =
+  transactionWireSchemas.FidelityWarningSchema;
+export const TransactionModeSchema: (typeof transactionWireSchemas)["TransactionModeSchema"] =
+  transactionWireSchemas.TransactionModeSchema;
+export const DesignTransactionSuccessSchema: (typeof transactionWireSchemas)["DesignTransactionSuccessSchema"] =
+  transactionWireSchemas.DesignTransactionSuccessSchema;
+export const DesignTransactionFailureSchema: (typeof transactionWireSchemas)["DesignTransactionFailureSchema"] =
+  transactionWireSchemas.DesignTransactionFailureSchema;
+export const DesignTransactionResultSchema: (typeof transactionWireSchemas)["DesignTransactionResultSchema"] =
+  transactionWireSchemas.DesignTransactionResultSchema;
+export const HistoryEntrySchema: (typeof transactionWireSchemas)["HistoryEntrySchema"] =
+  transactionWireSchemas.HistoryEntrySchema;
 
 export const {
   HistoryStateSchema,
