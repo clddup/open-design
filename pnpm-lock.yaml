@@ -220,12 +220,18 @@ importers:
       '@opendesign/agent-contracts':
         specifier: workspace:*
         version: link:../agent-contracts
+      '@opendesign/contract-runtime':
+        specifier: workspace:*
+        version: link:../contract-runtime
       '@opendesign/model-gateway':
         specifier: workspace:*
         version: link:../model-gateway
       '@opendesign/session-store':
         specifier: workspace:*
         version: link:../session-store
+      '@sinclair/typebox':
+        specifier: ^0.34.41
+        version: 0.34.52
     devDependencies:
       typebox:
         specifier: 1.3.7

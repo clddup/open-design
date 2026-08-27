@@ -14,7 +14,11 @@ import type {
 } from "@opendesign/model-gateway";
 import type { SessionStore } from "@opendesign/session-store";
 import type { CompletionGuardPort } from "./completion-guard.js";
-import type { AgentRunRequest, ModelToolSurface } from "./run-request.js";
+import type {
+  ModelToolDisclosure,
+  ModelToolSurface,
+} from "./model-tool-disclosure-contract.js";
+import type { AgentRunRequest } from "./run-request.js";
 
 export interface AgentToolDefinition extends CanonicalTool {
   risk: ToolRisk;
@@ -25,23 +29,9 @@ export interface AgentToolDefinition extends CanonicalTool {
    * This changes only which validated host tools and schemas are sent to the
    * Provider. It never grants execution authority or creates another tool
    * implementation: every disclosed view still executes the original trusted
-   * definition and validateInput boundary.
+   * definition and validateInputIssues boundary.
    */
-  modelDisclosure?: {
-    bootstrap: "available" | "deferred";
-    beforePlan?: "available" | "deferred";
-    afterInspection?: "available";
-    role?: "inspection" | "plan" | "material-write";
-    /**
-     * Provider surfaces that may see this definition before the first
-     * material revision. Omitted definitions belong to the general surface.
-     * Execution registration and host authority are unaffected.
-     */
-    surfaces?: readonly ModelToolSurface[];
-    bootstrapDescription?: string;
-    bootstrapInputSchema?: Record<string, unknown>;
-    whenDeliveryScopeReview?: "required";
-  };
+  modelDisclosure?: ModelToolDisclosure;
   approvalScope?: "call" | "run";
   approvalDenial?: "continue" | "cancel-run";
   approvalPrompt?:

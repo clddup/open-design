@@ -1,5 +1,5 @@
 import type { AgentToolDefinition } from "./runtime-ports.js";
-import { isSafeModelDisclosure } from "./tool-disclosure.js";
+import { ModelToolDisclosureContract } from "./model-tool-disclosure-contract.js";
 
 export function selectSafeDefinitions(
   definitions: readonly AgentToolDefinition[],
@@ -22,7 +22,9 @@ function isSafeDefinition(definition: AgentToolDefinition): boolean {
     definition.description.length > 0 &&
     definition.inputSchema.type === "object" &&
     definition.inputSchema.additionalProperties === false &&
-    isSafeModelDisclosure(definition.modelDisclosure) &&
+    (definition.modelDisclosure === undefined ||
+      ModelToolDisclosureContract.issues(definition.modelDisclosure).length ===
+        0) &&
     typeof definition.validateInputIssues === "function" &&
     (definition.approvalScope === undefined ||
       definition.approvalScope === "call" ||

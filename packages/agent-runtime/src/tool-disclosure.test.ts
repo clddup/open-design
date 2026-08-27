@@ -3,9 +3,9 @@ import type { AgentToolDefinition } from "./index.js";
 import {
   deliveryScopeReviewToolDefinitions,
   disclosedToolDefinitions,
-  isSafeModelDisclosure,
   resolveModelToolDisclosurePhase,
 } from "./tool-disclosure.js";
+import { ModelToolDisclosureContract } from "./model-tool-disclosure-contract.js";
 
 const definition: AgentToolDefinition = {
   name: "opendesign_probe",
@@ -240,28 +240,50 @@ describe("model tool disclosure", () => {
   });
 
   it("rejects malformed disclosure metadata at the catalog boundary", () => {
-    expect(isSafeModelDisclosure(definition.modelDisclosure)).toBe(true);
-    expect(isSafeModelDisclosure(null as never)).toBe(false);
     expect(
-      isSafeModelDisclosure({
+      ModelToolDisclosureContract.issues(definition.modelDisclosure),
+    ).toEqual([]);
+    expect(ModelToolDisclosureContract.issues(null)).not.toEqual([]);
+    expect(
+      ModelToolDisclosureContract.issues({
         bootstrap: "available",
         bootstrapInputSchema: null,
-      } as never),
-    ).toBe(false);
+      }),
+    ).not.toEqual([]);
     expect(
-      isSafeModelDisclosure({
+      ModelToolDisclosureContract.issues({
         bootstrap: "available",
         beforePlan: "sometimes",
-      } as never),
-    ).toBe(false);
+      }),
+    ).not.toEqual([]);
     expect(
-      isSafeModelDisclosure({ bootstrap: "available", extra: true } as never),
-    ).toBe(false);
+      ModelToolDisclosureContract.issues({
+        bootstrap: "available",
+        extra: true,
+      }),
+    ).not.toEqual([]);
     expect(
-      isSafeModelDisclosure({
+      ModelToolDisclosureContract.issues({
         bootstrap: "deferred",
         afterInspection: "sometimes",
-      } as never),
-    ).toBe(false);
+      }),
+    ).not.toEqual([]);
+    expect(
+      ModelToolDisclosureContract.issues({
+        bootstrap: "available",
+        surfaces: ["general", "general"],
+      }),
+    ).not.toEqual([]);
+    expect(
+      ModelToolDisclosureContract.issues({
+        bootstrap: "available",
+        bootstrapInputSchema: { type: "array", additionalProperties: false },
+      }),
+    ).toEqual([
+      expect.objectContaining({
+        code: "agent_tool_disclosure.schema_invalid",
+        path: "/bootstrapInputSchema/type",
+      }),
+    ]);
   });
 });

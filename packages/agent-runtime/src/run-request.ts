@@ -1,11 +1,11 @@
 import type { AgentRequest } from "@opendesign/agent-contracts";
 
+export type { ModelToolSurface } from "./model-tool-disclosure-contract.js";
+
 export type AgentRunRequest = Omit<
   Extract<AgentRequest, { type: "run.start" }>,
   "type"
 >;
-
-export type ModelToolSurface = "general" | "new-design";
 
 export function projectAgentRunPrompt(request: AgentRunRequest): string {
   const inspection = request.initialDesignInspection;

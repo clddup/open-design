@@ -20,10 +20,10 @@ import {
 } from "./pi-model-gateway-adapter.js";
 import { PiRunEventAdapter } from "./pi-run-event-adapter.js";
 import { normalizeSessionHistory } from "./session-history.js";
+import { selectSafeDefinitions } from "./tool-definition-safety.js";
 import {
   deliveryScopeReviewToolDefinitions,
   disclosedToolDefinitions,
-  isSafeModelDisclosure,
 } from "./tool-disclosure.js";
 
 const DEFAULT_LIMITS: AgentRuntimeLimits = {
@@ -275,15 +275,7 @@ export class OpenDesignPiRuntime {
 
   async #loadSafeTools(): Promise<AgentToolDefinition[]> {
     const catalog = this.options.toolCatalog ?? EMPTY_TOOL_CATALOG;
-    const tools = await catalog.listTools();
-    const safe: AgentToolDefinition[] = [];
-    const names = new Set<string>();
-    for (const tool of tools) {
-      if (!isSafeToolDefinition(tool) || names.has(tool.name)) continue;
-      names.add(tool.name);
-      safe.push(tool);
-    }
-    return safe;
+    return selectSafeDefinitions(await catalog.listTools());
   }
 }
 
@@ -300,32 +292,6 @@ function createPiModel(request: AgentRunRequest): Model<Api> {
     contextWindow: request.modelContext?.contextWindow ?? 200_000,
     maxTokens: request.modelContext?.maxOutputTokens ?? 16_384,
   };
-}
-
-function isSafeToolDefinition(tool: AgentToolDefinition): boolean {
-  return (
-    tool.name.startsWith("opendesign_") &&
-    tool.description.length > 0 &&
-    tool.inputSchema.type === "object" &&
-    tool.inputSchema.additionalProperties === false &&
-    isSafeModelDisclosure(tool.modelDisclosure) &&
-    (tool.approvalScope === undefined ||
-      tool.approvalScope === "call" ||
-      tool.approvalScope === "run") &&
-    !(tool.approvalScope === "run" && tool.approval !== "required") &&
-    (tool.approvalDenial === undefined ||
-      tool.approvalDenial === "continue" ||
-      tool.approvalDenial === "cancel-run") &&
-    !(tool.approvalDenial === "cancel-run" && tool.approval !== "required") &&
-    (tool.approvalPrompt === undefined ||
-      typeof tool.approvalPrompt === "function" ||
-      (typeof tool.approvalPrompt.title === "string" &&
-        typeof tool.approvalPrompt.summary === "string" &&
-        tool.approvalPrompt.title.length > 0 &&
-        tool.approvalPrompt.title.length <= 2_000 &&
-        tool.approvalPrompt.summary.length <= 20_000)) &&
-    typeof tool.validateInputIssues === "function"
-  );
 }
 
 function snapshotRequest(request: AgentRunRequest): AgentRunRequest {
