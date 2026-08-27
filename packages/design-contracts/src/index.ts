@@ -31,6 +31,11 @@ import { createComponentSchemas } from "./component-schema.js";
 import { createDocumentResourceSchemas } from "./document-resource-schema.js";
 import { createLibrarySchemas } from "./library-schema.js";
 import { createDesignDocumentSchema } from "./design-document-schema.js";
+import { createShapeSchemas } from "./shape-schema.js";
+import { createTextNodeSchemas } from "./text-node-schema.js";
+import { createImageNodeSchemas } from "./image-node-schema.js";
+import { createVectorSchemas } from "./vector-schema.js";
+import { createNodeSchemas } from "./node-schema.js";
 import * as limits from "./limits.js";
 import * as versions from "./versions.js";
 import {
@@ -93,24 +98,6 @@ export {
   designTransactionDomainIssues,
 } from "./operation-domain.js";
 export const DESIGN_FORMAT = "dev.opendesign.document" as const;
-export const NodeKindSchema = Type.Union([
-  Type.Literal("frame"),
-  Type.Literal("slot"),
-  Type.Literal("group"),
-  Type.Literal("boolean"),
-  Type.Literal("rectangle"),
-  Type.Literal("ellipse"),
-  Type.Literal("line"),
-  Type.Literal("polygon"),
-  Type.Literal("star"),
-  Type.Literal("text"),
-  Type.Literal("image"),
-  Type.Literal("vector"),
-  Type.Literal("path"),
-  Type.Literal("instance"),
-  Type.Literal("slice"),
-]);
-
 export const RectSchema = Type.Object(
   {
     x: Type.Number(),
@@ -140,493 +127,63 @@ export const {
   layoutGuideSchema: layout.LayoutGuideSchema,
 });
 
-export const MaskModeSchema = Type.Union([
-  Type.Literal("none"),
-  Type.Literal("alpha"),
-  Type.Literal("luminance"),
-  Type.Literal("clipping"),
-  Type.Literal("outline"),
-]);
-
-const ShapeProperties = {
-  fills: Type.Array(PaintSchema),
-  strokes: Type.Array(PaintSchema),
-  strokeWidth: Type.Number({ minimum: 0 }),
-  strokeAlign: Type.Optional(
-    Type.Union([
-      Type.Literal("inside"),
-      Type.Literal("center"),
-      Type.Literal("outside"),
-    ]),
-  ),
-  strokeCap: Type.Optional(
-    Type.Union([
-      Type.Literal("none"),
-      Type.Literal("round"),
-      Type.Literal("square"),
-    ]),
-  ),
-  strokeJoin: Type.Optional(
-    Type.Union([
-      Type.Literal("miter"),
-      Type.Literal("round"),
-      Type.Literal("bevel"),
-    ]),
-  ),
-  dashPattern: Type.Optional(Type.Array(Type.Number({ minimum: 0 }))),
-};
-
-export const FramePropertiesSchema = Type.Object(
-  {
-    ...ShapeProperties,
-    cornerRadius: Type.Number({ minimum: 0 }),
-    clipsContent: Type.Boolean(),
-    autoLayout: Type.Optional(layout.AutoLayoutSchema),
-    layoutGuides: Type.Optional(
-      Type.Array(layout.LayoutGuideSchema, { maxItems: 8 }),
-    ),
-  },
-  { additionalProperties: false },
-);
-
-export const GroupPropertiesSchema = Type.Object(
-  {},
-  { additionalProperties: false },
-);
-
-export const RectanglePropertiesSchema = Type.Object(
-  {
-    ...ShapeProperties,
-    cornerRadius: Type.Number({ minimum: 0 }),
-  },
-  { additionalProperties: false },
-);
-
-export const EllipsePropertiesSchema = Type.Object(ShapeProperties, {
-  additionalProperties: false,
+const shapeSchemas = createShapeSchemas({
+  paintSchema: PaintSchema,
+  normalizedPointSchema: NormalizedPointSchema,
+  autoLayoutSchema: layout.AutoLayoutSchema,
+  layoutGuideSchema: layout.LayoutGuideSchema,
 });
+const ShapeProperties = shapeSchemas.ShapeProperties;
+export const {
+  MaskModeSchema,
+  FramePropertiesSchema,
+  GroupPropertiesSchema,
+  RectanglePropertiesSchema,
+  EllipsePropertiesSchema,
+  LineEndpointSchema,
+  LinePropertiesSchema,
+  PolygonPropertiesSchema,
+  StarPropertiesSchema,
+  BooleanOperationSchema,
+  BooleanPropertiesSchema,
+} = shapeSchemas;
 
-export const LineEndpointSchema = Type.Union([
-  Type.Literal("none"),
-  Type.Literal("line-arrow"),
-  Type.Literal("triangle-arrow"),
-  Type.Literal("reversed-triangle-arrow"),
-  Type.Literal("circle"),
-  Type.Literal("diamond"),
-]);
+const textNodeSchemas = createTextNodeSchemas({
+  fontFaceIdentityProperties: styles.FontFaceIdentityProperties,
+  paintSchema: PaintSchema,
+  strokeAlignSchema: ShapeProperties.strokeAlign,
+  strokeCapSchema: ShapeProperties.strokeCap,
+  strokeJoinSchema: ShapeProperties.strokeJoin,
+  dashPatternSchema: ShapeProperties.dashPattern,
+});
+const TextSharedProperties = textNodeSchemas.TextSharedProperties;
+export const TextPropertiesSchema = textNodeSchemas.TextPropertiesSchema;
 
-export const LinePropertiesSchema = Type.Object(
-  {
-    fills: Type.Array(PaintSchema, { maxItems: 0 }),
-    strokes: ShapeProperties.strokes,
-    strokeWidth: ShapeProperties.strokeWidth,
-    strokeAlign: Type.Optional(Type.Literal("center")),
-    strokeCap: ShapeProperties.strokeCap,
-    strokeJoin: ShapeProperties.strokeJoin,
-    dashPattern: ShapeProperties.dashPattern,
-    start: NormalizedPointSchema,
-    end: NormalizedPointSchema,
-    startEndpoint: LineEndpointSchema,
-    endEndpoint: LineEndpointSchema,
-  },
-  { additionalProperties: false },
-);
-
-export const PolygonPropertiesSchema = Type.Object(
-  {
-    ...ShapeProperties,
-    pointCount: Type.Integer({ minimum: 3, maximum: 60 }),
-    cornerRadius: Type.Number({ minimum: 0 }),
-  },
-  { additionalProperties: false },
-);
-
-export const StarPropertiesSchema = Type.Object(
-  {
-    ...ShapeProperties,
-    pointCount: Type.Integer({ minimum: 3, maximum: 60 }),
-    innerRadius: Type.Number({ minimum: 0, maximum: 1 }),
-    cornerRadius: Type.Number({ minimum: 0 }),
-  },
-  { additionalProperties: false },
-);
-
-const TextSharedProperties = {
-  content: Type.String(),
-  paragraphRuns: Type.Optional(
-    Type.Array(
-      Type.Object(
-        {
-          start: Type.Integer({ minimum: 0 }),
-          end: Type.Integer({ minimum: 1 }),
-          style: Type.Object(
-            {
-              listOptions: Type.Object(
-                {
-                  type: Type.Union([
-                    Type.Literal("none"),
-                    Type.Literal("ordered"),
-                    Type.Literal("unordered"),
-                  ]),
-                },
-                { additionalProperties: false },
-              ),
-              indentation: Type.Integer({ minimum: 0, maximum: 5 }),
-              listSpacing: Type.Number({ minimum: 0 }),
-              paragraphIndent: Type.Number({ minimum: 0 }),
-              paragraphSpacing: Type.Number({ minimum: 0 }),
-            },
-            { additionalProperties: false },
-          ),
-        },
-        { additionalProperties: false },
-      ),
-      { maxItems: 16_384 },
-    ),
-  ),
-  runs: Type.Optional(
-    Type.Array(
-      Type.Object(
-        {
-          start: Type.Integer({ minimum: 0 }),
-          end: Type.Integer({ minimum: 1 }),
-          style: Type.Object(
-            {
-              ...styles.FontFaceIdentityProperties,
-              fontSize: Type.Number({ exclusiveMinimum: 0 }),
-              letterSpacing: Type.Number(),
-              lineHeight: Type.Number({ exclusiveMinimum: 0 }),
-              textCase: Type.Union([
-                Type.Literal("original"),
-                Type.Literal("uppercase"),
-                Type.Literal("lowercase"),
-                Type.Literal("title-case"),
-                Type.Literal("small-caps"),
-              ]),
-              textDecoration: Type.Union([
-                Type.Literal("none"),
-                Type.Literal("underline"),
-                Type.Literal("strikethrough"),
-              ]),
-              fills: Type.Array(PaintSchema, { maxItems: 64 }),
-              textStyleId: Type.Optional(
-                Type.String({ minLength: 1, maxLength: 512 }),
-              ),
-              fillStyleId: Type.Optional(
-                Type.String({ minLength: 1, maxLength: 512 }),
-              ),
-            },
-            { additionalProperties: false },
-          ),
-        },
-        { additionalProperties: false },
-      ),
-      { maxItems: 16_384 },
-    ),
-  ),
-  ...styles.FontFaceIdentityProperties,
-  fontSize: Type.Number({ exclusiveMinimum: 0 }),
-  lineHeight: Type.Number({ exclusiveMinimum: 0 }),
-  letterSpacing: Type.Number(),
-  paragraphIndent: Type.Number({ minimum: 0 }),
-  paragraphSpacing: Type.Number({ minimum: 0 }),
-  listSpacing: Type.Number({ minimum: 0 }),
-  hangingList: Type.Boolean(),
-  textCase: Type.Union([
-    Type.Literal("original"),
-    Type.Literal("uppercase"),
-    Type.Literal("lowercase"),
-    Type.Literal("title-case"),
-    Type.Literal("small-caps"),
-  ]),
-  textDecoration: Type.Union([
-    Type.Literal("none"),
-    Type.Literal("underline"),
-    Type.Literal("strikethrough"),
-  ]),
-  textAlignHorizontal: Type.Union([
-    Type.Literal("left"),
-    Type.Literal("center"),
-    Type.Literal("right"),
-    Type.Literal("justify"),
-  ]),
-  textAlignVertical: Type.Union([
-    Type.Literal("top"),
-    Type.Literal("center"),
-    Type.Literal("bottom"),
-  ]),
-  fills: Type.Array(PaintSchema),
-  strokes: Type.Array(PaintSchema),
-  strokeWidth: Type.Number({ minimum: 0 }),
-  strokeAlign: ShapeProperties.strokeAlign,
-  strokeCap: ShapeProperties.strokeCap,
-  strokeJoin: ShapeProperties.strokeJoin,
-  dashPattern: ShapeProperties.dashPattern,
-} as const;
-
-const FixedTextTruncationDisabledPropertiesSchema = Type.Object(
-  {
-    ...TextSharedProperties,
-    textResize: Type.Literal("fixed"),
-    textWrap: Type.Union([
-      Type.Literal("none"),
-      Type.Literal("word"),
-      Type.Literal("character"),
-    ]),
-    textOverflow: Type.Union([Type.Literal("visible"), Type.Literal("clip")]),
-    textTruncation: Type.Literal("disabled"),
-    maxLines: Type.Null(),
-  },
-  { additionalProperties: false },
-);
-
-const FixedTextTruncationEndingPropertiesSchema = Type.Object(
-  {
-    ...TextSharedProperties,
-    textResize: Type.Literal("fixed"),
-    textWrap: Type.Union([
-      Type.Literal("none"),
-      Type.Literal("word"),
-      Type.Literal("character"),
-    ]),
-    textOverflow: Type.Literal("clip"),
-    textTruncation: Type.Literal("ending"),
-    maxLines: Type.Union([Type.Null(), Type.Integer({ minimum: 1 })]),
-  },
-  { additionalProperties: false },
-);
-
-const AutoWidthTextTruncationDisabledPropertiesSchema = Type.Object(
-  {
-    ...TextSharedProperties,
-    textResize: Type.Literal("auto-width"),
-    textWrap: Type.Literal("none"),
-    textOverflow: Type.Literal("visible"),
-    textTruncation: Type.Literal("disabled"),
-    maxLines: Type.Null(),
-  },
-  { additionalProperties: false },
-);
-
-const AutoWidthTextTruncationEndingPropertiesSchema = Type.Object(
-  {
-    ...TextSharedProperties,
-    textResize: Type.Literal("auto-width"),
-    textWrap: Type.Literal("none"),
-    textOverflow: Type.Literal("visible"),
-    textTruncation: Type.Literal("ending"),
-    maxLines: Type.Integer({ minimum: 1 }),
-  },
-  { additionalProperties: false },
-);
-
-const AutoHeightTextTruncationDisabledPropertiesSchema = Type.Object(
-  {
-    ...TextSharedProperties,
-    textResize: Type.Literal("auto-height"),
-    textWrap: Type.Union([Type.Literal("word"), Type.Literal("character")]),
-    textOverflow: Type.Literal("visible"),
-    textTruncation: Type.Literal("disabled"),
-    maxLines: Type.Null(),
-  },
-  { additionalProperties: false },
-);
-
-const AutoHeightTextTruncationEndingPropertiesSchema = Type.Object(
-  {
-    ...TextSharedProperties,
-    textResize: Type.Literal("auto-height"),
-    textWrap: Type.Union([Type.Literal("word"), Type.Literal("character")]),
-    textOverflow: Type.Literal("visible"),
-    textTruncation: Type.Literal("ending"),
-    maxLines: Type.Integer({ minimum: 1 }),
-  },
-  { additionalProperties: false },
-);
-
-export const TextPropertiesSchema = Type.Union([
-  FixedTextTruncationDisabledPropertiesSchema,
-  FixedTextTruncationEndingPropertiesSchema,
-  AutoWidthTextTruncationDisabledPropertiesSchema,
-  AutoWidthTextTruncationEndingPropertiesSchema,
-  AutoHeightTextTruncationDisabledPropertiesSchema,
-  AutoHeightTextTruncationEndingPropertiesSchema,
-]);
-
-export const ImagePlacementSchema = Type.Union([
-  Type.Object(
-    { mode: Type.Literal("stretch") },
-    { additionalProperties: false },
-  ),
-  Type.Object({ mode: Type.Literal("fit") }, { additionalProperties: false }),
-  Type.Object(
-    {
-      mode: Type.Literal("fill"),
-      focalPoint: NormalizedPointSchema,
-    },
-    { additionalProperties: false },
-  ),
-  Type.Object(
-    {
-      mode: Type.Literal("crop"),
-      focalPoint: NormalizedPointSchema,
-      zoom: Type.Number({ minimum: 1, maximum: 64 }),
-      rotation: Type.Number({ minimum: -360, maximum: 360 }),
-      flipHorizontal: Type.Boolean(),
-      flipVertical: Type.Boolean(),
-    },
-    { additionalProperties: false },
-  ),
-]);
-
-export const ImagePropertiesSchema = Type.Object(
-  {
-    assetId: Type.String({ minLength: 1 }),
-    placement: ImagePlacementSchema,
-    filters: Type.Optional(ImageFiltersSchema),
-    altText: Type.String(),
-    cornerRadius: Type.Number({ minimum: 0 }),
-  },
-  { additionalProperties: false },
-);
+const imageNodeSchemas = createImageNodeSchemas({
+  normalizedPointSchema: NormalizedPointSchema,
+  imageFiltersSchema: ImageFiltersSchema,
+});
+export const { ImagePlacementSchema, ImagePropertiesSchema } = imageNodeSchemas;
 
 export { PathDataSchema } from "./path-schema.js";
-
-export const VectorGeometryIdSchema = Type.String({
-  minLength: 1,
-  maxLength: 128,
-  pattern: "^[A-Za-z][A-Za-z0-9._:-]*$",
+const vectorSchemas = createVectorSchemas({
+  shapeProperties: ShapeProperties,
+  pointSchema: PointSchema,
+  pathDataSchema: PathDataSchema,
 });
-
-export const VectorPointModeSchema = Type.Union([
-  Type.Literal("corner"),
-  Type.Literal("smooth"),
-  Type.Literal("mirrored"),
-  Type.Literal("independent"),
-]);
-
-export const VectorVertexSchema = Type.Object(
-  {
-    id: VectorGeometryIdSchema,
-    x: Type.Number(),
-    y: Type.Number(),
-    handleMode: Type.Optional(VectorPointModeSchema),
-  },
-  { additionalProperties: false },
-);
-
-export const VectorSegmentSchema = Type.Object(
-  {
-    id: VectorGeometryIdSchema,
-    startVertexId: VectorGeometryIdSchema,
-    endVertexId: VectorGeometryIdSchema,
-    tangentStart: Type.Optional(PointSchema),
-    tangentEnd: Type.Optional(PointSchema),
-  },
-  { additionalProperties: false },
-);
-
-export const VectorSegmentReferenceSchema = Type.Object(
-  {
-    segmentId: VectorGeometryIdSchema,
-    reversed: Type.Boolean(),
-  },
-  { additionalProperties: false },
-);
-
-export const VectorPathRunSchema = Type.Object(
-  {
-    id: VectorGeometryIdSchema,
-    closed: Type.Boolean(),
-    segments: Type.Array(VectorSegmentReferenceSchema, {
-      minItems: 1,
-      maxItems: 16_384,
-    }),
-  },
-  { additionalProperties: false },
-);
-
-export const VectorRegionSchema = Type.Object(
-  {
-    id: VectorGeometryIdSchema,
-    windingRule: Type.Union([Type.Literal("nonzero"), Type.Literal("evenodd")]),
-    loops: Type.Array(
-      Type.Object(
-        {
-          pathId: VectorGeometryIdSchema,
-          reversed: Type.Boolean(),
-        },
-        { additionalProperties: false },
-      ),
-      { minItems: 1, maxItems: 1_024 },
-    ),
-  },
-  { additionalProperties: false },
-);
-
-export const VectorNetworkSchema = Type.Object(
-  {
-    vertices: Type.Array(VectorVertexSchema, {
-      minItems: 2,
-      maxItems: 16_384,
-    }),
-    segments: Type.Array(VectorSegmentSchema, {
-      minItems: 1,
-      maxItems: 16_384,
-    }),
-    paths: Type.Array(VectorPathRunSchema, {
-      minItems: 1,
-      maxItems: 16_384,
-    }),
-    regions: Type.Array(VectorRegionSchema, { maxItems: 16_384 }),
-  },
-  { additionalProperties: false },
-);
-
-export const PathDataPropertiesSchema = Type.Object(
-  {
-    ...ShapeProperties,
-    path: PathDataSchema,
-    fillRule: Type.Optional(
-      Type.Union([Type.Literal("nonzero"), Type.Literal("evenodd")]),
-    ),
-  },
-  { additionalProperties: false },
-);
-
-export const VectorNetworkPropertiesSchema = Type.Object(
-  {
-    ...ShapeProperties,
-    network: VectorNetworkSchema,
-    fillRule: Type.Optional(
-      Type.Union([Type.Literal("nonzero"), Type.Literal("evenodd")]),
-    ),
-  },
-  { additionalProperties: false },
-);
-
-export const PathPropertiesSchema = Type.Union([
+export const {
+  VectorGeometryIdSchema,
+  VectorPointModeSchema,
+  VectorVertexSchema,
+  VectorSegmentSchema,
+  VectorSegmentReferenceSchema,
+  VectorPathRunSchema,
+  VectorRegionSchema,
+  VectorNetworkSchema,
   PathDataPropertiesSchema,
   VectorNetworkPropertiesSchema,
-]);
-
-export const BooleanOperationSchema = Type.Union([
-  Type.Literal("union"),
-  Type.Literal("subtract"),
-  Type.Literal("intersect"),
-  Type.Literal("exclude"),
-]);
-
-export const BooleanPropertiesSchema = Type.Object(
-  {
-    ...ShapeProperties,
-    operation: BooleanOperationSchema,
-    fillRule: Type.Optional(
-      Type.Union([Type.Literal("nonzero"), Type.Literal("evenodd")]),
-    ),
-  },
-  { additionalProperties: false },
-);
+  PathPropertiesSchema,
+} = vectorSchemas;
 
 const componentSchemas = createComponentSchemas({
   blendModeSchema: BlendModeSchema,
@@ -637,7 +194,6 @@ const componentSchemas = createComponentSchemas({
   componentPropertyDefinitionsSchema: ComponentPropertyDefinitionsSchema,
   variantPropertiesSchema: VariantPropertiesSchema,
 });
-
 export const {
   ComponentOverridePatchSchema,
   ComponentOverrideSchema,
@@ -650,7 +206,6 @@ const documentResourceSchemas = createDocumentResourceSchemas({
   sizeSchema: SizeSchema,
   jsonObjectSchema: JsonObjectSchema,
 });
-
 export const {
   DesignPageSchema,
   DesignAssetSchema,
@@ -659,193 +214,58 @@ export const {
   ImageAssetDerivationSchema,
 } = documentResourceSchemas;
 
-const NodeBaseProperties = {
-  id: Type.String({ minLength: 1 }),
-  name: Type.String(),
-  parentId: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
-  childIds: Type.Array(Type.String({ minLength: 1 }), { uniqueItems: true }),
-  visible: Type.Boolean(),
-  locked: Type.Boolean(),
-  transform: TransformSchema,
-  size: SizeSchema,
-  opacity: Type.Number({ minimum: 0, maximum: 1 }),
-  constraints: Type.Optional(layout.LayoutConstraintsSchema),
-  layoutPositioning: Type.Optional(layout.LayoutPositioningSchema),
-  layoutSizing: Type.Optional(layout.LayoutSizingSchema),
-  layoutLimits: Type.Optional(layout.LayoutLimitsSchema),
-  gridPlacement: Type.Optional(layout.GridChildPlacementSchema),
-  componentPropertyReferences: Type.Optional(
-    Type.Union([ComponentPropertyReferencesSchema, Type.Null()]),
-  ),
-  blendMode: Type.Optional(BlendModeSchema),
-  effects: Type.Optional(Type.Array(EffectSchema)),
-  maskMode: Type.Optional(MaskModeSchema),
-  explicitVariableModes: Type.Optional(variables.ExplicitVariableModesSchema),
-  boundVariables: Type.Optional(variables.NodeBoundVariablesSchema),
-  ...styles.NodeStyleReferenceProperties,
-  exportSettings: exportSettings.ExportSettingsSchema,
-  extensions: JsonObjectSchema,
-};
-
-export const FrameNodeSchema = Type.Object(
-  {
-    ...NodeBaseProperties,
-    kind: Type.Literal("frame"),
-    properties: FramePropertiesSchema,
-  },
-  { additionalProperties: false },
-);
-
-export const SlotPropertiesSchema = Type.Object(
-  {
-    ...ShapeProperties,
-    cornerRadius: Type.Number({ minimum: 0 }),
-    clipsContent: Type.Boolean(),
-    autoLayout: Type.Optional(layout.AutoLayoutSchema),
-    sourceSlotId: Type.Union([
-      Type.String({ minLength: 1, maxLength: 256 }),
-      Type.Null(),
-    ]),
-  },
-  { additionalProperties: false },
-);
-
-export const SlotNodeSchema = Type.Object(
-  {
-    ...NodeBaseProperties,
-    kind: Type.Literal("slot"),
-    properties: SlotPropertiesSchema,
-  },
-  { additionalProperties: false },
-);
-
-export const GroupNodeSchema = Type.Object(
-  {
-    ...NodeBaseProperties,
-    kind: Type.Literal("group"),
-    properties: GroupPropertiesSchema,
-  },
-  { additionalProperties: false },
-);
-
-export const BooleanNodeSchema = Type.Object(
-  {
-    ...NodeBaseProperties,
-    kind: Type.Literal("boolean"),
-    properties: BooleanPropertiesSchema,
-  },
-  { additionalProperties: false },
-);
-
-export const RectangleNodeSchema = Type.Object(
-  {
-    ...NodeBaseProperties,
-    kind: Type.Literal("rectangle"),
-    properties: RectanglePropertiesSchema,
-  },
-  { additionalProperties: false },
-);
-
-export const EllipseNodeSchema = Type.Object(
-  {
-    ...NodeBaseProperties,
-    kind: Type.Literal("ellipse"),
-    properties: EllipsePropertiesSchema,
-  },
-  { additionalProperties: false },
-);
-
-export const LineNodeSchema = Type.Object(
-  {
-    ...NodeBaseProperties,
-    kind: Type.Literal("line"),
-    properties: LinePropertiesSchema,
-  },
-  { additionalProperties: false },
-);
-
-export const PolygonNodeSchema = Type.Object(
-  {
-    ...NodeBaseProperties,
-    kind: Type.Literal("polygon"),
-    properties: PolygonPropertiesSchema,
-  },
-  { additionalProperties: false },
-);
-
-export const StarNodeSchema = Type.Object(
-  {
-    ...NodeBaseProperties,
-    kind: Type.Literal("star"),
-    properties: StarPropertiesSchema,
-  },
-  { additionalProperties: false },
-);
-
-export const TextNodeSchema = Type.Object(
-  {
-    ...NodeBaseProperties,
-    kind: Type.Literal("text"),
-    properties: TextPropertiesSchema,
-  },
-  { additionalProperties: false },
-);
-
-export const ImageNodeSchema = Type.Object(
-  {
-    ...NodeBaseProperties,
-    kind: Type.Literal("image"),
-    properties: ImagePropertiesSchema,
-  },
-  { additionalProperties: false },
-);
-
-export const VectorNodeSchema = Type.Object(
-  {
-    ...NodeBaseProperties,
-    kind: Type.Literal("vector"),
-    properties: PathPropertiesSchema,
-  },
-  { additionalProperties: false },
-);
-
-export const PathNodeSchema = Type.Object(
-  {
-    ...NodeBaseProperties,
-    kind: Type.Literal("path"),
-    properties: PathPropertiesSchema,
-  },
-  { additionalProperties: false },
-);
-
-export const InstanceNodeSchema = Type.Object(
-  {
-    ...NodeBaseProperties,
-    childIds: Type.Array(Type.String({ minLength: 1 }), {
-      uniqueItems: true,
-      maxItems: 4_096,
-    }),
-    kind: Type.Literal("instance"),
-    properties: InstancePropertiesSchema,
-  },
-  { additionalProperties: false },
-);
-
-export const SlicePropertiesSchema = Type.Object(
-  {},
-  { additionalProperties: false },
-);
-
-export const SliceNodeSchema = Type.Object(
-  {
-    ...NodeBaseProperties,
-    childIds: Type.Array(Type.String({ minLength: 1 }), { maxItems: 0 }),
-    kind: Type.Literal("slice"),
-    properties: SlicePropertiesSchema,
-  },
-  { additionalProperties: false },
-);
-
+const nodeSchemas = createNodeSchemas({
+  transformSchema: TransformSchema,
+  sizeSchema: SizeSchema,
+  layoutConstraintsSchema: layout.LayoutConstraintsSchema,
+  layoutPositioningSchema: layout.LayoutPositioningSchema,
+  layoutSizingSchema: layout.LayoutSizingSchema,
+  layoutLimitsSchema: layout.LayoutLimitsSchema,
+  gridChildPlacementSchema: layout.GridChildPlacementSchema,
+  componentPropertyReferencesSchema: ComponentPropertyReferencesSchema,
+  blendModeSchema: BlendModeSchema,
+  effectSchema: EffectSchema,
+  maskModeSchema: MaskModeSchema,
+  explicitVariableModesSchema: variables.ExplicitVariableModesSchema,
+  nodeBoundVariablesSchema: variables.NodeBoundVariablesSchema,
+  nodeStyleReferenceProperties: styles.NodeStyleReferenceProperties,
+  exportSettingsSchema: exportSettings.ExportSettingsSchema,
+  jsonObjectSchema: JsonObjectSchema,
+  shapeProperties: ShapeProperties,
+  autoLayoutSchema: layout.AutoLayoutSchema,
+  framePropertiesSchema: FramePropertiesSchema,
+  groupPropertiesSchema: GroupPropertiesSchema,
+  booleanPropertiesSchema: BooleanPropertiesSchema,
+  rectanglePropertiesSchema: RectanglePropertiesSchema,
+  ellipsePropertiesSchema: EllipsePropertiesSchema,
+  linePropertiesSchema: LinePropertiesSchema,
+  polygonPropertiesSchema: PolygonPropertiesSchema,
+  starPropertiesSchema: StarPropertiesSchema,
+  textPropertiesSchema: TextPropertiesSchema,
+  imagePropertiesSchema: ImagePropertiesSchema,
+  pathPropertiesSchema: PathPropertiesSchema,
+  instancePropertiesSchema: InstancePropertiesSchema,
+});
+export const {
+  NodeKindSchema,
+  FrameNodeSchema,
+  SlotPropertiesSchema,
+  SlotNodeSchema,
+  GroupNodeSchema,
+  BooleanNodeSchema,
+  RectangleNodeSchema,
+  EllipseNodeSchema,
+  LineNodeSchema,
+  PolygonNodeSchema,
+  StarNodeSchema,
+  TextNodeSchema,
+  ImageNodeSchema,
+  VectorNodeSchema,
+  PathNodeSchema,
+  InstanceNodeSchema,
+  SlicePropertiesSchema,
+  SliceNodeSchema,
+} = nodeSchemas;
 export const DesignNodeSchema: TUnion<
   [
     typeof FrameNodeSchema,
@@ -864,23 +284,7 @@ export const DesignNodeSchema: TUnion<
     typeof InstanceNodeSchema,
     typeof SliceNodeSchema,
   ]
-> = Type.Union([
-  FrameNodeSchema,
-  SlotNodeSchema,
-  GroupNodeSchema,
-  BooleanNodeSchema,
-  RectangleNodeSchema,
-  EllipseNodeSchema,
-  LineNodeSchema,
-  PolygonNodeSchema,
-  StarNodeSchema,
-  TextNodeSchema,
-  ImageNodeSchema,
-  VectorNodeSchema,
-  PathNodeSchema,
-  InstanceNodeSchema,
-  SliceNodeSchema,
-]);
+> = nodeSchemas.DesignNodeSchema;
 
 const librarySchemas = createLibrarySchemas({
   componentDefinitionSchema: ComponentDefinitionSchema,
