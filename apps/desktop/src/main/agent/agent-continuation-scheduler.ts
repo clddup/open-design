@@ -3,6 +3,7 @@ import {
   isDesignDeliveryLedger,
   type DesignDeliveryLedger,
 } from "@opendesign/workspace-contracts";
+import { DesignDeliveryStageContract } from "@/shared/design-delivery-stage.js";
 
 type RunStartRequest = Extract<AgentRequest, { type: "run.start" }>;
 type AgentRunContinuation = NonNullable<RunStartRequest["continuation"]>;
@@ -226,13 +227,12 @@ function remainingScopeFromEvent(event: AgentEvent): boolean | undefined {
   if (event.type !== "tool.completed" || !isRecord(event.result)) {
     return undefined;
   }
-  const stage = event.result.deliveryStage;
-  if (!isRecord(stage)) return undefined;
-  if (isRecord(stage.nextTarget)) return true;
-  return typeof stage.totalTargets === "number" &&
-    typeof stage.plannedTargets === "number"
-    ? stage.plannedTargets < stage.totalTargets
-    : undefined;
+  const parsed = DesignDeliveryStageContract.parse(event.result.deliveryStage);
+  if (!parsed.ok) return undefined;
+  return (
+    parsed.value.nextTarget !== undefined ||
+    parsed.value.plannedTargets < parsed.value.totalTargets
+  );
 }
 
 function hasIncompleteTarget(delivery: DesignDeliveryLedger | undefined) {

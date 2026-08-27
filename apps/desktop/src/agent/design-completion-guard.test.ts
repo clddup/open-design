@@ -58,7 +58,25 @@ const deliveryScope: AgentToolCallRecord = {
   status: "completed",
   result: {
     deliveryScope: {
-      targets: [{ targetId: "target_home" }, { targetId: "target_profile" }],
+      version: 1,
+      deliverable: "ui",
+      objective: "Design the complete product suite",
+      targets: [
+        {
+          targetId: "target_home",
+          label: "Home",
+          objective: "Design the complete Home experience",
+          requiredContent: ["Primary Home content"],
+        },
+        {
+          targetId: "target_profile",
+          label: "Profile",
+          objective: "Design the complete Profile experience",
+          requiredContent: ["Primary Profile content"],
+        },
+      ],
+      exclusions: [],
+      assumptions: [],
     },
   },
 };
@@ -224,9 +242,14 @@ describe("design completion guard", () => {
     ).toEqual({ allow: true });
 
     const reducedScope = structuredClone(deliveryScope);
-    reducedScope.result = {
-      deliveryScope: { targets: [{ targetId: "target_home" }] },
+    if (!reducedScope.result || typeof reducedScope.result !== "object") {
+      throw new Error("Expected Delivery Scope result");
+    }
+    const reducedResult = reducedScope.result as {
+      deliveryScope: { targets: unknown[] };
     };
+    reducedResult.deliveryScope.targets =
+      reducedResult.deliveryScope.targets.slice(0, 1);
     const mismatch = reviewDesignCompletion(
       context([reducedScope, allTargetsVerified], undefined, {
         deliveryScopeReview: "required",
@@ -280,7 +303,25 @@ describe("design completion guard", () => {
                 totalTargets: 2,
                 plannedTargets: 1,
                 verifiedTargets: 1,
-                nextTarget: { targetId: "target_profile" },
+                currentPlan: {
+                  stage: 1,
+                  status: "verified",
+                  targets: [
+                    {
+                      targetId: "target_home",
+                      label: "Home",
+                      objective: "Design the complete Home experience",
+                      requiredContent: ["Primary Home content"],
+                    },
+                  ],
+                },
+                nextTarget: {
+                  stage: 2,
+                  targetId: "target_profile",
+                  label: "Profile",
+                  objective: "Design the complete Profile experience",
+                  requiredContent: ["Primary Profile content"],
+                },
               },
             }),
           },

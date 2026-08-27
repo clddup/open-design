@@ -52,7 +52,18 @@ describe("initial design inspection", () => {
             totalTargets: 2,
             plannedTargets: 1,
             verifiedTargets: 0,
-            currentPlan: { stage: 1, status: "active", targets: [] },
+            currentPlan: {
+              stage: 1,
+              status: "active",
+              targets: [
+                {
+                  targetId: "target_home",
+                  label: "Home",
+                  objective: "Design Home",
+                  requiredContent: ["Home content"],
+                },
+              ],
+            },
           }),
         },
         renderer: { execute },

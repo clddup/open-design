@@ -46,6 +46,7 @@ import {
   type RasterAssetRole,
 } from "@/shared/design-agent-tools.js";
 import type { RendererDesignCaptureTarget } from "@/shared/design-tool-bridge.js";
+import type { DesignDeliveryStage } from "@/shared/design-delivery-stage.js";
 import {
   registerDesignWorkflowPlan,
   reconcileEstablishedArtboardDescendants,
@@ -70,6 +71,7 @@ import type {
   DesignVisualCriticResult,
 } from "./design-visual-critic.js";
 import { AgentRunAdmissionError } from "./agent-run-admission-error.js";
+import { projectDesignDeliveryStage } from "./design-delivery-stage-projection.js";
 
 type RunStartRequest = Extract<AgentRequest, { type: "run.start" }>;
 
@@ -83,29 +85,6 @@ export type DesignPlanApplyAuthorization = {
 export type DesignPlanAllocation = {
   input: DesignApplyToolInput;
   targetIds: string[];
-};
-
-export type DesignDeliveryStageContext = {
-  totalTargets: number;
-  plannedTargets: number;
-  verifiedTargets: number;
-  currentPlan?: {
-    stage: number;
-    status: "active" | "verified";
-    targets: Array<{
-      targetId: string;
-      label: string;
-      objective: string;
-      requiredContent: string[];
-    }>;
-  };
-  nextTarget?: {
-    stage: number;
-    targetId: string;
-    label: string;
-    objective: string;
-    requiredContent: string[];
-  };
 };
 
 const activeLifecycles = new Set<GlobalTaskLifecycle>([
@@ -1624,79 +1603,11 @@ export class GlobalTaskCoordinator {
     return state ? deliveryLedger(state) : undefined;
   }
 
-  getDeliveryStageContext(
-    runId: string,
-  ): DesignDeliveryStageContext | undefined {
-    const state = this.#designPlansByRunId.get(runId);
-    const scope = this.#deliveryScopesByRunId.get(runId);
-    if (!state && !scope) return undefined;
-    const currentTargets = state ? designPlanTargets(state.plan) : [];
-    const currentPlanTargets = currentTargets.map((target) => {
-      const confirmed = scope?.targets.find(
-        (candidate) => candidate.targetId === target.targetId,
-      );
-      return {
-        targetId: target.targetId,
-        label: confirmed?.label ?? target.label,
-        objective: confirmed?.objective ?? target.objective,
-        requiredContent: [...(confirmed?.requiredContent ?? [])],
-      };
-    });
-    const firstCurrentTargetId = currentTargets[0]?.targetId;
-    const firstCurrentIndex = firstCurrentTargetId
-      ? (scope?.targets.findIndex(
-          (target) => target.targetId === firstCurrentTargetId,
-        ) ?? -1)
-      : -1;
-    const currentPlanVerified =
-      currentTargets.length > 0 &&
-      currentTargets.every(
-        (target) =>
-          state?.targetsById.get(target.targetId)?.delivery.status ===
-          "verified",
-      );
-    const next =
-      !state || currentPlanVerified
-        ? scope && state
-          ? this.#nextUnplannedScopeTarget(runId, state)
-          : scope?.targets[0]
-        : undefined;
-    const nextIndex = next
-      ? (scope?.targets.findIndex(
-          (target) => target.targetId === next.targetId,
-        ) ?? -1)
-      : -1;
-    return {
-      totalTargets: scope?.targets.length ?? state?.targetOrder.length ?? 0,
-      plannedTargets: state?.targetOrder.length ?? 0,
-      verifiedTargets:
-        state?.targetOrder.filter(
-          (targetId) =>
-            state.targetsById.get(targetId)?.delivery.status === "verified",
-        ).length ?? 0,
-      ...(currentPlanTargets.length === 0
-        ? {}
-        : {
-            currentPlan: {
-              stage: firstCurrentIndex >= 0 ? firstCurrentIndex + 1 : 1,
-              status: currentPlanVerified
-                ? ("verified" as const)
-                : ("active" as const),
-              targets: currentPlanTargets,
-            },
-          }),
-      ...(!next
-        ? {}
-        : {
-            nextTarget: {
-              stage: nextIndex >= 0 ? nextIndex + 1 : 1,
-              targetId: next.targetId,
-              label: next.label,
-              objective: next.objective,
-              requiredContent: [...next.requiredContent],
-            },
-          }),
-    };
+  getDeliveryStageContext(runId: string): DesignDeliveryStage | undefined {
+    return projectDesignDeliveryStage(
+      this.#designPlansByRunId.get(runId),
+      this.#deliveryScopesByRunId.get(runId),
+    );
   }
 
   getRecoverableDelivery(

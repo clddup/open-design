@@ -53,7 +53,23 @@ const captureCall: ToolCallRequest = {
 
 function setup(options: { inspectionRevision?: number } = {}) {
   const delivery = { version: 1, targets: [] };
-  const deliveryStage = { activeTargetId: "target_main" };
+  const deliveryStage = {
+    totalTargets: 1,
+    plannedTargets: 1,
+    verifiedTargets: 0,
+    currentPlan: {
+      stage: 1,
+      status: "active" as const,
+      targets: [
+        {
+          targetId: "target_main",
+          label: "Main",
+          objective: "Design the main target",
+          requiredContent: ["Main target content"],
+        },
+      ],
+    },
+  };
   const layoutQuality = { errorCount: 0 };
   const reviewWorkflow = {
     capturedRevision: 7,

@@ -5,7 +5,6 @@ import type {
   CompletionGuardPort,
 } from "@opendesign/agent-runtime";
 import {
-  isDesignDeliveryLedger,
   type DesignDeliveryLedger,
   type DesignDeliveryTarget,
 } from "@opendesign/workspace-contracts";
@@ -19,7 +18,6 @@ import {
   DESIGN_FIRST_SLICE_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
-  DESIGN_PAGE_TOOL_NAME,
   DESIGN_PLAN_TOOL_NAME,
   DESIGN_REVIEW_TOOL_NAME,
   EDIT_IMAGE_TOOL_NAME,
@@ -27,7 +25,15 @@ import {
   IMPORT_SVG_TOOL_NAME,
   PLACE_IMAGE_TOOL_NAME,
   UPDATE_IMAGE_TOOL_NAME,
+  type DesignDeliveryScope,
 } from "@/shared/design-agent-tools.js";
+import {
+  hasSupersededDelivery,
+  initialDeliveryStage,
+  latestDeliveryLedger,
+  latestDeliveryStage,
+  latestReviewedDeliveryScope,
+} from "./design-completion-evidence.js";
 
 export function reviewDesignCompletion(
   context: AgentCompletionContext,
@@ -97,7 +103,7 @@ export function reviewDesignCompletion(
     ) {
       return {
         allow: false,
-        message: `The current executable Plan is verified, but the trusted delivery scope still has ${deliveryStage.totalTargets - deliveryStage.plannedTargets} unplanned target(s). Define the next Plan${deliveryStage.nextTargetId ? ` for confirmed target ${deliveryStage.nextTargetId}` : " from deliveryStage.nextTarget"}, create its first real editable slice, and continue without repeating completed targets.`,
+        message: `The current executable Plan is verified, but the trusted delivery scope still has ${deliveryStage.totalTargets - deliveryStage.plannedTargets} unplanned target(s). Define the next Plan${deliveryStage.nextTarget ? ` for confirmed target ${deliveryStage.nextTarget.targetId}` : " from deliveryStage.nextTarget"}, create its first real editable slice, and continue without repeating completed targets.`,
       };
     }
     return { allow: true };
@@ -219,124 +225,15 @@ export function reviewDesignCompletion(
   return { allow: true };
 }
 
-function latestReviewedDeliveryScope(
-  toolCalls: readonly AgentToolCallRecord[],
-): { targets: Array<{ targetId: string }> } | undefined {
-  for (let index = toolCalls.length - 1; index >= 0; index -= 1) {
-    const call = toolCalls[index];
-    if (
-      call?.toolName !== DESIGN_DELIVERY_SCOPE_TOOL_NAME ||
-      !isRecord(call.result) ||
-      !isRecord(call.result.deliveryScope)
-    ) {
-      continue;
-    }
-    const targets = call.result.deliveryScope.targets;
-    if (
-      Array.isArray(targets) &&
-      targets.length > 0 &&
-      targets.every(
-        (target) => isRecord(target) && typeof target.targetId === "string",
-      )
-    ) {
-      return {
-        targets: targets.map((target) => ({
-          targetId: (target as { targetId: string }).targetId,
-        })),
-      };
-    }
-  }
-  return undefined;
-}
-
-type DeliveryStageProgress = {
-  totalTargets: number;
-  plannedTargets: number;
-  nextTargetId?: string;
-};
-
-function latestDeliveryStage(
-  toolCalls: readonly AgentToolCallRecord[],
-): DeliveryStageProgress | undefined {
-  for (let index = toolCalls.length - 1; index >= 0; index -= 1) {
-    const result = toolCalls[index]?.result;
-    if (!isRecord(result)) continue;
-    const parsed = parseDeliveryStage(result.deliveryStage);
-    if (parsed) return parsed;
-  }
-  return undefined;
-}
-
-function initialDeliveryStage(
-  serialized: string | undefined,
-): DeliveryStageProgress | undefined {
-  if (!serialized) return undefined;
-  try {
-    const content: unknown = JSON.parse(serialized);
-    return isRecord(content)
-      ? parseDeliveryStage(content.deliveryStage)
-      : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function parseDeliveryStage(value: unknown): DeliveryStageProgress | undefined {
-  if (!isRecord(value)) return undefined;
-  if (
-    !Number.isSafeInteger(value.totalTargets) ||
-    !Number.isSafeInteger(value.plannedTargets) ||
-    Number(value.totalTargets) < 1 ||
-    Number(value.plannedTargets) < 1 ||
-    Number(value.plannedTargets) > Number(value.totalTargets)
-  ) {
-    return undefined;
-  }
-  const nextTarget = isRecord(value.nextTarget) ? value.nextTarget : undefined;
-  return {
-    totalTargets: Number(value.totalTargets),
-    plannedTargets: Number(value.plannedTargets),
-    ...(typeof nextTarget?.targetId === "string"
-      ? { nextTargetId: nextTarget.targetId }
-      : {}),
-  };
-}
-
 function deliveryIsOrderedScopePrefix(
   delivery: DesignDeliveryLedger,
-  scope: { targets: Array<{ targetId: string }> },
+  scope: DesignDeliveryScope,
 ): boolean {
   return (
     delivery.targets.length <= scope.targets.length &&
     delivery.targets.every(
       (target, index) => scope.targets[index]?.targetId === target.targetId,
     )
-  );
-}
-
-function latestDeliveryLedger(
-  toolCalls: readonly AgentToolCallRecord[],
-): DesignDeliveryLedger | undefined {
-  for (let index = toolCalls.length - 1; index >= 0; index -= 1) {
-    const result = toolCalls[index]?.result;
-    if (!isRecord(result)) continue;
-    if (result.deliveryDisposition === "superseded") return undefined;
-    const delivery = result.delivery;
-    if (isDesignDeliveryLedger(delivery)) return delivery;
-    const unfinishedDelivery = result.unfinishedDelivery;
-    if (isDesignDeliveryLedger(unfinishedDelivery)) return unfinishedDelivery;
-  }
-  return undefined;
-}
-
-function hasSupersededDelivery(
-  toolCalls: readonly AgentToolCallRecord[],
-): boolean {
-  return toolCalls.some(
-    (call) =>
-      call.toolName === DESIGN_PAGE_TOOL_NAME &&
-      isRecord(call.result) &&
-      call.result.deliveryDisposition === "superseded",
   );
 }
 

@@ -248,7 +248,25 @@ describe("AgentContinuationScheduler", () => {
           totalTargets: 12,
           plannedTargets: 1,
           verifiedTargets: 1,
-          nextTarget: { targetId: "target_2" },
+          currentPlan: {
+            stage: 1,
+            status: "verified",
+            targets: [
+              {
+                targetId: "target_1",
+                label: "Home",
+                objective: "Design Home",
+                requiredContent: ["Home content"],
+              },
+            ],
+          },
+          nextTarget: {
+            stage: 2,
+            targetId: "target_2",
+            label: "Profile",
+            objective: "Design Profile",
+            requiredContent: ["Profile content"],
+          },
         },
       },
     });

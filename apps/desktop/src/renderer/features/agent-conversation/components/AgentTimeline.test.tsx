@@ -104,7 +104,18 @@ describe("AgentTimeline", () => {
             totalTargets: 12,
             plannedTargets: 1,
             verifiedTargets: 0,
-            currentPlan: { stage: 1, status: "active" },
+            currentPlan: {
+              stage: 1,
+              status: "active",
+              targets: [
+                {
+                  targetId: "target_home",
+                  label: "Home",
+                  objective: "Establish the primary product hierarchy",
+                  requiredContent: ["Primary Home content"],
+                },
+              ],
+            },
           },
         },
         revision: 2,

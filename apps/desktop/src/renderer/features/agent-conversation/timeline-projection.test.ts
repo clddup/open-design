@@ -66,7 +66,20 @@ describe("Agent continuation timeline projection", () => {
           delivery,
           deliveryStage: {
             totalTargets: 12,
-            currentPlan: { stage: 1, status: "active" },
+            plannedTargets: 1,
+            verifiedTargets: 0,
+            currentPlan: {
+              stage: 1,
+              status: "active",
+              targets: [
+                {
+                  targetId: "target_home",
+                  label: "首页",
+                  objective: "建立核心信息层级与首要行动",
+                  requiredContent: ["首页核心内容"],
+                },
+              ],
+            },
           },
         },
         revision: 2,
