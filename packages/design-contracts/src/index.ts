@@ -25,6 +25,9 @@ import { createDesignTransactionResultContract } from "./transaction-result-cont
 import { createEditorWireSchemas } from "./editor-wire-schema.js";
 import { createChangeSetSchemas } from "./change-set-schema.js";
 import { createTransactionWireSchemas } from "./transaction-wire-schema.js";
+import { createNodeOperationSchemas } from "./node-operation-schema.js";
+import { createResourceOperationSchemas } from "./resource-operation-schema.js";
+import { createDesignOperationSchema } from "./operation-schema.js";
 import * as limits from "./limits.js";
 import * as versions from "./versions.js";
 import {
@@ -1161,402 +1164,38 @@ export const DesignDocumentSchema: TObject<DesignDocumentProperties> =
     { additionalProperties: false },
   );
 
-const OperationBaseProperties = {
-  commandId: Type.String({ minLength: 1 }),
-};
+const nodeOperationSchemas = createNodeOperationSchemas({
+  designNodeSchema: DesignNodeSchema,
+  transformSchema: TransformSchema,
+  sizeSchema: SizeSchema,
+  layoutConstraintsSchema: layout.LayoutConstraintsSchema,
+  layoutPositioningSchema: layout.LayoutPositioningSchema,
+  layoutSizingSchema: layout.LayoutSizingSchema,
+  layoutLimitsSchema: layout.LayoutLimitsSchema,
+  gridChildPlacementSchema: layout.GridChildPlacementSchema,
+  componentPropertyReferencesSchema: ComponentPropertyReferencesSchema,
+  blendModeSchema: BlendModeSchema,
+  effectSchema: EffectSchema,
+  maskModeSchema: MaskModeSchema,
+  exportSettingsSchema: exportSettings.ExportSettingsSchema,
+  jsonObjectSchema: JsonObjectSchema,
+  fontFaceIdentityProperties: styles.FontFaceIdentityProperties,
+  paintSchema: PaintSchema,
+  textRunsSchema: TextSharedProperties.runs,
+});
 
-export const InsertElementCommandSchema = Type.Object(
-  {
-    ...OperationBaseProperties,
-    type: Type.Literal("insert_element"),
-    pageId: Type.String({ minLength: 1 }),
-    parentId: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
-    index: Type.Integer({ minimum: 0 }),
-    node: DesignNodeSchema,
-  },
-  { additionalProperties: false },
-);
-
-export const UpdatePropertiesCommandSchema = Type.Object(
-  {
-    ...OperationBaseProperties,
-    type: Type.Literal("update_properties"),
-    nodeId: Type.String({ minLength: 1 }),
-    name: Type.Optional(Type.String()),
-    visible: Type.Optional(Type.Boolean()),
-    locked: Type.Optional(Type.Boolean()),
-    transform: Type.Optional(TransformSchema),
-    size: Type.Optional(SizeSchema),
-    opacity: Type.Optional(Type.Number({ minimum: 0, maximum: 1 })),
-    constraints: Type.Optional(
-      Type.Union([layout.LayoutConstraintsSchema, Type.Null()]),
-    ),
-    layoutPositioning: Type.Optional(
-      Type.Union([layout.LayoutPositioningSchema, Type.Null()]),
-    ),
-    layoutSizing: Type.Optional(
-      Type.Union([layout.LayoutSizingSchema, Type.Null()]),
-    ),
-    layoutLimits: Type.Optional(
-      Type.Union([layout.LayoutLimitsSchema, Type.Null()]),
-    ),
-    gridPlacement: Type.Optional(
-      Type.Union([layout.GridChildPlacementSchema, Type.Null()]),
-    ),
-    componentPropertyReferences: Type.Optional(
-      Type.Union([ComponentPropertyReferencesSchema, Type.Null()]),
-    ),
-    blendMode: Type.Optional(BlendModeSchema),
-    effects: Type.Optional(Type.Array(EffectSchema)),
-    maskMode: Type.Optional(MaskModeSchema),
-    exportSettings: Type.Optional(exportSettings.ExportSettingsSchema),
-    properties: Type.Optional(JsonObjectSchema),
-    extensions: Type.Optional(JsonObjectSchema),
-  },
-  { additionalProperties: false, minProperties: 4 },
-);
-
-export const MoveElementCommandSchema = Type.Object(
-  {
-    ...OperationBaseProperties,
-    type: Type.Literal("move_element"),
-    nodeId: Type.String({ minLength: 1 }),
-    pageId: Type.String({ minLength: 1 }),
-    parentId: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
-    index: Type.Integer({ minimum: 0 }),
-  },
-  { additionalProperties: false },
-);
-
-export const DeleteElementCommandSchema = Type.Object(
-  {
-    ...OperationBaseProperties,
-    type: Type.Literal("delete_element"),
-    nodeId: Type.String({ minLength: 1 }),
-  },
-  { additionalProperties: false },
-);
-
-export const ReplaceSubtreeCommandSchema = Type.Object(
-  {
-    ...OperationBaseProperties,
-    type: Type.Literal("replace_subtree"),
-    rootNodeId: Type.String({ minLength: 1 }),
-    nodes: Type.Array(DesignNodeSchema, { minItems: 1 }),
-  },
-  { additionalProperties: false },
-);
-
-export const TextFontDescriptorSchema = Type.Object(
-  styles.FontFaceIdentityProperties,
-  { additionalProperties: false },
-);
-
-export const ReflowTextCommandSchema = Type.Object(
-  {
-    ...OperationBaseProperties,
-    type: Type.Literal("reflow_text"),
-    nodeIds: Type.Array(Type.String({ minLength: 1, maxLength: 256 }), {
-      minItems: 1,
-      maxItems: 1_000,
-      uniqueItems: true,
-    }),
-    expectedFont: TextFontDescriptorSchema,
-    replacementFont: Type.Optional(TextFontDescriptorSchema),
-  },
-  { additionalProperties: false },
-);
-
-export const UpdateTextRangeStyleCommandSchema = Type.Object(
-  {
-    ...OperationBaseProperties,
-    type: Type.Literal("update_text_range_style"),
-    nodeId: Type.String({ minLength: 1, maxLength: 256 }),
-    start: Type.Integer({ minimum: 0 }),
-    end: Type.Integer({ minimum: 1 }),
-    style: Type.Object(
-      {
-        fontFamily: Type.Optional(
-          Type.String({ minLength: 1, maxLength: 4_096 }),
-        ),
-        fontStyleName: Type.Optional(
-          Type.Union([
-            Type.String({ minLength: 1, maxLength: 512 }),
-            Type.Null(),
-          ]),
-        ),
-        fontSize: Type.Optional(Type.Number({ exclusiveMinimum: 0 })),
-        fontWeight: Type.Optional(Type.Integer({ minimum: 1, maximum: 1_000 })),
-        fontSlant: Type.Optional(
-          Type.Union([Type.Literal("normal"), Type.Literal("italic")]),
-        ),
-        letterSpacing: Type.Optional(Type.Number()),
-        lineHeight: Type.Optional(Type.Number({ exclusiveMinimum: 0 })),
-        textCase: Type.Optional(
-          Type.Union([
-            Type.Literal("original"),
-            Type.Literal("uppercase"),
-            Type.Literal("lowercase"),
-            Type.Literal("title-case"),
-            Type.Literal("small-caps"),
-          ]),
-        ),
-        textDecoration: Type.Optional(
-          Type.Union([
-            Type.Literal("none"),
-            Type.Literal("underline"),
-            Type.Literal("strikethrough"),
-          ]),
-        ),
-        paragraphIndent: Type.Optional(Type.Number({ minimum: 0 })),
-        paragraphSpacing: Type.Optional(Type.Number({ minimum: 0 })),
-        listOptions: Type.Optional(
-          Type.Object(
-            {
-              type: Type.Union([
-                Type.Literal("none"),
-                Type.Literal("ordered"),
-                Type.Literal("unordered"),
-              ]),
-            },
-            { additionalProperties: false },
-          ),
-        ),
-        indentation: Type.Optional(Type.Integer({ minimum: 0, maximum: 5 })),
-        listSpacing: Type.Optional(Type.Number({ minimum: 0 })),
-        fills: Type.Optional(Type.Array(PaintSchema, { maxItems: 64 })),
-        textStyleId: Type.Optional(
-          Type.Union([
-            Type.String({ minLength: 1, maxLength: 512 }),
-            Type.Null(),
-          ]),
-        ),
-        fillStyleId: Type.Optional(
-          Type.Union([
-            Type.String({ minLength: 1, maxLength: 512 }),
-            Type.Null(),
-          ]),
-        ),
-      },
-      { additionalProperties: false, minProperties: 1 },
-    ),
-  },
-  { additionalProperties: false },
-);
-
-export const CommitTextEditParagraphPatchSchema = Type.Object(
-  {
-    start: Type.Integer({ minimum: 0 }),
-    end: Type.Integer({ minimum: 1 }),
-    style: Type.Object(
-      {
-        paragraphIndent: Type.Optional(Type.Number({ minimum: 0 })),
-        paragraphSpacing: Type.Optional(Type.Number({ minimum: 0 })),
-        listOptions: Type.Optional(
-          Type.Object(
-            {
-              type: Type.Union([
-                Type.Literal("none"),
-                Type.Literal("ordered"),
-                Type.Literal("unordered"),
-              ]),
-            },
-            { additionalProperties: false },
-          ),
-        ),
-        indentation: Type.Optional(Type.Integer({ minimum: 0, maximum: 5 })),
-        listSpacing: Type.Optional(Type.Number({ minimum: 0 })),
-      },
-      { additionalProperties: false, minProperties: 1 },
-    ),
-  },
-  { additionalProperties: false },
-);
-
-export const CommitTextEditCommandSchema = Type.Object(
-  {
-    ...OperationBaseProperties,
-    type: Type.Literal("commit_text_edit"),
-    nodeId: Type.String({ minLength: 1, maxLength: 256 }),
-    content: Type.String(),
-    paragraphPatches: Type.Array(CommitTextEditParagraphPatchSchema, {
-      maxItems: 16_384,
-    }),
-    runs: TextSharedProperties.runs,
-  },
-  { additionalProperties: false },
-);
-
-export const PutAssetCommandSchema = Type.Object(
-  {
-    ...OperationBaseProperties,
-    type: Type.Literal("put_asset"),
-    asset: DesignAssetSchema,
-  },
-  { additionalProperties: false },
-);
-
-export const DeleteAssetCommandSchema = Type.Object(
-  {
-    ...OperationBaseProperties,
-    type: Type.Literal("delete_asset"),
-    assetId: Type.String({ minLength: 1 }),
-  },
-  { additionalProperties: false },
-);
-
-export const PutImageAssetDerivationCommandSchema = Type.Object(
-  {
-    ...OperationBaseProperties,
-    type: Type.Literal("put_image_asset_derivation"),
-    derivation: ImageAssetDerivationSchema,
-  },
-  { additionalProperties: false },
-);
-
-export const DeleteImageAssetDerivationCommandSchema = Type.Object(
-  {
-    ...OperationBaseProperties,
-    type: Type.Literal("delete_image_asset_derivation"),
-    derivationId: Type.String({ minLength: 1, maxLength: 256 }),
-  },
-  { additionalProperties: false },
-);
-
-export const PutComponentCommandSchema = Type.Object(
-  {
-    ...OperationBaseProperties,
-    type: Type.Literal("put_component"),
-    component: ComponentDefinitionSchema,
-  },
-  { additionalProperties: false },
-);
-export const DeleteComponentCommandSchema = Type.Object(
-  {
-    ...OperationBaseProperties,
-    type: Type.Literal("delete_component"),
-    componentId: Type.String({ minLength: 1 }),
-  },
-  { additionalProperties: false },
-);
-export const PutLibraryComponentSourceCommandSchema = Type.Object(
-  {
-    ...OperationBaseProperties,
-    type: Type.Literal("put_library_component_source"),
-    source: LibraryComponentSourceSchema,
-  },
-  { additionalProperties: false },
-);
-export const DeleteLibraryComponentSourceCommandSchema = Type.Object(
-  {
-    ...OperationBaseProperties,
-    type: Type.Literal("delete_library_component_source"),
-    componentId: Type.String({ minLength: 1, maxLength: 256 }),
-  },
-  { additionalProperties: false },
-);
-export const PutLibraryVariantSetSourceCommandSchema = Type.Object(
-  {
-    ...OperationBaseProperties,
-    type: Type.Literal("put_library_variant_set_source"),
-    source: LibraryVariantSetSourceSchema,
-  },
-  { additionalProperties: false },
-);
-export const DeleteLibraryVariantSetSourceCommandSchema = Type.Object(
-  {
-    ...OperationBaseProperties,
-    type: Type.Literal("delete_library_variant_set_source"),
-    variantSetId: Type.String({ minLength: 1, maxLength: 256 }),
-  },
-  { additionalProperties: false },
-);
-export const PutLibraryStyleSourceCommandSchema = Type.Object(
-  {
-    ...OperationBaseProperties,
-    type: Type.Literal("put_library_style_source"),
-    source: LibraryStyleSourceSchema,
-  },
-  { additionalProperties: false },
-);
-export const DeleteLibraryStyleSourceCommandSchema = Type.Object(
-  {
-    ...OperationBaseProperties,
-    type: Type.Literal("delete_library_style_source"),
-    styleId: Type.String({ minLength: 1, maxLength: 256 }),
-  },
-  { additionalProperties: false },
-);
-export const PutLibraryVariableCollectionSourceCommandSchema = Type.Object(
-  {
-    ...OperationBaseProperties,
-    type: Type.Literal("put_library_variable_collection_source"),
-    source: LibraryVariableCollectionSourceSchema,
-  },
-  { additionalProperties: false },
-);
-export const DeleteLibraryVariableCollectionSourceCommandSchema = Type.Object(
-  {
-    ...OperationBaseProperties,
-    type: Type.Literal("delete_library_variable_collection_source"),
-    collectionId: Type.String({ minLength: 1, maxLength: 256 }),
-  },
-  { additionalProperties: false },
-);
-export const PutLibraryVariableSourceCommandSchema = Type.Object(
-  {
-    ...OperationBaseProperties,
-    type: Type.Literal("put_library_variable_source"),
-    source: LibraryVariableSourceSchema,
-  },
-  { additionalProperties: false },
-);
-export const DeleteLibraryVariableSourceCommandSchema = Type.Object(
-  {
-    ...OperationBaseProperties,
-    type: Type.Literal("delete_library_variable_source"),
-    variableId: Type.String({ minLength: 1, maxLength: 256 }),
-  },
-  { additionalProperties: false },
-);
-export const InsertPageCommandSchema = Type.Object(
-  {
-    ...OperationBaseProperties,
-    type: Type.Literal("insert_page"),
-    index: Type.Integer({ minimum: 0 }),
-    page: DesignPageSchema,
-    nodes: Type.Array(DesignNodeSchema, {
-      maxItems: limits.MAX_PAGE_TRANSACTION_NODES,
-    }),
-  },
-  { additionalProperties: false },
-);
-export const UpdatePageCommandSchema = Type.Object(
-  {
-    ...OperationBaseProperties,
-    type: Type.Literal("update_page"),
-    pageId: Type.String({ minLength: 1 }),
-    name: Type.String({ minLength: 1, maxLength: 256 }),
-  },
-  { additionalProperties: false },
-);
-export const MovePageCommandSchema = Type.Object(
-  {
-    ...OperationBaseProperties,
-    type: Type.Literal("move_page"),
-    pageId: Type.String({ minLength: 1 }),
-    index: Type.Integer({ minimum: 0 }),
-  },
-  { additionalProperties: false },
-);
-export const DeletePageCommandSchema = Type.Object(
-  {
-    ...OperationBaseProperties,
-    type: Type.Literal("delete_page"),
-    pageId: Type.String({ minLength: 1 }),
-  },
-  { additionalProperties: false },
-);
+export const {
+  InsertElementCommandSchema,
+  UpdatePropertiesCommandSchema,
+  MoveElementCommandSchema,
+  DeleteElementCommandSchema,
+  ReplaceSubtreeCommandSchema,
+  TextFontDescriptorSchema,
+  ReflowTextCommandSchema,
+  UpdateTextRangeStyleCommandSchema,
+  CommitTextEditParagraphPatchSchema,
+  CommitTextEditCommandSchema,
+} = nodeOperationSchemas;
 export const NodeDesignOperationSchema: TUnion<
   [
     typeof InsertElementCommandSchema,
@@ -1568,16 +1207,44 @@ export const NodeDesignOperationSchema: TUnion<
     typeof UpdateTextRangeStyleCommandSchema,
     typeof CommitTextEditCommandSchema,
   ]
-> = Type.Union([
-  InsertElementCommandSchema,
-  UpdatePropertiesCommandSchema,
-  MoveElementCommandSchema,
-  DeleteElementCommandSchema,
-  ReplaceSubtreeCommandSchema,
-  ReflowTextCommandSchema,
-  UpdateTextRangeStyleCommandSchema,
-  CommitTextEditCommandSchema,
-]);
+> = nodeOperationSchemas.NodeDesignOperationSchema;
+
+const resourceOperationSchemas = createResourceOperationSchemas({
+  designAssetSchema: DesignAssetSchema,
+  imageAssetDerivationSchema: ImageAssetDerivationSchema,
+  componentDefinitionSchema: ComponentDefinitionSchema,
+  libraryComponentSourceSchema: LibraryComponentSourceSchema,
+  libraryVariantSetSourceSchema: LibraryVariantSetSourceSchema,
+  libraryStyleSourceSchema: LibraryStyleSourceSchema,
+  libraryVariableCollectionSourceSchema: LibraryVariableCollectionSourceSchema,
+  libraryVariableSourceSchema: LibraryVariableSourceSchema,
+  designPageSchema: DesignPageSchema,
+  designNodeSchema: DesignNodeSchema,
+  maxPageTransactionNodes: limits.MAX_PAGE_TRANSACTION_NODES,
+});
+
+export const {
+  PutAssetCommandSchema,
+  DeleteAssetCommandSchema,
+  PutImageAssetDerivationCommandSchema,
+  DeleteImageAssetDerivationCommandSchema,
+  PutComponentCommandSchema,
+  DeleteComponentCommandSchema,
+  PutLibraryComponentSourceCommandSchema,
+  DeleteLibraryComponentSourceCommandSchema,
+  PutLibraryVariantSetSourceCommandSchema,
+  DeleteLibraryVariantSetSourceCommandSchema,
+  PutLibraryStyleSourceCommandSchema,
+  DeleteLibraryStyleSourceCommandSchema,
+  PutLibraryVariableCollectionSourceCommandSchema,
+  DeleteLibraryVariableCollectionSourceCommandSchema,
+  PutLibraryVariableSourceCommandSchema,
+  DeleteLibraryVariableSourceCommandSchema,
+  InsertPageCommandSchema,
+  UpdatePageCommandSchema,
+  MovePageCommandSchema,
+  DeletePageCommandSchema,
+} = resourceOperationSchemas;
 
 export const DesignOperationSchema: TUnion<
   [
@@ -1616,8 +1283,7 @@ export const DesignOperationSchema: TUnion<
     typeof MovePageCommandSchema,
     typeof DeletePageCommandSchema,
   ]
-> = Type.Union([
-  NodeDesignOperationSchema,
+> = createDesignOperationSchema(NodeDesignOperationSchema, [
   PutAssetCommandSchema,
   DeleteAssetCommandSchema,
   PutImageAssetDerivationCommandSchema,
