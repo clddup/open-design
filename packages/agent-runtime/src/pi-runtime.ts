@@ -4,13 +4,13 @@ import type {
 } from "@opendesign/agent-contracts";
 import type { Model, Api } from "@earendil-works/pi-ai";
 import type { SessionStore } from "@opendesign/session-store";
-import {
-  type AgentRunRequest,
-  type AgentRuntimeLimits,
-  type AgentRuntimeOptions,
-  type AgentToolDefinition,
-  type ToolCatalogPort,
-} from "./index.js";
+import type { AgentRunRequest } from "./run-request.js";
+import type {
+  AgentRuntimeLimits,
+  AgentRuntimeOptions,
+  AgentToolDefinition,
+  ToolCatalogPort,
+} from "./runtime-ports.js";
 import { resolveInitialModelToolSurface } from "./model-tool-surface.js";
 import { createOpenDesignPiAgent } from "./pi-core-adapter.js";
 import { prepareOpenDesignPiContext } from "./pi-context-adapter.js";

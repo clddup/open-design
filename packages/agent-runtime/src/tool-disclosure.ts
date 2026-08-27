@@ -1,8 +1,6 @@
-import type {
-  AgentToolCallRecord,
-  AgentToolDefinition,
-  ModelToolSurface,
-} from "./index.js";
+import type { AgentToolCallRecord } from "./completion-guard.js";
+import type { ModelToolSurface } from "./run-request.js";
+import type { AgentToolDefinition } from "./runtime-ports.js";
 
 export type ModelToolDisclosurePhase =
   "bootstrap" | "host-inspected" | "inspected" | "continuation" | "expanded";

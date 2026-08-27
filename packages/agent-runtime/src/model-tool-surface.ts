@@ -1,5 +1,5 @@
 import type { AgentInitialDesignInspectionContent } from "@opendesign/agent-contracts";
-import type { AgentRunRequest, ModelToolSurface } from "./index.js";
+import type { AgentRunRequest, ModelToolSurface } from "./run-request.js";
 
 const CREATE_INTENT =
   /(?:设计|创建|新建|生成|制作|搭建|画一个|做一个|重新设计)|\b(?:design|create|generate|build|make|compose|draw)\b/i;

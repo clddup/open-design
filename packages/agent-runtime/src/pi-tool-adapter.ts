@@ -13,16 +13,15 @@ import {
   type TrustedToolFailure,
   type TrustedToolResult,
 } from "@opendesign/agent-contracts";
-import { TrustedToolExecutionError } from "./index.js";
-import type {
-  AgentRunRequest,
-  AgentToolCallRecord,
-  AgentToolDefinition,
-  ModelToolSurface,
-  ApprovalPort,
-  ApprovalRequest,
-  ToolExecutorPort,
-} from "./index.js";
+import type { AgentToolCallRecord } from "./completion-guard.js";
+import type { AgentRunRequest, ModelToolSurface } from "./run-request.js";
+import {
+  TrustedToolExecutionError,
+  type AgentToolDefinition,
+  type ApprovalPort,
+  type ApprovalRequest,
+  type ToolExecutorPort,
+} from "./runtime-ports.js";
 import { PiDesignFailureRecovery } from "./pi-design-failure-recovery.js";
 import { PiToolProgressCircuit } from "./pi-tool-progress-circuit.js";
 import {

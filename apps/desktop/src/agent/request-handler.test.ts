@@ -137,6 +137,42 @@ describe("dispatchAgentRequest", () => {
     expect(isAgentEvent(error)).toBe(true);
   });
 
+  it("passes the canonical run.start payload without its wire discriminant", async () => {
+    const runtime = createRuntime(vi.fn(() => Promise.resolve([])));
+    let received: unknown;
+    runtime.run = async function* (request) {
+      received = request;
+      await Promise.resolve();
+      yield* [];
+    };
+
+    await dispatchAgentRequest(
+      {
+        type: "run.start",
+        runId: "run_1",
+        sessionId: "session_1",
+        prompt: "Create a design",
+        documentId: "document_1",
+        revision: 2,
+        scope: { kind: "document", selectedNodeIds: [] },
+        mutationTarget: { kind: "document" },
+        modelSelection: { providerId: "provider_1", modelId: "model_1" },
+      },
+      { runtime, postMessage: vi.fn() },
+    );
+
+    expect(received).toEqual({
+      runId: "run_1",
+      sessionId: "session_1",
+      prompt: "Create a design",
+      documentId: "document_1",
+      revision: 2,
+      scope: { kind: "document", selectedNodeIds: [] },
+      mutationTarget: { kind: "document" },
+      modelSelection: { providerId: "provider_1", modelId: "model_1" },
+    });
+  });
+
   it("routes an exact approval resolution to the pending approval controller", async () => {
     const events: AgentEvent[] = [];
     const resolveApproval = vi.fn(() => true);

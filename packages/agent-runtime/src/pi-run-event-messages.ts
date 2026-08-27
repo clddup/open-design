@@ -9,7 +9,7 @@ import type {
   ResolvedModelIdentity,
 } from "@opendesign/model-gateway";
 import { normalizeAssistantTimelineBlocks } from "@opendesign/session-store";
-import type { AgentRunRequest } from "./index.js";
+import type { AgentRunRequest } from "./run-request.js";
 
 export type PiAgentEventMessage = Extract<
   PiAgentEvent,

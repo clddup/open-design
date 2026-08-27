@@ -13,17 +13,21 @@ import type {
 } from "@opendesign/agent-contracts";
 import type { SessionStore } from "@opendesign/session-store";
 import type { AssistantMessage, UserMessage } from "@earendil-works/pi-ai";
+import type {
+  AgentToolCallRecord,
+  CompletionGuardPort,
+} from "./completion-guard.js";
+import { canonicalUserMessage } from "./model-message-projection.js";
 import {
-  canonicalUserMessage,
   projectAgentRunPrompt,
   type AgentRunRequest,
-  type AgentToolCallRecord,
-  type AgentToolDefinition,
   type ModelToolSurface,
-  type ApprovalPort,
-  type CompletionGuardPort,
-  type ToolExecutorPort,
-} from "./index.js";
+} from "./run-request.js";
+import type {
+  AgentToolDefinition,
+  ApprovalPort,
+  ToolExecutorPort,
+} from "./runtime-ports.js";
 import {
   OpenDesignPiToolAdapter,
   type PiToolApprovalRequested,

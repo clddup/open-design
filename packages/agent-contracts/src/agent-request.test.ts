@@ -8,6 +8,7 @@ import {
   MAX_INITIAL_DESIGN_INSPECTION_CHARACTERS,
   MAX_SELECTED_NODE_IDS,
   ModelSelectionSchema,
+  ResolvedModelIdentityContract,
   SelectionScopeSchema,
   isAgentEvent,
   isAgentRequest,
@@ -39,6 +40,28 @@ const validStart = {
 describe("Agent request contract", () => {
   it("reuses the canonical Model Gateway selection schema by identity", () => {
     expect(ModelSelectionSchema).toBe(GatewayModelSelectionSchema);
+    expect(
+      ResolvedModelIdentityContract.parse({
+        providerId: "provider_1",
+        modelId: "design-model",
+        apiFormat: "openai-responses",
+      }).ok,
+    ).toBe(true);
+    expect(
+      ResolvedModelIdentityContract.parse({
+        providerId: "provider_1",
+        modelId: "",
+        apiFormat: "openai-responses",
+      }),
+    ).toMatchObject({
+      ok: false,
+      issues: [
+        expect.objectContaining({
+          code: "resolved_model_identity.schema_invalid",
+          path: "/modelId",
+        }),
+      ],
+    });
   });
 
   it("accepts a strict host-bound selection snapshot", () => {

@@ -1,5 +1,5 @@
 import type { TrustedToolFailure } from "@opendesign/agent-contracts";
-import type { AgentUnresolvedDesignWriteFailure } from "./index.js";
+import type { AgentUnresolvedDesignWriteFailure } from "./completion-guard.js";
 
 export class PiDesignFailureRecovery {
   readonly #attempts = new Map<string, number>();

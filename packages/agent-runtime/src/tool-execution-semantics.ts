@@ -5,7 +5,7 @@ import {
   type TrustedToolContext,
   type TrustedToolResult,
 } from "@opendesign/agent-contracts";
-import type { AgentRunRequest } from "./index.js";
+import type { AgentRunRequest } from "./run-request.js";
 
 const MAX_MODEL_TOOL_RESULT_STRING_CHARACTERS = 16_000;
 const MAX_MODEL_TOOL_RESULT_CHARACTERS = 50_000;

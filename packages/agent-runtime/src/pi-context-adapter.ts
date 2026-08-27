@@ -18,26 +18,26 @@ import type {
 } from "@opendesign/model-gateway";
 import type { SessionStore } from "@opendesign/session-store";
 import {
-  canonicalUserMessage,
   compactInRunMessagesForProvider,
   contextBudgetExceededMessage,
   createContextBudget,
   modelContextCompatibilityMessage,
   modelContextFits,
-  planContextCompaction,
-  projectAgentRunPrompt,
-  restoreModelMessages,
-  toCanonicalTool,
-  type AgentRunRequest,
-  type AgentToolDefinition,
   type ContextBudget,
-} from "./index.js";
+} from "./context-budget.js";
+import { planContextCompaction } from "./context-checkpoint.js";
+import {
+  canonicalUserMessage,
+  restoreModelMessages,
+} from "./model-message-projection.js";
 import {
   projectPiMessageToCanonical,
   type PiContextFailure,
   type PiModelContextProjectionPort,
 } from "./pi-model-gateway-adapter.js";
 import { appendRunJournalEvent } from "./run-journal-writer.js";
+import { projectAgentRunPrompt, type AgentRunRequest } from "./run-request.js";
+import { toCanonicalTool, type AgentToolDefinition } from "./runtime-ports.js";
 
 const DEFAULT_MAX_CONTEXT_CHARACTERS = 240_000;
 

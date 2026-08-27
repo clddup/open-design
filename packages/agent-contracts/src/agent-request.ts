@@ -5,7 +5,9 @@ import {
 } from "@opendesign/contract-runtime";
 import {
   ModelSelectionSchema,
+  ResolvedModelIdentitySchema,
   type ModelSelection,
+  type ResolvedModelIdentity,
 } from "@opendesign/model-gateway/provider-config";
 import { AgentContinuationSchemas } from "./continuation.js";
 import {
@@ -192,6 +194,15 @@ export const ModelSelectionContract = defineContract<AgentModelSelection>({
   recovery: "Correct the reported model selection field.",
   clone: false,
 });
+
+export const ResolvedModelIdentityContract =
+  defineContract<ResolvedModelIdentity>({
+    schema: ResolvedModelIdentitySchema,
+    code: "resolved_model_identity.schema_invalid",
+    subject: "Resolved model identity",
+    recovery: "Correct the reported resolved model identity field.",
+    clone: false,
+  });
 
 export const AgentAttachmentContract = defineContract<AgentAttachment>({
   schema: AgentAttachmentSchema,

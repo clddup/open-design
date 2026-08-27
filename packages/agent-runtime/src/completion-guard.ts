@@ -1,5 +1,5 @@
 import type { AgentToolFailureDetails } from "@opendesign/agent-contracts";
-import type { AgentRunRequest } from "./index.js";
+import type { AgentRunRequest } from "./run-request.js";
 
 export interface AgentToolCallRecord {
   toolCallId: string;

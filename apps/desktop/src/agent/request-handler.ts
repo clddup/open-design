@@ -83,7 +83,8 @@ async function handleRequest(
   }
 
   if (request.type === "run.start") {
-    const runRequest: AgentRunRequest = { ...request };
+    const { type: requestType, ...runRequest } = request;
+    requestType satisfies "run.start";
     for await (const event of runtime.run(runRequest)) {
       postMessage(event);
     }

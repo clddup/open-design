@@ -1,4 +1,4 @@
-import type { AgentToolDefinition } from "./index.js";
+import type { AgentToolDefinition } from "./runtime-ports.js";
 import { isSafeModelDisclosure } from "./tool-disclosure.js";
 
 export function selectSafeDefinitions(
