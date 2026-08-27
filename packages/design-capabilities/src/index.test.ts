@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   CAPABILITY_SURFACES,
   DESIGN_CAPABILITY_MANIFEST,
+  DesignCapabilityManifestContract,
   capabilityManifestForAgent,
   formatAgentCapabilitySummary,
   getDesignCapability,
@@ -101,5 +102,33 @@ describe("design capability manifest", () => {
     const inconsistent = structuredClone(DESIGN_CAPABILITY_MANIFEST);
     inconsistent.capabilities[0]!.status = "available";
     expect(isDesignCapabilityManifest(inconsistent)).toBe(false);
+    expect(
+      DesignCapabilityManifestContract.issues(inconsistent),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "design.capability_status_inconsistent",
+        path: "/capabilities/0/status",
+      }),
+    );
+  });
+
+  it("reports structural and category-reference failures at exact paths", () => {
+    expect(
+      DesignCapabilityManifestContract.issues({
+        ...structuredClone(DESIGN_CAPABILITY_MANIFEST),
+        secret: true,
+      })[0]?.path,
+    ).toBe("/secret");
+
+    const unknownCategory = structuredClone(DESIGN_CAPABILITY_MANIFEST);
+    unknownCategory.capabilities[0]!.category = "missing.category";
+    expect(
+      DesignCapabilityManifestContract.issues(unknownCategory),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "design.capability_category_unknown",
+        path: "/capabilities/0/category",
+      }),
+    );
   });
 });

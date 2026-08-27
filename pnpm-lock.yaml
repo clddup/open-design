@@ -252,6 +252,13 @@ importers:
         version: 5.9.3
 
   packages/design-capabilities:
+    dependencies:
+      '@opendesign/contract-runtime':
+        specifier: workspace:*
+        version: link:../contract-runtime
+      '@sinclair/typebox':
+        specifier: ^0.34.41
+        version: 0.34.52
     devDependencies:
       typescript:
         specifier: 'catalog:'
