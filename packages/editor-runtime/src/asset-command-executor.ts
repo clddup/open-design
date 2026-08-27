@@ -48,6 +48,7 @@ function deleteAsset(
   if (referencingNode) {
     throw new OperationError(
       command.commandId,
+      "design.asset.in_use_by_node",
       `Asset ${command.assetId} is still referenced by node ${referencingNode.id}`,
     );
   }
@@ -64,6 +65,7 @@ function deleteAsset(
   if (referencingStyle) {
     throw new OperationError(
       command.commandId,
+      "design.asset.in_use_by_style",
       `Asset ${command.assetId} is still referenced by Style ${referencingStyle.id}`,
     );
   }
@@ -79,6 +81,7 @@ function deleteAsset(
   if (referencingDerivation) {
     throw new OperationError(
       command.commandId,
+      "design.asset.in_use_by_derivation",
       `Asset ${command.assetId} is still referenced by image derivation ${referencingDerivation.id}`,
     );
   }
@@ -100,6 +103,7 @@ function putImageAssetDerivation(
     if (!asset || asset.kind !== "image") {
       throw new OperationError(
         command.commandId,
+        "design.asset.derivation_asset_missing",
         `Image derivation ${derivation.id} references missing image asset ${assetId}`,
       );
     }

@@ -35,6 +35,7 @@ export function applyStyleOperation(
       if (document.libraryStylesById[command.style.id]) {
         throw new OperationError(
           command.commandId,
+          "design.style.conflicts_library",
           `Style ${command.style.id} conflicts with a Library Style`,
           "duplicate",
         );
@@ -43,6 +44,7 @@ export function applyStyleOperation(
       if (current && current.styleType !== command.style.styleType) {
         throw new OperationError(
           command.commandId,
+          "design.style.type_immutable",
           "A Style cannot change type after creation",
         );
       }
@@ -53,6 +55,7 @@ export function applyStyleOperation(
       if (duplicateKey) {
         throw new OperationError(
           command.commandId,
+          "design.style.key_duplicate",
           `Style key ${command.style.key} is already used by ${duplicateKey.id}`,
           "duplicate",
         );
@@ -81,6 +84,7 @@ export function applyStyleOperation(
       if (consumer) {
         throw new OperationError(
           command.commandId,
+          "design.style.in_use",
           `Style ${command.styleId} is still used by ${consumer.id}`,
         );
       }
@@ -95,6 +99,7 @@ export function applyStyleOperation(
       if (style.styleType !== command.styleType) {
         throw new OperationError(
           command.commandId,
+          "design.style.type_mismatch",
           `Style ${command.styleId} is not ${command.styleType}`,
         );
       }
@@ -104,6 +109,7 @@ export function applyStyleOperation(
       if (command.index < 0 || command.index >= order.length) {
         throw new OperationError(
           command.commandId,
+          "design.style.index_out_of_range",
           "Style index is out of range",
         );
       }
@@ -120,6 +126,7 @@ export function applyStyleOperation(
         if (!styleCanApply(node, command.target.field, style)) {
           throw new OperationError(
             command.commandId,
+            "design.style.reference_incompatible",
             `${command.target.field} cannot consume ${style.styleType} style ${style.id}`,
           );
         }
@@ -135,6 +142,7 @@ export function applyStyleOperation(
       if (document.stylesById[styleId]) {
         throw new OperationError(
           command.commandId,
+          "design.library_style.conflicts_local",
           `Library Style ${styleId} conflicts with a local Style`,
           "duplicate",
         );
@@ -143,6 +151,7 @@ export function applyStyleOperation(
       if (current && !sameLibraryStyleIdentity(current, command.source)) {
         throw new OperationError(
           command.commandId,
+          "design.library_style.identity_changed",
           `Library Style ${styleId} cannot change source identity`,
           "invalid",
         );
@@ -153,6 +162,7 @@ export function applyStyleOperation(
       ) {
         throw new OperationError(
           command.commandId,
+          "design.library_style.type_immutable",
           "A Library Style cannot change type after import",
           "invalid",
         );
@@ -164,6 +174,7 @@ export function applyStyleOperation(
       if (duplicateKey) {
         throw new OperationError(
           command.commandId,
+          "design.style.key_duplicate",
           `Style key ${command.source.style.key} is already used by ${duplicateKey.id}`,
           "duplicate",
         );
@@ -178,6 +189,7 @@ export function applyStyleOperation(
       if (styleIsReferenced(document, command.styleId)) {
         throw new OperationError(
           command.commandId,
+          "design.library_style.in_use",
           `Library Style ${command.styleId} is still referenced`,
           "invalid",
         );
@@ -289,6 +301,7 @@ function hasPaints(node: DesignNode): node is DesignNode & {
 function notFound(commandId: string, id: string): OperationError {
   return new OperationError(
     commandId,
+    "design.style_or_node.not_found",
     `Style or node ${id} does not exist`,
     "not-found",
   );

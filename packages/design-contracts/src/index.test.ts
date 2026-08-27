@@ -3227,7 +3227,7 @@ describe("design contract schemas", () => {
         retryable: false,
         issues: [
           {
-            code: "design.node_schema_invalid",
+            code: "design.node.schema_invalid",
             commandId: "update_node",
             path: "/nodesById/node_1",
             message: "Node is invalid",

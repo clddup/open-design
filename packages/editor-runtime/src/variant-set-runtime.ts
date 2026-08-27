@@ -12,6 +12,7 @@ export function putVariantSet(
   if (existing && existing.rootNodeId !== command.variantSet.rootNodeId) {
     throw new OperationError(
       command.commandId,
+      "design.variant_set.duplicate",
       `Component set ${command.variantSet.id} is already bound to ${existing.rootNodeId}`,
       "duplicate",
     );
@@ -28,6 +29,7 @@ export function deleteVariantSet(
   if (!document.variantSetsById[command.variantSetId]) {
     throw new OperationError(
       command.commandId,
+      "design.variant_set.not_found",
       `Node ${command.variantSetId} does not exist`,
       "not-found",
     );
@@ -38,6 +40,7 @@ export function deleteVariantSet(
   if (member) {
     throw new OperationError(
       command.commandId,
+      "design.variant_set.in_use",
       `Component set ${command.variantSetId} is still referenced by component ${member.id}`,
     );
   }
@@ -55,6 +58,7 @@ export function deleteVariantSet(
   if (preferredBy) {
     throw new OperationError(
       command.commandId,
+      "design.variant_set.preferred_in_use",
       `Component set ${command.variantSetId} is still preferred by component ${preferredBy.id}`,
     );
   }

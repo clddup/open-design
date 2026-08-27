@@ -27,6 +27,7 @@ export function targetChildren(
   ) {
     throw new OperationError(
       commandId,
+      "design.node.parent_cannot_contain_children",
       `${parent.kind} nodes cannot contain children`,
     );
   }
@@ -34,6 +35,7 @@ export function targetChildren(
   if (!location || location.pageId !== pageId) {
     throw new OperationError(
       commandId,
+      "design.node.parent_outside_page",
       `Parent ${parentId} is not on ${pageId}`,
     );
   }
@@ -49,6 +51,7 @@ export function assertPage(
   if (!page) {
     throw new OperationError(
       commandId,
+      "design.page.not_found",
       `Page ${pageId} does not exist`,
       "not-found",
     );
@@ -64,6 +67,7 @@ export function assertIndex(
   if (index > children.length) {
     throw new OperationError(
       commandId,
+      "design.node.child_index_out_of_range",
       `Index ${index} exceeds child count ${children.length}`,
     );
   }
@@ -122,6 +126,7 @@ export function assertComponentSourcesRemain(
     if (!removedNodeIds.has(component.rootNodeId)) continue;
     throw new OperationError(
       commandId,
+      "design.component.main_in_use",
       `Component ${component.id} must be deleted or detached from its instances before removing main ${component.rootNodeId}`,
       "invalid",
       {
@@ -141,6 +146,7 @@ export function nodeNotFound(
 ): OperationError {
   return new OperationError(
     commandId,
+    "design.node.not_found",
     `Node ${nodeId} does not exist`,
     "not-found",
   );

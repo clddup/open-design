@@ -41,6 +41,7 @@ function putComponent(
   if (existing && existing.rootNodeId !== command.component.rootNodeId) {
     throw new OperationError(
       command.commandId,
+      "design.component.id_conflict",
       `Component ${command.component.id} is already bound to ${existing.rootNodeId}`,
       "duplicate",
     );
@@ -65,6 +66,7 @@ function deleteComponent(
   if (referencingInstance) {
     throw new OperationError(
       command.commandId,
+      "design.component.in_use",
       `Component ${command.componentId} is still referenced by instance ${referencingInstance.id}`,
     );
   }
@@ -79,6 +81,7 @@ function putLibraryComponentSource(
   if (document.componentsById[componentId]) {
     throw new OperationError(
       command.commandId,
+      "design.library_component.conflicts_local",
       `Library component ${componentId} conflicts with a local component`,
       "duplicate",
     );
@@ -114,6 +117,7 @@ function deleteLibraryComponentSource(
   if (persistentInstance) {
     throw new OperationError(
       command.commandId,
+      "design.library_component.in_use_by_instance",
       `Library component ${command.componentId} is still referenced by instance ${persistentInstance.id}`,
     );
   }
@@ -125,6 +129,7 @@ function deleteLibraryComponentSource(
   if (dependentSource) {
     throw new OperationError(
       command.commandId,
+      "design.library_component.dependency_in_use",
       `Library component ${command.componentId} is still required by ${dependentSource.component.id}`,
     );
   }
@@ -147,6 +152,7 @@ function deleteLibraryComponentSource(
   if (definitionReference) {
     throw new OperationError(
       command.commandId,
+      "design.library_component.definition_in_use",
       `Library component ${command.componentId} is still referenced by component ${definitionReference.id}`,
     );
   }
@@ -158,6 +164,7 @@ function deleteLibraryComponentSource(
   if (variantSet) {
     throw new OperationError(
       command.commandId,
+      "design.library_component.variant_member_in_use",
       `Library component ${command.componentId} is still a member of variant set ${variantSet.variantSet.id}`,
     );
   }
@@ -172,6 +179,7 @@ function putLibraryVariantSetSource(
   if (document.variantSetsById[variantSetId]) {
     throw new OperationError(
       command.commandId,
+      "design.library_variant_set.conflicts_local",
       `Library variant set ${variantSetId} conflicts with a local variant set`,
       "duplicate",
     );
@@ -207,6 +215,7 @@ function deleteLibraryVariantSetSource(
   if (member) {
     throw new OperationError(
       command.commandId,
+      "design.library_variant_set.member_in_use",
       `Library variant set ${command.variantSetId} is still referenced by component ${member.id}`,
     );
   }
@@ -224,6 +233,7 @@ function deleteLibraryVariantSetSource(
   if (preferredBy) {
     throw new OperationError(
       command.commandId,
+      "design.library_variant_set.preferred_in_use",
       `Library variant set ${command.variantSetId} is still preferred by component ${preferredBy.id}`,
     );
   }
@@ -250,6 +260,7 @@ function assertStableLibraryIdentity(
   if (!changed) return;
   throw new OperationError(
     commandId,
+    "design.library_source.identity_changed",
     `Library source identity for ${entityId} cannot change ${changed}; import it under a new stable id`,
     "invalid",
   );

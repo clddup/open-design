@@ -60,6 +60,7 @@ function insertElement(
   if (document.nodesById[command.node.id]) {
     throw new OperationError(
       command.commandId,
+      "design.node.duplicate",
       `Node ${command.node.id} already exists`,
       "duplicate",
     );
@@ -94,6 +95,7 @@ function updateProperties(
   if (node.kind === "instance" && command.size !== undefined) {
     throw new OperationError(
       command.commandId,
+      "design.instance.resize_forbidden",
       "Instance size follows its main component; resize the main component or detach the instance",
       "invalid",
       { path: `/nodesById/${escapeJsonPointer(node.id)}/size` },
@@ -108,6 +110,7 @@ function updateProperties(
     ) {
       throw new OperationError(
         command.commandId,
+        "design.text.runs_require_text_operation",
         "Text character and paragraph runs cannot be replaced through update_properties; use update_text_range_style or replace the complete Text node",
         "invalid",
         {
@@ -175,12 +178,13 @@ function updateProperties(
     const firstIssue = details[0];
     throw new OperationError(
       command.commandId,
+      "design.node.schema_invalid",
       `Properties are invalid for ${node.kind} node ${node.id}: ${firstIssue?.message ?? "node does not match its kind"}`,
       "invalid",
       {
         ...(firstIssue ? { path: firstIssue.path } : {}),
         issues: details.map((issue) => ({
-          code: "design.node_schema_invalid",
+          code: "design.node.schema_invalid",
           commandId: command.commandId,
           path: issue.path,
           message: issue.message,
@@ -250,6 +254,7 @@ function replaceSubtree(
   if (root.parentId !== current.parentId) {
     throw new OperationError(
       command.commandId,
+      "design.node.replacement_parent_changed",
       "Replacement root must preserve its parent",
     );
   }
@@ -262,6 +267,7 @@ function replaceSubtree(
     if (!oldIds.has(node.id) && document.nodesById[node.id]) {
       throw new OperationError(
         command.commandId,
+        "design.node.duplicate_outside_replacement",
         `Node ${node.id} already exists outside the replaced subtree`,
         "duplicate",
       );
@@ -293,6 +299,7 @@ function assertBooleanOperandUpdateAllowed(
   ) {
     throw new OperationError(
       command.commandId,
+      "design.boolean_operand.appearance_owned_by_parent",
       "Boolean operand appearance is controlled by its Boolean parent",
     );
   }
@@ -310,6 +317,7 @@ function assertBooleanOperandUpdateAllowed(
   if (appearanceFields.some((field) => Object.hasOwn(properties, field))) {
     throw new OperationError(
       command.commandId,
+      "design.boolean_operand.paint_owned_by_parent",
       "Boolean operand fill and stroke are controlled by its Boolean parent",
     );
   }

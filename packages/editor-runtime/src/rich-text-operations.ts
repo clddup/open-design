@@ -166,6 +166,7 @@ export function commitTextEditingSession(
   ) {
     throw new OperationError(
       command.commandId,
+      "design.text.edit_noop",
       "Text editing session did not change content, character styles, or paragraph styles",
       "invalid",
       { context: { code: "no-op", nodeId: node.id } },
@@ -190,6 +191,7 @@ export function commitTextEditingSession(
     ) {
       throw new OperationError(
         command.commandId,
+        "design.text.paragraph_patch_invalid",
         "Text editing paragraph patches must be ordered, non-overlapping, and aligned to final paragraph boundaries",
         "invalid",
         {
@@ -219,6 +221,7 @@ export function updateTextRangeStyle(
   if (Object.keys(command.style).length === 0) {
     throw new OperationError(
       command.commandId,
+      "design.text.style_patch_empty",
       "Text range style update must change at least one field",
       "invalid",
       { path: `/nodesById/${escapePointer(node.id)}/properties/runs` },
@@ -278,6 +281,7 @@ export function updateTextRangeStyle(
   } catch (error) {
     throw new OperationError(
       command.commandId,
+      "design.text.range_update_invalid",
       error instanceof Error ? error.message : "Text range update failed",
       "invalid",
       {
@@ -298,6 +302,7 @@ export function updateTextRangeStyle(
   ) {
     throw new OperationError(
       command.commandId,
+      "design.text.range_style_unchanged",
       "Text range already uses the requested style",
       "invalid",
       { context: { code: "no-op", nodeId: node.id } },
@@ -474,9 +479,15 @@ function sameParagraphRuns(
 }
 
 function invalidRuns(nodeId: string, commandId: string, message: string) {
-  return new OperationError(commandId, message, "invalid", {
-    path: `/nodesById/${escapePointer(nodeId)}/properties/runs`,
-  });
+  return new OperationError(
+    commandId,
+    "design.text.runs_invalid",
+    message,
+    "invalid",
+    {
+      path: `/nodesById/${escapePointer(nodeId)}/properties/runs`,
+    },
+  );
 }
 
 function invalidParagraphRuns(
@@ -484,9 +495,15 @@ function invalidParagraphRuns(
   commandId: string,
   message: string,
 ) {
-  return new OperationError(commandId, message, "invalid", {
-    path: `/nodesById/${escapePointer(nodeId)}/properties/paragraphRuns`,
-  });
+  return new OperationError(
+    commandId,
+    "design.text.paragraph_runs_invalid",
+    message,
+    "invalid",
+    {
+      path: `/nodesById/${escapePointer(nodeId)}/properties/paragraphRuns`,
+    },
+  );
 }
 
 function escapePointer(value: string): string {

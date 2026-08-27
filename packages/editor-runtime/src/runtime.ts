@@ -534,6 +534,7 @@ export class EditorRuntime {
       if (!autoLayout.ok) {
         throw new OperationError(
           transaction.commands.at(-1)?.commandId ?? "auto_layout",
+          "design.auto_layout.resolution_failed",
           autoLayout.message,
           "invalid",
           {
@@ -782,20 +783,7 @@ function operationError(error: unknown): DesignError {
       code: error.code,
       message: error.message,
       retryable: error.retryable,
-      issues:
-        error.issues === undefined
-          ? [
-              {
-                code: `design.operation.${error.code}`,
-                commandId: error.commandId,
-                path: error.path ?? "",
-                message: error.message,
-                ...(error.context === undefined
-                  ? {}
-                  : { details: error.context }),
-              },
-            ]
-          : [...error.issues],
+      issues: [...error.issues],
       ...(error.context === undefined ? {} : { context: error.context }),
     };
   }

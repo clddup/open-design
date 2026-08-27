@@ -286,7 +286,7 @@ describe("EditorRuntime transactions", () => {
         code: "invalid",
         issues: [
           {
-            code: "design.node_schema_invalid",
+            code: "design.node.schema_invalid",
             commandId: "paint_group",
             path: "/nodesById/feature_group/properties/fills",
             message: "Unexpected property",
@@ -465,7 +465,12 @@ describe("EditorRuntime transactions", () => {
       ok: false,
       error: {
         code: "not-found",
-        issues: [{ commandId: "delete_missing" }],
+        issues: [
+          {
+            code: "design.node.not_found",
+            commandId: "delete_missing",
+          },
+        ],
       },
     });
     expect(runtime.getSnapshot()).toBe(before);
@@ -1100,7 +1105,12 @@ describe("EditorRuntime transactions", () => {
         ok: false,
         error: {
           code: "invalid",
-          issues: [{ commandId: "delete_path_paint_asset" }],
+          issues: [
+            {
+              code: "design.asset.in_use_by_node",
+              commandId: "delete_path_paint_asset",
+            },
+          ],
         },
       });
       expect(

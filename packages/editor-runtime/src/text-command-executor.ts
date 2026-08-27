@@ -152,6 +152,7 @@ function reflowText(
     if (node.kind !== "text") {
       throw new OperationError(
         command.commandId,
+        "design.text.node_type_mismatch",
         `Node ${nodeId} is not a Text layer`,
         "invalid",
         { path: `/nodesById/${escapeJsonPointer(nodeId)}` },
@@ -160,6 +161,7 @@ function reflowText(
     if (isEffectivelyLocked(document, nodeId)) {
       throw new OperationError(
         command.commandId,
+        "design.text.locked",
         `Text layer ${nodeId} is locked`,
         "permission-denied",
         { path: `/nodesById/${escapeJsonPointer(nodeId)}/locked` },
@@ -173,6 +175,7 @@ function reflowText(
     ) {
       throw new OperationError(
         command.commandId,
+        "design.text.expected_font_changed",
         `Text layer ${nodeId} no longer uses the expected font`,
         "conflict",
         {
@@ -238,6 +241,7 @@ function reflowText(
   if (!changed) {
     throw new OperationError(
       command.commandId,
+      "design.text.layout_up_to_date",
       "Text layout is already up to date",
       "invalid",
       { context: { code: "no-op", nodeIds: command.nodeIds } },
@@ -255,6 +259,7 @@ function applyTextRangeStyleOperation(
   if (node.kind !== "text") {
     throw new OperationError(
       command.commandId,
+      "design.text.node_type_mismatch",
       `Node ${node.id} is not a Text layer`,
       "invalid",
       { path: `/nodesById/${escapeJsonPointer(node.id)}` },
@@ -263,6 +268,7 @@ function applyTextRangeStyleOperation(
   if (isEffectivelyLocked(document, node.id)) {
     throw new OperationError(
       command.commandId,
+      "design.text.locked",
       `Text layer ${node.id} is locked`,
       "permission-denied",
       { path: `/nodesById/${escapeJsonPointer(node.id)}/locked` },
@@ -277,6 +283,7 @@ function applyTextRangeStyleOperation(
     if (reference.styleType !== "TEXT") {
       throw new OperationError(
         command.commandId,
+        "design.text.text_style_required",
         `Style ${reference.id} is not a Text Style`,
         "invalid",
       );
@@ -305,6 +312,7 @@ function applyTextRangeStyleOperation(
     if (reference.styleType !== "PAINT") {
       throw new OperationError(
         command.commandId,
+        "design.text.paint_style_required",
         `Style ${reference.id} is not a Paint Style`,
         "invalid",
       );
@@ -325,6 +333,7 @@ function applyTextEditingSessionOperation(
   if (node.kind !== "text") {
     throw new OperationError(
       command.commandId,
+      "design.text.node_type_mismatch",
       `Node ${node.id} is not a Text layer`,
       "invalid",
       { path: `/nodesById/${escapeJsonPointer(node.id)}` },
@@ -333,6 +342,7 @@ function applyTextEditingSessionOperation(
   if (isEffectivelyLocked(document, node.id)) {
     throw new OperationError(
       command.commandId,
+      "design.text.locked",
       `Text layer ${node.id} is locked`,
       "permission-denied",
       { path: `/nodesById/${escapeJsonPointer(node.id)}/locked` },
@@ -352,6 +362,7 @@ function inspectReflowFont(
   if (!provider?.inspectFont) {
     throw new OperationError(
       commandId,
+      "design.font.availability_initializing",
       "Font availability is still initializing; retry after the canvas is ready",
       "engine-failure",
       {
@@ -369,6 +380,7 @@ function inspectReflowFont(
   } catch (error) {
     throw new OperationError(
       commandId,
+      "design.font.availability_provider_failed",
       error instanceof Error && error.message
         ? `Font availability provider failed: ${error.message}`
         : "Font availability provider failed",
@@ -384,6 +396,7 @@ function inspectReflowFont(
   ) {
     throw new OperationError(
       commandId,
+      "design.font.availability_result_invalid",
       issue ?? "Font availability provider returned inconsistent identity",
       "engine-failure",
       {
@@ -400,6 +413,7 @@ function inspectReflowFont(
   if (result.status === "missing") {
     throw new OperationError(
       commandId,
+      "design.font.unavailable",
       `Font ${descriptor.fontFamily} is not available to the current canvas`,
       "invalid",
       {
@@ -436,6 +450,7 @@ export function resolveTextAutoSize(
   if (!provider) {
     throw new OperationError(
       commandId,
+      "design.text.auto_size_initializing",
       "Text Auto Size is still initializing; retry after the canvas is ready",
       "engine-failure",
       {
@@ -476,6 +491,7 @@ export function resolveTextAutoSize(
   } catch (error) {
     throw new OperationError(
       commandId,
+      "design.text.layout_provider_failed",
       error instanceof Error && error.message
         ? `Text layout provider failed: ${error.message}`
         : "Text layout provider failed",
@@ -496,6 +512,7 @@ export function resolveTextAutoSize(
   if (resultIssue) {
     throw new OperationError(
       commandId,
+      "design.text.layout_result_invalid",
       `Text layout provider returned an invalid result: ${resultIssue}`,
       "engine-failure",
       {
@@ -510,16 +527,22 @@ export function resolveTextAutoSize(
     );
   }
   if (!result.ok) {
-    throw new OperationError(commandId, result.message, "engine-failure", {
-      path: `/nodesById/${escapeJsonPointer(node.id)}/size`,
-      retryable: result.retryable,
-      context: {
-        nodeId: node.id,
-        provider: provider.id,
-        providerVersion: provider.version,
-        providerCode: result.code,
+    throw new OperationError(
+      commandId,
+      "design.text.layout_resolution_failed",
+      result.message,
+      "engine-failure",
+      {
+        path: `/nodesById/${escapeJsonPointer(node.id)}/size`,
+        retryable: result.retryable,
+        context: {
+          nodeId: node.id,
+          provider: provider.id,
+          providerVersion: provider.version,
+          providerCode: result.code,
+        },
       },
-    });
+    );
   }
   if (
     result.provider !== provider.id ||
@@ -527,6 +550,7 @@ export function resolveTextAutoSize(
   ) {
     throw new OperationError(
       commandId,
+      "design.text.layout_identity_mismatch",
       "Text layout provider returned inconsistent identity",
       "engine-failure",
       {
@@ -567,6 +591,7 @@ export function resolveTextFirstBaseline(
     if (!provider) {
       throw new OperationError(
         commandId,
+        "design.text.rich_baseline_initializing",
         "Rich text baseline measurement is still initializing; retry after the canvas is ready",
         "engine-failure",
         { path, retryable: true },
@@ -575,6 +600,7 @@ export function resolveTextFirstBaseline(
     if (node.properties.textAlignHorizontal === "justify") {
       throw new OperationError(
         commandId,
+        "design.text.rich_justify_unsupported",
         "Rich text baseline measurement does not support justified alignment yet",
         "unsupported",
         {
@@ -610,6 +636,7 @@ export function resolveTextFirstBaseline(
     if (issue || !result.ok) {
       throw new OperationError(
         commandId,
+        "design.text.rich_baseline_result_invalid",
         issue ??
           (result.ok ? "Text baseline measurement failed" : result.message),
         "engine-failure",
@@ -622,6 +649,7 @@ export function resolveTextFirstBaseline(
     ) {
       throw new OperationError(
         commandId,
+        "design.text.rich_baseline_identity_mismatch",
         "Rich text baseline provider returned inconsistent identity",
         "engine-failure",
         { path, retryable: true },
@@ -634,6 +662,7 @@ export function resolveTextFirstBaseline(
   if (!provider?.measureFirstBaseline) {
     throw new OperationError(
       commandId,
+      "design.text.baseline_initializing",
       "Text baseline measurement is still initializing; retry after the canvas is ready",
       "engine-failure",
       { path, retryable: true },
@@ -665,6 +694,7 @@ export function resolveTextFirstBaseline(
   if (issue || !result.ok) {
     throw new OperationError(
       commandId,
+      "design.text.baseline_result_invalid",
       issue ??
         (result.ok ? "Text baseline measurement failed" : result.message),
       "engine-failure",
@@ -677,6 +707,7 @@ export function resolveTextFirstBaseline(
   ) {
     throw new OperationError(
       commandId,
+      "design.text.baseline_identity_mismatch",
       "Text baseline provider returned inconsistent identity",
       "engine-failure",
       { path, retryable: true },
@@ -695,6 +726,7 @@ function resolveRichTextAutoSize(
   if (!provider) {
     throw new OperationError(
       commandId,
+      "design.text.rich_auto_size_initializing",
       "Rich Text Auto Size is still initializing; retry after the canvas is ready",
       "engine-failure",
       {
@@ -711,6 +743,7 @@ function resolveRichTextAutoSize(
   if (node.properties.textAlignHorizontal === "justify") {
     throw new OperationError(
       commandId,
+      "design.text.rich_justify_unsupported",
       "Rich Text Auto Size does not support justified alignment yet",
       "unsupported",
       {
@@ -721,6 +754,7 @@ function resolveRichTextAutoSize(
   if (node.properties.textTruncation !== "disabled") {
     throw new OperationError(
       commandId,
+      "design.text.rich_truncation_unsupported",
       "Rich Text Auto Size does not support ending truncation yet",
       "unsupported",
       {
@@ -754,6 +788,7 @@ function resolveRichTextAutoSize(
   } catch (error) {
     throw new OperationError(
       commandId,
+      "design.text.rich_layout_provider_failed",
       error instanceof Error && error.message
         ? `Rich text layout provider failed: ${error.message}`
         : "Rich text layout provider failed",
@@ -763,15 +798,22 @@ function resolveRichTextAutoSize(
   }
   const issue = validateTextRunLayoutResult(result, request);
   if (issue) {
-    throw new OperationError(commandId, issue, "engine-failure", {
-      path,
-      retryable: true,
-      context: { provider: provider.id, providerVersion: provider.version },
-    });
+    throw new OperationError(
+      commandId,
+      "design.text.rich_layout_result_invalid",
+      issue,
+      "engine-failure",
+      {
+        path,
+        retryable: true,
+        context: { provider: provider.id, providerVersion: provider.version },
+      },
+    );
   }
   if (!result.ok) {
     throw new OperationError(
       commandId,
+      "design.text.rich_layout_resolution_failed",
       result.message,
       result.code === "unsupported" ? "unsupported" : "engine-failure",
       {
@@ -787,6 +829,7 @@ function resolveRichTextAutoSize(
   ) {
     throw new OperationError(
       commandId,
+      "design.text.rich_layout_identity_mismatch",
       "Rich text layout provider returned inconsistent identity",
       "engine-failure",
       { path, retryable: true },

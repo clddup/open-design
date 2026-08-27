@@ -77,6 +77,30 @@ describe("page command executor", () => {
     expect(document.pagesById.page_invalid).toBeUndefined();
   });
 
+  it("reports one stable domain issue instead of a generic invalid code", () => {
+    const document = structuredClone(createWelcomeDocument());
+
+    try {
+      applyPageCommand(document, {
+        commandId: "rename_page_noop",
+        type: "update_page",
+        pageId: "page_welcome",
+        name: document.pagesById.page_welcome!.name,
+      });
+      throw new Error("Expected unchanged Page name to fail");
+    } catch (error) {
+      if (!(error instanceof OperationError)) throw error;
+      expect(error.issues).toEqual([
+        {
+          code: "design.page.name_unchanged",
+          commandId: "rename_page_noop",
+          path: "",
+          message: "Page name is unchanged",
+        },
+      ]);
+    }
+  });
+
   it("declines commands owned by other executors", () => {
     const document = structuredClone(createWelcomeDocument());
     const command: DesignOperation = {

@@ -2758,7 +2758,7 @@ describe("Renderer design tool scope", () => {
     const details = response.error.details;
     expect(details?.fingerprint).toMatch(/^design_[a-f0-9]{8}$/);
     expect(details?.issues[0]).toMatchObject({
-      code: "design.node_schema_invalid",
+      code: "design.node.schema_invalid",
       commandId: "break_feature_stroke",
       nodeId: "feature_one",
       path: "/nodesById/feature_one/properties/strokeWidth",

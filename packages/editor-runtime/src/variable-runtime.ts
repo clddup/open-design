@@ -34,6 +34,7 @@ export function applyVariableOperation(
       if (document.libraryVariableCollectionsById[command.collection.id]) {
         throw new OperationError(
           command.commandId,
+          "design.variable_collection.conflicts_library",
           `Collection ${command.collection.id} conflicts with a Library Collection`,
           "duplicate",
         );
@@ -58,6 +59,7 @@ export function applyVariableOperation(
       ) {
         throw new OperationError(
           command.commandId,
+          "design.variable_collection.not_empty",
           `Collection ${command.collectionId} still owns variables`,
         );
       }
@@ -80,6 +82,7 @@ export function applyVariableOperation(
       ) {
         throw new OperationError(
           command.commandId,
+          "design.variable_collection.index_out_of_range",
           "Collection index is out of range",
         );
       }
@@ -95,6 +98,7 @@ export function applyVariableOperation(
       if (document.libraryVariablesById[command.variable.id]) {
         throw new OperationError(
           command.commandId,
+          "design.variable.conflicts_library",
           `Variable ${command.variable.id} conflicts with a Library Variable`,
           "duplicate",
         );
@@ -138,6 +142,7 @@ export function applyVariableOperation(
       if (document.variableCollectionsById[collectionId]) {
         throw new OperationError(
           command.commandId,
+          "design.library_variable_collection.conflicts_local",
           `Library Collection ${collectionId} conflicts with a local Collection`,
           "duplicate",
         );
@@ -146,6 +151,7 @@ export function applyVariableOperation(
       if (current && !sameCollectionIdentity(current, command.source)) {
         throw new OperationError(
           command.commandId,
+          "design.library_variable_collection.identity_changed",
           `Library Collection ${collectionId} cannot change source identity`,
           "invalid",
         );
@@ -158,6 +164,7 @@ export function applyVariableOperation(
       if (duplicateKey) {
         throw new OperationError(
           command.commandId,
+          "design.variable_collection.key_duplicate",
           `Collection key ${command.source.collection.key} is already used by ${duplicateKey.id}`,
           "duplicate",
         );
@@ -182,6 +189,7 @@ export function applyVariableOperation(
       ) {
         throw new OperationError(
           command.commandId,
+          "design.library_variable_collection.not_empty",
           `Library Collection ${command.collectionId} still owns Variables`,
           "invalid",
         );
@@ -194,6 +202,7 @@ export function applyVariableOperation(
       if (document.variablesById[variableId]) {
         throw new OperationError(
           command.commandId,
+          "design.library_variable.conflicts_local",
           `Library Variable ${variableId} conflicts with a local Variable`,
           "duplicate",
         );
@@ -208,6 +217,7 @@ export function applyVariableOperation(
       ) {
         throw new OperationError(
           command.commandId,
+          "design.library_variable.collection_missing",
           `Library Variable ${variableId} requires its Collection from the same release`,
           "invalid",
         );
@@ -216,6 +226,7 @@ export function applyVariableOperation(
       if (current && !sameVariableIdentity(current, command.source)) {
         throw new OperationError(
           command.commandId,
+          "design.library_variable.identity_changed",
           `Library Variable ${variableId} cannot change source identity`,
           "invalid",
         );
@@ -226,6 +237,7 @@ export function applyVariableOperation(
       ) {
         throw new OperationError(
           command.commandId,
+          "design.library_variable.type_immutable",
           "A Library Variable cannot change type after import",
           "invalid",
         );
@@ -238,6 +250,7 @@ export function applyVariableOperation(
       if (duplicateKey) {
         throw new OperationError(
           command.commandId,
+          "design.variable.key_duplicate",
           `Variable key ${command.source.variable.key} is already used by ${duplicateKey.id}`,
           "duplicate",
         );
@@ -258,6 +271,7 @@ export function applyVariableOperation(
       if (libraryVariableIsReferenced(document, command.variableId)) {
         throw new OperationError(
           command.commandId,
+          "design.library_variable.in_use",
           `Library Variable ${command.variableId} is still referenced`,
           "invalid",
         );
@@ -363,6 +377,7 @@ function setVariableBinding(
     if (command.target.field === "characters" && node.kind !== "text") {
       throw new OperationError(
         command.commandId,
+        "design.variable.text_binding_target_invalid",
         "characters variable binding requires a Text node",
       );
     }
@@ -378,6 +393,7 @@ function setVariableBinding(
   if (!paint) {
     throw new OperationError(
       command.commandId,
+      "design.variable.paint_index_missing",
       `${command.target.paintField} paint ${command.target.paintIndex} does not exist`,
       "not-found",
     );
@@ -385,6 +401,7 @@ function setVariableBinding(
   if (paint.type !== "solid") {
     throw new OperationError(
       command.commandId,
+      "design.variable.paint_type_unsupported",
       "Only SolidPaint color supports Variables v1",
     );
   }
@@ -420,6 +437,7 @@ function nodePaints(
 function notFound(commandId: string, kind: string, id: string): OperationError {
   return new OperationError(
     commandId,
+    "design.variable.entity_not_found",
     `${kind} ${id} does not exist`,
     "not-found",
   );

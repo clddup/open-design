@@ -40,6 +40,7 @@ function insertPage(
   if (document.pagesById[command.page.id]) {
     throw new OperationError(
       command.commandId,
+      "design.page.duplicate",
       `Page ${command.page.id} already exists`,
       "duplicate",
     );
@@ -51,6 +52,7 @@ function insertPage(
     if (insertedNodeIds.has(node.id)) {
       throw new OperationError(
         command.commandId,
+        "design.page.duplicate_child",
         `Page contains duplicate node ${node.id}`,
         "duplicate",
       );
@@ -58,6 +60,7 @@ function insertPage(
     if (document.nodesById[node.id]) {
       throw new OperationError(
         command.commandId,
+        "design.node.duplicate",
         `Node ${node.id} already exists`,
         "duplicate",
       );
@@ -78,7 +81,11 @@ function updatePage(
   const page = assertPage(document, command.pageId, command.commandId);
   assertPageName(command.name, command.commandId);
   if (page.name === command.name) {
-    throw new OperationError(command.commandId, "Page name is unchanged");
+    throw new OperationError(
+      command.commandId,
+      "design.page.name_unchanged",
+      "Page name is unchanged",
+    );
   }
   page.name = command.name;
 }
@@ -93,7 +100,11 @@ function movePage(
     throw nodeNotFound(command.commandId, command.pageId);
   }
   if (previousIndex === command.index) {
-    throw new OperationError(command.commandId, "Page position is unchanged");
+    throw new OperationError(
+      command.commandId,
+      "design.page.position_unchanged",
+      "Page position is unchanged",
+    );
   }
   document.pageOrder.splice(previousIndex, 1);
   assertIndex(document.pageOrder, command.index, command.commandId);
@@ -108,6 +119,7 @@ function deletePage(
   if (document.pageOrder.length <= 1) {
     throw new OperationError(
       command.commandId,
+      "design.page.last_page_delete_forbidden",
       "A Design File must contain at least one Page",
     );
   }
@@ -124,16 +136,22 @@ function assertPageName(name: string, commandId: string): void {
   if (name !== name.trim()) {
     throw new OperationError(
       commandId,
+      "design.page.name_whitespace",
       "Page name must not start or end with whitespace",
     );
   }
   if (name.length === 0 || name.length > 256) {
     throw new OperationError(
       commandId,
+      "design.page.name_length",
       "Page name must contain from 1 to 256 characters",
     );
   }
   if (/\p{Cc}/u.test(name)) {
-    throw new OperationError(commandId, "Page name cannot contain controls");
+    throw new OperationError(
+      commandId,
+      "design.page.name_control_character",
+      "Page name cannot contain controls",
+    );
   }
 }

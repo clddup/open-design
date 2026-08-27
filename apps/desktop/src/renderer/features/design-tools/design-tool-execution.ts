@@ -2169,7 +2169,7 @@ function designTransactionToolError(
   const fingerprintSource = issues
     .map(
       (issue) =>
-        `${issue.commandId ?? ""}\u0000${issue.nodeId ?? ""}\u0000${issue.path}\u0000${issue.message}`,
+        `${issue.code}\u0000${issue.commandId ?? ""}\u0000${issue.nodeId ?? ""}\u0000${issue.path}\u0000${issue.message}`,
     )
     .join("\u0001");
   return new DesignTransactionToolError({
