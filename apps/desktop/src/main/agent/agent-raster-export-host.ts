@@ -1,3 +1,4 @@
+import { designWorkflowError } from "@/shared/design-workflow-failure-classification.js";
 import type {
   ToolCallRequest,
   TrustedToolContext,
@@ -49,7 +50,8 @@ export class AgentRasterExportHost {
       prepared.revision !== context.revision ||
       preparedResult.observedRevision !== prepared.revision
     ) {
-      throw new Error(
+      throw designWorkflowError(
+        "revision_conflict",
         `Raster export revision conflict: expected ${context.revision}, received ${prepared.revision}`,
       );
     }

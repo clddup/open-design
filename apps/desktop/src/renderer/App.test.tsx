@@ -6849,6 +6849,81 @@ describe("App", () => {
     expect(await screen.findByText("Disk is read-only")).toBeInTheDocument();
   });
 
+  it("preserves a structured workflow failure across the Renderer bridge", async () => {
+    const { conversation } = await openProjectConversation();
+    const current = runtime().getSnapshot().document;
+    const manual = runtime().apply({
+      transactionId: "manual_before_agent",
+      documentId: current.documentId,
+      baseRevision: current.revision,
+      label: "Manual edit",
+      actor: { type: "user", id: "user_test" },
+      commands: [
+        {
+          commandId: "manual_rename",
+          type: "update_properties",
+          nodeId: "frame_welcome",
+          name: "Manually updated",
+        },
+      ],
+    });
+    expect(manual.ok).toBe(true);
+    if (!requestDesignTool) throw new Error("Design tool listener is missing");
+
+    act(() => {
+      requestDesignTool?.({
+        requestId: "renderer_stale_workflow_failure",
+        call: {
+          toolCallId: "stale_workflow_failure",
+          toolName: "opendesign_apply_transaction",
+          input: {
+            label: "Stale Agent edit",
+            commands: [
+              {
+                commandId: "stale_rename",
+                type: "update_properties",
+                nodeId: "frame_welcome",
+                name: "Stale Agent update",
+              },
+            ],
+          },
+        },
+        context: {
+          runId: "run_stale_workflow_failure",
+          sessionId: conversation.conversationId,
+          documentId: current.documentId,
+          revision: current.revision,
+          scope: { kind: "document", selectedNodeIds: [] },
+          mutationTarget: { kind: "document" },
+        },
+      });
+    });
+
+    await vi.waitFor(() => {
+      const response = vi
+        .mocked(window.desktop!.resolveDesignToolRequest)
+        .mock.calls.find(
+          ([candidate]) =>
+            candidate.requestId === "renderer_stale_workflow_failure",
+        )?.[0];
+      expect(response).toMatchObject({
+        ok: false,
+        error: {
+          code: "design_revision_conflict",
+          details: {
+            kind: "design-workflow",
+            workflowCode: "revision_conflict",
+            phase: "inspection",
+          },
+        },
+      });
+    });
+    expect(runtime().getSnapshot().document.revision).toBe(1);
+    expect(runtime().getSnapshot().document.nodesById.frame_welcome?.name).toBe(
+      "Manually updated",
+    );
+  });
+
   it("keeps a Run bound to file A while the user works in file B", async () => {
     const { user, manifest, conversation } = await openProjectConversation();
     await user.type(

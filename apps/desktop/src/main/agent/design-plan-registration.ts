@@ -1,3 +1,4 @@
+import { designWorkflowError } from "@/shared/design-workflow-failure-classification.js";
 import type {
   DesignDeliveryLedger,
   DesignDeliveryTarget,
@@ -230,8 +231,9 @@ function assertReusableComponentsAreAvailable(
       !inspection.catalogComponentsById.has(candidate.componentId),
   );
   if (missing?.decision === "reuse-component") {
-    throw new Error(
-      `design_workflow.component_catalog_stale: Reusable Component ${missing.componentId} is not available in the current Design File catalog; inspect again and choose a current catalog Component or create a new Main inside the delivery plan`,
+    throw designWorkflowError(
+      "component_catalog_stale",
+      `Reusable Component ${missing.componentId} is not available in the current Design File catalog; inspect again and choose a current catalog Component or create a new Main inside the delivery plan`,
     );
   }
 }
@@ -260,8 +262,9 @@ function assertMaterialComponentDecisionsRemainStable(
     for (const occurrence of previous) {
       const retained = next.get(occurrence.nodeId);
       if (!retained) {
-        throw new Error(
-          `design_workflow.plan_amendment_invalid: Material semantic object ${occurrence.decisionId} must retain stable node ${occurrence.nodeId} and an explicit component decision`,
+        throw designWorkflowError(
+          "plan_amendment_invalid",
+          `Material semantic object ${occurrence.decisionId} must retain stable node ${occurrence.nodeId} and an explicit component decision`,
         );
       }
       if (
@@ -269,8 +272,9 @@ function assertMaterialComponentDecisionsRemainStable(
         (retained.decision !== occurrence.decision ||
           retained.componentId !== occurrence.componentId)
       ) {
-        throw new Error(
-          `design_workflow.plan_amendment_invalid: Declared Component occurrence ${occurrence.nodeId} must preserve its Main/Instance role and component ID after material design has started`,
+        throw designWorkflowError(
+          "plan_amendment_invalid",
+          `Declared Component occurrence ${occurrence.nodeId} must preserve its Main/Instance role and component ID after material design has started`,
         );
       }
     }
@@ -360,8 +364,9 @@ function createTargetState(
     inspectedArtboard &&
     !recoveredAllocation
   ) {
-    throw new Error(
-      `design_workflow.artboard_already_exists: Planned create target ${target.artboard.frameId} already exists without matching allocation evidence; inspect it as an existing artboard instead`,
+    throw designWorkflowError(
+      "artboard_already_exists",
+      `Planned create target ${target.artboard.frameId} already exists without matching allocation evidence; inspect it as an existing artboard instead`,
     );
   }
   const delivery = recoverDeliveryTarget(
@@ -406,8 +411,9 @@ function assertMaterialTargetsRemainStable(
     materialTargets.length > 0 &&
     existing.plan.outputMode !== plan.outputMode
   ) {
-    throw new Error(
-      "design_workflow.plan_amendment_invalid: Output mode cannot change after material design writes have started",
+    throw designWorkflowError(
+      "plan_amendment_invalid",
+      "Output mode cannot change after material design writes have started",
     );
   }
   const nextTargets = new Map(
@@ -417,16 +423,18 @@ function assertMaterialTargetsRemainStable(
     const next = nextTargets.get(current.delivery.targetId);
     if (!next) {
       if (current.delivery.status === "verified") continue;
-      throw new Error(
-        `design_workflow.plan_amendment_invalid: Material target ${current.delivery.targetId} cannot be removed from an amended plan`,
+      throw designWorkflowError(
+        "plan_amendment_invalid",
+        `Material target ${current.delivery.targetId} cannot be removed from an amended plan`,
       );
     }
     if (
       next.pageId !== current.planned.pageId ||
       next.artboard.frameId !== current.planned.artboard.frameId
     ) {
-      throw new Error(
-        `design_workflow.plan_amendment_invalid: Material target ${current.delivery.targetId} must preserve its Page and artboard Frame ID`,
+      throw designWorkflowError(
+        "plan_amendment_invalid",
+        `Material target ${current.delivery.targetId} must preserve its Page and artboard Frame ID`,
       );
     }
     const nextRegionIds = new Set(
@@ -436,16 +444,18 @@ function assertMaterialTargetsRemainStable(
       (region) => !nextRegionIds.has(region.nodeId),
     );
     if (removedRegion) {
-      throw new Error(
-        `design_workflow.plan_amendment_invalid: Material region ${removedRegion.nodeId} must retain its stable node ID`,
+      throw designWorkflowError(
+        "plan_amendment_invalid",
+        `Material region ${removedRegion.nodeId} must retain its stable node ID`,
       );
     }
     const currentQuality = current.planned.qualityProfile;
     const nextQuality = next.qualityProfile;
     if (currentQuality?.kind === "ui") {
       if (nextQuality?.kind !== "ui") {
-        throw new Error(
-          `design_workflow.plan_amendment_invalid: Material UI target ${current.delivery.targetId} must retain its executable UI quality profile`,
+        throw designWorkflowError(
+          "plan_amendment_invalid",
+          `Material UI target ${current.delivery.targetId} must retain its executable UI quality profile`,
         );
       }
     }
@@ -494,8 +504,9 @@ function assertUniquePlannedNodeIds(
     for (const nodeId of plannedNodeIdsForTarget(plan, target.targetId)) {
       const ownerTargetId = targetByNodeId.get(nodeId);
       if (ownerTargetId !== undefined) {
-        throw new Error(
-          `design_workflow.plan_node_ambiguous: Planned node ID ${nodeId} is reserved by both ${ownerTargetId} and ${target.targetId}; inspect and define unique stable IDs for every delivery target`,
+        throw designWorkflowError(
+          "plan_node_ambiguous",
+          `Planned node ID ${nodeId} is reserved by both ${ownerTargetId} and ${target.targetId}; inspect and define unique stable IDs for every delivery target`,
         );
       }
       targetByNodeId.set(nodeId, target.targetId);
@@ -510,13 +521,15 @@ export function resolveExistingArtboardDescendants(
   const frameId = target.artboard.frameId;
   const frame = inspection.nodesById.get(frameId);
   if (!frame || frame.kind !== "frame") {
-    throw new Error(
-      `design_workflow.existing_artboard_invalid: Existing artboard ${frameId} is missing or is not a Frame; inspect again and choose an existing Frame`,
+    throw designWorkflowError(
+      "existing_artboard_invalid",
+      `Existing artboard ${frameId} is missing or is not a Frame; inspect again and choose an existing Frame`,
     );
   }
   if (!inspectedNodeBelongsToPage(inspection, target.pageId, frameId)) {
-    throw new Error(
-      `design_workflow.existing_artboard_invalid: Existing artboard ${frameId} does not belong to Page ${target.pageId}; inspect again and choose a Frame on the target Page`,
+    throw designWorkflowError(
+      "existing_artboard_invalid",
+      `Existing artboard ${frameId} does not belong to Page ${target.pageId}; inspect again and choose a Frame on the target Page`,
     );
   }
   const descendants = new Set<string>();
@@ -728,8 +741,9 @@ function assertCreatedArtboardsDoNotOverlap(
           height: other.artboard.height,
         })
       ) {
-        throw new Error(
-          `design_workflow.artboard_overlap: Planned artboard ${target.artboard.frameId} overlaps new artboard ${other.artboard.frameId}; place every new delivery Frame in a separate visible canvas area`,
+        throw designWorkflowError(
+          "artboard_overlap",
+          `Planned artboard ${target.artboard.frameId} overlaps new artboard ${other.artboard.frameId}; place every new delivery Frame in a separate visible canvas area`,
         );
       }
     }
@@ -738,8 +752,9 @@ function assertCreatedArtboardsDoNotOverlap(
       const root = inspection.nodesById.get(rootId);
       if (!root) continue;
       if (rectanglesOverlap(bounds, transformedBounds(root))) {
-        throw new Error(
-          `design_workflow.artboard_overlap: Planned artboard ${target.artboard.frameId} overlaps existing Page root ${rootId}; use the inspected root bounds and place the new Frame in an unoccupied canvas area`,
+        throw designWorkflowError(
+          "artboard_overlap",
+          `Planned artboard ${target.artboard.frameId} overlaps existing Page root ${rootId}; use the inspected root bounds and place the new Frame in an unoccupied canvas area`,
         );
       }
     }
@@ -848,8 +863,9 @@ function assertAllocatedArtboardMatchesInspection(
     frame.size.width !== target.artboard.width ||
     frame.size.height !== target.artboard.height
   ) {
-    throw new Error(
-      `design_workflow.allocated_artboard_invalid: Allocated artboard ${target.artboard.frameId} was deleted, resized, reparented, or structurally changed; inspect and amend the plan before continuing`,
+    throw designWorkflowError(
+      "allocated_artboard_invalid",
+      `Allocated artboard ${target.artboard.frameId} was deleted, resized, reparented, or structurally changed; inspect and amend the plan before continuing`,
     );
   }
 }

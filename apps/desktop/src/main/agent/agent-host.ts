@@ -39,7 +39,6 @@ import {
   type SessionStoreBridgeRequest,
   type SessionStoreBridgeResponse,
 } from "@/shared/session-store-bridge";
-import { trustedDesignWorkflowFailure } from "./design-workflow-failure";
 import { AgentSupervisor } from "./agent-supervisor";
 
 export interface AgentHostListener {
@@ -627,10 +626,6 @@ function trustedToolFailureFromError(error: unknown): TrustedToolFailure {
     isTrustedToolFailure(error.cause)
   ) {
     return error.cause;
-  }
-  if (error instanceof Error) {
-    const workflowFailure = trustedDesignWorkflowFailure(error);
-    if (workflowFailure) return workflowFailure;
   }
   const fatal = error instanceof FatalAgentRunError;
   return {

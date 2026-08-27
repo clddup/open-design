@@ -1,3 +1,4 @@
+import { designWorkflowError } from "@/shared/design-workflow-failure-classification.js";
 import type {
   AgentAttachment,
   AgentEvent,
@@ -320,7 +321,8 @@ export class GlobalTaskCoordinator {
       throw new Error("Design tool context does not match its registered Run");
     }
     if (binding.revision !== context.revision) {
-      throw new Error(
+      throw designWorkflowError(
+        "revision_conflict",
         `Design tool revision conflict: expected ${binding.revision}, received ${context.revision}`,
       );
     }
@@ -377,18 +379,21 @@ export class GlobalTaskCoordinator {
   ): DesignDeliveryScope {
     this.assertDesignToolContext(context);
     if (this.#deliveryScopesByRunId.has(context.runId)) {
-      throw new Error(
-        "design_workflow.delivery_scope_already_reviewed: Delivery scope is already confirmed for this Run; start a new user-directed Run to revise it",
+      throw designWorkflowError(
+        "delivery_scope_already_reviewed",
+        "Delivery scope is already confirmed for this Run; start a new user-directed Run to revise it",
       );
     }
     if (!this.hasDeliveryScopeAuthorization(context.runId, toolCallId, scope)) {
-      throw new Error(
-        "design_workflow.delivery_scope_approval_required: The delivery plan must be approved by the user before execution",
+      throw designWorkflowError(
+        "delivery_scope_approval_required",
+        "The delivery plan must be approved by the user before execution",
       );
     }
     if (this.#designPlansByRunId.has(context.runId)) {
-      throw new Error(
-        "design_workflow.delivery_scope_late: Review delivery scope before defining an executable design Plan or writing canvas content",
+      throw designWorkflowError(
+        "delivery_scope_late",
+        "Review delivery scope before defining an executable design Plan or writing canvas content",
       );
     }
     const accepted = structuredClone(scope);
@@ -404,8 +409,9 @@ export class GlobalTaskCoordinator {
       binding?.deliveryScopeReview === "required" &&
       !this.#deliveryScopesByRunId.has(context.runId)
     ) {
-      throw new Error(
-        "design_workflow.delivery_scope_review_required: This broad brief requires a user-confirmed delivery plan before Page creation, executable planning, or canvas writes",
+      throw designWorkflowError(
+        "delivery_scope_review_required",
+        "This broad brief requires a user-confirmed delivery plan before Page creation, executable planning, or canvas writes",
       );
     }
   }
@@ -497,8 +503,9 @@ export class GlobalTaskCoordinator {
     ) {
       return;
     }
-    throw new Error(
-      "design_workflow.page_structure_access_required: Call opendesign_request_page_structure_access and wait for the user's one-time approval before modifying Page structure or another Page",
+    throw designWorkflowError(
+      "page_structure_access_required",
+      "Call opendesign_request_page_structure_access and wait for the user's one-time approval before modifying Page structure or another Page",
     );
   }
 
@@ -559,8 +566,9 @@ export class GlobalTaskCoordinator {
     ) {
       return;
     }
-    throw new Error(
-      "design_workflow.page_structure_access_required: Call opendesign_request_page_structure_access and wait for the user's one-time approval before modifying components on another Page",
+    throw designWorkflowError(
+      "page_structure_access_required",
+      "Call opendesign_request_page_structure_access and wait for the user's one-time approval before modifying components on another Page",
     );
   }
 
@@ -716,8 +724,9 @@ export class GlobalTaskCoordinator {
     revision?: number,
   ): void {
     if (!validRevision(revision)) {
-      throw new Error(
-        "design_workflow.allocation_revision_invalid: Artboard allocation did not return a valid document revision",
+      throw designWorkflowError(
+        "allocation_revision_invalid",
+        "Artboard allocation did not return a valid document revision",
       );
     }
     const state = this.#designPlansByRunId.get(runId);
@@ -725,8 +734,9 @@ export class GlobalTaskCoordinator {
     for (const targetId of targetIds) {
       const target = state.targetsById.get(targetId);
       if (!target || target.delivery.status !== "pending") {
-        throw new Error(
-          `design_workflow.allocation_state_invalid: Delivery target ${targetId} is not pending allocation`,
+        throw designWorkflowError(
+          "allocation_state_invalid",
+          `Delivery target ${targetId} is not pending allocation`,
         );
       }
       target.artboardEstablished = true;
@@ -757,8 +767,9 @@ export class GlobalTaskCoordinator {
   assertPageLifecycleInspected(context: TrustedToolContext): void {
     this.assertDesignToolContext(context);
     if (!this.#inspectionsByRunId.has(context.runId)) {
-      throw new Error(
-        "design_workflow.inspection_required: Inspect the bound design document before modifying Page structure",
+      throw designWorkflowError(
+        "inspection_required",
+        "Inspect the bound design document before modifying Page structure",
       );
     }
   }
@@ -771,8 +782,9 @@ export class GlobalTaskCoordinator {
   ) {
     this.assertDesignToolContext(context);
     if (!Number.isSafeInteger(observedRevision) || observedRevision < 0) {
-      throw new Error(
-        "design_workflow.capture_revision_invalid: The rendered capture returned an invalid document revision; capture the current canvas again",
+      throw designWorkflowError(
+        "capture_revision_invalid",
+        "The rendered capture returned an invalid document revision; capture the current canvas again",
       );
     }
     const state = this.#designPlansByRunId.get(context.runId);
@@ -795,13 +807,15 @@ export class GlobalTaskCoordinator {
       target.lastMaterialWriteRevision !== null &&
       observedRevision < target.lastMaterialWriteRevision
     ) {
-      throw new Error(
-        "design_workflow.capture_revision_invalid: The rendered capture predates the latest material design revision; capture the current canvas again",
+      throw designWorkflowError(
+        "capture_revision_invalid",
+        "The rendered capture predates the latest material design revision; capture the current canvas again",
       );
     }
     if (!layoutQuality) {
-      throw new Error(
-        "design_workflow.layout_quality_unavailable: A delivery Frame capture requires a trusted deterministic layout-quality report; inspect and capture the current target again",
+      throw designWorkflowError(
+        "layout_quality_unavailable",
+        "A delivery Frame capture requires a trusted deterministic layout-quality report; inspect and capture the current target again",
       );
     }
     assertLayoutQualityMatchesCapture(
@@ -845,8 +859,9 @@ export class GlobalTaskCoordinator {
       visualCritic !== undefined &&
       visualCritic.observedRevision !== observedRevision
     ) {
-      throw new Error(
-        "design_workflow.visual_critic_unavailable: The independent visual critic does not match the exact captured revision",
+      throw designWorkflowError(
+        "visual_critic_unavailable",
+        "The independent visual critic does not match the exact captured revision",
       );
     }
     const generationMode = this.#toolBindingsByRunId.get(
@@ -855,8 +870,9 @@ export class GlobalTaskCoordinator {
     const fastVisualCriticRequired =
       generationMode === "fast" && requiresFastDraftVisualCritic(state, target);
     if (fastVisualCriticRequired && visualCritic === undefined) {
-      throw new Error(
-        "design_workflow.visual_critic_unavailable: This initial material capture requires one independent exact-revision visual critic before evidence-based refinement",
+      throw designWorkflowError(
+        "visual_critic_unavailable",
+        "This initial material capture requires one independent exact-revision visual critic before evidence-based refinement",
       );
     }
     if (
@@ -868,8 +884,9 @@ export class GlobalTaskCoordinator {
     ) {
       const inspection = this.#inspectionsByRunId.get(context.runId);
       if (!inspection || inspection.revision !== observedRevision) {
-        throw new Error(
-          "design_workflow.delivery_verification_required: Fast delivery requires an authoritative document inspection from the exact captured revision; inspect and capture the current target again",
+        throw designWorkflowError(
+          "delivery_verification_required",
+          "Fast delivery requires an authoritative document inspection from the exact captured revision; inspect and capture the current target again",
         );
       }
       const componentStrategy = assertDeliveryTargetStructure(
@@ -954,14 +971,16 @@ export class GlobalTaskCoordinator {
       ReturnType<typeof assertDeliveryTargetStructure> | undefined;
     if (target.delivery.status === "refined") {
       if (visualCritic === undefined) {
-        throw new Error(
-          "design_workflow.visual_critic_unavailable: Final delivery verification requires an independent visual critic for the exact captured revision",
+        throw designWorkflowError(
+          "visual_critic_unavailable",
+          "Final delivery verification requires an independent visual critic for the exact captured revision",
         );
       }
       const inspection = this.#inspectionsByRunId.get(context.runId);
       if (!inspection || inspection.revision !== observedRevision) {
-        throw new Error(
-          "design_workflow.delivery_verification_required: Final delivery verification requires an authoritative document inspection from the exact captured revision; inspect and capture the current target again",
+        throw designWorkflowError(
+          "delivery_verification_required",
+          "Final delivery verification requires an authoritative document inspection from the exact captured revision; inspect and capture the current target again",
         );
       }
       componentStrategy = assertDeliveryTargetStructure(
@@ -1088,8 +1107,9 @@ export class GlobalTaskCoordinator {
           (candidate) => candidate.attachmentId === attachmentId,
         );
         if (!reference) {
-          throw new Error(
-            "design_workflow.reference_unavailable: An active visual reference is no longer authorized for this Run",
+          throw designWorkflowError(
+            "reference_unavailable",
+            "An active visual reference is no longer authorized for this Run",
           );
         }
         return structuredClone(reference);
@@ -1103,8 +1123,9 @@ export class GlobalTaskCoordinator {
   ): void {
     const state = this.#requireDesignPlan(context);
     if (!sameValue(review.skillRefs, state.plan.skillRefs)) {
-      throw new Error(
-        "design_workflow.visual_review_skill_binding_invalid: Visual Review skills do not match the active Design Plan",
+      throw designWorkflowError(
+        "visual_review_skill_binding_invalid",
+        "Visual Review skills do not match the active Design Plan",
       );
     }
     const target = firstTargetWithStatus(state, "captured");
@@ -1116,17 +1137,20 @@ export class GlobalTaskCoordinator {
             candidate.delivery.status !== "allocated",
         )
       ) {
-        throw new Error(
-          "design_workflow.capture_required: Call opendesign_capture_canvas once after the latest material design write, then record the visual review from that returned image; do not retry the review before capturing",
+        throw designWorkflowError(
+          "capture_required",
+          "Call opendesign_capture_canvas once after the latest material design write, then record the visual review from that returned image; do not retry the review before capturing",
         );
       }
-      throw new Error(
-        "design_workflow.material_write_required: Apply one successful material design transaction from the accepted plan, then call opendesign_capture_canvas before recording a visual review; do not retry the review yet",
+      throw designWorkflowError(
+        "material_write_required",
+        "Apply one successful material design transaction from the accepted plan, then call opendesign_capture_canvas before recording a visual review; do not retry the review yet",
       );
     }
     if (target.captureCount <= target.reviewedCaptureCount) {
-      throw new Error(
-        "design_workflow.capture_required: Call opendesign_capture_canvas once after the latest material design write, then record the visual review from that returned image; do not retry the review before capturing",
+      throw designWorkflowError(
+        "capture_required",
+        "Call opendesign_capture_canvas once after the latest material design write, then record the visual review from that returned image; do not retry the review before capturing",
       );
     }
     if (
@@ -1134,8 +1158,9 @@ export class GlobalTaskCoordinator {
       (target.lastMaterialWriteRevision !== null &&
         target.lastCaptureRevision < target.lastMaterialWriteRevision)
     ) {
-      throw new Error(
-        "design_workflow.capture_revision_invalid: The latest rendered capture predates the latest material design revision; capture the current canvas again before recording the review",
+      throw designWorkflowError(
+        "capture_revision_invalid",
+        "The latest rendered capture predates the latest material design revision; capture the current canvas again before recording the review",
       );
     }
     target.lastReview = structuredClone(review);
@@ -1172,8 +1197,9 @@ export class GlobalTaskCoordinator {
       (target.delivery.status !== "reviewed" &&
         target.delivery.status !== "refined")
     ) {
-      throw new Error(
-        "design_workflow.visual_review_required: Capture the complete material draft and use its trusted independent visual review before starting the refinement checkpoint",
+      throw designWorkflowError(
+        "visual_review_required",
+        "Capture the complete material draft and use its trusted independent visual review before starting the refinement checkpoint",
       );
     }
   }
@@ -1226,8 +1252,9 @@ export class GlobalTaskCoordinator {
     );
     if (candidates.length === 1) return candidates[0] ?? requestedAttachmentId;
     if (candidates.length > 1) {
-      throw new Error(
-        `design_workflow.image_attachment_ambiguous: Attachment ${requestedAttachmentId} is not authorized, and ${candidates.length} generated ${role} images are available in this Run; use the exact attachmentId returned by the intended generation result`,
+      throw designWorkflowError(
+        "image_attachment_ambiguous",
+        `Attachment ${requestedAttachmentId} is not authorized, and ${candidates.length} generated ${role} images are available in this Run; use the exact attachmentId returned by the intended generation result`,
       );
     }
     return requestedAttachmentId;
@@ -1263,8 +1290,9 @@ export class GlobalTaskCoordinator {
           ) && !candidate.artboardDescendantIds.has(parentId),
       );
       if (plannedRegionTarget?.artboardEstablished) {
-        throw new Error(
-          `design_workflow.planned_parent_not_materialized: Planned region ${parentId} is a logical region and is not a real container in the current document; place the image inside an inspected descendant of artboard ${plannedRegionTarget.planned.artboard.frameId}, or first insert a current-namespace Frame under that artboard`,
+        throw designWorkflowError(
+          "planned_parent_not_materialized",
+          `Planned region ${parentId} is a logical region and is not a real container in the current document; place the image inside an inspected descendant of artboard ${plannedRegionTarget.planned.artboard.frameId}, or first insert a current-namespace Frame under that artboard`,
         );
       }
     }
@@ -1386,8 +1414,9 @@ export class GlobalTaskCoordinator {
     const state = this.#requireDesignPlan(context);
     const assumedAllocatedTargetIds = new Set(allocationTargetIds);
     if (assumedAllocatedTargetIds.size !== allocationTargetIds.length) {
-      throw new Error(
-        "design_workflow.allocation_state_invalid: Compact allocation target IDs must be unique",
+      throw designWorkflowError(
+        "allocation_state_invalid",
+        "Compact allocation target IDs must be unique",
       );
     }
     for (const targetId of assumedAllocatedTargetIds) {
@@ -1398,8 +1427,9 @@ export class GlobalTaskCoordinator {
         target.artboardEstablished ||
         target.planned.artboard.mode !== "create"
       ) {
-        throw new Error(
-          `design_workflow.allocation_state_invalid: Delivery target ${targetId} is not pending creation`,
+        throw designWorkflowError(
+          "allocation_state_invalid",
+          `Delivery target ${targetId} is not pending creation`,
         );
       }
     }
@@ -1412,8 +1442,9 @@ export class GlobalTaskCoordinator {
       ),
     ];
     if (targetIds.length === 0) {
-      throw new Error(
-        "design_workflow.material_write_required: Compact first-slice input must create real editable content inside the first allocated target",
+      throw designWorkflowError(
+        "material_write_required",
+        "Compact first-slice input must create real editable content inside the first allocated target",
       );
     }
     assertFocusedUiTargetWrites(state, targetIds);
@@ -1907,13 +1938,15 @@ export class GlobalTaskCoordinator {
     this.assertDesignToolContext(context);
     const inspection = this.#inspectionsByRunId.get(context.runId);
     if (!inspection) {
-      throw new Error(
-        "design_workflow.inspection_required: Inspect the bound design document before using stable design targets",
+      throw designWorkflowError(
+        "inspection_required",
+        "Inspect the bound design document before using stable design targets",
       );
     }
     if (inspection.revision !== context.revision) {
-      throw new Error(
-        `design_workflow.inspection_stale: Inspect the current document revision before continuing; inspected ${inspection.revision}, current ${context.revision}`,
+      throw designWorkflowError(
+        "inspection_stale",
+        `Inspect the current document revision before continuing; inspected ${inspection.revision}, current ${context.revision}`,
       );
     }
     return inspection;
@@ -2015,8 +2048,9 @@ function reservedNodeIdsForTargets(
 
 function assertNewNodeIdHasPrefix(nodeId: string, prefix: string): void {
   if (nodeId.startsWith(prefix)) return;
-  throw new Error(
-    `design_workflow.new_node_id_namespace_required: New node ID ${nodeId} must start with ${prefix} from the latest trusted inspection so it cannot collide with hidden nodes on another Page`,
+  throw designWorkflowError(
+    "new_node_id_namespace_required",
+    `New node ID ${nodeId} must start with ${prefix} from the latest trusted inspection so it cannot collide with hidden nodes on another Page`,
   );
 }
 
@@ -2115,8 +2149,9 @@ function resolvePlannedStructureGeometry(
     const planned = plannedNodes.get(command.node.id);
     if (planned?.kind === "region") {
       if (command.node.kind !== "group" && command.node.kind !== "frame") {
-        throw new Error(
-          `design_workflow.planned_region_id_reserved: Planned region ${command.node.id} is a host-owned Frame identity and cannot be inserted as ${command.node.kind}; parent real content to that region ID instead`,
+        throw designWorkflowError(
+          "planned_region_id_reserved",
+          `Planned region ${command.node.id} is a host-owned Frame identity and cannot be inserted as ${command.node.kind}; parent real content to that region ID instead`,
         );
       }
       hostOwnedRegionCommandIds.add(command.commandId);
@@ -2204,8 +2239,9 @@ function resolvePlannedStructureGeometry(
     ];
   });
   if (commands.length === 0) {
-    throw new Error(
-      "design_workflow.material_write_required: The planned artboard Frame is already allocated; add real editable content inside it instead of recreating the Frame",
+    throw designWorkflowError(
+      "material_write_required",
+      "The planned artboard Frame is already allocated; add real editable content inside it instead of recreating the Frame",
     );
   }
   if (!changed) return input;
@@ -2273,8 +2309,9 @@ function registerPlannedNode<T>(
   value: T,
 ): void {
   if (nodes.has(nodeId)) {
-    throw new Error(
-      `design_workflow.plan_node_ambiguous: Planned node ID ${nodeId} is reused across delivery targets; inspect and define unique stable IDs`,
+    throw designWorkflowError(
+      "plan_node_ambiguous",
+      `Planned node ID ${nodeId} is reused across delivery targets; inspect and define unique stable IDs`,
     );
   }
   nodes.set(nodeId, value);
@@ -2323,8 +2360,10 @@ function assertPlannedTargetWrites(
           "The first design creation transaction must create the planned axis-aligned Page-root Frame at its declared position and dimensions",
         );
       }
-      throw new Error(
+      throw designWorkflowError(
+        "target_stale",
         `Design command ${command.commandId} targets content outside every declared delivery artboard`,
+        { commandId: command.commandId },
       );
     }
     targetIds.add(target.delivery.targetId);
@@ -2474,8 +2513,9 @@ function assertPlannedRegionWrites(
       );
     }
     if (!insertedSubtreeHasMaterialNode(inserts, region.nodeId)) {
-      throw new Error(
-        `design_workflow.empty_region_draft: Planned region ${region.nodeId} must include at least one real editable content layer in the same transaction; do not commit empty Group or Frame scaffolding`,
+      throw designWorkflowError(
+        "empty_region_draft",
+        `Planned region ${region.nodeId} must include at least one real editable content layer in the same transaction; do not commit empty Group or Frame scaffolding`,
       );
     }
   }
@@ -2489,8 +2529,9 @@ function assertInitialArtboardMaterial(
   target: DesignPlanTarget,
 ): void {
   if (insertedSubtreeHasMaterialNode(inserts, target.artboard.frameId)) return;
-  throw new Error(
-    `design_workflow.empty_artboard_draft: The first transaction for ${target.artboard.frameId} must include at least one real editable content layer; do not commit an empty artboard and defer all visible content to a later call`,
+  throw designWorkflowError(
+    "empty_artboard_draft",
+    `The first transaction for ${target.artboard.frameId} must include at least one real editable content layer; do not commit an empty artboard and defer all visible content to a later call`,
   );
 }
 
@@ -2783,8 +2824,9 @@ function requiresFastDraftVisualCritic(
 
 function assertDeliveryAcceptsMaterialWrites(state: DesignWorkflowState): void {
   if (!nextIncompleteTarget(state)) {
-    throw new Error(
-      "design_workflow.delivery_already_verified: Every planned target is already verified; amend the plan before applying more material changes",
+    throw designWorkflowError(
+      "delivery_already_verified",
+      "Every planned target is already verified; amend the plan before applying more material changes",
     );
   }
 }
@@ -2802,8 +2844,9 @@ function assertFocusedUiTargetWrites(
   ) {
     return;
   }
-  throw new Error(
-    `design_workflow.active_ui_target_required: Complete the current UI target ${activeTarget.delivery.targetId} before writing another artboard; create one target-specific editable hierarchy, capture it, and then continue to the next target instead of bulk-filling several screens`,
+  throw designWorkflowError(
+    "active_ui_target_required",
+    `Complete the current UI target ${activeTarget.delivery.targetId} before writing another artboard; create one target-specific editable hierarchy, capture it, and then continue to the next target instead of bulk-filling several screens`,
   );
 }
 
@@ -2852,8 +2895,9 @@ function assertUiDraftIsNotFlattened(
       authoredLeaves.length === 1 &&
       authoredLeaves[0]?.node.kind === "text"
     ) {
-      throw new Error(
-        `design_workflow.ui_draft_structure_incomplete: UI target ${targetId} cannot be flattened into one multiline Text layer; realize its planned hierarchy as separate editable labels, controls, content surfaces, and target-specific visual elements before committing the first draft`,
+      throw designWorkflowError(
+        "ui_draft_structure_incomplete",
+        `UI target ${targetId} cannot be flattened into one multiline Text layer; realize its planned hierarchy as separate editable labels, controls, content surfaces, and target-specific visual elements before committing the first draft`,
       );
     }
   }
@@ -2879,8 +2923,9 @@ function assertDeclaredReferencesAuthorizedForRun(
     return false;
   });
   if (invalid) {
-    throw new Error(
-      "design_workflow.reference_strategy_invalid: Every image explicitly declared in referenceStrategy must be authorized for the current Run and may be declared at most once",
+    throw designWorkflowError(
+      "reference_strategy_invalid",
+      "Every image explicitly declared in referenceStrategy must be authorized for the current Run and may be declared at most once",
     );
   }
 }
@@ -2956,15 +3001,17 @@ function bindPlanToReviewedScope(
 ): DesignPlanToolInput {
   if (scope === undefined) {
     if (reviewMode === "required") {
-      throw new Error(
-        "design_workflow.delivery_scope_review_required: This broad brief requires a user-confirmed delivery plan before Page creation, executable planning, or canvas writes",
+      throw designWorkflowError(
+        "delivery_scope_review_required",
+        "This broad brief requires a user-confirmed delivery plan before Page creation, executable planning, or canvas writes",
       );
     }
     return plan;
   }
   const mismatch = (message: string): never => {
-    throw new Error(
-      `design_workflow.delivery_scope_mismatch: ${message}. Preserve the user-confirmed delivery targets exactly; ask for a revised confirmation instead of silently shrinking or expanding scope`,
+    throw designWorkflowError(
+      "delivery_scope_mismatch",
+      `${message}. Preserve the user-confirmed delivery targets exactly; ask for a revised confirmation instead of silently shrinking or expanding scope`,
     );
   };
   if (plan.deliverable !== scope.deliverable) {

@@ -373,13 +373,12 @@ function collapseTerminalFailureDuplicates(
 
 function isDesignCorrectionFailure(
   code: string,
-  message: string,
   details?: AgentToolFailureDetails,
 ): boolean {
   return (
     !code.startsWith("renderer_") &&
     (code.startsWith("design") ||
-      isRoutineRecoverableToolFailure(code, message, details))
+      isRoutineRecoverableToolFailure(code, details))
   );
 }
 
@@ -511,22 +510,14 @@ function projectDurableTimeline(
       const routineRecoverableFailure =
         item.status === "failed" &&
         item.error?.message !== undefined &&
-        isRoutineRecoverableToolFailure(
-          item.error.code,
-          item.error.message,
-          item.error.details,
-        );
+        isRoutineRecoverableToolFailure(item.error.code, item.error.details);
       return {
         ...base,
         recoverableFailure:
           item.status === "failed" &&
           item.error?.recoverable === true &&
           (isNativeDesignTool(item.toolName) ||
-            isDesignCorrectionFailure(
-              item.error.code,
-              item.error.message,
-              item.error.details,
-            )),
+            isDesignCorrectionFailure(item.error.code, item.error.details)),
         ...(item.error?.code ? { failureCode: item.error.code } : {}),
         ...(item.error?.message ? { failureMessage: item.error.message } : {}),
         routine:
@@ -743,7 +734,11 @@ function projectLiveEvents(
           title: event.runId ? failure.title : t("agent.agentUnavailable"),
           detail: event.runId
             ? failure.detail
-            : friendlyAgentError(event.message, t),
+            : friendlyAgentError(
+                event.message,
+                t,
+                event.failure?.code ?? event.code,
+              ),
           ...(event.failure?.code
             ? { failureCode: event.failure.code }
             : { failureCode: event.code }),
@@ -920,7 +915,6 @@ function projectLiveEvents(
       const existingTool = items.get(`tool:${event.toolCallId}`);
       const routine = isRoutineRecoverableToolFailure(
         event.code,
-        event.message,
         event.details,
       );
       updateEvent(`tool:${event.toolCallId}`, {
@@ -928,11 +922,7 @@ function projectLiveEvents(
         recoverableFailure:
           event.recoverable === true &&
           (isNativeDesignTool(existingTool?.toolName) ||
-            isDesignCorrectionFailure(
-              event.code,
-              event.message,
-              event.details,
-            )),
+            isDesignCorrectionFailure(event.code, event.details)),
         failureCode: event.code,
         failureMessage: event.message,
         state: "error",

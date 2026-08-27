@@ -1,3 +1,4 @@
+import { designWorkflowError } from "@/shared/design-workflow-failure-classification.js";
 import type {
   ToolCallRequest,
   TrustedToolContext,
@@ -40,8 +41,9 @@ export async function handleDesignFirstSliceTool(
     logoBriefRequiresExploration(authoritativePrompt) &&
     input.logoExploration === undefined
   ) {
-    throw new Error(
-      "design_workflow.logo_exploration_required: The current Logo brief explicitly requests three concept directions. Submit one corrected opendesign_generate_first_slice call with logoExploration, three distinct principles, three declared first-target concept regions, and stable monochrome plus 32/24/16 px evidence IDs; do not allocate or draw a single direction first",
+    throw designWorkflowError(
+      "logo_exploration_required",
+      "The current Logo brief explicitly requests three concept directions. Submit one corrected opendesign_generate_first_slice call with logoExploration, three distinct principles, three declared first-target concept regions, and stable monochrome plus 32/24/16 px evidence IDs; do not allocate or draw a single direction first",
     );
   }
   const compiled = compileDesignFirstSliceToolInput(input);
@@ -73,8 +75,9 @@ export async function handleDesignFirstSliceTool(
     !allocation ||
     allocation.targetIds.length !== compiled.plan.targets.length
   ) {
-    throw new Error(
-      "design_workflow.allocation_state_invalid: Compact first-slice generation requires every declared target to be pending real Frame allocation",
+    throw designWorkflowError(
+      "allocation_state_invalid",
+      "Compact first-slice generation requires every declared target to be pending real Frame allocation",
     );
   }
   coordinator.assertVisualReviewBeforeWrite(context);
@@ -178,8 +181,9 @@ export async function handleDesignFirstSliceTool(
 
 function committedStepRevision(content: unknown, stepId: string): number {
   if (!isRecord(content) || !Array.isArray(content.committedSteps)) {
-    throw new Error(
-      "design_workflow.allocation_revision_invalid: Combined first-slice transaction did not report semantic revisions",
+    throw designWorkflowError(
+      "allocation_revision_invalid",
+      "Combined first-slice transaction did not report semantic revisions",
     );
   }
   const committedSteps: unknown[] = content.committedSteps;
@@ -194,8 +198,9 @@ function committedStepRevision(content: unknown, stepId: string): number {
     !Number.isSafeInteger(step.revision) ||
     Number(step.revision) < 1
   ) {
-    throw new Error(
-      "design_workflow.allocation_revision_invalid: Combined first-slice transaction did not expose the real artboard allocation revision",
+    throw designWorkflowError(
+      "allocation_revision_invalid",
+      "Combined first-slice transaction did not expose the real artboard allocation revision",
     );
   }
   return Number(step.revision);

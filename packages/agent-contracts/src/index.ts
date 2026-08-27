@@ -6,6 +6,18 @@ import {
   type ValidationIssue,
 } from "@opendesign/contract-runtime";
 import { AgentContinuationSchemas } from "./continuation.js";
+import {
+  createDesignWorkflowFailureDetailsSchema,
+  designWorkflowFailureDomainIssues,
+} from "./workflow-failure-contract.js";
+export {
+  DESIGN_WORKFLOW_FAILURE_CODES,
+  DESIGN_WORKFLOW_FAILURE_DEFINITIONS,
+  DesignWorkflowFailureCodeSchema,
+  designWorkflowFailureDefinition,
+  type DesignWorkflowFailureCode,
+  type DesignWorkflowFailurePhase,
+} from "./workflow-failure-contract.js";
 export type { AgentRunContinuation } from "./continuation.js";
 export { formatContractFailure as formatRuntimeContractFailure } from "@opendesign/contract-runtime";
 export type {
@@ -121,9 +133,16 @@ export const AgentToolValidationFailureDetailsSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const DesignWorkflowFailureDetailsSchema =
+  createDesignWorkflowFailureDetailsSchema(
+    AgentToolFailureIssueSchema,
+    FailureAttemptFields,
+  );
+
 export const AgentToolFailureDetailsSchema = Type.Union([
   DesignTransactionFailureDetailsSchema,
   AgentToolValidationFailureDetailsSchema,
+  DesignWorkflowFailureDetailsSchema,
 ]);
 
 const ToolFailureFields = {
@@ -385,6 +404,17 @@ export const TrustedToolFailureSchema = Type.Object(
   },
   { additionalProperties: false },
 );
+
+export const TrustedToolFailureContract = defineContract<
+  Static<typeof TrustedToolFailureSchema>
+>({
+  schema: TrustedToolFailureSchema,
+  code: "trusted_tool_failure.schema_invalid",
+  subject: "Trusted tool failure",
+  recovery: "Correct the reported trusted tool failure field.",
+  refine: (value) => designWorkflowFailureDomainIssues(value, ""),
+  clone: false,
+});
 
 export const TrustedToolResultSchema = Type.Object(
   {
@@ -1336,6 +1366,9 @@ export function agentEventRequestId(value: unknown): string | null {
 
 function agentEventDomainIssues(value: AgentEvent): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
+  if (value.type === "tool.failed") {
+    issues.push(...designWorkflowFailureDomainIssues(value, ""));
+  }
   if (value.type === "agent.error" && value.failure !== undefined) {
     if (value.failure.code !== value.code) {
       issues.push(
@@ -1381,6 +1414,14 @@ function agentEventDomainIssues(value: AgentEvent): ValidationIssue[] {
             "agent_event.history_failure_state_invalid",
             `/timeline/${index}/failure`,
             "Run failure details require error status and error stop reason",
+          ),
+        );
+      }
+      if (item.type === "tool" && item.error !== undefined) {
+        issues.push(
+          ...designWorkflowFailureDomainIssues(
+            item.error,
+            `/timeline/${index}/error`,
           ),
         );
       }

@@ -1,5 +1,8 @@
 import type { AgentEvent } from "@opendesign/agent-contracts";
+import { isTrustedToolFailure } from "@opendesign/agent-contracts";
 import { describe, expect, it, vi } from "vitest";
+import { designWorkflowError } from "@/shared/design-workflow-failure-classification.js";
+import type { DiagnosticInput } from "@/shared/diagnostics.js";
 import { reportAgentDiagnostic } from "./agent-diagnostic-reporter";
 
 describe("Agent diagnostic reporter", () => {
@@ -82,5 +85,33 @@ describe("Agent diagnostic reporter", () => {
     const diagnostic = publish.mock.calls[0]?.[0] as
       { details?: { kind?: string } } | undefined;
     expect(diagnostic?.details?.kind).toBe("tool-validation");
+  });
+
+  it("reports a structured workflow failure without parsing its message", () => {
+    const publish = vi.fn();
+    const failure = designWorkflowError(
+      "capture_required",
+      "Capture the current canvas",
+    ).cause;
+    if (!isTrustedToolFailure(failure)) throw new Error("Invalid test failure");
+
+    reportAgentDiagnostic(
+      {
+        type: "tool.failed",
+        runId: "run_workflow",
+        toolCallId: "review_before_capture",
+        ...failure,
+      },
+      publish,
+      () => ({ runId: "run_workflow" }),
+    );
+
+    const diagnostic = publish.mock.calls[0]?.[0] as
+      DiagnosticInput | undefined;
+    expect(diagnostic).toMatchObject({
+      code: "design_capture_required",
+      presentation: "toast",
+      details: { kind: "design-workflow", workflowCode: "capture_required" },
+    });
   });
 });

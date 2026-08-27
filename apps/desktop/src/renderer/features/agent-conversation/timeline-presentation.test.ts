@@ -51,8 +51,9 @@ describe("Agent component timeline presentation", () => {
   it("keeps recoverable component-plan repair in the normal workflow state", () => {
     expect(
       friendlyAgentError(
-        "design_workflow.component_strategy_incomplete: Instance is missing",
+        "message wording is irrelevant",
         t,
+        "design_component_strategy_incomplete",
       ),
     ).toBe("agent.workflowRepairingComponents");
   });
@@ -157,19 +158,11 @@ describe("Agent component timeline presentation", () => {
         "Reduce the card width to fit its parent.",
       ].join("\n"),
     );
+    expect(isRoutineRecoverableToolFailure("design.invalid", details)).toBe(
+      true,
+    );
     expect(
-      isRoutineRecoverableToolFailure(
-        "design.invalid",
-        "message wording is irrelevant",
-        details,
-      ),
-    ).toBe(true);
-    expect(
-      isRoutineRecoverableToolFailure(
-        "design.permission-denied",
-        "design_workflow.layout_quality_failed: misleading text",
-        details,
-      ),
+      isRoutineRecoverableToolFailure("design.permission-denied", details),
     ).toBe(false);
   });
 });

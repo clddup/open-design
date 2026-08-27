@@ -1,3 +1,4 @@
+import { designWorkflowError } from "@/shared/design-workflow-failure-classification";
 import type { DesignMutationTarget } from "@opendesign/agent-contracts";
 import type {
   DesignDocument,
@@ -94,7 +95,8 @@ function assertRevision(
   kind: string,
 ): void {
   if (document.revision !== expected) {
-    throw new Error(
+    throw designWorkflowError(
+      "revision_conflict",
       `${kind} operation revision conflict: expected ${expected}, current ${document.revision}`,
     );
   }

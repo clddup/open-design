@@ -1,10 +1,16 @@
-export type DesignWorkflowFailurePhase =
-  | "inspection"
-  | "material-write"
-  | "capture"
-  | "component-repair"
-  | "plan-repair"
-  | "layout-repair";
+import {
+  DESIGN_WORKFLOW_FAILURE_DEFINITIONS,
+  TrustedToolFailureContract,
+  designWorkflowFailureDefinition,
+  type DesignWorkflowFailureCode,
+  type DesignWorkflowFailurePhase,
+  type TrustedToolFailure,
+} from "@opendesign/agent-contracts";
+
+export type {
+  DesignWorkflowFailureCode,
+  DesignWorkflowFailurePhase,
+} from "@opendesign/agent-contracts";
 
 export type DesignWorkflowFailurePresentation =
   | "applying-draft"
@@ -16,115 +22,140 @@ export type DesignWorkflowFailurePresentation =
   | "scope-conflict";
 
 export interface DesignWorkflowFailureClassification {
-  code: string;
+  code: DesignWorkflowFailureCode;
   phase: DesignWorkflowFailurePhase;
   presentation: DesignWorkflowFailurePresentation;
-  routineRecoverable: boolean;
   requiresInspection: boolean;
 }
 
-const WORKFLOW_FAILURES: Readonly<
-  Record<string, Omit<DesignWorkflowFailureClassification, "code">>
-> = {
-  inspection_required: recovery("inspection", "applying-draft", true),
-  inspection_stale: recovery("inspection", "applying-draft", true),
-  material_write_required: recovery("material-write", "applying-draft", false),
-  delivery_structure_incomplete: recovery(
-    "material-write",
-    "applying-draft",
-    true,
-  ),
-  planned_parent_not_materialized: recovery(
-    "material-write",
-    "applying-draft",
-    true,
-  ),
-  image_attachment_ambiguous: recovery(
-    "material-write",
-    "applying-draft",
-    false,
-  ),
-  capture_required: recovery("capture", "capturing-canvas", false),
-  capture_revision_invalid: recovery("capture", "capturing-canvas", true),
-  delivery_verification_required: recovery("capture", "capturing-canvas", true),
-  component_strategy_incomplete: recovery(
-    "component-repair",
-    "repairing-components",
-    true,
-  ),
-  plan_amendment_invalid: recovery("plan-repair", "repairing-plan", true),
-  artboard_overlap: recovery("plan-repair", "repairing-plan", false),
-  new_node_id_namespace_required: recovery(
-    "plan-repair",
-    "repairing-plan",
-    false,
-  ),
-  frame_resize_requires_layout_tool: recovery(
-    "layout-repair",
-    "repairing-layout",
-    true,
-  ),
-  layout_quality_failed: recovery("layout-repair", "repairing-layout", true),
-  logo_exploration_incomplete: recovery(
-    "material-write",
-    "applying-draft",
-    true,
-  ),
-  logo_exploration_required: recovery(
-    "material-write",
-    "applying-draft",
-    false,
-  ),
+type WorkflowFailureOptions = {
+  commandId?: string;
+  nodeId?: string;
+  path?: string;
+  recovery?: string;
 };
 
 export function classifyDesignWorkflowFailure(
-  message: string,
-): DesignWorkflowFailureClassification | undefined {
-  const workflowCode = /^design_workflow\.([a-z_]+):/iu.exec(message)?.[1];
-  if (workflowCode) {
-    const classification = WORKFLOW_FAILURES[workflowCode];
-    return classification
-      ? { code: workflowCode, ...classification }
-      : undefined;
-  }
-  if (
-    /^Design command .+ targets content outside every declared delivery artboard/im.test(
-      message,
-    )
-  ) {
-    return {
-      code: "design_target_stale",
-      ...recovery("inspection", "applying-draft", true),
-    };
-  }
-  if (/revision conflict|expected revision|stale revision/iu.test(message)) {
-    return {
-      code: "design_revision_conflict",
-      ...recovery("inspection", "canvas-changed", true),
-    };
-  }
-  if (
-    /targets a parent outside|exceeds the registered .* scope|outside the registered .* scope/iu.test(
-      message,
-    )
-  ) {
-    return {
-      code: "design_scope_conflict",
-      ...recovery("inspection", "scope-conflict", true),
-    };
-  }
-  return undefined;
+  code: DesignWorkflowFailureCode,
+): DesignWorkflowFailureClassification {
+  const definition = designWorkflowFailureDefinition(code);
+  if (!definition) throw new TypeError(`Unknown design workflow code: ${code}`);
+  return {
+    ...definition,
+    presentation: workflowPresentation(code, definition.phase),
+  };
 }
 
-function recovery(
-  phase: DesignWorkflowFailurePhase,
-  presentation: DesignWorkflowFailurePresentation,
-  requiresInspection: boolean,
-): Omit<DesignWorkflowFailureClassification, "code"> {
+export function designWorkflowClassificationFromFailureCode(
+  failureCode: string | undefined,
+): DesignWorkflowFailureClassification | undefined {
+  if (!failureCode?.startsWith("design_")) return undefined;
+  const code = failureCode.slice("design_".length);
+  if (!isDesignWorkflowFailureCode(code)) return undefined;
+  return classifyDesignWorkflowFailure(code);
+}
+
+function isDesignWorkflowFailureCode(
+  code: string,
+): code is DesignWorkflowFailureCode {
+  return DESIGN_WORKFLOW_FAILURE_DEFINITIONS.some(
+    (definition) => definition.code === code,
+  );
+}
+
+export function designWorkflowError(
+  code: DesignWorkflowFailureCode,
+  detail: string,
+  options: WorkflowFailureOptions = {},
+): Error {
+  const classification = classifyDesignWorkflowFailure(code);
+  const recovery = options.recovery ?? recoveryMessage(classification);
+  const message = `design_workflow.${code}: ${detail}\nRecovery: ${recovery}`;
+  const parsed = TrustedToolFailureContract.parse(
+    workflowFailure(message, detail, recovery, classification, options),
+  );
+  if (!parsed.ok) {
+    throw new TypeError("Host created an invalid design workflow failure");
+  }
+  return new Error(message, { cause: parsed.value });
+}
+
+function workflowFailure(
+  message: string,
+  detail: string,
+  recovery: string,
+  classification: DesignWorkflowFailureClassification,
+  options: WorkflowFailureOptions,
+): TrustedToolFailure {
+  const { code, phase, requiresInspection } = classification;
   return {
-    phase,
-    presentation,
-    routineRecoverable: true,
-    requiresInspection,
+    code: `design_${code}`,
+    message,
+    retryable: false,
+    recoverable: true,
+    details: {
+      kind: "design-workflow",
+      fingerprint: `workflow_${hashText(`${code}:${detail}`)}`,
+      workflowCode: code,
+      phase,
+      requiresInspection,
+      issues: [
+        {
+          code: `design_workflow.${code}`,
+          ...(options.commandId ? { commandId: options.commandId } : {}),
+          ...(options.nodeId ? { nodeId: options.nodeId } : {}),
+          path: options.path ?? workflowIssuePath(code),
+          message: detail,
+          recovery,
+        },
+      ],
+      recovery: { action: "follow-workflow", required: true },
+    },
   };
+}
+
+function workflowIssuePath(code: DesignWorkflowFailureCode): string {
+  if (code === "revision_conflict") return "/revision";
+  if (code === "scope_conflict") return "/mutationTarget";
+  if (code === "target_stale") return "/targetSet";
+  return "/designWorkflow";
+}
+
+function recoveryMessage(
+  classification: DesignWorkflowFailureClassification,
+): string {
+  if (classification.code === "plan_amendment_invalid") {
+    return "Preserve every material target, Page, artboard, and region ID. Inspect the current document and amend only unfinished intent or content inside the existing stable artboard.";
+  }
+  if (classification.code === "new_node_id_namespace_required") {
+    return "Use the latest inspection's exact newNodeIdPrefix for genuinely new nodes and keep inspected existing IDs unchanged.";
+  }
+  if (classification.code === "target_stale") {
+    return "Inspect the current document and use current descendants of the active delivery artboard. Do not reuse IDs removed by an earlier replace or delete transaction.";
+  }
+  return classification.requiresInspection
+    ? "Inspect the current document, then follow the stated next action using the current revision and stable target IDs."
+    : "Follow the stated next action using the current revision and stable target IDs.";
+}
+
+function workflowPresentation(
+  code: DesignWorkflowFailureCode,
+  phase: DesignWorkflowFailurePhase,
+): DesignWorkflowFailurePresentation {
+  if (code === "revision_conflict") return "canvas-changed";
+  if (code === "scope_conflict") return "scope-conflict";
+  if (phase === "capture") return "capturing-canvas";
+  if (phase === "component-repair") return "repairing-components";
+  if (phase === "plan-repair") return "repairing-plan";
+  if (phase === "layout-repair") return "repairing-layout";
+  return "applying-draft";
+}
+
+function hashText(value: string): string {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
 }

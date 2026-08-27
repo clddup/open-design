@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { isTrustedToolFailure } from "@opendesign/agent-contracts";
 import type { LeaferTextRunStyle } from "@opendesign/leafer-engine";
 import type { TextRunLayoutProvider } from "@opendesign/text-service";
 import { reportRendererError } from "../diagnostics/diagnostics";
@@ -150,6 +151,18 @@ export function useRendererDesignToolHost(
                   retryable: false,
                   recoverable: false,
                 },
+              });
+            }
+            if (
+              error instanceof Error &&
+              "cause" in error &&
+              isTrustedToolFailure(error.cause)
+            ) {
+              return desktop.resolveDesignToolRequest({
+                requestId: request.requestId,
+                ok: false,
+                performance: toolPerformance,
+                error: error.cause,
               });
             }
             const message = reportRendererError(

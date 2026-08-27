@@ -11,11 +11,22 @@ import type {
   AgentEvent,
   SessionTimelineItem,
 } from "@opendesign/agent-contracts";
+import { isTrustedToolFailure } from "@opendesign/agent-contracts";
 import { describe, expect, it, vi } from "vitest";
 import type { DesktopApi } from "@/shared/desktop-api";
+import {
+  designWorkflowError,
+  type DesignWorkflowFailureCode,
+} from "@/shared/design-workflow-failure-classification";
 import { AgentTimeline } from "./AgentTimeline";
 
 const now = "2026-08-08T12:00:00.000Z";
+
+function workflowFailure(code: DesignWorkflowFailureCode, detail: string) {
+  const failure = designWorkflowError(code, detail).cause;
+  if (!isTrustedToolFailure(failure)) throw new Error("Invalid test failure");
+  return failure;
+}
 
 async function chooseNextOption(
   user: ReturnType<typeof userEvent.setup>,
@@ -1723,9 +1734,10 @@ describe("AgentTimeline", () => {
         type: "tool.failed",
         runId: "run_scope_1",
         toolCallId: "tool_scope_1",
-        code: "tool_error",
-        message:
+        ...workflowFailure(
+          "scope_conflict",
           "Agent command login-002 targets a parent outside the registered page scope",
+        ),
       },
     ];
 
@@ -1742,7 +1754,9 @@ describe("AgentTimeline", () => {
       />,
     );
 
-    expect(container.querySelectorAll("[data-agent-item]")).toHaveLength(0);
+    expect(
+      screen.getByText("Design structure correction record · 1"),
+    ).toBeVisible();
     expect(container).not.toHaveTextContent(
       "This change did not match the active canvas scope",
     );
@@ -1811,8 +1825,10 @@ describe("AgentTimeline", () => {
   });
 
   it("keeps recoverable design workflow guard retries out of the visible timeline", () => {
-    const message =
-      "design_workflow.capture_required: Call opendesign_capture_canvas once before retrying review";
+    const failure = workflowFailure(
+      "capture_required",
+      "Call opendesign_capture_canvas once before retrying review",
+    );
     const timeline: SessionTimelineItem[] = [
       {
         itemId: "tool:durable_review_retry",
@@ -1827,7 +1843,7 @@ describe("AgentTimeline", () => {
         input: {},
         risk: "read",
         status: "failed",
-        error: { code: "tool_error", message },
+        error: failure,
       },
     ];
     const events: AgentEvent[] = [
@@ -1843,8 +1859,7 @@ describe("AgentTimeline", () => {
         type: "tool.failed",
         runId: "run_review_retry",
         toolCallId: "live_review_retry",
-        code: "tool_error",
-        message,
+        ...failure,
       },
     ];
 
@@ -1867,8 +1882,10 @@ describe("AgentTimeline", () => {
   });
 
   it("keeps recoverable stale-inspection corrections out of the visible timeline", () => {
-    const message =
-      "design_workflow.inspection_stale: Inspect the current document revision before continuing; inspected 417, current 418";
+    const failure = workflowFailure(
+      "inspection_stale",
+      "Inspect the current document revision before continuing; inspected 417, current 418",
+    );
     const { container } = render(
       <AgentTimeline
         activeRunId="run_inspection_retry"
@@ -1888,9 +1905,7 @@ describe("AgentTimeline", () => {
             type: "tool.failed",
             runId: "run_inspection_retry",
             toolCallId: "page_after_rename",
-            code: "tool_error",
-            message,
-            recoverable: true,
+            ...failure,
           },
         ]}
         onStop={vi.fn()}

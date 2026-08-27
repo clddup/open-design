@@ -1,3 +1,4 @@
+import { designWorkflowError } from "@/shared/design-workflow-failure-classification.js";
 import type {
   TrustedToolContext,
   TrustedToolResult,
@@ -26,8 +27,9 @@ export function parseInspectedHierarchy(
   result: TrustedToolResult,
 ): InspectedHierarchy {
   if (!validRevision(result.observedRevision)) {
-    throw new Error(
-      "design_workflow.inspection_invalid: Document inspection did not return a valid observed revision; inspect again",
+    throw designWorkflowError(
+      "inspection_invalid",
+      "Document inspection did not return a valid observed revision; inspect again",
     );
   }
   const content = recordValue(result.content);
@@ -39,8 +41,9 @@ export function parseInspectedHierarchy(
         ? rawIdAllocation
         : null;
   if (idAllocation === null) {
-    throw new Error(
-      "design_workflow.inspection_invalid: Document inspection contains an invalid new-node ID allocation; inspect again",
+    throw designWorkflowError(
+      "inspection_invalid",
+      "Document inspection contains an invalid new-node ID allocation; inspect again",
     );
   }
   const document = recordValue(content?.document);
@@ -49,15 +52,17 @@ export function parseInspectedHierarchy(
     document.documentId !== context.documentId ||
     document.revision !== result.observedRevision
   ) {
-    throw new Error(
-      "design_workflow.inspection_invalid: Document inspection identity or revision is invalid; inspect again",
+    throw designWorkflowError(
+      "inspection_invalid",
+      "Document inspection identity or revision is invalid; inspect again",
     );
   }
   const rawPages = recordValue(document.pagesById);
   const rawNodes = recordValue(document.nodesById);
   if (!rawPages || !rawNodes) {
-    throw new Error(
-      "design_workflow.inspection_invalid: Document inspection hierarchy is missing; inspect again",
+    throw designWorkflowError(
+      "inspection_invalid",
+      "Document inspection hierarchy is missing; inspect again",
     );
   }
   const pageRootsById = new Map<string, Set<string>>();
@@ -70,8 +75,9 @@ export function parseInspectedHierarchy(
       !page.rootNodeIds.every(safeHierarchyId) ||
       new Set(page.rootNodeIds).size !== page.rootNodeIds.length
     ) {
-      throw new Error(
-        "design_workflow.inspection_invalid: Document inspection contains an invalid Page hierarchy; inspect again",
+      throw designWorkflowError(
+        "inspection_invalid",
+        "Document inspection contains an invalid Page hierarchy; inspect again",
       );
     }
     pageRootsById.set(pageId, new Set(page.rootNodeIds));
@@ -95,8 +101,9 @@ export function parseInspectedHierarchy(
         (typeof node.parentId === "string" && safeHierarchyId(node.parentId))
       )
     ) {
-      throw new Error(
-        "design_workflow.inspection_invalid: Document inspection contains an invalid node hierarchy; inspect again",
+      throw designWorkflowError(
+        "inspection_invalid",
+        "Document inspection contains an invalid node hierarchy; inspect again",
       );
     }
     const properties = recordValue(node.properties);
@@ -117,14 +124,16 @@ export function parseInspectedHierarchy(
   }
   for (const node of nodesById.values()) {
     if (node.parentId !== null && !nodesById.has(node.parentId)) {
-      throw new Error(
-        `design_workflow.inspection_invalid: Document inspection is missing parent ${node.parentId}; inspect again`,
+      throw designWorkflowError(
+        "inspection_invalid",
+        `Document inspection is missing parent ${node.parentId}; inspect again`,
       );
     }
     for (const childId of node.childIds) {
       if (nodesById.get(childId)?.parentId !== node.id) {
-        throw new Error(
-          `design_workflow.inspection_invalid: Document inspection contains inconsistent child ${childId}; inspect again`,
+        throw designWorkflowError(
+          "inspection_invalid",
+          `Document inspection contains inconsistent child ${childId}; inspect again`,
         );
       }
     }
@@ -133,8 +142,9 @@ export function parseInspectedHierarchy(
   for (const roots of pageRootsById.values()) {
     for (const rootId of roots) {
       if (nodesById.get(rootId)?.parentId !== null) {
-        throw new Error(
-          "design_workflow.inspection_invalid: Document inspection contains an invalid Page root; inspect again",
+        throw designWorkflowError(
+          "inspection_invalid",
+          "Document inspection contains an invalid Page root; inspect again",
         );
       }
     }
@@ -150,8 +160,9 @@ export function parseInspectedHierarchy(
       !safeHierarchyId(componentId) ||
       !safeHierarchyId(component.rootNodeId)
     ) {
-      throw new Error(
-        "design_workflow.inspection_invalid: Document inspection contains an invalid component definition; inspect again",
+      throw designWorkflowError(
+        "inspection_invalid",
+        "Document inspection contains an invalid component definition; inspect again",
       );
     }
     componentsById.set(componentId, {
@@ -167,8 +178,9 @@ export function parseInspectedHierarchy(
         ? rawComponentCatalog
         : null;
   if (componentCatalog === null) {
-    throw new Error(
-      "design_workflow.inspection_invalid: Document inspection contains an invalid reusable component catalog; inspect again",
+    throw designWorkflowError(
+      "inspection_invalid",
+      "Document inspection contains an invalid reusable component catalog; inspect again",
     );
   }
   const catalogComponentsById = new Map<
@@ -205,14 +217,16 @@ export function assertDeliveryTargetStructure(
     artboard.kind !== "frame" ||
     !inspectedNodeBelongsToPage(inspection, target.planned.pageId, artboardId)
   ) {
-    throw new Error(
-      `design_workflow.delivery_structure_incomplete: Delivery target ${target.delivery.targetId} requires Frame ${artboardId} on Page ${target.planned.pageId}; inspect the current document and finish that target before capturing again`,
+    throw designWorkflowError(
+      "delivery_structure_incomplete",
+      `Delivery target ${target.delivery.targetId} requires Frame ${artboardId} on Page ${target.planned.pageId}; inspect the current document and finish that target before capturing again`,
     );
   }
   if (target.planned.artboard.mode === "existing") {
     if (!inspectedSubtreeHasMaterialNode(inspection.nodesById, artboardId)) {
-      throw new Error(
-        `design_workflow.delivery_structure_incomplete: Existing delivery artboard ${artboardId} has no real editable content; add or refine material layers inside the artboard before capturing again`,
+      throw designWorkflowError(
+        "delivery_structure_incomplete",
+        `Existing delivery artboard ${artboardId} has no real editable content; add or refine material layers inside the artboard before capturing again`,
       );
     }
     assertLogoExplorationEvidence(inspection, target, plan);
@@ -226,13 +240,15 @@ export function assertDeliveryTargetStructure(
       (regionNode.kind !== "group" && regionNode.kind !== "frame") ||
       regionNode.parentId !== expectedParentId
     ) {
-      throw new Error(
-        `design_workflow.delivery_structure_incomplete: Planned region ${region.nodeId} must be a Group or Frame child of declared parent ${expectedParentId} inside delivery artboard ${artboardId}; inspect the current document and finish that region before capturing again`,
+      throw designWorkflowError(
+        "delivery_structure_incomplete",
+        `Planned region ${region.nodeId} must be a Group or Frame child of declared parent ${expectedParentId} inside delivery artboard ${artboardId}; inspect the current document and finish that region before capturing again`,
       );
     }
     if (!inspectedSubtreeHasMaterialNode(inspection.nodesById, region.nodeId)) {
-      throw new Error(
-        `design_workflow.delivery_structure_incomplete: Planned region ${region.nodeId} is empty; add real editable design content before capturing the target again`,
+      throw designWorkflowError(
+        "delivery_structure_incomplete",
+        `Planned region ${region.nodeId} is empty; add real editable design content before capturing the target again`,
       );
     }
   }
@@ -265,8 +281,9 @@ function assertUiTargetHasEditableComposition(
     if (node.kind !== "slice") leafKinds.push(node.kind);
   }
   if (leafKinds.length !== 1 || leafKinds[0] !== "text") return;
-  throw new Error(
-    `design_workflow.ui_draft_structure_incomplete: UI target ${target.delivery.targetId} cannot be flattened into one Text layer; headings, controls, rows, navigation, data, and target-specific visual elements must remain separately editable`,
+  throw designWorkflowError(
+    "ui_draft_structure_incomplete",
+    `UI target ${target.delivery.targetId} cannot be flattened into one Text layer; headings, controls, rows, navigation, data, and target-specific visual elements must remain separately editable`,
   );
 }
 
@@ -289,8 +306,9 @@ function assertLogoExplorationEvidence(
         artboardId,
       )
     ) {
-      throw new Error(
-        `design_workflow.logo_exploration_incomplete: Logo concept ${direction.conceptId} requires semantic Frame/Group ${direction.rootNodeId} inside exploration artboard ${artboardId}`,
+      throw designWorkflowError(
+        "logo_exploration_incomplete",
+        `Logo concept ${direction.conceptId} requires semantic Frame/Group ${direction.rootNodeId} inside exploration artboard ${artboardId}`,
       );
     }
     for (const evidenceNodeId of new Set([
@@ -305,8 +323,9 @@ function assertLogoExplorationEvidence(
           direction.rootNodeId,
         )
       ) {
-        throw new Error(
-          `design_workflow.logo_exploration_incomplete: Logo concept ${direction.conceptId} requires evidence node ${evidenceNodeId} beneath ${direction.rootNodeId}; provide monochrome and ordered 32/24/16 px optical tests before final verification`,
+        throw designWorkflowError(
+          "logo_exploration_incomplete",
+          `Logo concept ${direction.conceptId} requires evidence node ${evidenceNodeId} beneath ${direction.rootNodeId}; provide monochrome and ordered 32/24/16 px optical tests before final verification`,
         );
       }
     }
@@ -456,8 +475,9 @@ export function assertLayoutQualityMatchesCapture(
       target.planned.qualityProfile,
     )
   ) {
-    throw new Error(
-      "design_workflow.layout_quality_unavailable: The deterministic layout-quality report does not match the current delivery document, revision, Page, and Frame; inspect and capture the current target again",
+    throw designWorkflowError(
+      "layout_quality_unavailable",
+      "The deterministic layout-quality report does not match the current delivery document, revision, Page, and Frame; inspect and capture the current target again",
     );
   }
 }
@@ -488,8 +508,9 @@ function assertAcyclicInspectedParentChain(
   const visited = new Set<string>();
   while (current !== null) {
     if (visited.has(current)) {
-      throw new Error(
-        "design_workflow.inspection_invalid: Document inspection contains a parent cycle; inspect again after repairing the document",
+      throw designWorkflowError(
+        "inspection_invalid",
+        "Document inspection contains a parent cycle; inspect again after repairing the document",
       );
     }
     visited.add(current);

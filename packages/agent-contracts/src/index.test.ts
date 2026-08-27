@@ -487,6 +487,45 @@ describe("Agent contracts", () => {
         },
       }),
     ).toBe(true);
+    const workflowFailure = {
+      ...failure,
+      code: "design_capture_required",
+      details: {
+        kind: "design-workflow",
+        fingerprint: "workflow_deadbeef",
+        workflowCode: "capture_required",
+        phase: "capture",
+        requiresInspection: false,
+        issues: [
+          {
+            code: "design_workflow.capture_required",
+            path: "/designWorkflow",
+            message: "Capture the current canvas before review",
+            recovery: "Capture once, then continue review.",
+          },
+        ],
+        recovery: { action: "follow-workflow", required: true },
+      },
+    };
+    expect(isAgentEvent(workflowFailure)).toBe(true);
+    expect(
+      isAgentEvent({ ...workflowFailure, code: "design_inspection_required" }),
+    ).toBe(true);
+    expect(isAgentEvent({ ...workflowFailure, code: "provider_error" })).toBe(
+      false,
+    );
+    expect(
+      isAgentEvent({
+        ...workflowFailure,
+        details: { ...workflowFailure.details, phase: "material-write" },
+      }),
+    ).toBe(false);
+    expect(
+      isAgentEvent({
+        ...workflowFailure,
+        details: { ...workflowFailure.details, workflowCode: "unknown" },
+      }),
+    ).toBe(false);
   });
 
   it("carries bounded structured Provider failure diagnostics", () => {

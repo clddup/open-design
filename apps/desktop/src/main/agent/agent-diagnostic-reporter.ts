@@ -28,7 +28,10 @@ export function reportAgentDiagnostic(
       level: "warning",
       source: "design-tool",
       presentation:
-        event.details?.kind === "design-transaction" ? "toast" : "silent",
+        event.details?.kind === "design-transaction" ||
+        event.details?.kind === "design-workflow"
+          ? "toast"
+          : "silent",
       code: event.code,
       message: event.message,
       context: contextFor(event),

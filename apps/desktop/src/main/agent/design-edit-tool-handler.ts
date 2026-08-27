@@ -1,3 +1,4 @@
+import { designWorkflowError } from "@/shared/design-workflow-failure-classification.js";
 import type {
   ToolCallRequest,
   TrustedToolContext,
@@ -70,13 +71,15 @@ export async function handleEditDesignTool(input: {
   }
 
   if (materialTargetIds.size > 1) {
-    throw new Error(
-      "design_workflow.cross_artboard_edit_invalid: One atomic Edit Design call cannot combine writes across delivery artboards",
+    throw designWorkflowError(
+      "cross_artboard_edit_invalid",
+      "One atomic Edit Design call cannot combine writes across delivery artboards",
     );
   }
   if (authorization?.rebaseGuard && canonicalEdits.length !== 1) {
-    throw new Error(
-      "design_workflow.edit_rebase_requires_inspection: A planned insert can rebase over a pure Frame translation only when it is the sole Edit Design entry; inspect the current document before combining hierarchy or layout changes",
+    throw designWorkflowError(
+      "edit_rebase_requires_inspection",
+      "A planned insert can rebase over a pure Frame translation only when it is the sole Edit Design entry; inspect the current document before combining hierarchy or layout changes",
     );
   }
   const canonicalInput: InternalDesignEditToolInput = {

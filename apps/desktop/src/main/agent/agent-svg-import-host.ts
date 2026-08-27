@@ -1,3 +1,4 @@
+import { designWorkflowError } from "@/shared/design-workflow-failure-classification.js";
 import type {
   ToolCallRequest,
   TrustedToolContext,
@@ -107,7 +108,8 @@ export class AgentSvgImportHost {
       rendered.designRevision?.previousRevision !== context.revision ||
       rendered.designRevision.revision !== result.revision
     ) {
-      throw new Error(
+      throw designWorkflowError(
+        "revision_conflict",
         `SVG import revision conflict: expected ${context.revision + 1}, received ${result.revision}`,
       );
     }

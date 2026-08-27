@@ -1,3 +1,4 @@
+import { designWorkflowError } from "@/shared/design-workflow-failure-classification.js";
 import {
   MAX_INITIAL_DESIGN_INSPECTION_CHARACTERS,
   type AgentInitialDesignInspection,
@@ -71,8 +72,9 @@ export async function prepareInitialDesignInspection(
     { timeouts: INITIAL_DESIGN_INSPECTION_TIMEOUTS },
   );
   if (result.observedRevision !== request.revision) {
-    throw new Error(
-      `design_workflow.initial_inspection_stale: Expected revision ${request.revision}, observed ${String(result.observedRevision)}`,
+    throw designWorkflowError(
+      "initial_inspection_stale",
+      `Expected revision ${request.revision}, observed ${String(result.observedRevision)}`,
     );
   }
   dependencies.coordinator.recordDocumentInspection(context, result);

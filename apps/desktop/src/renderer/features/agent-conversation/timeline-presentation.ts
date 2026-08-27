@@ -6,7 +6,10 @@ import type {
 import type { DesignDeliveryStatus } from "@opendesign/workspace-contracts";
 import type { AppLocale } from "@/shared/i18n/locale";
 import type { MessageKey } from "@/shared/i18n/messages";
-import { classifyDesignWorkflowFailure } from "@/shared/design-workflow-failure-classification";
+import {
+  designWorkflowClassificationFromFailureCode,
+  type DesignWorkflowFailurePresentation,
+} from "@/shared/design-workflow-failure-classification";
 import {
   DESIGN_APPLY_TOOL_NAME,
   DESIGN_ARRANGE_TOOL_NAME,
@@ -92,28 +95,14 @@ export function approvalDecisionKey(decision: string): MessageKey {
   return "approval.deny";
 }
 
-export function friendlyAgentError(message: string, t: Translate): string {
-  const workflowFailure = classifyDesignWorkflowFailure(message);
+export function friendlyAgentError(
+  message: string,
+  t: Translate,
+  code?: string,
+): string {
+  const workflowFailure = designWorkflowClassificationFromFailureCode(code);
   if (workflowFailure) {
-    if (workflowFailure.presentation === "capturing-canvas") {
-      return t("agent.workflowCapturingCanvas");
-    }
-    if (workflowFailure.presentation === "repairing-components") {
-      return t("agent.workflowRepairingComponents");
-    }
-    if (workflowFailure.presentation === "repairing-plan") {
-      return t("agent.workflowRepairingPlan");
-    }
-    if (workflowFailure.presentation === "repairing-layout") {
-      return t("agent.workflowRepairingLayout");
-    }
-    if (workflowFailure.presentation === "canvas-changed") {
-      return t("agent.canvasChanged");
-    }
-    if (workflowFailure.presentation === "scope-conflict") {
-      return t("agent.canvasScopeConflict");
-    }
-    return t("agent.workflowApplyingDraft");
+    return workflowFailurePresentation(workflowFailure.presentation, t);
   }
   if (
     /Model attempt did not complete|attempt mismatch|\b(?:run|attempt)_[A-Za-z0-9_-]+/i.test(
@@ -195,7 +184,11 @@ export function runFailurePresentation(
               ? t("agent.canvasToolIdleTimeoutDetail")
               : failure.code === "renderer_total_timeout"
                 ? t("agent.canvasToolTotalTimeoutDetail")
-                : friendlyAgentError(failure.message || fallback, t);
+                : friendlyAgentError(
+                    failure.message || fallback,
+                    t,
+                    failure.code,
+                  );
   const correlation = [
     failure.modelRequestId
       ? t("agent.modelRequestId", { id: failure.modelRequestId })
@@ -243,6 +236,14 @@ function structuredFailureIssueDetail(
       .filter(Boolean)
       .join("\n");
   }
+  if (details.kind === "design-workflow") {
+    const classification = designWorkflowClassificationFromFailureCode(
+      `design_${details.workflowCode}`,
+    );
+    if (classification) {
+      return workflowFailurePresentation(classification.presentation, t);
+    }
+  }
   const target = [
     issue.commandId ? `command ${issue.commandId}` : null,
     issue.nodeId ? `node ${issue.nodeId}` : null,
@@ -257,6 +258,23 @@ function structuredFailureIssueDetail(
   return [rootCause, target.join(" · "), issue.recovery, retry]
     .filter(Boolean)
     .join("\n");
+}
+
+function workflowFailurePresentation(
+  presentation: DesignWorkflowFailurePresentation,
+  t: Translate,
+): string {
+  if (presentation === "capturing-canvas")
+    return t("agent.workflowCapturingCanvas");
+  if (presentation === "repairing-components")
+    return t("agent.workflowRepairingComponents");
+  if (presentation === "repairing-plan")
+    return t("agent.workflowRepairingPlan");
+  if (presentation === "repairing-layout")
+    return t("agent.workflowRepairingLayout");
+  if (presentation === "canvas-changed") return t("agent.canvasChanged");
+  if (presentation === "scope-conflict") return t("agent.canvasScopeConflict");
+  return t("agent.workflowApplyingDraft");
 }
 
 function unstructuredToolFailureDetail(
@@ -276,27 +294,26 @@ function unstructuredToolFailureDetail(
     return t("agent.canvasToolIdleTimeoutDetail");
   if (code === "renderer_total_timeout")
     return t("agent.canvasToolTotalTimeoutDetail");
-  return friendlyAgentError(message, t);
+  return friendlyAgentError(message, t, code);
 }
 
-export function isRecoverableDesignWorkflowFailure(message: string): boolean {
-  return classifyDesignWorkflowFailure(message)?.routineRecoverable === true;
+export function isRecoverableDesignWorkflowFailure(code: string): boolean {
+  return designWorkflowClassificationFromFailureCode(code) !== undefined;
 }
 
 export function isRoutineRecoverableToolFailure(
   code: string,
-  message: string,
   details?: AgentToolFailureDetails,
 ): boolean {
+  if (details?.kind === "design-workflow") return true;
   if (details?.kind === "design-transaction") {
     return ROUTINE_DESIGN_TRANSACTION_CODES.has(code);
   }
   return (
-    isRecoverableDesignWorkflowFailure(message) ||
+    isRecoverableDesignWorkflowFailure(code) ||
     code === "invalid_tool_input" ||
     code === "design_inspection_required" ||
-    code === "repeated_tool_failure" ||
-    message === "Tool call was rejected before execution"
+    code === "repeated_tool_failure"
   );
 }
 

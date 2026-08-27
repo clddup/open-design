@@ -1,3 +1,4 @@
+import { designWorkflowError } from "@/shared/design-workflow-failure-classification.js";
 import type { TrustedToolResult } from "@opendesign/agent-contracts";
 import { designTargetQualityProfilesEqual } from "@opendesign/design-contracts";
 import {
@@ -14,8 +15,9 @@ export function requireCanvasCaptureLayoutQuality(
   const content = recordValue(result.content);
   if (captureTarget.kind === "page") {
     if (content?.layoutQuality !== undefined) {
-      throw new Error(
-        "design_workflow.layout_quality_unavailable: A Page capture returned an unexpected Frame layout-quality report; inspect and capture the current target again",
+      throw designWorkflowError(
+        "layout_quality_unavailable",
+        "A Page capture returned an unexpected Frame layout-quality report; inspect and capture the current target again",
       );
     }
     return undefined;
@@ -32,8 +34,9 @@ export function requireCanvasCaptureLayoutQuality(
       captureTarget.qualityProfile,
     )
   ) {
-    throw new Error(
-      "design_workflow.layout_quality_unavailable: The rendered Frame capture did not include a trusted layout-quality report for the exact document, revision, Page, and Frame; inspect and capture the current target again",
+    throw designWorkflowError(
+      "layout_quality_unavailable",
+      "The rendered Frame capture did not include a trusted layout-quality report for the exact document, revision, Page, and Frame; inspect and capture the current target again",
     );
   }
   return layoutQuality;

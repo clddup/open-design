@@ -1,8 +1,9 @@
-import type {
-  AgentToolFailureIssue,
-  DesignMutationTarget,
-  SelectionScope,
-  TrustedToolFailure,
+import { designWorkflowError } from "@/shared/design-workflow-failure-classification";
+import {
+  type AgentToolFailureIssue,
+  type DesignMutationTarget,
+  type SelectionScope,
+  type TrustedToolFailure,
 } from "@opendesign/agent-contracts";
 import type {
   DesignDocument,
@@ -156,7 +157,8 @@ async function executeDesignToolRequestUnsafe(
   }
   if (request.call.toolName === DESIGN_INSPECT_TOOL_NAME) {
     if (document.revision < request.context.revision) {
-      throw new Error(
+      throw designWorkflowError(
+        "revision_conflict",
         `Design revision conflict: expected at least ${request.context.revision}, current ${document.revision}`,
       );
     }
@@ -177,7 +179,8 @@ async function executeDesignToolRequestUnsafe(
   }
   if (request.call.toolName === DESIGN_CAPTURE_TOOL_NAME) {
     if (document.revision < request.context.revision) {
-      throw new Error(
+      throw designWorkflowError(
+        "revision_conflict",
         `Design revision conflict: expected at least ${request.context.revision}, current ${document.revision}`,
       );
     }
@@ -227,7 +230,8 @@ async function executeDesignToolRequestUnsafe(
     }
     const input = parsed.value;
     if (document.revision !== request.context.revision) {
-      throw new Error(
+      throw designWorkflowError(
+        "revision_conflict",
         `Component operation revision conflict: expected ${request.context.revision}, current ${document.revision}`,
       );
     }
@@ -339,7 +343,8 @@ async function executeDesignToolRequestUnsafe(
       (!canRebasePlannedInsert(request, document) &&
         !canRebaseNewDesignFileAssets(request, document))
     ) {
-      throw new Error(
+      throw designWorkflowError(
+        "revision_conflict",
         `Design revision conflict: expected ${request.context.revision}, current ${document.revision}`,
       );
     }
@@ -1816,13 +1821,15 @@ function assertAgentDoesNotBypassAutoLayout(
           ? command.nodes
           : [];
     if (commandNodes.some((node) => node.layoutPositioning !== undefined)) {
-      throw new Error(
-        `design_workflow.auto_layout_requires_layout_tool: Configure flow or absolute positioning with opendesign_edit_design arrange edit action set-layout-positioning`,
+      throw designWorkflowError(
+        "auto_layout_requires_layout_tool",
+        `Configure flow or absolute positioning with opendesign_edit_design arrange edit action set-layout-positioning`,
       );
     }
     if (commandNodes.some((node) => node.gridPlacement !== undefined)) {
-      throw new Error(
-        `design_workflow.auto_layout_requires_layout_tool: Configure Grid cells and spans with opendesign_edit_design arrange edit action set-grid-placement`,
+      throw designWorkflowError(
+        "auto_layout_requires_layout_tool",
+        `Configure Grid cells and spans with opendesign_edit_design arrange edit action set-grid-placement`,
       );
     }
     const writesLayoutGuides =
@@ -1834,40 +1841,45 @@ function assertAgentDoesNotBypassAutoLayout(
         command.properties !== undefined &&
         Object.hasOwn(command.properties, "layoutGuides"));
     if (writesLayoutGuides) {
-      throw new Error(
-        `design_workflow.layout_guides_requires_layout_tool: Configure Frame layout guides with opendesign_edit_design arrange edit action set-layout-guides`,
+      throw designWorkflowError(
+        "layout_guides_requires_layout_tool",
+        `Configure Frame layout guides with opendesign_edit_design arrange edit action set-layout-guides`,
       );
     }
     if (
       command.type === "update_properties" &&
       command.layoutSizing !== undefined
     ) {
-      throw new Error(
-        `design_workflow.auto_layout_requires_layout_tool: Configure flow-child sizing with opendesign_edit_design arrange edit action set-layout-sizing`,
+      throw designWorkflowError(
+        "auto_layout_requires_layout_tool",
+        `Configure flow-child sizing with opendesign_edit_design arrange edit action set-layout-sizing`,
       );
     }
     if (
       command.type === "update_properties" &&
       command.layoutPositioning !== undefined
     ) {
-      throw new Error(
-        `design_workflow.auto_layout_requires_layout_tool: Configure flow or absolute positioning with opendesign_edit_design arrange edit action set-layout-positioning`,
+      throw designWorkflowError(
+        "auto_layout_requires_layout_tool",
+        `Configure flow or absolute positioning with opendesign_edit_design arrange edit action set-layout-positioning`,
       );
     }
     if (
       command.type === "update_properties" &&
       command.layoutLimits !== undefined
     ) {
-      throw new Error(
-        `design_workflow.auto_layout_requires_layout_tool: Configure Auto Layout min/max sizing with opendesign_edit_design arrange edit action set-layout-limits`,
+      throw designWorkflowError(
+        "auto_layout_requires_layout_tool",
+        `Configure Auto Layout min/max sizing with opendesign_edit_design arrange edit action set-layout-limits`,
       );
     }
     if (
       command.type === "update_properties" &&
       command.gridPlacement !== undefined
     ) {
-      throw new Error(
-        `design_workflow.auto_layout_requires_layout_tool: Configure Grid cells and spans with opendesign_edit_design arrange edit action set-grid-placement`,
+      throw designWorkflowError(
+        "auto_layout_requires_layout_tool",
+        `Configure Grid cells and spans with opendesign_edit_design arrange edit action set-grid-placement`,
       );
     }
     if (
@@ -1875,8 +1887,9 @@ function assertAgentDoesNotBypassAutoLayout(
       command.properties !== undefined &&
       Object.hasOwn(command.properties, "autoLayout")
     ) {
-      throw new Error(
-        `design_workflow.auto_layout_requires_layout_tool: Configure Frame Auto Layout with opendesign_edit_design arrange edit action set-auto-layout`,
+      throw designWorkflowError(
+        "auto_layout_requires_layout_tool",
+        `Configure Frame Auto Layout with opendesign_edit_design arrange edit action set-auto-layout`,
       );
     }
   }
@@ -1895,8 +1908,9 @@ function assertAgentDoesNotBypassImageWorkflow(
       command.properties.placement !== undefined ||
       command.properties.filters !== undefined
     ) {
-      throw new Error(
-        `design_workflow.image_update_requires_image_tool: Update Image node ${node.id} with opendesign_update_image so source, placement, and filters remain non-destructive and atomic`,
+      throw designWorkflowError(
+        "image_update_requires_image_tool",
+        `Update Image node ${node.id} with opendesign_update_image so source, placement, and filters remain non-destructive and atomic`,
       );
     }
   }
@@ -1938,8 +1952,9 @@ function assertAgentDoesNotBypassImageWorkflow(
         },
       );
       if (changesRetainedImageFilters) {
-        throw new Error(
-          `design_workflow.image_paint_update_requires_image_tool: Update an existing image ${field} on node ${node.id} with opendesign_update_image action set-paint-filters so the exact paint identity remains non-destructive and stale-safe`,
+        throw designWorkflowError(
+          "image_paint_update_requires_image_tool",
+          `Update an existing image ${field} on node ${node.id} with opendesign_update_image action set-paint-filters so the exact paint identity remains non-destructive and stale-safe`,
         );
       }
     }
@@ -2648,8 +2663,10 @@ function assertCommandsWithinMutationTarget(
       );
     }
     if (parentId !== null && !allowedNodeIds.has(parentId)) {
-      throw new Error(
+      throw designWorkflowError(
+        "scope_conflict",
         `Agent command ${commandId} targets a parent outside the registered page mutation target`,
+        { commandId },
       );
     }
   };
@@ -2768,7 +2785,8 @@ function assertPageToolMutationTarget(
     mutationTarget.kind === "page"
   ) {
     if (input.pageId !== mutationTarget.pageId) {
-      throw new Error(
+      throw designWorkflowError(
+        "scope_conflict",
         `Page ${input.action} targets ${input.pageId} outside the registered Page scope`,
       );
     }

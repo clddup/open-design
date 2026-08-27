@@ -1,3 +1,4 @@
+import { designWorkflowError } from "@/shared/design-workflow-failure-classification.js";
 import type {
   ToolCallRequest,
   TrustedToolContext,
@@ -64,8 +65,9 @@ export function createDesignCaptureReviewSession(
     }
     const observedRevision = result.observedRevision;
     if (!Number.isSafeInteger(observedRevision) || observedRevision == null) {
-      throw new Error(
-        "design_workflow.capture_revision_invalid: Canvas capture did not return a valid document revision",
+      throw designWorkflowError(
+        "capture_revision_invalid",
+        "Canvas capture did not return a valid document revision",
       );
     }
     const layoutQuality = requireCanvasCaptureLayoutQuality(
@@ -80,8 +82,9 @@ export function createDesignCaptureReviewSession(
     });
     input.coordinator.recordDocumentInspection(input.context, inspection);
     if (inspection.observedRevision !== observedRevision) {
-      throw new Error(
-        "design_workflow.capture_revision_invalid: The document changed between the rendered capture and its authoritative verification; capture the current target again",
+      throw designWorkflowError(
+        "capture_revision_invalid",
+        "The document changed between the rendered capture and its authoritative verification; capture the current target again",
       );
     }
 
