@@ -4,6 +4,7 @@ import {
   createEmptyDesignDocument,
   createWelcomeDocument,
 } from "./document.js";
+import { DesignDiagnosticReportContract } from "./diagnostic-contract.js";
 import { diagnoseDesignPages } from "./diagnostics.js";
 
 describe("design render diagnostics", () => {
@@ -135,6 +136,34 @@ describe("design render diagnostics", () => {
         (item) => item.code === "invisible-node",
       ),
     ).toEqual([]);
+  });
+
+  it("returns exact Contract paths for count and Page-scope drift", () => {
+    const report = diagnoseDesignPages(brokenDocument(), ["page_diagnostics"]);
+    expect(
+      DesignDiagnosticReportContract.issues({
+        ...report,
+        errorCount: report.errorCount + 1,
+      }),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "design_diagnostic_report.count_mismatch",
+        path: "/errorCount",
+      }),
+    );
+    expect(
+      DesignDiagnosticReportContract.issues({
+        ...report,
+        items: report.items.map((item, index) =>
+          index === 0 ? { ...item, pageId: "page_other" } : item,
+        ),
+      }),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "design_diagnostic_report.page_scope_invalid",
+        path: "/items/0/pageId",
+      }),
+    );
   });
 });
 

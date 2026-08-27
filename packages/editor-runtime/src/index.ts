@@ -261,15 +261,20 @@ export {
   type SvgExportPlanFailureCode,
   type SvgExportPlanInput,
 } from "./svg-export-operations.js";
+export { diagnoseDesignPages } from "./diagnostics.js";
 export {
+  DESIGN_DIAGNOSTIC_CODES,
   DESIGN_DIAGNOSTIC_REPORT_VERSION,
-  diagnoseDesignPages,
+  DesignDiagnosticReportContract,
+  DesignDiagnosticReportSchema,
+  DesignDiagnosticSchema,
+  DesignFeatureSummarySchema,
   type DesignDiagnostic,
   type DesignDiagnosticCode,
   type DesignDiagnosticReport,
   type DesignDiagnosticSeverity,
   type DesignFeatureSummary,
-} from "./diagnostics.js";
+} from "./diagnostic-contract.js";
 export {
   DESIGN_LAYOUT_QUALITY_REPORT_VERSION,
   DesignLayoutQualityReportContract,

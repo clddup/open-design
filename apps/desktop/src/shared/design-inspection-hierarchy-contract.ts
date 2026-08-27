@@ -1,5 +1,9 @@
 import { Type, type Static } from "@sinclair/typebox";
 import {
+  DesignDiagnosticReportContract,
+  DesignDiagnosticReportSchema,
+} from "@opendesign/editor-runtime";
+import {
   AgentDesignIdAllocationContract,
   AgentDesignIdAllocationSchema,
 } from "./design-id-allocation";
@@ -94,6 +98,7 @@ export const DesignInspectionHierarchySchema = Type.Object(
       {
         idAllocation: Type.Optional(AgentDesignIdAllocationSchema),
         document: InspectedDocumentSchema,
+        diagnostics: Type.Optional(DesignDiagnosticReportSchema),
       },
       { additionalProperties: true },
     ),
@@ -168,9 +173,62 @@ function inspectionHierarchyIssues(
       ),
     );
   }
+  if (value.content.diagnostics) {
+    issues.push(
+      ...prefixIssues(
+        DesignDiagnosticReportContract.issues(value.content.diagnostics),
+        "/content/diagnostics",
+      ),
+      ...diagnosticCorrelationIssues(value),
+    );
+  }
   issues.push(...identityIssues(document));
   issues.push(...relationshipIssues(document));
   return issues.slice(0, MAX_INSPECTION_HIERARCHY_ISSUES);
+}
+
+function diagnosticCorrelationIssues(
+  inspection: DesignInspectionHierarchy,
+): ValidationIssue[] {
+  const diagnostics = inspection.content.diagnostics;
+  if (!diagnostics) return [];
+  const { document } = inspection.content;
+  const issues: ValidationIssue[] = [];
+  if (diagnostics.documentId !== document.documentId) {
+    issues.push(
+      issue(
+        "design_inspection_hierarchy.diagnostic_document_mismatch",
+        "/content/diagnostics/documentId",
+        "Diagnostic documentId must match inspected documentId",
+        document.documentId,
+        diagnostics.documentId,
+      ),
+    );
+  }
+  if (diagnostics.revision !== inspection.observedRevision) {
+    issues.push(
+      issue(
+        "design_inspection_hierarchy.diagnostic_revision_mismatch",
+        "/content/diagnostics/revision",
+        "Diagnostic revision must match observedRevision",
+        inspection.observedRevision,
+        diagnostics.revision,
+      ),
+    );
+  }
+  const expectedPages = Object.keys(document.pagesById).sort();
+  const actualPages = [...diagnostics.pageIds].sort();
+  if (JSON.stringify(actualPages) !== JSON.stringify(expectedPages)) {
+    issues.push({
+      code: "design_inspection_hierarchy.diagnostic_pages_mismatch",
+      path: "/content/diagnostics/pageIds",
+      message: "Diagnostic Page scope must match inspected pagesById",
+      expected: expectedPages,
+      actual: actualPages,
+      recovery: "Regenerate diagnostics for the exact inspected Page scope.",
+    });
+  }
+  return issues;
 }
 
 function identityIssues(

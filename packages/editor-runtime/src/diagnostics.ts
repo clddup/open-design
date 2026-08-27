@@ -8,54 +8,14 @@ import {
   type Rect,
 } from "@opendesign/design-contracts";
 import { resolvePathPropertiesData } from "@opendesign/geometry-service/editable-vector";
+import {
+  DESIGN_DIAGNOSTIC_REPORT_VERSION,
+  DesignDiagnosticReportContract,
+  type DesignDiagnostic,
+  type DesignDiagnosticReport,
+  type DesignFeatureSummary,
+} from "./diagnostic-contract.js";
 import { getNodeBounds } from "./geometry.js";
-
-export const DESIGN_DIAGNOSTIC_REPORT_VERSION = 1 as const;
-
-export type DesignDiagnosticSeverity = "error" | "warning";
-
-export type DesignDiagnosticCode =
-  | "empty-path"
-  | "empty-text"
-  | "fragmented-root"
-  | "invisible-node"
-  | "missing-asset"
-  | "no-visible-paint"
-  | "non-finite-bounds"
-  | "outside-clipping-bounds"
-  | "unsupported-image-source";
-
-export interface DesignDiagnostic {
-  code: DesignDiagnosticCode;
-  message: string;
-  nodeId?: string;
-  pageId: string;
-  relatedNodeIds?: string[];
-  severity: DesignDiagnosticSeverity;
-}
-
-export interface DesignFeatureSummary {
-  blends: number;
-  blurs: number;
-  glows: number;
-  gradients: number;
-  images: number;
-  masks: number;
-  paths: number;
-  text: number;
-}
-
-export interface DesignDiagnosticReport {
-  version: typeof DESIGN_DIAGNOSTIC_REPORT_VERSION;
-  documentId: string;
-  revision: number;
-  pageIds: string[];
-  checkedNodeCount: number;
-  errorCount: number;
-  warningCount: number;
-  features: DesignFeatureSummary;
-  items: DesignDiagnostic[];
-}
 
 const FRAGMENTED_ROOT_THRESHOLD = 4;
 
@@ -104,7 +64,7 @@ export function diagnoseDesignPages(
     }
   }
 
-  return {
+  const report: DesignDiagnosticReport = {
     version: DESIGN_DIAGNOSTIC_REPORT_VERSION,
     documentId: document.documentId,
     revision: document.revision,
@@ -115,6 +75,14 @@ export function diagnoseDesignPages(
     features,
     items,
   };
+  const parsed = DesignDiagnosticReportContract.parse(report);
+  if (!parsed.ok) {
+    const firstIssue = parsed.issues[0];
+    throw new TypeError(
+      `EditorRuntime created an invalid diagnostic report at ${firstIssue?.path ?? "/"}: ${firstIssue?.message ?? "unknown contract failure"}`,
+    );
+  }
+  return parsed.value;
 }
 
 function diagnoseNode(

@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { createAgentDesignIdAllocation } from "./design-id-allocation";
-import { DesignInspectionHierarchyContract } from "./design-inspection-hierarchy-contract";
+import {
+  DesignInspectionHierarchyContract,
+  type DesignInspectionHierarchy,
+} from "./design-inspection-hierarchy-contract";
 
 const context = { documentId: "document_1", runId: "run_1" };
 
-function inspection() {
+function inspection(): DesignInspectionHierarchy {
   return {
     observedRevision: 4,
     content: {
@@ -41,9 +44,9 @@ function inspection() {
         },
         componentsById: {},
       },
-      diagnostics: { warnings: [] },
+      otherProjection: { warnings: [] },
     },
-  };
+  } as DesignInspectionHierarchy;
 }
 
 describe("design inspection hierarchy contract", () => {
@@ -91,7 +94,7 @@ describe("design inspection hierarchy contract", () => {
     );
 
     const cycle = inspection();
-    cycle.content.document.nodesById.frame_1.parentId = "title_1" as never;
+    cycle.content.document.nodesById.frame_1.parentId = "title_1";
     expect(DesignInspectionHierarchyContract.issues(cycle, context)).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -110,6 +113,46 @@ describe("design inspection hierarchy contract", () => {
         code: "agent_design_id_allocation.run_mismatch",
         path: "/content/idAllocation/newNodeIdPrefix",
       }),
+    );
+  });
+
+  it("correlates diagnostic identity, revision, and Page scope", () => {
+    const input = inspection();
+    input.content.diagnostics = {
+      version: 1,
+      documentId: "document_other",
+      revision: 3,
+      pageIds: ["page_other"],
+      checkedNodeCount: 0,
+      errorCount: 0,
+      warningCount: 0,
+      features: {
+        blends: 0,
+        blurs: 0,
+        glows: 0,
+        gradients: 0,
+        images: 0,
+        masks: 0,
+        paths: 0,
+        text: 0,
+      },
+      items: [],
+    };
+    expect(DesignInspectionHierarchyContract.issues(input, context)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "design_inspection_hierarchy.diagnostic_document_mismatch",
+          path: "/content/diagnostics/documentId",
+        }),
+        expect.objectContaining({
+          code: "design_inspection_hierarchy.diagnostic_revision_mismatch",
+          path: "/content/diagnostics/revision",
+        }),
+        expect.objectContaining({
+          code: "design_inspection_hierarchy.diagnostic_pages_mismatch",
+          path: "/content/diagnostics/pageIds",
+        }),
+      ]),
     );
   });
 });
