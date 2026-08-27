@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   isTextLayoutQualityEvidence,
   TEXT_LAYOUT_QUALITY_EVIDENCE_VERSION,
+  TextLayoutQualityEvidenceContract,
 } from "./text-quality-evidence.js";
 
 describe("text layout quality evidence", () => {
@@ -70,5 +71,36 @@ describe("text layout quality evidence", () => {
         ],
       }),
     ).toBe(false);
+  });
+
+  it("returns the exact duplicate and discriminated measurement field paths", () => {
+    const duplicate = {
+      version: 1,
+      documentId: "document_1",
+      revision: 7,
+      pageId: "page_1",
+      measurements: [
+        { status: "unavailable", nodeId: "copy", message: "Unavailable" },
+        { status: "unavailable", nodeId: "copy", message: "Unavailable" },
+      ],
+    };
+    expect(TextLayoutQualityEvidenceContract.issues(duplicate)).toContainEqual(
+      expect.objectContaining({
+        code: "text.layout_quality_evidence_node_duplicate",
+        path: "/measurements/1/nodeId",
+      }),
+    );
+
+    const malformed = structuredClone(duplicate);
+    malformed.measurements = [
+      {
+        status: "measured",
+        nodeId: "copy",
+        message: "Unavailable",
+      },
+    ];
+    expect(TextLayoutQualityEvidenceContract.issues(malformed)[0]?.path).toBe(
+      "/measurements/0/provider",
+    );
   });
 });

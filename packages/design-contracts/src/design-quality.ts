@@ -1,57 +1,124 @@
-export type DesignQualityPlatform =
-  "web" | "macos" | "windows" | "ios" | "ipados" | "android" | "other";
+import {
+  defineContract,
+  type ValidationIssue,
+} from "@opendesign/contract-runtime";
+import { Type, type Static } from "@sinclair/typebox";
 
-export type DesignQualityInteractionMode = "pointer" | "touch" | "mixed";
+const QualityProfileIdSchema = Type.String({
+  minLength: 1,
+  maxLength: 256,
+  pattern: "^[^\\u0000-\\u001F\\u007F]+$",
+});
+const SafeAreaInsetSchema = Type.Number({ minimum: 0, maximum: 10_000 });
 
-export type DesignSafeAreaInsets = {
-  top: number;
-  right: number;
-  bottom: number;
-  left: number;
-};
+export const DesignSafeAreaInsetsSchema = Type.Object(
+  {
+    top: SafeAreaInsetSchema,
+    right: SafeAreaInsetSchema,
+    bottom: SafeAreaInsetSchema,
+    left: SafeAreaInsetSchema,
+  },
+  { additionalProperties: false },
+);
 
-export type DesignTargetQualityProfile =
-  | { kind: "graphic" }
-  | {
-      kind: "ui";
-      platform: DesignQualityPlatform;
-      interactionMode: DesignQualityInteractionMode;
-      safeAreaInsets: DesignSafeAreaInsets;
-      safeAreaNodeIds: string[];
-      interactiveNodeIds: string[];
-    };
+const UiQualityProfileSchema = Type.Object(
+  {
+    kind: Type.Literal("ui"),
+    platform: Type.Union([
+      Type.Literal("web"),
+      Type.Literal("macos"),
+      Type.Literal("windows"),
+      Type.Literal("ios"),
+      Type.Literal("ipados"),
+      Type.Literal("android"),
+      Type.Literal("other"),
+    ]),
+    interactionMode: Type.Union([
+      Type.Literal("pointer"),
+      Type.Literal("touch"),
+      Type.Literal("mixed"),
+    ]),
+    safeAreaInsets: DesignSafeAreaInsetsSchema,
+    safeAreaNodeIds: Type.Array(QualityProfileIdSchema, {
+      maxItems: 64,
+      uniqueItems: true,
+    }),
+    interactiveNodeIds: Type.Array(QualityProfileIdSchema, {
+      maxItems: 64,
+      uniqueItems: true,
+    }),
+  },
+  {
+    additionalProperties: false,
+    description:
+      "Executable UI geometry policy. safeAreaInsets are parent-local artboard insets, safeAreaNodeIds name foreground descendants that must remain inside them, and interactiveNodeIds independently name actual descendant hit-area Frames or layers—not the delivery artboard itself and not merely their visible icon children. Do not duplicate interactiveNodeIds into safeAreaNodeIds; the host automatically checks both sets against the safe area, then applies platform minimum hit sizes to interactiveNodeIds.",
+  },
+);
+
+export const DesignTargetQualityProfileSchema = Type.Union([
+  Type.Object(
+    { kind: Type.Literal("graphic") },
+    {
+      additionalProperties: false,
+      description:
+        "Use for posters, logos, brand assets, illustrations and other non-interface graphics. Device safe-area and interaction-target checks do not apply.",
+    },
+  ),
+  UiQualityProfileSchema,
+]);
+
+export type DesignQualityPlatform = Static<
+  typeof UiQualityProfileSchema
+>["platform"];
+export type DesignQualityInteractionMode = Static<
+  typeof UiQualityProfileSchema
+>["interactionMode"];
+export type DesignSafeAreaInsets = Static<typeof DesignSafeAreaInsetsSchema>;
+export type DesignTargetQualityProfile = Static<
+  typeof DesignTargetQualityProfileSchema
+>;
+
+type QualityProfileFrameSize = { width: number; height: number };
+
+export const DesignTargetQualityProfileContract = defineContract<
+  DesignTargetQualityProfile,
+  DesignTargetQualityProfile,
+  QualityProfileFrameSize | undefined
+>({
+  schema: DesignTargetQualityProfileSchema,
+  code: "design.quality_profile_structure_invalid",
+  subject: "design target quality profile",
+  refine: qualityProfileFrameIssues,
+  clone: false,
+});
 
 export function isDesignTargetQualityProfile(
   value: unknown,
-  frameSize?: { width: number; height: number },
+  frameSize?: QualityProfileFrameSize,
 ): value is DesignTargetQualityProfile {
-  if (!isRecord(value)) return false;
-  if (value.kind === "graphic") return exactKeys(value, ["kind"]);
-  const safeAreaNodeIds = value.safeAreaNodeIds;
-  const interactiveNodeIds = value.interactiveNodeIds;
-  if (
-    value.kind !== "ui" ||
-    !isDesignQualityPlatform(value.platform) ||
-    !["pointer", "touch", "mixed"].includes(String(value.interactionMode)) ||
-    !isSafeAreaInsets(value.safeAreaInsets) ||
-    !boundedUniqueIds(safeAreaNodeIds, 0, 64) ||
-    !boundedUniqueIds(interactiveNodeIds, 0, 64) ||
-    !exactKeys(value, [
-      "kind",
-      "platform",
-      "interactionMode",
-      "safeAreaInsets",
-      "safeAreaNodeIds",
-      "interactiveNodeIds",
-    ])
-  ) {
-    return false;
-  }
-  if (!frameSize) return true;
-  return (
-    value.safeAreaInsets.left + value.safeAreaInsets.right < frameSize.width &&
-    value.safeAreaInsets.top + value.safeAreaInsets.bottom < frameSize.height
-  );
+  return DesignTargetQualityProfileContract.parse(value, frameSize).ok;
+}
+
+function qualityProfileFrameIssues(
+  profile: DesignTargetQualityProfile,
+  frameSize: QualityProfileFrameSize | undefined,
+): ValidationIssue[] {
+  if (!frameSize || profile.kind === "graphic") return [];
+  const horizontal = profile.safeAreaInsets.left + profile.safeAreaInsets.right;
+  const vertical = profile.safeAreaInsets.top + profile.safeAreaInsets.bottom;
+  if (horizontal < frameSize.width && vertical < frameSize.height) return [];
+  return [
+    {
+      code: "design.quality_profile_safe_area_invalid",
+      path: "/safeAreaInsets",
+      message:
+        "Safe-area insets must leave a positive interior inside the target frame",
+      expected: { width: frameSize.width, height: frameSize.height },
+      actual: { width: horizontal, height: vertical },
+      recovery:
+        "Reduce the insets so each opposing pair sums to less than the frame dimension.",
+    },
+  ];
 }
 
 export function minimumInteractiveTargetSize(
@@ -103,73 +170,4 @@ function sameStringSet(left: string[], right: string[]): boolean {
   return (
     left.length === right.length && left.every((value) => right.includes(value))
   );
-}
-
-function isDesignQualityPlatform(
-  value: unknown,
-): value is DesignQualityPlatform {
-  return [
-    "web",
-    "macos",
-    "windows",
-    "ios",
-    "ipados",
-    "android",
-    "other",
-  ].includes(String(value));
-}
-
-function isSafeAreaInsets(value: unknown): value is DesignSafeAreaInsets {
-  return (
-    isRecord(value) &&
-    [value.top, value.right, value.bottom, value.left].every(
-      (inset) =>
-        typeof inset === "number" &&
-        Number.isFinite(inset) &&
-        inset >= 0 &&
-        inset <= 10_000,
-    ) &&
-    exactKeys(value, ["top", "right", "bottom", "left"])
-  );
-}
-
-function boundedUniqueIds(
-  value: unknown,
-  minimum: number,
-  maximum: number,
-): value is string[] {
-  return (
-    Array.isArray(value) &&
-    value.length >= minimum &&
-    value.length <= maximum &&
-    value.every(safeId) &&
-    new Set(value).size === value.length
-  );
-}
-
-function safeId(value: unknown): value is string {
-  return (
-    typeof value === "string" &&
-    value.length > 0 &&
-    value.length <= 256 &&
-    ![...value].some((character) => {
-      const code = character.charCodeAt(0);
-      return code <= 0x1f || code === 0x7f;
-    })
-  );
-}
-
-function exactKeys(
-  value: Record<string, unknown>,
-  expected: readonly string[],
-): boolean {
-  const actual = Object.keys(value);
-  return (
-    actual.length === expected.length &&
-    actual.every((key) => expected.includes(key))
-  );
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
 }

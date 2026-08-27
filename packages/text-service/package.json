@@ -19,6 +19,8 @@
     "vitest": "catalog:"
   },
   "dependencies": {
+    "@opendesign/contract-runtime": "workspace:*",
+    "@sinclair/typebox": "^0.34.41",
     "bidi-js": "1.0.3",
     "harfbuzzjs": "1.4.0"
   }

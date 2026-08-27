@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  DesignTargetQualityProfileContract,
   designTargetQualityProfilesEqual,
   minimumInteractiveTargetSize,
   qualityProfileNodeIds,
@@ -57,5 +58,28 @@ describe("design quality policy", () => {
         platform: "android",
       }),
     ).toBe(false);
+  });
+
+  it("reports structure and frame-domain failures at stable paths", () => {
+    expect(
+      DesignTargetQualityProfileContract.issues({
+        ...profile,
+        platform: "desktop",
+      })[0]?.path,
+    ).toBe("/platform");
+    expect(
+      DesignTargetQualityProfileContract.issues(
+        {
+          ...profile,
+          safeAreaInsets: { top: 500, right: 0, bottom: 500, left: 0 },
+        },
+        { width: 390, height: 844 },
+      ),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "design.quality_profile_safe_area_invalid",
+        path: "/safeAreaInsets",
+      }),
+    );
   });
 });

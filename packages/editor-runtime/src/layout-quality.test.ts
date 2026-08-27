@@ -3,6 +3,7 @@ import { componentProjectionId } from "@opendesign/component-service";
 import { describe, expect, it } from "vitest";
 import { createEmptyDesignDocument } from "./document.js";
 import {
+  DesignLayoutQualityReportContract,
   diagnoseDesignTargetLayout,
   isDesignLayoutQualityReport,
 } from "./layout-quality.js";
@@ -30,6 +31,47 @@ describe("deterministic delivery layout quality", () => {
     expect(
       isDesignLayoutQualityReport({ ...report, untrustedPayload: true }),
     ).toBe(false);
+  });
+
+  it("reports count and nested measurement failures through one contract", () => {
+    const report = diagnoseDesignTargetLayout(
+      layoutDocument(),
+      "page_layout",
+      "artboard",
+    );
+    expect(
+      DesignLayoutQualityReportContract.issues({
+        ...report,
+        warningCount: 1,
+      }),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "design.layout_quality_report_warning_count_mismatch",
+        path: "/warningCount",
+      }),
+    );
+
+    const malformed = {
+      ...report,
+      errorCount: 1,
+      issues: [
+        {
+          code: "interactive-target-overlap",
+          severity: "error",
+          nodeId: "button",
+          message: "Overlap",
+          relatedNodeIds: [],
+          measurement: {
+            kind: "interaction-overlap",
+            intersectionArea: 10,
+            overlapRatio: 0.5,
+          },
+        },
+      ],
+    };
+    expect(DesignLayoutQualityReportContract.issues(malformed)[0]?.path).toBe(
+      "/issues/0/measurement/otherNodeId",
+    );
   });
 
   it("reports clipping policy, partial, excessive, and fully outside geometry", () => {

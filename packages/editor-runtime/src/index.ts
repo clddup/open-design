@@ -272,6 +272,8 @@ export {
 } from "./diagnostics.js";
 export {
   DESIGN_LAYOUT_QUALITY_REPORT_VERSION,
+  DesignLayoutQualityReportContract,
+  MAX_DESIGN_LAYOUT_QUALITY_ISSUES,
   diagnoseDesignTargetLayout,
   isDesignLayoutQualityReport,
   type DesignLayoutQualityCode,

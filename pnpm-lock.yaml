@@ -297,6 +297,9 @@ importers:
       '@opendesign/component-service':
         specifier: workspace:*
         version: link:../component-service
+      '@opendesign/contract-runtime':
+        specifier: workspace:*
+        version: link:../contract-runtime
       '@opendesign/design-contracts':
         specifier: workspace:*
         version: link:../design-contracts
@@ -324,6 +327,9 @@ importers:
       '@opendesign/variable-service':
         specifier: workspace:*
         version: link:../variable-service
+      '@sinclair/typebox':
+        specifier: ^0.34.41
+        version: 0.34.52
     devDependencies:
       typescript:
         specifier: 'catalog:'
@@ -529,6 +535,12 @@ importers:
 
   packages/text-service:
     dependencies:
+      '@opendesign/contract-runtime':
+        specifier: workspace:*
+        version: link:../contract-runtime
+      '@sinclair/typebox':
+        specifier: ^0.34.41
+        version: 0.34.52
       bidi-js:
         specifier: 1.0.3
         version: 1.0.3

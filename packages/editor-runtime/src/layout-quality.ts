@@ -8,7 +8,6 @@ import type {
 } from "@opendesign/design-contracts";
 import {
   isFrameLikeNode,
-  isDesignTargetQualityProfile,
   minimumInteractiveTargetSize,
 } from "@opendesign/design-contracts";
 import { projectComponentInstances } from "@opendesign/component-service";
@@ -18,108 +17,39 @@ import {
   type TextLayoutQualityMeasurement,
 } from "@opendesign/text-service";
 import {
+  DESIGN_LAYOUT_QUALITY_REPORT_VERSION,
+  DesignLayoutQualityReportContract,
+  MAX_DESIGN_LAYOUT_QUALITY_ISSUES,
+  type DesignLayoutQualityCode,
+  type DesignLayoutQualityGeometry,
+  type DesignLayoutQualityIssue,
+  type DesignLayoutQualityMeasurement,
+  type DesignLayoutQualityReport,
+  type DesignLayoutQualitySeverity,
+} from "./layout-quality-contract.js";
+import {
   getNodeBounds,
   getWorldTransform,
   invertTransform,
 } from "./geometry.js";
 
-export const DESIGN_LAYOUT_QUALITY_REPORT_VERSION = 6 as const;
-
-export type DesignLayoutQualitySeverity = "error" | "warning";
-
-export type DesignLayoutQualityCode =
-  | "artboard-clipping-disabled"
-  | "artboard-geometry-unavailable"
-  | "artboard-not-visible"
-  | "component-instance-resolution-failed"
-  | "component-node-clipped-by-ancestor"
-  | "node-excessive-artboard-overflow"
-  | "node-fully-outside-artboard"
-  | "node-geometry-unavailable"
-  | "node-outside-safe-area"
-  | "node-partial-artboard-overflow"
-  | "interactive-target-too-small"
-  | "interactive-target-overlap"
-  | "interactive-target-fully-occluded"
-  | "interaction-geometry-unavailable"
-  | "quality-node-missing"
-  | "quality-node-not-visible"
-  | "quality-profile-geometry-unavailable"
-  | "quality-scan-truncated"
-  | "text-content-clipped"
-  | "text-content-overflow"
-  | "text-ending-truncation-active"
-  | "text-layout-evidence-unavailable"
-  | "target-frame-invalid";
-
-export interface DesignLayoutQualityIssue {
-  code: DesignLayoutQualityCode;
-  message: string;
-  nodeId: string;
-  outsideRatio?: number;
-  geometry?: DesignLayoutQualityGeometry;
-  measurement?: DesignLayoutQualityMeasurement;
-  componentTarget?: ComponentSelectionTarget;
-  relatedNodeIds: string[];
-  severity: DesignLayoutQualitySeverity;
-}
-
-export interface DesignLayoutQualityGeometry {
-  coordinateSpace: "world";
-  constraint: "artboard" | "clipping-ancestor" | "safe-area";
-  nodeBounds: Rect;
-  artboardBounds: Rect;
-  constraintBounds: Rect;
-  parentId: string | null;
-  currentLocalPosition: { x: number; y: number };
-  recommendedLocalDelta: { x: number; y: number };
-  recommendedLocalPosition: { x: number; y: number };
-  requiresResize: boolean;
-}
-
-export type DesignLayoutQualityMeasurement =
-  | {
-      kind: "minimum-interactive-size";
-      actualSize: { width: number; height: number };
-      requiredSize: { width: number; height: number };
-      source: string;
-    }
-  | ({ kind: "text-layout" } & Extract<
-      TextLayoutQualityMeasurement,
-      { status: "measured" }
-    >)
-  | {
-      kind: "interaction-overlap";
-      intersectionArea: number;
-      overlapRatio: number;
-      otherNodeId: string;
-    }
-  | {
-      kind: "interaction-occlusion";
-      coveredRatio: 1;
-      occluderNodeId: string;
-      proof: "opaque-later-sibling";
-    };
-
-export interface DesignLayoutQualityReport {
-  version: typeof DESIGN_LAYOUT_QUALITY_REPORT_VERSION;
-  documentId: string;
-  revision: number;
-  pageId: string;
-  artboardFrameId: string;
-  checkedNodeCount: number;
-  checkedQualityNodeCount: number;
-  checkedTextNodeCount: number;
-  errorCount: number;
-  warningCount: number;
-  issues: DesignLayoutQualityIssue[];
-  qualityProfile: DesignTargetQualityProfile | null;
-}
+export {
+  DESIGN_LAYOUT_QUALITY_REPORT_VERSION,
+  DesignLayoutQualityReportContract,
+  MAX_DESIGN_LAYOUT_QUALITY_ISSUES,
+};
+export type {
+  DesignLayoutQualityCode,
+  DesignLayoutQualityGeometry,
+  DesignLayoutQualityIssue,
+  DesignLayoutQualityMeasurement,
+  DesignLayoutQualityReport,
+  DesignLayoutQualitySeverity,
+};
 
 const BOUNDS_TOLERANCE = 0.5;
 const PARTIAL_OVERFLOW_RATIO = 0.01;
 const EXCESSIVE_OVERFLOW_RATIO = 0.25;
-const MAX_QUALITY_ISSUES = 128;
 const INTERACTION_OVERLAP_AREA_TOLERANCE = 1;
 
 export function diagnoseDesignTargetLayout(
@@ -820,226 +750,7 @@ function formatSize(size: { width: number; height: number }): string {
 export function isDesignLayoutQualityReport(
   value: unknown,
 ): value is DesignLayoutQualityReport {
-  const record = recordValue(value);
-  if (!record) return false;
-  return (
-    record.version === DESIGN_LAYOUT_QUALITY_REPORT_VERSION &&
-    safeText(record.documentId) &&
-    Number.isSafeInteger(record.revision) &&
-    Number(record.revision) >= 0 &&
-    safeText(record.pageId) &&
-    safeText(record.artboardFrameId) &&
-    boundedCount(record.checkedNodeCount) &&
-    boundedCount(record.checkedQualityNodeCount) &&
-    boundedCount(record.checkedTextNodeCount) &&
-    boundedCount(record.errorCount) &&
-    boundedCount(record.warningCount) &&
-    Array.isArray(record.issues) &&
-    record.issues.length <= MAX_QUALITY_ISSUES &&
-    record.issues.every(isDesignLayoutQualityIssue) &&
-    record.errorCount ===
-      record.issues.filter((issue) => issue.severity === "error").length &&
-    record.warningCount ===
-      record.issues.filter((issue) => issue.severity === "warning").length &&
-    (record.qualityProfile === null ||
-      isDesignTargetQualityProfile(record.qualityProfile)) &&
-    recordKeysOnly(record, [
-      "version",
-      "documentId",
-      "revision",
-      "pageId",
-      "artboardFrameId",
-      "checkedNodeCount",
-      "checkedQualityNodeCount",
-      "checkedTextNodeCount",
-      "errorCount",
-      "warningCount",
-      "issues",
-      "qualityProfile",
-    ])
-  );
-}
-
-function isDesignLayoutQualityIssue(
-  value: unknown,
-): value is DesignLayoutQualityIssue {
-  const record = recordValue(value);
-  if (!record) return false;
-  return (
-    [
-      "artboard-clipping-disabled",
-      "artboard-geometry-unavailable",
-      "artboard-not-visible",
-      "component-instance-resolution-failed",
-      "component-node-clipped-by-ancestor",
-      "node-excessive-artboard-overflow",
-      "node-fully-outside-artboard",
-      "node-geometry-unavailable",
-      "node-outside-safe-area",
-      "node-partial-artboard-overflow",
-      "interactive-target-too-small",
-      "interactive-target-overlap",
-      "interactive-target-fully-occluded",
-      "interaction-geometry-unavailable",
-      "quality-node-missing",
-      "quality-node-not-visible",
-      "quality-profile-geometry-unavailable",
-      "quality-scan-truncated",
-      "text-content-clipped",
-      "text-content-overflow",
-      "text-ending-truncation-active",
-      "text-layout-evidence-unavailable",
-      "target-frame-invalid",
-    ].includes(String(record.code)) &&
-    (record.severity === "error" || record.severity === "warning") &&
-    safeText(record.nodeId) &&
-    safeText(record.message, 4_000) &&
-    Array.isArray(record.relatedNodeIds) &&
-    record.relatedNodeIds.length <= 8 &&
-    record.relatedNodeIds.every((nodeId) => safeText(nodeId)) &&
-    (record.outsideRatio === undefined ||
-      (typeof record.outsideRatio === "number" &&
-        Number.isFinite(record.outsideRatio) &&
-        record.outsideRatio >= 0 &&
-        record.outsideRatio <= 1)) &&
-    (record.geometry === undefined ||
-      isDesignLayoutQualityGeometry(record.geometry)) &&
-    (record.measurement === undefined ||
-      isDesignLayoutQualityMeasurement(record.measurement)) &&
-    (record.componentTarget === undefined ||
-      isComponentSelectionTarget(record.componentTarget)) &&
-    recordKeysOnly(record, [
-      "code",
-      "message",
-      "nodeId",
-      "outsideRatio",
-      "geometry",
-      "measurement",
-      "componentTarget",
-      "relatedNodeIds",
-      "severity",
-    ])
-  );
-}
-
-function isDesignLayoutQualityGeometry(value: unknown): boolean {
-  const record = recordValue(value);
-  if (!record) return false;
-  return (
-    record.coordinateSpace === "world" &&
-    (record.constraint === "artboard" ||
-      record.constraint === "clipping-ancestor" ||
-      record.constraint === "safe-area") &&
-    isFiniteRect(record.nodeBounds) &&
-    isFiniteRect(record.artboardBounds) &&
-    isFiniteRect(record.constraintBounds) &&
-    (record.parentId === null || safeText(record.parentId)) &&
-    isFinitePoint(record.currentLocalPosition) &&
-    isFinitePoint(record.recommendedLocalDelta) &&
-    isFinitePoint(record.recommendedLocalPosition) &&
-    typeof record.requiresResize === "boolean" &&
-    recordKeysOnly(record, [
-      "coordinateSpace",
-      "constraint",
-      "nodeBounds",
-      "artboardBounds",
-      "constraintBounds",
-      "parentId",
-      "currentLocalPosition",
-      "recommendedLocalDelta",
-      "recommendedLocalPosition",
-      "requiresResize",
-    ])
-  );
-}
-
-function isComponentSelectionTarget(value: unknown): boolean {
-  const record = recordValue(value);
-  return (
-    record !== null &&
-    safeText(record.instanceId, 256) &&
-    Array.isArray(record.sourcePath) &&
-    record.sourcePath.length > 0 &&
-    record.sourcePath.length <= 64 &&
-    record.sourcePath.every((segment) => safeText(segment, 256)) &&
-    recordKeysOnly(record, ["instanceId", "sourcePath"])
-  );
-}
-
-function isDesignLayoutQualityMeasurement(value: unknown): boolean {
-  const record = recordValue(value);
-  if (!record) return false;
-  if (record.kind === "minimum-interactive-size") {
-    return (
-      isFiniteSize(record.actualSize) &&
-      isFiniteSize(record.requiredSize) &&
-      safeText(record.source) &&
-      recordKeysOnly(record, ["kind", "actualSize", "requiredSize", "source"])
-    );
-  }
-  if (record.kind === "text-layout") {
-    return (
-      record.status === "measured" &&
-      safeText(record.nodeId) &&
-      safeText(record.provider) &&
-      safeText(record.providerVersion) &&
-      isFiniteSize(record.boxSize) &&
-      isFiniteSize(record.fullContentSize) &&
-      isFiniteSize(record.displayedContentSize) &&
-      isTextOverflowAxis(record.overflow) &&
-      typeof record.truncated === "boolean" &&
-      recordKeysOnly(record, [
-        "kind",
-        "status",
-        "nodeId",
-        "provider",
-        "providerVersion",
-        "boxSize",
-        "fullContentSize",
-        "displayedContentSize",
-        "overflow",
-        "truncated",
-      ])
-    );
-  }
-  if (record.kind === "interaction-overlap") {
-    return (
-      finiteNonNegative(record.intersectionArea) &&
-      finiteRatio(record.overlapRatio) &&
-      safeText(record.otherNodeId) &&
-      recordKeysOnly(record, [
-        "kind",
-        "intersectionArea",
-        "overlapRatio",
-        "otherNodeId",
-      ])
-    );
-  }
-  return (
-    record.kind === "interaction-occlusion" &&
-    record.coveredRatio === 1 &&
-    safeText(record.occluderNodeId) &&
-    record.proof === "opaque-later-sibling" &&
-    recordKeysOnly(record, ["kind", "coveredRatio", "occluderNodeId", "proof"])
-  );
-}
-
-function finiteNonNegative(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value) && value >= 0;
-}
-
-function finiteRatio(value: unknown): value is number {
-  return finiteNonNegative(value) && value <= 1;
-}
-
-function isTextOverflowAxis(value: unknown): boolean {
-  const record = recordValue(value);
-  return (
-    record !== null &&
-    typeof record.horizontal === "boolean" &&
-    typeof record.vertical === "boolean" &&
-    recordKeysOnly(record, ["horizontal", "vertical"])
-  );
+  return DesignLayoutQualityReportContract.parse(value).ok;
 }
 
 function containmentGeometry(
@@ -1132,46 +843,6 @@ function roundGeometry(value: number): number {
   return Math.round(value * 1_000_000) / 1_000_000;
 }
 
-function isFinitePoint(value: unknown): boolean {
-  const record = recordValue(value);
-  return (
-    record !== null &&
-    typeof record.x === "number" &&
-    Number.isFinite(record.x) &&
-    typeof record.y === "number" &&
-    Number.isFinite(record.y) &&
-    recordKeysOnly(record, ["x", "y"])
-  );
-}
-
-function isFiniteRect(value: unknown): boolean {
-  const record = recordValue(value);
-  return (
-    isFinitePoint({ x: record?.x, y: record?.y }) &&
-    typeof record?.width === "number" &&
-    Number.isFinite(record.width) &&
-    record.width >= 0 &&
-    typeof record.height === "number" &&
-    Number.isFinite(record.height) &&
-    record.height >= 0 &&
-    recordKeysOnly(record, ["x", "y", "width", "height"])
-  );
-}
-
-function isFiniteSize(value: unknown): boolean {
-  const record = recordValue(value);
-  return (
-    record !== null &&
-    typeof record.width === "number" &&
-    Number.isFinite(record.width) &&
-    record.width >= 0 &&
-    typeof record.height === "number" &&
-    Number.isFinite(record.height) &&
-    record.height >= 0 &&
-    recordKeysOnly(record, ["width", "height"])
-  );
-}
-
 function report(
   document: DesignDocument,
   pageId: string,
@@ -1203,18 +874,18 @@ function appendQualityIssue(
   artboardFrameId: string,
   issue: DesignLayoutQualityIssue,
 ): void {
-  if (issues.length < MAX_QUALITY_ISSUES) {
+  if (issues.length < MAX_DESIGN_LAYOUT_QUALITY_ISSUES) {
     issues.push(issue);
     return;
   }
-  const last = issues[MAX_QUALITY_ISSUES - 1];
+  const last = issues[MAX_DESIGN_LAYOUT_QUALITY_ISSUES - 1];
   if (last?.code === "quality-scan-truncated") return;
-  issues[MAX_QUALITY_ISSUES - 1] = {
+  issues[MAX_DESIGN_LAYOUT_QUALITY_ISSUES - 1] = {
     code: "quality-scan-truncated",
     severity: "error",
     nodeId: artboardFrameId,
     relatedNodeIds: [],
-    message: `Delivery artboard ${artboardFrameId} produced more than ${MAX_QUALITY_ISSUES} deterministic layout issues; reduce or repair the overflowing structure before verification`,
+    message: `Delivery artboard ${artboardFrameId} produced more than ${MAX_DESIGN_LAYOUT_QUALITY_ISSUES} deterministic layout issues; reduce or repair the overflowing structure before verification`,
   };
 }
 
@@ -1529,27 +1200,4 @@ function rectOutsideRatio(rect: Rect, container: Rect): number {
   const area = rect.width * rect.height;
   const intersectionArea = intersectionWidth * intersectionHeight;
   return Math.max(0, Math.min(1, 1 - intersectionArea / area));
-}
-
-function recordValue(value: unknown): Record<string, unknown> | null {
-  return value !== null && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
-}
-
-function safeText(value: unknown, maxLength = 512): value is string {
-  return (
-    typeof value === "string" && value.length > 0 && value.length <= maxLength
-  );
-}
-
-function boundedCount(value: unknown): value is number {
-  return Number.isSafeInteger(value) && Number(value) >= 0;
-}
-
-function recordKeysOnly(
-  value: Record<string, unknown>,
-  allowed: readonly string[],
-): boolean {
-  return Object.keys(value).every((key) => allowed.includes(key));
 }

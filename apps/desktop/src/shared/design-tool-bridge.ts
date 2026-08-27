@@ -12,7 +12,7 @@ import {
   type TrustedToolResult,
 } from "@opendesign/agent-contracts";
 import { executableJsonSchema } from "@opendesign/design-contracts";
-import { Type } from "@sinclair/typebox";
+import { Type, type TSchema } from "@sinclair/typebox";
 import {
   DESIGN_TARGET_QUALITY_PROFILE_SCHEMA,
   type DesignTargetQualityProfile,
@@ -30,9 +30,8 @@ const RendererBridgeIdSchema = Type.String({
   maxLength: 512,
   pattern: "^[^\\u0000-\\u001F\\u007F]+$",
 });
-const RendererDesignTargetQualityProfileSchema = executableJsonSchema(
-  DESIGN_TARGET_QUALITY_PROFILE_SCHEMA,
-);
+const RendererDesignTargetQualityProfileSchema: TSchema =
+  DESIGN_TARGET_QUALITY_PROFILE_SCHEMA;
 const RendererDesignCaptureTargetSchema = Type.Union([
   Type.Object(
     {

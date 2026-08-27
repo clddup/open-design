@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@opendesign/component-service": "workspace:*",
+    "@opendesign/contract-runtime": "workspace:*",
     "@opendesign/design-contracts": "workspace:*",
     "@opendesign/geometry-service": "workspace:*",
     "@opendesign/import-export-service": "workspace:*",
@@ -19,7 +20,8 @@
     "@opendesign/library-service": "workspace:*",
     "@opendesign/style-service": "workspace:*",
     "@opendesign/text-service": "workspace:*",
-    "@opendesign/variable-service": "workspace:*"
+    "@opendesign/variable-service": "workspace:*",
+    "@sinclair/typebox": "^0.34.41"
   },
   "devDependencies": {
     "typescript": "catalog:",
