@@ -681,22 +681,22 @@ describe("ProjectIpcService", () => {
         projectId: "project_acme",
         rootPath: "/tmp/forged",
       }),
-    ).rejects.toThrow("Invalid Project create request");
+    ).rejects.toThrow("/rootPath");
     expect(selectDirectory).not.toHaveBeenCalled();
-    expect(() =>
+    await expect(
       service.readDesignFile({
         projectId: "project_acme",
         designFileId: "design_brand",
         path: "/tmp/forged.opendesign",
       }),
-    ).toThrow("Invalid design file read request");
-    expect(() =>
+    ).rejects.toThrow("/path");
+    await expect(
       service.renameDesignFile({
         projectId: "project_acme",
         designFileId: "design_brand",
         name: " Forged ",
       }),
-    ).toThrow("Invalid design file rename request");
+    ).rejects.toThrow("/name");
     store.close();
   });
 });

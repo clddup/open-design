@@ -14,28 +14,10 @@ import { createConversationApi } from "./conversation-api";
 import { AgentRequestResultContract } from "@/shared/agent-request-contract";
 import {
   channels,
-  isAgentAttachmentPreviewRequest,
-  isAgentAttachmentPreviewResult,
-  isAgentAttachmentSelection,
-  isAgentAttachmentImport,
-  isDesignImageSelection,
-  isDesignImageEditRequest,
-  isDesignImageEditResult,
-  isCancelDesignImageEditRequest,
   isFontBinaryDescriptor,
   isFontBinaryPayload,
   isFontBinaryReadRequest,
-  isDesignFileDescriptorResult,
-  isCreateProjectDesignFileRequest,
-  isCreateProjectRequest,
   isGlobalTaskProjectionResult,
-  isModelProviderCatalog,
-  isOpenRecentProjectRequest,
-  isProviderConnectionResult,
-  isProjectDesignFile,
-  isProjectDesignFileRequest,
-  isProjectManifestResult,
-  isRenameProjectDesignFileRequest,
   isListProjectLibrariesRequest,
   isProjectLibraryCatalog,
   isPublishProjectLibraryRequest,
@@ -44,45 +26,21 @@ import {
   isSetProjectLibraryEnabledRequest,
   isSetProjectLibraryUpdateAcceptedRequest,
   isSetProjectLibraryUpdateIgnoredRequest,
-  isRecentProject,
   isOpenDesignFile,
   isOpenSvgFile,
   isSaveDesignFileRequest,
   isSaveDesignFileResult,
-  isSaveProjectDesignFileRequest,
   isSaveSvgFileRequest,
   isSaveSvgFileResult,
   isSaveRasterFileRequest,
   isSaveRasterFileResult,
   isLocalePreference,
-  isSaveModelProviderProfileRequest,
-  isGlobalImageGenerationSettings,
-  isSaveGlobalImageGenerationSettingsRequest,
-  isDeleteModelProviderProfileRequest,
   isDiagnosticEvent,
   isRendererDiagnosticReport,
-  isTestModelProviderConnectionRequest,
-  type AgentAttachmentPreviewRequest,
-  type AgentAttachmentPreviewResult,
-  type AgentAttachmentSelection,
-  type AgentAttachmentImport,
-  type DesignImageSelection,
-  type DesignImageEditRequest,
-  type DesignImageEditResult,
-  type CancelDesignImageEditRequest,
   type FontBinaryDescriptor,
   type FontBinaryPayload,
   type FontBinaryReadRequest,
-  type CreateProjectDesignFileRequest,
-  type CreateProjectRequest,
   type DesktopApi,
-  type OpenRecentProjectRequest,
-  type ModelProviderCatalog,
-  type GlobalImageGenerationSettings,
-  type ProviderConnectionResult,
-  type ProjectDesignFile,
-  type ProjectDesignFileRequest,
-  type RenameProjectDesignFileRequest,
   type ListProjectLibrariesRequest,
   type ProjectLibraryCatalog,
   type PublishProjectLibraryRequest,
@@ -91,18 +49,12 @@ import {
   type SetProjectLibraryEnabledRequest,
   type SetProjectLibraryUpdateAcceptedRequest,
   type SetProjectLibraryUpdateIgnoredRequest,
-  type RecentProject,
   type SaveDesignFileRequest,
   type SaveDesignFileResult,
   type OpenDesignFile,
   type OpenSvgFile,
-  type SaveModelProviderProfileRequest,
-  type SaveGlobalImageGenerationSettingsRequest,
-  type DeleteModelProviderProfileRequest,
   type DiagnosticEvent,
   type RendererDiagnosticReport,
-  type TestModelProviderConnectionRequest,
-  type SaveProjectDesignFileRequest,
   type SaveSvgFileRequest,
   type SaveSvgFileResult,
   type SaveRasterFileRequest,
@@ -122,23 +74,10 @@ import {
   type RendererDesignToolRequest,
   type RendererDesignToolResponse,
 } from "@/shared/design-tool-bridge";
-
-type Guard<T> = (value: unknown) => value is T;
-
-function validate<T>(value: unknown, guard: Guard<T>, message: string): T {
-  if (!guard(value)) throw new TypeError(message);
-  return value;
-}
-
-function validateArray<T>(
-  value: unknown,
-  guard: Guard<T>,
-  message: string,
-): T[] {
-  if (!Array.isArray(value) || !value.every(guard))
-    throw new TypeError(message);
-  return value;
-}
+import { createMediaApi } from "./media-api";
+import { createProjectApi } from "./project-api";
+import { createProviderApi } from "./provider-api";
+import { validate, validateArray } from "./value-parser";
 
 const desktopApi: DesktopApi = Object.freeze({
   getPlatformInfo: () => ipcRenderer.invoke(channels.platformInfo),
@@ -211,194 +150,16 @@ const desktopApi: DesktopApi = Object.freeze({
   getTheme: () => ipcRenderer.invoke(channels.getTheme),
   setTheme: (theme: ThemePreference) =>
     ipcRenderer.invoke(channels.setTheme, theme),
-  getModelProviderCatalog: async () => {
-    const result: unknown = await ipcRenderer.invoke(
-      channels.getModelProviderCatalog,
-    );
-    return validate<ModelProviderCatalog>(
-      result,
-      isModelProviderCatalog,
-      "Invalid model provider catalog response",
-    );
-  },
-  getGlobalImageGenerationSettings: async () => {
-    const result: unknown = await ipcRenderer.invoke(
-      channels.getGlobalImageGenerationSettings,
-    );
-    return validate<GlobalImageGenerationSettings>(
-      result,
-      isGlobalImageGenerationSettings,
-      "Invalid global image-generation settings response",
-    );
-  },
-  saveGlobalImageGenerationSettings: async (
-    request: SaveGlobalImageGenerationSettingsRequest,
-  ) => {
-    validate(
-      request,
-      isSaveGlobalImageGenerationSettingsRequest,
-      "Invalid global image-generation settings request",
-    );
-    const result: unknown = await ipcRenderer.invoke(
-      channels.saveGlobalImageGenerationSettings,
-      request,
-    );
-    return validate<GlobalImageGenerationSettings>(
-      result,
-      isGlobalImageGenerationSettings,
-      "Invalid global image-generation settings response",
-    );
-  },
-  saveModelProviderProfile: async (
-    request: SaveModelProviderProfileRequest,
-  ) => {
-    validate(
-      request,
-      isSaveModelProviderProfileRequest,
-      "Invalid model provider profile request",
-    );
-    const result: unknown = await ipcRenderer.invoke(
-      channels.saveModelProviderProfile,
-      request,
-    );
-    return validate<ModelProviderCatalog>(
-      result,
-      isModelProviderCatalog,
-      "Invalid model provider catalog response",
-    );
-  },
-  deleteModelProviderProfile: async (
-    request: DeleteModelProviderProfileRequest,
-  ) => {
-    validate(
-      request,
-      isDeleteModelProviderProfileRequest,
-      "Invalid model provider delete request",
-    );
-    const result: unknown = await ipcRenderer.invoke(
-      channels.deleteModelProviderProfile,
-      request,
-    );
-    return validate<ModelProviderCatalog>(
-      result,
-      isModelProviderCatalog,
-      "Invalid model provider catalog response",
-    );
-  },
-  testModelProviderConnection: async (
-    request: TestModelProviderConnectionRequest,
-  ) => {
-    validate(
-      request,
-      isTestModelProviderConnectionRequest,
-      "Invalid model provider test request",
-    );
-    const result: unknown = await ipcRenderer.invoke(
-      channels.testModelProviderConnection,
-      request,
-    );
-    return validate<ProviderConnectionResult>(
-      result,
-      isProviderConnectionResult,
-      "Invalid model provider connection response",
-    );
-  },
-  onModelProviderCatalogChange: (
-    listener: (catalog: ModelProviderCatalog) => void,
-  ) => {
-    const handler = (_event: Electron.IpcRendererEvent, value: unknown) => {
-      if (isModelProviderCatalog(value)) listener(value);
-    };
-    ipcRenderer.on(channels.modelProviderCatalogChanged, handler);
-    return () =>
-      ipcRenderer.removeListener(channels.modelProviderCatalogChanged, handler);
-  },
-  selectAgentAttachments: async () => {
-    const result: unknown = await ipcRenderer.invoke(
-      channels.selectAgentAttachments,
-    );
-    return validateArray<AgentAttachmentSelection>(
-      result,
-      isAgentAttachmentSelection,
-      "Invalid Agent attachment selection response",
-    );
-  },
-  importAgentAttachments: async (attachments: AgentAttachmentImport[]) => {
-    if (
-      !Array.isArray(attachments) ||
-      attachments.length > 6 ||
-      !attachments.every(isAgentAttachmentImport)
-    ) {
-      throw new TypeError("Invalid Agent attachment import request");
-    }
-    const result: unknown = await ipcRenderer.invoke(
-      channels.importAgentAttachments,
-      attachments,
-    );
-    return validateArray<AgentAttachmentSelection>(
-      result,
-      isAgentAttachmentSelection,
-      "Invalid Agent attachment import response",
-    );
-  },
-  getAgentAttachmentPreview: async (request: AgentAttachmentPreviewRequest) => {
-    validate(
-      request,
-      isAgentAttachmentPreviewRequest,
-      "Invalid Agent attachment preview request",
-    );
-    const result: unknown = await ipcRenderer.invoke(
-      channels.getAgentAttachmentPreview,
-      request,
-    );
-    return validate<AgentAttachmentPreviewResult>(
-      result,
-      isAgentAttachmentPreviewResult,
-      "Invalid Agent attachment preview response",
-    );
-  },
-  selectDesignImage: async () => {
-    const result: unknown = await ipcRenderer.invoke(
-      channels.selectDesignImage,
-    );
-    if (result === null) return null;
-    return validate<DesignImageSelection>(
-      result,
-      isDesignImageSelection,
-      "Invalid design image selection response",
-    );
-  },
-  editDesignImage: async (request: DesignImageEditRequest) => {
-    validate(
-      request,
-      isDesignImageEditRequest,
-      "Invalid design image edit request",
-    );
-    const result: unknown = await ipcRenderer.invoke(
-      channels.editDesignImage,
-      request,
-    );
-    return validate<DesignImageEditResult>(
-      result,
-      isDesignImageEditResult,
-      "Invalid design image edit response",
-    );
-  },
-  cancelDesignImageEdit: async (request: CancelDesignImageEditRequest) => {
-    validate(
-      request,
-      isCancelDesignImageEditRequest,
-      "Invalid design image edit cancellation request",
-    );
-    const result: unknown = await ipcRenderer.invoke(
-      channels.cancelDesignImageEdit,
-      request,
-    );
-    if (typeof result !== "boolean") {
-      throw new TypeError("Invalid design image edit cancellation response");
-    }
-    return result;
-  },
+  ...createProviderApi(
+    (channel, ...args) => ipcRenderer.invoke(channel, ...args),
+    (channel, listener) => {
+      const handler = (_event: Electron.IpcRendererEvent, value: unknown) =>
+        listener(value);
+      ipcRenderer.on(channel, handler);
+      return () => ipcRenderer.removeListener(channel, handler);
+    },
+  ),
+  ...createMediaApi((channel, ...args) => ipcRenderer.invoke(channel, ...args)),
   selectFontBinaries: async () => {
     const result: unknown = await ipcRenderer.invoke(
       channels.selectFontBinaries,
@@ -550,80 +311,9 @@ const desktopApi: DesktopApi = Object.freeze({
       "Invalid raster save response",
     );
   },
-  createProject: async (request: CreateProjectRequest) => {
-    validate(request, isCreateProjectRequest, "Invalid Project create request");
-    const result: unknown = await ipcRenderer.invoke(
-      channels.createProject,
-      request,
-    );
-    return result === null
-      ? null
-      : validate(result, isProjectManifestResult, "Invalid Project response");
-  },
-  openProject: async () => {
-    const result: unknown = await ipcRenderer.invoke(channels.openProject);
-    return result === null
-      ? null
-      : validate(result, isProjectManifestResult, "Invalid Project response");
-  },
-  openRecentProject: async (request: OpenRecentProjectRequest) => {
-    validate(
-      request,
-      isOpenRecentProjectRequest,
-      "Invalid recent Project request",
-    );
-    const result: unknown = await ipcRenderer.invoke(
-      channels.openRecentProject,
-      request,
-    );
-    return validate(
-      result,
-      isProjectManifestResult,
-      "Invalid Project response",
-    );
-  },
-  listRecentProjects: async () => {
-    const result: unknown = await ipcRenderer.invoke(
-      channels.listRecentProjects,
-    );
-    return validateArray<RecentProject>(
-      result,
-      isRecentProject,
-      "Invalid recent Projects response",
-    );
-  },
-  removeRecentProject: async (request: OpenRecentProjectRequest) => {
-    validate(
-      request,
-      isOpenRecentProjectRequest,
-      "Invalid recent Project remove request",
-    );
-    const result: unknown = await ipcRenderer.invoke(
-      channels.removeRecentProject,
-      request,
-    );
-    return validateArray<RecentProject>(
-      result,
-      isRecentProject,
-      "Invalid recent Projects response",
-    );
-  },
-  revealRecentProject: async (request: OpenRecentProjectRequest) => {
-    validate(
-      request,
-      isOpenRecentProjectRequest,
-      "Invalid recent Project reveal request",
-    );
-    await ipcRenderer.invoke(channels.revealRecentProject, request);
-  },
-  listOpenProjects: async () => {
-    const result: unknown = await ipcRenderer.invoke(channels.listOpenProjects);
-    return validateArray(
-      result,
-      isProjectManifestResult,
-      "Invalid open Projects response",
-    );
-  },
+  ...createProjectApi((channel, ...args) =>
+    ipcRenderer.invoke(channel, ...args),
+  ),
   ...createConversationApi((channel, ...args) =>
     ipcRenderer.invoke(channel, ...args),
   ),
@@ -633,70 +323,6 @@ const desktopApi: DesktopApi = Object.freeze({
       result,
       isGlobalTaskProjectionResult,
       "Invalid Global Tasks response",
-    );
-  },
-  createProjectDesignFile: async (request: CreateProjectDesignFileRequest) => {
-    validate(
-      request,
-      isCreateProjectDesignFileRequest,
-      "Invalid design file create request",
-    );
-    const result: unknown = await ipcRenderer.invoke(
-      channels.createProjectDesignFile,
-      request,
-    );
-    return validate<ProjectDesignFile>(
-      result,
-      isProjectDesignFile,
-      "Invalid design file response",
-    );
-  },
-  readProjectDesignFile: async (request: ProjectDesignFileRequest) => {
-    validate(
-      request,
-      isProjectDesignFileRequest,
-      "Invalid design file read request",
-    );
-    const result: unknown = await ipcRenderer.invoke(
-      channels.readProjectDesignFile,
-      request,
-    );
-    return validate<ProjectDesignFile>(
-      result,
-      isProjectDesignFile,
-      "Invalid design file response",
-    );
-  },
-  saveProjectDesignFile: async (request: SaveProjectDesignFileRequest) => {
-    validate(
-      request,
-      isSaveProjectDesignFileRequest,
-      "Invalid design file save request",
-    );
-    const result: unknown = await ipcRenderer.invoke(
-      channels.saveProjectDesignFile,
-      request,
-    );
-    return validate<ProjectDesignFile>(
-      result,
-      isProjectDesignFile,
-      "Invalid design file response",
-    );
-  },
-  renameProjectDesignFile: async (request: RenameProjectDesignFileRequest) => {
-    validate(
-      request,
-      isRenameProjectDesignFileRequest,
-      "Invalid design file rename request",
-    );
-    const result: unknown = await ipcRenderer.invoke(
-      channels.renameProjectDesignFile,
-      request,
-    );
-    return validate(
-      result,
-      isDesignFileDescriptorResult,
-      "Invalid design file rename response",
     );
   },
   publishProjectLibrary: async (request: PublishProjectLibraryRequest) => {

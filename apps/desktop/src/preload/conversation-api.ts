@@ -8,14 +8,11 @@ import {
   type DeleteConversationRequest,
 } from "@opendesign/workspace-contracts";
 import {
-  formatContractFailure,
-  type Contract,
-} from "@opendesign/contract-runtime";
-import {
   ConversationOpenContextContract,
   type ConversationOpenContext,
 } from "@/shared/conversation-contract";
 import { channels, type DesktopApi } from "@/shared/desktop-api";
+import { parseContract } from "./contract-parser";
 
 type ConversationApi = Pick<
   DesktopApi,
@@ -94,17 +91,4 @@ export function createConversationApi(
       );
     },
   };
-}
-
-function parseContract<T, Context>(
-  contract: Contract<T, Context>,
-  value: unknown,
-  subject: string,
-  context?: Context,
-): T {
-  const result = contract.parse(value, context);
-  if (!result.ok) {
-    throw new TypeError(formatContractFailure(subject, result.issues));
-  }
-  return result.value;
 }

@@ -14,6 +14,7 @@ import { checkSchema } from "./schema-check.js";
 export { executableJsonSchema } from "./schema-check.js";
 import * as layout from "./layout.js";
 import { createDesignDocumentContract } from "./document-contract.js";
+export { designDocumentDomainIssues } from "./document-domain.js";
 import { migrateDesignDocumentValue } from "./document-migration.js";
 import { PathDataSchema } from "./path-schema.js";
 import {

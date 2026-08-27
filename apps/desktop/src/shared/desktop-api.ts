@@ -1,17 +1,10 @@
 import type { AgentEvent, AgentRequest } from "@opendesign/agent-contracts";
-import {
-  isDesignDocument,
-  type DesignDocument,
-  type LibraryReleaseSnapshot,
-} from "@opendesign/design-contracts";
+import type { LibraryReleaseSnapshot } from "@opendesign/design-contracts";
 import {
   ConversationDescriptorContract,
   ConversationIdentityRequestContract,
   CreateConversationRequestContract,
-  isDesignFileDescriptor,
   isGlobalTaskProjection,
-  isProjectManifest,
-  isStableId,
   type ConversationDescriptor,
   type ConversationIdentityRequest,
   type CreateConversationRequest,
@@ -135,6 +128,16 @@ import type {
   SetProjectLibraryUpdateAcceptedRequest,
   SetProjectLibraryUpdateIgnoredRequest,
 } from "./project-library-contract";
+import type {
+  CreateProjectDesignFileRequest,
+  CreateProjectRequest,
+  OpenRecentProjectRequest,
+  ProjectDesignFile,
+  ProjectDesignFileRequest,
+  RecentProject,
+  RenameProjectDesignFileRequest,
+  SaveProjectDesignFileRequest,
+} from "./project-file-contract";
 
 export {
   isListProjectLibrariesRequest,
@@ -155,6 +158,40 @@ export {
   type SetProjectLibraryUpdateAcceptedRequest,
   type SetProjectLibraryUpdateIgnoredRequest,
 } from "./project-library-contract";
+
+export {
+  CreateProjectDesignFileRequestContract,
+  CreateProjectRequestContract,
+  OpenRecentProjectRequestContract,
+  ProjectDesignFileContract,
+  ProjectDesignFileRequestContract,
+  ProjectIdentityRequestContract,
+  ProjectManifestListContract,
+  ProjectManifestResponseContract,
+  RecentProjectContract,
+  RecentProjectListContract,
+  RenameProjectDesignFileRequestContract,
+  RenameProjectDesignFileResultContract,
+  SaveProjectDesignFileRequestContract,
+  isCreateProjectDesignFileRequest,
+  isCreateProjectRequest,
+  isDesignFileDescriptorResult,
+  isOpenRecentProjectRequest,
+  isProjectDesignFile,
+  isProjectDesignFileRequest,
+  isProjectManifestResult,
+  isRecentProject,
+  isRenameProjectDesignFileRequest,
+  isSaveProjectDesignFileRequest,
+  type CreateProjectDesignFileRequest,
+  type CreateProjectRequest,
+  type OpenRecentProjectRequest,
+  type ProjectDesignFile,
+  type ProjectDesignFileRequest,
+  type RecentProject,
+  type RenameProjectDesignFileRequest,
+  type SaveProjectDesignFileRequest,
+} from "./project-file-contract";
 
 export {
   formatDiagnosticReport,
@@ -200,49 +237,11 @@ export type PlatformInfo = { platform: NodeJS.Platform; version: string };
 
 export type WindowAction = "minimize" | "toggle-maximize" | "close";
 
-export type CreateProjectRequest = {
-  projectId: string;
-};
-
-export type OpenRecentProjectRequest = {
-  projectId: string;
-};
-
-export type RecentProject = {
-  projectId: string;
-  name: string;
-  lastOpenedAt: string;
-};
-
 export type {
   ConversationIdentityRequest,
   ConversationOpenContext,
   CreateConversationRequest,
   DeleteConversationRequest,
-};
-
-export type CreateProjectDesignFileRequest = {
-  projectId: string;
-  descriptor: DesignFileDescriptor;
-  document: DesignDocument;
-};
-
-export type ProjectDesignFileRequest = {
-  projectId: string;
-  designFileId: string;
-};
-
-export type SaveProjectDesignFileRequest = ProjectDesignFileRequest & {
-  document: DesignDocument;
-};
-
-export type RenameProjectDesignFileRequest = ProjectDesignFileRequest & {
-  name: string;
-};
-
-export type ProjectDesignFile = {
-  descriptor: DesignFileDescriptor;
-  document: DesignDocument;
 };
 
 export interface DesktopApi {
@@ -457,22 +456,6 @@ export function isWindowAction(value: unknown): value is WindowAction {
   );
 }
 
-export function isCreateProjectRequest(
-  value: unknown,
-): value is CreateProjectRequest {
-  if (!value || typeof value !== "object") return false;
-  const request = value as Record<string, unknown>;
-  return isStableId(request.projectId) && hasExactKeys(request, ["projectId"]);
-}
-
-export function isOpenRecentProjectRequest(
-  value: unknown,
-): value is OpenRecentProjectRequest {
-  if (!value || typeof value !== "object") return false;
-  const request = value as Record<string, unknown>;
-  return isStableId(request.projectId) && hasExactKeys(request, ["projectId"]);
-}
-
 export function isCreateConversationRequest(
   value: unknown,
 ): value is CreateConversationRequest {
@@ -501,120 +484,4 @@ export function isGlobalTaskProjectionResult(
   value: unknown,
 ): value is GlobalTaskProjection {
   return isGlobalTaskProjection(value);
-}
-
-export function isCreateProjectDesignFileRequest(
-  value: unknown,
-): value is CreateProjectDesignFileRequest {
-  if (!value || typeof value !== "object") return false;
-  const request = value as Record<string, unknown>;
-  return (
-    isStableId(request.projectId) &&
-    isDesignFileDescriptor(request.descriptor) &&
-    isDesignDocument(request.document) &&
-    request.descriptor.documentId === request.document.documentId &&
-    hasExactKeys(request, ["projectId", "descriptor", "document"])
-  );
-}
-
-export function isProjectDesignFileRequest(
-  value: unknown,
-): value is ProjectDesignFileRequest {
-  if (!value || typeof value !== "object") return false;
-  const request = value as Record<string, unknown>;
-  return (
-    isStableId(request.projectId) &&
-    isStableId(request.designFileId) &&
-    hasExactKeys(request, ["projectId", "designFileId"])
-  );
-}
-
-export function isSaveProjectDesignFileRequest(
-  value: unknown,
-): value is SaveProjectDesignFileRequest {
-  if (!value || typeof value !== "object") return false;
-  const request = value as Record<string, unknown>;
-  return (
-    isStableId(request.projectId) &&
-    isStableId(request.designFileId) &&
-    isDesignDocument(request.document) &&
-    hasExactKeys(request, ["projectId", "designFileId", "document"])
-  );
-}
-
-export function isRenameProjectDesignFileRequest(
-  value: unknown,
-): value is RenameProjectDesignFileRequest {
-  if (!value || typeof value !== "object") return false;
-  const request = value as Record<string, unknown>;
-  return (
-    isStableId(request.projectId) &&
-    isStableId(request.designFileId) &&
-    isDisplayName(request.name) &&
-    request.name === request.name.trim() &&
-    hasExactKeys(request, ["projectId", "designFileId", "name"])
-  );
-}
-
-export function isProjectDesignFile(
-  value: unknown,
-): value is ProjectDesignFile {
-  if (!value || typeof value !== "object") return false;
-  const file = value as Record<string, unknown>;
-  return (
-    isDesignFileDescriptor(file.descriptor) &&
-    isDesignDocument(file.document) &&
-    file.descriptor.documentId === file.document.documentId &&
-    hasExactKeys(file, ["descriptor", "document"])
-  );
-}
-
-export function isDesignFileDescriptorResult(
-  value: unknown,
-): value is DesignFileDescriptor {
-  return isDesignFileDescriptor(value);
-}
-
-export function isRecentProject(value: unknown): value is RecentProject {
-  if (!value || typeof value !== "object") return false;
-  const project = value as Record<string, unknown>;
-  return (
-    isStableId(project.projectId) &&
-    isDisplayName(project.name) &&
-    typeof project.lastOpenedAt === "string" &&
-    Number.isFinite(Date.parse(project.lastOpenedAt)) &&
-    hasExactKeys(project, ["projectId", "name", "lastOpenedAt"])
-  );
-}
-
-export function isProjectManifestResult(
-  value: unknown,
-): value is ProjectManifest {
-  return isProjectManifest(value);
-}
-
-function isDisplayName(value: unknown): value is string {
-  return (
-    typeof value === "string" &&
-    value.length > 0 &&
-    value.length <= 256 &&
-    !hasControlCharacter(value)
-  );
-}
-
-function hasExactKeys(
-  value: Record<string, unknown>,
-  keys: readonly string[],
-): boolean {
-  const actual = Object.keys(value);
-  return (
-    actual.length === keys.length && actual.every((key) => keys.includes(key))
-  );
-}
-
-function hasControlCharacter(value: string): boolean {
-  return [...value].some((character) => {
-    const codePoint = character.codePointAt(0);
-    return codePoint !== undefined && (codePoint <= 31 || codePoint === 127);
-  });
 }

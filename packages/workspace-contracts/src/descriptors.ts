@@ -30,6 +30,7 @@ export const RelativePathSchema = Type.String({
 export const WorkspaceNameSchema = Type.String({
   minLength: 1,
   maxLength: 256,
+  pattern: "^[^\\u0000-\\u001F\\u007F]+$",
 });
 
 export const ConversationTitleSchema = Type.String({
@@ -159,7 +160,7 @@ export const DesignFileDescriptorContract =
     schema: DesignFileDescriptorSchema,
     code: "workspace.design_file_descriptor_invalid",
     subject: "Design File descriptor",
-    refine: designFileDescriptorIssues,
+    refine: designFileDescriptorDomainIssues,
     clone: false,
   });
 
@@ -167,7 +168,7 @@ export const ProjectManifestContract = defineContract<ProjectManifest>({
   schema: ProjectManifestSchema,
   code: "workspace.project_manifest_invalid",
   subject: "Project manifest",
-  refine: projectManifestIssues,
+  refine: projectManifestDomainIssues,
   clone: false,
 });
 
@@ -242,7 +243,7 @@ export function isConversationDescriptor(
   return ConversationDescriptorContract.parse(value).ok;
 }
 
-function designFileDescriptorIssues(
+export function designFileDescriptorDomainIssues(
   value: DesignFileDescriptor,
 ): ValidationIssue[] {
   return value.relativePath.toLowerCase().endsWith(".opendesign")
@@ -257,10 +258,12 @@ function designFileDescriptorIssues(
       ];
 }
 
-function projectManifestIssues(value: ProjectManifest): ValidationIssue[] {
+export function projectManifestDomainIssues(
+  value: ProjectManifest,
+): ValidationIssue[] {
   const issues = value.designFiles.flatMap((descriptor, index) =>
     prefixIssues(
-      designFileDescriptorIssues(descriptor),
+      designFileDescriptorDomainIssues(descriptor),
       `/designFiles/${index}`,
     ),
   );

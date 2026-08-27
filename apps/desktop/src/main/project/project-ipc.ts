@@ -8,19 +8,15 @@ import {
   ConversationIdentityRequestContract,
   CreateConversationRequestContract,
 } from "@opendesign/workspace-contracts";
-import {
-  formatContractFailure,
-  type Contract,
-} from "@opendesign/contract-runtime";
 import { basename } from "node:path";
 import {
-  isCreateProjectDesignFileRequest,
-  isCreateProjectRequest,
-  isOpenRecentProjectRequest,
-  isProjectDesignFileRequest,
-  isRenameProjectDesignFileRequest,
-  isSaveProjectDesignFileRequest,
-} from "@/shared/desktop-api.js";
+  CreateProjectRequestContract,
+  OpenRecentProjectRequestContract,
+  ProjectManifestListContract,
+  ProjectManifestResponseContract,
+  RecentProjectListContract,
+} from "@/shared/project-file-contract.js";
+import { requireContract } from "@/main/contract-parser.js";
 import { ConversationOpenContextContract } from "@/shared/conversation-contract.js";
 import {
   isListProjectLibrariesRequest,
@@ -31,6 +27,7 @@ import {
   isSetProjectLibraryUpdateIgnoredRequest,
 } from "@/shared/project-library-contract.js";
 import { createStarterProjectFiles } from "@/shared/project/starter-project.js";
+import { ProjectFileIpcService } from "./project-file-ipc-service.js";
 import { ProjectHostError, type ProjectHost } from "./project-host.js";
 import type { WorkspaceStore } from "./workspace-store.js";
 
@@ -42,6 +39,8 @@ export type RevealProjectDirectory = (rootPath: string) => void;
 export type HasActiveConversationRun = (conversationId: string) => boolean;
 
 export class ProjectIpcService {
+  readonly #projectFiles: ProjectFileIpcService;
+
   constructor(
     private readonly projectHost: ProjectHost,
     private readonly workspaceStore: WorkspaceStore,
@@ -50,30 +49,43 @@ export class ProjectIpcService {
       undefined,
     private readonly hasActiveConversationRun: HasActiveConversationRun = () =>
       false,
-  ) {}
+  ) {
+    this.#projectFiles = new ProjectFileIpcService(projectHost);
+  }
 
   async createProject(request: unknown) {
-    if (!isCreateProjectRequest(request)) {
-      throw new TypeError("Invalid Project create request");
-    }
+    const canonicalRequest = requireContract(
+      CreateProjectRequestContract,
+      request,
+      "Project create request",
+    );
     const rootPath = await this.selectProjectDirectory("create");
     if (!rootPath) return null;
     try {
       const project = {
-        ...request,
+        ...canonicalRequest,
         name: basename(rootPath),
       };
-      return await this.projectHost.createProject(
+      const result = await this.projectHost.createProject(
         rootPath,
         project,
-        createStarterProjectFiles(request.projectId),
+        createStarterProjectFiles(canonicalRequest.projectId),
+      );
+      return requireContract(
+        ProjectManifestResponseContract,
+        result,
+        "Project create response",
       );
     } catch (error) {
       if (
         error instanceof ProjectHostError &&
         error.code === "PROJECT_EXISTS"
       ) {
-        return this.projectHost.openProject(rootPath);
+        return requireContract(
+          ProjectManifestResponseContract,
+          await this.projectHost.openProject(rootPath),
+          "Project create response",
+        );
       }
       throw error;
     }
@@ -82,39 +94,64 @@ export class ProjectIpcService {
   async openProject() {
     const rootPath = await this.selectProjectDirectory("open");
     if (!rootPath) return null;
-    return this.projectHost.openProject(rootPath);
+    return requireContract(
+      ProjectManifestResponseContract,
+      await this.projectHost.openProject(rootPath),
+      "Project open response",
+    );
   }
 
-  openRecentProject(request: unknown) {
-    if (!isOpenRecentProjectRequest(request)) {
-      throw new TypeError("Invalid recent Project request");
-    }
-    return this.projectHost.openRecentProject(request.projectId);
+  async openRecentProject(request: unknown) {
+    const canonicalRequest = requireContract(
+      OpenRecentProjectRequestContract,
+      request,
+      "Recent Project request",
+    );
+    return requireContract(
+      ProjectManifestResponseContract,
+      await this.projectHost.openRecentProject(canonicalRequest.projectId),
+      "Recent Project response",
+      { kind: "project", projectId: canonicalRequest.projectId },
+    );
   }
 
   listRecentProjects() {
-    return this.workspaceStore.listRecentProjects();
+    return requireContract(
+      RecentProjectListContract,
+      this.workspaceStore.listRecentProjects(),
+      "Recent Project list",
+    );
   }
 
   removeRecentProject(request: unknown) {
-    if (!isOpenRecentProjectRequest(request)) {
-      throw new TypeError("Invalid recent Project remove request");
-    }
-    this.workspaceStore.hideProject(request.projectId);
-    return this.workspaceStore.listRecentProjects();
+    const canonicalRequest = requireContract(
+      OpenRecentProjectRequestContract,
+      request,
+      "Recent Project remove request",
+    );
+    this.workspaceStore.hideProject(canonicalRequest.projectId);
+    return this.listRecentProjects();
   }
 
   revealRecentProject(request: unknown) {
-    if (!isOpenRecentProjectRequest(request)) {
-      throw new TypeError("Invalid recent Project reveal request");
-    }
-    const rootPath = this.workspaceStore.getProjectRoot(request.projectId);
+    const canonicalRequest = requireContract(
+      OpenRecentProjectRequestContract,
+      request,
+      "Recent Project reveal request",
+    );
+    const rootPath = this.workspaceStore.getProjectRoot(
+      canonicalRequest.projectId,
+    );
     if (!rootPath) throw new Error("Recent Project is not registered");
     this.revealProjectDirectory(rootPath);
   }
 
   listOpenProjects() {
-    return this.projectHost.listOpenProjects();
+    return requireContract(
+      ProjectManifestListContract,
+      this.projectHost.listOpenProjects(),
+      "Open Project list",
+    );
   }
 
   createConversation(request: unknown) {
@@ -345,45 +382,19 @@ export class ProjectIpcService {
   }
 
   createDesignFile(request: unknown) {
-    if (!isCreateProjectDesignFileRequest(request)) {
-      throw new TypeError("Invalid design file create request");
-    }
-    return this.projectHost.createDesignFile(request.projectId, {
-      descriptor: request.descriptor,
-      document: request.document,
-    });
+    return this.#projectFiles.create(request);
   }
 
   readDesignFile(request: unknown) {
-    if (!isProjectDesignFileRequest(request)) {
-      throw new TypeError("Invalid design file read request");
-    }
-    return this.projectHost.readDesignFile(
-      request.projectId,
-      request.designFileId,
-    );
+    return this.#projectFiles.read(request);
   }
 
   saveDesignFile(request: unknown) {
-    if (!isSaveProjectDesignFileRequest(request)) {
-      throw new TypeError("Invalid design file save request");
-    }
-    return this.projectHost.saveDesignFile(
-      request.projectId,
-      request.designFileId,
-      request.document,
-    );
+    return this.#projectFiles.save(request);
   }
 
   renameDesignFile(request: unknown) {
-    if (!isRenameProjectDesignFileRequest(request)) {
-      throw new TypeError("Invalid design file rename request");
-    }
-    return this.projectHost.renameDesignFile(
-      request.projectId,
-      request.designFileId,
-      request.name,
-    );
+    return this.#projectFiles.rename(request);
   }
 
   publishProjectLibrary(request: unknown) {
@@ -450,17 +461,4 @@ export class ProjectIpcService {
       request.releaseId,
     );
   }
-}
-
-function requireContract<T, Context>(
-  contract: Contract<T, Context>,
-  value: unknown,
-  subject: string,
-  context?: Context,
-): T {
-  const result = contract.parse(value, context);
-  if (!result.ok) {
-    throw new TypeError(formatContractFailure(subject, result.issues));
-  }
-  return result.value;
 }
