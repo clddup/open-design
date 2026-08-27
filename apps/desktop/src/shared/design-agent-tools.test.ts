@@ -6,7 +6,8 @@ import {
   DESIGN_BOOTSTRAP_EDIT_TOOL_INPUT_SCHEMA,
   DESIGN_CAPABILITIES_TOOL_NAME,
   DESIGN_CHECKPOINT_TOOL_NAME,
-  DESIGN_COMPONENT_TOOL_NAME,
+  DESIGN_SYSTEM_TOOL_NAME,
+  INTERNAL_DESIGN_COMPONENT_TOOL_NAME as DESIGN_COMPONENT_TOOL_NAME,
   DESIGN_FIRST_SLICE_TOOL_NAME,
   DESIGN_EDIT_TOOL_NAME,
   DESIGN_FONT_TOOL_NAME,
@@ -1751,7 +1752,7 @@ describe("design Agent tool contract", () => {
     expect(bootstrap).not.toContain('"effects"');
     expect(
       DESIGN_AGENT_TOOL_SPECS.find(
-        (tool) => tool.name === DESIGN_COMPONENT_TOOL_NAME,
+        (tool) => tool.name === DESIGN_SYSTEM_TOOL_NAME,
       )?.modelDisclosure,
     ).toMatchObject({ bootstrap: "deferred" });
     expect(

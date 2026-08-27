@@ -5,8 +5,10 @@ import type {
 } from "@opendesign/agent-contracts";
 import { describe, expect, it, vi } from "vitest";
 import {
-  DESIGN_STYLE_TOOL_NAME,
-  DESIGN_VARIABLE_TOOL_NAME,
+  DESIGN_SYSTEM_TOOL_NAME,
+  INTERNAL_DESIGN_COMPONENT_TOOL_NAME,
+  INTERNAL_DESIGN_STYLE_TOOL_NAME,
+  INTERNAL_DESIGN_VARIABLE_TOOL_NAME,
 } from "@/shared/design-agent-tools.js";
 import type { GlobalTaskCoordinator } from "./global-task-coordinator.js";
 import { handleDesignSystemTool } from "./design-system-tool-handler.js";
@@ -26,6 +28,7 @@ const context: TrustedToolContext = {
 
 function coordinator() {
   return {
+    assertComponentToolAccess: vi.fn(),
     assertDocumentInspected: vi.fn(),
     assertVisualReviewBeforeWrite: vi.fn(),
     resolveMaterialTargetIdsIfPlanned: vi.fn(() => []),
@@ -41,14 +44,17 @@ describe("design system Main tool boundary", () => {
       handleDesignSystemTool({
         call: {
           toolCallId: "call_invalid_variable",
-          toolName: DESIGN_VARIABLE_TOOL_NAME,
+          toolName: DESIGN_SYSTEM_TOOL_NAME,
           input: {
-            action: "set-mode",
-            label: "Invalid mode target",
-            pageId: "page_1",
-            target: { kind: "node", nodeId: "title" },
-            collectionId: "theme",
-            modeId: "dark",
+            kind: "variable",
+            input: {
+              action: "set-mode",
+              label: "Invalid mode target",
+              pageId: "page_1",
+              target: { kind: "node", nodeId: "title" },
+              collectionId: "theme",
+              modeId: "dark",
+            },
           },
         },
         context,
@@ -56,7 +62,7 @@ describe("design system Main tool boundary", () => {
         execute,
         withDelivery: (result) => result,
       }),
-    ).rejects.toThrow(/design_variable\.schema_invalid at \/target\/id/);
+    ).rejects.toThrow(/design_system\.schema_invalid at \/input\/target\/id/);
     expect(execute).not.toHaveBeenCalled();
   });
 
@@ -78,8 +84,8 @@ describe("design system Main tool boundary", () => {
       handleDesignSystemTool({
         call: {
           toolCallId: "call_style",
-          toolName: DESIGN_STYLE_TOOL_NAME,
-          input: sourceInput,
+          toolName: DESIGN_SYSTEM_TOOL_NAME,
+          input: { kind: "style", input: sourceInput },
         },
         context,
         coordinator: coordinator(),
@@ -88,7 +94,46 @@ describe("design system Main tool boundary", () => {
       }),
     ).resolves.toBe(result);
     const executed = execute.mock.calls[0]?.[0];
-    expect(executed?.input).toEqual(sourceInput);
+    expect(executed).toMatchObject({
+      toolName: INTERNAL_DESIGN_STYLE_TOOL_NAME,
+      input: sourceInput,
+    });
     expect(executed?.input).not.toBe(sourceInput);
+    expect(executed?.toolName).not.toBe(INTERNAL_DESIGN_VARIABLE_TOOL_NAME);
+  });
+
+  it("routes a public Component branch through the internal Component service", async () => {
+    const result: TrustedToolResult = { content: { ok: true } };
+    const execute = vi.fn((call: ToolCallRequest) => {
+      void call;
+      return Promise.resolve(result);
+    });
+
+    await expect(
+      handleDesignSystemTool({
+        call: {
+          toolCallId: "call_component",
+          toolName: DESIGN_SYSTEM_TOOL_NAME,
+          input: {
+            kind: "component",
+            input: {
+              action: "create-component",
+              label: "Promote button",
+              pageId: "page_1",
+              rootNodeId: "button_main",
+              componentId: "component_button",
+              name: "Button",
+            },
+          },
+        },
+        context,
+        coordinator: coordinator(),
+        execute,
+        withDelivery: (value) => value,
+      }),
+    ).resolves.toBe(result);
+    const executed = execute.mock.calls[0]?.[0];
+    expect(executed?.toolName).toBe(INTERNAL_DESIGN_COMPONENT_TOOL_NAME);
+    expect(executed?.input).toMatchObject({ action: "create-component" });
   });
 });

@@ -24,7 +24,7 @@ import {
   DESIGN_CAPABILITIES_TOOL_NAME,
   DESIGN_CAPTURE_TOOL_NAME,
   DESIGN_CHECKPOINT_TOOL_NAME,
-  DESIGN_COMPONENT_TOOL_NAME,
+  DESIGN_SYSTEM_TOOL_NAME,
   DESIGN_DELIVERY_SCOPE_TOOL_NAME,
   DESIGN_EDIT_TOOL_NAME,
   DESIGN_FIRST_SLICE_TOOL_NAME,
@@ -33,9 +33,7 @@ import {
   DESIGN_PAGE_TOOL_NAME,
   DESIGN_PLAN_TOOL_NAME,
   DESIGN_REVIEW_TOOL_NAME,
-  DESIGN_STYLE_TOOL_NAME,
   DESIGN_TEXT_RANGE_TOOL_NAME,
-  DESIGN_VARIABLE_TOOL_NAME,
   DESIGN_VECTOR_TOOL_NAME,
   EXPORT_RASTER_TOOL_NAME,
   EXPORT_SVG_TOOL_NAME,
@@ -43,6 +41,9 @@ import {
   GENERATE_IMAGE_TOOL_NAME,
   IMPORT_SVG_TOOL_NAME,
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
+  INTERNAL_DESIGN_COMPONENT_TOOL_NAME,
+  INTERNAL_DESIGN_STYLE_TOOL_NAME,
+  INTERNAL_DESIGN_VARIABLE_TOOL_NAME,
   INTERNAL_IMPORT_SVG_TOOL_NAME,
   INTERNAL_READ_IMAGE_SOURCE_TOOL_NAME,
   INTERNAL_UPDATE_IMAGE_TOOL_NAME,
@@ -86,7 +87,6 @@ import {
   DESIGN_FONT_TOOL_INPUT_SCHEMA,
   DESIGN_TEXT_RANGE_TOOL_INPUT_SCHEMA,
 } from "./design-agent-typography-tools";
-import { DESIGN_COMPONENT_TOOL_INPUT_SCHEMA } from "./design-component-tool-schema";
 import {
   DesignPageContract,
   DESIGN_PAGE_TOOL_INPUT_SCHEMA,
@@ -99,9 +99,11 @@ import {
 } from "./design-agent-checkpoint";
 import { DesignComponentContract } from "./design-component-tool";
 import { DesignVariableContract } from "./design-variable-tool";
-import { DESIGN_VARIABLE_TOOL_INPUT_SCHEMA } from "./design-variable-tool-schema";
 import { DesignStyleContract } from "./design-style-tool";
-import { DESIGN_STYLE_TOOL_INPUT_SCHEMA } from "./design-style-tool-schema";
+import {
+  DesignSystemContract,
+  DESIGN_SYSTEM_TOOL_INPUT_SCHEMA,
+} from "./design-system-tool";
 export {
   DesignApplyContract,
   designApplyRequiresPlan,
@@ -218,6 +220,11 @@ export type { DesignVariableToolInput } from "./design-variable-tool";
 export { DesignStyleContract } from "./design-style-tool";
 export { DESIGN_STYLE_TOOL_INPUT_SCHEMA } from "./design-style-tool-schema";
 export type { DesignStyleToolInput } from "./design-style-tool";
+export {
+  DesignSystemContract,
+  DESIGN_SYSTEM_TOOL_INPUT_SCHEMA,
+} from "./design-system-tool";
+export type { DesignSystemToolInput } from "./design-system-tool";
 export type {
   DesignPlanComponentCandidate,
   DesignPlanComponentStrategy,
@@ -564,43 +571,17 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     validateInputIssues: DesignVectorContract.issues,
   },
   {
-    name: DESIGN_COMPONENT_TOOL_NAME,
+    name: DESIGN_SYSTEM_TOOL_NAME,
     modelDisclosure: {
       bootstrap: "deferred" as const,
       role: "material-write" as const,
     },
     description:
-      "Manage reusable components through OpenDesign's typed component runtime. create-component promotes one existing Frame/Group as the Main and requires exactly action, label, pageId, rootNodeId, componentId, and name. combine-as-variants creates one real Component Set Frame from inspected sibling Mains. add-component-to-variant-set, duplicate-variant, remove-variant, and dissolve-variant-set manage Set membership. add/rename/reorder/remove-variant-property, rename/reorder-variant-value, and set-variant-properties edit the Figma-compatible two-dimensional Variant matrix using explicit inspected Set/member roots; the host preserves complete unique combinations, property/value order, top-left defaults, current Instance resolution, one revision, and one undo. create-instance places a linked instance. add/rename/remove-property author Boolean, Text, Instance-swap, or Slot properties on explicit Main sublayers. create-slot-override, clear-slot, reset-slot, and set-slot-settings manage bounded instance Slot contents and guidance without detaching the Instance; arbitrary content is inserted only under the real override Slot root returned by a fresh inspection. set/reset-property also selects VARIANT values exposed by inspection. set/reset-overrides remains the advanced sourcePath layer and wins after typed properties. Main edits synchronize property defaults, ordinary Instance structure remains read-only, every write is previewed and atomic, and cross-Page work requires the same one-time Page structure access as other writes.",
-    inputSchema: DESIGN_COMPONENT_TOOL_INPUT_SCHEMA,
+      "Manage the current Design File's reusable design system through one typed boundary. Choose kind=component for Component Mains, Instances, Variants, properties, Slots, overrides, detach, and Go to main; kind=variable for collections, modes, values, aliases, scopes, code syntax, bindings, and mode overrides; or kind=style for local Paint, Text, Effect, and Grid Style creation, metadata, ordering, references, detach, and deletion. Each kind preserves its dedicated versioned service, stable inspected IDs, Page scope, preview, atomic revision, and one undo step. Imported Library snapshots remain read-only. Do not write Component definitions, Style registries, Variable registries, or their references through generic node edits.",
+    inputSchema: DESIGN_SYSTEM_TOOL_INPUT_SCHEMA,
     risk: "design_write" as const,
     approval: "never" as const,
-    validateInputIssues: DesignComponentContract.issues,
-  },
-  {
-    name: DESIGN_VARIABLE_TOOL_NAME,
-    modelDisclosure: {
-      bootstrap: "deferred" as const,
-      role: "material-write" as const,
-    },
-    description:
-      "Manage Figma-compatible Variables through the versioned Variable Service. Collections, modes, values, aliases, scopes, code syntax, Page/node mode overrides, and supported node/Paint bindings are validated, previewed, and applied as one atomic undoable transaction. Use stable IDs and current definitions from opendesign_inspect_document. BOOLEAN binds visibility, FLOAT binds opacity in 0..1, STRING binds Text content, and COLOR RGB/RGBA binds SolidPaint color. Scope only ranks picker recommendations and never replaces type validation. TIMING/EASING remain authorable but are not bindable before Motion support.",
-    inputSchema: DESIGN_VARIABLE_TOOL_INPUT_SCHEMA,
-    risk: "design_write" as const,
-    approval: "never" as const,
-    validateInputIssues: DesignVariableContract.issues,
-  },
-  {
-    name: DESIGN_STYLE_TOOL_NAME,
-    modelDisclosure: {
-      bootstrap: "deferred" as const,
-      role: "material-write" as const,
-    },
-    description:
-      "Manage Figma-compatible local Paint, Text, Effect, and Grid styles through the versioned Style Service. Create or update a Style from an explicit inspected node property, edit metadata/order, apply or detach stable style references, and delete while preserving every consumer's resolved appearance. Every write is validated, previewed, atomic, undoable, and scoped to the current Design File and Page node IDs returned by inspection. Remote Libraries and arbitrary Figma private data are not accepted.",
-    inputSchema: DESIGN_STYLE_TOOL_INPUT_SCHEMA,
-    risk: "design_write" as const,
-    approval: "never" as const,
-    validateInputIssues: DesignStyleContract.issues,
+    validateInputIssues: DesignSystemContract.issues,
   },
   {
     name: PAGE_STRUCTURE_ACCESS_TOOL_NAME,
@@ -735,13 +716,16 @@ export function validateDesignAgentToolInput(
   if (toolName === DESIGN_PAGE_TOOL_NAME) {
     return DesignPageContract.parse(input).ok;
   }
-  if (toolName === DESIGN_COMPONENT_TOOL_NAME) {
+  if (toolName === DESIGN_SYSTEM_TOOL_NAME) {
+    return DesignSystemContract.parse(input).ok;
+  }
+  if (toolName === INTERNAL_DESIGN_COMPONENT_TOOL_NAME) {
     return DesignComponentContract.parse(input).ok;
   }
-  if (toolName === DESIGN_VARIABLE_TOOL_NAME) {
+  if (toolName === INTERNAL_DESIGN_VARIABLE_TOOL_NAME) {
     return DesignVariableContract.parse(input).ok;
   }
-  if (toolName === DESIGN_STYLE_TOOL_NAME) {
+  if (toolName === INTERNAL_DESIGN_STYLE_TOOL_NAME) {
     return DesignStyleContract.parse(input).ok;
   }
   if (toolName === PAGE_STRUCTURE_ACCESS_TOOL_NAME) {

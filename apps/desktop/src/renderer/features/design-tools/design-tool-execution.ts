@@ -34,7 +34,7 @@ import {
 import {
   DESIGN_ARRANGE_TOOL_NAME,
   DESIGN_CAPTURE_TOOL_NAME,
-  DESIGN_COMPONENT_TOOL_NAME,
+  INTERNAL_DESIGN_COMPONENT_TOOL_NAME,
   EXPORT_RASTER_TOOL_NAME,
   EXPORT_SVG_TOOL_NAME,
   DESIGN_APPLY_TOOL_NAME,
@@ -221,7 +221,7 @@ async function executeDesignToolRequestUnsafe(
     };
   }
 
-  if (request.call.toolName === DESIGN_COMPONENT_TOOL_NAME) {
+  if (request.call.toolName === INTERNAL_DESIGN_COMPONENT_TOOL_NAME) {
     const parsed = DesignComponentContract.parse(request.call.input);
     if (!parsed.ok) {
       throw new TypeError(

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   DESIGN_CHECKPOINT_TOOL_NAME,
-  DESIGN_COMPONENT_TOOL_NAME,
+  DESIGN_SYSTEM_TOOL_NAME,
   DESIGN_DELIVERY_SCOPE_TOOL_NAME,
 } from "@/shared/design-agent-tools.js";
 import {
@@ -17,14 +17,14 @@ import type { Translate } from "./timeline-types.js";
 
 const t: Translate = (key) => key;
 
-describe("Agent component timeline presentation", () => {
-  it("presents component work as a native visible design step", () => {
-    expect(isNativeDesignTool(DESIGN_COMPONENT_TOOL_NAME)).toBe(true);
-    expect(toolTitle(DESIGN_COMPONENT_TOOL_NAME, "active", t)).toBe(
-      "agent.updatingComponents",
+describe("Agent design-system timeline presentation", () => {
+  it("presents design-system work as one native visible step", () => {
+    expect(isNativeDesignTool(DESIGN_SYSTEM_TOOL_NAME)).toBe(true);
+    expect(toolTitle(DESIGN_SYSTEM_TOOL_NAME, "active", t)).toBe(
+      "agent.updatingDesignSystem",
     );
-    expect(toolTitle(DESIGN_COMPONENT_TOOL_NAME, "done", t)).toBe(
-      "agent.componentsUpdated",
+    expect(toolTitle(DESIGN_SYSTEM_TOOL_NAME, "done", t)).toBe(
+      "agent.designSystemUpdated",
     );
   });
 

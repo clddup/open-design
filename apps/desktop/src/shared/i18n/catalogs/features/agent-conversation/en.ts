@@ -169,6 +169,8 @@ export const agentConversationMessages = {
   "agent.hierarchyUpdated": "Layer structure updated",
   "agent.updatingComponents": "Building reusable components",
   "agent.componentsUpdated": "Component definitions updated",
+  "agent.updatingDesignSystem": "Updating the design system",
+  "agent.designSystemUpdated": "Design system updated",
   "agent.arrangingLayers": "Arranging layers",
   "agent.arrangementUpdated": "Layer arrangement updated",
   "agent.updatingPages": "Updating Pages",

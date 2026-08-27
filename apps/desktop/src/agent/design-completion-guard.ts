@@ -13,7 +13,7 @@ import {
   DESIGN_APPLY_TOOL_NAME,
   DESIGN_ARRANGE_TOOL_NAME,
   DESIGN_CAPTURE_TOOL_NAME,
-  DESIGN_COMPONENT_TOOL_NAME,
+  DESIGN_SYSTEM_TOOL_NAME,
   DESIGN_DELIVERY_SCOPE_TOOL_NAME,
   DESIGN_EDIT_TOOL_NAME,
   DESIGN_FIRST_SLICE_TOOL_NAME,
@@ -450,8 +450,8 @@ function isSuccessfulDesignWrite(call: AgentToolCallRecord): boolean {
     call.toolName === DESIGN_HIERARCHY_TOOL_NAME ||
     call.toolName === DESIGN_EDIT_TOOL_NAME ||
     call.toolName === DESIGN_FIRST_SLICE_TOOL_NAME ||
-    (call.toolName === DESIGN_COMPONENT_TOOL_NAME &&
-      isMaterialComponentWrite(call.input)) ||
+    (call.toolName === DESIGN_SYSTEM_TOOL_NAME &&
+      isMaterialDesignSystemWrite(call.input)) ||
     (call.toolName === DESIGN_APPLY_TOOL_NAME &&
       readCommands(call.input).length > 0)
   );
@@ -509,6 +509,27 @@ function isMaterialComponentWrite(input: unknown): boolean {
   }
   if (input.action !== "set-override" || !isRecord(input.patch)) return false;
   return Object.keys(input.patch).some((key) => key !== "name");
+}
+
+function isMaterialDesignSystemWrite(input: unknown): boolean {
+  if (!isRecord(input) || !isRecord(input.input)) return false;
+  if (input.kind === "component") {
+    return isMaterialComponentWrite(input.input);
+  }
+  if (input.kind === "variable") {
+    return (
+      input.input.action === "set-binding" ||
+      (input.input.action === "set-mode" &&
+        isRecord(input.input.target) &&
+        input.input.target.kind === "node")
+    );
+  }
+  return (
+    input.kind === "style" &&
+    (input.input.action === "create-from-node" ||
+      input.input.action === "update-from-node" ||
+      input.input.action === "set-reference")
+  );
 }
 
 function readCommands(

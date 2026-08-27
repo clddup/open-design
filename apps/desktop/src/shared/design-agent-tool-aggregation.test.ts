@@ -5,8 +5,9 @@ import {
   DESIGN_CAPTURE_TOOL_NAME,
   DESIGN_CHECKPOINT_TOOL_INPUT_SCHEMA,
   DESIGN_CHECKPOINT_TOOL_NAME,
-  DESIGN_COMPONENT_TOOL_INPUT_SCHEMA,
-  DESIGN_COMPONENT_TOOL_NAME,
+  DESIGN_SYSTEM_TOOL_INPUT_SCHEMA,
+  DESIGN_SYSTEM_TOOL_NAME,
+  DesignSystemContract,
   DESIGN_DELIVERY_SCOPE_TOOL_NAME,
   DESIGN_EDIT_TOOL_INPUT_SCHEMA,
   DESIGN_EDIT_TOOL_NAME,
@@ -20,12 +21,8 @@ import {
   DESIGN_PLAN_TOOL_INPUT_SCHEMA,
   DESIGN_PLAN_TOOL_NAME,
   DESIGN_REVIEW_TOOL_NAME,
-  DESIGN_STYLE_TOOL_INPUT_SCHEMA,
-  DESIGN_STYLE_TOOL_NAME,
   DESIGN_TEXT_RANGE_TOOL_INPUT_SCHEMA,
   DESIGN_TEXT_RANGE_TOOL_NAME,
-  DESIGN_VARIABLE_TOOL_INPUT_SCHEMA,
-  DESIGN_VARIABLE_TOOL_NAME,
   DESIGN_VECTOR_TOOL_INPUT_SCHEMA,
   DESIGN_VECTOR_TOOL_NAME,
   DESIGN_VISUAL_REVIEW_TOOL_INPUT_SCHEMA,
@@ -39,6 +36,9 @@ import {
   GENERATE_IMAGE_TOOL_NAME,
   IMPORT_SVG_TOOL_INPUT_SCHEMA,
   IMPORT_SVG_TOOL_NAME,
+  INTERNAL_DESIGN_COMPONENT_TOOL_NAME,
+  INTERNAL_DESIGN_STYLE_TOOL_NAME,
+  INTERNAL_DESIGN_VARIABLE_TOOL_NAME,
   PAGE_STRUCTURE_ACCESS_TOOL_INPUT_SCHEMA,
   PAGE_STRUCTURE_ACCESS_TOOL_NAME,
   PLACE_IMAGE_TOOL_INPUT_SCHEMA,
@@ -70,9 +70,7 @@ describe("design Agent tool aggregation", () => {
       EXPORT_RASTER_TOOL_NAME,
       DESIGN_EDIT_TOOL_NAME,
       DESIGN_VECTOR_TOOL_NAME,
-      DESIGN_COMPONENT_TOOL_NAME,
-      DESIGN_VARIABLE_TOOL_NAME,
-      DESIGN_STYLE_TOOL_NAME,
+      DESIGN_SYSTEM_TOOL_NAME,
       PAGE_STRUCTURE_ACCESS_TOOL_NAME,
       DESIGN_PAGE_TOOL_NAME,
       DESIGN_TEXT_RANGE_TOOL_NAME,
@@ -99,9 +97,7 @@ describe("design Agent tool aggregation", () => {
       [EXPORT_RASTER_TOOL_NAME, EXPORT_RASTER_TOOL_INPUT_SCHEMA],
       [DESIGN_EDIT_TOOL_NAME, DESIGN_EDIT_TOOL_INPUT_SCHEMA],
       [DESIGN_VECTOR_TOOL_NAME, DESIGN_VECTOR_TOOL_INPUT_SCHEMA],
-      [DESIGN_COMPONENT_TOOL_NAME, DESIGN_COMPONENT_TOOL_INPUT_SCHEMA],
-      [DESIGN_VARIABLE_TOOL_NAME, DESIGN_VARIABLE_TOOL_INPUT_SCHEMA],
-      [DESIGN_STYLE_TOOL_NAME, DESIGN_STYLE_TOOL_INPUT_SCHEMA],
+      [DESIGN_SYSTEM_TOOL_NAME, DESIGN_SYSTEM_TOOL_INPUT_SCHEMA],
       [
         PAGE_STRUCTURE_ACCESS_TOOL_NAME,
         PAGE_STRUCTURE_ACCESS_TOOL_INPUT_SCHEMA,
@@ -114,5 +110,38 @@ describe("design Agent tool aggregation", () => {
     for (const [name, schema] of expected) {
       expect(schemaByName.get(name), name).toBe(schema);
     }
+  });
+
+  it("keeps internal design-system routes out of the Provider catalog", () => {
+    const names = DESIGN_AGENT_TOOL_SPECS.map((tool) => tool.name);
+    expect(names).toContain(DESIGN_SYSTEM_TOOL_NAME);
+    expect(names).not.toEqual(
+      expect.arrayContaining([
+        INTERNAL_DESIGN_COMPONENT_TOOL_NAME,
+        INTERNAL_DESIGN_VARIABLE_TOOL_NAME,
+        INTERNAL_DESIGN_STYLE_TOOL_NAME,
+      ]),
+    );
+  });
+
+  it("reports the selected design-system branch at its concrete input path", () => {
+    expect(
+      DesignSystemContract.issues({
+        kind: "variable",
+        input: {
+          action: "set-mode",
+          label: "Set dark mode",
+          pageId: "page_1",
+          target: { kind: "node", nodeId: "title" },
+          collectionId: "theme",
+          modeId: "dark",
+        },
+      }),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "design_system.schema_invalid",
+        path: "/input/target/id",
+      }),
+    );
   });
 });

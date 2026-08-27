@@ -3,8 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   DESIGN_AGENT_TOOL_SPECS,
   DESIGN_COMPONENT_TOOL_INPUT_SCHEMA,
-  DESIGN_COMPONENT_TOOL_NAME,
+  DESIGN_SYSTEM_TOOL_NAME,
   DesignComponentContract,
+  DesignSystemContract,
   type DesignComponentToolInput,
 } from "./design-agent-tools";
 
@@ -411,14 +412,20 @@ describe("Component Agent contract", () => {
     ]);
   });
 
-  it("wires Pi validation to the same Component contract", () => {
+  it("composes the Component contract into the unified Provider contract", () => {
     const tool = DESIGN_AGENT_TOOL_SPECS.find(
-      (candidate) => candidate.name === DESIGN_COMPONENT_TOOL_NAME,
+      (candidate) => candidate.name === DESIGN_SYSTEM_TOOL_NAME,
     );
     expect(tool).not.toHaveProperty("explainInvalidInput");
     expect(tool).toHaveProperty(
       "validateInputIssues",
-      DesignComponentContract.issues,
+      DesignSystemContract.issues,
     );
+    expect(
+      DesignSystemContract.parse({ kind: "component", input: validInputs[0] }),
+    ).toEqual({
+      ok: true,
+      value: { kind: "component", input: validInputs[0] },
+    });
   });
 });

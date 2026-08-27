@@ -90,7 +90,6 @@ import {
   designPageToolPreauthorization,
   handleDesignPageTool,
 } from "./agent/design-page-tool-handler.js";
-import { handleDesignComponentTool } from "./agent/design-component-tool-handler.js";
 import { translate } from "@/shared/i18n/messages";
 import {
   DESIGN_CAPTURE_TOOL_NAME,
@@ -984,14 +983,6 @@ async function startDesktopApplication(
         withDelivery: withDesignDelivery,
       });
       if (designTypographyResult) return designTypographyResult;
-      const designComponentResult = await handleDesignComponentTool({
-        call,
-        context,
-        coordinator: globalTaskCoordinator,
-        execute: executeRendererTool,
-        withDelivery: withDesignDelivery,
-      });
-      if (designComponentResult) return designComponentResult;
       const designSystemResult = await handleDesignSystemTool({
         call,
         context,

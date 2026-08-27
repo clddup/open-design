@@ -3,8 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   DESIGN_AGENT_TOOL_SPECS,
   DESIGN_STYLE_TOOL_INPUT_SCHEMA,
-  DESIGN_STYLE_TOOL_NAME,
+  DESIGN_SYSTEM_TOOL_NAME,
   DesignStyleContract,
+  DesignSystemContract,
   type DesignStyleToolInput,
 } from "./design-agent-tools";
 
@@ -116,14 +117,14 @@ describe("Style Agent contract", () => {
     ).not.toHaveLength(0);
   });
 
-  it("wires Pi validation to the same Style contract", () => {
+  it("composes the Style contract into the unified Provider contract", () => {
     const tool = DESIGN_AGENT_TOOL_SPECS.find(
-      (candidate) => candidate.name === DESIGN_STYLE_TOOL_NAME,
+      (candidate) => candidate.name === DESIGN_SYSTEM_TOOL_NAME,
     );
     expect(tool).not.toHaveProperty("explainInvalidInput");
     expect(tool).toHaveProperty(
       "validateInputIssues",
-      DesignStyleContract.issues,
+      DesignSystemContract.issues,
     );
   });
 });

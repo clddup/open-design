@@ -13,13 +13,11 @@ import {
 import {
   DESIGN_APPLY_TOOL_NAME,
   DESIGN_ARRANGE_TOOL_NAME,
-  DESIGN_COMPONENT_TOOL_NAME,
+  DESIGN_SYSTEM_TOOL_NAME,
   DESIGN_CHECKPOINT_TOOL_NAME,
   DESIGN_DELIVERY_SCOPE_TOOL_NAME,
   DESIGN_EDIT_TOOL_NAME,
   DESIGN_FIRST_SLICE_TOOL_NAME,
-  DESIGN_VARIABLE_TOOL_NAME,
-  DESIGN_STYLE_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
   DESIGN_PAGE_TOOL_NAME,
@@ -82,9 +80,7 @@ export function isNativeDesignTool(toolName: string | undefined): boolean {
     toolName === DESIGN_CHECKPOINT_TOOL_NAME ||
     toolName === DESIGN_ARRANGE_TOOL_NAME ||
     toolName === DESIGN_HIERARCHY_TOOL_NAME ||
-    toolName === DESIGN_COMPONENT_TOOL_NAME ||
-    toolName === DESIGN_VARIABLE_TOOL_NAME ||
-    toolName === DESIGN_STYLE_TOOL_NAME ||
+    toolName === DESIGN_SYSTEM_TOOL_NAME ||
     toolName === DESIGN_PAGE_TOOL_NAME
   );
 }
@@ -401,20 +397,10 @@ export function toolTitle(
       ? t("agent.hierarchyUpdated")
       : t("agent.organizingLayers");
   }
-  if (toolName === DESIGN_COMPONENT_TOOL_NAME) {
+  if (toolName === DESIGN_SYSTEM_TOOL_NAME) {
     return state === "done"
-      ? t("agent.componentsUpdated")
-      : t("agent.updatingComponents");
-  }
-  if (toolName === DESIGN_VARIABLE_TOOL_NAME) {
-    return state === "done"
-      ? t("agent.variablesUpdated")
-      : t("agent.updatingVariables");
-  }
-  if (toolName === DESIGN_STYLE_TOOL_NAME) {
-    return state === "done"
-      ? t("agent.stylesUpdated")
-      : t("agent.updatingStyles");
+      ? t("agent.designSystemUpdated")
+      : t("agent.updatingDesignSystem");
   }
   if (toolName === DESIGN_ARRANGE_TOOL_NAME) {
     return state === "done"

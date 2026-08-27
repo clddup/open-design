@@ -4,8 +4,11 @@ import type {
   TrustedToolResult,
 } from "@opendesign/agent-contracts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { DESIGN_COMPONENT_TOOL_NAME } from "@/shared/design-agent-tools.js";
-import { handleDesignComponentTool } from "./design-component-tool-handler.js";
+import {
+  INTERNAL_DESIGN_COMPONENT_TOOL_NAME as DESIGN_COMPONENT_TOOL_NAME,
+  type DesignComponentToolInput,
+} from "@/shared/design-agent-tools.js";
+import { handleCanonicalDesignComponentTool } from "./design-component-tool-handler.js";
 
 const context: TrustedToolContext = {
   runId: "run_component",
@@ -62,38 +65,6 @@ describe("Design Component Main tool handler", () => {
     vi.clearAllMocks();
   });
 
-  it("returns null for another tool family without touching Component state", async () => {
-    const state = setup({
-      toolCallId: "inspect",
-      toolName: "opendesign_inspect_document",
-      input: {},
-    });
-
-    await expect(handleDesignComponentTool(state.input)).resolves.toBeNull();
-    expect(state.coordinator.assertComponentToolAccess).not.toHaveBeenCalled();
-    expect(state.execute).not.toHaveBeenCalled();
-  });
-
-  it("rejects malformed Component input before policy checks", async () => {
-    const state = setup({
-      toolCallId: "create_instance_invalid",
-      toolName: DESIGN_COMPONENT_TOOL_NAME,
-      input: {
-        action: "create-instance",
-        label: "Create Instance",
-        pageId: "page_ui",
-        componentId: "button_component",
-      },
-    });
-
-    await expect(handleDesignComponentTool(state.input)).rejects.toThrow(
-      /Component.*\/instanceId/,
-    );
-    expect(state.coordinator.assertComponentToolAccess).not.toHaveBeenCalled();
-    expect(state.coordinator.assertDocumentInspected).not.toHaveBeenCalled();
-    expect(state.execute).not.toHaveBeenCalled();
-  });
-
   it("executes non-material Component metadata without visual-review delivery", async () => {
     const call: ToolCallRequest = {
       toolCallId: "create_component",
@@ -109,9 +80,12 @@ describe("Design Component Main tool handler", () => {
     };
     const state = setup(call);
 
-    await expect(handleDesignComponentTool(state.input)).resolves.toBe(
-      state.result,
-    );
+    await expect(
+      handleCanonicalDesignComponentTool(
+        state.input,
+        call.input as DesignComponentToolInput,
+      ),
+    ).resolves.toBe(state.result);
     expect(state.coordinator.assertComponentToolAccess).toHaveBeenCalledWith(
       context,
       call.input,
@@ -147,9 +121,12 @@ describe("Design Component Main tool handler", () => {
     };
     const state = setup(call);
 
-    await expect(handleDesignComponentTool(state.input)).resolves.toBe(
-      state.delivered,
-    );
+    await expect(
+      handleCanonicalDesignComponentTool(
+        state.input,
+        call.input as DesignComponentToolInput,
+      ),
+    ).resolves.toBe(state.delivered);
     expect(
       state.coordinator.assertVisualReviewBeforeWrite,
     ).toHaveBeenCalledWith(context);
@@ -182,7 +159,10 @@ describe("Design Component Main tool handler", () => {
     };
     const state = setup(call);
 
-    await handleDesignComponentTool(state.input);
+    await handleCanonicalDesignComponentTool(
+      state.input,
+      call.input as DesignComponentToolInput,
+    );
 
     expect(
       state.coordinator.assertVisualReviewBeforeWrite,

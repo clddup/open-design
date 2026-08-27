@@ -155,6 +155,8 @@ export const agentConversationMessages = {
   "agent.hierarchyUpdated": "图层结构已更新",
   "agent.updatingComponents": "正在构建可复用组件",
   "agent.componentsUpdated": "组件定义已更新",
+  "agent.updatingDesignSystem": "正在更新设计系统",
+  "agent.designSystemUpdated": "设计系统已更新",
   "agent.arrangingLayers": "正在排列图层",
   "agent.arrangementUpdated": "图层排列已更新",
   "agent.updatingPages": "正在更新页面",

@@ -12,7 +12,7 @@ export const DesignVariableContract = defineContract<DesignVariableToolInput>({
   refine: refineDesignVariable,
 });
 
-function refineDesignVariable(
+export function refineDesignVariable(
   input: DesignVariableToolInput,
 ): ValidationIssue[] {
   const keyIssue =

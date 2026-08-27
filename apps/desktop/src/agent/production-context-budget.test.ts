@@ -30,7 +30,7 @@ import {
   DESIGN_BOOTSTRAP_EDIT_TOOL_INPUT_SCHEMA,
   DESIGN_CAPABILITIES_TOOL_NAME,
   DESIGN_CAPTURE_TOOL_NAME,
-  DESIGN_COMPONENT_TOOL_NAME,
+  DESIGN_SYSTEM_TOOL_NAME,
   DESIGN_DELIVERY_SCOPE_TOOL_NAME,
   DESIGN_FIRST_SLICE_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
@@ -319,7 +319,7 @@ describe("production Agent context budget", () => {
         expect.objectContaining({ name: DESIGN_DELIVERY_SCOPE_TOOL_NAME }),
       );
       expect(gateway.requests[0]?.tools).not.toContainEqual(
-        expect.objectContaining({ name: DESIGN_COMPONENT_TOOL_NAME }),
+        expect.objectContaining({ name: DESIGN_SYSTEM_TOOL_NAME }),
       );
       const completeModelTools = DESIGN_AGENT_TOOL_SPECS.map((tool) => ({
         name: tool.name,
@@ -517,7 +517,7 @@ describe("production Agent context budget", () => {
         expect.arrayContaining([
           DESIGN_CAPTURE_TOOL_NAME,
           DESIGN_REVIEW_TOOL_NAME,
-          DESIGN_COMPONENT_TOOL_NAME,
+          DESIGN_SYSTEM_TOOL_NAME,
         ]),
       );
       expect(events.at(-1)).toMatchObject({

@@ -15,9 +15,16 @@ export const DESIGN_VECTOR_TOOL_NAME = "opendesign_edit_vector";
 export const DESIGN_FONT_TOOL_NAME = "opendesign_manage_fonts";
 export const DESIGN_TEXT_RANGE_TOOL_NAME = "opendesign_style_text_range";
 export const DESIGN_PAGE_TOOL_NAME = "opendesign_manage_pages";
-export const DESIGN_COMPONENT_TOOL_NAME = "opendesign_manage_components";
-export const DESIGN_VARIABLE_TOOL_NAME = "opendesign_manage_variables";
-export const DESIGN_STYLE_TOOL_NAME = "opendesign_manage_styles";
+export const DESIGN_SYSTEM_TOOL_NAME = "opendesign_manage_design_system";
+
+// Internal routes remain separate because their planners and runtime services
+// have different semantics. They are never disclosed in the provider catalog.
+export const INTERNAL_DESIGN_COMPONENT_TOOL_NAME =
+  "opendesign_internal_manage_components";
+export const INTERNAL_DESIGN_VARIABLE_TOOL_NAME =
+  "opendesign_internal_manage_variables";
+export const INTERNAL_DESIGN_STYLE_TOOL_NAME =
+  "opendesign_internal_manage_styles";
 export const PAGE_STRUCTURE_ACCESS_TOOL_NAME =
   "opendesign_request_page_structure_access";
 export const READ_IMAGE_TOOL_NAME = "opendesign_read_image";

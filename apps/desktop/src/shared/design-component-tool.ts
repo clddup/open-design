@@ -14,7 +14,7 @@ export const DesignComponentContract = defineContract<DesignComponentToolInput>(
   },
 );
 
-function refineDesignComponent(
+export function refineDesignComponent(
   input: DesignComponentToolInput,
 ): ValidationIssue[] {
   const issues: ValidationIssue[] = [];

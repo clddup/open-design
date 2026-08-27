@@ -21,10 +21,10 @@ describe("PiToolProgressCircuit", () => {
     const circuit = new PiToolProgressCircuit();
 
     expect(
-      circuit.recordFailure("opendesign_manage_components", invalidInput),
+      circuit.recordFailure("opendesign_manage_design_system", invalidInput),
     ).not.toHaveProperty("runTerminal");
     expect(
-      circuit.recordFailure("opendesign_manage_components", invalidInput),
+      circuit.recordFailure("opendesign_manage_design_system", invalidInput),
     ).toMatchObject({
       code: "tool_protocol_no_progress",
       recoverable: false,
@@ -102,16 +102,16 @@ describe("PiToolProgressCircuit", () => {
 
   it("resets the run circuit only when a trusted revision advances", () => {
     const circuit = new PiToolProgressCircuit();
-    circuit.recordFailure("opendesign_manage_components", invalidInput);
+    circuit.recordFailure("opendesign_manage_design_system", invalidInput);
 
     circuit.recordSuccess("opendesign_inspect_document", false);
     expect(
-      circuit.recordFailure("opendesign_manage_components", invalidInput),
+      circuit.recordFailure("opendesign_manage_design_system", invalidInput),
     ).toMatchObject({ runTerminal: true });
 
     circuit.recordSuccess("opendesign_apply_transaction", true);
     expect(
-      circuit.recordFailure("opendesign_manage_components", invalidInput),
+      circuit.recordFailure("opendesign_manage_design_system", invalidInput),
     ).not.toHaveProperty("runTerminal");
   });
 });

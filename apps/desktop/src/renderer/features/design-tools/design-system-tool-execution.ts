@@ -9,8 +9,8 @@ import type { EditorRuntime } from "@opendesign/editor-runtime";
 import {
   DesignStyleContract,
   DesignVariableContract,
-  DESIGN_STYLE_TOOL_NAME,
-  DESIGN_VARIABLE_TOOL_NAME,
+  INTERNAL_DESIGN_STYLE_TOOL_NAME,
+  INTERNAL_DESIGN_VARIABLE_TOOL_NAME,
 } from "@/shared/design-agent-tools";
 import type {
   RendererDesignToolRequest,
@@ -34,7 +34,7 @@ export function executeDesignSystemToolRequest({
   ) => never;
 }): RendererDesignToolResponse | null {
   const { call, context } = request;
-  if (call.toolName === DESIGN_VARIABLE_TOOL_NAME) {
+  if (call.toolName === INTERNAL_DESIGN_VARIABLE_TOOL_NAME) {
     const parsed = DesignVariableContract.parse(call.input);
     if (!parsed.ok) {
       throw new TypeError("Renderer received invalid canonical Variable input");
@@ -52,7 +52,7 @@ export function executeDesignSystemToolRequest({
       toolCallId: call.toolCallId,
     });
   }
-  if (call.toolName !== DESIGN_STYLE_TOOL_NAME) {
+  if (call.toolName !== INTERNAL_DESIGN_STYLE_TOOL_NAME) {
     return null;
   }
   const parsed = DesignStyleContract.parse(call.input);
