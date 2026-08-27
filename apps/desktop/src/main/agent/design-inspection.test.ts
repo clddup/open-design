@@ -183,6 +183,61 @@ describe("Agent design inspection component strategy", () => {
     ).toBe("Navigation");
   });
 
+  it("preserves the exact reusable-catalog field path in inspection failure", () => {
+    try {
+      parseInspectedHierarchy(
+        {
+          runId: "run_1",
+          sessionId: "conversation_1",
+          documentId: "document_1",
+          revision: 9,
+          scope: { kind: "page", pageId: "page_1", selectedNodeIds: [] },
+          mutationTarget: { kind: "page", pageId: "page_1" },
+        },
+        {
+          observedRevision: 9,
+          content: {
+            document: {
+              documentId: "document_1",
+              revision: 9,
+              pagesById: {},
+              nodesById: {},
+              componentsById: {},
+              componentCatalog: {
+                totalCount: 1,
+                truncated: false,
+                components: [
+                  {
+                    componentId: "component_navigation",
+                    name: "Navigation",
+                    availability: "current-scope",
+                    usageCount: 1,
+                    scopeUsageCount: 2,
+                    variantProperties: {},
+                    properties: [],
+                    propertiesTruncated: false,
+                  },
+                ],
+              },
+            },
+          },
+        },
+      );
+      throw new Error("Expected invalid component catalog");
+    } catch (error) {
+      if (!(error instanceof Error)) throw error;
+      expect(error.cause).toMatchObject({
+        details: {
+          issues: [
+            {
+              path: "/componentCatalog/components/0/scopeUsageCount",
+            },
+          ],
+        },
+      });
+    }
+  });
+
   it("reports no component-strategy issues for declared Main, Instance, and ordinary semantic roots", () => {
     const inspection = completeInspection();
 

@@ -1,174 +1,222 @@
+import {
+  defineContract,
+  type ValidationIssue,
+} from "@opendesign/contract-runtime";
+import { Type, type Static } from "@sinclair/typebox";
+
 export const MAX_DESIGN_SYSTEM_CATALOG_COMPONENTS = 64;
 export const MAX_DESIGN_SYSTEM_CATALOG_PROPERTIES = 12;
 export const MAX_DESIGN_SYSTEM_CATALOG_CHARACTERS = 12_000;
 
-export type DesignSystemComponentCatalogEntry = {
-  componentId: string;
-  name: string;
-  description?: string;
-  descriptionTruncated?: true;
-  availability: "current-scope" | "design-file";
-  usageCount: number;
-  scopeUsageCount: number;
-  variantSetId?: string;
-  variantProperties: Record<string, string>;
-  properties: Array<{
-    name: string;
-    type: "BOOLEAN" | "TEXT" | "INSTANCE_SWAP" | "SLOT";
-  }>;
-  propertiesTruncated: boolean;
-};
+const CatalogIdSchema = Type.String({
+  minLength: 1,
+  maxLength: 512,
+  pattern: "^[^\\u0000-\\u001F\\u007F]+$",
+});
+const ComponentIdSchema = Type.String({
+  minLength: 1,
+  maxLength: 256,
+  pattern: "^[^\\u0000-\\u001F\\u007F]+$",
+});
+const HumanTextSchema = Type.String({
+  minLength: 1,
+  maxLength: 512,
+  pattern: "^[^\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F\\u007F]+$",
+});
+const CountSchema = Type.Integer({
+  minimum: 0,
+  maximum: Number.MAX_SAFE_INTEGER,
+});
 
-export type DesignSystemComponentCatalog = {
-  totalCount: number;
-  truncated: boolean;
-  components: DesignSystemComponentCatalogEntry[];
-};
+export const DesignSystemComponentCatalogPropertySchema = Type.Object(
+  {
+    name: CatalogIdSchema,
+    type: Type.Union([
+      Type.Literal("BOOLEAN"),
+      Type.Literal("TEXT"),
+      Type.Literal("INSTANCE_SWAP"),
+      Type.Literal("SLOT"),
+    ]),
+  },
+  { additionalProperties: false },
+);
+
+export const DesignSystemComponentCatalogEntrySchema = Type.Object(
+  {
+    componentId: ComponentIdSchema,
+    name: Type.String({
+      minLength: 1,
+      maxLength: 256,
+      pattern: "^[^\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F\\u007F]+$",
+    }),
+    description: Type.Optional(
+      Type.String({
+        minLength: 1,
+        maxLength: 240,
+        pattern: "^[^\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F\\u007F]+$",
+      }),
+    ),
+    descriptionTruncated: Type.Optional(Type.Literal(true)),
+    availability: Type.Union([
+      Type.Literal("current-scope"),
+      Type.Literal("design-file"),
+    ]),
+    usageCount: CountSchema,
+    scopeUsageCount: CountSchema,
+    variantSetId: Type.Optional(ComponentIdSchema),
+    variantProperties: Type.Record(CatalogIdSchema, HumanTextSchema, {
+      maxProperties: 12,
+    }),
+    properties: Type.Array(DesignSystemComponentCatalogPropertySchema, {
+      maxItems: MAX_DESIGN_SYSTEM_CATALOG_PROPERTIES,
+    }),
+    propertiesTruncated: Type.Boolean(),
+  },
+  { additionalProperties: false },
+);
+
+export const DesignSystemComponentCatalogSchema = Type.Object(
+  {
+    totalCount: CountSchema,
+    truncated: Type.Boolean(),
+    components: Type.Array(DesignSystemComponentCatalogEntrySchema, {
+      maxItems: MAX_DESIGN_SYSTEM_CATALOG_COMPONENTS,
+    }),
+  },
+  { additionalProperties: false },
+);
+
+export type DesignSystemComponentCatalogEntry = Static<
+  typeof DesignSystemComponentCatalogEntrySchema
+>;
+export type DesignSystemComponentCatalog = Static<
+  typeof DesignSystemComponentCatalogSchema
+>;
+
+export const DesignSystemComponentCatalogContract =
+  defineContract<DesignSystemComponentCatalog>({
+    schema: DesignSystemComponentCatalogSchema,
+    code: "design.component_catalog_structure_invalid",
+    subject: "Design File component catalog",
+    refine: componentCatalogDomainIssues,
+    clone: false,
+  });
 
 export function isDesignSystemComponentCatalog(
   value: unknown,
 ): value is DesignSystemComponentCatalog {
-  if (
-    !isRecord(value) ||
-    !exactKeys(value, ["totalCount", "truncated", "components"])
-  ) {
-    return false;
+  return DesignSystemComponentCatalogContract.parse(value).ok;
+}
+
+function componentCatalogDomainIssues(
+  catalog: DesignSystemComponentCatalog,
+): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+  if (catalog.totalCount < catalog.components.length) {
+    issues.push(
+      issue(
+        "design.component_catalog_total_count_invalid",
+        "/totalCount",
+        "totalCount cannot be smaller than the returned component list",
+      ),
+    );
+  }
+  if (catalog.truncated !== catalog.totalCount > catalog.components.length) {
+    issues.push(
+      issue(
+        "design.component_catalog_truncation_invalid",
+        "/truncated",
+        "truncated must describe whether components omit catalog entries",
+      ),
+    );
   }
   if (
-    !Number.isInteger(value.totalCount) ||
-    Number(value.totalCount) < 0 ||
-    typeof value.truncated !== "boolean" ||
-    !Array.isArray(value.components) ||
-    value.components.length > MAX_DESIGN_SYSTEM_CATALOG_COMPONENTS ||
-    JSON.stringify(value.components).length >
-      MAX_DESIGN_SYSTEM_CATALOG_CHARACTERS ||
-    Number(value.totalCount) < value.components.length ||
-    value.truncated !== Number(value.totalCount) > value.components.length
+    JSON.stringify(catalog.components).length >
+    MAX_DESIGN_SYSTEM_CATALOG_CHARACTERS
   ) {
-    return false;
+    issues.push(
+      issue(
+        "design.component_catalog_budget_exceeded",
+        "/components",
+        "Serialized component catalog exceeds the inspection context budget",
+      ),
+    );
   }
-  const componentIds = new Set<string>();
-  for (const component of value.components) {
-    if (!isDesignSystemComponentCatalogEntry(component)) return false;
-    if (componentIds.has(component.componentId)) return false;
-    componentIds.add(component.componentId);
-  }
-  return true;
+  issues.push(...componentEntryDomainIssues(catalog.components));
+  return issues;
 }
 
-function isDesignSystemComponentCatalogEntry(
-  value: unknown,
-): value is DesignSystemComponentCatalogEntry {
-  if (!isRecord(value)) return false;
-  const optionalDescription =
-    value.description === undefined || safeHumanText(value.description, 240);
-  const optionalDescriptionTruncated =
-    value.descriptionTruncated === undefined ||
-    (value.descriptionTruncated === true && value.description !== undefined);
-  const optionalVariantSet =
-    value.variantSetId === undefined || safeId(value.variantSetId, 256);
-  if (
-    !safeId(value.componentId, 256) ||
-    !safeHumanText(value.name, 256) ||
-    !optionalDescription ||
-    !optionalDescriptionTruncated ||
-    (value.availability !== "current-scope" &&
-      value.availability !== "design-file") ||
-    !nonNegativeInteger(value.usageCount) ||
-    !nonNegativeInteger(value.scopeUsageCount) ||
-    Number(value.scopeUsageCount) > Number(value.usageCount) ||
-    !optionalVariantSet ||
-    !isStringRecord(value.variantProperties, 12) ||
-    !Array.isArray(value.properties) ||
-    value.properties.length > MAX_DESIGN_SYSTEM_CATALOG_PROPERTIES ||
-    typeof value.propertiesTruncated !== "boolean"
-  ) {
-    return false;
-  }
-  const propertyNames = new Set<string>();
-  for (const property of value.properties) {
-    if (
-      !isRecord(property) ||
-      !safeId(property.name, 512) ||
-      !["BOOLEAN", "TEXT", "INSTANCE_SWAP", "SLOT"].includes(
-        String(property.type),
-      ) ||
-      !exactKeys(property, ["name", "type"]) ||
-      propertyNames.has(property.name)
-    ) {
-      return false;
-    }
-    propertyNames.add(property.name);
-  }
-  return exactKeys(value, [
-    "componentId",
-    "name",
-    ...(value.description === undefined ? [] : ["description"]),
-    ...(value.descriptionTruncated === undefined
-      ? []
-      : ["descriptionTruncated"]),
-    "availability",
-    "usageCount",
-    "scopeUsageCount",
-    ...(value.variantSetId === undefined ? [] : ["variantSetId"]),
-    "variantProperties",
-    "properties",
-    "propertiesTruncated",
-  ]);
-}
-
-function isStringRecord(value: unknown, maxProperties: number): boolean {
-  if (!isRecord(value)) return false;
-  const entries = Object.entries(value);
-  return (
-    entries.length <= maxProperties &&
-    entries.every(([key, item]) => safeId(key, 512) && safeHumanText(item, 512))
-  );
-}
-
-function nonNegativeInteger(value: unknown): boolean {
-  return Number.isInteger(value) && Number(value) >= 0;
-}
-
-function safeId(value: unknown, maxLength: number): value is string {
-  return (
-    typeof value === "string" &&
-    value.length > 0 &&
-    value.length <= maxLength &&
-    ![...value].some((character) => {
-      const codePoint = character.codePointAt(0);
-      return codePoint !== undefined && (codePoint <= 31 || codePoint === 127);
-    })
-  );
-}
-
-function safeHumanText(value: unknown, maxLength: number): value is string {
-  return (
-    typeof value === "string" &&
-    value.length > 0 &&
-    value.length <= maxLength &&
-    ![...value].some((character) => {
-      const codePoint = character.codePointAt(0);
-      return (
-        codePoint !== undefined &&
-        ((codePoint <= 31 && ![9, 10, 13].includes(codePoint)) ||
-          codePoint === 127)
+function componentEntryDomainIssues(
+  components: readonly DesignSystemComponentCatalogEntry[],
+): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+  const componentIndexById = new Map<string, number>();
+  components.forEach((component, index) => {
+    const path = `/components/${index}`;
+    const existing = componentIndexById.get(component.componentId);
+    if (existing !== undefined) {
+      issues.push(
+        issue(
+          "design.component_catalog_component_duplicate",
+          `${path}/componentId`,
+          `Component ID is already used at /components/${existing}/componentId`,
+        ),
       );
-    })
-  );
+    } else {
+      componentIndexById.set(component.componentId, index);
+    }
+    if (component.scopeUsageCount > component.usageCount) {
+      issues.push(
+        issue(
+          "design.component_catalog_scope_usage_invalid",
+          `${path}/scopeUsageCount`,
+          "scopeUsageCount cannot exceed the Design File usageCount",
+        ),
+      );
+    }
+    if (component.descriptionTruncated && !component.description) {
+      issues.push(
+        issue(
+          "design.component_catalog_description_invalid",
+          `${path}/descriptionTruncated`,
+          "descriptionTruncated requires a returned description",
+        ),
+      );
+    }
+    issues.push(...propertyNameDomainIssues(component, path));
+  });
+  return issues;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
+function propertyNameDomainIssues(
+  component: DesignSystemComponentCatalogEntry,
+  path: string,
+): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+  const propertyIndexByName = new Map<string, number>();
+  component.properties.forEach((property, index) => {
+    const existing = propertyIndexByName.get(property.name);
+    if (existing !== undefined) {
+      issues.push(
+        issue(
+          "design.component_catalog_property_duplicate",
+          `${path}/properties/${index}/name`,
+          `Property name is already used at ${path}/properties/${existing}/name`,
+        ),
+      );
+    } else {
+      propertyIndexByName.set(property.name, index);
+    }
+  });
+  return issues;
 }
 
-function exactKeys(
-  value: Record<string, unknown>,
-  expected: readonly string[],
-): boolean {
-  const keys = Object.keys(value).sort();
-  return (
-    keys.length === expected.length &&
-    keys.every((key, index) => key === [...expected].sort()[index])
-  );
+function issue(code: string, path: string, message: string): ValidationIssue {
+  return {
+    code,
+    path,
+    message,
+    recovery:
+      "Regenerate the component catalog from the current exact-revision Design File inspection.",
+  };
 }

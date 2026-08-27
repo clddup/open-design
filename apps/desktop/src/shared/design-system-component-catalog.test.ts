@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  DesignSystemComponentCatalogContract,
   isDesignSystemComponentCatalog,
   type DesignSystemComponentCatalog,
 } from "./design-system-component-catalog";
@@ -46,5 +47,56 @@ describe("design-system component catalog", () => {
     expect(
       isDesignSystemComponentCatalog({ ...catalog, untrusted: true }),
     ).toBe(false);
+  });
+
+  it("reports structure and cross-field failures at exact catalog paths", () => {
+    expect(
+      DesignSystemComponentCatalogContract.issues({
+        ...catalog,
+        components: [
+          {
+            ...catalog.components[0],
+            properties: [{ name: "Label", type: "NUMBER" }],
+          },
+        ],
+      })[0]?.path,
+    ).toBe("/components/0/properties/0/type");
+
+    expect(
+      DesignSystemComponentCatalogContract.issues({
+        ...catalog,
+        components: [
+          {
+            ...catalog.components[0],
+            scopeUsageCount: 9,
+          },
+        ],
+      }),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "design.component_catalog_scope_usage_invalid",
+        path: "/components/0/scopeUsageCount",
+      }),
+    );
+
+    expect(
+      DesignSystemComponentCatalogContract.issues({
+        ...catalog,
+        components: [
+          {
+            ...catalog.components[0],
+            properties: [
+              { name: "Label", type: "TEXT" },
+              { name: "Label", type: "BOOLEAN" },
+            ],
+          },
+        ],
+      }),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "design.component_catalog_property_duplicate",
+        path: "/components/0/properties/1/name",
+      }),
+    );
   });
 });

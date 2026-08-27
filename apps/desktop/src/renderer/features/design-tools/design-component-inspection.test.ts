@@ -1,6 +1,9 @@
 import { createWelcomeDocument } from "@opendesign/editor-runtime";
 import { describe, expect, it } from "vitest";
-import { MAX_DESIGN_SYSTEM_CATALOG_CHARACTERS } from "@/shared/design-system-component-catalog";
+import {
+  DesignSystemComponentCatalogContract,
+  MAX_DESIGN_SYSTEM_CATALOG_CHARACTERS,
+} from "@/shared/design-system-component-catalog";
 import { createScopedComponentInspection } from "./design-component-inspection";
 
 describe("scoped component inspection catalog", () => {
@@ -46,6 +49,10 @@ describe("scoped component inspection catalog", () => {
     });
     expect(inspection.componentsById).toHaveProperty("component_current");
     expect(inspection.componentsById).not.toHaveProperty("component_file");
+    expect(
+      DesignSystemComponentCatalogContract.parse(inspection.componentCatalog)
+        .ok,
+    ).toBe(true);
   });
 
   it("bounds the complete catalog payload and marks omitted components", () => {
@@ -77,6 +84,10 @@ describe("scoped component inspection catalog", () => {
     expect(inspection.componentCatalog.components[0]).toMatchObject({
       descriptionTruncated: true,
     });
+    expect(
+      DesignSystemComponentCatalogContract.parse(inspection.componentCatalog)
+        .ok,
+    ).toBe(true);
   });
 });
 
