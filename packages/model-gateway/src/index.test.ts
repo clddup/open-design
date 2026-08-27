@@ -3,6 +3,7 @@ import { Value } from "@sinclair/typebox/value";
 import {
   CanonicalStreamEventSchema,
   MockModelGateway,
+  ModelSelectionSchema,
   ModelResponseAccumulator,
   MultiProtocolModelGateway,
   SerializableModelRequestSchema,
@@ -13,6 +14,23 @@ import {
 } from "./index.js";
 
 const signal = new AbortController().signal;
+
+describe("model selection contract", () => {
+  it("requires a non-empty model ID at every consumer boundary", () => {
+    expect(
+      Value.Check(ModelSelectionSchema, {
+        providerId: "provider_1",
+        modelId: "design-model",
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(ModelSelectionSchema, {
+        providerId: "provider_1",
+        modelId: "",
+      }),
+    ).toBe(false);
+  });
+});
 
 function configuration(
   apiFormat: ModelApiFormat,

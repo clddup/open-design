@@ -41,10 +41,20 @@ export const ModelAuthModeSchema = Type.Union(
 export const ModelSelectionSchema = Type.Object(
   {
     providerId: ModelWireIdSchema,
-    modelId: ModelWireTextSchema(256),
+    modelId: Type.String({ minLength: 1, maxLength: 256 }),
     reasoningEffort: Type.Optional(ModelReasoningEffortSchema),
   },
   { additionalProperties: false },
 );
 
+export const ResolvedModelIdentitySchema = Type.Object(
+  {
+    ...ModelSelectionSchema.properties,
+    apiFormat: ModelApiFormatSchema,
+    responseId: Type.Optional(ModelWireIdSchema),
+  },
+  { additionalProperties: false },
+);
+
 export type ModelSelection = Static<typeof ModelSelectionSchema>;
+export type ResolvedModelIdentity = Static<typeof ResolvedModelIdentitySchema>;

@@ -195,6 +195,9 @@ importers:
       '@opendesign/contract-runtime':
         specifier: workspace:*
         version: link:../contract-runtime
+      '@opendesign/model-gateway':
+        specifier: workspace:*
+        version: link:../model-gateway
       '@opendesign/workspace-contracts':
         specifier: workspace:*
         version: link:../workspace-contracts

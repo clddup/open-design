@@ -17,6 +17,11 @@ export const SessionIdSchema = AgentIdSchema;
 export const MessageIdSchema = AgentIdSchema;
 export const ApprovalIdSchema = AgentIdSchema;
 export const TransactionIdSchema = AgentIdSchema;
+export const ApprovalDecisionSchema = Type.Union([
+  Type.Literal("allow_once"),
+  Type.Literal("allow_session"),
+  Type.Literal("deny"),
+]);
 
 const SelectedNodeIdsSchema = Type.Array(AgentIdSchema, {
   maxItems: MAX_SELECTED_NODE_IDS,
@@ -70,6 +75,7 @@ export const DesignMutationTargetSchema = Type.Union([
 
 export type SelectionScope = Static<typeof SelectionScopeSchema>;
 export type DesignMutationTarget = Static<typeof DesignMutationTargetSchema>;
+export type ApprovalDecision = Static<typeof ApprovalDecisionSchema>;
 
 export const SelectionScopeContract = defineContract<SelectionScope>({
   schema: SelectionScopeSchema,

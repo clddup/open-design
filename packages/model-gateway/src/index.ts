@@ -14,12 +14,13 @@ import { streamSimple as streamOpenAICompletions } from "@earendil-works/pi-ai/a
 import { streamSimple as streamOpenAIResponses } from "@earendil-works/pi-ai/api/openai-responses";
 import { Type, type Static } from "@sinclair/typebox";
 import {
-  ModelApiFormatSchema,
   ModelSelectionSchema,
+  ResolvedModelIdentitySchema,
   ModelWireIdSchema,
   ModelWireTextSchema,
   type ModelApiFormat,
   type ModelAuthMode,
+  type ResolvedModelIdentity,
 } from "./provider-config.js";
 import { exposesReasoningSummary } from "./reasoning-visibility.js";
 export {
@@ -30,23 +31,16 @@ export {
   ModelAuthModeSchema,
   ModelReasoningEffortSchema,
   ModelSelectionSchema,
+  ResolvedModelIdentitySchema,
   ModelWireIdSchema,
   ModelWireTextSchema,
   type ModelApiFormat,
   type ModelAuthMode,
   type ModelReasoningEffort,
   type ModelSelection,
+  type ResolvedModelIdentity,
 } from "./provider-config.js";
 export type ModelLatencyProfile = "interactive" | "extended";
-
-export const ResolvedModelIdentitySchema = Type.Object(
-  {
-    ...ModelSelectionSchema.properties,
-    apiFormat: ModelApiFormatSchema,
-    responseId: Type.Optional(ModelWireIdSchema),
-  },
-  { additionalProperties: false },
-);
 
 export const ModelUsageSchema = Type.Object(
   {
@@ -337,7 +331,6 @@ export const CanonicalStreamEventSchema = Type.Union([
   ),
 ]);
 
-export type ResolvedModelIdentity = Static<typeof ResolvedModelIdentitySchema>;
 export type ModelUsage = Static<typeof ModelUsageSchema>;
 export type ModelError = Static<typeof ModelErrorSchema>;
 export type CanonicalContentBlock = Static<typeof CanonicalContentBlockSchema>;

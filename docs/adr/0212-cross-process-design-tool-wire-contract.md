@@ -21,7 +21,7 @@
 
 - Utility→Main→Renderer 的同一非法字段保持同一根因和完整嵌套路径，恢复逻辑不再解析 message。
 - Tool Execution Event 与两段 response 的 Trusted Result revision/rebase 错误均定位到真实 `/result/designRevision/...`。
-- `packages/agent-contracts/src/index.ts` 删除 600 余行 Tool Wire 实现并继续作为兼容导出入口；剩余 Agent Event/Timeline/Request 聚合仍按后续 owner 切片拆分，不能把本次描述为整个根入口重构完成。
+- `packages/agent-contracts/src/index.ts` 删除 600 余行 Tool Wire 实现并继续作为稳定导出入口；剩余 Agent Event/Timeline/Request 聚合已由 ADR-0213 迁出，根入口不再承载 wire 实现。
 - 不增加 Provider 工具数量、产品版本、内容 hash、源码/fixture 数量门禁或旧 boolean 兼容路径。
 
 ## 验证
