@@ -1,7 +1,6 @@
 import {
   Type,
   type Static,
-  type TObject,
   type TSchema,
   type TUnion,
 } from "@sinclair/typebox";
@@ -28,6 +27,10 @@ import { createTransactionWireSchemas } from "./transaction-wire-schema.js";
 import { createNodeOperationSchemas } from "./node-operation-schema.js";
 import { createResourceOperationSchemas } from "./resource-operation-schema.js";
 import { createDesignOperationSchema } from "./operation-schema.js";
+import { createComponentSchemas } from "./component-schema.js";
+import { createDocumentResourceSchemas } from "./document-resource-schema.js";
+import { createLibrarySchemas } from "./library-schema.js";
+import { createDesignDocumentSchema } from "./design-document-schema.js";
 import * as limits from "./limits.js";
 import * as versions from "./versions.js";
 import {
@@ -625,57 +628,36 @@ export const BooleanPropertiesSchema = Type.Object(
   { additionalProperties: false },
 );
 
-export const ComponentOverridePatchSchema = Type.Object(
-  {
-    name: Type.Optional(Type.String()),
-    visible: Type.Optional(Type.Boolean()),
-    locked: Type.Optional(Type.Boolean()),
-    opacity: Type.Optional(Type.Number({ minimum: 0, maximum: 1 })),
-    blendMode: Type.Optional(BlendModeSchema),
-    effects: Type.Optional(Type.Array(EffectSchema)),
-    maskMode: Type.Optional(MaskModeSchema),
-    properties: Type.Optional(JsonObjectSchema),
-  },
-  { additionalProperties: false },
-);
+const componentSchemas = createComponentSchemas({
+  blendModeSchema: BlendModeSchema,
+  effectSchema: EffectSchema,
+  maskModeSchema: MaskModeSchema,
+  jsonObjectSchema: JsonObjectSchema,
+  componentPropertyAssignmentsSchema: ComponentPropertyAssignmentsSchema,
+  componentPropertyDefinitionsSchema: ComponentPropertyDefinitionsSchema,
+  variantPropertiesSchema: VariantPropertiesSchema,
+});
 
-export const ComponentOverrideSchema = Type.Object(
-  {
-    sourcePath: Type.Array(Type.String({ minLength: 1 }), {
-      minItems: 1,
-      maxItems: 64,
-    }),
-    patch: ComponentOverridePatchSchema,
-  },
-  { additionalProperties: false },
-);
+export const {
+  ComponentOverridePatchSchema,
+  ComponentOverrideSchema,
+  InstancePropertiesSchema,
+  ComponentDefinitionSchema,
+} = componentSchemas;
 
-export const InstancePropertiesSchema = Type.Object(
-  {
-    componentId: Type.String({ minLength: 1 }),
-    componentProperties: ComponentPropertyAssignmentsSchema,
-    overrides: Type.Array(ComponentOverrideSchema, { maxItems: 4_096 }),
-  },
-  { additionalProperties: false },
-);
+const documentResourceSchemas = createDocumentResourceSchemas({
+  explicitVariableModesSchema: variables.ExplicitVariableModesSchema,
+  sizeSchema: SizeSchema,
+  jsonObjectSchema: JsonObjectSchema,
+});
 
-export const ComponentDefinitionSchema = Type.Object(
-  {
-    id: Type.String({ minLength: 1 }),
-    name: Type.String({ minLength: 1, maxLength: 256 }),
-    rootNodeId: Type.String({ minLength: 1 }),
-    description: Type.Optional(Type.String({ maxLength: 2_000 })),
-    componentPropertyOrder: Type.Array(
-      Type.String({ minLength: 1, maxLength: 512 }),
-      { maxItems: 4_096, uniqueItems: true },
-    ),
-    componentPropertyDefinitions: ComponentPropertyDefinitionsSchema,
-    variantSetId: Type.Optional(Type.String({ minLength: 1, maxLength: 256 })),
-    variantProperties: VariantPropertiesSchema,
-    extensions: JsonObjectSchema,
-  },
-  { additionalProperties: false },
-);
+export const {
+  DesignPageSchema,
+  DesignAssetSchema,
+  ImageAssetDerivationOperationSchema,
+  ImageLightingPresetSchema,
+  ImageAssetDerivationSchema,
+} = documentResourceSchemas;
 
 const NodeBaseProperties = {
   id: Type.String({ minLength: 1 }),
@@ -900,269 +882,68 @@ export const DesignNodeSchema: TUnion<
   SliceNodeSchema,
 ]);
 
-export const DesignPageSchema = Type.Object(
-  {
-    id: Type.String({ minLength: 1 }),
-    name: Type.String(),
-    rootNodeIds: Type.Array(Type.String({ minLength: 1 }), {
-      uniqueItems: true,
-    }),
-    explicitVariableModes: Type.Optional(variables.ExplicitVariableModesSchema),
-    extensions: JsonObjectSchema,
-  },
-  { additionalProperties: false },
-);
+const librarySchemas = createLibrarySchemas({
+  componentDefinitionSchema: ComponentDefinitionSchema,
+  designNodeSchema: DesignNodeSchema,
+  designAssetSchema: DesignAssetSchema,
+  variantSetDefinitionSchema: VariantSetDefinitionSchema,
+  sharedStyleDefinitionSchema: SharedStyleDefinitionSchema,
+  variableCollectionDefinitionSchema:
+    variables.VariableCollectionDefinitionSchema,
+  variableDefinitionSchema: variables.VariableDefinitionSchema,
+});
 
-export const DesignAssetSchema = Type.Object(
-  {
-    id: Type.String({ minLength: 1 }),
-    kind: Type.Union([
-      Type.Literal("image"),
-      Type.Literal("font"),
-      Type.Literal("binary"),
-    ]),
-    name: Type.String(),
-    mimeType: Type.String({ minLength: 1 }),
-    source: Type.Object(
-      {
-        type: Type.Union([
-          Type.Literal("uri"),
-          Type.Literal("data"),
-          Type.Literal("external"),
-        ]),
-        value: Type.String(),
-      },
-      { additionalProperties: false },
-    ),
-    size: Type.Optional(SizeSchema),
-    extensions: JsonObjectSchema,
-  },
-  { additionalProperties: false },
-);
+export const {
+  LibraryReleaseIdentitySchema,
+  LibraryComponentSourceSchema,
+  LibraryVariantSetSourceSchema,
+  LibraryStyleSourceSchema,
+  LibraryVariableCollectionSourceSchema,
+  LibraryVariableSourceSchema,
+  LibraryReleaseSnapshotSchema,
+} = librarySchemas;
 
-export const ImageAssetDerivationOperationSchema = Type.Union([
-  Type.Literal("replacement"),
-  Type.Literal("remove-background"),
-  Type.Literal("replace-background"),
-  Type.Literal("erase-object"),
-  Type.Literal("isolate-object"),
-  Type.Literal("expand"),
-  Type.Literal("upscale"),
-  Type.Literal("prompt-edit"),
-  Type.Literal("relight"),
-  Type.Literal("style-harmonize"),
-]);
-
-export const ImageLightingPresetSchema = Type.Union([
-  Type.Literal("natural-soft"),
-  Type.Literal("studio-softbox"),
-  Type.Literal("golden-hour"),
-  Type.Literal("moonlight"),
-  Type.Literal("neon"),
-]);
-
-export const ImageAssetDerivationSchema = Type.Object(
-  {
-    id: Type.String({ minLength: 1, maxLength: 256 }),
-    sourceAssetId: Type.String({ minLength: 1 }),
-    resultAssetId: Type.String({ minLength: 1 }),
-    operation: ImageAssetDerivationOperationSchema,
-    prompt: Type.Optional(Type.String({ minLength: 1, maxLength: 32_000 })),
-    lightingPreset: Type.Optional(ImageLightingPresetSchema),
-    maskAssetId: Type.Optional(Type.String({ minLength: 1 })),
-    referenceAssetIds: Type.Array(Type.String({ minLength: 1 }), {
-      maxItems: 16,
-      uniqueItems: true,
-    }),
-    extensions: JsonObjectSchema,
-  },
-  { additionalProperties: false },
-);
-
-const LibraryReleaseIdentityProperties = {
-  libraryId: Type.String({ minLength: 1, maxLength: 256 }),
-  releaseId: Type.String({ minLength: 1, maxLength: 256 }),
-  sourceProjectId: Type.String({ minLength: 1, maxLength: 256 }),
-  sourceDesignFileId: Type.String({ minLength: 1, maxLength: 256 }),
-  sourceDocumentId: Type.String({ minLength: 1, maxLength: 256 }),
-};
-
-export const LibraryReleaseIdentitySchema = Type.Object(
-  LibraryReleaseIdentityProperties,
-  { additionalProperties: false },
-);
-
-export const LibraryComponentSourceSchema = Type.Object(
-  {
-    source: Type.Object(
-      {
-        ...LibraryReleaseIdentityProperties,
-        sourceComponentId: Type.String({ minLength: 1, maxLength: 256 }),
-      },
-      { additionalProperties: false },
-    ),
-    component: ComponentDefinitionSchema,
-    nodesById: Type.Record(Type.String(), DesignNodeSchema),
-    assetsById: Type.Record(Type.String(), DesignAssetSchema),
-    dependencyComponentIds: Type.Array(
-      Type.String({ minLength: 1, maxLength: 256 }),
-      { maxItems: 4_096, uniqueItems: true },
-    ),
-  },
-  { additionalProperties: false },
-);
-
-export const LibraryVariantSetSourceSchema = Type.Object(
-  {
-    source: Type.Object(
-      {
-        ...LibraryReleaseIdentityProperties,
-        sourceVariantSetId: Type.String({ minLength: 1, maxLength: 256 }),
-      },
-      { additionalProperties: false },
-    ),
-    variantSet: VariantSetDefinitionSchema,
-  },
-  { additionalProperties: false },
-);
-
-export const LibraryStyleSourceSchema = Type.Object(
-  {
-    source: Type.Object(
-      {
-        ...LibraryReleaseIdentityProperties,
-        sourceStyleId: Type.String({ minLength: 1, maxLength: 256 }),
-      },
-      { additionalProperties: false },
-    ),
-    style: SharedStyleDefinitionSchema,
-  },
-  { additionalProperties: false },
-);
-
-export const LibraryVariableCollectionSourceSchema = Type.Object(
-  {
-    source: Type.Object(
-      {
-        ...LibraryReleaseIdentityProperties,
-        sourceVariableCollectionId: Type.String({
-          minLength: 1,
-          maxLength: 256,
-        }),
-      },
-      { additionalProperties: false },
-    ),
-    collection: variables.VariableCollectionDefinitionSchema,
-  },
-  { additionalProperties: false },
-);
-
-export const LibraryVariableSourceSchema = Type.Object(
-  {
-    source: Type.Object(
-      {
-        ...LibraryReleaseIdentityProperties,
-        sourceVariableId: Type.String({ minLength: 1, maxLength: 256 }),
-      },
-      { additionalProperties: false },
-    ),
-    variable: variables.VariableDefinitionSchema,
-  },
-  { additionalProperties: false },
-);
-
-export const LibraryReleaseSnapshotSchema = Type.Object(
-  {
-    version: Type.Literal(3),
-    libraryId: Type.String({ minLength: 1, maxLength: 256 }),
-    releaseId: Type.String({ minLength: 1, maxLength: 256 }),
-    sourceProjectId: Type.String({ minLength: 1, maxLength: 256 }),
-    sourceDesignFileId: Type.String({ minLength: 1, maxLength: 256 }),
-    sourceDocumentId: Type.String({ minLength: 1, maxLength: 256 }),
-    name: Type.String({ minLength: 1, maxLength: 256 }),
-    publishedAt: Type.String({ minLength: 1, maxLength: 64 }),
-    componentsById: Type.Record(
-      Type.String({ minLength: 1, maxLength: 256 }),
-      LibraryComponentSourceSchema,
-    ),
-    variantSetsById: Type.Record(
-      Type.String({ minLength: 1, maxLength: 256 }),
-      LibraryVariantSetSourceSchema,
-    ),
-    stylesById: Type.Record(
-      Type.String({ minLength: 1, maxLength: 256 }),
-      LibraryStyleSourceSchema,
-    ),
-    variableCollectionsById: Type.Record(
-      Type.String({ minLength: 1, maxLength: 256 }),
-      LibraryVariableCollectionSourceSchema,
-    ),
-    variablesById: Type.Record(
-      Type.String({ minLength: 1, maxLength: 256 }),
-      LibraryVariableSourceSchema,
-    ),
-  },
-  { additionalProperties: false },
-);
-
-const DesignDocumentIdentityProperties = {
-  format: Type.Literal(DESIGN_FORMAT),
-  schemaVersion: Type.Literal(versions.DESIGN_SCHEMA_VERSION),
-  documentId: Type.String({ minLength: 1 }),
-  revision: Type.Integer({ minimum: 0 }),
-  pageOrder: Type.Array(Type.String({ minLength: 1 }), {
-    minItems: 1,
-    uniqueItems: true,
-  }),
-  pagesById: Type.Record(Type.String(), DesignPageSchema),
-  nodesById: Type.Record(Type.String(), DesignNodeSchema),
-};
-
-const DesignDocumentResourceProperties = {
-  componentsById: Type.Record(Type.String(), ComponentDefinitionSchema),
-  variantSetsById: Type.Record(Type.String(), VariantSetDefinitionSchema),
-  libraryComponentsById: Type.Record(
-    Type.String(),
-    LibraryComponentSourceSchema,
-  ),
-  libraryVariantSetsById: Type.Record(
-    Type.String(),
-    LibraryVariantSetSourceSchema,
-  ),
-  libraryStylesById: Type.Record(Type.String(), LibraryStyleSourceSchema),
-  libraryVariableCollectionsById: Type.Record(
-    Type.String(),
-    LibraryVariableCollectionSourceSchema,
-  ),
-  libraryVariablesById: Type.Record(Type.String(), LibraryVariableSourceSchema),
-  styleOrderByType: StyleOrderByTypeSchema,
-  stylesById: Type.Record(Type.String(), SharedStyleDefinitionSchema),
-  interactionsById: Type.Record(Type.String(), JsonValueSchema),
-  assetsById: Type.Record(Type.String(), DesignAssetSchema),
-  imageAssetDerivationOrder: Type.Array(
-    Type.String({ minLength: 1, maxLength: 256 }),
-    { maxItems: 65_536, uniqueItems: true },
-  ),
-  imageAssetDerivationsById: Type.Record(
-    Type.String(),
-    ImageAssetDerivationSchema,
-  ),
-  extensions: JsonObjectSchema,
-};
-
-type DesignDocumentProperties = typeof DesignDocumentIdentityProperties &
-  typeof DesignDocumentResourceProperties &
-  typeof variables.VariableDocumentProperties;
-
-export const DesignDocumentSchema: TObject<DesignDocumentProperties> =
-  Type.Object(
-    {
-      ...DesignDocumentIdentityProperties,
-      ...DesignDocumentResourceProperties,
-      ...variables.VariableDocumentProperties,
-    },
-    { additionalProperties: false },
-  );
+export const DesignDocumentSchema: ReturnType<
+  typeof createDesignDocumentSchema<{
+    format: typeof DESIGN_FORMAT;
+    schemaVersion: typeof versions.DESIGN_SCHEMA_VERSION;
+    designPageSchema: typeof DesignPageSchema;
+    designNodeSchema: typeof DesignNodeSchema;
+    componentDefinitionSchema: typeof ComponentDefinitionSchema;
+    variantSetDefinitionSchema: typeof VariantSetDefinitionSchema;
+    libraryComponentSourceSchema: typeof LibraryComponentSourceSchema;
+    libraryVariantSetSourceSchema: typeof LibraryVariantSetSourceSchema;
+    libraryStyleSourceSchema: typeof LibraryStyleSourceSchema;
+    libraryVariableCollectionSourceSchema: typeof LibraryVariableCollectionSourceSchema;
+    libraryVariableSourceSchema: typeof LibraryVariableSourceSchema;
+    styleOrderByTypeSchema: typeof StyleOrderByTypeSchema;
+    sharedStyleDefinitionSchema: typeof SharedStyleDefinitionSchema;
+    jsonValueSchema: typeof JsonValueSchema;
+    designAssetSchema: typeof DesignAssetSchema;
+    imageAssetDerivationSchema: typeof ImageAssetDerivationSchema;
+    jsonObjectSchema: typeof JsonObjectSchema;
+    variableDocumentProperties: typeof variables.VariableDocumentProperties;
+  }>
+> = createDesignDocumentSchema({
+  format: DESIGN_FORMAT,
+  schemaVersion: versions.DESIGN_SCHEMA_VERSION,
+  designPageSchema: DesignPageSchema,
+  designNodeSchema: DesignNodeSchema,
+  componentDefinitionSchema: ComponentDefinitionSchema,
+  variantSetDefinitionSchema: VariantSetDefinitionSchema,
+  libraryComponentSourceSchema: LibraryComponentSourceSchema,
+  libraryVariantSetSourceSchema: LibraryVariantSetSourceSchema,
+  libraryStyleSourceSchema: LibraryStyleSourceSchema,
+  libraryVariableCollectionSourceSchema: LibraryVariableCollectionSourceSchema,
+  libraryVariableSourceSchema: LibraryVariableSourceSchema,
+  styleOrderByTypeSchema: StyleOrderByTypeSchema,
+  sharedStyleDefinitionSchema: SharedStyleDefinitionSchema,
+  jsonValueSchema: JsonValueSchema,
+  designAssetSchema: DesignAssetSchema,
+  imageAssetDerivationSchema: ImageAssetDerivationSchema,
+  jsonObjectSchema: JsonObjectSchema,
+  variableDocumentProperties: variables.VariableDocumentProperties,
+});
 
 const nodeOperationSchemas = createNodeOperationSchemas({
   designNodeSchema: DesignNodeSchema,
