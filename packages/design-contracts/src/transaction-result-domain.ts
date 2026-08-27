@@ -1,5 +1,5 @@
 import type { ValidationIssue } from "@opendesign/contract-runtime";
-import type { DesignTransactionResult } from "./index.js";
+import type { DesignTransactionResult } from "./public-types.js";
 
 export function designTransactionResultDomainIssues(
   result: DesignTransactionResult,

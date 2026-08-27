@@ -4,7 +4,7 @@ import {
   designOperationDomainIssues,
   designTransactionDomainIssues,
 } from "./operation-domain.js";
-import type { DesignOperation, DesignTransaction } from "./index.js";
+import type { DesignOperation, DesignTransaction } from "./public-types.js";
 
 export function createDesignOperationContract(schema: TSchema) {
   return defineContract<DesignOperation>({

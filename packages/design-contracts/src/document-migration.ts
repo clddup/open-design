@@ -1,4 +1,4 @@
-import type { DesignDocument } from "./index.js";
+import type { DesignDocument } from "./public-types.js";
 import { PaintSchema } from "./appearance.js";
 import { migrateFigmaComponentProperties } from "./component-properties.js";
 import * as exportSettings from "./export-settings.js";

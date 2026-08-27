@@ -1,6 +1,6 @@
 import type { ValidationIssue } from "@opendesign/contract-runtime";
 import { isValidLayoutLimits } from "./layout.js";
-import type { DesignOperation, DesignTransaction } from "./index.js";
+import type { DesignOperation, DesignTransaction } from "./public-types.js";
 
 export function designOperationDomainIssues(
   operation: DesignOperation,

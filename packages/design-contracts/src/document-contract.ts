@@ -1,7 +1,7 @@
 import { type TSchema } from "@sinclair/typebox";
 import { defineContract } from "@opendesign/contract-runtime";
 import { designDocumentDomainIssues } from "./document-domain.js";
-import type { DesignDocument } from "./index.js";
+import type { DesignDocument } from "./public-types.js";
 
 export function createDesignDocumentContract(schema: TSchema) {
   return defineContract<DesignDocument>({

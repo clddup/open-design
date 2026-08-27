@@ -1,4 +1,5 @@
-import type { NormalizedPoint, Point, Rect, Size } from "./index.js";
+import type { NormalizedPoint, Point, Size } from "./primitives.js";
+import type { Rect } from "./public-types.js";
 
 export function resolveLineEndpointPoint(
   size: Size,
