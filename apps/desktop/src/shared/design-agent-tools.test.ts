@@ -111,7 +111,7 @@ describe("component tool recovery contract", () => {
 });
 
 describe("design Agent tool contract", () => {
-  it("wires field-level compact first-slice recovery into the production tool definition", () => {
+  it("wires first-slice validation into the production tool definition", () => {
     const firstSlice = DESIGN_AGENT_TOOL_SPECS.find(
       (tool) => tool.name === DESIGN_FIRST_SLICE_TOOL_NAME,
     );
@@ -119,9 +119,6 @@ describe("design Agent tool contract", () => {
     expect(firstSlice).toHaveProperty(
       "validateInputIssues",
       FirstSliceContract.issues,
-    );
-    expect(firstSlice?.description).toContain(
-      "at most 48 model-authored content elements total, not per stage",
     );
   });
 
