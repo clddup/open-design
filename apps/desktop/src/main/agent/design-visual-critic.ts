@@ -14,6 +14,12 @@ import {
   DesignVisualReviewContract,
 } from "@/shared/design-agent-tools.js";
 import { formatValidationFailure } from "@/shared/contract-validation.js";
+import {
+  createDesignVisualCriticVerdictContract,
+  DesignVisualCriticCaptureContentContract,
+  type DesignVisualCriticAttachment,
+} from "@/shared/design-visual-critic-contract.js";
+import { designWorkflowError } from "@/shared/design-workflow-failure-classification.js";
 
 const GENERIC_CRITERIA = [
   "visual-thesis",
@@ -72,13 +78,6 @@ export type DesignVisualCriticResult = {
   review: DesignVisualReviewToolInput;
 };
 
-export type DesignVisualCriticAttachment = {
-  attachmentId: string;
-  byteSize: number;
-  mimeType: "image/jpeg";
-  name: string;
-};
-
 export type DesignVisualCriticContext = {
   runId: string;
   generationMode?: "fast" | "thorough";
@@ -100,6 +99,10 @@ export async function runIndependentDesignVisualCritic(
   signal: AbortSignal,
 ): Promise<DesignVisualCriticResult> {
   const criterionIds = criticCriteria(context.plan);
+  const verdictContract = createDesignVisualCriticVerdictContract(
+    criterionIds,
+    context.phase,
+  );
   const logoDirectionCriteria = logoDirectionCriterionContracts(context.plan);
   const attemptId =
     `visual_critic_${context.runId}_${context.observedRevision}`.slice(0, 220);
@@ -159,7 +162,7 @@ export async function runIndependentDesignVisualCritic(
           ],
         },
       ],
-      tools: [criticTool(criterionIds, context.phase)],
+      tools: [criticTool(verdictContract.schema)],
     },
     signal,
   );
@@ -182,17 +185,25 @@ export async function runIndependentDesignVisualCritic(
     hasUnexpectedOutput ||
     call?.type !== "tool_call"
   ) {
-    throw new Error(
-      "design_visual_critic.invalid_response: Independent critic did not submit the required structured verdict",
+    throw designWorkflowError(
+      "visual_critic_unavailable",
+      "Independent critic did not submit the required structured verdict",
+      { path: "/response" },
     );
   }
-  const parsed = parseCriticInput(call.input, criterionIds, context.phase);
-  if (!parsed) {
-    throw new Error(
-      "design_visual_critic.invalid_response: Independent critic returned an invalid scorecard",
+  const parsed = verdictContract.parse(call.input);
+  if (!parsed.ok) {
+    throw designWorkflowError(
+      "visual_critic_unavailable",
+      formatValidationFailure("Independent visual critic", parsed.issues),
+      {
+        path: parsed.issues[0]?.path ?? "/response",
+        recovery: parsed.issues[0]?.recovery,
+      },
     );
   }
-  const scoreValues = criterionIds.map((id) => parsed.criteria[id].score);
+  const verdict = parsed.value;
+  const scoreValues = criterionIds.map((id) => verdict.criteria[id].score);
   const averageScore =
     Math.round(
       (scoreValues.reduce((sum, score) => sum + score, 0) /
@@ -225,31 +236,31 @@ export async function runIndependentDesignVisualCritic(
     criticalIds.add(REFERENCE_CRITERION);
   }
   const failedCriteria = criterionIds.filter((id) => {
-    const score = parsed.criteria[id].score;
+    const score = verdict.criteria[id].score;
     return score < (criticalIds.has(id) ? 4 : 3);
   });
   const passed = failedCriteria.length === 0 && averageScore >= 3.5;
   const refinements = uniqueText([
     ...failedCriteria.map(
       (id) =>
-        parsed.criteria[id].refinement ??
-        `Rework ${id} using this evidence: ${parsed.criteria[id].evidence}`.slice(
+        verdict.criteria[id].refinement ??
+        `Rework ${id} using this evidence: ${verdict.criteria[id].evidence}`.slice(
           0,
           500,
         ),
     ),
-    ...parsed.refinements,
+    ...verdict.refinements,
   ]).slice(0, 12);
   return {
     version: 1,
     observedRevision: context.observedRevision,
     passed,
     averageScore,
-    summary: parsed.summary,
-    criteria: parsed.criteria,
+    summary: verdict.summary,
+    criteria: verdict.criteria,
     failedCriteria,
     refinements,
-    review: toLedgerVisualReview(context.plan, parsed, refinements),
+    review: toLedgerVisualReview(context.plan, verdict, refinements),
   };
 }
 
@@ -325,124 +336,28 @@ function logoDirectionCriterionContracts(plan: DesignPlanToolInput): Array<{
 }
 
 function criticTool(
-  criterionIds: readonly CriticCriterionId[],
-  phase: DesignVisualCriticContext["phase"],
+  inputSchema: ReturnType<
+    typeof createDesignVisualCriticVerdictContract<CriticCriterionId>
+  >["schema"],
 ) {
   return {
     name: SUBMIT_CRITIQUE_TOOL,
     description:
       "Submit the independent exact-revision visual scorecard once. Every required criterion is non-compensating.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        summary: { type: "string", minLength: 12, maxLength: 1_000 },
-        criteria: {
-          type: "object",
-          properties: Object.fromEntries(
-            criterionIds.map((id) => [
-              id,
-              {
-                type: "object",
-                properties: {
-                  score: { type: "integer", minimum: 1, maximum: 5 },
-                  evidence: {
-                    type: "string",
-                    minLength: 12,
-                    maxLength: 1_000,
-                  },
-                  refinement: {
-                    type: "string",
-                    minLength: 8,
-                    maxLength: 500,
-                  },
-                },
-                required: ["score", "evidence"],
-                additionalProperties: false,
-              },
-            ]),
-          ),
-          required: [...criterionIds],
-          additionalProperties: false,
-        },
-        refinements: {
-          type: "array",
-          minItems: phase === "draft" ? 2 : 0,
-          maxItems: 12,
-          items: { type: "string", minLength: 8, maxLength: 500 },
-        },
-      },
-      required: ["summary", "criteria", "refinements"],
-      additionalProperties: false,
-    },
-  };
-}
-
-function parseCriticInput(
-  value: unknown,
-  criterionIds: readonly CriticCriterionId[],
-  phase: DesignVisualCriticContext["phase"],
-): {
-  summary: string;
-  criteria: Record<
-    CriticCriterionId,
-    { score: number; evidence: string; refinement?: string }
-  >;
-  refinements: string[];
-} | null {
-  if (!isRecord(value) || !boundedText(value.summary, 12, 1_000)) return null;
-  if (!isRecord(value.criteria)) return null;
-  if (!exactKeys(value.criteria, criterionIds)) return null;
-  const criteria = {} as Record<
-    CriticCriterionId,
-    { score: number; evidence: string; refinement?: string }
-  >;
-  for (const id of criterionIds) {
-    const candidate = value.criteria[id];
-    if (
-      !isRecord(candidate) ||
-      !Number.isInteger(candidate.score) ||
-      Number(candidate.score) < 1 ||
-      Number(candidate.score) > 5 ||
-      !boundedText(candidate.evidence, 12, 1_000) ||
-      (candidate.refinement !== undefined &&
-        !boundedText(candidate.refinement, 8, 500)) ||
-      !exactKeys(candidate, [
-        "score",
-        "evidence",
-        ...(candidate.refinement === undefined ? [] : ["refinement"]),
-      ])
-    ) {
-      return null;
-    }
-    criteria[id] = {
-      score: Number(candidate.score),
-      evidence: candidate.evidence,
-      ...(candidate.refinement === undefined
-        ? {}
-        : { refinement: candidate.refinement }),
-    };
-  }
-  if (
-    !Array.isArray(value.refinements) ||
-    (phase === "draft" && value.refinements.length < 2) ||
-    value.refinements.length > 12 ||
-    !value.refinements.every((item) => boundedText(item, 8, 500)) ||
-    !exactKeys(value, ["summary", "criteria", "refinements"])
-  ) {
-    return null;
-  }
-  return {
-    summary: value.summary,
-    criteria,
-    refinements: [...value.refinements],
+    inputSchema,
   };
 }
 
 function toLedgerVisualReview(
   plan: DesignPlanToolInput,
-  critic: ReturnType<typeof parseCriticInput> extends infer Parsed
-    ? Exclude<Parsed, null>
-    : never,
+  critic: {
+    summary: string;
+    criteria: Record<
+      CriticCriterionId,
+      { score: number; evidence: string; refinement?: string }
+    >;
+    refinements: string[];
+  },
   refinements: readonly string[],
 ): DesignVisualReviewToolInput {
   const generic = Object.fromEntries(
@@ -494,56 +409,19 @@ function uniqueText(values: readonly string[]): string[] {
   return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function boundedText(
-  value: unknown,
-  minimum: number,
-  maximum: number,
-): value is string {
-  return (
-    typeof value === "string" &&
-    value.trim().length >= minimum &&
-    value.length <= maximum
-  );
-}
-
-function exactKeys(
-  value: Record<string, unknown>,
-  expected: readonly string[],
-): boolean {
-  const keys = Object.keys(value);
-  return (
-    keys.length === expected.length &&
-    keys.every((key) => expected.includes(key))
-  );
-}
-
 export function requireDesignVisualCriticAttachment(
-  value: Record<string, unknown>,
+  value: unknown,
 ): DesignVisualCriticAttachment {
-  const attachment = value.attachment;
-  if (
-    !isRecord(attachment) ||
-    typeof attachment.attachmentId !== "string" ||
-    attachment.attachmentId.length === 0 ||
-    typeof attachment.name !== "string" ||
-    attachment.name.length === 0 ||
-    attachment.mimeType !== "image/jpeg" ||
-    !Number.isSafeInteger(attachment.byteSize) ||
-    Number(attachment.byteSize) <= 0 ||
-    !exactKeys(attachment, ["attachmentId", "name", "mimeType", "byteSize"])
-  ) {
-    throw new Error(
-      "design_visual_critic.capture_unavailable: Exact-revision capture attachment is missing or invalid",
+  const parsed = DesignVisualCriticCaptureContentContract.parse(value);
+  if (!parsed.ok) {
+    throw designWorkflowError(
+      "visual_critic_unavailable",
+      formatValidationFailure("Visual critic capture", parsed.issues),
+      {
+        path: parsed.issues[0]?.path ?? "/attachment",
+        recovery: parsed.issues[0]?.recovery,
+      },
     );
   }
-  return {
-    attachmentId: attachment.attachmentId,
-    name: attachment.name,
-    mimeType: "image/jpeg",
-    byteSize: Number(attachment.byteSize),
-  };
+  return parsed.value.attachment;
 }

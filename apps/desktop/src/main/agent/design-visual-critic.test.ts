@@ -306,7 +306,7 @@ describe("independent design visual critic", () => {
         criticContext("draft"),
         new AbortController().signal,
       ),
-    ).rejects.toThrow("invalid scorecard");
+    ).rejects.toThrow("design_visual_critic.schema_invalid at /refinements");
 
     expect(
       requireDesignVisualCriticAttachment({
@@ -332,7 +332,9 @@ describe("independent design visual critic", () => {
           byteSize: 12_000,
         },
       }),
-    ).toThrow("Exact-revision capture attachment is missing or invalid");
+    ).toThrow(
+      "design_visual_critic.capture_schema_invalid at /attachment/mimeType",
+    );
     expect(() =>
       requireDesignVisualCriticAttachment({
         attachment: {
@@ -343,7 +345,9 @@ describe("independent design visual critic", () => {
           filePath: "/tmp/not-allowed.jpg",
         },
       }),
-    ).toThrow("Exact-revision capture attachment is missing or invalid");
+    ).toThrow(
+      "design_visual_critic.capture_schema_invalid at /attachment/filePath",
+    );
   });
 
   it("reviews declared visual references as a non-compensating criterion", async () => {

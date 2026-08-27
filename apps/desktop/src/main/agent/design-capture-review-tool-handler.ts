@@ -12,6 +12,7 @@ import {
 } from "@/shared/design-agent-tools.js";
 import type { RendererDesignCaptureTarget } from "@/shared/design-tool-bridge.js";
 import { formatValidationFailure } from "@/shared/contract-validation.js";
+import { CanvasCaptureStructuredContentContract } from "@/shared/design-visual-critic-contract.js";
 import type { ModelProviderHost } from "../model/model-provider-host.js";
 import { requireCanvasCaptureLayoutQuality } from "./canvas-capture-quality.js";
 import {
@@ -60,9 +61,17 @@ export function createDesignCaptureReviewSession(
       captureTarget,
       ...(reportProgress ? { reportProgress } : {}),
     });
-    if (!isRecord(result.content)) {
-      throw new TypeError("Canvas capture returned invalid structured content");
+    const parsedContent = CanvasCaptureStructuredContentContract.parse(
+      result.content,
+    );
+    if (!parsedContent.ok) {
+      throw designWorkflowError(
+        "layout_quality_unavailable",
+        formatValidationFailure("Canvas capture", parsedContent.issues),
+        { path: parsedContent.issues[0]?.path ?? "/content" },
+      );
     }
+    const resultContent = result.content as Record<string, unknown>;
     const observedRevision = result.observedRevision;
     if (!Number.isSafeInteger(observedRevision) || observedRevision == null) {
       throw designWorkflowError(
@@ -115,7 +124,7 @@ export function createDesignCaptureReviewSession(
     return {
       ...result,
       content: {
-        ...result.content,
+        ...resultContent,
         captureTarget,
         reviewWorkflow,
         delivery: input.coordinator.getDeliveryLedger(input.context.runId),
@@ -152,8 +161,4 @@ export function createDesignCaptureReviewSession(
   };
 
   return { capture, handle };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
