@@ -10,6 +10,7 @@ import {
   isTrustedToolContext,
   isTrustedToolFailure,
   isTrustedToolResult,
+  TrustedToolFailureContract,
   TrustedToolResultContract,
 } from "./index.js";
 
@@ -103,6 +104,79 @@ describe("agent tool wire contracts", () => {
     expect(isTrustedToolFailure({ ...failure, runTerminal: false })).toBe(
       false,
     );
+  });
+
+  it("uses one trusted failure contract for workflow relationships", () => {
+    const failure = {
+      code: "design_target_stale",
+      message: "The selected node was removed",
+      retryable: false,
+      recoverable: true,
+      details: {
+        kind: "design-workflow",
+        fingerprint: "workflow_target_stale",
+        workflowCode: "target_stale",
+        phase: "inspection",
+        requiresInspection: true,
+        issues: [
+          {
+            code: "design_workflow.target_stale",
+            path: "/targetSet",
+            message: "The selected node was removed",
+          },
+        ],
+        recovery: { action: "follow-workflow", required: true },
+      },
+    } as const;
+
+    expect(isTrustedToolFailure(failure)).toBe(true);
+
+    const cases = [
+      {
+        value: { ...failure, code: "provider_error" },
+        code: "trusted_tool_failure.workflow_code_mismatch",
+        path: "/code",
+      },
+      {
+        value: {
+          ...failure,
+          details: { ...failure.details, phase: "capture" },
+        },
+        code: "trusted_tool_failure.workflow_phase_mismatch",
+        path: "/details/phase",
+      },
+      {
+        value: {
+          ...failure,
+          details: { ...failure.details, requiresInspection: false },
+        },
+        code: "trusted_tool_failure.workflow_inspection_mismatch",
+        path: "/details/requiresInspection",
+      },
+      {
+        value: {
+          ...failure,
+          details: {
+            ...failure.details,
+            issues: [
+              {
+                ...failure.details.issues[0],
+                code: "design_workflow.capture_required",
+              },
+            ],
+          },
+        },
+        code: "trusted_tool_failure.workflow_issue_code_mismatch",
+        path: "/details/issues/0/code",
+      },
+    ];
+
+    for (const entry of cases) {
+      expect(isTrustedToolFailure(entry.value)).toBe(false);
+      expect(TrustedToolFailureContract.issues(entry.value)).toContainEqual(
+        expect.objectContaining({ code: entry.code, path: entry.path }),
+      );
+    }
   });
 
   it("enforces revision and rebase invariants on trusted results", () => {

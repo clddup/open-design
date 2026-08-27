@@ -145,6 +145,16 @@ export const AgentToolFailureDetailsSchema = Type.Union([
   DesignWorkflowFailureDetailsSchema,
 ]);
 
+export const AgentToolFailureDetailsContract = defineContract<
+  Static<typeof AgentToolFailureDetailsSchema>
+>({
+  schema: AgentToolFailureDetailsSchema,
+  code: "agent_tool_failure_details.schema_invalid",
+  subject: "Agent tool failure details",
+  recovery: "Correct the reported Agent tool failure details field.",
+  clone: false,
+});
+
 const ToolFailureFields = {
   code: IdSchema,
   message: Type.String({ minLength: 1, maxLength: 20_000 }),
@@ -1237,10 +1247,7 @@ export function isTrustedToolContext(
 export function isTrustedToolFailure(
   value: unknown,
 ): value is TrustedToolFailure {
-  return (
-    Value.Check(TrustedToolFailureSchema, value) &&
-    (value.details === undefined || isAgentToolFailureDetails(value.details))
-  );
+  return TrustedToolFailureContract.parse(value).ok;
 }
 
 export function isTrustedToolResult(
@@ -1309,7 +1316,7 @@ export function designToolBridgeResponseId(value: unknown): string | null {
 export function isAgentToolFailureDetails(
   value: unknown,
 ): value is AgentToolFailureDetails {
-  return Value.Check(AgentToolFailureDetailsSchema, value);
+  return AgentToolFailureDetailsContract.parse(value).ok;
 }
 
 export function isDurableTimelineEvent(

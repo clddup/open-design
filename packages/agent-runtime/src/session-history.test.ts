@@ -90,6 +90,58 @@ describe("Agent session history normalization", () => {
     ).not.toHaveProperty("details");
   });
 
+  it("keeps valid structured failure details and the containing message", () => {
+    const timeline = normalizeSessionHistory([
+      {
+        type: "tool",
+        itemId: "tool:call_structured",
+        sessionId: "session_1",
+        runId: "run_1",
+        sequence: 2,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        toolCallId: "call_structured",
+        toolName: "opendesign_edit_design",
+        input: {},
+        risk: "design_write",
+        status: "failed",
+        error: {
+          code: "design_target_stale",
+          message: "The selected node was removed",
+          recoverable: true,
+          details: {
+            kind: "design-workflow",
+            fingerprint: "workflow_target_stale",
+            workflowCode: "target_stale",
+            phase: "inspection",
+            requiresInspection: true,
+            issues: [
+              {
+                code: "design_workflow.target_stale",
+                path: "/targetSet",
+                message: "The selected node was removed",
+              },
+            ],
+            recovery: { action: "follow-workflow", required: true },
+          },
+        },
+      },
+    ]);
+
+    expect(timeline).toHaveLength(1);
+    expect(timeline[0]).toMatchObject({
+      type: "tool",
+      status: "failed",
+      error: {
+        code: "design_target_stale",
+        details: {
+          kind: "design-workflow",
+          workflowCode: "target_stale",
+        },
+      },
+    });
+  });
+
   it("recovers a legacy oversized tool failure without discarding session history", () => {
     const timeline = normalizeSessionHistory([
       {
