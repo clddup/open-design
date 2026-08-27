@@ -11,6 +11,10 @@ import {
   DesignSystemComponentCatalogContract,
   DesignSystemComponentCatalogSchema,
 } from "./design-system-component-catalog";
+import {
+  DesignImageInspectionContract,
+  DesignImageInspectionSchema,
+} from "./design-image-inspection-contract";
 import { defineContract, type ValidationIssue } from "./contract-validation";
 
 const MAX_INSPECTION_HIERARCHY_ISSUES = 64;
@@ -87,6 +91,7 @@ const InspectedDocumentSchema = Type.Object(
       }),
     ),
     componentCatalog: Type.Optional(DesignSystemComponentCatalogSchema),
+    ...DesignImageInspectionSchema.properties,
   },
   { additionalProperties: true },
 );
@@ -173,6 +178,16 @@ function inspectionHierarchyIssues(
       ),
     );
   }
+  issues.push(
+    ...prefixIssues(
+      DesignImageInspectionContract.issues({
+        assetsById: document.assetsById,
+        imageAssetDerivations: document.imageAssetDerivations,
+        imageAssetDerivationsTruncated: document.imageAssetDerivationsTruncated,
+      }),
+      "/content/document",
+    ),
+  );
   if (value.content.diagnostics) {
     issues.push(
       ...prefixIssues(

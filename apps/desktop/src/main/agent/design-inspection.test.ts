@@ -143,6 +143,9 @@ describe("Agent design inspection component strategy", () => {
                 },
               },
             },
+            assetsById: {},
+            imageAssetDerivations: [],
+            imageAssetDerivationsTruncated: false,
             componentsById: {
               component_navigation: {
                 id: "component_navigation",
@@ -202,6 +205,9 @@ describe("Agent design inspection component strategy", () => {
               revision: 9,
               pagesById: {},
               nodesById: {},
+              assetsById: {},
+              imageAssetDerivations: [],
+              imageAssetDerivationsTruncated: false,
               componentsById: {},
               componentCatalog: {
                 totalCount: 1,

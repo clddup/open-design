@@ -42,6 +42,9 @@ function inspection(): DesignInspectionHierarchy {
             properties: {},
           },
         },
+        assetsById: {},
+        imageAssetDerivations: [],
+        imageAssetDerivationsTruncated: false,
         componentsById: {},
       },
       otherProjection: { warnings: [] },
@@ -151,6 +154,78 @@ describe("design inspection hierarchy contract", () => {
         expect.objectContaining({
           code: "design_inspection_hierarchy.diagnostic_pages_mismatch",
           path: "/content/diagnostics/pageIds",
+        }),
+      ]),
+    );
+  });
+
+  it("uses the image inspection contract for asset identity and derivation paths", () => {
+    const input = inspection();
+    input.content.document.assetsById.asset_source = {
+      id: "asset_other",
+      kind: "image",
+      name: "Source",
+      mimeType: "image/png",
+      sourceType: "data",
+      size: { width: 128, height: 128 },
+      extensionKeys: [],
+    };
+    input.content.document.imageAssetDerivations = [
+      {
+        id: "derivation_1",
+        sourceAssetId: "asset_source",
+        resultAssetId: "asset_missing",
+        operation: "replacement",
+        referenceAssetIds: [],
+        promptPresent: false,
+      },
+    ];
+    expect(DesignInspectionHierarchyContract.issues(input, context)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "design_image_inspection.asset_identity_mismatch",
+          path: "/content/document/assetsById/asset_source/id",
+        }),
+        expect.objectContaining({
+          code: "design_image_inspection.asset_reference_missing",
+          path: "/content/document/imageAssetDerivations/0/resultAssetId",
+        }),
+      ]),
+    );
+  });
+
+  it("rejects image source payloads and invalid canonical operations at exact fields", () => {
+    const input = inspection();
+    const document = input.content.document as unknown as {
+      assetsById: Record<string, Record<string, unknown>>;
+      imageAssetDerivations: Array<Record<string, unknown>>;
+    };
+    document.assetsById.asset_source = {
+      id: "asset_source",
+      kind: "image",
+      name: "Source",
+      mimeType: "image/png",
+      sourceType: "data",
+      extensionKeys: [],
+      source: { type: "data", value: "binary-must-not-leak" },
+    };
+    document.imageAssetDerivations = [
+      {
+        id: "derivation_1",
+        sourceAssetId: "asset_source",
+        resultAssetId: "asset_source",
+        operation: "invented-operation",
+        referenceAssetIds: [],
+        promptPresent: false,
+      },
+    ];
+    expect(DesignInspectionHierarchyContract.issues(input, context)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "/content/document/assetsById/asset_source/source",
+        }),
+        expect.objectContaining({
+          path: "/content/document/imageAssetDerivations/0/operation",
         }),
       ]),
     );

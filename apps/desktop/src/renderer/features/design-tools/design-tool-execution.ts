@@ -89,6 +89,7 @@ import { planDesignArrangeTool } from "./design-arrange-tool-plan";
 import { planDesignHierarchyTool } from "./design-hierarchy-tool-plan";
 import { planDesignComponentTool } from "./design-component-tool-plan";
 import { createScopedComponentInspection } from "./design-component-inspection";
+import { createScopedImageInspection } from "./design-image-inspection";
 import { createScopedVariableInspection } from "./design-variable-inspection";
 import { createScopedStyleInspection } from "./design-style-inspection";
 import { executeDesignSystemToolRequest } from "./design-system-tool-execution";
@@ -121,8 +122,6 @@ type ExecuteDesignToolOptions = {
 
 const MAX_INSPECTED_FONT_REQUESTS = 256;
 const MAX_INSPECTED_FONT_NODE_IDS = 1_000;
-const MAX_INSPECTED_STAGED_IMAGE_ASSETS = 64;
-const MAX_INSPECTED_IMAGE_DERIVATIONS = 64;
 
 export async function executeDesignToolRequest(
   request: RendererDesignToolRequest,
@@ -2301,124 +2300,8 @@ function createScopedInspection(
         ...runtime.inspectTextFont(font),
       };
     });
-  const assetIds = new Set<string>();
-  for (const node of Object.values(nodesById)) {
-    if (node.kind === "image") assetIds.add(node.properties.assetId);
-    if (
-      node.kind === "frame" ||
-      node.kind === "rectangle" ||
-      node.kind === "ellipse" ||
-      node.kind === "line" ||
-      node.kind === "polygon" ||
-      node.kind === "star" ||
-      node.kind === "text" ||
-      node.kind === "path" ||
-      node.kind === "vector" ||
-      node.kind === "boolean"
-    ) {
-      for (const paint of [
-        ...node.properties.fills,
-        ...node.properties.strokes,
-        ...(node.kind === "text"
-          ? (node.properties.runs ?? []).flatMap((run) => run.style.fills)
-          : []),
-      ]) {
-        if (paint.type === "image") assetIds.add(paint.assetId);
-      }
-    }
-  }
-  const stagedAssetIds = Object.values(document.assetsById)
-    .filter(
-      (asset) =>
-        asset.kind === "image" &&
-        asset.extensions.generatedBy === "opendesign-agent",
-    )
-    .slice(-MAX_INSPECTED_STAGED_IMAGE_ASSETS)
-    .map((asset) => asset.id);
-  stagedAssetIds.forEach((assetId) => assetIds.add(assetId));
-  let familyExpanded = true;
-  while (
-    familyExpanded &&
-    assetIds.size < MAX_INSPECTED_IMAGE_DERIVATIONS * 2
-  ) {
-    familyExpanded = false;
-    for (const derivationId of document.imageAssetDerivationOrder) {
-      const derivation = document.imageAssetDerivationsById[derivationId];
-      if (
-        !derivation ||
-        (!assetIds.has(derivation.sourceAssetId) &&
-          !assetIds.has(derivation.resultAssetId))
-      ) {
-        continue;
-      }
-      const previousSize = assetIds.size;
-      assetIds.add(derivation.sourceAssetId);
-      assetIds.add(derivation.resultAssetId);
-      familyExpanded ||= assetIds.size !== previousSize;
-      if (assetIds.size >= MAX_INSPECTED_IMAGE_DERIVATIONS * 2) break;
-    }
-  }
-  const assetsById = Object.fromEntries(
-    [...assetIds].flatMap((assetId) => {
-      const asset = document.assetsById[assetId];
-      if (!asset) return [];
-      // Inspection is model context, not an asset transport. Returning a data
-      // URI here duplicates the full binary as tool-result text and can exceed
-      // the model context window after a single image is placed. Pixels remain
-      // available through the bounded canvas capture tool.
-      return [
-        [
-          assetId,
-          {
-            id: asset.id,
-            kind: asset.kind,
-            name: asset.name,
-            mimeType: asset.mimeType,
-            sourceType: asset.source.type,
-            ...(asset.size === undefined
-              ? {}
-              : { size: structuredClone(asset.size) }),
-            extensionKeys: Object.keys(asset.extensions),
-            ...(asset.extensions.generatedBy === "opendesign-agent"
-              ? {
-                  availability: "design-file",
-                  generated: true,
-                  ...(typeof asset.extensions.designRole === "string"
-                    ? { designRole: asset.extensions.designRole }
-                    : {}),
-                }
-              : {}),
-          },
-        ],
-      ];
-    }),
-  );
+  const imageInspection = createScopedImageInspection(document, nodesById);
   const diagnostics = diagnoseDesignPages(document, pageIds);
-  const imageAssetDerivations = document.imageAssetDerivationOrder
-    .flatMap((derivationId) => {
-      const derivation = document.imageAssetDerivationsById[derivationId];
-      if (
-        !derivation ||
-        (!assetIds.has(derivation.sourceAssetId) &&
-          !assetIds.has(derivation.resultAssetId))
-      ) {
-        return [];
-      }
-      return [
-        {
-          id: derivation.id,
-          sourceAssetId: derivation.sourceAssetId,
-          resultAssetId: derivation.resultAssetId,
-          operation: derivation.operation,
-          ...(derivation.maskAssetId === undefined
-            ? {}
-            : { maskAssetId: derivation.maskAssetId }),
-          referenceAssetIds: [...derivation.referenceAssetIds],
-          promptPresent: derivation.prompt !== undefined,
-        },
-      ];
-    })
-    .slice(0, MAX_INSPECTED_IMAGE_DERIVATIONS);
   const { componentCatalog, componentsById, instancesById, variantSetsById } =
     createScopedComponentInspection(document, nodeIds, nodesById);
   const { designSystemIds: variableDesignSystemIds, ...variableInspection } =
@@ -2434,18 +2317,7 @@ function createScopedInspection(
       pageOrder: pageIds,
       pagesById,
       nodesById,
-      assetsById,
-      imageAssetDerivations,
-      imageAssetDerivationsTruncated:
-        imageAssetDerivations.length <
-        document.imageAssetDerivationOrder.filter((derivationId) => {
-          const derivation = document.imageAssetDerivationsById[derivationId];
-          return Boolean(
-            derivation &&
-            (assetIds.has(derivation.sourceAssetId) ||
-              assetIds.has(derivation.resultAssetId)),
-          );
-        }).length,
+      ...imageInspection,
       componentsById,
       componentCatalog,
       variantSetsById,

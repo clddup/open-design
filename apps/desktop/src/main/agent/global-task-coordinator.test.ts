@@ -722,6 +722,9 @@ function inspectionResult(
           }),
         ),
         nodesById: structuredClone(document.nodesById),
+        assetsById: {},
+        imageAssetDerivations: [],
+        imageAssetDerivationsTruncated: false,
       },
     },
   };
