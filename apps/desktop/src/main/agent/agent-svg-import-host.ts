@@ -1,3 +1,4 @@
+import { formatValidationFailure } from "@/shared/contract-validation.js";
 import { designWorkflowError } from "@/shared/design-workflow-failure-classification.js";
 import type {
   ToolCallRequest,
@@ -6,10 +7,10 @@ import type {
 } from "@opendesign/agent-contracts";
 import { createHash } from "node:crypto";
 import {
+  AgentSvgImportResultContract,
   IMPORT_SVG_TOOL_NAME,
   INTERNAL_IMPORT_SVG_TOOL_NAME,
   ImportSvgContract,
-  isAgentSvgImportResult,
   type InternalImportSvgToolInput,
 } from "@/shared/design-agent-tools";
 
@@ -87,10 +88,13 @@ export class AgentSvgImportHost {
       signal,
     );
 
-    const result = rendered.content;
-    if (!isAgentSvgImportResult(result)) {
-      throw new TypeError("Renderer returned an invalid SVG import result");
+    const parsedResult = AgentSvgImportResultContract.parse(rendered.content);
+    if (!parsedResult.ok) {
+      throw new TypeError(
+        formatValidationFailure("Renderer SVG import", parsedResult.issues),
+      );
     }
+    const result = parsedResult.value;
     if (
       result.attachmentId !== publicInput.attachmentId ||
       result.name !== name ||

@@ -1,3 +1,8 @@
+import {
+  executableJsonSchema,
+  schemaValidationIssues,
+} from "@opendesign/design-contracts";
+
 export type SvgInterchangeIssueSeverity = "error" | "warning";
 
 export const SVG_INTERCHANGE_ISSUE_CODES = [
@@ -42,6 +47,26 @@ export interface SvgInterchangeIssue {
   severity: SvgInterchangeIssueSeverity;
   sourceElement?: string;
 }
+
+const BOUNDED_IDENTIFIER_SCHEMA = {
+  type: "string",
+  minLength: 1,
+  maxLength: 512,
+  pattern: "^[^\\u0000-\\u001F\\u007F]+$",
+} as const;
+
+export const SvgInterchangeIssueSchema = executableJsonSchema({
+  type: "object",
+  properties: {
+    code: { enum: [...SVG_INTERCHANGE_ISSUE_CODES] },
+    message: { type: "string", minLength: 1, maxLength: 10_000 },
+    nodeId: BOUNDED_IDENTIFIER_SCHEMA,
+    severity: { enum: ["error", "warning"] },
+    sourceElement: { type: "string", minLength: 1, maxLength: 512 },
+  },
+  required: ["code", "message", "severity"],
+  additionalProperties: false,
+});
 
 export function createSvgIssue(
   code: SvgInterchangeIssueCode,
@@ -97,39 +122,5 @@ export function reportUnsupportedSvgElementAttributes(
 export function isSvgInterchangeIssue(
   value: unknown,
 ): value is SvgInterchangeIssue {
-  if (!isRecord(value)) return false;
-  return (
-    typeof value.code === "string" &&
-    SVG_INTERCHANGE_ISSUE_CODES.includes(
-      value.code as SvgInterchangeIssueCode,
-    ) &&
-    typeof value.message === "string" &&
-    value.message.length > 0 &&
-    value.message.length <= 10_000 &&
-    (value.nodeId === undefined || boundedIdentifier(value.nodeId)) &&
-    (value.sourceElement === undefined ||
-      (typeof value.sourceElement === "string" &&
-        value.sourceElement.length > 0 &&
-        value.sourceElement.length <= 512)) &&
-    (value.severity === "error" || value.severity === "warning") &&
-    Object.keys(value).every((key) =>
-      ["code", "message", "nodeId", "severity", "sourceElement"].includes(key),
-    )
-  );
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function boundedIdentifier(value: unknown): value is string {
-  return (
-    typeof value === "string" &&
-    value.length > 0 &&
-    value.length <= 512 &&
-    ![...value].some((character) => {
-      const code = character.codePointAt(0) ?? 0;
-      return code < 32 || code === 127;
-    })
-  );
+  return schemaValidationIssues(SvgInterchangeIssueSchema, value).length === 0;
 }

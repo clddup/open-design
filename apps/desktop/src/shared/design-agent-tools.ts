@@ -165,6 +165,8 @@ export type {
   UpdateImageToolInput,
 } from "./design-agent-image-tools";
 export {
+  AgentSvgImportResultContract,
+  AGENT_SVG_IMPORT_RESULT_SCHEMA,
   ExportRasterContract,
   ExportSvgContract,
   EXPORT_RASTER_TOOL_INPUT_SCHEMA,
@@ -173,6 +175,10 @@ export {
   INTERNAL_IMPORT_SVG_TOOL_INPUT_SCHEMA,
   ImportSvgContract,
   IMPORT_SVG_TOOL_INPUT_SCHEMA,
+  PreparedAgentRasterExportContract,
+  PREPARED_AGENT_RASTER_EXPORT_SCHEMA,
+  PreparedAgentSvgExportContract,
+  PREPARED_AGENT_SVG_EXPORT_SCHEMA,
   isAgentSvgImportResult,
   isPreparedAgentRasterExport,
   isPreparedAgentSvgExport,

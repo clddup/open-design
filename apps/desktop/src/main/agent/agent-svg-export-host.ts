@@ -7,8 +7,9 @@ import type {
 import {
   ExportSvgContract,
   EXPORT_SVG_TOOL_NAME,
-  isPreparedAgentSvgExport,
+  PreparedAgentSvgExportContract,
 } from "@/shared/design-agent-tools";
+import { formatValidationFailure } from "@/shared/contract-validation";
 import type { SvgFileService } from "../svg/svg-file-service";
 
 interface RendererSvgExportPort {
@@ -53,10 +54,15 @@ export class AgentSvgExportHost {
       signal,
     );
     throwIfAborted(signal);
-    const prepared = preparedResult.content;
-    if (!isPreparedAgentSvgExport(prepared)) {
-      throw new TypeError("Renderer returned an invalid SVG export");
+    const parsedPrepared = PreparedAgentSvgExportContract.parse(
+      preparedResult.content,
+    );
+    if (!parsedPrepared.ok) {
+      throw new TypeError(
+        formatValidationFailure("Renderer SVG export", parsedPrepared.issues),
+      );
     }
+    const prepared = parsedPrepared.value;
     if (
       prepared.revision !== context.revision ||
       preparedResult.observedRevision !== prepared.revision

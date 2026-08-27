@@ -176,7 +176,7 @@ describe("AgentSvgImportHost", () => {
     );
     await expect(
       forged.execute(call, context, new AbortController().signal),
-    ).rejects.toThrow("invalid SVG import result");
+    ).rejects.toThrow(/Renderer SVG import.*\/svg/);
 
     const stale = new AgentSvgImportHost(
       {

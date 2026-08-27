@@ -91,6 +91,19 @@ describe("AgentRasterExportHost", () => {
 
   it("rejects stale or forged Renderer output before saving", async () => {
     const saveRasterFile = vi.fn();
+    const invalidMime = new AgentRasterExportHost(
+      {
+        execute: vi.fn().mockResolvedValue({
+          observedRevision: 7,
+          content: { ...prepared, mimeType: "image/jpeg" },
+        }),
+      },
+      { saveRasterFile },
+    );
+    await expect(
+      invalidMime.execute(call, context, new AbortController().signal),
+    ).rejects.toThrow(/Renderer raster export.*\/mimeType/);
+
     const stale = new AgentRasterExportHost(
       {
         execute: vi.fn().mockResolvedValue({

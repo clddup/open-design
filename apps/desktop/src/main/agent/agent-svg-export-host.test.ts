@@ -126,7 +126,7 @@ describe("AgentSvgExportHost", () => {
     );
     await expect(
       forgedHost.execute(call, context, new AbortController().signal),
-    ).rejects.toThrow("invalid SVG export");
+    ).rejects.toThrow(/Renderer SVG export.*\/filePath/);
 
     const staleHost = new AgentSvgExportHost(
       {

@@ -7,8 +7,9 @@ import type {
 import {
   ExportRasterContract,
   EXPORT_RASTER_TOOL_NAME,
-  isPreparedAgentRasterExport,
+  PreparedAgentRasterExportContract,
 } from "@/shared/design-agent-tools.js";
+import { formatValidationFailure } from "@/shared/contract-validation.js";
 import type { RasterFileService } from "../raster/raster-file-service.js";
 import type { RendererDesignToolHost } from "./renderer-design-tool-host.js";
 
@@ -42,10 +43,18 @@ export class AgentRasterExportHost {
       signal,
     );
     throwIfAborted(signal);
-    const prepared = preparedResult.content;
-    if (!isPreparedAgentRasterExport(prepared)) {
-      throw new TypeError("Renderer returned an invalid raster export");
+    const parsedPrepared = PreparedAgentRasterExportContract.parse(
+      preparedResult.content,
+    );
+    if (!parsedPrepared.ok) {
+      throw new TypeError(
+        formatValidationFailure(
+          "Renderer raster export",
+          parsedPrepared.issues,
+        ),
+      );
     }
+    const prepared = parsedPrepared.value;
     if (
       prepared.revision !== context.revision ||
       preparedResult.observedRevision !== prepared.revision

@@ -1,5 +1,12 @@
 import { executableJsonSchema } from "@opendesign/design-contracts";
 import { SVG_MAX_CHARACTERS } from "@opendesign/import-export-service/limits";
+import {
+  RASTER_EXPORT_MAX_DIMENSION,
+  RASTER_EXPORT_MAX_ENCODED_BYTES,
+} from "@opendesign/import-export-service/raster";
+import { SvgInterchangeIssueSchema } from "@opendesign/import-export-service/svg-issues";
+import { Type } from "@sinclair/typebox";
+import { PortableFileNameSchema } from "./portable-file-name";
 
 const ID_SCHEMA = {
   type: "string",
@@ -204,3 +211,76 @@ export const EXPORT_RASTER_TOOL_INPUT_SCHEMA = executableJsonSchema({
   ],
   additionalProperties: false,
 });
+
+const INTERNAL_ID_SCHEMA = Type.String({ minLength: 1, maxLength: 256 });
+const INTERNAL_REVISION_SCHEMA = Type.Integer({ minimum: 0 });
+const INTERNAL_SVG_ISSUES_SCHEMA = Type.Array(SvgInterchangeIssueSchema, {
+  maxItems: 1_000,
+});
+
+export const PREPARED_AGENT_RASTER_EXPORT_SCHEMA = Type.Object(
+  {
+    kind: Type.Literal("raster-export-preparation"),
+    version: Type.Literal(1),
+    suggestedName: PortableFileNameSchema,
+    format: Type.Union([
+      Type.Literal("png"),
+      Type.Literal("jpeg"),
+      Type.Literal("webp"),
+    ]),
+    mimeType: Type.Union([
+      Type.Literal("image/png"),
+      Type.Literal("image/jpeg"),
+      Type.Literal("image/webp"),
+    ]),
+    bytes: Type.Uint8Array({
+      minByteLength: 1,
+      maxByteLength: RASTER_EXPORT_MAX_ENCODED_BYTES,
+    }),
+    width: Type.Integer({ minimum: 1, maximum: RASTER_EXPORT_MAX_DIMENSION }),
+    height: Type.Integer({ minimum: 1, maximum: RASTER_EXPORT_MAX_DIMENSION }),
+    revision: INTERNAL_REVISION_SCHEMA,
+    rootNodeId: INTERNAL_ID_SCHEMA,
+  },
+  { additionalProperties: false },
+);
+
+export const AGENT_SVG_IMPORT_RESULT_SCHEMA = Type.Object(
+  {
+    kind: Type.Literal("svg-import-result"),
+    version: Type.Literal(1),
+    ok: Type.Literal(true),
+    format: Type.Literal("svg"),
+    attachmentId: Type.String({ pattern: "^svg_[a-f0-9]{64}$" }),
+    name: Type.String({ minLength: 1, maxLength: 255, pattern: "\\S" }),
+    pageId: INTERNAL_ID_SCHEMA,
+    parentId: Type.Union([INTERNAL_ID_SCHEMA, Type.Null()]),
+    rootNodeId: INTERNAL_ID_SCHEMA,
+    importedNodeIds: Type.Array(INTERNAL_ID_SCHEMA, {
+      minItems: 1,
+      maxItems: 10_000,
+      uniqueItems: true,
+    }),
+    revision: Type.Integer({ minimum: 1 }),
+    atomic: Type.Literal(true),
+    issues: INTERNAL_SVG_ISSUES_SCHEMA,
+  },
+  { additionalProperties: false },
+);
+
+export const PREPARED_AGENT_SVG_EXPORT_SCHEMA = Type.Object(
+  {
+    kind: Type.Literal("svg-export-preparation"),
+    version: Type.Literal(1),
+    suggestedName: PortableFileNameSchema,
+    svg: Type.String({ minLength: 1, maxLength: SVG_MAX_CHARACTERS }),
+    revision: INTERNAL_REVISION_SCHEMA,
+    exportedNodeIds: Type.Array(INTERNAL_ID_SCHEMA, {
+      minItems: 1,
+      maxItems: 10_000,
+      uniqueItems: true,
+    }),
+    issues: INTERNAL_SVG_ISSUES_SCHEMA,
+  },
+  { additionalProperties: false },
+);
