@@ -16,7 +16,7 @@ Figma 的公开 Rename Layers 行为提供产品参照：单层名称可直接�
 - 普通多选的所有名称通过一个 `DesignTransaction` 应用，形成一个 revision 与一个 undo entry。窗口冻结打开时的 document revision；期间任何文档事务都会使提交失败并要求基于当前 revision 重新打开，不能把旧 preview 静默套到新文档。
 - 通用 Modal shell 在 `@opendesign/ui` 内包装仓库既有 Base UI Dialog，统一 Portal、Backdrop、Escape、pointer dismissal、focus lifecycle 与 ARIA；Renderer 只组合 OpenDesign UI API 和业务 `Component.module.scss`，不得直接依赖 `@base-ui/react` 或重写弹窗基础设施。既有 `ConfirmDialog` 复用同一 shell。
 
-本切片不升级 `DesignDocument`，不增加兼容分支。右键 Layers context menu、Canvas Frame label 双击、AI Rename Layers、跨多个 Instance 派生目标批量命名和远程 Library 名称同步仍是后续能力；在具备完整菜单信息架构或多派生目标 Selection contract 前，不以孤立菜单项或 Renderer-local projection 数组绕过。
+本切片不升级 `DesignDocument`，不增加兼容分支。右键 Layers context menu、AI Rename Layers、跨多个 Instance 派生目标批量命名和远程 Library 名称同步仍是后续能力；在具备完整菜单信息架构或多派生目标 Selection contract 前，不以孤立菜单项或 Renderer-local projection 数组绕过。Canvas Frame label 双击已由 [ADR-0203](0203-top-level-canvas-frame-labels.md) 后续实现，并直接复用本 ADR 的单目标 rename workflow。
 
 ## 验证
 

@@ -638,6 +638,9 @@ export function EditorWorkbenchFeature({
               onAdjustSmartSelectionSpacing={adjustSmartSelectionSpacing}
               onReorderSmartSelection={reorderSmartSelection}
               onAssetDrop={placeImageAssetAtPoint}
+              onRenameFrame={(nodeId, name) =>
+                renameLayerTarget({ nodeId }, name)
+              }
               onImageAreaEdit={(nodeId, action, selection) =>
                 void runImageEdit(nodeId, { action, selection })
               }

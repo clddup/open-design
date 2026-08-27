@@ -84,6 +84,7 @@ describe("canvas top-level Frame labels", () => {
     render(
       <CanvasFrameLabels
         document={document}
+        onRename={() => ({ ok: true })}
         onSelect={onSelect}
         pageId="page_welcome"
         selectedNodeIds={[]}
@@ -93,5 +94,97 @@ describe("canvas top-level Frame labels", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Welcome canvas" }));
     expect(onSelect).toHaveBeenCalledWith("frame_welcome");
+  });
+
+  it("renames through the host workflow on double-click and Enter", () => {
+    const onRename = vi.fn(() => ({ ok: true }) as const);
+    render(
+      <CanvasFrameLabels
+        document={createWelcomeDocument()}
+        onRename={onRename}
+        onSelect={vi.fn()}
+        pageId="page_welcome"
+        selectedNodeIds={[]}
+        viewport={viewport}
+      />,
+    );
+
+    fireEvent.doubleClick(
+      screen.getByRole("button", { name: "Welcome canvas" }),
+    );
+    const input = screen.getByRole("textbox", { name: "Welcome canvas" });
+    fireEvent.change(input, { target: { value: "Product home" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(onRename).toHaveBeenCalledWith("frame_welcome", "Product home");
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  });
+
+  it("commits on blur, cancels on Escape, and keeps failures visible", () => {
+    const onRename = vi
+      .fn()
+      .mockReturnValueOnce({ ok: true })
+      .mockReturnValueOnce({ ok: false, error: "Name is unavailable" });
+    render(
+      <CanvasFrameLabels
+        document={createWelcomeDocument()}
+        onRename={onRename}
+        onSelect={vi.fn()}
+        pageId="page_welcome"
+        selectedNodeIds={[]}
+        viewport={viewport}
+      />,
+    );
+
+    fireEvent.doubleClick(
+      screen.getByRole("button", { name: "Welcome canvas" }),
+    );
+    let input = screen.getByRole("textbox", { name: "Welcome canvas" });
+    fireEvent.change(input, { target: { value: "Blurred name" } });
+    fireEvent.blur(input);
+    expect(onRename).toHaveBeenLastCalledWith("frame_welcome", "Blurred name");
+
+    fireEvent.doubleClick(
+      screen.getByRole("button", { name: "Welcome canvas" }),
+    );
+    input = screen.getByRole("textbox", { name: "Welcome canvas" });
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(onRename).toHaveBeenCalledTimes(1);
+
+    fireEvent.doubleClick(
+      screen.getByRole("button", { name: "Welcome canvas" }),
+    );
+    input = screen.getByRole("textbox", { name: "Welcome canvas" });
+    fireEvent.change(input, { target: { value: "Rejected name" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(screen.getByRole("alert")).toHaveTextContent("Name is unavailable");
+    expect(input).toHaveAttribute("aria-invalid", "true");
+  });
+
+  it("does not submit Enter while an input method composition is active", () => {
+    const onRename = vi.fn(() => ({ ok: true }) as const);
+    render(
+      <CanvasFrameLabels
+        document={createWelcomeDocument()}
+        onRename={onRename}
+        onSelect={vi.fn()}
+        pageId="page_welcome"
+        selectedNodeIds={[]}
+        viewport={viewport}
+      />,
+    );
+
+    fireEvent.doubleClick(
+      screen.getByRole("button", { name: "Welcome canvas" }),
+    );
+    const input = screen.getByRole("textbox", { name: "Welcome canvas" });
+    fireEvent.compositionStart(input);
+    fireEvent.change(input, { target: { value: "产品首页" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onRename).not.toHaveBeenCalled();
+
+    fireEvent.compositionEnd(input);
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onRename).toHaveBeenCalledWith("frame_welcome", "产品首页");
   });
 });

@@ -113,6 +113,7 @@ export function Canvas({
   onTransactionError,
   onAdjustAutoLayoutSpacing,
   onAssetDrop,
+  onRenameFrame,
   imageEditActivity,
   onImageAreaEdit,
   onImageAreaSelectionControllerChange,
@@ -156,6 +157,10 @@ export function Canvas({
     assetId: string,
     documentPoint: { x: number; y: number },
   ) => { ok: boolean };
+  onRenameFrame: (
+    nodeId: string,
+    name: string,
+  ) => { ok: true } | { ok: false; error: string };
   imageEditActivity?: {
     action: DesignImageEditAction;
     nodeName: string;
@@ -1429,6 +1434,7 @@ export function Canvas({
       )}
       <CanvasFrameLabels
         document={snapshot.document}
+        onRename={onRenameFrame}
         onSelect={(nodeId) => {
           runtime.setSelection([nodeId], nodeId);
           host.current?.focus();
