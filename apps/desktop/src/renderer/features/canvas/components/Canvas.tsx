@@ -99,6 +99,7 @@ import { GridTrackInput } from "./GridTrackInput";
 import { ImageExpandOverlay } from "./ImageExpandOverlay";
 import { useCanvasInlineEditors } from "../use-canvas-inline-editors";
 import { canvasGridEditorScope } from "../canvas-grid-editor-scope";
+import { CanvasFrameLabels } from "./CanvasFrameLabels";
 
 export function Canvas({
   activeAgentRunId,
@@ -1426,6 +1427,16 @@ export function Canvas({
           {t("canvas.dropImageAsset")}
         </div>
       )}
+      <CanvasFrameLabels
+        document={snapshot.document}
+        onSelect={(nodeId) => {
+          runtime.setSelection([nodeId], nodeId);
+          host.current?.focus();
+        }}
+        pageId={activePageId}
+        selectedNodeIds={snapshot.state.selection.nodeIds}
+        viewport={snapshot.state.viewport}
+      />
       {inlineEditors.autoLayoutSpacing &&
         (() => {
           const request = inlineEditors.autoLayoutSpacing;

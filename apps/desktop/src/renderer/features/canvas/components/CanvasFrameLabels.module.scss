@@ -1,0 +1,54 @@
+.root {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.label {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  overflow: hidden;
+  max-width: 240px;
+  height: 18px;
+  padding: 0 3px;
+  border: 0;
+  border-radius: 3px;
+  color: var(--ui-text-faint);
+  background: transparent;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 580;
+  line-height: 18px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  pointer-events: auto;
+  transform: translate3d(
+    var(--canvas-frame-label-x),
+    var(--canvas-frame-label-y),
+    0
+  );
+
+  &:hover {
+    color: var(--ui-text);
+    background: color-mix(in srgb, var(--ui-surface-raised) 88%, transparent);
+  }
+
+  &:focus-visible {
+    outline: 1px solid var(--ui-focus);
+    outline-offset: 1px;
+  }
+
+  &[data-selected="true"] {
+    color: var(--ui-accent);
+  }
+
+  &[data-kind="component"] {
+    color: var(--ui-accent-text);
+  }
+}
