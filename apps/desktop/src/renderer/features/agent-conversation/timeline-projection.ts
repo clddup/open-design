@@ -8,12 +8,13 @@ import {
   DESIGN_FIRST_SLICE_TOOL_NAME,
   DESIGN_PLAN_TOOL_NAME,
 } from "@/shared/design-agent-tools";
+import { parseDesignStepProgressMessage } from "@/shared/design-step-progress";
 import {
   committedStepsFromResult,
   latestDeliveryLedger,
-  parseCommittedDesignStep,
   projectDurableDesignSteps,
 } from "./timeline-design-delivery";
+import { createPlanExecutionStateProjector } from "./timeline-plan-status";
 import {
   approvalDecisionKey,
   assistantReasoningSummary,
@@ -127,88 +128,23 @@ export function projectAgentTimeline({
     });
   }
   const latestRunId = [...runOrder.keys()].at(-1);
+  const projectPlanExecutionState = createPlanExecutionStateProjector({
+    events,
+    timeline,
+  });
   const normalized = [...merged.values()].map((item) => {
     if (item.kind === "plan" && item.plan && item.runId) {
-      const plan = item.plan;
       const delivery = latestDeliveryLedger(timeline, events, item.runId);
-      const allCommittedSteps = [...merged.values()]
-        .filter(
-          (candidate) =>
-            candidate.runId === item.runId &&
-            candidate.id.startsWith("design-step:") &&
-            (candidate.toolCallId === item.toolCallId ||
-              candidate.order > item.order),
-        )
-        .flatMap((candidate) => {
-          const revision = Number(candidate.time.replace(/^r/, ""));
-          return Number.isSafeInteger(revision)
-            ? [{ label: candidate.title.trim(), revision }]
-            : [];
-        });
-      const committedSteps = [
-        ...new Map(
-          allCommittedSteps
-            .sort((left, right) => left.revision - right.revision)
-            .map((step) => [step.label, step]),
-        ).values(),
-      ];
-      if (delivery || committedSteps.length > 0) {
-        const statusByTargetId = new Map(
-          delivery?.targets.map((target) => [target.targetId, target.status]) ??
-            [],
-        );
-        const targets = plan.targets.map((target, targetIndex) => {
-          const status = statusByTargetId.get(target.targetId) ?? target.status;
-          const projectedSteps = target.implementationSteps.map((step) => {
-            const committed = committedSteps.find(
-              (candidate) => candidate.label === step.label.trim(),
-            );
-            const verifiedReview =
-              status === "verified" &&
-              /review|refine|审查|精修/i.test(step.label);
-            return committed || verifiedReview
-              ? {
-                  ...step,
-                  status: "committed" as const,
-                  ...(committed ? { revision: committed.revision } : {}),
-                }
-              : step;
-          });
-          const knownLabels = new Set(
-            projectedSteps.map((step) => step.label.trim()),
-          );
-          const ownsUnmatchedCommittedSteps =
-            plan.targets.length === 1 ||
-            delivery?.activeTargetId === target.targetId ||
-            (delivery?.activeTargetId === null && targetIndex === 0);
-          return {
-            ...target,
-            ...(status ? { status } : {}),
-            implementationSteps: [
-              ...projectedSteps,
-              ...(ownsUnmatchedCommittedSteps
-                ? committedSteps
-                    .filter((step) => !knownLabels.has(step.label))
-                    .map((step) => ({
-                      label: step.label,
-                      status: "committed" as const,
-                      revision: step.revision,
-                    }))
-                : []),
-            ],
-          };
-        });
-        return {
-          ...item,
-          plan: {
-            ...plan,
-            status: targets.every((target) => target.status === "verified")
-              ? ("verified" as const)
-              : ("active" as const),
-            targets,
-          },
-        };
-      }
+      return {
+        ...item,
+        plan: projectPlanExecutionState({
+          ...(delivery ? { delivery } : {}),
+          plan: item.plan,
+          planOrder: item.order,
+          ...(item.toolCallId ? { planToolCallId: item.toolCallId } : {}),
+          runId: item.runId,
+        }),
+      };
     }
     if (
       item.runId === stoppingRunId &&
@@ -388,7 +324,7 @@ export function timelineRenderMarker(
   return items
     .map(
       (item) =>
-        `${item.id}:${item.state}:${item.title.length}:${item.detail?.length ?? 0}:${item.reasoning?.length ?? 0}:${item.plan?.status ?? ""}:${item.plan?.targets.map((target) => `${target.status ?? ""}:${target.implementationSteps.map((step) => `${step.status}:${step.revision ?? ""}`).join(";")}`).join(",") ?? ""}`,
+        `${item.id}:${item.state}:${item.title.length}:${item.detail?.length ?? 0}:${item.reasoning?.length ?? 0}:${item.plan?.status ?? ""}:${item.plan?.targets.map((target) => `${target.status ?? ""}:${target.implementationSteps.map((step) => step.status).join(";")}`).join(",") ?? ""}`,
     )
     .join("|");
 }
@@ -853,31 +789,29 @@ function projectLiveEvents(
     }
     if (event.type === "tool.progress") {
       const existing = items.get(`tool:${event.toolCallId}`);
-      const committedDesignStep = event.message.startsWith("设计步骤：")
-        ? event.message.slice("设计步骤：".length)
-        : undefined;
+      const committedDesignStep = parseDesignStepProgressMessage(event.message);
       updateEvent(`tool:${event.toolCallId}`, {
         state: "active",
         kind: "tool",
         time: `${Math.round(event.progress * 100)}%`,
         title: existing?.title ?? t("agent.applyingChange"),
         detail: committedDesignStep
-          ? committedDesignStep
+          ? committedDesignStep.label
           : isNativeDesignTool(existing?.toolName)
             ? undefined
             : friendlyAgentError(event.message, t),
       });
       if (committedDesignStep) {
-        const parsed = parseCommittedDesignStep(committedDesignStep);
-        if (parsed) {
-          updateEvent(`design-step:${event.toolCallId}:${parsed.revision}`, {
+        updateEvent(
+          `design-step:${event.toolCallId}:${committedDesignStep.revision}`,
+          {
             state: "done",
             kind: "system",
             toolCallId: event.toolCallId,
-            time: `r${parsed.revision}`,
-            title: parsed.label,
-          });
-        }
+            time: `r${committedDesignStep.revision}`,
+            title: committedDesignStep.label,
+          },
+        );
       }
     }
     if (event.type === "tool.completed") {
@@ -1098,8 +1032,7 @@ function designPlanTimeline(
             );
             return {
               label,
-              status: committed ? ("committed" as const) : ("pending" as const),
-              ...(committed ? { revision: committed.revision } : {}),
+              status: committed ? ("completed" as const) : ("pending" as const),
             };
           })
       : [];

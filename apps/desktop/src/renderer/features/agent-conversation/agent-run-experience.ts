@@ -8,6 +8,7 @@ import {
   DESIGN_FIRST_SLICE_TOOL_NAME,
   DESIGN_REVIEW_TOOL_NAME,
 } from "@/shared/design-agent-tools";
+import { parseDesignStepProgressMessage } from "@/shared/design-step-progress";
 import type { MessageKey } from "@/shared/i18n/messages";
 import { latestDeliveryLedger } from "./timeline-design-delivery";
 
@@ -87,7 +88,7 @@ export function projectAgentRunExperience(input: {
       (event) =>
         (event.type === "tool.completed" && event.revision !== undefined) ||
         (event.type === "tool.progress" &&
-          /^设计步骤：.+ · r\d+$/.test(event.message)),
+          parseDesignStepProgressMessage(event.message) !== null),
     );
   const hasCanvasChanges = allocatedTargetCount > 0 || hasRevision;
   const activeToolNames = activeTools(timelineForRun, eventsForRun);

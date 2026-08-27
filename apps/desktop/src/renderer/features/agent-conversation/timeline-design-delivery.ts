@@ -48,15 +48,6 @@ export function projectDurableDesignSteps(
   });
 }
 
-export function parseCommittedDesignStep(
-  value: string,
-): { label: string; revision: number } | null {
-  const match = /^(.*) · r(\d+)$/.exec(value);
-  if (!match?.[1] || match[1].length > 512) return null;
-  const revision = Number(match[2]);
-  return Number.isSafeInteger(revision) ? { label: match[1], revision } : null;
-}
-
 export function committedStepsFromResult(
   value: unknown,
 ): Array<{ label: string; revision: number }> {

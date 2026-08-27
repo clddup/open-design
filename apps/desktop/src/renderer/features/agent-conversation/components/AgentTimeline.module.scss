@@ -381,27 +381,28 @@
 
   li {
     display: grid;
-    grid-template-columns: 12px minmax(0, 1fr) auto;
+    grid-template-columns: 14px minmax(0, 1fr) auto;
     align-items: start;
     gap: 6px;
     color: var(--ui-text-muted);
     font-size: 9px;
     line-height: 1.4;
 
-    > span:first-child {
-      display: grid;
-      width: 5px;
-      height: 5px;
-      margin-top: 4px;
-      place-items: center;
-      border: 1px solid var(--ui-border-strong);
-      border-radius: 50%;
-      background: var(--ui-surface);
-    }
-
     > small {
       color: var(--ui-text-faint);
       font-size: 8px;
+
+      &[data-state="active"] {
+        color: var(--ui-accent);
+      }
+
+      &[data-state="completed"] {
+        color: var(--ui-success);
+      }
+
+      &[data-state="failed"] {
+        color: var(--ui-danger);
+      }
     }
   }
 }
@@ -410,15 +411,38 @@
   min-width: 0;
 }
 
-.planSteps li > .planStepCommitted {
-  width: 11px;
-  height: 11px;
+.planStepIndicator {
+  display: grid;
+  width: 12px;
+  height: 12px;
   margin-top: 1px;
-  border-color: var(--ui-success);
-  color: var(--ui-surface);
-  background: var(--ui-success);
-  font-size: 7px;
-  line-height: 1;
+  place-items: center;
+  border: 1px solid var(--ui-border-strong);
+  border-radius: 50%;
+  color: var(--ui-text-faint);
+  background: var(--ui-surface);
+
+  &[data-state="active"] {
+    border-color: var(--ui-accent);
+    color: var(--ui-accent);
+  }
+
+  &[data-state="completed"] {
+    border-color: var(--ui-success);
+    color: var(--ui-surface);
+    background: var(--ui-success);
+  }
+
+  &[data-state="failed"] {
+    border-color: var(--ui-danger);
+    color: var(--ui-surface);
+    background: var(--ui-danger);
+  }
+
+  :global(.ui-icon) {
+    width: 8px;
+    height: 8px;
+  }
 }
 
 .toolGroupItems {

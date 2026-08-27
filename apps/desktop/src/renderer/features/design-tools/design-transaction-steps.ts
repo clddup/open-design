@@ -11,6 +11,7 @@ import {
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
   type InternalDesignApplyToolInput,
 } from "@/shared/design-agent-tools";
+import { designStepProgressMessage } from "@/shared/design-step-progress";
 import type {
   RendererDesignToolProgressPhase,
   RendererDesignToolRequest,
@@ -56,7 +57,10 @@ export async function executeSemanticDesignTransaction(options: {
     execution.onProgress?.(
       "applying",
       0.9,
-      `设计步骤：${transaction.label ?? "Apply design transaction"} · r${result.revision.revision}`,
+      designStepProgressMessage(
+        transaction.label ?? "Apply design transaction",
+        result.revision.revision,
+      ),
     );
     return {
       requestId: request.requestId,
@@ -133,21 +137,23 @@ export async function executeSemanticDesignTransaction(options: {
         remainingSteps,
         commands.length,
       );
-      committedSteps.push({
-        stepIds: completedSteps.map((step) => step.stepId),
-        label: completedSteps.map((step) => step.label).join(" + "),
+      const completed = completedSteps.map((step) => ({
+        stepIds: [step.stepId],
+        label: step.label,
         revision: result.revision.revision,
-      });
-      const committed = committedSteps.at(-1);
-      execution.onProgress?.(
-        "applying",
+      }));
+      committedSteps.push(...completed);
+      const progress =
         0.1 +
-          0.8 *
-            ((transaction.commands.length - remainingCommands.length) /
-              transaction.commands.length),
-        committed
-          ? `设计步骤：${committed.label} · r${committed.revision}`
-          : undefined,
+        0.8 *
+          ((transaction.commands.length - remainingCommands.length) /
+            transaction.commands.length);
+      completed.forEach((step) =>
+        execution.onProgress?.(
+          "applying",
+          progress,
+          designStepProgressMessage(step.label, step.revision),
+        ),
       );
       if (remainingCommands.length > 0) {
         await waitForCanvasPaint(signal, stageDelayMs, onCanvasWait);

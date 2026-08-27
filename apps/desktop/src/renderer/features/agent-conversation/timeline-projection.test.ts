@@ -134,9 +134,142 @@ describe("Agent continuation timeline projection", () => {
       implementationSteps: [
         { label: "构建导航与首屏层级", status: "pending" },
         { label: "完成核心内容与底部状态", status: "pending" },
-        { label: "完成真实导航结构", status: "committed", revision: 3 },
+        { label: "完成真实导航结构", status: "completed" },
       ],
     });
+  });
+
+  it("projects pending, active, failed, and completed Plan steps from real tool state", () => {
+    const now = "2026-08-26T04:00:00.000Z";
+    const runId = "run_step_state";
+    const timeline: SessionTimelineItem[] = [
+      {
+        itemId: "tool:plan_step_state",
+        sessionId: "conversation_1",
+        runId,
+        sequence: 1,
+        createdAt: now,
+        updatedAt: now,
+        type: "tool",
+        toolCallId: "plan_step_state",
+        toolName: "opendesign_generate_first_slice",
+        input: {},
+        risk: "design_write",
+        status: "completed",
+        result: {
+          plan: {
+            targets: [
+              {
+                targetId: "target_home",
+                label: "首页",
+                objective: "建立首页",
+                implementationSteps: ["构建导航", "完成内容"],
+              },
+            ],
+          },
+          delivery: {
+            version: 3,
+            targets: [
+              {
+                targetId: "target_home",
+                label: "首页",
+                pageId: "page_1",
+                rootNodeId: "frame_home",
+                reservedNodeIds: ["frame_home"],
+                status: "allocated",
+                allocatedRevision: 1,
+              },
+            ],
+            activeTargetId: "target_home",
+          },
+        },
+        revision: 1,
+        transactionId: "transaction_plan",
+      },
+    ];
+    const input = {
+      label: "构建首页",
+      edits: [
+        {
+          kind: "node" as const,
+          input: {
+            label: "构建导航",
+            steps: [
+              {
+                stepId: "navigation",
+                label: "构建导航",
+                commandIds: ["update_navigation"],
+              },
+            ],
+            commands: [
+              {
+                commandId: "update_navigation",
+                type: "update_properties" as const,
+                nodeId: "navigation",
+                opacity: 0.96,
+              },
+            ],
+          },
+        },
+      ],
+    };
+    const project = (events: AgentEvent[]) =>
+      projectAgentTimeline({
+        activeRunId: runId,
+        events,
+        locale: "zh-CN",
+        stoppingRunId: null,
+        timeline,
+        t: (key, parameters) => translate("zh-CN", key, parameters),
+      }).find((item) => item.kind === "plan")?.plan?.targets[0]
+        ?.implementationSteps;
+    const requested: AgentEvent = {
+      type: "tool.requested",
+      runId,
+      toolCallId: "edit_navigation",
+      toolName: "opendesign_edit_design",
+      input,
+      risk: "design_write",
+    };
+
+    expect(project([])).toMatchObject([
+      { label: "构建导航", status: "pending" },
+      { label: "完成内容", status: "pending" },
+    ]);
+    expect(project([requested])).toMatchObject([
+      { label: "构建导航", status: "active" },
+      { label: "完成内容", status: "pending" },
+    ]);
+    expect(
+      project([
+        requested,
+        {
+          type: "tool.failed",
+          runId,
+          toolCallId: "edit_navigation",
+          code: "design.node.invalid",
+          message: "Navigation is invalid",
+        },
+      ]),
+    ).toMatchObject([
+      { label: "构建导航", status: "failed" },
+      { label: "完成内容", status: "pending" },
+    ]);
+    expect(
+      project([
+        requested,
+        {
+          type: "tool.progress",
+          runId,
+          toolCallId: "edit_navigation",
+          message: "设计步骤：构建导航 · r2",
+          progress: 0.8,
+        },
+      ]),
+    ).toMatchObject([
+      { label: "构建导航", status: "completed" },
+      { label: "完成内容", status: "pending" },
+    ]);
   });
 
   it("keeps terminal failures at the end without duplicating one root cause", () => {

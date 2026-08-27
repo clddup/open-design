@@ -45,8 +45,7 @@ export interface AgentTimelineItem {
       objective: string;
       implementationSteps: Array<{
         label: string;
-        status: "pending" | "committed";
-        revision?: number;
+        status: "pending" | "active" | "completed" | "failed";
       }>;
       status?: DesignDeliveryStatus;
     }>;

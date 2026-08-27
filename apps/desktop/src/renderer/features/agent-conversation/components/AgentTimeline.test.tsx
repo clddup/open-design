@@ -128,9 +128,11 @@ describe("AgentTimeline", () => {
     expect(screen.getByText("Current plan · Stage 1/12")).toBeInTheDocument();
     expect(screen.getByText("Home")).toBeInTheDocument();
     expect(screen.getByText("Build navigation and hero")).toBeInTheDocument();
-    expect(screen.getByText("r2")).toBeInTheDocument();
+    expect(screen.getByText("Completed")).toBeInTheDocument();
+    expect(screen.getByText("Pending")).toBeInTheDocument();
     const activePlan = document.querySelector("[data-agent-active-plan]");
     expect(activePlan).not.toBeNull();
+    expect(activePlan).not.toHaveTextContent("r2");
     expect(activePlan?.closest("ol")).toBeNull();
     expect(
       document.querySelector("details[data-agent-plan]")?.hasAttribute("open"),

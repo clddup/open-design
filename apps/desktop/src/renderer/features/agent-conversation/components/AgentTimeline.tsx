@@ -155,18 +155,17 @@ function PlanDisclosure({
                     <li key={`${target.targetId}:${index}`}>
                       <span
                         aria-hidden="true"
-                        className={
-                          step.status === "committed"
-                            ? styles.planStepCommitted
-                            : undefined
-                        }
+                        className={styles.planStepIndicator}
+                        data-state={step.status}
                       >
-                        {step.status === "committed" ? "✓" : ""}
+                        {step.status !== "pending" && (
+                          <Icon name={planStepStatusIcon(step.status)} />
+                        )}
                       </span>
                       <span className={styles.planStepLabel}>{step.label}</span>
-                      {step.revision !== undefined && (
-                        <small>{`r${step.revision}`}</small>
-                      )}
+                      <small data-state={step.status}>
+                        {t(planStepStatusKey(step.status))}
+                      </small>
                     </li>
                   ))}
                 </ol>
@@ -177,6 +176,25 @@ function PlanDisclosure({
       </div>
     </details>
   );
+}
+
+function planStepStatusIcon(
+  status: "active" | "completed" | "failed",
+): "lucide:circle-dot" | "lucide:check" | "lucide:x" {
+  if (status === "active") return "lucide:circle-dot";
+  if (status === "completed") return "lucide:check";
+  return "lucide:x";
+}
+
+function planStepStatusKey(
+  status: NonNullable<
+    AgentTimelineItem["plan"]
+  >["targets"][number]["implementationSteps"][number]["status"],
+) {
+  if (status === "active") return "agent.planStepActive" as const;
+  if (status === "completed") return "agent.planStepCompleted" as const;
+  if (status === "failed") return "agent.planStepFailed" as const;
+  return "agent.planStepPending" as const;
 }
 
 function ToolGroupDisclosure({
