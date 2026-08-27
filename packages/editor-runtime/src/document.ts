@@ -54,10 +54,12 @@ export function normalizeDesignDocument(value: unknown): DesignDocument {
   const migrated = migrateDesignDocument(value);
   if (!migrated) {
     const contractIssues = DesignDocumentContract.issues(value).map(
-      ({ code, path, message, recovery }) => ({
+      ({ code, path, message, expected, actual, recovery }) => ({
         code,
         path,
         message,
+        ...(expected === undefined ? {} : { expected }),
+        ...(actual === undefined ? {} : { actual }),
         ...(recovery === undefined ? {} : { recovery }),
       }),
     );

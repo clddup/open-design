@@ -4,6 +4,7 @@ import {
   isValidLayoutLimits,
   layoutGuideGeometryIsValid,
   type DesignDocument,
+  type DesignIssue,
   type DesignNode,
 } from "@opendesign/design-contracts";
 
@@ -11,6 +12,8 @@ export interface DocumentInvariantIssue {
   code?: string;
   path: string;
   message: string;
+  expected?: DesignIssue["expected"];
+  actual?: DesignIssue["actual"];
   recovery?: string;
 }
 

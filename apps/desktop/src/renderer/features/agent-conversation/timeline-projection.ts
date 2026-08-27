@@ -1,5 +1,6 @@
 import type {
   AgentEvent,
+  AgentToolFailureDetails,
   SessionTimelineItem,
 } from "@opendesign/agent-contracts";
 import type { AppLocale } from "@/shared/i18n/locale";
@@ -370,11 +371,15 @@ function collapseTerminalFailureDuplicates(
   });
 }
 
-function isDesignCorrectionFailure(code: string, message: string): boolean {
+function isDesignCorrectionFailure(
+  code: string,
+  message: string,
+  details?: AgentToolFailureDetails,
+): boolean {
   return (
     !code.startsWith("renderer_") &&
     (code.startsWith("design") ||
-      isRoutineRecoverableToolFailure(code, message))
+      isRoutineRecoverableToolFailure(code, message, details))
   );
 }
 
@@ -506,14 +511,22 @@ function projectDurableTimeline(
       const routineRecoverableFailure =
         item.status === "failed" &&
         item.error?.message !== undefined &&
-        isRoutineRecoverableToolFailure(item.error.code, item.error.message);
+        isRoutineRecoverableToolFailure(
+          item.error.code,
+          item.error.message,
+          item.error.details,
+        );
       return {
         ...base,
         recoverableFailure:
           item.status === "failed" &&
           item.error?.recoverable === true &&
           (isNativeDesignTool(item.toolName) ||
-            isDesignCorrectionFailure(item.error.code, item.error.message)),
+            isDesignCorrectionFailure(
+              item.error.code,
+              item.error.message,
+              item.error.details,
+            )),
         ...(item.error?.code ? { failureCode: item.error.code } : {}),
         ...(item.error?.message ? { failureMessage: item.error.message } : {}),
         routine:
@@ -908,13 +921,18 @@ function projectLiveEvents(
       const routine = isRoutineRecoverableToolFailure(
         event.code,
         event.message,
+        event.details,
       );
       updateEvent(`tool:${event.toolCallId}`, {
         routine,
         recoverableFailure:
           event.recoverable === true &&
           (isNativeDesignTool(existingTool?.toolName) ||
-            isDesignCorrectionFailure(event.code, event.message)),
+            isDesignCorrectionFailure(
+              event.code,
+              event.message,
+              event.details,
+            )),
         failureCode: event.code,
         failureMessage: event.message,
         state: "error",

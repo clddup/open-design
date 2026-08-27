@@ -7,6 +7,7 @@ import {
 import {
   friendlyAgentError,
   isNativeDesignTool,
+  isRoutineRecoverableToolFailure,
   runFailurePresentation,
   structuredToolFailureDetail,
   toolFailureTitle,
@@ -117,5 +118,58 @@ describe("Agent component timeline presentation", () => {
         "Defer secondary content to continuation.",
       ].join("\n"),
     );
+  });
+
+  it("uses structured design issues for transaction recovery presentation", () => {
+    const details = {
+      kind: "design-transaction" as const,
+      fingerprint: "design_layout",
+      issues: [
+        {
+          code: "design.layout.width_invalid",
+          commandId: "resize_card",
+          nodeId: "card",
+          path: "/nodesById/card/size/width",
+          message: "Card width exceeds its parent",
+          expected: 280,
+          actual: 320,
+          recovery: "Reduce the card width to fit its parent.",
+        },
+      ],
+      recovery: {
+        action: "inspect-and-revise" as const,
+        toolName: "opendesign_inspect_document" as const,
+        required: true as const,
+      },
+    };
+
+    expect(
+      structuredToolFailureDetail(
+        "design.invalid",
+        "generic transaction failure",
+        details,
+        t,
+      ),
+    ).toBe(
+      [
+        "design.layout.width_invalid: Card width exceeds its parent",
+        "command resize_card · node card · /nodesById/card/size/width",
+        "Reduce the card width to fit its parent.",
+      ].join("\n"),
+    );
+    expect(
+      isRoutineRecoverableToolFailure(
+        "design.invalid",
+        "message wording is irrelevant",
+        details,
+      ),
+    ).toBe(true);
+    expect(
+      isRoutineRecoverableToolFailure(
+        "design.permission-denied",
+        "design_workflow.layout_quality_failed: misleading text",
+        details,
+      ),
+    ).toBe(false);
   });
 });

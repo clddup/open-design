@@ -808,6 +808,8 @@ function operationError(error: unknown): DesignError {
         code: issue.code ?? "design.document_invariant_invalid",
         path: issue.path,
         message: issue.message,
+        ...(issue.expected === undefined ? {} : { expected: issue.expected }),
+        ...(issue.actual === undefined ? {} : { actual: issue.actual }),
         ...(issue.recovery === undefined ? {} : { recovery: issue.recovery }),
       })),
     };

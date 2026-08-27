@@ -224,24 +224,16 @@ export function structuredToolFailureDetail(
   details: AgentToolFailureDetails | undefined,
   t: Translate,
 ): string {
-  const friendly =
-    code === "renderer_circuit_open"
-      ? t("agent.canvasCircuitOpenDetail")
-      : code === "tool_protocol_no_progress"
-        ? t("agent.toolProtocolNoProgressDetail")
-        : code === "design_recovery_no_progress"
-          ? t("agent.designRecoveryNoProgressDetail")
-          : code === "renderer_first_response_timeout"
-            ? t("agent.canvasToolFirstResponseTimeoutDetail")
-            : code === "renderer_idle_timeout"
-              ? t("agent.canvasToolIdleTimeoutDetail")
-              : code === "renderer_capture_timeout"
-                ? t("agent.canvasToolIdleTimeoutDetail")
-                : code === "renderer_total_timeout"
-                  ? t("agent.canvasToolTotalTimeoutDetail")
-                  : friendlyAgentError(message, t);
   const issue = details?.issues[0];
-  if (!issue) return friendly;
+  if (!issue) return unstructuredToolFailureDetail(code, message, t);
+  return structuredFailureIssueDetail(issue, details, t);
+}
+
+function structuredFailureIssueDetail(
+  issue: AgentToolFailureDetails["issues"][number],
+  details: AgentToolFailureDetails,
+  t: Translate,
+): string {
   if (details.kind === "tool-validation") {
     return [
       issue.code ? `${issue.code}: ${issue.message}` : issue.message,
@@ -259,7 +251,32 @@ export function structuredToolFailureDetail(
   const retry = details.retrySuppressed
     ? t("agent.inspectRequiredBeforeRetry")
     : null;
-  return [friendly, target.join(" · "), retry].filter(Boolean).join("\n");
+  const rootCause = issue.code
+    ? `${issue.code}: ${issue.message}`
+    : issue.message;
+  return [rootCause, target.join(" · "), issue.recovery, retry]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function unstructuredToolFailureDetail(
+  code: string,
+  message: string,
+  t: Translate,
+): string {
+  if (code === "renderer_circuit_open")
+    return t("agent.canvasCircuitOpenDetail");
+  if (code === "tool_protocol_no_progress")
+    return t("agent.toolProtocolNoProgressDetail");
+  if (code === "design_recovery_no_progress")
+    return t("agent.designRecoveryNoProgressDetail");
+  if (code === "renderer_first_response_timeout")
+    return t("agent.canvasToolFirstResponseTimeoutDetail");
+  if (code === "renderer_idle_timeout" || code === "renderer_capture_timeout")
+    return t("agent.canvasToolIdleTimeoutDetail");
+  if (code === "renderer_total_timeout")
+    return t("agent.canvasToolTotalTimeoutDetail");
+  return friendlyAgentError(message, t);
 }
 
 export function isRecoverableDesignWorkflowFailure(message: string): boolean {
@@ -269,7 +286,11 @@ export function isRecoverableDesignWorkflowFailure(message: string): boolean {
 export function isRoutineRecoverableToolFailure(
   code: string,
   message: string,
+  details?: AgentToolFailureDetails,
 ): boolean {
+  if (details?.kind === "design-transaction") {
+    return ROUTINE_DESIGN_TRANSACTION_CODES.has(code);
+  }
   return (
     isRecoverableDesignWorkflowFailure(message) ||
     code === "invalid_tool_input" ||
@@ -278,6 +299,13 @@ export function isRoutineRecoverableToolFailure(
     message === "Tool call was rejected before execution"
   );
 }
+
+const ROUTINE_DESIGN_TRANSACTION_CODES = new Set([
+  "design.invalid",
+  "design.conflict",
+  "design.not-found",
+  "design.duplicate",
+]);
 
 export function toolFailureTitle(code: string, t: Translate): string {
   if (code === "tool_protocol_no_progress") {

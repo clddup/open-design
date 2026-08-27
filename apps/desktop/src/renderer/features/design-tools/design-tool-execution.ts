@@ -91,6 +91,7 @@ import { createScopedComponentInspection } from "./design-component-inspection";
 import { createScopedVariableInspection } from "./design-variable-inspection";
 import { createScopedStyleInspection } from "./design-style-inspection";
 import { executeDesignSystemToolRequest } from "./design-system-tool-execution";
+import { projectDesignFailureIssues } from "./design-error-projection";
 
 type ExecuteDesignToolOptions = {
   captureCanvas?: (document: DesignDocument) => Promise<{
@@ -2145,7 +2146,7 @@ function designTransactionToolError(
   error: DesignError,
   commands: readonly DesignOperation[],
 ): DesignTransactionToolError {
-  const issues = designFailureIssues(error, commands);
+  const issues = projectDesignFailureIssues(error, commands);
   const firstIssue = issues[0];
   const specificMessage = firstIssue
     ? `${error.message}: ${firstIssue.path || "document"}: ${firstIssue.message}`
@@ -2176,60 +2177,6 @@ function designTransactionToolError(
       },
     },
   });
-}
-
-function designFailureIssues(
-  error: DesignError,
-  commands: readonly DesignOperation[],
-): AgentToolFailureIssue[] {
-  return error.issues.slice(0, 128).map((issue) => {
-    const nodeId = issue.nodeId ?? nodeIdFromInvariantPath(issue.path);
-    const commandId =
-      issue.commandId ?? commandIdForNode(commands, nodeId) ?? undefined;
-    return {
-      ...(commandId ? { commandId } : {}),
-      ...(nodeId ? { nodeId } : {}),
-      path: issue.path.slice(0, 4_000),
-      message: issue.message.slice(0, 20_000),
-    };
-  });
-}
-
-function nodeIdFromInvariantPath(path: string): string | undefined {
-  const match = /^\/nodesById\/([^/]+)/.exec(path);
-  if (!match?.[1]) return undefined;
-  return match[1].replaceAll("~1", "/").replaceAll("~0", "~");
-}
-
-function commandIdForNode(
-  commands: readonly DesignOperation[],
-  nodeId: string | undefined,
-): string | undefined {
-  if (!nodeId) return undefined;
-  return [...commands]
-    .reverse()
-    .find((command) => commandDirectlyTargetsNode(command, nodeId))?.commandId;
-}
-
-function commandDirectlyTargetsNode(
-  command: DesignOperation,
-  nodeId: string,
-): boolean {
-  switch (command.type) {
-    case "insert_element":
-      return command.node.id === nodeId;
-    case "update_properties":
-    case "update_text_range_style":
-    case "move_element":
-    case "delete_element":
-      return command.nodeId === nodeId;
-    case "reflow_text":
-      return command.nodeIds.includes(nodeId);
-    case "replace_subtree":
-      return command.nodes.some((node) => node.id === nodeId);
-    default:
-      return false;
-  }
 }
 
 function hashFailureText(value: string): string {

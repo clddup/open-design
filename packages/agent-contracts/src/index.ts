@@ -64,6 +64,16 @@ export const AgentToolFailureIssueSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const AgentToolFailureIssueContract = defineContract<
+  Static<typeof AgentToolFailureIssueSchema>
+>({
+  schema: AgentToolFailureIssueSchema,
+  code: "agent_tool_failure_issue.schema_invalid",
+  subject: "Agent tool failure issue",
+  recovery: "Correct the reported failure issue field before retrying.",
+  clone: false,
+});
+
 const FailureAttemptFields = {
   attempt: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
   maxAttempts: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
