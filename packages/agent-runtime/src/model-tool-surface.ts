@@ -1,3 +1,4 @@
+import type { AgentInitialDesignInspectionContent } from "@opendesign/agent-contracts";
 import type { AgentRunRequest, ModelToolSurface } from "./index.js";
 
 const CREATE_INTENT =
@@ -22,7 +23,7 @@ export function resolveInitialModelToolSurface(
   request: Readonly<AgentRunRequest>,
 ): ModelToolSurface {
   const targetPageIsEmpty = inspectionTargetPageIsEmpty(
-    request.initialDesignInspection?.content,
+    request.initialDesignInspection?.content.inspection,
     request.mutationTarget.kind === "page"
       ? request.mutationTarget.pageId
       : undefined,
@@ -37,7 +38,7 @@ export function resolveInitialModelToolSurface(
     (!targetPageIsEmpty && CURRENT_EDIT_INTENT.test(request.prompt)) ||
     PAGE_LIFECYCLE_INTENT.test(request.prompt) ||
     !inspectionContainsTargetPage(
-      request.initialDesignInspection.content,
+      request.initialDesignInspection.content.inspection,
       request.mutationTarget.pageId,
     )
   ) {
@@ -53,55 +54,25 @@ export function resolveInitialModelToolSurface(
  * slower existing-document workflow.
  */
 function inspectionTargetPageIsEmpty(
-  content: string | undefined,
+  inspection: AgentInitialDesignInspectionContent["inspection"] | undefined,
   pageId: string | undefined,
 ): boolean {
-  if (!content || !pageId) return false;
-  let value: unknown;
-  try {
-    value = JSON.parse(content);
-  } catch {
-    return false;
-  }
-  if (!isRecord(value) || !isRecord(value.document)) return false;
-  const document = value.document;
-  if (!isRecord(document.pagesById) || !isRecord(document.nodesById)) {
-    return false;
-  }
-  const nodesById = document.nodesById;
+  const document = inspection?.document;
+  if (!document || !pageId) return false;
   const page = document.pagesById[pageId];
-  if (!isRecord(page) || !Array.isArray(page.rootNodeIds)) return false;
+  if (!page) return false;
   if (page.rootNodeIds.length === 0) return true;
   return page.rootNodeIds.every((rootId) => {
-    if (typeof rootId !== "string") return false;
-    const root = nodesById[rootId];
+    const root = document.nodesById[rootId];
     return (
-      isRecord(root) &&
-      root.kind === "frame" &&
-      Array.isArray(root.childIds) &&
-      root.childIds.length === 0
+      root !== undefined && root.kind === "frame" && root.childIds.length === 0
     );
   });
 }
 
 function inspectionContainsTargetPage(
-  content: string,
+  inspection: AgentInitialDesignInspectionContent["inspection"],
   pageId: string,
 ): boolean {
-  let value: unknown;
-  try {
-    value = JSON.parse(content);
-  } catch {
-    return false;
-  }
-  if (!isRecord(value) || !isRecord(value.document)) return false;
-  const document = value.document;
-  if (!isRecord(document.pagesById)) return false;
-  const page = document.pagesById[pageId];
-  if (!isRecord(page) || !Array.isArray(page.rootNodeIds)) return false;
-  return page.rootNodeIds.every((candidate) => typeof candidate === "string");
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  return inspection.document?.pagesById[pageId] !== undefined;
 }

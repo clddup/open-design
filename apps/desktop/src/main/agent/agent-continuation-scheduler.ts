@@ -3,7 +3,7 @@ import {
   isDesignDeliveryLedger,
   type DesignDeliveryLedger,
 } from "@opendesign/workspace-contracts";
-import { DesignDeliveryStageContract } from "@/shared/design-delivery-stage.js";
+import { DesignDeliveryStageContract } from "@opendesign/agent-contracts";
 
 type RunStartRequest = Extract<AgentRequest, { type: "run.start" }>;
 type AgentRunContinuation = NonNullable<RunStartRequest["continuation"]>;

@@ -4,6 +4,7 @@ import {
   AgentAttachmentContract,
   AgentEventContract,
   AgentEventSchema,
+  AgentRequestContract,
   AgentRequestSchema,
   AgentRunContinuationContract,
   AgentRunFailureContract,
@@ -491,7 +492,9 @@ describe("Agent contracts", () => {
     const initialDesignInspection = {
       version: 1,
       observedRevision: validStart.revision,
-      content: '{"pageId":"page_1","revision":4}',
+      content: {
+        inspection: { pageId: "page_1", revision: validStart.revision },
+      },
     } as const;
     expect(isAgentRequest({ ...validStart, initialDesignInspection })).toBe(
       true,
@@ -510,7 +513,11 @@ describe("Agent contracts", () => {
         ...validStart,
         initialDesignInspection: {
           ...initialDesignInspection,
-          content: "x".repeat(MAX_INITIAL_DESIGN_INSPECTION_CHARACTERS + 1),
+          content: {
+            inspection: {
+              notice: "x".repeat(MAX_INITIAL_DESIGN_INSPECTION_CHARACTERS + 1),
+            },
+          },
         },
       }),
     ).toBe(false);
@@ -523,6 +530,53 @@ describe("Agent contracts", () => {
         },
       }),
     ).toBe(false);
+
+    expect(
+      AgentRequestContract.issues({
+        ...validStart,
+        initialDesignInspection: {
+          ...initialDesignInspection,
+          observedRevision: validStart.revision + 1,
+        },
+      }),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "agent_request.initial_inspection_revision_mismatch",
+        path: "/initialDesignInspection/observedRevision",
+      }),
+    );
+    expect(
+      AgentRequestContract.issues({
+        ...validStart,
+        initialDesignInspection: {
+          ...initialDesignInspection,
+          content: {
+            inspection: {
+              notice: "x".repeat(MAX_INITIAL_DESIGN_INSPECTION_CHARACTERS + 1),
+            },
+          },
+        },
+      }),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "agent_initial_inspection.content_size_invalid",
+        path: "/initialDesignInspection/content",
+      }),
+    );
+  });
+
+  it("reports the exact Page scope path for a mismatched mutation target", () => {
+    expect(
+      AgentRequestContract.issues({
+        ...validStart,
+        scope: { ...validStart.scope, pageId: "page_other" },
+      }),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "agent_request.page_scope_mismatch",
+        path: "/scope/pageId",
+      }),
+    );
   });
 
   it("accepts only bounded content-addressed image, document, and SVG handles", () => {

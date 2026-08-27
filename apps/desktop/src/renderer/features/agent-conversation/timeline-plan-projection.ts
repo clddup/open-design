@@ -2,7 +2,7 @@ import {
   DESIGN_FIRST_SLICE_TOOL_NAME,
   DESIGN_PLAN_TOOL_NAME,
 } from "@/shared/design-agent-tools";
-import { DesignDeliveryStageContract } from "@/shared/design-delivery-stage";
+import { DesignDeliveryStageContract } from "@opendesign/agent-contracts";
 import {
   DesignDeliveryLedgerContract,
   type DesignDeliveryStatus,

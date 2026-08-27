@@ -46,7 +46,7 @@ import {
   type RasterAssetRole,
 } from "@/shared/design-agent-tools.js";
 import type { RendererDesignCaptureTarget } from "@/shared/design-tool-bridge.js";
-import type { DesignDeliveryStage } from "@/shared/design-delivery-stage.js";
+import type { DesignDeliveryStage } from "@opendesign/agent-contracts";
 import {
   registerDesignWorkflowPlan,
   reconcileEstablishedArtboardDescendants,

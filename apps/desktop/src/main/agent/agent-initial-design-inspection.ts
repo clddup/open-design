@@ -1,14 +1,17 @@
 import { designWorkflowError } from "@/shared/design-workflow-failure-classification.js";
 import {
-  MAX_INITIAL_DESIGN_INSPECTION_CHARACTERS,
+  AgentInitialDesignInspectionContract,
   type AgentInitialDesignInspection,
   type AgentRequest,
+  type DesignDeliveryStage,
   type ToolCallRequest,
   type TrustedToolContext,
   type TrustedToolResult,
 } from "@opendesign/agent-contracts";
+import type { DesignDeliveryLedger } from "@opendesign/workspace-contracts";
 import { projectToolResultForModel } from "@opendesign/agent-runtime";
 import { DESIGN_INSPECT_TOOL_NAME } from "@/shared/design-agent-tools.js";
+import { formatValidationFailure } from "@/shared/contract-validation.js";
 
 type RunStartRequest = Extract<AgentRequest, { type: "run.start" }>;
 
@@ -25,8 +28,10 @@ export interface InitialDesignInspectionCoordinator {
     context: TrustedToolContext,
     result: TrustedToolResult,
   ): void;
-  getRecoverableDelivery(context: TrustedToolContext): unknown;
-  getDeliveryStageContext(runId: string): unknown;
+  getRecoverableDelivery(
+    context: TrustedToolContext,
+  ): DesignDeliveryLedger | undefined;
+  getDeliveryStageContext(runId: string): DesignDeliveryStage | undefined;
 }
 
 export interface InitialDesignInspectionRenderer {
@@ -83,26 +88,21 @@ export async function prepareInitialDesignInspection(
   const deliveryStage = dependencies.coordinator.getDeliveryStageContext(
     context.runId,
   );
-  const content =
-    unfinishedDelivery === undefined && deliveryStage === undefined
-      ? result.content
-      : {
-          ...requireRecord(result.content),
-          ...(unfinishedDelivery === undefined ? {} : { unfinishedDelivery }),
-          ...(deliveryStage === undefined ? {} : { deliveryStage }),
-        };
-  const serialized = JSON.stringify(projectToolResultForModel(content));
-  if (
-    serialized.length < 2 ||
-    serialized.length > MAX_INITIAL_DESIGN_INSPECTION_CHARACTERS
-  ) {
-    throw new RangeError("Initial design inspection projection is oversized");
-  }
-  return {
+  const parsed = AgentInitialDesignInspectionContract.parse({
     version: 1,
     observedRevision: request.revision,
-    content: serialized,
-  };
+    content: {
+      inspection: projectToolResultForModel(result.content),
+      ...(unfinishedDelivery === undefined ? {} : { unfinishedDelivery }),
+      ...(deliveryStage === undefined ? {} : { deliveryStage }),
+    },
+  });
+  if (!parsed.ok) {
+    throw new TypeError(
+      formatValidationFailure("Initial design inspection", parsed.issues),
+    );
+  }
+  return parsed.value;
 }
 
 function trustedContext(request: RunStartRequest): TrustedToolContext {
@@ -114,11 +114,4 @@ function trustedContext(request: RunStartRequest): TrustedToolContext {
     scope: structuredClone(request.scope),
     mutationTarget: structuredClone(request.mutationTarget),
   };
-}
-
-function requireRecord(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new TypeError("Document inspection must return structured content");
-  }
-  return value as Record<string, unknown>;
 }

@@ -669,7 +669,9 @@ describe("OpenDesign Pi production runtime", () => {
       initialDesignInspection: {
         version: 1,
         observedRevision: request.revision,
-        content: '{"pageId":"page_1","revision":7}',
+        content: {
+          inspection: { pageId: "page_1", revision: 7 },
+        },
       },
     });
 

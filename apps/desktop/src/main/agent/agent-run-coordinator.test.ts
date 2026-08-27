@@ -37,7 +37,7 @@ describe("AgentRunCoordinator", () => {
     const inspection = {
       version: 1 as const,
       observedRevision: source.revision,
-      content: '{"pageId":"page_1"}',
+      content: { inspection: { pageId: "page_1" } },
     };
     fixture.prepareInitialDesignInspection.mockResolvedValue(inspection);
 

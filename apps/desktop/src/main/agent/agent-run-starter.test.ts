@@ -46,7 +46,9 @@ describe("Agent Run starter", () => {
     const initialDesignInspection = {
       version: 1 as const,
       observedRevision: source.revision,
-      content: '{"pageId":"page_1","revision":4}',
+      content: {
+        inspection: { pageId: "page_1", revision: source.revision },
+      },
     };
     const started = await startAgentRun(source, {
       agentHost: { send } as never,
@@ -130,7 +132,7 @@ describe("Agent Run starter", () => {
           initialDesignInspection: {
             version: 1,
             observedRevision: source.revision,
-            content: '{"forged":true}',
+            content: { inspection: { forged: true } },
           },
         },
         {

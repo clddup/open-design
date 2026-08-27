@@ -12,7 +12,7 @@
 
 ## 决策
 
-1. Desktop shared 层唯一拥有 `DesignDeliveryStageSchema/Contract`。Stage 是 Run 工具结果与初始 inspection 的跨 Main/Agent/Renderer 投影，不是新的持久 Workspace 实体，也不增加协议版本号。
+1. `@opendesign/agent-contracts` 唯一拥有 `DesignDeliveryStageSchema/Contract`。Stage 是 Run 工具结果与初始 inspection 的跨 Main/Agent/Renderer 投影，不是新的持久 Workspace 实体，也不增加协议版本号；owner 下沉与结构化 Initial Inspection 见 ADR-0211。
 2. Schema 负责总数、累计 planned/verified 数、current Plan、next target、目标摘要、状态枚举和字段预算；target ID 与 label 直接组合 Workspace canonical Schema。
 3. Domain refinement 只处理计数顺序、current Plan 的累计 stage 范围和 target 唯一性，以及 next target 必须紧随 planned prefix、不能与 active/current target 重复。
 4. Main producer 返回前解析同一 Contract，内部漂移立即失败；不再生成未经验证的进度对象。

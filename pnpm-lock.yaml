@@ -195,6 +195,9 @@ importers:
       '@opendesign/contract-runtime':
         specifier: workspace:*
         version: link:../contract-runtime
+      '@opendesign/workspace-contracts':
+        specifier: workspace:*
+        version: link:../workspace-contracts
       '@sinclair/typebox':
         specifier: ^0.34.41
         version: 0.34.52

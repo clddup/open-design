@@ -101,16 +101,18 @@ describe("production Agent context budget", () => {
         initialDesignInspection: {
           version: 1,
           observedRevision: 3,
-          content: JSON.stringify({
-            document: {
-              documentId: "document_1",
-              revision: 3,
-              pagesById: {
-                page_1: { id: "page_1", rootNodeIds: [] },
+          content: {
+            inspection: {
+              document: {
+                documentId: "document_1",
+                revision: 3,
+                pagesById: {
+                  page_1: { id: "page_1", rootNodeIds: [] },
+                },
+                nodesById: {},
               },
-              nodesById: {},
             },
-          }),
+          },
         },
       })) {
         events.push(event);
@@ -185,16 +187,18 @@ describe("production Agent context budget", () => {
         initialDesignInspection: {
           version: 1,
           observedRevision: 3,
-          content: JSON.stringify({
-            document: {
-              documentId: "document_1",
-              revision: 3,
-              pagesById: {
-                page_1: { id: "page_1", rootNodeIds: [] },
+          content: {
+            inspection: {
+              document: {
+                documentId: "document_1",
+                revision: 3,
+                pagesById: {
+                  page_1: { id: "page_1", rootNodeIds: [] },
+                },
+                nodesById: {},
               },
-              nodesById: {},
             },
-          }),
+          },
         },
       })) {
         events.push(event);
@@ -377,23 +381,25 @@ describe("production Agent context budget", () => {
         initialDesignInspection: {
           version: 1,
           observedRevision: 3,
-          content: JSON.stringify({
-            document: {
-              documentId: "document_1",
-              revision: 3,
-              pagesById: {
-                page_1: { id: "page_1", rootNodeIds: ["dashboard"] },
-              },
-              nodesById: {
-                dashboard: {
-                  id: "dashboard",
-                  kind: "frame",
-                  parentId: null,
-                  childIds: ["title"],
+          content: {
+            inspection: {
+              document: {
+                documentId: "document_1",
+                revision: 3,
+                pagesById: {
+                  page_1: { id: "page_1", rootNodeIds: ["dashboard"] },
+                },
+                nodesById: {
+                  dashboard: {
+                    id: "dashboard",
+                    kind: "frame",
+                    parentId: null,
+                    childIds: ["title"],
+                  },
                 },
               },
             },
-          }),
+          },
         },
       })) {
         events.push(event);

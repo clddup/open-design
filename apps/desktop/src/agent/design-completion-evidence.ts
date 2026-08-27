@@ -11,8 +11,9 @@ import {
 } from "@/shared/design-agent-tools.js";
 import {
   DesignDeliveryStageContract,
+  type AgentInitialDesignInspectionContent,
   type DesignDeliveryStage,
-} from "@/shared/design-delivery-stage.js";
+} from "@opendesign/agent-contracts";
 
 export function latestReviewedDeliveryScope(
   toolCalls: readonly AgentToolCallRecord[],
@@ -42,18 +43,10 @@ export function latestDeliveryStage(
 }
 
 export function initialDeliveryStage(
-  serialized: string | undefined,
+  content: AgentInitialDesignInspectionContent | undefined,
 ): DesignDeliveryStage | undefined {
-  if (!serialized) return undefined;
-  try {
-    const content: unknown = JSON.parse(serialized);
-    const parsed = DesignDeliveryStageContract.parse(
-      isRecord(content) ? content.deliveryStage : undefined,
-    );
-    return parsed.ok ? parsed.value : undefined;
-  } catch {
-    return undefined;
-  }
+  const parsed = DesignDeliveryStageContract.parse(content?.deliveryStage);
+  return parsed.ok ? parsed.value : undefined;
 }
 
 export function latestDeliveryLedger(

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   DesignDeliveryStageContract,
   type DesignDeliveryStage,
-} from "./design-delivery-stage";
+} from "./design-delivery-stage.js";
 
 describe("Design Delivery Stage contract", () => {
   it("accepts the unplanned, active, and verified rolling-stage states", () => {

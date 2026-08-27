@@ -1,9 +1,12 @@
-import { Type, type Static } from "@opendesign/design-contracts";
+import { Type, type Static } from "@sinclair/typebox";
 import {
   StableIdSchema,
   WorkspaceNameSchema,
 } from "@opendesign/workspace-contracts";
-import { defineContract, type ValidationIssue } from "./contract-validation";
+import {
+  defineContract,
+  type ValidationIssue,
+} from "@opendesign/contract-runtime";
 
 const MAX_DELIVERY_STAGE_TARGETS = 32;
 
@@ -71,7 +74,7 @@ export const DesignDeliveryStageContract = defineContract<DesignDeliveryStage>({
   refine: designDeliveryStageIssues,
 });
 
-function designDeliveryStageIssues(
+export function designDeliveryStageIssues(
   value: DesignDeliveryStage,
 ): ValidationIssue[] {
   const issues: ValidationIssue[] = [];

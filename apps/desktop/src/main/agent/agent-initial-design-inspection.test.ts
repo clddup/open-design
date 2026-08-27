@@ -1,4 +1,7 @@
-import type { AgentRequest } from "@opendesign/agent-contracts";
+import type {
+  AgentRequest,
+  TrustedToolContext,
+} from "@opendesign/agent-contracts";
 import { describe, expect, it, vi } from "vitest";
 import { DESIGN_INSPECT_TOOL_NAME } from "@/shared/design-agent-tools.js";
 import {
@@ -46,7 +49,16 @@ describe("initial design inspection", () => {
           getRecoverableDelivery: () => ({
             version: 3,
             activeTargetId: "target_home",
-            targets: [],
+            targets: [
+              {
+                targetId: "target_home",
+                label: "Home",
+                pageId: "page_1",
+                rootNodeId: "frame_home",
+                reservedNodeIds: ["frame_home"],
+                status: "pending",
+              },
+            ],
           }),
           getDeliveryStageContext: () => ({
             totalTargets: 2,
@@ -92,12 +104,12 @@ describe("initial design inspection", () => {
       version: 1,
       observedRevision: request.revision,
     });
-    expect(JSON.parse(result.content)).toMatchObject({
-      pageId: "page_1",
+    expect(result.content).toMatchObject({
+      inspection: { pageId: "page_1" },
       unfinishedDelivery: { activeTargetId: "target_home" },
       deliveryStage: { totalTargets: 2, plannedTargets: 1 },
     });
-    expect(result.content).not.toContain("x".repeat(20_000));
+    expect(JSON.stringify(result.content)).not.toContain("x".repeat(20_000));
   });
 
   it("rejects a concurrent revision instead of injecting a stale snapshot", async () => {
@@ -124,5 +136,49 @@ describe("initial design inspection", () => {
       ),
     ).rejects.toThrow("initial_inspection_stale");
     expect(recordDocumentInspection).not.toHaveBeenCalled();
+  });
+
+  it("rejects a non-object projection and reports document revision drift", async () => {
+    const execute = vi.fn();
+    const dependencies = {
+      coordinator: {
+        assertDesignToolContext: vi.fn(),
+        resolveExecutionContext: (context: TrustedToolContext) => context,
+        recordDocumentInspection: vi.fn(),
+        getRecoverableDelivery: () => undefined,
+        getDeliveryStageContext: () => undefined,
+      },
+      renderer: { execute },
+    };
+    execute.mockResolvedValueOnce({
+      content: "not structured",
+      observedRevision: 7,
+    });
+    await expect(
+      prepareInitialDesignInspection(
+        request,
+        dependencies,
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow("/content/inspection");
+
+    execute.mockResolvedValueOnce({
+      content: {
+        document: {
+          documentId: "document_1",
+          revision: 8,
+          pagesById: {},
+          nodesById: {},
+        },
+      },
+      observedRevision: 7,
+    });
+    await expect(
+      prepareInitialDesignInspection(
+        request,
+        dependencies,
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow("/content/inspection/document/revision");
   });
 });

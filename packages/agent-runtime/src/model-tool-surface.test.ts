@@ -104,23 +104,29 @@ function request(overrides: Partial<AgentRunRequest> = {}): AgentRunRequest {
   };
 }
 
-function inspection(nodes: Array<{ id: string } & Record<string, unknown>>) {
+function inspection(
+  nodes: Array<
+    { id: string; kind: string; childIds: string[] } & Record<string, unknown>
+  >,
+) {
   return {
     version: 1 as const,
     observedRevision: 3,
-    content: JSON.stringify({
-      document: {
-        documentId: "document_1",
-        revision: 3,
-        pagesById: {
-          page_1: {
-            id: "page_1",
-            rootNodeIds: nodes.map((node) => node.id),
+    content: {
+      inspection: {
+        document: {
+          documentId: "document_1",
+          revision: 3,
+          pagesById: {
+            page_1: {
+              id: "page_1",
+              rootNodeIds: nodes.map((node) => node.id),
+            },
           },
+          nodesById: Object.fromEntries(nodes.map((node) => [node.id, node])),
         },
-        nodesById: Object.fromEntries(nodes.map((node) => [node.id, node])),
       },
-    }),
+    },
   };
 }
 

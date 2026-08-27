@@ -2,7 +2,7 @@ import { formatValidationFailure } from "@/shared/contract-validation.js";
 import {
   DesignDeliveryStageContract,
   type DesignDeliveryStage,
-} from "@/shared/design-delivery-stage.js";
+} from "@opendesign/agent-contracts";
 import {
   designPlanTargets,
   type DesignDeliveryScope,

@@ -136,7 +136,9 @@ describe("OpenDesign Pi context adapter", () => {
         initialDesignInspection: {
           version: 1,
           observedRevision: request.revision,
-          content: '{"pageId":"page_1","nodes":["frame_1"]}',
+          content: {
+            inspection: { pageId: "page_1", nodes: ["frame_1"] },
+          },
         },
       },
       sessionStore: new MemorySessionStore(),

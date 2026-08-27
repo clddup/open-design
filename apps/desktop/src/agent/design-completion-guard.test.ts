@@ -298,7 +298,8 @@ describe("design completion guard", () => {
           initialDesignInspection: {
             version: 1,
             observedRevision: 8,
-            content: JSON.stringify({
+            content: {
+              inspection: { notice: "bounded host projection" },
               deliveryStage: {
                 totalTargets: 2,
                 plannedTargets: 1,
@@ -323,7 +324,7 @@ describe("design completion guard", () => {
                   requiredContent: ["Primary Profile content"],
                 },
               },
-            }),
+            },
           },
         },
       ),
@@ -515,7 +516,7 @@ describe("design completion guard", () => {
         initialDesignInspection: {
           version: 1,
           observedRevision: 4,
-          content: "{}",
+          content: { inspection: { notice: "bounded host projection" } },
         },
       },
     );

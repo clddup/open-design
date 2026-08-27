@@ -7,6 +7,10 @@ import {
 } from "@opendesign/contract-runtime";
 import { AgentContinuationSchemas } from "./continuation.js";
 import {
+  AgentInitialDesignInspectionSchema,
+  agentInitialDesignInspectionDomainIssues,
+} from "./initial-design-inspection.js";
+import {
   createDesignWorkflowFailureDetailsSchema,
   designWorkflowFailureDomainIssues,
 } from "./workflow-failure-contract.js";
@@ -20,6 +24,8 @@ export {
 } from "./workflow-failure-contract.js";
 export type { AgentRunContinuation } from "./continuation.js";
 export { AgentRunContinuationContract } from "./continuation.js";
+export * from "./design-delivery-stage.js";
+export * from "./initial-design-inspection.js";
 export { formatContractFailure as formatRuntimeContractFailure } from "@opendesign/contract-runtime";
 export type {
   Contract as RuntimeContract,
@@ -29,7 +35,6 @@ export type {
 
 export const AGENT_PROTOCOL_VERSION = "3.12.0" as const;
 export const MAX_SELECTED_NODE_IDS = 512;
-export const MAX_INITIAL_DESIGN_INSPECTION_CHARACTERS = 60_000;
 export const MAX_AGENT_ATTACHMENTS = 6;
 export const MAX_AGENT_ATTACHMENT_BYTES = 16 * 1024 * 1024;
 export const MAX_AGENT_IMAGE_ATTACHMENTS = MAX_AGENT_ATTACHMENTS;
@@ -289,18 +294,6 @@ export const DesignGenerationModeSchema = Type.Union([
   Type.Literal("fast"),
   Type.Literal("thorough"),
 ]);
-
-export const AgentInitialDesignInspectionSchema = Type.Object(
-  {
-    version: Type.Literal(1),
-    observedRevision: RevisionSchema,
-    content: Type.String({
-      minLength: 2,
-      maxLength: MAX_INITIAL_DESIGN_INSPECTION_CHARACTERS,
-    }),
-  },
-  { additionalProperties: false },
-);
 
 export const ResolvedModelIdentitySchema = Type.Object(
   {
@@ -1184,9 +1177,6 @@ export type AgentRequest = Static<typeof AgentRequestSchema>;
 export type AgentEvent = Static<typeof AgentEventSchema>;
 export type AgentModelSelection = Static<typeof ModelSelectionSchema>;
 export type AgentModelContext = Static<typeof AgentModelContextSchema>;
-export type AgentInitialDesignInspection = Static<
-  typeof AgentInitialDesignInspectionSchema
->;
 export type AgentToolFailureIssue = Static<typeof AgentToolFailureIssueSchema>;
 export type AgentToolFailureDetails = Static<
   typeof AgentToolFailureDetailsSchema
@@ -1198,6 +1188,16 @@ export const ModelSelectionContract = defineContract<AgentModelSelection>({
   code: "model_selection.schema_invalid",
   subject: "Model selection",
   recovery: "Correct the reported model selection field.",
+  clone: false,
+});
+
+export const AgentRequestContract = defineContract<AgentRequest>({
+  schema: AgentRequestSchema,
+  code: "agent_request.schema_invalid",
+  subject: "Agent request",
+  recovery: "Correct the reported Agent request field before retrying.",
+  selectSchema: agentRequestSchemaForInput,
+  refine: agentRequestDomainIssues,
   clone: false,
 });
 
@@ -1383,18 +1383,76 @@ export function isDurableTimelineEvent(
   return DurableTimelineEventContract.parse(value).ok;
 }
 
-export function isAgentRequest(value: unknown): value is AgentRequest {
-  return (
-    Value.Check(AgentRequestSchema, value) &&
-    (value.type !== "run.start" ||
-      ((value.initialDesignInspection === undefined ||
-        value.initialDesignInspection.observedRevision === value.revision) &&
-        isSelectionScope(value.scope) &&
-        isDesignMutationTarget(value.mutationTarget) &&
-        (value.mutationTarget.kind !== "page" ||
-          value.scope.pageId === undefined ||
-          value.scope.pageId === value.mutationTarget.pageId)))
+function agentRequestDomainIssues(value: AgentRequest): ValidationIssue[] {
+  if (value.type !== "run.start") return [];
+  const issues: ValidationIssue[] = prefixValidationIssues(
+    selectionScopeDomainIssues(value.scope),
+    "/scope",
   );
+  if (value.initialDesignInspection) {
+    issues.push(
+      ...prefixValidationIssues(
+        agentInitialDesignInspectionDomainIssues(value.initialDesignInspection),
+        "/initialDesignInspection",
+      ),
+    );
+    if (value.initialDesignInspection.observedRevision !== value.revision) {
+      issues.push({
+        code: "agent_request.initial_inspection_revision_mismatch",
+        path: "/initialDesignInspection/observedRevision",
+        message:
+          "Initial inspection revision must match the Run start revision",
+        expected: value.revision,
+        actual: value.initialDesignInspection.observedRevision,
+        recovery: "Regenerate initial inspection for the bound Run revision.",
+      });
+    }
+  }
+  if (
+    value.mutationTarget.kind === "page" &&
+    value.scope.pageId !== undefined &&
+    value.scope.pageId !== value.mutationTarget.pageId
+  ) {
+    issues.push({
+      code: "agent_request.page_scope_mismatch",
+      path: "/scope/pageId",
+      message: "Selection Page must match the Page mutation target",
+      expected: value.mutationTarget.pageId,
+      actual: value.scope.pageId,
+      recovery: "Bind selection and mutation target to the same Page.",
+    });
+  }
+  return issues;
+}
+
+function agentRequestSchemaForInput(input: unknown): TSchema {
+  const type = recordValue(input)?.type;
+  if (typeof type !== "string") return AgentRequestSchema;
+  return (
+    AgentRequestSchema.anyOf.find((schema) => {
+      const properties = recordValue(recordValue(schema)?.properties);
+      const discriminant = recordValue(properties?.type);
+      return discriminant?.const === type;
+    }) ?? AgentRequestSchema
+  );
+}
+
+function recordValue(value: unknown): Record<string, unknown> | undefined {
+  return record(value) ? value : undefined;
+}
+
+function prefixValidationIssues(
+  issues: readonly ValidationIssue[],
+  prefix: string,
+): ValidationIssue[] {
+  return issues.map((issue) => ({
+    ...issue,
+    path: issue.path === "/" ? prefix : `${prefix}${issue.path}`,
+  }));
+}
+
+export function isAgentRequest(value: unknown): value is AgentRequest {
+  return AgentRequestContract.parse(value).ok;
 }
 
 export function isAgentEvent(value: unknown): value is AgentEvent {
