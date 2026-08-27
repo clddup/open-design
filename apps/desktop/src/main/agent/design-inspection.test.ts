@@ -277,6 +277,13 @@ describe("Agent design inspection component strategy", () => {
           surfaceMode: "graphic",
         },
       },
+      logoColorStrategy: {
+        mode: "brand-color",
+        rationale:
+          "Each selected mark uses an ownable chromatic signal as part of the primary identity.",
+        lightDarkAdaptation:
+          "Primary colors retain contrast through explicit light and dark surface variants.",
+      },
       logoOutputs: ["symbol"],
       targets: plan.targets.map((target) => ({
         ...target,
@@ -340,12 +347,21 @@ function logoDirection(
   prefix: string,
   principle: "negative-space" | "modular-system" | "typographic-relationship",
 ) {
+  const paletteByPrinciple = {
+    "negative-space": ["#F97316", "#431407", "#FFF7ED"],
+    "modular-system": ["#2563EB", "#172554", "#EFF6FF"],
+    "typographic-relationship": ["#A855F7", "#3B0764", "#FAF5FF"],
+  } as const;
   return {
     conceptId: `concept_${prefix}`,
     label: `${prefix} concept`,
     principle,
     thesis: `${prefix} establishes a visibly distinct identity construction.`,
     constructionLogic: `${prefix} uses a separate editable contour and counterform relationship.`,
+    colorSystem: {
+      palette: [...paletteByPrinciple[principle]],
+      rationale: `${prefix} assigns a distinct chromatic role to the identifying contour.`,
+    },
     rootNodeId: `${prefix}_root`,
     monochromeNodeId: `${prefix}_mono`,
     smallSizeNodeIds: [`${prefix}_32`, `${prefix}_24`, `${prefix}_16`] as [

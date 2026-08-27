@@ -26,6 +26,10 @@ import {
   MAX_ACTIVE_VISUAL_REFERENCES,
   type DesignReferenceStrategy,
 } from "./design-reference-strategy";
+import {
+  logoColorDomainIssues,
+  type DesignLogoColorStrategy,
+} from "./design-logo-color";
 
 export { DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA } from "./design-first-slice-tool-schema";
 export {
@@ -36,8 +40,9 @@ export {
 export type DesignFirstSliceElement = DesignFirstSliceElementInput;
 export type DesignFirstSliceToolInput = Omit<
   DesignFirstSliceCanonicalInput,
-  "logoOutputs" | "logoExploration"
+  "logoColorStrategy" | "logoOutputs" | "logoExploration"
 > & {
+  logoColorStrategy?: DesignLogoColorStrategy;
   logoOutputs?: DesignLogoOutput[];
   logoExploration?: {
     targetId: string;
@@ -46,6 +51,10 @@ export type DesignFirstSliceToolInput = Omit<
       principle: (typeof LOGO_CONCEPT_PRINCIPLES)[number];
       thesis: string;
       constructionLogic: string;
+      colorSystem: {
+        palette: string[];
+        rationale: string;
+      };
       rootNodeId: string;
       evidenceNodeIds: [string, string, string, string];
     }>;
@@ -173,6 +182,7 @@ function chunkRequiredContent(value: string): string[] {
 
 function refineFirstSlice(
   input: DesignFirstSliceCanonicalInput,
+  context: FirstSliceContractContext,
 ): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
   if (
@@ -221,6 +231,28 @@ function refineFirstSlice(
       ),
     );
   }
+  issues.push(
+    ...logoColorDomainIssues({
+      ...(context.authoritativePrompt === undefined
+        ? {}
+        : { authoritativePrompt: context.authoritativePrompt }),
+      codePrefix: "first_slice",
+      deliverable: input.deliverable,
+      ...(input.logoExploration === undefined
+        ? {}
+        : {
+            directionColors: input.logoExploration.directions.map(
+              (direction) => direction.colorSystem,
+            ),
+          }),
+      palette: input.visualSystem.palette,
+      ...(input.logoColorStrategy === undefined
+        ? {}
+        : {
+            strategy: input.logoColorStrategy as DesignLogoColorStrategy,
+          }),
+    }),
+  );
 
   const targetIds = new Map<string, string>();
   const frameIds = new Map<string, string>();

@@ -43,11 +43,12 @@ export async function handleDesignFirstSliceTool(
   ) {
     throw designWorkflowError(
       "logo_exploration_required",
-      "The current Logo brief explicitly requests three concept directions. Submit one corrected opendesign_generate_first_slice call with logoExploration, three distinct principles, three declared first-target concept regions, and stable monochrome plus 32/24/16 px evidence IDs; do not allocate or draw a single direction first",
+      "The current Logo brief explicitly requests three concept directions. Submit one corrected opendesign_generate_first_slice call with logoExploration, three distinct principles and color systems, three declared first-target concept regions, and stable monochrome plus 32/24/16 px evidence IDs; do not allocate or draw a single direction first",
     );
   }
   const compiled = compileDesignFirstSliceToolInput(input);
   const parsedPlan = DesignPlanContract.parse(compiled.plan, {
+    authoritativePrompt,
     canonical: true,
   });
   if (!parsedPlan.ok) {

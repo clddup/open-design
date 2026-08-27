@@ -224,6 +224,13 @@ describe("handleDesignFirstSliceTool", () => {
     const input = firstSliceInput();
     input.deliverable = "logo";
     input.designIntent.calibration.surfaceMode = "graphic";
+    input.logoColorStrategy = {
+      mode: "brand-color",
+      rationale:
+        "A vivid violet primary identifies the creative platform without relying on generic black geometry.",
+      lightDarkAdaptation:
+        "Use the primary violet on light surfaces and a brighter optical variant on dark surfaces.",
+    };
     input.targets = input.targets.map((target) => ({
       ...target,
       qualityProfile: { kind: "graphic" },

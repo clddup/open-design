@@ -56,6 +56,9 @@ export function compileValidatedDesignFirstSliceToolInput(
       ? {}
       : { referenceStrategy: structuredClone(input.referenceStrategy) }),
     skillRefs: structuredClone(input.skillRefs),
+    ...(input.logoColorStrategy === undefined
+      ? {}
+      : { logoColorStrategy: structuredClone(input.logoColorStrategy) }),
     ...(input.logoOutputs === undefined
       ? {}
       : { logoOutputs: [...input.logoOutputs] }),
@@ -73,6 +76,7 @@ export function compileValidatedDesignFirstSliceToolInput(
                 principle: direction.principle,
                 thesis: direction.thesis,
                 constructionLogic: direction.constructionLogic,
+                colorSystem: structuredClone(direction.colorSystem),
                 rootNodeId: direction.rootNodeId,
                 monochromeNodeId,
                 smallSizeNodeIds: [size32, size24, size16] as [

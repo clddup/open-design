@@ -23,6 +23,7 @@ describe("compact first-slice tool", () => {
         "deliverable",
         "designIntent",
         "firstSlice",
+        "logoColorStrategy",
         "logoExploration",
         "logoOutputs",
         "objective",
@@ -442,6 +443,13 @@ describe("compact first-slice tool", () => {
     const input = fixture();
     input.deliverable = "logo";
     input.designIntent.calibration.surfaceMode = "graphic";
+    input.logoColorStrategy = {
+      mode: "brand-color",
+      rationale:
+        "Electric violet identifies creative momentum while deep ink preserves professional precision.",
+      lightDarkAdaptation:
+        "Use violet on light surfaces and a brighter optical violet with white counters on dark surfaces.",
+    };
     input.logoOutputs = ["symbol", "app-icon"];
     input.targets = input.targets.map((target) => ({
       ...target,
@@ -542,6 +550,20 @@ describe("compact first-slice tool", () => {
       "negative-space";
     expect(FirstSliceContract.parse(duplicatePrinciple).ok).toBe(false);
 
+    const duplicateColorSystem = structuredClone(modelInput) as {
+      logoExploration?: NonNullable<
+        DesignFirstSliceToolInput["logoExploration"]
+      >;
+    };
+    if (!duplicateColorSystem.logoExploration) {
+      throw new Error("Expected Logo exploration fixture");
+    }
+    duplicateColorSystem.logoExploration.directions[1].colorSystem =
+      structuredClone(
+        duplicateColorSystem.logoExploration.directions[0].colorSystem,
+      );
+    expect(FirstSliceContract.parse(duplicateColorSystem).ok).toBe(false);
+
     const unplannedConceptRoot = structuredClone(modelInput) as {
       logoExploration?: NonNullable<
         DesignFirstSliceToolInput["logoExploration"]
@@ -580,6 +602,33 @@ describe("compact first-slice tool", () => {
       deliverable: "logo",
       logoOutputs: ["symbol"],
     });
+
+    const monochromeFocused = structuredClone(missingExploration) as Record<
+      string,
+      unknown
+    > & {
+      logoColorStrategy?: DesignFirstSliceToolInput["logoColorStrategy"];
+      visualSystem: DesignFirstSliceToolInput["visualSystem"];
+    };
+    monochromeFocused.visualSystem.palette = ["#111111", "#FFFFFF"];
+    monochromeFocused.logoColorStrategy = {
+      mode: "monochrome-by-brief",
+      rationale:
+        "The primary identity is intentionally reduced to one high-contrast ink relationship.",
+      lightDarkAdaptation:
+        "Reverse foreground and background while preserving the same optical counterform.",
+    };
+    expect(
+      FirstSliceContract.parse(monochromeFocused, {
+        authoritativePrompt:
+          "Include monochrome tests alongside the primary color Logo.",
+      }).ok,
+    ).toBe(false);
+    expect(
+      FirstSliceContract.parse(monochromeFocused, {
+        authoritativePrompt: "The primary Logo must be monochrome only.",
+      }).ok,
+    ).toBe(true);
 
     const omittedOutputs = structuredClone(missingExploration);
     delete omittedOutputs.logoOutputs;
@@ -1087,11 +1136,20 @@ function logoDirection(
   principle: "negative-space" | "modular-system" | "typographic-relationship",
   prefix: string,
 ) {
+  const paletteByPrinciple = {
+    "negative-space": ["#FF5A5F", "#121826", "#FFF7F2"],
+    "modular-system": ["#2563EB", "#0B1F4B", "#E8F1FF"],
+    "typographic-relationship": ["#7C3AED", "#24113F", "#F5EDFF"],
+  } as const;
   return {
     conceptId,
     principle,
     thesis: `${prefix} construction creates a materially different brand silhouette.`,
     constructionLogic: `${prefix} uses a deliberate contour and counterform whose asymmetric aperture remains recognizable at 16 px.`,
+    colorSystem: {
+      palette: [...paletteByPrinciple[principle]],
+      rationale: `${prefix} uses a distinct chromatic hierarchy tied to its construction rather than a cosmetic hue swap.`,
+    },
     rootNodeId: `${prefix}_root`,
     evidenceNodeIds: [
       `${prefix}_mono`,

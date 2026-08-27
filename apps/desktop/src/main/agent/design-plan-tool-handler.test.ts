@@ -90,6 +90,9 @@ describe("handleDesignPlanTool", () => {
       activeTargetId: "target_home",
     };
     const coordinator = {
+      authoritativeDesignPrompt: vi
+        .fn()
+        .mockReturnValue("Design Home and Profile"),
       registerDesignPlan: vi.fn().mockReturnValue({
         status: "accepted",
         planRevision: 1,
@@ -182,6 +185,9 @@ describe("handleDesignPlanTool", () => {
 
   it("does not advance the delivery ledger when the allocation transaction fails", async () => {
     const coordinator = {
+      authoritativeDesignPrompt: vi
+        .fn()
+        .mockReturnValue("Design Home and Profile"),
       registerDesignPlan: vi.fn().mockReturnValue({
         status: "accepted",
         planRevision: 1,
@@ -226,6 +232,9 @@ describe("handleDesignPlanTool", () => {
     };
     invalid.unexpectedField = "not allowed";
     const coordinator = {
+      authoritativeDesignPrompt: vi
+        .fn()
+        .mockReturnValue("Design Home and Profile"),
       registerDesignPlan: vi.fn(),
     };
 

@@ -7,6 +7,7 @@ import {
   DESIGN_LOGO_OUTPUTS,
   LOGO_CONCEPT_PRINCIPLES,
 } from "./design-agent-plan-review";
+import { DESIGN_LOGO_COLOR_MODES } from "./design-logo-color";
 
 const CLOSED = { additionalProperties: false } as const;
 const ID_PATTERN = "^[^\\u0000-\\u001F\\u007F]+$";
@@ -330,6 +331,32 @@ const LOGO_OUTPUTS_SCHEMA = Type.Array(
   },
 );
 
+const LOGO_COLOR_STRATEGY_SCHEMA = Type.Object(
+  {
+    mode: Type.Union(
+      DESIGN_LOGO_COLOR_MODES.map((mode) => Type.Literal(mode)) as [
+        ReturnType<typeof Type.Literal>,
+        ...ReturnType<typeof Type.Literal>[],
+      ],
+    ),
+    rationale: textSchema(16, 1_000),
+    lightDarkAdaptation: textSchema(16, 1_000),
+  },
+  CLOSED,
+);
+
+const LOGO_DIRECTION_COLOR_SYSTEM_SCHEMA = Type.Object(
+  {
+    palette: Type.Array(textSchema(1, 128), {
+      minItems: 1,
+      maxItems: 6,
+      uniqueItems: true,
+    }),
+    rationale: textSchema(16, 1_000),
+  },
+  CLOSED,
+);
+
 const LOGO_EXPLORATION_SCHEMA = Type.Object(
   {
     targetId: idSchema(128),
@@ -347,6 +374,7 @@ const LOGO_EXPLORATION_SCHEMA = Type.Object(
           ),
           thesis: textSchema(16, 1_000),
           constructionLogic: textSchema(24, 1_000),
+          colorSystem: LOGO_DIRECTION_COLOR_SYSTEM_SCHEMA,
           rootNodeId: idSchema(),
           evidenceNodeIds: Type.Array(idSchema(), {
             minItems: 4,
@@ -542,6 +570,7 @@ export const DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA = Type.Object(
     semanticObjects: Type.Optional(
       Type.Array(SEMANTIC_OBJECT_SCHEMA, { maxItems: 24 }),
     ),
+    logoColorStrategy: Type.Optional(LOGO_COLOR_STRATEGY_SCHEMA),
     logoOutputs: Type.Optional(LOGO_OUTPUTS_SCHEMA),
     logoExploration: Type.Optional(LOGO_EXPLORATION_SCHEMA),
     firstSlice: FIRST_SLICE_SCHEMA,
@@ -549,7 +578,7 @@ export const DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA = Type.Object(
   {
     ...CLOSED,
     description:
-      "Real artboard roots and one editable first slice. In this same call, provide one concise brief-specific direction, target job/layout, visual system, image roles, and reusable semantic objects; never explain every primitive. Main binds host-owned skills, complete brief fidelity, and quality defaults before domain refinement.",
+      "Real artboard roots and one editable first slice. In this same call, provide one concise brief-specific direction, target job/layout, visual system, image roles, and reusable semantic objects; never explain every primitive. Logo work also declares its primary color strategy and distinct exploration palettes, with monochrome kept as evidence unless explicitly requested as the identity. Main binds host-owned skills, complete brief fidelity, and quality defaults before domain refinement.",
   },
 );
 
@@ -568,6 +597,7 @@ export const DESIGN_FIRST_SLICE_CANONICAL_INPUT_SCHEMA = Type.Object(
     visualSystem: VISUAL_SYSTEM_SCHEMA,
     rasterAssetRoles: RASTER_ASSET_ROLES_SCHEMA,
     referenceStrategy: Type.Optional(REFERENCE_STRATEGY_SCHEMA),
+    logoColorStrategy: Type.Optional(LOGO_COLOR_STRATEGY_SCHEMA),
     logoOutputs: Type.Optional(LOGO_OUTPUTS_SCHEMA),
     logoExploration: Type.Optional(LOGO_EXPLORATION_SCHEMA),
     semanticObjects: Type.Optional(

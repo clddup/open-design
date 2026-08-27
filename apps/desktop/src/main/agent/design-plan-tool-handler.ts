@@ -21,7 +21,9 @@ export async function handleDesignPlanTool(
   signal: AbortSignal,
   reportProgress?: (message: string, progress: number) => void,
 ): Promise<TrustedToolResult> {
-  const parsed = DesignPlanContract.parse(call.input);
+  const parsed = DesignPlanContract.parse(call.input, {
+    authoritativePrompt: coordinator.authoritativeDesignPrompt(context),
+  });
   if (!parsed.ok) {
     throw new TypeError(
       formatValidationFailure("opendesign_define_design_plan", parsed.issues),

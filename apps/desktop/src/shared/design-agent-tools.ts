@@ -202,6 +202,13 @@ export type {
   RasterAssetRole,
 } from "./design-agent-plan-review";
 export {
+  DESIGN_LOGO_COLOR_MODES,
+  DESIGN_LOGO_COLOR_STRATEGY_SCHEMA,
+  logoBriefExplicitlyRequiresMonochrome,
+  paletteHasChromaticColor,
+} from "./design-logo-color";
+export type { DesignLogoColorStrategy } from "./design-logo-color";
+export {
   DESIGN_REFERENCE_DECISIONS,
   DESIGN_REFERENCE_STRATEGY_SCHEMA,
   MAX_ACTIVE_VISUAL_REFERENCES,

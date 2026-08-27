@@ -59,6 +59,10 @@ describe("built-in design skills", () => {
     expect(logoPlanning).toContain('id="logo-visual-direction"');
     expect(logoPlanning).toContain("product's primary action into a contour");
     expect(logoPlanning).toContain("Do not choose a symbol first");
+    expect(logoPlanning).toContain(
+      "Put a brief-specific palette in the primary mark",
+    );
+    expect(logoPlanning).toContain("Monochrome stays a test");
     expect(logoPlanning).not.toContain('id="ui-visual-direction"');
     expect(logoPlanning).not.toContain('id="logo-capture-critic"');
 
@@ -77,6 +81,8 @@ describe("built-in design skills", () => {
       formatBuiltinDesignReviewSkillBundleForDeliverable("logo");
     expect(logoReview).toContain('id="graphic-capture-critic"');
     expect(logoReview).toContain('id="logo-capture-critic"');
+    expect(logoReview).toContain("primary brand-color ownership");
+    expect(logoReview).toContain("app icons that disappear");
     expect(logoReview).not.toContain('id="logo-visual-direction"');
   });
 

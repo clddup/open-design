@@ -33,12 +33,15 @@ const LOGO_BASE_CRITERIA = [
   "optical-balance",
   "small-size-recognition",
   "monochrome-integrity",
+  "brand-color-system",
 ] as const;
 
 type LogoOptionalCriterionId =
   | "concept-divergence"
+  | "color-system-divergence"
   | "symbol-wordmark-relationship"
   | "app-icon-optical-redraw"
+  | "app-icon-ecosystem-distinction"
   | "component-system-integrity";
 
 const REFERENCE_CRITERION = "reference-adherence" as const;
@@ -116,6 +119,7 @@ export async function runIndependentDesignVisualCritic(
         "Call the critique tool exactly once. Do not answer with prose. Scores are integers from 1 (unacceptable) to 5 (delivery quality). Attractive presentation cannot compensate for a failed criterion.",
         "At final phase, use pass only when every criterion is independently delivery-ready. At draft phase, identify the most consequential real defects, not invented praise or minor filler.",
         "For every logo-concept-*-quality criterion, judge that declared direction independently. It must have an ownable silhouette, visibly intentional construction, controlled contour or counterform, recognition at 32/24/16 px, anti-template originality, and visible agreement with its thesis. A caption cannot rescue an arbitrary shape, and stronger sibling concepts cannot compensate for one filler direction.",
+        "For Logo color, treat monochrome as a required stress test rather than the default primary identity. brand-color-system fails when the main mark is only black/white/gray without an explicitly monochrome-only user brief, when color is decorative rather than semantic, or when light/dark adaptation is not visible. color-system-divergence requires explored directions to make materially different color decisions, not hue swaps. app-icon-ecosystem-distinction requires ownable color and optical weight among real macOS/Windows app icons.",
         "When visual references are supplied, the first image is always the delivery capture and later images are the authorized references named in the JSON contract. Judge the declared transferable decisions and avoidances; do not demand literal copying or confuse a content asset with a style reference.",
         formatBuiltinDesignReviewSkillBundleForDeliverable(
           context.plan.deliverable,
@@ -202,7 +206,10 @@ export async function runIndependentDesignVisualCritic(
           "black-silhouette",
           "counterform-contour",
           "small-size-recognition",
+          "brand-color-system",
           "app-icon-optical-redraw",
+          "app-icon-ecosystem-distinction",
+          "color-system-divergence",
           "template-avoidance",
         ])
       : new Set<CriticCriterionId>([
@@ -258,13 +265,16 @@ function criticCriteria(plan: DesignPlanToolInput): CriticCriterionId[] {
           ...LOGO_BASE_CRITERIA,
           ...(plan.logoExploration === undefined
             ? []
-            : (["concept-divergence"] as const)),
+            : (["concept-divergence", "color-system-divergence"] as const)),
           ...directionCriteria,
           ...(logoOutputs.has("wordmark") || logoOutputs.has("lockups")
             ? (["symbol-wordmark-relationship"] as const)
             : []),
           ...(logoOutputs.has("app-icon")
-            ? (["app-icon-optical-redraw"] as const)
+            ? ([
+                "app-icon-optical-redraw",
+                "app-icon-ecosystem-distinction",
+              ] as const)
             : []),
           ...(logoOutputs.size > 1
             ? (["component-system-integrity"] as const)
@@ -286,6 +296,7 @@ function logoDirectionCriterionContracts(plan: DesignPlanToolInput): Array<{
   principle: string;
   thesis: string;
   constructionLogic: string;
+  colorSystem: { palette: string[]; rationale: string };
   requiredEvidenceNodeIds: [string, string, string, string];
   rubric: readonly string[];
 }> {
@@ -296,6 +307,7 @@ function logoDirectionCriterionContracts(plan: DesignPlanToolInput): Array<{
     principle: direction.principle,
     thesis: direction.thesis,
     constructionLogic: direction.constructionLogic,
+    colorSystem: structuredClone(direction.colorSystem),
     requiredEvidenceNodeIds: [
       direction.monochromeNodeId,
       ...direction.smallSizeNodeIds,
@@ -306,6 +318,7 @@ function logoDirectionCriterionContracts(plan: DesignPlanToolInput): Array<{
       "controlled counterform or contour",
       "recognition at 32, 24, and 16 px",
       "anti-template originality",
+      "a brief-specific primary color system whose role is visible in the mark rather than only in captions or presentation backgrounds",
       "visible agreement between the form and declared thesis without relying on its caption",
     ],
   }));

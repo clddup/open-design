@@ -87,6 +87,64 @@ describe("DesignPlanContract", () => {
     );
   });
 
+  it("keeps monochrome as a Logo variant unless the authoritative brief makes it primary", () => {
+    const input = planInput();
+    input.deliverable = "logo";
+    input.designIntent.calibration.surfaceMode = "graphic";
+    input.targets[0].qualityProfile = { kind: "graphic" };
+    input.visualSystem.palette = ["#111111", "#FFFFFF"];
+
+    const missing = DesignPlanContract.parse(input);
+    expect(missing).toMatchObject({
+      ok: false,
+      issues: [
+        expect.objectContaining({
+          code: "design_plan.logo_color_strategy_required",
+          path: "/logoColorStrategy",
+        }),
+      ],
+    });
+
+    input.logoColorStrategy = {
+      mode: "brand-color",
+      rationale:
+        "A primary electric blue should identify the product before any caption is read.",
+      lightDarkAdaptation:
+        "Use deep blue on light surfaces and a brighter blue with white counters on dark surfaces.",
+    };
+    const neutral = DesignPlanContract.parse(input);
+    expect(neutral).toMatchObject({
+      ok: false,
+      issues: [
+        expect.objectContaining({
+          code: "design_plan.logo_brand_color_required",
+          path: "/visualSystem/palette",
+        }),
+      ],
+    });
+
+    input.logoColorStrategy.mode = "monochrome-by-brief";
+    expect(
+      DesignPlanContract.parse(input, {
+        authoritativePrompt:
+          "Include monochrome tests alongside a full-color primary Logo.",
+      }),
+    ).toMatchObject({
+      ok: false,
+      issues: [
+        expect.objectContaining({
+          code: "design_plan.logo_monochrome_not_requested",
+          path: "/logoColorStrategy/mode",
+        }),
+      ],
+    });
+    expect(
+      DesignPlanContract.parse(input, {
+        authoritativePrompt: "The primary Logo must be monochrome only.",
+      }).ok,
+    ).toBe(true);
+  });
+
   it("reports parent-local region overflow with a stable path", () => {
     const input = planInput();
     input.targets[0].composition.regions[1].x = 300;

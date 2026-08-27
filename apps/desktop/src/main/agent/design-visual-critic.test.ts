@@ -26,12 +26,15 @@ const criterionIds = [
   "optical-balance",
   "small-size-recognition",
   "monochrome-integrity",
+  "brand-color-system",
   "concept-divergence",
+  "color-system-divergence",
   "logo-concept-open-contour-quality",
   "logo-concept-modular-path-quality",
   "logo-concept-spatial-link-quality",
   "symbol-wordmark-relationship",
   "app-icon-optical-redraw",
+  "app-icon-ecosystem-distinction",
   "component-system-integrity",
 ] as const;
 
@@ -50,6 +53,7 @@ const singleMarkCriterionIds = [
   "optical-balance",
   "small-size-recognition",
   "monochrome-integrity",
+  "brand-color-system",
 ] as const;
 
 describe("independent design visual critic", () => {
@@ -129,6 +133,49 @@ describe("independent design visual critic", () => {
     expect(result.review.failedCriteria).toHaveLength(2);
   });
 
+  it("treats primary brand color, exploration color divergence, and desktop icon distinction as critical", async () => {
+    const weakColor = scorecard(4);
+    weakColor.criteria["brand-color-system"] = {
+      score: 2,
+      evidence:
+        "The primary marks are only black and white while blue appears only in the presentation caption.",
+      refinement:
+        "Apply one brief-specific brand color to the primary mark and show its light/dark adaptations.",
+    };
+    weakColor.criteria["color-system-divergence"] = {
+      score: 3,
+      evidence:
+        "All three directions reuse the same blue-white palette with no distinct semantic role.",
+      refinement:
+        "Give each concept a materially different color system tied to its own thesis.",
+    };
+    weakColor.criteria["app-icon-ecosystem-distinction"] = {
+      score: 3,
+      evidence:
+        "The icon reads as a generic monochrome tile among other desktop application icons.",
+      refinement:
+        "Rebalance color mass and negative space for recognizable macOS and Windows icon contexts.",
+    };
+
+    const result = await runIndependentDesignVisualCritic(
+      {
+        complete: (request) =>
+          Promise.resolve(responseEvents(request.attemptId, weakColor)),
+      },
+      criticContext("final"),
+      new AbortController().signal,
+    );
+
+    expect(result.passed).toBe(false);
+    expect(result.failedCriteria).toEqual(
+      expect.arrayContaining([
+        "brand-color-system",
+        "color-system-divergence",
+        "app-icon-ecosystem-distinction",
+      ]),
+    );
+  });
+
   it("reviews one requested Logo/Icon without invented exploration or system criteria", async () => {
     const context = criticContext("final");
     context.plan.logoOutputs = ["symbol"];
@@ -152,7 +199,11 @@ describe("independent design visual critic", () => {
 
     expect(result.passed).toBe(true);
     expect(result.criteria).not.toHaveProperty("concept-divergence");
+    expect(result.criteria).not.toHaveProperty("color-system-divergence");
     expect(result.criteria).not.toHaveProperty("app-icon-optical-redraw");
+    expect(result.criteria).not.toHaveProperty(
+      "app-icon-ecosystem-distinction",
+    );
     expect(result.criteria).not.toHaveProperty("component-system-integrity");
     expect(JSON.stringify(capturedRequest?.tools)).not.toContain(
       "concept-divergence",
@@ -502,7 +553,7 @@ function logoPlan(): DesignPlanToolInput {
       avoidances: ["generic square tile", "sparkle"],
       formLanguage: "Ownable asymmetric open contour",
       palette: ["#111111", "#2f6bff", "#ffffff"],
-      surfaceAndDepth: "Flat monochrome-first identity",
+      surfaceAndDepth: "Flat color-led identity with monochrome variants",
       typography: ["Custom wordmark relationship"],
       effects: ["No decorative effect dependency"],
     },
@@ -529,13 +580,21 @@ function logoPlan(): DesignPlanToolInput {
       visualThesis: "Open structure becomes a precise ownable contour",
       signatureMotif: "One open counterform creates the identifying gesture",
       typographyLanguage: "Restrained wordmark with optical edits",
-      colorMaterialLanguage: "Black and white first with restrained blue",
+      colorMaterialLanguage:
+        "A precise electric blue primary carries recognition while black and white remain proof variants",
       compositionTension: "Specimens expose silhouette before explanation",
       antiPatterns: ["generic tile", "sparkle"],
     },
     skillRefs: BUILTIN_LOGO_DESIGN_SKILL_REFS.map((reference) => ({
       ...reference,
     })),
+    logoColorStrategy: {
+      mode: "brand-color",
+      rationale:
+        "Electric blue signals precise creative action and belongs to the primary mark rather than its presentation board.",
+      lightDarkAdaptation:
+        "Use the deeper blue on light surfaces and a brighter optical blue with white counterforms on dark surfaces.",
+    },
     logoExploration: {
       targetId: "logo-system",
       directions: [
@@ -545,6 +604,11 @@ function logoPlan(): DesignPlanToolInput {
           principle: "path-contour",
           thesis: "One open contour creates an ownable silhouette",
           constructionLogic: "A continuous contour defines aperture and edge",
+          colorSystem: {
+            palette: ["#2F6BFF", "#111827", "#EFF4FF"],
+            rationale:
+              "Electric blue energizes the open contour while deep ink preserves precision.",
+          },
           rootNodeId: "logo_direction",
           monochromeNodeId: "logo_monochrome",
           smallSizeNodeIds: ["logo_32", "logo_24", "logo_16"],
@@ -556,6 +620,11 @@ function logoPlan(): DesignPlanToolInput {
           thesis: "A modular path creates a precise recognizable system",
           constructionLogic:
             "Repeated modules lock into one asymmetric identifying contour",
+          colorSystem: {
+            palette: ["#F97316", "#431407", "#FFF7ED"],
+            rationale:
+              "Signal orange makes modular assembly feel active and materially distinct.",
+          },
           rootNodeId: "logo_direction_modular",
           monochromeNodeId: "logo_monochrome_modular",
           smallSizeNodeIds: [
@@ -571,6 +640,11 @@ function logoPlan(): DesignPlanToolInput {
           thesis: "An open spatial link expresses structured collaboration",
           constructionLogic:
             "Two interlocking planes preserve one deliberate open counterform",
+          colorSystem: {
+            palette: ["#8B5CF6", "#2E1065", "#F5F3FF"],
+            rationale:
+              "Violet separates the interlocking planes while maintaining one ownable silhouette.",
+          },
           rootNodeId: "logo_direction_spatial",
           monochromeNodeId: "logo_monochrome_spatial",
           smallSizeNodeIds: [

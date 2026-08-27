@@ -30,6 +30,11 @@ import {
   validateContract,
 } from "./contract-validation";
 import { isRecord, substantiveReviewText } from "./design-agent-validation";
+import {
+  DESIGN_LOGO_COLOR_STRATEGY_SCHEMA,
+  logoColorDomainIssues,
+  type DesignLogoColorStrategy,
+} from "./design-logo-color";
 
 export type DesignDeliverable =
   | "ui"
@@ -153,6 +158,10 @@ export type DesignLogoExploration = {
     principle: (typeof LOGO_CONCEPT_PRINCIPLES)[number];
     thesis: string;
     constructionLogic: string;
+    colorSystem: {
+      palette: string[];
+      rationale: string;
+    };
     rootNodeId: string;
     monochromeNodeId: string;
     smallSizeNodeIds: [string, string, string];
@@ -172,6 +181,7 @@ export type DesignPlanToolInput = {
   designIntent: DesignIntent;
   referenceStrategy?: DesignReferenceStrategy;
   skillRefs: BuiltinDesignSkillRef[];
+  logoColorStrategy?: DesignLogoColorStrategy;
   logoOutputs?: DesignLogoOutput[];
   logoExploration?: DesignLogoExploration;
   singleRasterEvidence?: string;
@@ -512,7 +522,7 @@ const DESIGN_INTENT_SCHEMA = {
 export const DESIGN_LOGO_EXPLORATION_SCHEMA = {
   type: "object",
   description:
-    "Optional for a requested multi-direction Logo exploration. Three genuinely different concept directions with stable editable roots and rendered monochrome plus 32/24/16 px evidence. Each thesis states the relevant brand meaning; each constructionLogic names the visible geometric mechanism, memorable silhouette/counterform anchor, and feature that survives at 16 px. Cosmetic variants and caption-dependent arbitrary shapes are invalid.",
+    "Optional for a requested multi-direction Logo exploration. Three genuinely different concept directions with stable editable roots, distinct thesis-specific primary color systems, and rendered monochrome plus 32/24/16 px evidence. Each thesis states the relevant brand meaning; each constructionLogic names the visible geometric mechanism, memorable silhouette/counterform anchor, and feature that survives at 16 px. Cosmetic variants, hue swaps, and caption-dependent arbitrary shapes are invalid.",
   properties: {
     targetId: {
       type: "string",
@@ -554,6 +564,31 @@ export const DESIGN_LOGO_EXPLORATION_SCHEMA = {
             description:
               "Causal meaning-to-form mechanism, including the memorable silhouette or counterform anchor and what remains recognizable at 16 px.",
           },
+          colorSystem: {
+            type: "object",
+            properties: {
+              palette: {
+                type: "array",
+                minItems: 1,
+                maxItems: 6,
+                uniqueItems: true,
+                items: {
+                  type: "string",
+                  minLength: 1,
+                  maxLength: 128,
+                  pattern: "\\S",
+                },
+              },
+              rationale: {
+                type: "string",
+                minLength: 16,
+                maxLength: 1_000,
+                pattern: "\\S",
+              },
+            },
+            required: ["palette", "rationale"],
+            additionalProperties: false,
+          },
           rootNodeId: {
             type: "string",
             minLength: 1,
@@ -587,6 +622,7 @@ export const DESIGN_LOGO_EXPLORATION_SCHEMA = {
           "principle",
           "thesis",
           "constructionLogic",
+          "colorSystem",
           "rootNodeId",
           "monochromeNodeId",
           "smallSizeNodeIds",
@@ -602,7 +638,7 @@ export const DESIGN_LOGO_EXPLORATION_SCHEMA = {
 const DESIGN_PLAN_MODEL_INPUT_JSON_SCHEMA = {
   type: "object",
   description:
-    "Current executable delivery plan. targets must match the user's requested scope exactly. designIntent must commit to a subject-grounded visual thesis and signature motif before drawing. Main binds the exact locally loaded UI skill bundle. briefFidelity preserves requested and inspected product semantics without invented capabilities, componentStrategy explicitly judges reusable semantic objects, and every target declares an executable qualityProfile.",
+    "Current executable delivery plan. targets must match the user's requested scope exactly. designIntent must commit to a subject-grounded visual thesis and signature motif before drawing. Logo delivery also declares a primary logoColorStrategy; monochrome remains a test unless the authoritative brief explicitly requests a monochrome-only identity. Main binds the exact locally loaded design skill bundle. briefFidelity preserves requested and inspected product semantics without invented capabilities, componentStrategy explicitly judges reusable semantic objects, and every target declares an executable qualityProfile.",
   properties: {
     version: { const: 1 },
     deliverable: {
@@ -727,6 +763,7 @@ const DESIGN_PLAN_MODEL_INPUT_JSON_SCHEMA = {
         "Optional Logo scope hint. When present, list only the concrete Logo/Icon outputs requested by the user; omission must not block drawing.",
       items: { enum: [...DESIGN_LOGO_OUTPUTS] },
     },
+    logoColorStrategy: DESIGN_LOGO_COLOR_STRATEGY_SCHEMA,
     logoExploration: DESIGN_LOGO_EXPLORATION_SCHEMA,
     singleRasterEvidence: {
       type: "string",
@@ -870,7 +907,10 @@ export const DESIGN_VISUAL_REVIEW_CANONICAL_INPUT_SCHEMA = executableJsonSchema(
   },
 );
 
-export type DesignPlanContractContext = { canonical?: boolean };
+export type DesignPlanContractContext = {
+  authoritativePrompt?: string;
+  canonical?: boolean;
+};
 
 function parseDesignPlan(
   input: unknown,
@@ -885,7 +925,7 @@ function parseDesignPlan(
         code: "design_plan.canonical_schema_invalid",
         subject: "canonical Design Plan",
         maximum: 32,
-        refine: refineDesignPlan,
+        refine: (value) => refineDesignPlan(value, context),
       },
       modelInput,
       undefined,
@@ -907,7 +947,7 @@ function parseDesignPlan(
         maximum: 32,
       },
       bind: bindDesignPlanHostContext,
-      refine: refineDesignPlan,
+      refine: (value) => refineDesignPlan(value, context),
     },
     modelInput,
     undefined,
@@ -943,7 +983,10 @@ function bindDesignPlanHostContext(
   };
 }
 
-function refineDesignPlan(input: DesignPlanToolInput): ValidationIssue[] {
+function refineDesignPlan(
+  input: DesignPlanToolInput,
+  context: DesignPlanContractContext = {},
+): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
   if (
     !isBuiltinDesignSkillRefsForDeliverable(input.deliverable, input.skillRefs)
@@ -1019,7 +1062,7 @@ function refineDesignPlan(input: DesignPlanToolInput): ValidationIssue[] {
     issues,
   );
   refinePlanReferenceStrategy(input.referenceStrategy, issues);
-  refinePlanLogo(input, targetIds, issues);
+  refinePlanLogo(input, targetIds, issues, context.authoritativePrompt);
   refinePlanOutputMode(input, issues);
   return issues;
 }
@@ -1291,7 +1334,25 @@ function refinePlanLogo(
   input: DesignPlanToolInput,
   targetIds: ReadonlyMap<string, string>,
   issues: ValidationIssue[],
+  authoritativePrompt?: string,
 ): void {
+  issues.push(
+    ...logoColorDomainIssues({
+      ...(authoritativePrompt === undefined ? {} : { authoritativePrompt }),
+      deliverable: input.deliverable,
+      ...(input.logoExploration === undefined
+        ? {}
+        : {
+            directionColors: input.logoExploration.directions.map(
+              (direction) => direction.colorSystem,
+            ),
+          }),
+      palette: input.visualSystem.palette,
+      ...(input.logoColorStrategy === undefined
+        ? {}
+        : { strategy: input.logoColorStrategy }),
+    }),
+  );
   if (input.logoOutputs !== undefined && input.deliverable !== "logo") {
     issues.push(
       planIssue(
