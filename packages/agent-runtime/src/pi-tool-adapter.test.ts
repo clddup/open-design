@@ -52,10 +52,12 @@ const moveTool: AgentToolDefinition = {
   },
   risk: "design_write",
   approval: "never",
-  validateInput: (input) =>
+  validateInputIssues: (input) =>
     !!input &&
     typeof input === "object" &&
-    typeof (input as { dx?: unknown }).dx === "number",
+    typeof (input as { dx?: unknown }).dx === "number"
+      ? []
+      : [{ path: "/dx", message: "dx must be a number" }],
 };
 
 const inspectTool: AgentToolDefinition = {
@@ -68,11 +70,13 @@ const inspectTool: AgentToolDefinition = {
   },
   risk: "read",
   approval: "never",
-  validateInput: (input) =>
+  validateInputIssues: (input) =>
     !!input &&
     typeof input === "object" &&
     !Array.isArray(input) &&
-    Object.keys(input).length === 0,
+    Object.keys(input).length === 0
+      ? []
+      : [{ path: "/", message: "Expected an empty object" }],
 };
 
 class MemorySessionStore implements SessionStore {
@@ -361,6 +365,29 @@ describe("OpenDesign Pi tool adapter", () => {
         .filter((event) => event.type === "tool.completed")
         .map((event) => event.revision),
     ).toEqual([13, 14]);
+  });
+
+  it("parses one valid tool input only once across the Pi hook and executor", async () => {
+    const validateInputIssues = vi.fn((input: unknown) =>
+      moveTool.validateInputIssues(input),
+    );
+    await runPiToolLoop({
+      gateway: new RecordingGateway(
+        new MockModelGateway([
+          toolTurn("move_once", "move_once", 24),
+          { blocks: [{ id: "done", type: "text", text: "Done" }] },
+        ]),
+      ),
+      definitions: [{ ...moveTool, validateInputIssues }],
+      toolExecutor: {
+        async *execute(): AsyncIterable<ToolExecutionEvent> {
+          await Promise.resolve();
+          yield { type: "completed", result: { content: { ok: true } } };
+        },
+      },
+    });
+
+    expect(validateInputIssues).toHaveBeenCalledTimes(1);
   });
 
   it("returns custom validation failures to the model without executing", async () => {
@@ -1084,7 +1111,11 @@ describe("OpenDesign Pi tool adapter", () => {
       code: "invalid_tool_input",
       recoverable: true,
     });
-    expect(failure?.message).toContain("dx: must be number");
+    expect(failure?.message).toContain("at /dx: dx must be a number");
+    expect(failure?.details).toMatchObject({
+      kind: "tool-validation",
+      issues: [{ path: "/dx", message: "dx must be a number" }],
+    });
     expect(JSON.stringify(result.events)).not.toContain(
       "Tool call was rejected before execution",
     );
@@ -1110,8 +1141,6 @@ describe("OpenDesign Pi tool adapter", () => {
         additionalProperties: false,
       },
       validateInputIssues,
-      explainInvalidInput: () =>
-        'Invalid move action. Expected exact shape: {"dx":<number>}.',
     };
     const result = await runPiToolLoop({
       gateway: new RecordingGateway(

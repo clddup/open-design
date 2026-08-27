@@ -324,7 +324,7 @@ function isSafeToolDefinition(tool: AgentToolDefinition): boolean {
         tool.approvalPrompt.title.length > 0 &&
         tool.approvalPrompt.title.length <= 2_000 &&
         tool.approvalPrompt.summary.length <= 20_000)) &&
-    typeof tool.validateInput === "function"
+    typeof tool.validateInputIssues === "function"
   );
 }
 

@@ -39,7 +39,6 @@ import {
   EXPORT_RASTER_TOOL_NAME,
   EXPORT_SVG_TOOL_NAME,
   GENERATE_IMAGE_TOOL_NAME,
-  validateDesignAgentToolInput,
 } from "@/shared/design-agent-tools";
 import {
   newDesignSystemPromptForRequest,
@@ -79,8 +78,6 @@ describe("production Agent context budget", () => {
                 string,
                 unknown
               >,
-              validateInput: (input: unknown) =>
-                validateDesignAgentToolInput(tool.name, input),
             })),
         },
       });
@@ -166,8 +163,6 @@ describe("production Agent context budget", () => {
                 string,
                 unknown
               >,
-              validateInput: (input: unknown) =>
-                validateDesignAgentToolInput(tool.name, input),
             })),
         },
       });
@@ -279,8 +274,6 @@ describe("production Agent context budget", () => {
                 string,
                 unknown
               >,
-              validateInput: (input: unknown) =>
-                validateDesignAgentToolInput(tool.name, input),
             })),
         },
       });
@@ -361,8 +354,6 @@ describe("production Agent context budget", () => {
                 string,
                 unknown
               >,
-              validateInput: (input: unknown) =>
-                validateDesignAgentToolInput(tool.name, input),
             })),
         },
       });
@@ -464,8 +455,6 @@ describe("production Agent context budget", () => {
                 string,
                 unknown
               >,
-              validateInput: (input: unknown) =>
-                validateDesignAgentToolInput(tool.name, input),
             })),
         },
         toolExecutor: {
@@ -602,8 +591,6 @@ describe("production Agent context budget", () => {
                 string,
                 unknown
               >,
-              validateInput: (input: unknown) =>
-                validateDesignAgentToolInput(tool.name, input),
             })),
         },
         toolExecutor: {
@@ -740,8 +727,6 @@ describe("production Agent context budget", () => {
       ).map((tool) => ({
         ...tool,
         inputSchema: tool.inputSchema as unknown as Record<string, unknown>,
-        validateInput: (input: unknown) =>
-          validateDesignAgentToolInput(tool.name, input),
       }));
       const request: AgentRunRequest = {
         runId: "run_pi_production_context_loop",

@@ -8,10 +8,7 @@ import { MockModelGateway } from "@opendesign/model-gateway";
 import { dispatchAgentRequest } from "./request-handler.js";
 import { ParentModelGateway } from "./parent-model-gateway.js";
 import { ParentDesignToolExecutor } from "./parent-design-tool-executor.js";
-import {
-  DESIGN_AGENT_TOOL_SPECS,
-  validateDesignAgentToolInput,
-} from "@/shared/design-agent-tools.js";
+import { DESIGN_AGENT_TOOL_SPECS } from "@/shared/design-agent-tools.js";
 import {
   agentSystemPromptForRequest,
   designThinkingLevelForRequest,
@@ -45,8 +42,6 @@ const runtime = new OpenDesignPiRuntime({
       DESIGN_AGENT_TOOL_SPECS.map((tool) => ({
         ...tool,
         inputSchema: tool.inputSchema as unknown as Record<string, unknown>,
-        validateInput: (input: unknown) =>
-          validateDesignAgentToolInput(tool.name, input),
       })),
   },
   toolExecutor: parentDesignToolExecutor,

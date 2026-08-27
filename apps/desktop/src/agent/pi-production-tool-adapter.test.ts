@@ -18,7 +18,6 @@ import {
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
   INTERNAL_IMPORT_SVG_TOOL_NAME,
   INTERNAL_UPDATE_IMAGE_TOOL_NAME,
-  validateDesignAgentToolInput,
 } from "@/shared/design-agent-tools.js";
 
 const request: AgentRunRequest = {
@@ -38,8 +37,6 @@ describe("production Pi design-tool catalog", () => {
       (tool) => ({
         ...tool,
         inputSchema: tool.inputSchema as unknown as Record<string, unknown>,
-        validateInput: (input) =>
-          validateDesignAgentToolInput(tool.name, input),
       }),
     );
     const adapter = new PiRunEventAdapter({

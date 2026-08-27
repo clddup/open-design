@@ -44,8 +44,10 @@ const tool: AgentToolDefinition = {
   },
   risk: "read",
   approval: "never",
-  validateInput: (input) =>
-    typeof input === "object" && input !== null && !Array.isArray(input),
+  validateInputIssues: (input) =>
+    typeof input === "object" && input !== null && !Array.isArray(input)
+      ? []
+      : [{ path: "/", message: "Expected an object" }],
 };
 
 class MemorySessionStore implements SessionStore {
@@ -814,8 +816,10 @@ function disclosureProbeTools(): AgentToolDefinition[] {
           additionalProperties: false,
         },
       },
-      validateInput: (input) =>
-        typeof input === "object" && input !== null && !Array.isArray(input),
+      validateInputIssues: (input) =>
+        typeof input === "object" && input !== null && !Array.isArray(input)
+          ? []
+          : [{ path: "/", message: "Expected an object" }],
     },
     {
       ...tool,

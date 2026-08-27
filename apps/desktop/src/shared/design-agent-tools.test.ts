@@ -36,6 +36,7 @@ import {
   DesignHierarchyContract,
   DesignVisualReviewContract,
   FirstSliceContract,
+  designAgentToolInputIssues,
   isAgentSvgImportResult,
   isPreparedAgentSvgExport,
   isPreparedAgentRasterExport,
@@ -111,6 +112,30 @@ describe("component tool recovery contract", () => {
 });
 
 describe("design Agent tool contract", () => {
+  it("gives every public tool one structured input issue entry", () => {
+    expect(
+      DESIGN_AGENT_TOOL_SPECS.every(
+        (tool) => typeof tool.validateInputIssues === "function",
+      ),
+    ).toBe(true);
+    expect(
+      designAgentToolInputIssues(DESIGN_CAPABILITIES_TOOL_NAME, {
+        unexpected: true,
+      }),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "design_tool.empty_input_invalid",
+        path: "/unexpected",
+      }),
+    );
+    expect(designAgentToolInputIssues("opendesign_unknown", {})).toEqual([
+      expect.objectContaining({
+        code: "design_tool.unknown",
+        path: "/",
+      }),
+    ]);
+  });
+
   it("wires first-slice validation into the production tool definition", () => {
     const firstSlice = DESIGN_AGENT_TOOL_SPECS.find(
       (tool) => tool.name === DESIGN_FIRST_SLICE_TOOL_NAME,

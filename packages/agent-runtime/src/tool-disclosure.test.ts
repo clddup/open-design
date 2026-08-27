@@ -26,7 +26,7 @@ const definition: AgentToolDefinition = {
       additionalProperties: false,
     },
   },
-  validateInput: () => true,
+  validateInputIssues: () => [],
 };
 
 describe("model tool disclosure", () => {
@@ -38,7 +38,7 @@ describe("model tool disclosure", () => {
       description: "Bootstrap probe",
       inputSchema: definition.modelDisclosure?.bootstrapInputSchema,
     });
-    expect(bootstrap?.validateInput({ basic: "content" })).toBe(true);
+    expect(bootstrap?.validateInputIssues({ basic: "content" })).toEqual([]);
     expect(disclosedToolDefinitions([definition], "expanded")[0]).toBe(
       definition,
     );

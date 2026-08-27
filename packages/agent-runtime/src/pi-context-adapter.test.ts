@@ -65,8 +65,10 @@ const probeTool: AgentToolDefinition = {
   },
   risk: "read",
   approval: "never",
-  validateInput: (input) =>
-    typeof input === "object" && input !== null && !Array.isArray(input),
+  validateInputIssues: (input) =>
+    typeof input === "object" && input !== null && !Array.isArray(input)
+      ? []
+      : [{ path: "/", message: "Expected an object" }],
 };
 
 class MemorySessionStore implements SessionStore {

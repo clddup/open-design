@@ -106,9 +106,7 @@ export interface AgentToolDefinition extends CanonicalTool {
         input: unknown,
         request: Readonly<AgentRunRequest>,
       ) => { title: string; summary: string });
-  validateInput(input: unknown): boolean;
-  validateInputIssues?(input: unknown): readonly AgentToolFailureIssue[];
-  explainInvalidInput?(input: unknown): string | undefined;
+  validateInputIssues(input: unknown): readonly AgentToolFailureIssue[];
 }
 
 export interface ToolCatalogPort {

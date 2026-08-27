@@ -253,8 +253,10 @@ describe("Pi run event adapter", () => {
       },
       risk: "read" as const,
       approval: "never" as const,
-      validateInput: (input: unknown) =>
-        !!input && typeof input === "object" && Object.keys(input).length === 0,
+      validateInputIssues: (input: unknown) =>
+        !!input && typeof input === "object" && Object.keys(input).length === 0
+          ? []
+          : [{ path: "/", message: "Expected an empty object" }],
     };
     const adapter = new PiRunEventAdapter({
       request,

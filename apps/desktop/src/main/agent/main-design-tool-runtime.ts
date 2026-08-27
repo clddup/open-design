@@ -17,7 +17,6 @@ import {
   DESIGN_CAPTURE_TOOL_NAME,
   DESIGN_REVIEW_TOOL_NAME,
   READ_IMAGE_TOOL_NAME,
-  validateDesignAgentToolInput,
 } from "@/shared/design-agent-tools.js";
 
 export interface MainDesignToolDispatcher {
@@ -84,8 +83,7 @@ export class MainDesignToolRuntime {
       this.#runtime.register({
         name: spec.name,
         description: spec.description,
-        validateInput: (input) =>
-          validateDesignAgentToolInput(spec.name, input),
+        validateInput: (input) => spec.validateInputIssues(input).length === 0,
         validateOutput: isTrustedToolResult,
         capability,
         resolveCapability: (_input, request) => ({

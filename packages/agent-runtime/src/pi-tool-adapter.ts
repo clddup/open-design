@@ -104,6 +104,7 @@ export type PiToolTerminalProjection =
     };
 interface ActiveToolCall extends PiToolStartProjection {
   budgetExceeded: boolean;
+  inputValidated: boolean;
   revisionAtStart: number;
   sequence: number;
 }
@@ -346,6 +347,7 @@ export class OpenDesignPiToolAdapter {
     const projection: ActiveToolCall = {
       duplicate,
       budgetExceeded,
+      inputValidated: false,
       revisionAtStart: this.#currentRevision,
       sequence: ++this.#toolSequence,
       toolCallId: event.toolCallId,
@@ -389,7 +391,7 @@ export class OpenDesignPiToolAdapter {
       const existingFailure = this.#failures.get(event.toolCallId);
       const inferredFailure =
         existingFailure ??
-        (definition && toolOwnedValidationFailure(definition, active.input)) ??
+        (definition && this.#validateActiveInput(active, definition)) ??
         inferPiToolFailure(active, event.result);
       const failure =
         existingFailure ??
@@ -499,7 +501,7 @@ export class OpenDesignPiToolAdapter {
         `Tool ${active.toolName} is not registered for this run`,
       );
     }
-    const validationFailure = toolValidationFailure(definition, context.args);
+    const validationFailure = this.#validateActiveInput(active, definition);
     if (validationFailure) {
       const baseFailure = validationFailure;
       const recoveredFailure = this.#designFailureRecovery.recordFailure({
@@ -692,7 +694,10 @@ export class OpenDesignPiToolAdapter {
     onUpdate: Parameters<AgentTool["execute"]>[3],
   ) {
     try {
-      const validationFailure = toolValidationFailure(definition, parameters);
+      const active = this.#active.get(toolCallId);
+      const validationFailure = active
+        ? this.#validateActiveInput(active, definition)
+        : toolValidationFailure(definition, parameters);
       if (validationFailure) {
         throw new TrustedToolExecutionError(validationFailure);
       }
@@ -827,6 +832,16 @@ export class OpenDesignPiToolAdapter {
     }
   }
 
+  #validateActiveInput(
+    active: ActiveToolCall,
+    definition: AgentToolDefinition,
+  ): TrustedToolFailure | undefined {
+    if (active.inputValidated) return undefined;
+    const validationFailure = toolValidationFailure(definition, active.input);
+    if (validationFailure === undefined) active.inputValidated = true;
+    return validationFailure;
+  }
+
   #block(
     toolCallId: string,
     code: string,
@@ -941,21 +956,16 @@ function failure(
 
 function invalidInputFailure(
   definition: AgentToolDefinition,
-  input: unknown,
-  issues: readonly AgentToolFailureIssue[] = [],
+  issues: readonly AgentToolFailureIssue[],
 ): TrustedToolFailure {
-  const explanation =
-    issues.length > 0
-      ? validationIssuesMessage(definition.name, issues)
-      : definition.explainInvalidInput?.(input)?.trim();
+  const explanation = validationIssuesMessage(definition.name, issues);
   const base = failure(
     "invalid_tool_input",
-    explanation && explanation.length <= 20_000
+    explanation.length <= 20_000
       ? explanation
       : `The ${definition.name} arguments do not match its schema. Review the tool parameters and submit a corrected call.`,
     true,
   );
-  if (issues.length === 0) return base;
   return {
     ...base,
     details: {
@@ -971,31 +981,10 @@ function toolValidationFailure(
   definition: AgentToolDefinition,
   input: unknown,
 ): TrustedToolFailure | undefined {
-  if (definition.validateInputIssues) {
-    const issues = definition.validateInputIssues(input).slice(0, 128);
-    return issues.length > 0
-      ? invalidInputFailure(definition, input, issues)
-      : undefined;
-  }
-  return definition.validateInput(input)
-    ? undefined
-    : invalidInputFailure(definition, input);
-}
-
-function toolOwnedValidationFailure(
-  definition: AgentToolDefinition,
-  input: unknown,
-): TrustedToolFailure | undefined {
-  if (definition.validateInputIssues) {
-    const issues = definition.validateInputIssues(input).slice(0, 128);
-    return issues.length > 0
-      ? invalidInputFailure(definition, input, issues)
-      : undefined;
-  }
-  if (definition.explainInvalidInput && !definition.validateInput(input)) {
-    return invalidInputFailure(definition, input);
-  }
-  return undefined;
+  const issues = definition.validateInputIssues(input).slice(0, 128);
+  return issues.length > 0
+    ? invalidInputFailure(definition, issues)
+    : undefined;
 }
 
 function validationIssuesMessage(
