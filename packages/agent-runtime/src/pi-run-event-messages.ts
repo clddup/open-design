@@ -8,8 +8,8 @@ import type {
   ModelApiFormat,
   ResolvedModelIdentity,
 } from "@opendesign/model-gateway";
+import { normalizeAssistantTimelineBlocks } from "@opendesign/session-store";
 import type { AgentRunRequest } from "./index.js";
-import { normalizeAssistantTimelineBlocks } from "./timeline-blocks.js";
 
 export type PiAgentEventMessage = Extract<
   PiAgentEvent,

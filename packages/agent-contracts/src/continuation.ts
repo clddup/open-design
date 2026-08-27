@@ -1,4 +1,5 @@
 import { Type, type Static } from "@sinclair/typebox";
+import { defineContract } from "@opendesign/contract-runtime";
 
 const ContinuationRunIdSchema = Type.String({ minLength: 1, maxLength: 256 });
 
@@ -68,3 +69,12 @@ export type AgentContinuationReason = Static<
   typeof AgentContinuationReasonSchema
 >;
 export type AgentRunContinuation = Static<typeof AgentRunContinuationSchema>;
+
+export const AgentRunContinuationContract =
+  defineContract<AgentRunContinuation>({
+    schema: AgentRunContinuationSchema,
+    code: "agent_run_continuation.schema_invalid",
+    subject: "Agent run continuation",
+    recovery: "Correct the reported Agent run continuation field.",
+    clone: false,
+  });

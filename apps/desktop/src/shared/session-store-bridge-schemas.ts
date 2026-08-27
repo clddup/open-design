@@ -1,11 +1,11 @@
 import {
   DurableTimelineEventSchema,
   SessionTimelineItemSchema,
+  type SessionTimelineItem,
 } from "@opendesign/agent-contracts";
 import type {
   JournalEvent,
   SessionProjection,
-  SessionTimelineItem,
 } from "@opendesign/session-store";
 import { Type, type Static } from "@sinclair/typebox";
 

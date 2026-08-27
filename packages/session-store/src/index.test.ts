@@ -1,6 +1,7 @@
 import { appendFile, mkdir, mkdtemp, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { MAX_REASONING_SUMMARY_CHARACTERS } from "@opendesign/agent-contracts";
 import { describe, expect, it } from "vitest";
 import {
   JsonlSessionStore,
@@ -209,6 +210,32 @@ describe("session journal recovery", () => {
     );
   });
 
+  it("accepts the canonical non-retryable continuation reason", () => {
+    const continuation = {
+      parentRunId: "run_parent",
+      rootRunId: "run_root",
+      attempt: 3 as const,
+      maxAttempts: 3 as const,
+      reason: "non-retryable-error" as const,
+    };
+    expect(
+      projectTimeline("session_1", [
+        event(1, "run.state", {
+          status: "error",
+          startedAt: new Date(1).toISOString(),
+          finishedAt: new Date(2).toISOString(),
+          stopReason: "error",
+          failure: {
+            code: "provider_rejected",
+            message: "Provider rejected the request",
+            retryable: false,
+          },
+          continuation,
+        }),
+      ]),
+    ).toContainEqual(expect.objectContaining({ type: "run", continuation }));
+  });
+
   it("terminally recovers interrupted JSONL runs and pending tools once", async () => {
     const directory = await mkdtemp(join(tmpdir(), "opendesign-session-"));
     const store = new JsonlSessionStore(join(directory, "events.jsonl"));
@@ -314,7 +341,9 @@ describe("session journal recovery", () => {
           scope: { kind: "document", selectedNodeIds: [] },
         }),
       ),
-    ).toThrow("Invalid journal event");
+    ).toThrow(
+      "durable_timeline_event.schema_invalid at /payload/attachments/0/path",
+    );
     store.close();
   });
 
@@ -341,6 +370,84 @@ describe("session journal recovery", () => {
       "utf8",
     );
     await expect(store.read("session_1")).resolves.toEqual(events);
+  });
+
+  it("keeps a persisted failed tool while removing only invalid legacy details", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "opendesign-session-"));
+    const path = join(directory, "events.jsonl");
+    const requested = event(1, "tool.requested", {
+      toolCallId: "tool_legacy_failure",
+      toolName: "opendesign_edit_design",
+      input: {},
+      risk: "design_write",
+    });
+    const failed = event(2, "tool.failed", {
+      toolCallId: "tool_legacy_failure",
+      code: "legacy_failure",
+      message: `The legacy failure remains visible\n${"x".repeat(30_000)}`,
+      details: { legacy: true },
+    });
+    await appendFile(
+      path,
+      `${JSON.stringify(requested)}\n${JSON.stringify(failed)}\n`,
+      "utf8",
+    );
+
+    const store = new JsonlSessionStore(path);
+    const raw = await store.read("session_1");
+    expect(raw).toHaveLength(2);
+    expect(raw[1]?.payload).not.toHaveProperty("details");
+    const timeline = await store.readTimeline("session_1");
+    const tool = timeline.find((item) => item.type === "tool");
+    expect(tool).toMatchObject({
+      type: "tool",
+      status: "failed",
+      error: { code: "legacy_failure" },
+    });
+    if (tool?.type !== "tool") return;
+    expect(tool.error?.message).toHaveLength(20_000);
+    expect(tool.error?.message).toContain("The legacy failure remains visible");
+    expect(tool.error?.message).toContain(
+      "[OpenDesign truncated legacy tool diagnostics]",
+    );
+  });
+
+  it("splits persisted oversized reasoning without hiding the assistant message", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "opendesign-session-"));
+    const path = join(directory, "events.jsonl");
+    const summary = "reasoning".repeat(
+      Math.ceil((MAX_REASONING_SUMMARY_CHARACTERS + 1) / 9),
+    );
+    await appendFile(
+      path,
+      `${JSON.stringify(
+        event(1, "message.assistant", {
+          messageId: "message_oversized_reasoning",
+          blocks: [
+            {
+              blockId: "reasoning_1",
+              type: "reasoning_summary",
+              status: "completed",
+              summary,
+            },
+          ],
+        }),
+      )}\n`,
+      "utf8",
+    );
+
+    const timeline = await new JsonlSessionStore(path).readTimeline(
+      "session_1",
+    );
+    const message = timeline.find((item) => item.type === "assistant.message");
+    expect(message?.type).toBe("assistant.message");
+    if (message?.type !== "assistant.message") return;
+    expect(
+      message.blocks
+        .filter((block) => block.type === "reasoning_summary")
+        .map((block) => block.summary ?? "")
+        .join(""),
+    ).toBe(summary);
   });
 
   it.each(["jsonl", "sqlite"] as const)(

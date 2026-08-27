@@ -19,6 +19,7 @@ export {
   type DesignWorkflowFailurePhase,
 } from "./workflow-failure-contract.js";
 export type { AgentRunContinuation } from "./continuation.js";
+export { AgentRunContinuationContract } from "./continuation.js";
 export { formatContractFailure as formatRuntimeContractFailure } from "@opendesign/contract-runtime";
 export type {
   Contract as RuntimeContract,
@@ -1192,6 +1193,67 @@ export type AgentToolFailureDetails = Static<
 >;
 export type AgentRunFailure = Static<typeof AgentRunFailureSchema>;
 
+export const ModelSelectionContract = defineContract<AgentModelSelection>({
+  schema: ModelSelectionSchema,
+  code: "model_selection.schema_invalid",
+  subject: "Model selection",
+  recovery: "Correct the reported model selection field.",
+  clone: false,
+});
+
+export const AgentRunFailureContract = defineContract<AgentRunFailure>({
+  schema: AgentRunFailureSchema,
+  code: "agent_run_failure.schema_invalid",
+  subject: "Agent run failure",
+  recovery: "Correct the reported Agent run failure field.",
+  clone: false,
+});
+
+export const AgentAttachmentContract = defineContract<AgentAttachment>({
+  schema: AgentAttachmentSchema,
+  code: "agent_attachment.schema_invalid",
+  subject: "Agent attachment",
+  recovery: "Correct the reported Agent attachment field.",
+  clone: false,
+});
+
+export const SelectionScopeContract = defineContract<SelectionScope>({
+  schema: SelectionScopeSchema,
+  code: "selection_scope.schema_invalid",
+  subject: "Selection scope",
+  recovery: "Correct the reported selection scope field.",
+  refine: (value) => selectionScopeDomainIssues(value),
+  clone: false,
+});
+
+export const DesignMutationTargetContract =
+  defineContract<DesignMutationTarget>({
+    schema: DesignMutationTargetSchema,
+    code: "design_mutation_target.schema_invalid",
+    subject: "Design mutation target",
+    recovery: "Correct the reported design mutation target field.",
+    clone: false,
+  });
+
+export const DurableTimelineEventContract =
+  defineContract<DurableTimelineEvent>({
+    schema: DurableTimelineEventSchema,
+    code: "durable_timeline_event.schema_invalid",
+    subject: "Durable timeline event",
+    recovery: "Correct the reported durable timeline event field.",
+    refine: durableTimelineEventDomainIssues,
+    clone: false,
+  });
+
+export const SessionTimelineItemContract = defineContract<SessionTimelineItem>({
+  schema: SessionTimelineItemSchema,
+  code: "session_timeline_item.schema_invalid",
+  subject: "Session timeline item",
+  recovery: "Correct the reported session timeline item field.",
+  refine: (value) => sessionTimelineItemDomainIssues(value),
+  clone: false,
+});
+
 export const AgentEventContract = defineContract<AgentEvent>({
   schema: AgentEventSchema,
   code: "agent_event.schema_invalid",
@@ -1203,25 +1265,21 @@ export const AgentEventContract = defineContract<AgentEvent>({
 });
 
 export function isAgentRunFailure(value: unknown): value is AgentRunFailure {
-  return Value.Check(AgentRunFailureSchema, value);
+  return AgentRunFailureContract.parse(value).ok;
 }
 
 export function isAgentAttachment(value: unknown): value is AgentAttachment {
-  return Value.Check(AgentAttachmentSchema, value);
+  return AgentAttachmentContract.parse(value).ok;
 }
 
 export function isSelectionScope(value: unknown): value is SelectionScope {
-  if (!Value.Check(SelectionScopeSchema, value)) return false;
-  return (
-    value.primaryNodeId === undefined ||
-    value.selectedNodeIds.includes(value.primaryNodeId)
-  );
+  return SelectionScopeContract.parse(value).ok;
 }
 
 export function isDesignMutationTarget(
   value: unknown,
 ): value is DesignMutationTarget {
-  return Value.Check(DesignMutationTargetSchema, value);
+  return DesignMutationTargetContract.parse(value).ok;
 }
 
 export function isToolCallRequest(
@@ -1322,14 +1380,7 @@ export function isAgentToolFailureDetails(
 export function isDurableTimelineEvent(
   value: unknown,
 ): value is DurableTimelineEvent {
-  return (
-    Value.Check(DurableTimelineEventSchema, value) &&
-    (value.type !== "message.user" || isSelectionScope(value.payload.scope)) &&
-    (value.type !== "run.state" ||
-      value.payload.failure === undefined ||
-      (value.payload.status === "error" &&
-        value.payload.stopReason === "error"))
-  );
+  return DurableTimelineEventContract.parse(value).ok;
 }
 
 export function isAgentRequest(value: unknown): value is AgentRequest {
@@ -1353,7 +1404,7 @@ export function isAgentEvent(value: unknown): value is AgentEvent {
 export function isSessionTimelineItem(
   value: unknown,
 ): value is SessionTimelineItem {
-  return Value.Check(SessionTimelineItemSchema, value);
+  return SessionTimelineItemContract.parse(value).ok;
 }
 
 export function agentEventValidationError(value: unknown): string | null {
@@ -1402,43 +1453,140 @@ function agentEventDomainIssues(value: AgentEvent): ValidationIssue[] {
   }
   if (value.type === "session.history") {
     value.timeline.forEach((item, index) => {
-      if (
-        item.type === "user.message" &&
-        item.scope.primaryNodeId !== undefined &&
-        !item.scope.selectedNodeIds.includes(item.scope.primaryNodeId)
-      ) {
-        issues.push(
-          agentEventIssue(
-            "agent_event.history_primary_selection_invalid",
-            `/timeline/${index}/scope/primaryNodeId`,
-            "Primary node must belong to the selected node snapshot",
-          ),
-        );
-      }
-      if (
-        item.type === "run" &&
-        item.failure !== undefined &&
-        (item.status !== "error" || item.stopReason !== "error")
-      ) {
-        issues.push(
-          agentEventIssue(
-            "agent_event.history_failure_state_invalid",
-            `/timeline/${index}/failure`,
-            "Run failure details require error status and error stop reason",
-          ),
-        );
-      }
-      if (item.type === "tool" && item.error !== undefined) {
-        issues.push(
-          ...designWorkflowFailureDomainIssues(
-            item.error,
-            `/timeline/${index}/error`,
-          ),
-        );
-      }
+      issues.push(
+        ...sessionTimelineItemDomainIssues(
+          item,
+          `/timeline/${index}`,
+          {
+            primarySelection: "agent_event.history_primary_selection_invalid",
+            failureState: "agent_event.history_failure_state_invalid",
+          },
+          "Correct the reported Agent event field before retrying.",
+        ),
+      );
     });
   }
   return issues;
+}
+
+function selectionScopeDomainIssues(
+  value: SelectionScope,
+  path = "",
+  code = "selection_scope.primary_node_not_selected",
+  recovery = "Choose primaryNodeId from selectedNodeIds or omit it.",
+): ValidationIssue[] {
+  if (
+    value.primaryNodeId === undefined ||
+    value.selectedNodeIds.includes(value.primaryNodeId)
+  ) {
+    return [];
+  }
+  return [
+    {
+      code,
+      path: `${path}/primaryNodeId`,
+      message: "Primary node must belong to the selected node snapshot",
+      expected: { memberOfSelectedNodeIds: true },
+      actual: value.primaryNodeId,
+      recovery,
+    },
+  ];
+}
+
+function runFailureStateDomainIssues(
+  value: {
+    status: string;
+    stopReason?: string;
+    failure?: AgentRunFailure;
+  },
+  path: string,
+  code: string,
+  recovery: string,
+): ValidationIssue[] {
+  if (
+    value.failure === undefined ||
+    (value.status === "error" && value.stopReason === "error")
+  ) {
+    return [];
+  }
+  return [
+    {
+      code,
+      path: `${path}/failure`,
+      message: "Run failure details require error status and error stop reason",
+      expected: { status: "error", stopReason: "error" },
+      actual: { status: value.status, stopReason: value.stopReason ?? null },
+      recovery,
+    },
+  ];
+}
+
+function durableTimelineEventDomainIssues(
+  value: DurableTimelineEvent,
+): ValidationIssue[] {
+  if (value.type === "message.user") {
+    return selectionScopeDomainIssues(
+      value.payload.scope,
+      "/payload/scope",
+      "durable_timeline_event.primary_selection_invalid",
+      "Persist a primary node that belongs to the selected node snapshot.",
+    );
+  }
+  if (value.type === "run.state") {
+    return runFailureStateDomainIssues(
+      value.payload,
+      "/payload",
+      "durable_timeline_event.failure_state_invalid",
+      "Persist failure details only with error status and error stop reason.",
+    );
+  }
+  if (
+    value.type === "context.compacted" &&
+    value.payload.toSequence < value.payload.fromSequence
+  ) {
+    return [
+      {
+        code: "durable_timeline_event.compacted_range_invalid",
+        path: "/payload/toSequence",
+        message: "toSequence must be greater than or equal to fromSequence",
+        expected: { minimum: value.payload.fromSequence },
+        actual: value.payload.toSequence,
+        recovery: "Persist a non-descending compacted sequence range.",
+      },
+    ];
+  }
+  return [];
+}
+
+function sessionTimelineItemDomainIssues(
+  value: SessionTimelineItem,
+  path = "",
+  codes = {
+    primarySelection: "session_timeline_item.primary_selection_invalid",
+    failureState: "session_timeline_item.failure_state_invalid",
+  },
+  recovery = "Correct the reported session timeline item field.",
+): ValidationIssue[] {
+  if (value.type === "user.message") {
+    return selectionScopeDomainIssues(
+      value.scope,
+      `${path}/scope`,
+      codes.primarySelection,
+      recovery,
+    );
+  }
+  if (value.type === "run") {
+    return runFailureStateDomainIssues(
+      value,
+      path,
+      codes.failureState,
+      recovery,
+    );
+  }
+  if (value.type === "tool" && value.error !== undefined) {
+    return designWorkflowFailureDomainIssues(value.error, `${path}/error`);
+  }
+  return [];
 }
 
 function agentEventIssue(

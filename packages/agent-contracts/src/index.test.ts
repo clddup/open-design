@@ -1,16 +1,29 @@
 import { Value } from "@sinclair/typebox/value";
 import { describe, expect, it } from "vitest";
 import {
+  AgentAttachmentContract,
   AgentEventContract,
   AgentEventSchema,
   AgentRequestSchema,
+  AgentRunContinuationContract,
+  AgentRunFailureContract,
+  DesignMutationTargetContract,
+  DurableTimelineEventContract,
   MAX_INITIAL_DESIGN_INSPECTION_CHARACTERS,
   MAX_SELECTED_NODE_IDS,
+  ModelSelectionContract,
+  SelectionScopeContract,
   SelectionScopeSchema,
+  SessionTimelineItemContract,
   agentEventValidationError,
+  isAgentAttachment,
   isAgentEvent,
   isAgentRequest,
+  isAgentRunFailure,
+  isDesignMutationTarget,
+  isDurableTimelineEvent,
   isSelectionScope,
+  isSessionTimelineItem,
 } from "./index.js";
 
 const validStart = {
@@ -35,7 +48,260 @@ const validStart = {
   mutationTarget: { kind: "page", pageId: "page_1" },
 } as const;
 
+const invalidSelectionScope = {
+  kind: "selection",
+  selectedNodeIds: ["node_1"],
+  primaryNodeId: "node_2",
+} as const;
+
+const providerFailure = {
+  code: "provider_timeout",
+  message: "Provider timed out",
+  retryable: true,
+} as const;
+
+const durableEventBase = {
+  eventId: "event_1",
+  sessionId: "session_1",
+  runId: "run_1",
+  sequence: 1,
+  createdAt: "2026-01-01T00:00:00.000Z",
+} as const;
+
+const timelineItemBase = {
+  itemId: "item_1",
+  sessionId: "session_1",
+  runId: "run_1",
+  sequence: 1,
+  createdAt: "2026-01-01T00:00:00.000Z",
+  updatedAt: "2026-01-01T00:00:01.000Z",
+} as const;
+
 describe("Agent contracts", () => {
+  it("exports one executable contract for each durable Agent value", () => {
+    expect(ModelSelectionContract.parse(validStart.modelSelection).ok).toBe(
+      true,
+    );
+    expect(
+      AgentRunFailureContract.parse({
+        code: "provider_timeout",
+        message: "Provider timed out",
+        retryable: true,
+      }).ok,
+    ).toBe(true);
+    expect(
+      AgentAttachmentContract.parse({
+        attachmentId: `image_${"a".repeat(64)}`,
+        name: "reference.png",
+        mimeType: "image/png",
+        byteSize: 1_024,
+      }).ok,
+    ).toBe(true);
+    expect(SelectionScopeContract.parse(validStart.scope).ok).toBe(true);
+    expect(
+      DesignMutationTargetContract.parse(validStart.mutationTarget).ok,
+    ).toBe(true);
+    expect(
+      AgentRunContinuationContract.parse({
+        parentRunId: "run_parent",
+        rootRunId: "run_root",
+        attempt: 1,
+        maxAttempts: 3,
+        reason: "budget",
+      }).ok,
+    ).toBe(true);
+  });
+
+  it("reports precise structure paths from the eight contract facades", () => {
+    const cases = [
+      [ModelSelectionContract, { ...validStart.modelSelection, modelId: "" }],
+      [
+        AgentRunFailureContract,
+        { code: "provider_timeout", message: "", retryable: true },
+      ],
+      [
+        AgentAttachmentContract,
+        {
+          attachmentId: `image_${"a".repeat(64)}`,
+          name: "reference.png",
+          mimeType: "image/png",
+          byteSize: 0,
+        },
+      ],
+      [SelectionScopeContract, { kind: "selection", selectedNodeIds: [] }],
+      [DesignMutationTargetContract, { kind: "page", pageId: "" }],
+      [
+        AgentRunContinuationContract,
+        {
+          parentRunId: "run_parent",
+          rootRunId: "run_root",
+          attempt: 4,
+          maxAttempts: 3,
+          reason: "budget",
+        },
+      ],
+    ] as const;
+    const expectedPaths = [
+      "/modelId",
+      "/message",
+      "/byteSize",
+      "/selectedNodeIds",
+      "/pageId",
+      "/attempt",
+    ];
+
+    cases.forEach(([contract, value], index) => {
+      const result = contract.parse(value);
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.issues[0]?.path).toBe(expectedPaths[index]);
+    });
+  });
+
+  it("routes thin boolean guards through the canonical contracts", () => {
+    expect(
+      isAgentRunFailure({
+        code: "provider_error",
+        message: "",
+        retryable: true,
+      }),
+    ).toBe(false);
+    expect(
+      isAgentAttachment({
+        attachmentId: `image_${"a".repeat(64)}`,
+        name: "reference.png",
+        mimeType: "image/png",
+        byteSize: 0,
+      }),
+    ).toBe(false);
+    expect(isDesignMutationTarget({ kind: "page", pageId: "" })).toBe(false);
+  });
+
+  it("centralizes the primary selection relationship", () => {
+    expect(SelectionScopeContract.parse(invalidSelectionScope)).toMatchObject({
+      ok: false,
+      issues: [
+        {
+          code: "selection_scope.primary_node_not_selected",
+          path: "/primaryNodeId",
+        },
+      ],
+    });
+    expect(isSelectionScope(invalidSelectionScope)).toBe(false);
+  });
+
+  it("applies selection and run failure relationships to durable events", () => {
+    const durableUser = {
+      ...durableEventBase,
+      type: "message.user",
+      payload: {
+        messageId: "message_1",
+        content: "Design a page",
+        documentId: "document_1",
+        revision: 0,
+        scope: invalidSelectionScope,
+      },
+    } as const;
+    expect(DurableTimelineEventContract.parse(durableUser)).toMatchObject({
+      ok: false,
+      issues: [
+        {
+          code: "durable_timeline_event.primary_selection_invalid",
+          path: "/payload/scope/primaryNodeId",
+        },
+      ],
+    });
+    expect(isDurableTimelineEvent(durableUser)).toBe(false);
+
+    const durableRun = {
+      ...durableEventBase,
+      type: "run.state",
+      payload: {
+        status: "completed",
+        startedAt: "2026-01-01T00:00:00.000Z",
+        stopReason: "complete",
+        failure: providerFailure,
+      },
+    } as const;
+    expect(DurableTimelineEventContract.parse(durableRun)).toMatchObject({
+      ok: false,
+      issues: [
+        {
+          code: "durable_timeline_event.failure_state_invalid",
+          path: "/payload/failure",
+        },
+      ],
+    });
+    expect(isDurableTimelineEvent(durableRun)).toBe(false);
+  });
+
+  it("preserves the compacted sequence range relationship", () => {
+    const compacted = {
+      ...durableEventBase,
+      type: "context.compacted",
+      payload: { fromSequence: 8, toSequence: 3 },
+    } as const;
+
+    expect(DurableTimelineEventContract.parse(compacted)).toMatchObject({
+      ok: false,
+      issues: [
+        {
+          code: "durable_timeline_event.compacted_range_invalid",
+          path: "/payload/toSequence",
+          expected: { minimum: 8 },
+          actual: 3,
+        },
+      ],
+    });
+    expect(isDurableTimelineEvent(compacted)).toBe(false);
+    expect(
+      DurableTimelineEventContract.parse({
+        ...compacted,
+        payload: { fromSequence: 8, toSequence: 8 },
+      }).ok,
+    ).toBe(true);
+  });
+
+  it("applies selection and run failure relationships to session items", () => {
+    const timelineUser = {
+      ...timelineItemBase,
+      type: "user.message",
+      messageId: "message_1",
+      content: "Design a page",
+      documentId: "document_1",
+      revision: 0,
+      scope: invalidSelectionScope,
+    } as const;
+    expect(SessionTimelineItemContract.parse(timelineUser)).toMatchObject({
+      ok: false,
+      issues: [
+        {
+          code: "session_timeline_item.primary_selection_invalid",
+          path: "/scope/primaryNodeId",
+        },
+      ],
+    });
+    expect(isSessionTimelineItem(timelineUser)).toBe(false);
+
+    const timelineRun = {
+      ...timelineItemBase,
+      type: "run",
+      status: "completed",
+      startedAt: "2026-01-01T00:00:00.000Z",
+      stopReason: "complete",
+      failure: providerFailure,
+    } as const;
+    expect(SessionTimelineItemContract.parse(timelineRun)).toMatchObject({
+      ok: false,
+      issues: [
+        {
+          code: "session_timeline_item.failure_state_invalid",
+          path: "/failure",
+        },
+      ],
+    });
+    expect(isSessionTimelineItem(timelineRun)).toBe(false);
+  });
+
   it("reports the failing field from the matching Agent event variant", () => {
     expect(
       agentEventValidationError({

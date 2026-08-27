@@ -4,7 +4,7 @@ import {
   isAgentEvent,
 } from "@opendesign/agent-contracts";
 import { describe, expect, it } from "vitest";
-import { normalizeAssistantTimelineBlocks } from "./timeline-blocks.js";
+import { normalizeAssistantTimelineBlocks } from "./durable-assistant-blocks.js";
 
 describe("assistant timeline block normalization", () => {
   it("preserves oversized text and reasoning as protocol-valid parts", () => {

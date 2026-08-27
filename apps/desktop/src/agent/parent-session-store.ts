@@ -1,8 +1,8 @@
+import type { SessionTimelineItem } from "@opendesign/agent-contracts";
 import type {
   JournalEvent,
   SessionProjection,
   SessionStore,
-  SessionTimelineItem,
 } from "@opendesign/session-store";
 import {
   isSessionStoreBridgeResponse,

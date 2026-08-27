@@ -3,38 +3,19 @@ import { mkdir, open, readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import {
-  isModelSelection,
-  isRunContinuation,
-  isRunFailure,
-  isRunStatus,
-  isRunStopReason,
-  type RunStatePayload,
-  type RunStopReason,
-  type SessionModelSelection,
-  type SessionRunContinuation,
-  type SessionRunFailure,
-} from "./run-state.js";
-export type {
-  ModelReasoningEffort,
-  RunStopReason,
-  SessionModelSelection,
-  SessionRunContinuation,
-  SessionRunFailure,
-} from "./run-state.js";
+  AgentToolFailureDetailsContract,
+  DurableTimelineEventContract,
+  SessionTimelineItemContract,
+  formatRuntimeContractFailure,
+  type AssistantTimelineBlock,
+  type DurableTimelineEvent,
+  type SessionTimelineItem,
+} from "@opendesign/agent-contracts";
+import { normalizeAssistantTimelineBlocks } from "./durable-assistant-blocks.js";
 
-export type JournalEventType =
-  | "session.created"
-  | "run.state"
-  | "message.user"
-  | "message.assistant"
-  | "tool.requested"
-  | "tool.progress"
-  | "tool.completed"
-  | "tool.failed"
-  | "approval.requested"
-  | "approval.resolved"
-  | "design.revision"
-  | "context.compacted";
+export { normalizeAssistantTimelineBlocks } from "./durable-assistant-blocks.js";
+
+export type JournalEventType = DurableTimelineEvent["type"];
 
 export interface JournalEvent<T = unknown> {
   eventId: string;
@@ -46,142 +27,15 @@ export interface JournalEvent<T = unknown> {
   payload: T;
 }
 
-export interface AssistantTimelineBlock {
-  blockId: string;
-  type: "text" | "reasoning_summary";
-  text?: string;
-  status?: "streaming" | "completed" | "omitted";
-  summary?: string;
-}
+type RunStatePayload = Extract<
+  DurableTimelineEvent,
+  { type: "run.state" }
+>["payload"];
+type TimelineBase = Pick<
+  SessionTimelineItem,
+  "itemId" | "sessionId" | "runId" | "sequence" | "createdAt" | "updatedAt"
+>;
 
-export type SessionAttachment =
-  | {
-      attachmentId: string;
-      name: string;
-      mimeType: "image/png" | "image/jpeg" | "image/webp" | "image/gif";
-      byteSize: number;
-    }
-  | {
-      attachmentId: string;
-      name: string;
-      mimeType:
-        | "application/pdf"
-        | "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        | "text/plain"
-        | "text/markdown"
-        | "text/csv"
-        | "text/html"
-        | "application/json"
-        | "application/yaml";
-      byteSize: number;
-    }
-  | {
-      attachmentId: string;
-      name: string;
-      mimeType: "image/svg+xml";
-      byteSize: number;
-    };
-
-interface TimelineBase {
-  itemId: string;
-  sessionId: string;
-  runId?: string;
-  sequence: number;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export type SessionTimelineItem =
-  | (TimelineBase & {
-      type: "user.message";
-      messageId: string;
-      content: string;
-      attachments?: SessionAttachment[];
-      documentId: string;
-      revision: number;
-      scope: SelectionScope;
-      mutationTarget?: DesignMutationTarget;
-    })
-  | (TimelineBase & {
-      type: "assistant.message";
-      messageId: string;
-      blocks: AssistantTimelineBlock[];
-    })
-  | (TimelineBase & {
-      type: "tool";
-      toolCallId: string;
-      toolName: string;
-      input: unknown;
-      risk: ToolRisk;
-      status: "requested" | "running" | "completed" | "failed";
-      progress?: number;
-      progressMessage?: string;
-      result?: unknown;
-      error?: {
-        code: string;
-        message: string;
-        retryable?: boolean;
-        recoverable?: boolean;
-        details?: unknown;
-      };
-      revision?: number;
-      transactionId?: string;
-    })
-  | (TimelineBase & {
-      type: "approval";
-      approvalId: string;
-      toolCallId: string;
-      title: string;
-      summary: string;
-      status: "requested" | "resolved";
-      decision?: ApprovalDecision;
-      resolvedAt?: string;
-    })
-  | (TimelineBase & {
-      type: "design.revision";
-      documentId: string;
-      previousRevision: number;
-      revision: number;
-      transactionId: string;
-      toolCallId?: string;
-    })
-  | (TimelineBase & {
-      type: "run";
-      runId: string;
-      status: "started" | "completed" | "cancelled" | "error" | "budget";
-      startedAt: string;
-      finishedAt?: string;
-      stopReason?: RunStopReason;
-      modelSelection?: SessionModelSelection;
-      failure?: SessionRunFailure;
-      continuation?: SessionRunContinuation;
-    });
-
-export type SelectionScope =
-  | {
-      kind: "selection";
-      selectedNodeIds: string[];
-      primaryNodeId?: string;
-      pageId?: string;
-    }
-  | {
-      kind: "page";
-      selectedNodeIds: string[];
-      primaryNodeId?: string;
-      pageId: string;
-    }
-  | {
-      kind: "document";
-      selectedNodeIds: string[];
-      primaryNodeId?: string;
-      pageId?: string;
-    };
-
-export type DesignMutationTarget =
-  { kind: "page"; pageId: string } | { kind: "document" };
-
-export type ToolRisk = "read" | "design_write" | "external" | "destructive";
-export type ApprovalDecision = "allow_once" | "allow_session" | "deny";
 export interface SessionProjection {
   sessionId: string;
   lastSequence: number;
@@ -264,7 +118,7 @@ export class SqliteSessionStore implements SessionStore {
     }
   }
 
-  read(sessionId: string): Promise<JournalEvent[]> {
+  read(sessionId: string): Promise<DurableTimelineEvent[]> {
     const rows = this.#database
       .prepare(
         `
@@ -296,7 +150,8 @@ export class SqliteSessionStore implements SessionStore {
             createdAt: row.created_at,
             payload: JSON.parse(row.payload_json) as unknown,
           };
-          return isJournalEvent(candidate) ? [candidate] : [];
+          const parsed = parsePersistedJournalEvent(candidate);
+          return parsed === undefined ? [] : [parsed];
         } catch {
           return [];
         }
@@ -305,7 +160,7 @@ export class SqliteSessionStore implements SessionStore {
   }
 
   async readTimeline(sessionId: string): Promise<SessionTimelineItem[]> {
-    return projectTimeline(sessionId, await this.read(sessionId));
+    return projectValidatedTimeline(sessionId, await this.read(sessionId));
   }
 
   async project(sessionId: string): Promise<SessionProjection> {
@@ -369,13 +224,13 @@ export class JsonlSessionStore implements SessionStore {
     });
   }
 
-  async read(sessionId: string): Promise<JournalEvent[]> {
+  async read(sessionId: string): Promise<DurableTimelineEvent[]> {
     await waitForJsonlAppends(this.path);
     return readJsonlEvents(this.path, sessionId);
   }
 
   async readTimeline(sessionId: string): Promise<SessionTimelineItem[]> {
-    return projectTimeline(sessionId, await this.read(sessionId));
+    return projectValidatedTimeline(sessionId, await this.read(sessionId));
   }
 
   async project(sessionId: string): Promise<SessionProjection> {
@@ -412,7 +267,7 @@ export class JsonlSessionStore implements SessionStore {
         if (!event.runId) continue;
         const key = `${event.sessionId}\u0000${event.runId}`;
         if (event.type === "run.state") {
-          const payload = event.payload as RunStatePayload;
+          const payload = event.payload;
           const current = runs.get(key);
           runs.set(key, {
             sessionId: event.sessionId,
@@ -426,15 +281,10 @@ export class JsonlSessionStore implements SessionStore {
         const current = runs.get(key);
         if (!current) continue;
         if (event.type === "tool.requested") {
-          current.pendingToolIds.add(
-            (event.payload as ToolRequestedPayload).toolCallId,
-          );
+          current.pendingToolIds.add(event.payload.toolCallId);
         }
         if (event.type === "tool.completed" || event.type === "tool.failed") {
-          current.pendingToolIds.delete(
-            (event.payload as ToolCompletedPayload | ToolFailedPayload)
-              .toolCallId,
-          );
+          current.pendingToolIds.delete(event.payload.toolCallId);
         }
       }
 
@@ -502,6 +352,16 @@ export function projectTimeline(
   sessionId: string,
   sourceEvents: JournalEvent[],
 ): SessionTimelineItem[] {
+  return projectValidatedTimeline(
+    sessionId,
+    sourceEvents.map(requireJournalEvent),
+  );
+}
+
+function projectValidatedTimeline(
+  sessionId: string,
+  sourceEvents: readonly DurableTimelineEvent[],
+): SessionTimelineItem[] {
   const items = new Map<string, SessionTimelineItem>();
   const events = sourceEvents
     .filter((event) => event.sessionId === sessionId)
@@ -509,7 +369,7 @@ export function projectTimeline(
 
   for (const event of events) {
     if (event.type === "run.state" && event.runId) {
-      const payload = event.payload as RunStatePayload;
+      const payload = event.payload;
       const key = `run:${event.runId}`;
       const current = items.get(key);
       if (current?.type === "run") {
@@ -566,7 +426,7 @@ export function projectTimeline(
     }
 
     if (event.type === "message.user" && event.runId) {
-      const payload = event.payload as UserMessagePayload;
+      const payload = event.payload;
       const key = `message:${payload.messageId}`;
       items.set(key, {
         ...timelineBase(key, event),
@@ -588,7 +448,7 @@ export function projectTimeline(
     }
 
     if (event.type === "message.assistant" && event.runId) {
-      const payload = event.payload as AssistantMessagePayload;
+      const payload = event.payload;
       const key = `message:${payload.messageId}`;
       const current = items.get(key);
       items.set(key, {
@@ -604,7 +464,7 @@ export function projectTimeline(
     }
 
     if (event.type === "tool.requested" && event.runId) {
-      const payload = event.payload as ToolRequestedPayload;
+      const payload = event.payload;
       const key = `tool:${payload.toolCallId}`;
       if (!items.has(key)) {
         items.set(key, {
@@ -622,7 +482,7 @@ export function projectTimeline(
     }
 
     if (event.type === "tool.progress") {
-      const payload = event.payload as ToolProgressPayload;
+      const payload = event.payload;
       const key = `tool:${payload.toolCallId}`;
       const current = items.get(key);
       if (current?.type === "tool") {
@@ -638,7 +498,7 @@ export function projectTimeline(
     }
 
     if (event.type === "tool.completed") {
-      const payload = event.payload as ToolCompletedPayload;
+      const payload = event.payload;
       const key = `tool:${payload.toolCallId}`;
       const current = items.get(key);
       if (current?.type === "tool") {
@@ -659,7 +519,7 @@ export function projectTimeline(
     }
 
     if (event.type === "tool.failed") {
-      const payload = event.payload as ToolFailedPayload;
+      const payload = event.payload;
       const key = `tool:${payload.toolCallId}`;
       const current = items.get(key);
       if (current?.type === "tool") {
@@ -700,7 +560,7 @@ export function projectTimeline(
     }
 
     if (event.type === "approval.requested" && event.runId) {
-      const payload = event.payload as ApprovalRequestedPayload;
+      const payload = event.payload;
       const key = `approval:${payload.approvalId}`;
       if (!items.has(key)) {
         items.set(key, {
@@ -718,7 +578,7 @@ export function projectTimeline(
     }
 
     if (event.type === "approval.resolved") {
-      const payload = event.payload as ApprovalResolvedPayload;
+      const payload = event.payload;
       const key = `approval:${payload.approvalId}`;
       const current = items.get(key);
       if (current?.type === "approval") {
@@ -734,7 +594,7 @@ export function projectTimeline(
     }
 
     if (event.type === "design.revision" && event.runId) {
-      const payload = event.payload as DesignRevisionPayload;
+      const payload = event.payload;
       const key = `revision:${payload.transactionId}`;
       items.set(key, {
         ...timelineBase(key, event),
@@ -751,15 +611,18 @@ export function projectTimeline(
     }
   }
 
-  return [...items.values()].sort(
-    (left, right) =>
-      left.sequence - right.sequence || left.itemId.localeCompare(right.itemId),
-  );
+  return [...items.values()]
+    .sort(
+      (left, right) =>
+        left.sequence - right.sequence ||
+        left.itemId.localeCompare(right.itemId),
+    )
+    .map(requireTimelineItem);
 }
 
 function projectEvents(
   sessionId: string,
-  events: JournalEvent[],
+  events: readonly DurableTimelineEvent[],
 ): SessionProjection {
   const projection: SessionProjection = {
     sessionId,
@@ -771,36 +634,36 @@ function projectEvents(
   const messages = new Set<string>();
   const toolCalls = new Set<string>();
 
-  for (const event of events.sort(compareEvents)) {
+  for (const event of [...events].sort(compareEvents)) {
     projection.lastSequence = Math.max(projection.lastSequence, event.sequence);
     if (event.type === "run.state" && event.runId) {
-      const payload = event.payload as RunStatePayload;
+      const payload = event.payload;
       if (payload.status === "started") projection.activeRunId = event.runId;
       if (payload.status !== "started") delete projection.activeRunId;
     }
-    if (event.type === "message.user" || event.type === "message.assistant") {
-      const payload = event.payload as { messageId: string; revision?: number };
-      messages.add(payload.messageId);
-      if (event.type === "message.user" && payload.revision !== undefined) {
-        projection.latestRevision = Math.max(
-          projection.latestRevision ?? 0,
-          payload.revision,
-        );
-      }
+    if (event.type === "message.user") {
+      messages.add(event.payload.messageId);
+      projection.latestRevision = Math.max(
+        projection.latestRevision ?? 0,
+        event.payload.revision,
+      );
+    }
+    if (event.type === "message.assistant") {
+      messages.add(event.payload.messageId);
     }
     if (event.type === "tool.requested") {
-      const payload = event.payload as ToolRequestedPayload;
+      const payload = event.payload;
       toolCalls.add(payload.toolCallId);
     }
     if (event.type === "design.revision") {
-      const payload = event.payload as DesignRevisionPayload;
+      const payload = event.payload;
       projection.latestRevision = Math.max(
         projection.latestRevision ?? 0,
         payload.revision,
       );
     }
     if (event.type === "context.compacted") {
-      const payload = event.payload as ContextCompactedPayload;
+      const payload = event.payload;
       projection.compactedRanges.push({
         fromSequence: payload.fromSequence,
         toSequence: payload.toSequence,
@@ -872,13 +735,15 @@ async function appendJsonlEvent<T>(
 async function readJsonlEvents(
   path: string,
   sessionId: string,
-): Promise<JournalEvent[]> {
+): Promise<DurableTimelineEvent[]> {
   return (await readAllJsonlEvents(path)).filter(
     (event) => event.sessionId === sessionId,
   );
 }
 
-async function readAllJsonlEvents(path: string): Promise<JournalEvent[]> {
+async function readAllJsonlEvents(
+  path: string,
+): Promise<DurableTimelineEvent[]> {
   let content: string;
   try {
     content = await readFile(path, "utf8");
@@ -893,7 +758,8 @@ async function readAllJsonlEvents(path: string): Promise<JournalEvent[]> {
     .flatMap((line) => {
       try {
         const candidate: unknown = JSON.parse(line);
-        return isJournalEvent(candidate) ? [candidate] : [];
+        const parsed = parsePersistedJournalEvent(candidate);
+        return parsed === undefined ? [] : [parsed];
       } catch {
         return [];
       }
@@ -915,258 +781,78 @@ function assertAllocatedEvent<T>(
 }
 
 function assertJournalEvent(value: unknown): asserts value is JournalEvent {
-  if (!isJournalEvent(value)) throw new TypeError("Invalid journal event");
+  requireJournalEvent(value);
 }
 
-function isJournalEvent(value: unknown): value is JournalEvent {
-  if (!isRecord(value)) return false;
-  if (
-    !isNonEmptyString(value.eventId) ||
-    !isNonEmptyString(value.sessionId) ||
-    (value.runId !== undefined && !isNonEmptyString(value.runId)) ||
-    !Number.isInteger(value.sequence) ||
-    (value.sequence as number) < 1 ||
-    !isNonEmptyString(value.createdAt) ||
-    !isJournalEventType(value.type) ||
-    !isRecord(value.payload)
-  ) {
-    return false;
+function requireJournalEvent(value: unknown): DurableTimelineEvent {
+  const parsed = DurableTimelineEventContract.parse(value);
+  if (!parsed.ok) {
+    throw new TypeError(
+      formatRuntimeContractFailure("Journal event", parsed.issues),
+    );
   }
-
-  const payload = value.payload;
-  switch (value.type) {
-    case "session.created":
-      return Object.keys(payload).length === 0;
-    case "run.state":
-      return (
-        isNonEmptyString(value.runId) &&
-        isRunStatus(payload.status) &&
-        isNonEmptyString(payload.startedAt) &&
-        optionalString(payload.finishedAt) &&
-        (payload.stopReason === undefined ||
-          isRunStopReason(payload.stopReason)) &&
-        (payload.modelSelection === undefined ||
-          isModelSelection(payload.modelSelection)) &&
-        (payload.failure === undefined ||
-          (payload.status === "error" &&
-            payload.stopReason === "error" &&
-            isRunFailure(payload.failure))) &&
-        (payload.continuation === undefined ||
-          isRunContinuation(payload.continuation))
-      );
-    case "message.user":
-      return (
-        isNonEmptyString(value.runId) &&
-        isNonEmptyString(payload.messageId) &&
-        isNonEmptyString(payload.content) &&
-        (payload.attachments === undefined ||
-          (Array.isArray(payload.attachments) &&
-            payload.attachments.length <= 6 &&
-            payload.attachments.every(isAttachment))) &&
-        isNonEmptyString(payload.documentId) &&
-        isRevision(payload.revision) &&
-        isSelectionScope(payload.scope) &&
-        (payload.mutationTarget === undefined ||
-          isDesignMutationTarget(payload.mutationTarget))
-      );
-    case "message.assistant":
-      return (
-        isNonEmptyString(value.runId) &&
-        isNonEmptyString(payload.messageId) &&
-        Array.isArray(payload.blocks) &&
-        payload.blocks.every(isAssistantBlock)
-      );
-    case "tool.requested":
-      return (
-        isNonEmptyString(value.runId) &&
-        isNonEmptyString(payload.toolCallId) &&
-        isNonEmptyString(payload.toolName) &&
-        isToolRisk(payload.risk) &&
-        "input" in payload
-      );
-    case "tool.progress":
-      return (
-        isNonEmptyString(value.runId) &&
-        isNonEmptyString(payload.toolCallId) &&
-        typeof payload.message === "string" &&
-        typeof payload.progress === "number" &&
-        payload.progress >= 0 &&
-        payload.progress <= 1
-      );
-    case "tool.completed":
-      return (
-        isNonEmptyString(value.runId) &&
-        isNonEmptyString(payload.toolCallId) &&
-        "result" in payload &&
-        (payload.revision === undefined || isRevision(payload.revision)) &&
-        optionalString(payload.transactionId)
-      );
-    case "tool.failed":
-      return (
-        isNonEmptyString(value.runId) &&
-        isNonEmptyString(payload.toolCallId) &&
-        isNonEmptyString(payload.code) &&
-        isNonEmptyString(payload.message) &&
-        (payload.retryable === undefined ||
-          typeof payload.retryable === "boolean") &&
-        (payload.recoverable === undefined ||
-          typeof payload.recoverable === "boolean") &&
-        (payload.details === undefined || isJsonCompatible(payload.details))
-      );
-    case "approval.requested":
-      return (
-        isNonEmptyString(value.runId) &&
-        isNonEmptyString(payload.approvalId) &&
-        isNonEmptyString(payload.toolCallId) &&
-        isNonEmptyString(payload.title) &&
-        typeof payload.summary === "string"
-      );
-    case "approval.resolved":
-      return (
-        isNonEmptyString(value.runId) &&
-        isNonEmptyString(payload.approvalId) &&
-        isNonEmptyString(payload.toolCallId) &&
-        isApprovalDecision(payload.decision) &&
-        isNonEmptyString(payload.resolvedAt)
-      );
-    case "design.revision":
-      return (
-        isNonEmptyString(value.runId) &&
-        isNonEmptyString(payload.documentId) &&
-        isRevision(payload.previousRevision) &&
-        isRevision(payload.revision) &&
-        isNonEmptyString(payload.transactionId) &&
-        optionalString(payload.toolCallId)
-      );
-    case "context.compacted":
-      return (
-        Number.isInteger(payload.fromSequence) &&
-        (payload.fromSequence as number) >= 1 &&
-        Number.isInteger(payload.toSequence) &&
-        (payload.toSequence as number) >= (payload.fromSequence as number) &&
-        optionalString(payload.summary)
-      );
-  }
+  return parsed.value;
 }
 
-function isSelectionScope(value: unknown): value is SelectionScope {
-  if (!isRecord(value) || !Array.isArray(value.selectedNodeIds)) return false;
+function requireTimelineItem(value: unknown): SessionTimelineItem {
+  const parsed = SessionTimelineItemContract.parse(value);
+  if (!parsed.ok) {
+    throw new TypeError(
+      formatRuntimeContractFailure("Session timeline item", parsed.issues),
+    );
+  }
+  return parsed.value;
+}
+
+function parsePersistedJournalEvent(
+  value: unknown,
+): DurableTimelineEvent | undefined {
+  const recovered = recoverPersistedEvent(value);
+  const parsed = DurableTimelineEventContract.parse(recovered);
+  return parsed.ok ? parsed.value : undefined;
+}
+
+function recoverPersistedEvent(value: unknown): unknown {
+  if (!isRecord(value) || !isRecord(value.payload)) return value;
   if (
-    value.selectedNodeIds.length > 512 ||
-    !value.selectedNodeIds.every(isNonEmptyString) ||
-    new Set(value.selectedNodeIds).size !== value.selectedNodeIds.length
+    value.type === "message.assistant" &&
+    Array.isArray(value.payload.blocks)
   ) {
-    return false;
+    try {
+      return {
+        ...value,
+        payload: {
+          ...value.payload,
+          blocks: normalizeAssistantTimelineBlocks(
+            value.payload.blocks as AssistantTimelineBlock[],
+          ),
+        },
+      };
+    } catch {
+      return value;
+    }
+  }
+  if (value.type !== "tool.failed") return value;
+  const payload = { ...value.payload };
+  if (typeof payload.message === "string" && payload.message.length > 20_000) {
+    payload.message = truncateLegacyToolMessage(payload.message);
   }
   if (
-    (value.kind === "selection" && value.selectedNodeIds.length === 0) ||
-    (value.kind === "page" && !isNonEmptyString(value.pageId)) ||
-    (value.kind !== "selection" &&
-      value.kind !== "page" &&
-      value.kind !== "document") ||
-    !optionalString(value.pageId) ||
-    !optionalString(value.primaryNodeId)
+    payload.details !== undefined &&
+    !AgentToolFailureDetailsContract.parse(payload.details).ok
   ) {
-    return false;
+    delete payload.details;
   }
-  const primaryNodeId = value.primaryNodeId;
-  return (
-    primaryNodeId === undefined ||
-    (typeof primaryNodeId === "string" &&
-      value.selectedNodeIds.includes(primaryNodeId))
-  );
+  return { ...value, payload };
 }
 
-function isDesignMutationTarget(value: unknown): value is DesignMutationTarget {
-  return (
-    isRecord(value) &&
-    ((value.kind === "document" && Object.keys(value).length === 1) ||
-      (value.kind === "page" &&
-        isNonEmptyString(value.pageId) &&
-        Object.keys(value).length === 2))
-  );
-}
-
-function isAssistantBlock(value: unknown): value is AssistantTimelineBlock {
-  if (!isRecord(value) || !isNonEmptyString(value.blockId)) return false;
-  if (value.type === "text") return typeof value.text === "string";
-  return (
-    value.type === "reasoning_summary" &&
-    (value.status === "streaming" ||
-      value.status === "completed" ||
-      value.status === "omitted") &&
-    optionalString(value.summary)
-  );
-}
-
-function isJournalEventType(value: unknown): value is JournalEventType {
-  return (
-    value === "session.created" ||
-    value === "run.state" ||
-    value === "message.user" ||
-    value === "message.assistant" ||
-    value === "tool.requested" ||
-    value === "tool.progress" ||
-    value === "tool.completed" ||
-    value === "tool.failed" ||
-    value === "approval.requested" ||
-    value === "approval.resolved" ||
-    value === "design.revision" ||
-    value === "context.compacted"
-  );
-}
-
-function isToolRisk(value: unknown): value is ToolRisk {
-  return (
-    value === "read" ||
-    value === "design_write" ||
-    value === "external" ||
-    value === "destructive"
-  );
-}
-
-function isApprovalDecision(value: unknown): value is ApprovalDecision {
-  return (
-    value === "allow_once" || value === "allow_session" || value === "deny"
-  );
-}
-
-function isRevision(value: unknown): value is number {
-  return Number.isInteger(value) && (value as number) >= 0;
-}
-
-function optionalString(value: unknown): boolean {
-  return value === undefined || typeof value === "string";
-}
-
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === "string" && value.length > 0;
+function truncateLegacyToolMessage(message: string): string {
+  const suffix = "\n[OpenDesign truncated legacy tool diagnostics]";
+  return `${message.slice(0, 20_000 - suffix.length)}${suffix}`;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function isJsonCompatible(value: unknown, depth = 0): boolean {
-  if (depth > 12) return false;
-  if (
-    value === null ||
-    typeof value === "string" ||
-    typeof value === "boolean"
-  ) {
-    return true;
-  }
-  if (typeof value === "number") return Number.isFinite(value);
-  if (Array.isArray(value)) {
-    return (
-      value.length <= 256 &&
-      value.every((child) => isJsonCompatible(child, depth + 1))
-    );
-  }
-  if (!isRecord(value) || Object.keys(value).length > 256) return false;
-  return Object.values(value).every((child) =>
-    isJsonCompatible(child, depth + 1),
-  );
 }
 
 function isMissingFile(error: unknown): boolean {
@@ -1177,121 +863,7 @@ function isMissingFile(error: unknown): boolean {
   );
 }
 
-interface UserMessagePayload {
-  messageId: string;
-  content: string;
-  attachments?: SessionAttachment[];
-  documentId: string;
-  revision: number;
-  scope: SelectionScope;
-  mutationTarget?: DesignMutationTarget;
-}
-
-function isAttachment(value: unknown): value is SessionAttachment {
-  if (!isRecord(value) || typeof value.attachmentId !== "string") return false;
-  const kind = value.attachmentId.startsWith("image_")
-    ? "image"
-    : value.attachmentId.startsWith("file_")
-      ? "document"
-      : value.attachmentId.startsWith("svg_")
-        ? "svg"
-        : null;
-  const validId =
-    kind === "image"
-      ? /^image_[a-f0-9]{64}$/.test(value.attachmentId)
-      : kind === "document"
-        ? /^file_[a-f0-9]{64}$/.test(value.attachmentId)
-        : kind === "svg"
-          ? /^svg_[a-f0-9]{64}$/.test(value.attachmentId)
-          : false;
-  const imageMimeTypes = ["image/png", "image/jpeg", "image/webp", "image/gif"];
-  const documentMimeTypes = [
-    "application/pdf",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "text/plain",
-    "text/markdown",
-    "text/csv",
-    "text/html",
-    "application/json",
-    "application/yaml",
-  ];
-  return (
-    validId &&
-    Object.keys(value).length === 4 &&
-    Object.keys(value).every((key) =>
-      ["attachmentId", "name", "mimeType", "byteSize"].includes(key),
-    ) &&
-    isNonEmptyString(value.name) &&
-    value.name.length <= 255 &&
-    (kind === "image"
-      ? imageMimeTypes.includes(String(value.mimeType))
-      : kind === "document"
-        ? documentMimeTypes.includes(String(value.mimeType))
-        : value.mimeType === "image/svg+xml") &&
-    Number.isInteger(value.byteSize) &&
-    Number(value.byteSize) > 0 &&
-    Number(value.byteSize) <= 16 * 1024 * 1024
-  );
-}
-
-interface AssistantMessagePayload {
-  messageId: string;
-  blocks: AssistantTimelineBlock[];
-}
-
-interface ToolRequestedPayload {
-  toolCallId: string;
-  toolName: string;
-  input: unknown;
-  risk: ToolRisk;
-}
-
-interface ToolProgressPayload {
-  toolCallId: string;
-  message: string;
-  progress: number;
-}
-
-interface ToolCompletedPayload {
-  toolCallId: string;
-  result: unknown;
-  revision?: number;
-  transactionId?: string;
-}
-
-interface ToolFailedPayload {
-  toolCallId: string;
-  code: string;
-  message: string;
-  retryable?: boolean;
-  recoverable?: boolean;
-  details?: unknown;
-}
-
-interface ApprovalRequestedPayload {
-  approvalId: string;
-  toolCallId: string;
-  title: string;
-  summary: string;
-}
-
-interface ApprovalResolvedPayload {
-  approvalId: string;
-  toolCallId: string;
-  decision: ApprovalDecision;
-  resolvedAt: string;
-}
-
-interface DesignRevisionPayload {
-  documentId: string;
-  previousRevision: number;
-  revision: number;
-  transactionId: string;
-  toolCallId?: string;
-}
-
-interface ContextCompactedPayload {
-  fromSequence: number;
-  toSequence: number;
-  summary?: string;
-}
+type ToolFailedPayload = Extract<
+  DurableTimelineEvent,
+  { type: "tool.failed" }
+>["payload"];
