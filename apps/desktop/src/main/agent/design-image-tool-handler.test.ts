@@ -5,6 +5,7 @@ import type {
 } from "@opendesign/agent-contracts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  EDIT_IMAGE_TOOL_NAME,
   GENERATE_IMAGE_TOOL_NAME,
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
   READ_IMAGE_TOOL_NAME,
@@ -30,8 +31,11 @@ const context: TrustedToolContext = {
 
 function dependencies(call: ToolCallRequest) {
   const coordinator = {
+    assertDocumentInspected: vi.fn(),
     assertDesignPlanForRaster: vi.fn(),
+    assertVisualReviewBeforeWrite: vi.fn(),
     recordGeneratedRaster: vi.fn(),
+    resolveMaterialTargetIds: vi.fn(() => ["target_image"]),
   };
   const attachment = {
     attachmentId: `image_${"a".repeat(64)}`,
@@ -68,6 +72,7 @@ function dependencies(call: ToolCallRequest) {
       },
     });
   const withDelivery = vi.fn((result: TrustedToolResult) => result);
+  const imageEditService = { edit: vi.fn() };
 
   return {
     input: {
@@ -79,7 +84,7 @@ function dependencies(call: ToolCallRequest) {
       getAttachmentHost: vi.fn(() => attachmentHost as never),
       getReferenceHost: vi.fn(() => referenceHost as never),
       getImageGenerationHost: vi.fn(() => imageGenerationHost as never),
-      imageEditService: {} as never,
+      imageEditService: imageEditService as never,
       execute,
       withDelivery,
     },
@@ -88,6 +93,7 @@ function dependencies(call: ToolCallRequest) {
     coordinator,
     execute,
     imageGenerationHost,
+    imageEditService,
     referenceHost,
   };
 }
@@ -204,5 +210,45 @@ describe("Design Image Main tool handler", () => {
     expect(setup.imageGenerationHost.generateImage).not.toHaveBeenCalled();
     expect(setup.attachmentHost.importImageBytes).not.toHaveBeenCalled();
     expect(setup.execute).not.toHaveBeenCalled();
+  });
+
+  it("returns the prepared image source field path before external editing", async () => {
+    const assetId = `asset_${"b".repeat(64)}`;
+    const setup = dependencies({
+      toolCallId: "remove_background",
+      toolName: EDIT_IMAGE_TOOL_NAME,
+      input: {
+        action: "remove-background",
+        label: "Remove background",
+        pageId: "page_main",
+        nodeId: "hero_image",
+        expectedAssetId: assetId,
+      },
+    });
+    setup.execute.mockResolvedValueOnce({
+      observedRevision: 3,
+      content: {
+        kind: "prepared-image-edit-source",
+        pageId: "page_main",
+        nodeId: "hero_image",
+        expectedAssetId: assetId,
+        asset: {
+          id: assetId,
+          kind: "image",
+          name: "Hero.png",
+          mimeType: "image/png",
+          source: { type: "external", value: "/tmp/hero.png" },
+          size: { width: 1600, height: 900 },
+          extensions: {},
+        },
+        placement: { mode: "fit" },
+        targetSize: { width: 800, height: 450 },
+      },
+    });
+
+    await expect(handleDesignImageTool(setup.input)).rejects.toThrow(
+      /Image edit source preparation.*\/asset\/source\/type/,
+    );
+    expect(setup.imageEditService.edit).not.toHaveBeenCalled();
   });
 });

@@ -17,10 +17,10 @@ import {
   IMAGE_EXPANSION_SCHEMA,
   IMAGE_TOOL_ID_SCHEMA,
   IMAGE_TOOL_LABEL_SCHEMA,
-  isBoundedEmbeddedImageAsset,
   type InternalReadImageSourceToolInput,
   type InternalUpdateImageToolInput,
 } from "./design-agent-image-tools";
+import { isBoundedEmbeddedImageAsset } from "./design-agent-image-result-contract";
 
 const POSITIVE_SIZE_SCHEMA = {
   type: "object",

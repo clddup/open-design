@@ -1,11 +1,9 @@
 import {
   executableJsonSchema,
-  isDesignAsset,
   ImageFiltersSchema,
   ImagePaintSchema,
   ImagePlacementSchema,
   ImageLightingPresetSchema,
-  isImagePlacement,
   type DesignAsset,
   type ImageFilters,
   type ImagePlacement,
@@ -18,12 +16,6 @@ import {
   type RasterAssetRole,
 } from "./design-agent-plan-review";
 import { defineContract, type ValidationIssue } from "./contract-validation";
-import {
-  exactKeys,
-  isRecord,
-  positive,
-  safeId,
-} from "./design-agent-validation";
 
 export type ReadImageToolInput = { source: string };
 export type ImageGenerationSize = "auto" | `${number}x${number}`;
@@ -154,16 +146,6 @@ export type InternalReadImageSourceToolInput = {
   pageId: string;
   nodeId: string;
   expectedAssetId: string;
-};
-
-export type PreparedImageEditSource = {
-  kind: "prepared-image-edit-source";
-  pageId: string;
-  nodeId: string;
-  expectedAssetId: string;
-  asset: DesignAsset;
-  placement: ImagePlacement;
-  targetSize: { width: number; height: number };
 };
 
 export type InternalUpdateImageToolInput =
@@ -696,61 +678,6 @@ export const EditImageContract = defineContract<EditImageToolInput>({
     return [];
   },
 });
-
-export function isPreparedImageEditSource(
-  input: unknown,
-): input is PreparedImageEditSource {
-  return (
-    isRecord(input) &&
-    input.kind === "prepared-image-edit-source" &&
-    safeId(input.pageId) &&
-    safeId(input.nodeId) &&
-    safeId(input.expectedAssetId) &&
-    isBoundedEmbeddedImageAsset(input.asset) &&
-    input.asset.id === input.expectedAssetId &&
-    isImagePlacement(input.placement) &&
-    isPositiveSize(input.targetSize) &&
-    exactKeys(input, [
-      "kind",
-      "pageId",
-      "nodeId",
-      "expectedAssetId",
-      "asset",
-      "placement",
-      "targetSize",
-    ])
-  );
-}
-
-function isPositiveSize(
-  value: unknown,
-): value is { width: number; height: number } {
-  return (
-    isRecord(value) &&
-    positive(value.width) &&
-    positive(value.height) &&
-    exactKeys(value, ["width", "height"])
-  );
-}
-
-export function isBoundedEmbeddedImageAsset(
-  value: unknown,
-): value is DesignAsset {
-  if (!isDesignAsset(value) || value.kind !== "image") return false;
-  return (
-    /^asset_[a-f0-9]{64}$/.test(value.id) &&
-    /^(?:image\/png|image\/jpeg|image\/webp|image\/gif)$/.test(
-      value.mimeType ?? "",
-    ) &&
-    value.source.type === "data" &&
-    value.source.value.length > 0 &&
-    value.source.value.length <= 24_000_000 &&
-    /^[A-Za-z0-9+/]*={0,2}$/.test(value.source.value) &&
-    value.size !== undefined &&
-    value.size.width > 0 &&
-    value.size.height > 0
-  );
-}
 
 function explicitImageGenerationSizeIssue(
   value: ImageGenerationSize | undefined,

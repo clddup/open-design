@@ -17,9 +17,9 @@ import {
   EditImageContract,
   GenerateImageContract,
   PlaceImageContract,
+  PreparedImageEditSourceContract,
   ReadImageContract,
   UpdateImageContract,
-  isPreparedImageEditSource,
 } from "@/shared/design-agent-tools.js";
 import { formatValidationFailure } from "@/shared/contract-validation.js";
 import type { AgentAttachmentHost } from "./agent-attachment-host.js";
@@ -412,12 +412,18 @@ export async function handleDesignImageTool(
         expectedAssetId: input.expectedAssetId,
       },
     });
-    if (!isPreparedImageEditSource(prepared.content)) {
+    const parsedPrepared = PreparedImageEditSourceContract.parse(
+      prepared.content,
+    );
+    if (!parsedPrepared.ok) {
       throw new TypeError(
-        "Image edit source preparation returned invalid data",
+        formatValidationFailure(
+          "Image edit source preparation",
+          parsedPrepared.issues,
+        ),
       );
     }
-    const source = prepared.content.asset;
+    const source = parsedPrepared.value.asset;
     const reference =
       input.action === "prompt-edit" && input.referenceAttachmentId
         ? await materializeAgentImageAsset(
@@ -455,8 +461,8 @@ export async function handleDesignImageTool(
                   action: input.action,
                   source,
                   expansion: input.expansion,
-                  placement: prepared.content.placement,
-                  targetSize: prepared.content.targetSize,
+                  placement: parsedPrepared.value.placement,
+                  targetSize: parsedPrepared.value.targetSize,
                   importedBy: "agent-image-edit",
                 }
               : {
@@ -486,8 +492,8 @@ export async function handleDesignImageTool(
         expectedAssetId: input.expectedAssetId,
         ...(input.action === "expand"
           ? {
-              expectedPlacement: prepared.content.placement,
-              expectedTargetSize: prepared.content.targetSize,
+              expectedPlacement: parsedPrepared.value.placement,
+              expectedTargetSize: parsedPrepared.value.targetSize,
               expansion: input.expansion,
             }
           : {}),

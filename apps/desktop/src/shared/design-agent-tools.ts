@@ -143,8 +143,15 @@ export {
   READ_IMAGE_TOOL_INPUT_SCHEMA,
   UpdateImageContract,
   UPDATE_IMAGE_TOOL_INPUT_SCHEMA,
-  isPreparedImageEditSource,
 } from "./design-agent-image-tools";
+export {
+  BoundedEmbeddedImageAssetContract,
+  BoundedEmbeddedImageAssetSchema,
+  isBoundedEmbeddedImageAsset,
+  isPreparedImageEditSource,
+  PreparedImageEditSourceContract,
+  PreparedImageEditSourceSchema,
+} from "./design-agent-image-result-contract";
 export {
   InternalReadImageSourceContract,
   InternalUpdateImageContract,
@@ -161,9 +168,9 @@ export type {
   InternalReadImageSourceToolInput,
   PlaceImageToolInput,
   ReadImageToolInput,
-  PreparedImageEditSource,
   UpdateImageToolInput,
 } from "./design-agent-image-tools";
+export type { PreparedImageEditSource } from "./design-agent-image-result-contract";
 export {
   AgentSvgImportResultContract,
   AGENT_SVG_IMPORT_RESULT_SCHEMA,
