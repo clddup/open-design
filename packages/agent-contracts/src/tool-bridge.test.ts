@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  DesignToolBridgeRequestContract,
+  DesignToolBridgeResponseContract,
+  ToolExecutionEventContract,
+  TrustedToolContextContract,
   designToolBridgeRequestId,
   designToolBridgeResponseId,
   isDesignToolBridgeCancel,
@@ -41,18 +45,42 @@ const request = {
 
 describe("agent tool wire contracts", () => {
   it("requires the host tool's semantic input validator", () => {
-    const validateInput = vi.fn(() => true);
+    const inputIssues = vi.fn(() => []);
 
-    expect(isDesignToolBridgeRequest(request, validateInput)).toBe(true);
-    expect(validateInput).toHaveBeenCalledWith(
+    expect(isDesignToolBridgeRequest(request, inputIssues)).toBe(true);
+    expect(inputIssues).toHaveBeenCalledWith(
       request.call.toolName,
       request.call.input,
     );
-    expect(isDesignToolBridgeRequest(request, () => false)).toBe(false);
+    const invalidInput = () => [
+      {
+        code: "design_apply.transaction_invalid",
+        path: "/transaction",
+        message: "Transaction is invalid",
+      },
+    ];
+    expect(isDesignToolBridgeRequest(request, invalidInput)).toBe(false);
+    expect(
+      DesignToolBridgeRequestContract.issues(request, invalidInput),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "design_apply.transaction_invalid",
+        path: "/call/input/transaction",
+      }),
+    );
     expect(
       isDesignToolBridgeRequest(
         { ...request, call: { ...request.call, toolName: "unknown_tool" } },
-        (toolName) => toolName === request.call.toolName,
+        (toolName) =>
+          toolName === request.call.toolName
+            ? []
+            : [
+                {
+                  code: "design_tool.unknown",
+                  path: "/",
+                  message: "Unknown design tool",
+                },
+              ],
       ),
     ).toBe(false);
   });
@@ -68,9 +96,20 @@ describe("agent tool wire contracts", () => {
     expect(
       isDesignToolBridgeRequest(
         { ...request, secretPath: "/tmp/private" },
-        () => true,
+        () => [],
       ),
     ).toBe(false);
+    expect(
+      TrustedToolContextContract.issues({
+        ...context,
+        scope: { ...context.scope, pageId: "page_other" },
+      }),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "trusted_tool_context.page_scope_mismatch",
+        path: "/scope/pageId",
+      }),
+    );
   });
 
   it("validates bounded failures and their structured recovery details", () => {
@@ -298,6 +337,44 @@ describe("agent tool wire contracts", () => {
         progress: 1.1,
       }),
     ).toBe(false);
+    expect(
+      ToolExecutionEventContract.issues({
+        type: "completed",
+        result: {
+          content: { applied: true },
+          designRevision: {
+            previousRevision: 5,
+            revision: 5,
+            transactionId: "transaction_1",
+          },
+        },
+      }),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "trusted_tool_result.revision_not_advanced",
+        path: "/result/designRevision/revision",
+      }),
+    );
+    expect(
+      DesignToolBridgeResponseContract.issues({
+        type: "design-tool.response",
+        requestId: "request_1",
+        ok: true,
+        result: {
+          content: { applied: true },
+          designRevision: {
+            previousRevision: 5,
+            revision: 5,
+            transactionId: "transaction_1",
+          },
+        },
+      }),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "trusted_tool_result.revision_not_advanced",
+        path: "/result/designRevision/revision",
+      }),
+    );
   });
 
   it("extracts correlation IDs from malformed matching envelopes", () => {

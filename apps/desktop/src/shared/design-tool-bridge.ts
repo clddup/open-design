@@ -1,11 +1,12 @@
 import {
   ToolCallRequestSchema,
   TrustedToolContextSchema,
+  TrustedToolContextContract,
   TrustedToolFailureSchema,
+  TrustedToolFailureContract,
   TrustedToolResultSchema,
   TrustedToolResultContract,
-  isTrustedToolContext,
-  isTrustedToolFailure,
+  type AgentToolFailureIssue,
   type ToolCallRequest,
   type TrustedToolContext,
   type TrustedToolFailure,
@@ -19,9 +20,9 @@ import {
 } from "./design-plan-quality-profile";
 import {
   DESIGN_CAPTURE_TOOL_NAME,
+  designAgentToolInputIssues,
   isPreparedImageEditSource,
   isPreparedAgentRasterExport,
-  validateDesignAgentToolInput,
 } from "./design-agent-tools";
 import { defineContract, type ValidationIssue } from "./contract-validation";
 
@@ -110,6 +111,10 @@ const RendererDesignToolResponseSchema = Type.Union([
     { additionalProperties: false },
   ),
 ]);
+const RendererBridgeRequestIdentitySchema = Type.Object(
+  { requestId: RendererBridgeIdSchema },
+  { additionalProperties: true },
+);
 
 export type RendererDesignToolRequest = {
   requestId: string;
@@ -161,34 +166,20 @@ export type RendererDesignToolResponse =
       performance?: RendererDesignToolPerformance;
     };
 
-const RendererDesignToolRequestContract =
+export const RendererDesignToolRequestContract =
   defineContract<RendererDesignToolRequest>({
     schema: RendererDesignToolRequestSchema,
     code: "renderer_design_tool_request.schema_invalid",
     subject: "Renderer design tool request",
     clone: false,
     refine: (value) => {
-      const issues: ValidationIssue[] = [];
-      if (
-        !validateDesignAgentToolInput(value.call.toolName, value.call.input)
-      ) {
-        issues.push(
-          bridgeIssue(
-            "renderer_design_tool_request.input_invalid",
-            "/call/input",
-            "Tool input does not satisfy the registered design tool contract",
-          ),
-        );
-      }
-      if (!isTrustedToolContext(value.context)) {
-        issues.push(
-          bridgeIssue(
-            "renderer_design_tool_request.context_invalid",
-            "/context",
-            "Trusted tool context violates selection or mutation-target invariants",
-          ),
-        );
-      }
+      const issues: ValidationIssue[] = [
+        ...toolInputValidationIssues(value.call.toolName, value.call.input),
+        ...prefixIssues(
+          TrustedToolContextContract.issues(value.context),
+          "/context",
+        ),
+      ];
       if (
         value.call.toolName === DESIGN_CAPTURE_TOOL_NAME
           ? value.captureTarget === undefined
@@ -208,7 +199,7 @@ const RendererDesignToolRequestContract =
     },
   });
 
-const RendererDesignToolCancelContract =
+export const RendererDesignToolCancelContract =
   defineContract<RendererDesignToolCancel>({
     schema: RendererDesignToolCancelSchema,
     code: "renderer_design_tool_cancel.schema_invalid",
@@ -216,7 +207,7 @@ const RendererDesignToolCancelContract =
     clone: false,
   });
 
-const RendererDesignToolProgressContract =
+export const RendererDesignToolProgressContract =
   defineContract<RendererDesignToolProgress>({
     schema: RendererDesignToolProgressSchema,
     code: "renderer_design_tool_progress.schema_invalid",
@@ -224,34 +215,27 @@ const RendererDesignToolProgressContract =
     clone: false,
   });
 
-const RendererDesignToolResponseContract =
+export const RendererDesignToolResponseContract =
   defineContract<RendererDesignToolResponse>({
     schema: RendererDesignToolResponseSchema,
     code: "renderer_design_tool_response.schema_invalid",
     subject: "Renderer design tool response",
     clone: false,
+    selectSchema: rendererResponseSchemaForInput,
     refine: (value) => {
-      const valid = value.ok
-        ? isRendererTrustedToolResult(value.result)
-        : isTrustedToolFailure(value.error);
-      return valid
-        ? []
-        : [
-            bridgeIssue(
-              value.ok
-                ? "renderer_design_tool_response.result_invalid"
-                : "renderer_design_tool_response.error_invalid",
-              value.ok ? "/result" : "/error",
-              value.ok
-                ? "Trusted result violates revision, content, or prepared-material invariants"
-                : "Trusted failure violates structured failure invariants",
-            ),
-          ];
+      return value.ok
+        ? prefixIssues(rendererTrustedToolResultIssues(value.result), "/result")
+        : prefixIssues(
+            TrustedToolFailureContract.issues(value.error),
+            "/error",
+          );
     },
   });
 
-const RendererBridgeRequestIdContract = defineContract<string>({
-  schema: RendererBridgeIdSchema,
+const RendererBridgeRequestIdentityContract = defineContract<{
+  requestId: string;
+}>({
+  schema: RendererBridgeRequestIdentitySchema,
   code: "renderer_design_tool_request_id.schema_invalid",
   subject: "Renderer design tool request ID",
   clone: false,
@@ -264,13 +248,8 @@ export function isRendererDesignToolRequest(
 }
 
 export function rendererDesignToolRequestId(value: unknown): string | null {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) {
-    return null;
-  }
-  const result = RendererBridgeRequestIdContract.parse(
-    (value as Record<string, unknown>).requestId,
-  );
-  return result.ok ? result.value : null;
+  const result = RendererBridgeRequestIdentityContract.parse(value);
+  return result.ok ? result.value.requestId : null;
 }
 
 export function isRendererDesignToolCancel(
@@ -291,20 +270,65 @@ export function isRendererDesignToolResponse(
   return RendererDesignToolResponseContract.parse(value).ok;
 }
 
-function isRendererTrustedToolResult(
-  value: unknown,
-): value is TrustedToolResult {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) {
-    return false;
-  }
-  const content = (value as Record<string, unknown>).content;
+function rendererTrustedToolResultIssues(
+  value: TrustedToolResult,
+): ValidationIssue[] {
+  const content = value.content;
   if (
     !isPreparedAgentRasterExport(content) &&
     !isPreparedImageEditSource(content)
   ) {
-    return TrustedToolResultContract.parse(value).ok;
+    return TrustedToolResultContract.issues(value);
   }
-  return TrustedToolResultContract.parse({ ...value, content: null }).ok;
+  return TrustedToolResultContract.issues({ ...value, content: null });
+}
+
+function toolInputValidationIssues(
+  toolName: string,
+  input: unknown,
+): ValidationIssue[] {
+  return designAgentToolInputIssues(toolName, input).map((issue) =>
+    inputIssue(issue, "/call/input"),
+  );
+}
+
+function inputIssue(
+  issue: AgentToolFailureIssue,
+  prefix: string,
+): ValidationIssue {
+  return {
+    code: issue.code ?? "renderer_design_tool_request.input_invalid",
+    path: issue.path === "/" ? prefix : `${prefix}${issue.path}`,
+    message: issue.message,
+    ...(issue.expected === undefined ? {} : { expected: issue.expected }),
+    ...(issue.actual === undefined ? {} : { actual: issue.actual }),
+    recovery:
+      issue.recovery ??
+      "Correct the reported tool input field before retrying.",
+  };
+}
+
+function rendererResponseSchemaForInput(value: unknown): TSchema | undefined {
+  if (!isRecord(value) || typeof value.ok !== "boolean") return undefined;
+  return RendererDesignToolResponseSchema.anyOf.find((schema) => {
+    const properties = isRecord(schema) ? schema.properties : undefined;
+    const ok = isRecord(properties) ? properties.ok : undefined;
+    return isRecord(ok) && ok.const === value.ok;
+  });
+}
+
+function prefixIssues(
+  issues: readonly ValidationIssue[],
+  prefix: string,
+): ValidationIssue[] {
+  return issues.map((issue) => ({
+    ...issue,
+    path: issue.path === "/" ? prefix : `${prefix}${issue.path}`,
+  }));
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 function bridgeIssue(

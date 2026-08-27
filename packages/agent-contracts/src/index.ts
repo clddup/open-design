@@ -10,10 +10,28 @@ import {
   AgentInitialDesignInspectionSchema,
   agentInitialDesignInspectionDomainIssues,
 } from "./initial-design-inspection.js";
+import { designWorkflowFailureDomainIssues } from "./workflow-failure-contract.js";
 import {
-  createDesignWorkflowFailureDetailsSchema,
-  designWorkflowFailureDomainIssues,
-} from "./workflow-failure-contract.js";
+  AgentRunFailureSchema,
+  ToolFailureFields,
+  type AgentRunFailure,
+} from "./tool-failure.js";
+import {
+  AgentIdSchema as IdSchema,
+  ApprovalIdSchema,
+  DesignMutationTargetSchema,
+  MessageIdSchema,
+  ProgressSchema,
+  RevisionSchema,
+  RunIdSchema,
+  SelectionScopeSchema,
+  SequenceSchema,
+  SessionIdSchema,
+  TimestampSchema,
+  ToolCallIdSchema,
+  TransactionIdSchema,
+  selectionScopeDomainIssues,
+} from "./wire-foundations.js";
 export {
   DESIGN_WORKFLOW_FAILURE_CODES,
   DESIGN_WORKFLOW_FAILURE_DEFINITIONS,
@@ -26,6 +44,10 @@ export type { AgentRunContinuation } from "./continuation.js";
 export { AgentRunContinuationContract } from "./continuation.js";
 export * from "./design-delivery-stage.js";
 export * from "./initial-design-inspection.js";
+export * from "./tool-bridge.js";
+export * from "./tool-failure.js";
+export * from "./trusted-tool-result.js";
+export * from "./wire-foundations.js";
 export { formatContractFailure as formatRuntimeContractFailure } from "@opendesign/contract-runtime";
 export type {
   Contract as RuntimeContract,
@@ -34,7 +56,6 @@ export type {
 } from "@opendesign/contract-runtime";
 
 export const AGENT_PROTOCOL_VERSION = "3.12.0" as const;
-export const MAX_SELECTED_NODE_IDS = 512;
 export const MAX_AGENT_ATTACHMENTS = 6;
 export const MAX_AGENT_ATTACHMENT_BYTES = 16 * 1024 * 1024;
 export const MAX_AGENT_IMAGE_ATTACHMENTS = MAX_AGENT_ATTACHMENTS;
@@ -42,157 +63,11 @@ export const MAX_AGENT_IMAGE_BYTES = MAX_AGENT_ATTACHMENT_BYTES;
 export const MAX_ASSISTANT_TEXT_BLOCK_CHARACTERS = 500_000;
 export const MAX_REASONING_SUMMARY_CHARACTERS = 20_000;
 
-const IdSchema = Type.String({ minLength: 1, maxLength: 256 });
-const TimestampSchema = Type.String({ minLength: 1, maxLength: 64 });
-const RevisionSchema = Type.Integer({ minimum: 0 });
-const SequenceSchema = Type.Integer({ minimum: 1 });
-const ProgressSchema = Type.Number({ minimum: 0, maximum: 1 });
 const EmptyObjectSchema = Type.Object({}, { additionalProperties: false });
 const DeliveryScopeReviewSchema = Type.Union([
   Type.Literal("direct"),
   Type.Literal("required"),
 ]);
-const FailureIssueScalarSchema = Type.Union([
-  Type.String({ maxLength: 4_000 }),
-  Type.Number(),
-  Type.Boolean(),
-  Type.Null(),
-]);
-const FailureIssueValueSchema = Type.Union([
-  FailureIssueScalarSchema,
-  Type.Array(FailureIssueScalarSchema, { maxItems: 64 }),
-  Type.Record(
-    Type.String({ minLength: 1, maxLength: 128 }),
-    FailureIssueScalarSchema,
-    { maxProperties: 64 },
-  ),
-]);
-
-export const AgentToolFailureIssueSchema = Type.Object(
-  {
-    code: Type.Optional(IdSchema),
-    commandId: Type.Optional(IdSchema),
-    nodeId: Type.Optional(IdSchema),
-    path: Type.String({ maxLength: 4_000 }),
-    message: Type.String({ minLength: 1, maxLength: 20_000 }),
-    expected: Type.Optional(FailureIssueValueSchema),
-    actual: Type.Optional(FailureIssueValueSchema),
-    recovery: Type.Optional(Type.String({ minLength: 1, maxLength: 4_000 })),
-  },
-  { additionalProperties: false },
-);
-
-export const AgentToolFailureIssueContract = defineContract<
-  Static<typeof AgentToolFailureIssueSchema>
->({
-  schema: AgentToolFailureIssueSchema,
-  code: "agent_tool_failure_issue.schema_invalid",
-  subject: "Agent tool failure issue",
-  recovery: "Correct the reported failure issue field before retrying.",
-  clone: false,
-});
-
-const FailureAttemptFields = {
-  attempt: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
-  maxAttempts: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
-  retrySuppressed: Type.Optional(Type.Boolean()),
-};
-
-export const DesignTransactionFailureDetailsSchema = Type.Object(
-  {
-    kind: Type.Literal("design-transaction"),
-    fingerprint: IdSchema,
-    issues: Type.Array(AgentToolFailureIssueSchema, {
-      minItems: 1,
-      maxItems: 128,
-    }),
-    recovery: Type.Object(
-      {
-        action: Type.Literal("inspect-and-revise"),
-        toolName: Type.Literal("opendesign_inspect_document"),
-        required: Type.Literal(true),
-      },
-      { additionalProperties: false },
-    ),
-    ...FailureAttemptFields,
-  },
-  { additionalProperties: false },
-);
-
-export const AgentToolValidationFailureDetailsSchema = Type.Object(
-  {
-    kind: Type.Literal("tool-validation"),
-    fingerprint: IdSchema,
-    issues: Type.Array(AgentToolFailureIssueSchema, {
-      minItems: 1,
-      maxItems: 128,
-    }),
-    recovery: Type.Object(
-      {
-        action: Type.Literal("correct-and-retry"),
-        required: Type.Literal(false),
-      },
-      { additionalProperties: false },
-    ),
-    ...FailureAttemptFields,
-  },
-  { additionalProperties: false },
-);
-
-export const DesignWorkflowFailureDetailsSchema =
-  createDesignWorkflowFailureDetailsSchema(
-    AgentToolFailureIssueSchema,
-    FailureAttemptFields,
-  );
-
-export const AgentToolFailureDetailsSchema = Type.Union([
-  DesignTransactionFailureDetailsSchema,
-  AgentToolValidationFailureDetailsSchema,
-  DesignWorkflowFailureDetailsSchema,
-]);
-
-export const AgentToolFailureDetailsContract = defineContract<
-  Static<typeof AgentToolFailureDetailsSchema>
->({
-  schema: AgentToolFailureDetailsSchema,
-  code: "agent_tool_failure_details.schema_invalid",
-  subject: "Agent tool failure details",
-  recovery: "Correct the reported Agent tool failure details field.",
-  clone: false,
-});
-
-const ToolFailureFields = {
-  code: IdSchema,
-  message: Type.String({ minLength: 1, maxLength: 20_000 }),
-  retryable: Type.Optional(Type.Boolean()),
-  recoverable: Type.Optional(Type.Boolean()),
-  details: Type.Optional(AgentToolFailureDetailsSchema),
-};
-
-export const AgentRunFailureSchema = Type.Object(
-  {
-    code: IdSchema,
-    message: Type.String({ minLength: 1, maxLength: 20_000 }),
-    retryable: Type.Boolean(),
-    provider: Type.Optional(IdSchema),
-    providerRequestId: Type.Optional(IdSchema),
-    modelRequestId: Type.Optional(IdSchema),
-    timeout: Type.Optional(
-      Type.Object(
-        {
-          phase: Type.Union([
-            Type.Literal("first-response"),
-            Type.Literal("stream-idle"),
-            Type.Literal("total"),
-          ]),
-          thresholdMs: Type.Integer({ minimum: 1, maximum: 86_400_000 }),
-        },
-        { additionalProperties: false },
-      ),
-    ),
-  },
-  { additionalProperties: false },
-);
 
 export const AgentImageAttachmentSchema = Type.Object(
   {
@@ -307,225 +182,6 @@ export const ResolvedModelIdentitySchema = Type.Object(
   },
   { additionalProperties: false },
 );
-
-export const RunIdSchema = Type.String({
-  minLength: 1,
-  maxLength: 256,
-});
-export const ToolCallIdSchema = Type.String({
-  minLength: 1,
-  maxLength: 256,
-});
-export const SessionIdSchema = IdSchema;
-export const MessageIdSchema = IdSchema;
-export const ApprovalIdSchema = IdSchema;
-export const TransactionIdSchema = IdSchema;
-
-const SelectedNodeIdsSchema = Type.Array(IdSchema, {
-  maxItems: MAX_SELECTED_NODE_IDS,
-  uniqueItems: true,
-});
-
-export const SelectionScopeSchema = Type.Union([
-  Type.Object(
-    {
-      kind: Type.Literal("selection"),
-      selectedNodeIds: Type.Array(IdSchema, {
-        minItems: 1,
-        maxItems: MAX_SELECTED_NODE_IDS,
-        uniqueItems: true,
-      }),
-      primaryNodeId: Type.Optional(IdSchema),
-      pageId: Type.Optional(IdSchema),
-    },
-    { additionalProperties: false },
-  ),
-  Type.Object(
-    {
-      kind: Type.Literal("page"),
-      selectedNodeIds: SelectedNodeIdsSchema,
-      primaryNodeId: Type.Optional(IdSchema),
-      pageId: IdSchema,
-    },
-    { additionalProperties: false },
-  ),
-  Type.Object(
-    {
-      kind: Type.Literal("document"),
-      selectedNodeIds: SelectedNodeIdsSchema,
-      primaryNodeId: Type.Optional(IdSchema),
-      pageId: Type.Optional(IdSchema),
-    },
-    { additionalProperties: false },
-  ),
-]);
-
-export const DesignMutationTargetSchema = Type.Union([
-  Type.Object(
-    {
-      kind: Type.Literal("page"),
-      pageId: IdSchema,
-    },
-    { additionalProperties: false },
-  ),
-  Type.Object(
-    {
-      kind: Type.Literal("document"),
-    },
-    { additionalProperties: false },
-  ),
-]);
-
-export const ToolCallRequestSchema = Type.Object(
-  {
-    toolCallId: ToolCallIdSchema,
-    toolName: IdSchema,
-    input: Type.Unknown(),
-  },
-  { additionalProperties: false },
-);
-
-export const TrustedToolContextSchema = Type.Object(
-  {
-    runId: RunIdSchema,
-    sessionId: SessionIdSchema,
-    documentId: IdSchema,
-    revision: RevisionSchema,
-    scope: SelectionScopeSchema,
-    mutationTarget: DesignMutationTargetSchema,
-  },
-  { additionalProperties: false },
-);
-
-export const TrustedToolFailureSchema = Type.Object(
-  {
-    code: IdSchema,
-    message: Type.String({ minLength: 1, maxLength: 20_000 }),
-    retryable: Type.Boolean(),
-    recoverable: Type.Boolean(),
-    runTerminal: Type.Optional(Type.Literal(true)),
-    details: Type.Optional(AgentToolFailureDetailsSchema),
-  },
-  { additionalProperties: false },
-);
-
-export const TrustedToolFailureContract = defineContract<
-  Static<typeof TrustedToolFailureSchema>
->({
-  schema: TrustedToolFailureSchema,
-  code: "trusted_tool_failure.schema_invalid",
-  subject: "Trusted tool failure",
-  recovery: "Correct the reported trusted tool failure field.",
-  refine: (value) => designWorkflowFailureDomainIssues(value, ""),
-  clone: false,
-});
-
-export const TrustedToolResultSchema = Type.Object(
-  {
-    content: Type.Unknown(),
-    observedRevision: Type.Optional(RevisionSchema),
-    designRevision: Type.Optional(
-      Type.Object(
-        {
-          previousRevision: RevisionSchema,
-          rebasedFromRevision: Type.Optional(RevisionSchema),
-          revision: RevisionSchema,
-          transactionId: TransactionIdSchema,
-        },
-        { additionalProperties: false },
-      ),
-    ),
-  },
-  { additionalProperties: false },
-);
-
-type TrustedToolResultValue = Static<typeof TrustedToolResultSchema>;
-
-export const TrustedToolResultContract = defineContract<TrustedToolResultValue>(
-  {
-    schema: TrustedToolResultSchema,
-    code: "trusted_tool_result.schema_invalid",
-    subject: "Trusted tool result",
-    recovery:
-      "Reject the malformed tool result and preserve the last trusted revision.",
-    refine: trustedToolResultDomainIssues,
-    clone: false,
-  },
-);
-
-export const ToolExecutionEventSchema = Type.Union([
-  Type.Object(
-    {
-      type: Type.Literal("progress"),
-      message: Type.String({ minLength: 1, maxLength: 2_000 }),
-      progress: ProgressSchema,
-    },
-    { additionalProperties: false },
-  ),
-  Type.Object(
-    {
-      type: Type.Literal("failed"),
-      error: TrustedToolFailureSchema,
-    },
-    { additionalProperties: false },
-  ),
-  Type.Object(
-    {
-      type: Type.Literal("completed"),
-      result: TrustedToolResultSchema,
-    },
-    { additionalProperties: false },
-  ),
-]);
-
-export const DesignToolBridgeRequestSchema = Type.Object(
-  {
-    type: Type.Literal("design-tool.request"),
-    requestId: IdSchema,
-    call: ToolCallRequestSchema,
-    context: TrustedToolContextSchema,
-  },
-  { additionalProperties: false },
-);
-
-export const DesignToolBridgeCancelSchema = Type.Object(
-  {
-    type: Type.Literal("design-tool.cancel"),
-    requestId: IdSchema,
-  },
-  { additionalProperties: false },
-);
-
-export const DesignToolBridgeProgressSchema = Type.Object(
-  {
-    type: Type.Literal("design-tool.progress"),
-    requestId: IdSchema,
-    message: Type.String({ minLength: 1, maxLength: 2_000 }),
-    progress: ProgressSchema,
-  },
-  { additionalProperties: false },
-);
-
-export const DesignToolBridgeResponseSchema = Type.Union([
-  Type.Object(
-    {
-      type: Type.Literal("design-tool.response"),
-      requestId: IdSchema,
-      ok: Type.Literal(true),
-      result: TrustedToolResultSchema,
-    },
-    { additionalProperties: false },
-  ),
-  Type.Object(
-    {
-      type: Type.Literal("design-tool.response"),
-      requestId: IdSchema,
-      ok: Type.Literal(false),
-      error: TrustedToolFailureSchema,
-    },
-    { additionalProperties: false },
-  ),
-]);
 
 export const ApprovalDecisionSchema = Type.Union([
   Type.Literal("allow_once"),
@@ -1137,25 +793,6 @@ const AgentEventRequestIdentitySchema = Type.Object(
   { additionalProperties: true },
 );
 
-export type SelectionScope = Static<typeof SelectionScopeSchema>;
-export type DesignMutationTarget = Static<typeof DesignMutationTargetSchema>;
-export type ToolCallRequest = Static<typeof ToolCallRequestSchema>;
-export type TrustedToolContext = Static<typeof TrustedToolContextSchema>;
-export type TrustedToolFailure = Static<typeof TrustedToolFailureSchema>;
-export type TrustedToolResult = Static<typeof TrustedToolResultSchema>;
-export type ToolExecutionEvent = Static<typeof ToolExecutionEventSchema>;
-export type DesignToolBridgeRequest = Static<
-  typeof DesignToolBridgeRequestSchema
->;
-export type DesignToolBridgeCancel = Static<
-  typeof DesignToolBridgeCancelSchema
->;
-export type DesignToolBridgeProgress = Static<
-  typeof DesignToolBridgeProgressSchema
->;
-export type DesignToolBridgeResponse = Static<
-  typeof DesignToolBridgeResponseSchema
->;
 export type ApprovalDecision = Static<typeof ApprovalDecisionSchema>;
 export type ToolRisk = Static<typeof ToolRiskSchema>;
 export type RunStopReason = Static<typeof RunStopReasonSchema>;
@@ -1177,12 +814,6 @@ export type AgentRequest = Static<typeof AgentRequestSchema>;
 export type AgentEvent = Static<typeof AgentEventSchema>;
 export type AgentModelSelection = Static<typeof ModelSelectionSchema>;
 export type AgentModelContext = Static<typeof AgentModelContextSchema>;
-export type AgentToolFailureIssue = Static<typeof AgentToolFailureIssueSchema>;
-export type AgentToolFailureDetails = Static<
-  typeof AgentToolFailureDetailsSchema
->;
-export type AgentRunFailure = Static<typeof AgentRunFailureSchema>;
-
 export const ModelSelectionContract = defineContract<AgentModelSelection>({
   schema: ModelSelectionSchema,
   code: "model_selection.schema_invalid",
@@ -1201,14 +832,6 @@ export const AgentRequestContract = defineContract<AgentRequest>({
   clone: false,
 });
 
-export const AgentRunFailureContract = defineContract<AgentRunFailure>({
-  schema: AgentRunFailureSchema,
-  code: "agent_run_failure.schema_invalid",
-  subject: "Agent run failure",
-  recovery: "Correct the reported Agent run failure field.",
-  clone: false,
-});
-
 export const AgentAttachmentContract = defineContract<AgentAttachment>({
   schema: AgentAttachmentSchema,
   code: "agent_attachment.schema_invalid",
@@ -1216,24 +839,6 @@ export const AgentAttachmentContract = defineContract<AgentAttachment>({
   recovery: "Correct the reported Agent attachment field.",
   clone: false,
 });
-
-export const SelectionScopeContract = defineContract<SelectionScope>({
-  schema: SelectionScopeSchema,
-  code: "selection_scope.schema_invalid",
-  subject: "Selection scope",
-  recovery: "Correct the reported selection scope field.",
-  refine: (value) => selectionScopeDomainIssues(value),
-  clone: false,
-});
-
-export const DesignMutationTargetContract =
-  defineContract<DesignMutationTarget>({
-    schema: DesignMutationTargetSchema,
-    code: "design_mutation_target.schema_invalid",
-    subject: "Design mutation target",
-    recovery: "Correct the reported design mutation target field.",
-    clone: false,
-  });
 
 export const DurableTimelineEventContract =
   defineContract<DurableTimelineEvent>({
@@ -1264,117 +869,8 @@ export const AgentEventContract = defineContract<AgentEvent>({
   clone: false,
 });
 
-export function isAgentRunFailure(value: unknown): value is AgentRunFailure {
-  return AgentRunFailureContract.parse(value).ok;
-}
-
 export function isAgentAttachment(value: unknown): value is AgentAttachment {
   return AgentAttachmentContract.parse(value).ok;
-}
-
-export function isSelectionScope(value: unknown): value is SelectionScope {
-  return SelectionScopeContract.parse(value).ok;
-}
-
-export function isDesignMutationTarget(
-  value: unknown,
-): value is DesignMutationTarget {
-  return DesignMutationTargetContract.parse(value).ok;
-}
-
-export function isToolCallRequest(
-  value: unknown,
-  validateInput: (toolName: string, input: unknown) => boolean,
-): value is ToolCallRequest {
-  return (
-    Value.Check(ToolCallRequestSchema, value) &&
-    validateInput(value.toolName, value.input)
-  );
-}
-
-export function isTrustedToolContext(
-  value: unknown,
-): value is TrustedToolContext {
-  return (
-    Value.Check(TrustedToolContextSchema, value) &&
-    isSelectionScope(value.scope) &&
-    isDesignMutationTarget(value.mutationTarget)
-  );
-}
-
-export function isTrustedToolFailure(
-  value: unknown,
-): value is TrustedToolFailure {
-  return TrustedToolFailureContract.parse(value).ok;
-}
-
-export function isTrustedToolResult(
-  value: unknown,
-): value is TrustedToolResult {
-  return TrustedToolResultContract.parse(value).ok;
-}
-
-export function isToolExecutionEvent(
-  value: unknown,
-): value is ToolExecutionEvent {
-  if (!Value.Check(ToolExecutionEventSchema, value)) return false;
-  if (value.type === "failed") return isTrustedToolFailure(value.error);
-  if (value.type === "completed") return isTrustedToolResult(value.result);
-  return true;
-}
-
-export function isDesignToolBridgeRequest(
-  value: unknown,
-  validateInput: (toolName: string, input: unknown) => boolean,
-): value is DesignToolBridgeRequest {
-  return (
-    Value.Check(DesignToolBridgeRequestSchema, value) &&
-    isToolCallRequest(value.call, validateInput) &&
-    isTrustedToolContext(value.context)
-  );
-}
-
-export function designToolBridgeRequestId(value: unknown): string | null {
-  return record(value) &&
-    value.type === "design-tool.request" &&
-    Value.Check(IdSchema, value.requestId)
-    ? value.requestId
-    : null;
-}
-
-export function isDesignToolBridgeCancel(
-  value: unknown,
-): value is DesignToolBridgeCancel {
-  return Value.Check(DesignToolBridgeCancelSchema, value);
-}
-
-export function isDesignToolBridgeProgress(
-  value: unknown,
-): value is DesignToolBridgeProgress {
-  return Value.Check(DesignToolBridgeProgressSchema, value);
-}
-
-export function isDesignToolBridgeResponse(
-  value: unknown,
-): value is DesignToolBridgeResponse {
-  if (!Value.Check(DesignToolBridgeResponseSchema, value)) return false;
-  return value.ok
-    ? isTrustedToolResult(value.result)
-    : isTrustedToolFailure(value.error);
-}
-
-export function designToolBridgeResponseId(value: unknown): string | null {
-  return record(value) &&
-    value.type === "design-tool.response" &&
-    Value.Check(IdSchema, value.requestId)
-    ? value.requestId
-    : null;
-}
-
-export function isAgentToolFailureDetails(
-  value: unknown,
-): value is AgentToolFailureDetails {
-  return AgentToolFailureDetailsContract.parse(value).ok;
 }
 
 export function isDurableTimelineEvent(
@@ -1527,30 +1023,6 @@ function agentEventDomainIssues(value: AgentEvent): ValidationIssue[] {
   return issues;
 }
 
-function selectionScopeDomainIssues(
-  value: SelectionScope,
-  path = "",
-  code = "selection_scope.primary_node_not_selected",
-  recovery = "Choose primaryNodeId from selectedNodeIds or omit it.",
-): ValidationIssue[] {
-  if (
-    value.primaryNodeId === undefined ||
-    value.selectedNodeIds.includes(value.primaryNodeId)
-  ) {
-    return [];
-  }
-  return [
-    {
-      code,
-      path: `${path}/primaryNodeId`,
-      message: "Primary node must belong to the selected node snapshot",
-      expected: { memberOfSelectedNodeIds: true },
-      actual: value.primaryNodeId,
-      recovery,
-    },
-  ];
-}
-
 function runFailureStateDomainIssues(
   value: {
     status: string;
@@ -1673,77 +1145,6 @@ function agentEventType(value: unknown): string {
     : "unknown";
 }
 
-function trustedToolResultDomainIssues(
-  value: TrustedToolResultValue,
-): ValidationIssue[] {
-  const contentIssue = trustedToolContentIssue(value.content);
-  const issues = contentIssue ? [contentIssue] : [];
-  const revision = value.designRevision;
-  if (!revision) return issues;
-  return [...issues, ...trustedToolRevisionIssues(value)];
-}
-
-function trustedToolContentIssue(content: unknown): ValidationIssue | null {
-  if (jsonSizeWithin(content, 4_000_000)) return null;
-  return {
-    code: "trusted_tool_result.content_invalid",
-    path: "/content",
-    message:
-      "Tool result content must be serializable and at most 4,000,000 characters",
-    expected: { maximumCharacters: 4_000_000 },
-    recovery:
-      "Return bounded structured content or an opaque resource handle instead of inline payload bytes.",
-  };
-}
-
-function trustedToolRevisionIssues(
-  value: TrustedToolResultValue,
-): ValidationIssue[] {
-  const revision = value.designRevision;
-  if (!revision) return [];
-  const issues: ValidationIssue[] = [];
-  if (revision.revision <= revision.previousRevision) {
-    issues.push({
-      code: "trusted_tool_result.revision_not_advanced",
-      path: "/designRevision/revision",
-      message: "A design write must advance the document revision",
-      expected: { greaterThan: revision.previousRevision },
-      actual: revision.revision,
-      recovery:
-        "Return the committed EditorRuntime revision, not the request base revision.",
-    });
-  }
-  if (
-    revision.rebasedFromRevision !== undefined &&
-    revision.rebasedFromRevision >= revision.previousRevision
-  ) {
-    issues.push({
-      code: "trusted_tool_result.rebase_order_invalid",
-      path: "/designRevision/rebasedFromRevision",
-      message: "rebasedFromRevision must precede previousRevision",
-      expected: { lessThan: revision.previousRevision },
-      actual: revision.rebasedFromRevision,
-      recovery:
-        "Report the original inspected revision only when the host safely rebased onto a newer base revision.",
-    });
-  }
-  if (
-    value.observedRevision !== undefined &&
-    value.observedRevision !== revision.revision
-  ) {
-    issues.push({
-      code: "trusted_tool_result.observed_revision_mismatch",
-      path: "/observedRevision",
-      message: "observedRevision must equal designRevision.revision",
-      expected: revision.revision,
-      actual: value.observedRevision,
-      recovery:
-        "Return one exact committed revision for both observed and design revision evidence.",
-    });
-  }
-  return issues;
-}
-
 function agentEventVariant(type: string): TSchema | undefined {
   const variants = (AgentEventSchema as { anyOf?: TSchema[] }).anyOf ?? [];
   return variants.find((variant) => {
@@ -1757,15 +1158,6 @@ function agentEventVariant(type: string): TSchema | undefined {
       discriminator.const === type
     );
   });
-}
-
-function jsonSizeWithin(value: unknown, maximum: number): boolean {
-  try {
-    const serialized = JSON.stringify(value);
-    return serialized !== undefined && serialized.length <= maximum;
-  } catch {
-    return false;
-  }
 }
 
 function record(value: unknown): value is Record<string, unknown> {

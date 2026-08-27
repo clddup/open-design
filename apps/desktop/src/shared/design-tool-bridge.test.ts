@@ -11,6 +11,8 @@ import {
   INTERNAL_UPDATE_IMAGE_TOOL_NAME,
 } from "./design-agent-tools";
 import {
+  RendererDesignToolRequestContract,
+  RendererDesignToolResponseContract,
   isRendererDesignToolCancel,
   isRendererDesignToolProgress,
   isRendererDesignToolRequest,
@@ -127,6 +129,15 @@ describe("Renderer design tool bridge", () => {
         },
       }),
     ).toBe(false);
+    expect(
+      RendererDesignToolRequestContract.issues({
+        ...request,
+        call: {
+          ...request.call,
+          input: { ...request.call.input, filePath: "/tmp/poster.png" },
+        },
+      }),
+    ).toContainEqual(expect.objectContaining({ path: "/call/input/filePath" }));
   });
 
   it("requires a Main-selected Page or Frame target for canvas capture", () => {
@@ -232,6 +243,45 @@ describe("Renderer design tool bridge", () => {
         },
       }),
     ).toBe(false);
+    expect(
+      RendererDesignToolResponseContract.issues({
+        ...rebasedResult,
+        result: {
+          ...rebasedResult.result,
+          designRevision: {
+            ...rebasedResult.result.designRevision,
+            rebasedFromRevision: 6,
+          },
+        },
+      }),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "trusted_tool_result.rebase_order_invalid",
+        path: "/result/designRevision/rebasedFromRevision",
+      }),
+    );
+  });
+
+  it("reports the exact trusted context path across the Renderer boundary", () => {
+    const request = {
+      requestId: "renderer_context_mismatch",
+      call: {
+        toolCallId: "inspect_1",
+        toolName: "opendesign_inspect_document",
+        input: {},
+      },
+      context: {
+        ...context,
+        scope: { ...context.scope, pageId: "page_other" },
+      },
+    };
+    expect(isRendererDesignToolRequest(request)).toBe(false);
+    expect(RendererDesignToolRequestContract.issues(request)).toContainEqual(
+      expect.objectContaining({
+        code: "trusted_tool_context.page_scope_mismatch",
+        path: "/context/scope/pageId",
+      }),
+    );
   });
 
   it("accepts a bounded internal Image update with an explicit node target", () => {

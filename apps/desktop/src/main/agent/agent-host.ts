@@ -2,10 +2,10 @@ import { app, utilityProcess } from "electron";
 import {
   agentEventRequestId,
   agentEventRunId,
+  DesignToolBridgeRequestContract,
   designToolBridgeRequestId,
   formatRuntimeContractFailure,
   isDesignToolBridgeCancel,
-  isDesignToolBridgeRequest,
   isTrustedToolFailure,
   type AgentEvent,
   type AgentRequest,
@@ -15,6 +15,7 @@ import {
   type TrustedToolContext,
   type TrustedToolFailure,
   type TrustedToolResult,
+  type RuntimeContractIssue,
   type RuntimeContractResult,
 } from "@opendesign/agent-contracts";
 import type {
@@ -29,7 +30,7 @@ import {
   modelBridgeRequestValidationError,
   type ModelBridgeResponse,
 } from "@/shared/model-bridge";
-import { validateDesignAgentToolInput } from "@/shared/design-agent-tools";
+import { designAgentToolInputIssues } from "@/shared/design-agent-tools";
 import {
   isSessionStoreBridgeRequest,
   isSessionStoreBridgeResponse,
@@ -260,11 +261,15 @@ export class AgentHost {
       } satisfies SessionStoreBridgeResponse);
       return;
     }
-    if (isDesignToolBridgeRequest(message, validateDesignAgentToolInput)) {
+    const designToolRequest = DesignToolBridgeRequestContract.parse(
+      message,
+      designAgentToolInputIssues,
+    );
+    if (designToolRequest.ok) {
       void this.handleDesignToolRequest(
-        message.requestId,
-        message.call,
-        message.context,
+        designToolRequest.value.requestId,
+        designToolRequest.value.call,
+        designToolRequest.value.context,
         generation,
       );
       return;
@@ -278,9 +283,18 @@ export class AgentHost {
         ok: false,
         error: {
           code: "invalid_tool_request",
-          message: "Design tool request rejected by the host",
+          message: formatRuntimeContractFailure(
+            "Design tool bridge request",
+            designToolRequest.issues,
+          ),
           retryable: false,
-          recoverable: false,
+          recoverable: true,
+          details: {
+            kind: "tool-validation",
+            fingerprint: designToolRequestFingerprint(designToolRequest.issues),
+            issues: designToolRequest.issues.slice(0, 128),
+            recovery: { action: "correct-and-retry", required: false },
+          },
         },
       } satisfies DesignToolBridgeResponse);
       return;
@@ -617,6 +631,16 @@ export class AgentHost {
     this.#toolRequests.clear();
     this.#pendingApprovals.clear();
   }
+}
+
+function designToolRequestFingerprint(
+  issues: readonly RuntimeContractIssue[],
+): string {
+  const issue = issues[0];
+  return `design_tool_bridge:${issue?.code ?? "invalid"}:${issue?.path ?? "/"}`.slice(
+    0,
+    256,
+  );
 }
 
 function trustedToolFailureFromError(error: unknown): TrustedToolFailure {

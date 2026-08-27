@@ -185,7 +185,7 @@ describe("AgentHost model bridge", () => {
     });
   });
 
-  it("returns a terminal bridge error instead of dropping an invalid design tool request", () => {
+  it("returns structured recovery instead of dropping an invalid design tool request", () => {
     const host = new AgentHost();
     void host.start();
     const error = vi
@@ -211,15 +211,23 @@ describe("AgentHost model bridge", () => {
     });
 
     expect(error).toHaveBeenCalledWith("Rejected invalid design tool request");
-    expect(electron.child.postMessage).toHaveBeenCalledWith({
+    const postMessage = electron.child.postMessage as {
+      mock: { calls: unknown[][] };
+    };
+    expect(postMessage.mock.calls.at(-1)?.[0]).toMatchObject({
       type: "design-tool.response",
       requestId: "design_tool_request_1",
       ok: false,
       error: {
         code: "invalid_tool_request",
-        message: "Design tool request rejected by the host",
         retryable: false,
-        recoverable: false,
+        recoverable: true,
+        details: {
+          kind: "tool-validation",
+          fingerprint:
+            "design_tool_bridge:design_tool.empty_input_invalid:/call/input/unexpected",
+          issues: [{ path: "/call/input/unexpected" }],
+        },
       },
     });
   });
