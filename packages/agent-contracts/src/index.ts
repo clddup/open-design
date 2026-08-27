@@ -435,6 +435,20 @@ export const TrustedToolResultSchema = Type.Object(
   { additionalProperties: false },
 );
 
+type TrustedToolResultValue = Static<typeof TrustedToolResultSchema>;
+
+export const TrustedToolResultContract = defineContract<TrustedToolResultValue>(
+  {
+    schema: TrustedToolResultSchema,
+    code: "trusted_tool_result.schema_invalid",
+    subject: "Trusted tool result",
+    recovery:
+      "Reject the malformed tool result and preserve the last trusted revision.",
+    refine: trustedToolResultDomainIssues,
+    clone: false,
+  },
+);
+
 export const ToolExecutionEventSchema = Type.Union([
   Type.Object(
     {
@@ -1232,17 +1246,7 @@ export function isTrustedToolFailure(
 export function isTrustedToolResult(
   value: unknown,
 ): value is TrustedToolResult {
-  if (!Value.Check(TrustedToolResultSchema, value)) return false;
-  if (!jsonSizeWithin(value.content, 4_000_000)) return false;
-  const revision = value.designRevision;
-  return (
-    revision === undefined ||
-    (revision.revision > revision.previousRevision &&
-      (revision.rebasedFromRevision === undefined ||
-        revision.rebasedFromRevision < revision.previousRevision) &&
-      (value.observedRevision === undefined ||
-        value.observedRevision === revision.revision))
-  );
+  return TrustedToolResultContract.parse(value).ok;
 }
 
 export function isToolExecutionEvent(
@@ -1454,6 +1458,77 @@ function agentEventType(value: unknown): string {
     typeof value.type === "string"
     ? value.type.slice(0, 256)
     : "unknown";
+}
+
+function trustedToolResultDomainIssues(
+  value: TrustedToolResultValue,
+): ValidationIssue[] {
+  const contentIssue = trustedToolContentIssue(value.content);
+  const issues = contentIssue ? [contentIssue] : [];
+  const revision = value.designRevision;
+  if (!revision) return issues;
+  return [...issues, ...trustedToolRevisionIssues(value)];
+}
+
+function trustedToolContentIssue(content: unknown): ValidationIssue | null {
+  if (jsonSizeWithin(content, 4_000_000)) return null;
+  return {
+    code: "trusted_tool_result.content_invalid",
+    path: "/content",
+    message:
+      "Tool result content must be serializable and at most 4,000,000 characters",
+    expected: { maximumCharacters: 4_000_000 },
+    recovery:
+      "Return bounded structured content or an opaque resource handle instead of inline payload bytes.",
+  };
+}
+
+function trustedToolRevisionIssues(
+  value: TrustedToolResultValue,
+): ValidationIssue[] {
+  const revision = value.designRevision;
+  if (!revision) return [];
+  const issues: ValidationIssue[] = [];
+  if (revision.revision <= revision.previousRevision) {
+    issues.push({
+      code: "trusted_tool_result.revision_not_advanced",
+      path: "/designRevision/revision",
+      message: "A design write must advance the document revision",
+      expected: { greaterThan: revision.previousRevision },
+      actual: revision.revision,
+      recovery:
+        "Return the committed EditorRuntime revision, not the request base revision.",
+    });
+  }
+  if (
+    revision.rebasedFromRevision !== undefined &&
+    revision.rebasedFromRevision >= revision.previousRevision
+  ) {
+    issues.push({
+      code: "trusted_tool_result.rebase_order_invalid",
+      path: "/designRevision/rebasedFromRevision",
+      message: "rebasedFromRevision must precede previousRevision",
+      expected: { lessThan: revision.previousRevision },
+      actual: revision.rebasedFromRevision,
+      recovery:
+        "Report the original inspected revision only when the host safely rebased onto a newer base revision.",
+    });
+  }
+  if (
+    value.observedRevision !== undefined &&
+    value.observedRevision !== revision.revision
+  ) {
+    issues.push({
+      code: "trusted_tool_result.observed_revision_mismatch",
+      path: "/observedRevision",
+      message: "observedRevision must equal designRevision.revision",
+      expected: revision.revision,
+      actual: value.observedRevision,
+      recovery:
+        "Return one exact committed revision for both observed and design revision evidence.",
+    });
+  }
+  return issues;
 }
 
 function agentEventVariant(type: string): TSchema | undefined {

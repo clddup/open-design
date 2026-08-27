@@ -186,6 +186,7 @@ describe("Renderer design tool bridge", () => {
       requestId: request.requestId,
       ok: true as const,
       result: {
+        observedRevision: 7,
         content: { ok: true },
         designRevision: {
           previousRevision: 6,

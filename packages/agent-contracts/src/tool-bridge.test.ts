@@ -10,6 +10,7 @@ import {
   isTrustedToolContext,
   isTrustedToolFailure,
   isTrustedToolResult,
+  TrustedToolResultContract,
 } from "./index.js";
 
 const context = {
@@ -124,16 +125,62 @@ describe("agent tool wire contracts", () => {
       }),
     ).toBe(false);
     expect(
+      TrustedToolResultContract.issues({
+        ...result,
+        designRevision: { ...result.designRevision, revision: 5 },
+      }),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "trusted_tool_result.revision_not_advanced",
+        path: "/designRevision/revision",
+      }),
+    );
+    expect(
       isTrustedToolResult({
         ...result,
         designRevision: { ...result.designRevision, rebasedFromRevision: 5 },
       }),
     ).toBe(false);
+    expect(
+      TrustedToolResultContract.issues({
+        ...result,
+        designRevision: {
+          ...result.designRevision,
+          rebasedFromRevision: 5,
+        },
+      }),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "trusted_tool_result.rebase_order_invalid",
+        path: "/designRevision/rebasedFromRevision",
+      }),
+    );
     expect(isTrustedToolResult({ ...result, observedRevision: 7 })).toBe(false);
+    expect(
+      TrustedToolResultContract.issues({
+        ...result,
+        observedRevision: 7,
+      }),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "trusted_tool_result.observed_revision_mismatch",
+        path: "/observedRevision",
+      }),
+    );
   });
 
   it("rejects oversized and non-serializable result content", () => {
     expect(isTrustedToolResult({ content: "x".repeat(4_000_001) })).toBe(false);
+    expect(
+      TrustedToolResultContract.issues({
+        content: "x".repeat(4_000_001),
+      }),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "trusted_tool_result.content_invalid",
+        path: "/content",
+      }),
+    );
     const cyclic: { self?: unknown } = {};
     cyclic.self = cyclic;
     expect(isTrustedToolResult({ content: cyclic })).toBe(false);

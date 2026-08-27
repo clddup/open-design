@@ -62,6 +62,7 @@ export async function executeSemanticDesignTransaction(options: {
       requestId: request.requestId,
       ok: true,
       result: {
+        observedRevision: result.revision.revision,
         content: {
           ok: true,
           label: transaction.label,
@@ -166,6 +167,7 @@ export async function executeSemanticDesignTransaction(options: {
     requestId: request.requestId,
     ok: true,
     result: {
+      observedRevision: lastResult.revision.revision,
       content: {
         ok: true,
         label: transaction.label,

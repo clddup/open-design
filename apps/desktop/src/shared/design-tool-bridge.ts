@@ -3,9 +3,9 @@ import {
   TrustedToolContextSchema,
   TrustedToolFailureSchema,
   TrustedToolResultSchema,
+  TrustedToolResultContract,
   isTrustedToolContext,
   isTrustedToolFailure,
-  isTrustedToolResult,
   type ToolCallRequest,
   type TrustedToolContext,
   type TrustedToolFailure,
@@ -303,9 +303,9 @@ function isRendererTrustedToolResult(
     !isPreparedAgentRasterExport(content) &&
     !isPreparedImageEditSource(content)
   ) {
-    return isTrustedToolResult(value);
+    return TrustedToolResultContract.parse(value).ok;
   }
-  return isTrustedToolResult({ ...value, content: null });
+  return TrustedToolResultContract.parse({ ...value, content: null }).ok;
 }
 
 function bridgeIssue(

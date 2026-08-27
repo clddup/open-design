@@ -32,3 +32,5 @@ ADR-0186 已要求事务失败携带结构化 `DesignIssue`，但 `OperationErro
 - Page no-op、缺失节点、资源引用占用和节点 Schema 失败返回各自稳定领域 code。
 - 全部 EditorRuntime 测试验证原子回滚、history、组件、变量、Style、Text 与几何行为未改变。
 - Renderer design transaction failure 保留同一 code、commandId、nodeId 和 path，并继续通过 Agent failure Contract。
+
+跨 Renderer/Main/Agent 的成功结果 correlation 由后续 ADR-0192 收口；完整事务 ChangeSet 不跨进程复制。

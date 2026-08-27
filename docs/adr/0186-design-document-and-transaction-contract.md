@@ -18,7 +18,7 @@
 
 本决策不把完整文档 invariant 移入 design-contracts。Component/Instance/Slot、Variant、Style、Variable、Vector、Asset 和树引用仍依赖各服务与 EditorRuntime，避免形成循环依赖。
 
-DesignDocument 历史 migration 已物理拆到独立模块，并通过注入 current parser 避免 migration 与当前 Contract 形成运行时循环；当前 schema 的读取仍严格失败关闭。OperationError 的完整领域 code 与跨 Renderer/Agent 投影已由 ADR-0191 完成；Main/Preload/MCP 入口复用与完整跨进程事务结果贯通仍是后续切片，未完成前不得宣称整个事务错误协议已迁移完毕。
+DesignDocument 历史 migration 已物理拆到独立模块，并通过注入 current parser 避免 migration 与当前 Contract 形成运行时循环；当前 schema 的读取仍严格失败关闭。OperationError 的完整领域 code 与跨 Renderer/Agent 投影已由 ADR-0191 完成；ADR-0192 进一步确认完整 `DesignTransactionResult` 留在 Renderer，Main/Agent 只接收有界、correlated `TrustedToolResult`。当前没有 MCP 产品实现，未来 MCP 必须复用同一 Tool Runtime 和事务契约，不得为“协议一致”提前建立无调用者门面。
 
 ## 失败行为
 

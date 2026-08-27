@@ -929,6 +929,7 @@ async function executeDesignToolRequestUnsafe(
       requestId: request.requestId,
       ok: true,
       result: {
+        observedRevision: result.revision.revision,
         content: {
           ok: true,
           action: input.action,
@@ -1001,6 +1002,7 @@ async function executeDesignToolRequestUnsafe(
       requestId: request.requestId,
       ok: true,
       result: {
+        observedRevision: result.revision.revision,
         content: {
           ok: true,
           action: input.action,
@@ -1233,6 +1235,7 @@ async function executeDesignToolRequestUnsafe(
       requestId: request.requestId,
       ok: true,
       result: {
+        observedRevision: result.revision.revision,
         content: {
           ok: true,
           action: input.action,
@@ -1505,6 +1508,7 @@ async function executeDesignToolRequestUnsafe(
       requestId: request.requestId,
       ok: true,
       result: {
+        observedRevision: result.revision.revision,
         content: {
           ok: true,
           action: input.action,
@@ -1725,6 +1729,7 @@ function executeAtomicEditDesign(
     requestId: request.requestId,
     ok: true,
     result: {
+      observedRevision: result.revision.revision,
       content: {
         ok: true,
         action: "edit-design",

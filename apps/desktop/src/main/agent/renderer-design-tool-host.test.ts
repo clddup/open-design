@@ -617,6 +617,7 @@ describe("RendererDesignToolHost", () => {
       requestId: apply.requestId,
       ok: true,
       result: {
+        observedRevision: 426,
         content: { revision: 426 },
         designRevision: {
           previousRevision: 425,
