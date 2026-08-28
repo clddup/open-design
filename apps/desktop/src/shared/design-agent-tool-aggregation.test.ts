@@ -158,7 +158,6 @@ describe("design Agent tool aggregation", () => {
       DESIGN_FIRST_SLICE_TOOL_NAME,
       DESIGN_INSPECT_TOOL_NAME,
       DESIGN_CAPTURE_TOOL_NAME,
-      DESIGN_CHECKPOINT_TOOL_NAME,
       DESIGN_EDIT_TOOL_NAME,
       DESIGN_SYSTEM_TOOL_NAME,
     ]) {

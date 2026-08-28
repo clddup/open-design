@@ -221,10 +221,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
   },
   {
     name: DESIGN_CHECKPOINT_TOOL_NAME,
-    modelDisclosure: {
-      bootstrap: "deferred" as const,
-      surfaces: ["general" as const, "new-design" as const],
-    },
+    modelDisclosure: { bootstrap: "deferred" as const },
     description:
       "Execute a real design checkpoint without a Provider round trip used only to request capture. Use apply-and-capture when the next material transaction is fully known: Main validates and commits it through the canonical apply path, then captures only if that write produced a new trusted revision. Fast mode returns trusted deterministic verification without an independent critic. Thorough mode also returns independent critic findings; after reading them, use refine-and-capture when the concrete refinement is known. Main applies that refinement through the same canonical path and captures only the successful refined revision. A failed prerequisite short-circuits later stages. If capture fails after a committed write, the result preserves that designRevision and reports capture-failed so you can recover without repeating the write. This tool does not replace inspect, Plan, image generation, Page approval, or dependencies whose result must be read before authoring the next stage.",
     inputSchema: DESIGN_CHECKPOINT_TOOL_INPUT_SCHEMA,

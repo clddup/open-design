@@ -159,7 +159,6 @@ describe("OpenDesign Pi tool adapter", () => {
         bootstrap: "deferred",
         afterInspection: "available",
         role: "material-write",
-        surfaces: ["general", "new-design"],
       },
     };
     const newDesignInspectTool: AgentToolDefinition = {
@@ -218,7 +217,6 @@ describe("OpenDesign Pi tool adapter", () => {
 
     expect(adapter.modelTools.map((tool) => tool.name)).toEqual([
       firstSliceTool.name,
-      checkpointTool.name,
       newDesignInspectTool.name,
     ]);
   });
