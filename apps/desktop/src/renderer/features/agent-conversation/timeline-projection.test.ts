@@ -619,6 +619,51 @@ describe("Agent continuation timeline projection", () => {
     );
   });
 
+  it("resolves correction from an internal committed revision without showing it", () => {
+    const runId = "run_recovery_resolved";
+    const items = projectAgentTimeline({
+      activeRunId: runId,
+      events: [
+        {
+          type: "tool.failed",
+          runId,
+          toolCallId: "stale_write",
+          code: "design_target_stale",
+          message: "The target needs a fresh inspection",
+          retryable: false,
+          recoverable: true,
+        },
+        {
+          type: "tool.progress",
+          runId,
+          toolCallId: "repair_write",
+          message: "设计步骤：修复目标 · r3",
+          progress: 0.8,
+        },
+      ],
+      locale: "zh-CN",
+      stoppingRunId: null,
+      timeline: [],
+      t: (key, parameters) => translate("zh-CN", key, parameters),
+    });
+
+    expect(items).toContainEqual(
+      expect.objectContaining({
+        id: `design-recovery:${runId}`,
+        state: "done",
+        title: "设计结构已修正 · 1 次",
+      }),
+    );
+    expect(items).toContainEqual(
+      expect.objectContaining({
+        id: "design-step:repair_write:3",
+        revision: 3,
+        time: "完成",
+      }),
+    );
+    expect(items.some((item) => /\br\d+\b/.test(item.time))).toBe(false);
+  });
+
   it("keeps assistant text before tools while hiding routine component repair failures", () => {
     const runId = "run_component_repair";
     const events: AgentEvent[] = [
@@ -885,7 +930,13 @@ describe("Agent continuation timeline projection", () => {
     ).toHaveLength(1);
     expect(
       projected.find((item) => item.id === "design-step:apply_steps:2"),
-    ).toMatchObject({ title: "完成 Hero", time: "r2", state: "done" });
+    ).toMatchObject({
+      title: "完成 Hero",
+      time: "完成",
+      revision: 2,
+      state: "done",
+    });
+    expect(projected.some((item) => /\br\d+\b/.test(item.time))).toBe(false);
   });
 
   it("keeps a legacy run-start item after its user message", () => {

@@ -832,6 +832,11 @@ describe("AgentTimeline", () => {
     );
 
     expect(screen.getByText("Design change completed")).toBeInTheDocument();
+    expect(
+      [...container.querySelectorAll<HTMLElement>("[title]")].some((node) =>
+        /\br\d+\b/.test(node.title),
+      ),
+    ).toBe(false);
     expect(container).not.toHaveTextContent(
       "Validating design tool parameters and revision",
     );
@@ -872,6 +877,11 @@ describe("AgentTimeline", () => {
     );
 
     expect(screen.getByText("Design change completed")).toBeInTheDocument();
+    expect(
+      [...container.querySelectorAll<HTMLElement>("[title]")].some((node) =>
+        /\br\d+\b/.test(node.title),
+      ),
+    ).toBe(false);
     expect(container).not.toHaveTextContent(
       "Validating design tool parameters and revision",
     );

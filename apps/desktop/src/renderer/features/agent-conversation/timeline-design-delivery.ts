@@ -6,7 +6,7 @@ import {
   isDesignDeliveryLedger,
   type DesignDeliveryLedger,
 } from "@opendesign/workspace-contracts";
-import type { AgentTimelineItem } from "./timeline-types";
+import type { AgentTimelineItem, Translate } from "./timeline-types";
 
 export function latestDeliveryLedger(
   timeline: readonly SessionTimelineItem[],
@@ -31,6 +31,7 @@ export function latestDeliveryLedger(
 
 export function projectDurableDesignSteps(
   timeline: readonly SessionTimelineItem[],
+  t: Translate,
 ): AgentTimelineItem[] {
   return timeline.flatMap((item) => {
     if (item.type !== "tool" || item.status !== "completed") return [];
@@ -42,7 +43,8 @@ export function projectDurableDesignSteps(
       state: "done" as const,
       kind: "system" as const,
       toolCallId: item.toolCallId,
-      time: `r${step.revision}`,
+      revision: step.revision,
+      time: t("common.done"),
       title: step.label,
     }));
   });

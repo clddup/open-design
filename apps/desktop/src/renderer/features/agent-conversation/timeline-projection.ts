@@ -91,7 +91,7 @@ export function projectAgentTimeline({
     t,
   );
   durable.push(...projectDurablePlans(timeline, t));
-  durable.push(...projectDurableDesignSteps(timeline));
+  durable.push(...projectDurableDesignSteps(timeline, t));
   const runOrder = new Map<string, number>();
   const recordRun = (runId: string | undefined) => {
     if (runId && !runOrder.has(runId)) runOrder.set(runId, runOrder.size);
@@ -234,7 +234,7 @@ function collapseRecoverableFailures(
         item.order > lastFailure.order &&
         ((item.kind === "tool" &&
           item.state === "done" &&
-          /^r\d+$/.test(item.time)) ||
+          item.revision !== undefined) ||
           item.id.startsWith("design-step:") ||
           item.id.startsWith("design-revision:")),
     );
@@ -461,6 +461,7 @@ function projectDurableTimeline(
             item.runId !== activeRunId),
         state,
         kind: "tool",
+        ...(item.revision === undefined ? {} : { revision: item.revision }),
         toolName: item.toolName,
         title:
           state === "error"
@@ -502,6 +503,7 @@ function projectDurableTimeline(
     if (item.type === "design.revision") {
       return {
         ...base,
+        revision: item.revision,
         routine: true,
         state: "done",
         kind: "tool",
@@ -807,7 +809,8 @@ function projectLiveEvents(
             state: "done",
             kind: "system",
             toolCallId: event.toolCallId,
-            time: `r${committedDesignStep.revision}`,
+            revision: committedDesignStep.revision,
+            time: t("common.done"),
             title: committedDesignStep.label,
           },
         );
@@ -819,10 +822,8 @@ function projectLiveEvents(
         state: "done",
         kind: "tool",
         detail: undefined,
-        time:
-          event.revision === undefined
-            ? t("common.done")
-            : `r${event.revision}`,
+        ...(event.revision === undefined ? {} : { revision: event.revision }),
+        time: t("common.done"),
         title: toolTitle(existing?.toolName ?? "", "done", t),
       });
       const plan = projectDesignPlanTimeline(existing?.toolName, event.result);

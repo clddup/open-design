@@ -31,6 +31,8 @@ export interface AgentTimelineItem {
   recoverableFailure?: boolean;
   failureCode?: string;
   failureMessage?: string;
+  /** Internal document revision used for reconciliation, never rendered as UI text. */
+  revision?: number;
   order: number;
   approvalId?: string;
   toolCallId?: string;

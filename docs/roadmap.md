@@ -60,6 +60,7 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 - [x] 打开 Conversation 由 Main 依次解析活动 Run、最近 Task 与归档 Project 默认文件，直接恢复准确 Project/Design File/Page；无有效目标时保留 Timeline 并禁用 Composer。
 - [x] Conversation 删除由 Main 活动 Run/continuation 权威门禁；已提交设计、文档 history 和 terminal Global Task 审计不随列表 tombstone 删除。见 [ADR-0094](adr/0094-workspace-owned-conversations.md)。
 - [x] Project 创建直接使用原生选择目录的 basename，不再重复输入名称；Project-backed Design File 可在没有 Conversation 时直接输入，首次发送惰性创建 Conversation 并立即提交同一 prompt。Agent Composer 正文独占整行，附件、Page/Selection 上下文和发送操作位于底部工具栏。见 [ADR-0150](adr/0150-project-contextual-conversation-workbench.md)。
+- [x] Agent Timeline 将文档 revision 保留为内部去重与恢复依据，不再把 `r数字` 投影到设计步骤、工具完成状态或悬浮提示；实时事件、持久化历史和重建路径统一显示本地化完成状态，避免把实现元数据误当成用户进度。
 
 ## P0-A：macOS 与 Windows 一级平台可用
 
