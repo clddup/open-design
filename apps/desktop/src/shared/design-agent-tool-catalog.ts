@@ -185,7 +185,10 @@ export const DESIGN_AGENT_TOOL_SPECS = [
   },
   {
     name: DESIGN_CAPTURE_TOOL_NAME,
-    modelDisclosure: { bootstrap: "deferred" as const },
+    modelDisclosure: {
+      bootstrap: "deferred" as const,
+      surfaces: ["general" as const, "new-design" as const],
+    },
     description:
       "Capture the Main-selected target in the Run-bound OpenDesign document as a bounded image and return it as multimodal content together with captureTarget, the observed document revision, and reviewWorkflow. After the planned artboard exists, captureTarget is that exact Frame; otherwise it is the bound Page. Frame captures return layoutQuality, a trusted exact-revision report over the complete rendered Component projection, clipping ancestor chain, artboard containment, quality profile, and production text layout. A componentTarget is the stable instanceId + sourcePath repair identity; projection node IDs are capture-only and must never be reused as persistent mutation targets. Overflow issues include world-space bounds plus parent-local repair geometry. When reviewWorkflow.nextAction is repair-layout-overflow, call the returned opendesign_edit_design arrange repair-overflow entry first; it expands safe trailing-edge delivery and persistent clipping Frames in one undoable revision, then capture again. If that bounded repair fails, inspect and explicitly correct the unsafe structure. The first representative new UI target and identity work receive the stateless exact-revision critic; later UI targets reuse that reviewed visual system but still fail deterministic verification when they are empty, flattened into one Text layer, structurally incomplete, or geometrically invalid. Follow reviewWorkflow.nextAction. Call record_visual_review only when reviewEligible is explicitly true as a legacy recovery path. Final verification may include a bounded non-blocking componentStrategy report when actual Component/Instance bindings differ from the model-authored plan; it is maintainability guidance and does not invalidate an otherwise useful visual delivery. The capture uses an isolated Leafer projection of the captured revision, so user pan, zoom, selection, window size, or switching to another open Design File cannot change its pixels or mutation target. Use this after a successful material design write to evaluate the rendered composition, hierarchy, spacing, proportions, and effects before recording the required visual review. A baseline capture before a write may inform planning but does not unlock review. This does not capture other applications, windows, files, or screens.",
     inputSchema: EMPTY_DESIGN_TOOL_INPUT_SCHEMA,
@@ -218,7 +221,10 @@ export const DESIGN_AGENT_TOOL_SPECS = [
   },
   {
     name: DESIGN_CHECKPOINT_TOOL_NAME,
-    modelDisclosure: { bootstrap: "deferred" as const },
+    modelDisclosure: {
+      bootstrap: "deferred" as const,
+      surfaces: ["general" as const, "new-design" as const],
+    },
     description:
       "Execute a real design checkpoint without a Provider round trip used only to request capture. Use apply-and-capture when the next material transaction is fully known: Main validates and commits it through the canonical apply path, then captures only if that write produced a new trusted revision. Fast mode returns trusted deterministic verification without an independent critic. Thorough mode also returns independent critic findings; after reading them, use refine-and-capture when the concrete refinement is known. Main applies that refinement through the same canonical path and captures only the successful refined revision. A failed prerequisite short-circuits later stages. If capture fails after a committed write, the result preserves that designRevision and reports capture-failed so you can recover without repeating the write. This tool does not replace inspect, Plan, image generation, Page approval, or dependencies whose result must be read before authoring the next stage.",
     inputSchema: DESIGN_CHECKPOINT_TOOL_INPUT_SCHEMA,
@@ -228,7 +234,10 @@ export const DESIGN_AGENT_TOOL_SPECS = [
   },
   {
     name: READ_IMAGE_TOOL_NAME,
-    modelDisclosure: { bootstrap: "available" as const },
+    modelDisclosure: {
+      bootstrap: "available" as const,
+      surfaces: ["general" as const, "new-design" as const],
+    },
     description:
       "Read an image that the user explicitly referenced in the current prompt or attached to the current run. source must be the exact attachment ID, absolute local path, file URL, or HTTP(S) image URL written by the user. The host resolves it as a bounded, content-addressed image attachment and returns multimodal content. This tool cannot enumerate directories, discover neighboring files, use browser cookies, or read an unmentioned source.",
     inputSchema: READ_IMAGE_TOOL_INPUT_SCHEMA,
@@ -241,6 +250,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     modelDisclosure: {
       bootstrap: "available" as const,
       beforePlan: "deferred" as const,
+      surfaces: ["general" as const, "new-design" as const],
     },
     description:
       "Generate one original raster image with OpenDesign's globally configured image-generation model. A successful opendesign_define_design_plan call must already declare the exact role as reference, background, hero, supporting-content, or final-single-image. This selection is application-wide and independent of the current conversation model. The result is staged immediately as a persistent current-Design-File asset and also returned as a current-Run attachment. Call opendesign_place_image only for a declared placeable role. The tool never accepts a provider or model ID and fails explicitly when no global image-generation model is configured.",
@@ -254,6 +264,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     modelDisclosure: {
       bootstrap: "deferred" as const,
       role: "material-write" as const,
+      surfaces: ["general" as const, "new-design" as const],
     },
     description:
       "Place either a current-Run image attachment or a persistent assetId returned by current Design File inspection. Supply exactly one source. A successful design plan must declare the image role. Existing assetId placement requires explicit width and height. Editable posters must first create their planned artboard Frame with meaningful editable shape/text content, then place the image inside that existing Frame or one of its inspected/current descendants; parentId may never be null for this flow. Do not copy attachmentId into image assetId. Editable posters cannot use final-single-image. The host inserts one image node through the same atomic OpenDesign transaction and revision history as every other design edit.",
@@ -333,6 +344,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
       bootstrap: "available" as const,
       beforePlan: "available" as const,
       role: "material-write" as const,
+      surfaces: ["general" as const, "new-design" as const],
       bootstrapDescription:
         "Perform one basic inspected node edit inside an existing planned artboard. Use one node edit entry and the compact insert, property update, move, and delete command schema. New artboard roots still use opendesign_generate_first_slice. After a material revision, this same tool expands to hierarchy and layout edits without changing tool names.",
       bootstrapInputSchema: DESIGN_BOOTSTRAP_EDIT_TOOL_INPUT_SCHEMA,
@@ -362,6 +374,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     modelDisclosure: {
       bootstrap: "deferred" as const,
       role: "material-write" as const,
+      surfaces: ["general" as const, "new-design" as const],
     },
     description:
       "Manage the current Design File's reusable design system through one typed boundary. Choose kind=component for Component Mains, Instances, Variants, properties, Slots, overrides, detach, and Go to main; kind=variable for collections, modes, values, aliases, scopes, code syntax, bindings, and mode overrides; or kind=style for local Paint, Text, Effect, and Grid Style creation, metadata, ordering, references, detach, and deletion. Each kind preserves its dedicated versioned service, stable inspected IDs, Page scope, preview, atomic revision, and one undo step. Imported Library snapshots remain read-only. Do not write Component definitions, Style registries, Variable registries, or their references through generic node edits.",

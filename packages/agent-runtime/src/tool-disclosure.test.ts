@@ -93,24 +93,32 @@ describe("model tool disclosure", () => {
         role: "plan" as const,
       },
     };
+    const newDesignVisible = {
+      ...definition,
+      name: "opendesign_capture_canvas",
+      modelDisclosure: {
+        bootstrap: "deferred" as const,
+        surfaces: ["general", "new-design"] as const,
+      },
+    };
 
     expect(
       disclosedToolDefinitions(
-        [definition, compact, inspection, plan],
+        [definition, compact, inspection, plan, newDesignVisible],
         "host-inspected",
         { surface: "new-design" },
       ).map((tool) => tool.name),
     ).toEqual([compact.name, inspection.name]);
     expect(
       disclosedToolDefinitions(
-        [definition, compact, inspection, plan],
+        [definition, compact, inspection, plan, newDesignVisible],
         "continuation",
         { surface: "new-design" },
       ).map((tool) => tool.name),
-    ).toEqual([definition.name, compact.name, inspection.name]);
+    ).toEqual([compact.name, inspection.name, newDesignVisible.name]);
     expect(
       resolveModelToolDisclosurePhase(
-        [definition, compact, inspection, plan],
+        [definition, compact, inspection, plan, newDesignVisible],
         [
           {
             toolCallId: "slice_1",
@@ -123,6 +131,34 @@ describe("model tool disclosure", () => {
         { initialInspection: true, surface: "new-design" },
       ),
     ).toBe("continuation");
+  });
+
+  it("keeps a new-design continuation on its compact surface", () => {
+    const generalOnly = {
+      ...definition,
+      name: "opendesign_manage_fonts",
+      modelDisclosure: { bootstrap: "deferred" as const },
+    };
+    const compact = {
+      ...definition,
+      name: "opendesign_edit_design",
+      modelDisclosure: {
+        bootstrap: "available" as const,
+        role: "material-write" as const,
+        surfaces: ["general", "new-design"] as const,
+      },
+    };
+
+    expect(
+      disclosedToolDefinitions([generalOnly, compact], "continuation", {
+        surface: "new-design",
+      }).map((tool) => tool.name),
+    ).toEqual([compact.name]);
+    expect(
+      disclosedToolDefinitions([generalOnly, compact], "continuation", {
+        surface: "general",
+      }).map((tool) => tool.name),
+    ).toEqual([generalOnly.name, compact.name]);
   });
 
   it("allows a compact first material slice beside Plan on the host-inspected surface", () => {

@@ -18,10 +18,12 @@ export function disclosedToolDefinitions(
     deliveryScopeReview?: "direct" | "required";
   } = {},
 ): AgentToolDefinition[] {
+  // Keep a new-design Run on its compact surface after the first material
+  // revision. Treating continuation as general silently exposed the full
+  // professional catalog and made tool selection noisy at the point where
+  // the model should continue the current visual stage.
   const surface =
-    phase === "expanded" || phase === "continuation"
-      ? "general"
-      : (options.surface ?? "general");
+    phase === "expanded" ? "general" : (options.surface ?? "general");
   const visibleDefinitions = definitions.filter((definition) => {
     if (
       definition.modelDisclosure?.whenDeliveryScopeReview === "required" &&

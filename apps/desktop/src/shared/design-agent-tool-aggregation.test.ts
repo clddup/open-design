@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { disclosedToolDefinitions } from "@opendesign/agent-runtime";
 import {
   DESIGN_AGENT_TOOL_SPECS,
   DESIGN_CAPABILITIES_TOOL_NAME,
@@ -143,5 +144,34 @@ describe("design Agent tool aggregation", () => {
         path: "/input/target/id",
       }),
     );
+  });
+
+  it("keeps new-design continuation focused on the current visual stage", () => {
+    const names = new Set(
+      disclosedToolDefinitions(DESIGN_AGENT_TOOL_SPECS, "continuation", {
+        surface: "new-design",
+        deliveryScopeReview: "direct",
+      }).map((tool) => tool.name),
+    );
+
+    for (const name of [
+      DESIGN_FIRST_SLICE_TOOL_NAME,
+      DESIGN_INSPECT_TOOL_NAME,
+      DESIGN_CAPTURE_TOOL_NAME,
+      DESIGN_CHECKPOINT_TOOL_NAME,
+      DESIGN_EDIT_TOOL_NAME,
+      DESIGN_SYSTEM_TOOL_NAME,
+    ]) {
+      expect(names.has(name), name).toBe(true);
+    }
+    for (const name of [
+      DESIGN_VECTOR_TOOL_NAME,
+      DESIGN_TEXT_RANGE_TOOL_NAME,
+      DESIGN_FONT_TOOL_NAME,
+      DESIGN_PAGE_TOOL_NAME,
+      DESIGN_CAPABILITIES_TOOL_NAME,
+    ]) {
+      expect(names.has(name), name).toBe(false);
+    }
   });
 });

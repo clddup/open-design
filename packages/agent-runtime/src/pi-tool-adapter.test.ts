@@ -134,7 +134,7 @@ class RecordingGateway implements ModelGateway {
 }
 
 describe("OpenDesign Pi tool adapter", () => {
-  it("exposes continuation tools without first-slice or Plan after a compact material revision", async () => {
+  it("keeps the next compact stage available after a material revision", async () => {
     const firstSliceTool: AgentToolDefinition = {
       ...moveTool,
       name: "opendesign_generate_first_slice",
@@ -159,11 +159,25 @@ describe("OpenDesign Pi tool adapter", () => {
         bootstrap: "deferred",
         afterInspection: "available",
         role: "material-write",
+        surfaces: ["general", "new-design"],
+      },
+    };
+    const newDesignInspectTool: AgentToolDefinition = {
+      ...inspectTool,
+      modelDisclosure: {
+        bootstrap: "available",
+        role: "inspection",
+        surfaces: ["general", "new-design"],
       },
     };
     const adapter = new OpenDesignPiToolAdapter({
       request,
-      definitions: [firstSliceTool, planTool, checkpointTool, inspectTool],
+      definitions: [
+        firstSliceTool,
+        planTool,
+        checkpointTool,
+        newDesignInspectTool,
+      ],
       toolExecutor: {
         async *execute(_call, context): AsyncIterable<ToolExecutionEvent> {
           await Promise.resolve();
@@ -191,6 +205,7 @@ describe("OpenDesign Pi tool adapter", () => {
 
     expect(adapter.modelTools.map((tool) => tool.name)).toEqual([
       firstSliceTool.name,
+      newDesignInspectTool.name,
     ]);
 
     const firstSlice = adapter.modelTools[0];
@@ -202,8 +217,9 @@ describe("OpenDesign Pi tool adapter", () => {
     );
 
     expect(adapter.modelTools.map((tool) => tool.name)).toEqual([
+      firstSliceTool.name,
       checkpointTool.name,
-      inspectTool.name,
+      newDesignInspectTool.name,
     ]);
   });
 
