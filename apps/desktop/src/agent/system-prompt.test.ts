@@ -269,7 +269,13 @@ describe("OpenDesign Agent system prompt", () => {
       "A high-confidence new-design stage uses generate_first_slice",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
-      "with opendesign_design_checkpoint action apply-and-capture",
+      "a new-design Run remains on its compact continuation surface",
+    );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "the compact edit includes basic node changes and deterministic layout repair",
+    );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "General Runs may use opendesign_design_checkpoint action apply-and-capture",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
       "thorough mode also returns independent critic findings",
