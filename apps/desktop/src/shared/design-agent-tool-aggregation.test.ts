@@ -149,12 +149,15 @@ describe("design Agent tool aggregation", () => {
   });
 
   it("keeps new-design continuation focused on the current visual stage", () => {
-    const names = new Set(
-      disclosedToolDefinitions(DESIGN_AGENT_TOOL_SPECS, "continuation", {
+    const visibleTools = disclosedToolDefinitions(
+      DESIGN_AGENT_TOOL_SPECS,
+      "continuation",
+      {
         surface: "new-design",
         deliveryScopeReview: "direct",
-      }).map((tool) => tool.name),
+      },
     );
+    const names = new Set(visibleTools.map((tool) => tool.name));
 
     for (const name of [
       DESIGN_FIRST_SLICE_TOOL_NAME,
@@ -174,6 +177,13 @@ describe("design Agent tool aggregation", () => {
     ]) {
       expect(names.has(name), name).toBe(false);
     }
+
+    const firstSlice = visibleTools.find(
+      (tool) => tool.name === DESIGN_FIRST_SLICE_TOOL_NAME,
+    );
+    expect(firstSlice?.description).toContain(
+      "a new-design Run remains on its compact continuation surface",
+    );
 
     const system = disclosedToolDefinitions(
       DESIGN_AGENT_TOOL_SPECS,
