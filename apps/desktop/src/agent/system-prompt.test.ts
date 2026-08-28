@@ -227,6 +227,12 @@ describe("OpenDesign Agent system prompt", () => {
       "A successful first-slice call already registered that bounded stage",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "On a new-design continuation, use opendesign_edit_design and capture_canvas",
+    );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).not.toContain(
+      "finish it directly with apply/checkpoint",
+    );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
       "register a new one-target stage",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
