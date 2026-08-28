@@ -1,7 +1,10 @@
 import { executableJsonSchema } from "@opendesign/design-contracts";
 import { INTERNAL_DESIGN_APPLY_TOOL_INPUT_SCHEMA } from "./design-apply-input";
 import { DESIGN_BOOTSTRAP_APPLY_INPUT_SCHEMA } from "./design-bootstrap-apply-schema";
-import { DESIGN_ARRANGE_TOOL_INPUT_SCHEMA } from "./design-arrange-tool-schema";
+import {
+  DESIGN_ARRANGE_CONTINUATION_INPUT_SCHEMA,
+  DESIGN_ARRANGE_TOOL_INPUT_SCHEMA,
+} from "./design-arrange-tool-schema";
 import { DESIGN_HIERARCHY_TOOL_INPUT_SCHEMA } from "./design-agent-structure-tool-schema";
 import { DESIGN_APPLY_TOOL_INPUT_SCHEMA } from "./design-agent-operation-schemas";
 
@@ -26,8 +29,35 @@ function editBranch(kind: "node" | "hierarchy" | "arrange", input: unknown) {
 
 function editDesignSchema(
   nodeInput: unknown,
-  options: { nodeOnly?: boolean } = {},
+  options: {
+    arrangeInput?: unknown;
+    hierarchyInput?: unknown;
+    nodeOnly?: boolean;
+  } = {},
 ) {
+  const branches = [
+    editBranch("node", nodeInput),
+    ...(options.nodeOnly
+      ? []
+      : [
+          ...(options.hierarchyInput === null
+            ? []
+            : [
+                editBranch(
+                  "hierarchy",
+                  options.hierarchyInput ?? DESIGN_HIERARCHY_TOOL_INPUT_SCHEMA,
+                ),
+              ]),
+          ...(options.arrangeInput === null
+            ? []
+            : [
+                editBranch(
+                  "arrange",
+                  options.arrangeInput ?? DESIGN_ARRANGE_TOOL_INPUT_SCHEMA,
+                ),
+              ]),
+        ]),
+  ];
   return executableJsonSchema({
     type: "object",
     description:
@@ -39,13 +69,7 @@ function editDesignSchema(
         minItems: 1,
         maxItems: 16,
         items: {
-          anyOf: options.nodeOnly
-            ? [editBranch("node", nodeInput)]
-            : [
-                editBranch("node", nodeInput),
-                editBranch("hierarchy", DESIGN_HIERARCHY_TOOL_INPUT_SCHEMA),
-                editBranch("arrange", DESIGN_ARRANGE_TOOL_INPUT_SCHEMA),
-              ],
+          anyOf: branches,
         },
       },
     },
@@ -57,6 +81,14 @@ function editDesignSchema(
 export const DESIGN_BOOTSTRAP_EDIT_TOOL_INPUT_SCHEMA = editDesignSchema(
   DESIGN_BOOTSTRAP_APPLY_INPUT_SCHEMA,
   { nodeOnly: true },
+);
+
+export const DESIGN_CONTINUATION_EDIT_TOOL_INPUT_SCHEMA = editDesignSchema(
+  DESIGN_BOOTSTRAP_APPLY_INPUT_SCHEMA,
+  {
+    arrangeInput: DESIGN_ARRANGE_CONTINUATION_INPUT_SCHEMA,
+    hierarchyInput: null,
+  },
 );
 
 export const DESIGN_EDIT_TOOL_INPUT_SCHEMA = editDesignSchema(

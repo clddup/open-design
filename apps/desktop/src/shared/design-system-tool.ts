@@ -1,5 +1,8 @@
 import type { DesignComponentToolInput } from "./design-component-tool-contract";
-import { DESIGN_COMPONENT_TOOL_INPUT_SCHEMA } from "./design-component-tool-schema";
+import {
+  DESIGN_COMPONENT_AUTHORING_TOOL_INPUT_SCHEMA,
+  DESIGN_COMPONENT_TOOL_INPUT_SCHEMA,
+} from "./design-component-tool-schema";
 import type { DesignStyleToolInput } from "./design-style-tool-contract";
 import { DESIGN_STYLE_TOOL_INPUT_SCHEMA } from "./design-style-tool-schema";
 import type { DesignVariableToolInput } from "./design-variable-tool-contract";
@@ -44,6 +47,16 @@ const DESIGN_SYSTEM_INPUT_BRANCHES = [
   }),
 ] as const;
 
+const DESIGN_SYSTEM_COMPONENT_AUTHORING_BRANCH = executableJsonSchema({
+  type: "object",
+  properties: {
+    kind: { const: "component" },
+    input: DESIGN_COMPONENT_AUTHORING_TOOL_INPUT_SCHEMA,
+  },
+  required: ["kind", "input"],
+  additionalProperties: false,
+});
+
 export const DESIGN_SYSTEM_TOOL_INPUT_SCHEMA = executableJsonSchema({
   type: "object",
   description:
@@ -54,6 +67,25 @@ export const DESIGN_SYSTEM_TOOL_INPUT_SCHEMA = executableJsonSchema({
   },
   required: ["kind", "input"],
   anyOf: DESIGN_SYSTEM_INPUT_BRANCHES,
+  additionalProperties: false,
+});
+
+/**
+ * Provider projection for a new-design continuation. It is intentionally
+ * derived from the authoritative component branch above; Variable, Style,
+ * variant-management and instance-edit operations remain available in the
+ * complete general surface without burdening the first design run.
+ */
+export const DESIGN_SYSTEM_NEW_DESIGN_INPUT_SCHEMA = executableJsonSchema({
+  type: "object",
+  description:
+    "Create a justified reusable Component Main or a linked Component Instance for the current design. Use stable inspected IDs and keep one semantic component operation per call.",
+  properties: {
+    kind: { const: "component" },
+    input: DESIGN_COMPONENT_AUTHORING_TOOL_INPUT_SCHEMA,
+  },
+  required: ["kind", "input"],
+  anyOf: [DESIGN_SYSTEM_COMPONENT_AUTHORING_BRANCH],
   additionalProperties: false,
 });
 

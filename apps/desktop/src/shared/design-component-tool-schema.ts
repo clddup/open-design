@@ -508,48 +508,80 @@ const COMPONENT_ACTION_BRANCHES = [
   },
 ] as const;
 
-export const DESIGN_COMPONENT_TOOL_INPUT_SCHEMA = executableJsonSchema({
-  type: "object",
-  description:
-    "Create and place linked Components, manage Component Sets and Variants, author typed Boolean/Text/Instance-swap/Slot properties, edit instance properties and overrides, detach an Instance, or locate its Main. Every action has one closed field shape. Component, set, root, property, source-path, and Page IDs must come from current inspection; IDs for newly created definitions and layers must come from the active allocation namespace.",
-  properties: {
-    action: { enum: COMPONENT_ACTIONS },
-    label: LABEL_SCHEMA,
-    pageId: ID_SCHEMA,
-    componentId: ID_SCHEMA,
-    componentIds: COMPONENT_IDS_SCHEMA,
-    componentRootNodeId: ID_SCHEMA,
-    componentRootNodeIds: COMPONENT_IDS_SCHEMA,
-    sourceComponentId: ID_SCHEMA,
-    sourceRootNodeId: ID_SCHEMA,
-    variantSetId: ID_SCHEMA,
-    rootNodeId: ID_SCHEMA,
-    instanceId: ID_SCHEMA,
-    parentId: { anyOf: [ID_SCHEMA, { type: "null" }] },
-    index: NON_NEGATIVE_INDEX_SCHEMA,
-    x: { type: "number" },
-    y: { type: "number" },
-    name: DISPLAY_NAME_SCHEMA,
-    variantPropertiesByComponentId: VARIANT_PROPERTY_MATRIX_SCHEMA,
-    variantProperties: VARIANT_PROPERTIES_SCHEMA,
-    valuesByComponentId: VARIANT_PROPERTIES_SCHEMA,
-    propertyOrder: PROPERTY_ORDER_SCHEMA,
-    componentPropertyOrder: COMPONENT_PROPERTY_ORDER_SCHEMA,
-    values: VARIANT_VALUES_SCHEMA,
-    propertyId: ID_SCHEMA,
-    propertyName: PROPERTY_NAME_SCHEMA,
-    type: { enum: ["BOOLEAN", "TEXT", "INSTANCE_SWAP", "SLOT"] },
-    sourceNodeId: ID_SCHEMA,
-    preferredValues: PREFERRED_VALUES_SCHEMA,
-    settings: SLOT_SETTINGS_SCHEMA,
-    description: { type: "string", maxLength: 2_000 },
-    value: {
-      anyOf: [{ type: "boolean" }, { type: "string", maxLength: 100_000 }],
-    },
-    sourcePath: SOURCE_PATH_SCHEMA,
-    patch: OVERRIDE_PATCH_SCHEMA,
+const COMPONENT_TOOL_PROPERTIES = {
+  action: { enum: COMPONENT_ACTIONS },
+  label: LABEL_SCHEMA,
+  pageId: ID_SCHEMA,
+  componentId: ID_SCHEMA,
+  componentIds: COMPONENT_IDS_SCHEMA,
+  componentRootNodeId: ID_SCHEMA,
+  componentRootNodeIds: COMPONENT_IDS_SCHEMA,
+  sourceComponentId: ID_SCHEMA,
+  sourceRootNodeId: ID_SCHEMA,
+  variantSetId: ID_SCHEMA,
+  rootNodeId: ID_SCHEMA,
+  instanceId: ID_SCHEMA,
+  parentId: { anyOf: [ID_SCHEMA, { type: "null" }] },
+  index: NON_NEGATIVE_INDEX_SCHEMA,
+  x: { type: "number" },
+  y: { type: "number" },
+  name: DISPLAY_NAME_SCHEMA,
+  variantPropertiesByComponentId: VARIANT_PROPERTY_MATRIX_SCHEMA,
+  variantProperties: VARIANT_PROPERTIES_SCHEMA,
+  valuesByComponentId: VARIANT_PROPERTIES_SCHEMA,
+  propertyOrder: PROPERTY_ORDER_SCHEMA,
+  componentPropertyOrder: COMPONENT_PROPERTY_ORDER_SCHEMA,
+  values: VARIANT_VALUES_SCHEMA,
+  propertyId: ID_SCHEMA,
+  propertyName: PROPERTY_NAME_SCHEMA,
+  type: { enum: ["BOOLEAN", "TEXT", "INSTANCE_SWAP", "SLOT"] },
+  sourceNodeId: ID_SCHEMA,
+  preferredValues: PREFERRED_VALUES_SCHEMA,
+  settings: SLOT_SETTINGS_SCHEMA,
+  description: { type: "string", maxLength: 2_000 },
+  value: {
+    anyOf: [{ type: "boolean" }, { type: "string", maxLength: 100_000 }],
   },
-  required: ["action", "pageId"],
-  anyOf: COMPONENT_ACTION_BRANCHES,
-  additionalProperties: false,
-});
+  sourcePath: SOURCE_PATH_SCHEMA,
+  patch: OVERRIDE_PATCH_SCHEMA,
+} as const;
+
+const COMPONENT_AUTHORING_TOOL_PROPERTIES = {
+  action: { enum: COMPONENT_ACTIONS.slice(0, 2) },
+  label: LABEL_SCHEMA,
+  pageId: ID_SCHEMA,
+  componentId: ID_SCHEMA,
+  rootNodeId: ID_SCHEMA,
+  instanceId: ID_SCHEMA,
+  parentId: { anyOf: [ID_SCHEMA, { type: "null" }] },
+  index: NON_NEGATIVE_INDEX_SCHEMA,
+  x: { type: "number" },
+  y: { type: "number" },
+  name: DISPLAY_NAME_SCHEMA,
+} as const;
+
+function componentToolSchema(
+  description: string,
+  branches: readonly Record<string, unknown>[],
+  properties: Record<string, unknown> = COMPONENT_TOOL_PROPERTIES,
+) {
+  return executableJsonSchema({
+    type: "object",
+    description,
+    properties,
+    required: ["action", "pageId"],
+    anyOf: branches,
+    additionalProperties: false,
+  });
+}
+
+export const DESIGN_COMPONENT_TOOL_INPUT_SCHEMA = componentToolSchema(
+  "Create and place linked Components, manage Component Sets and Variants, author typed Boolean/Text/Instance-swap/Slot properties, edit instance properties and overrides, detach an Instance, or locate its Main. Every action has one closed field shape. Component, set, root, property, source-path, and Page IDs must come from current inspection; IDs for newly created definitions and layers must come from the active allocation namespace.",
+  COMPONENT_ACTION_BRANCHES,
+);
+
+export const DESIGN_COMPONENT_AUTHORING_TOOL_INPUT_SCHEMA = componentToolSchema(
+  "Create a Component Main or place a linked Component Instance for the current design. Use stable inspected IDs and the active allocation namespace.",
+  COMPONENT_ACTION_BRANCHES.slice(0, 2),
+  COMPONENT_AUTHORING_TOOL_PROPERTIES,
+);

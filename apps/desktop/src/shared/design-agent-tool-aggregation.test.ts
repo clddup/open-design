@@ -6,7 +6,9 @@ import {
   DESIGN_CAPTURE_TOOL_NAME,
   DESIGN_CHECKPOINT_TOOL_INPUT_SCHEMA,
   DESIGN_CHECKPOINT_TOOL_NAME,
+  DESIGN_CONTINUATION_EDIT_TOOL_INPUT_SCHEMA,
   DESIGN_SYSTEM_TOOL_INPUT_SCHEMA,
+  DESIGN_SYSTEM_NEW_DESIGN_INPUT_SCHEMA,
   DESIGN_SYSTEM_TOOL_NAME,
   DesignSystemContract,
   DESIGN_DELIVERY_SCOPE_TOOL_NAME,
@@ -172,5 +174,68 @@ describe("design Agent tool aggregation", () => {
     ]) {
       expect(names.has(name), name).toBe(false);
     }
+
+    const system = disclosedToolDefinitions(
+      DESIGN_AGENT_TOOL_SPECS,
+      "continuation",
+      { surface: "new-design", deliveryScopeReview: "direct" },
+    ).find((tool) => tool.name === DESIGN_SYSTEM_TOOL_NAME);
+    expect(system?.inputSchema).toBe(DESIGN_SYSTEM_NEW_DESIGN_INPUT_SCHEMA);
+    const componentSchema = (
+      DESIGN_SYSTEM_NEW_DESIGN_INPUT_SCHEMA as unknown as {
+        anyOf?: readonly {
+          properties?: {
+            input?: {
+              anyOf?: readonly unknown[];
+              properties?: { action?: { enum?: readonly string[] } };
+            };
+          };
+        }[];
+      }
+    ).anyOf?.[0]?.properties?.input;
+    expect(componentSchema?.anyOf).toHaveLength(2);
+    expect(componentSchema?.properties?.action?.enum).toEqual([
+      "create-component",
+      "create-instance",
+    ]);
+  });
+
+  it("keeps continuation edits capable of deterministic layout repair", () => {
+    const edit = disclosedToolDefinitions(
+      DESIGN_AGENT_TOOL_SPECS,
+      "continuation",
+      { surface: "new-design", deliveryScopeReview: "direct" },
+    ).find((tool) => tool.name === DESIGN_EDIT_TOOL_NAME);
+
+    expect(edit?.inputSchema).toBe(DESIGN_CONTINUATION_EDIT_TOOL_INPUT_SCHEMA);
+    const editSchema = edit?.inputSchema as {
+      properties?: {
+        edits?: {
+          items?: {
+            anyOf?: readonly {
+              properties?: { input?: unknown };
+            }[];
+          };
+        };
+      };
+    };
+    const branches = editSchema.properties?.edits?.items?.anyOf;
+    expect(branches).toHaveLength(2);
+
+    const arrangeSchema = branches?.[1]?.properties?.input as {
+      properties?: { action?: { enum?: readonly string[] } };
+    };
+    expect(arrangeSchema.properties?.action?.enum).toEqual(
+      expect.arrayContaining([
+        "align-left",
+        "tidy-up",
+        "set-horizontal-spacing",
+        "repair-overflow",
+        "resize-frame",
+      ]),
+    );
+    expect(arrangeSchema.properties?.action?.enum).not.toContain(
+      "set-grid-placement",
+    );
   });
 });

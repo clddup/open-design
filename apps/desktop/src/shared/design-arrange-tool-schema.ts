@@ -208,32 +208,71 @@ const ARRANGE_ACTION_BRANCHES = [
   ),
 ] as const;
 
+const CONTINUATION_ARRANGE_ACTIONS = [
+  ...ALIGN_ACTIONS,
+  ...DISTRIBUTION_ACTIONS,
+  ...SPACING_ACTIONS,
+  "repair-overflow",
+  "resize-frame",
+] as const;
+
+const ARRANGE_TOOL_PROPERTIES = {
+  action: { enum: DESIGN_ARRANGE_ACTIONS },
+  label: LABEL_SCHEMA,
+  pageId: ID_SCHEMA,
+  nodeIds: nodeIdsSchema(2),
+  spacing: SPACING_SCHEMA,
+  nodeId: ID_SCHEMA,
+  constraints: LayoutConstraintsSchema,
+  positioning: { enum: ["flow", "absolute"] },
+  frameId: ID_SCHEMA,
+  width: FRAME_SIZE_SCHEMA,
+  height: FRAME_SIZE_SCHEMA,
+  axis: { enum: ["rows", "columns"] },
+  fromIndices: FROM_INDICES_SCHEMA,
+  insertionIndex: { type: "integer", minimum: 0, maximum: 4_096 },
+  autoLayout: AutoLayoutSchema,
+  placement: GridChildPlacementSchema,
+  sizing: LayoutSizingSchema,
+  limits: { anyOf: [LayoutLimitsSchema, { type: "null" }] },
+  layoutGuides: LAYOUT_GUIDES_SCHEMA,
+} as const;
+
+const ARRANGE_CONTINUATION_ACTION_BRANCHES = ARRANGE_ACTION_BRANCHES.filter(
+  (branch) =>
+    CONTINUATION_ARRANGE_ACTIONS.includes(
+      branch.properties.action
+        .const as (typeof CONTINUATION_ARRANGE_ACTIONS)[number],
+    ),
+);
+
+const ARRANGE_CONTINUATION_TOOL_PROPERTIES = {
+  action: { enum: CONTINUATION_ARRANGE_ACTIONS },
+  label: LABEL_SCHEMA,
+  pageId: ID_SCHEMA,
+  nodeIds: nodeIdsSchema(2),
+  spacing: SPACING_SCHEMA,
+  frameId: ID_SCHEMA,
+  width: FRAME_SIZE_SCHEMA,
+  height: FRAME_SIZE_SCHEMA,
+} as const;
+
 export const DESIGN_ARRANGE_TOOL_INPUT_SCHEMA = executableJsonSchema({
   type: "object",
   description:
     "Arrange explicit inspected layers with one of 21 closed action shapes. Align needs at least two unique layer IDs; distribute and tidy-up need at least three. Spacing may be negative, zero, or positive. Constraints, Frame resize, linear/wrapped Auto Layout, Auto Layout Grid, child sizing/positioning/limits, Grid placement/track reorder, Layout Guides, and bounded overflow repair use the same Figma-shaped document fields as the Runtime. Grid autoTracks is valid only for row-auto-flow. Layout Guide IDs must be unique. The host owns current Page/revision checks, geometry, preview, transaction, and undo.",
-  properties: {
-    action: { enum: DESIGN_ARRANGE_ACTIONS },
-    label: LABEL_SCHEMA,
-    pageId: ID_SCHEMA,
-    nodeIds: nodeIdsSchema(2),
-    spacing: SPACING_SCHEMA,
-    nodeId: ID_SCHEMA,
-    constraints: LayoutConstraintsSchema,
-    positioning: { enum: ["flow", "absolute"] },
-    frameId: ID_SCHEMA,
-    width: FRAME_SIZE_SCHEMA,
-    height: FRAME_SIZE_SCHEMA,
-    axis: { enum: ["rows", "columns"] },
-    fromIndices: FROM_INDICES_SCHEMA,
-    insertionIndex: { type: "integer", minimum: 0, maximum: 4_096 },
-    autoLayout: AutoLayoutSchema,
-    placement: GridChildPlacementSchema,
-    sizing: LayoutSizingSchema,
-    limits: { anyOf: [LayoutLimitsSchema, { type: "null" }] },
-    layoutGuides: LAYOUT_GUIDES_SCHEMA,
-  },
+  properties: ARRANGE_TOOL_PROPERTIES,
   required: ["action", "label", "pageId"],
   anyOf: ARRANGE_ACTION_BRANCHES,
+  additionalProperties: false,
+});
+
+export const DESIGN_ARRANGE_CONTINUATION_INPUT_SCHEMA = executableJsonSchema({
+  type: "object",
+  description:
+    "Repair and visually align explicit inspected layers inside the current design. Use align, distribute, spacing, repair-overflow, or resize-frame; the host owns geometry, preview, revision, and undo.",
+  properties: ARRANGE_CONTINUATION_TOOL_PROPERTIES,
+  required: ["action", "label", "pageId"],
+  anyOf: ARRANGE_CONTINUATION_ACTION_BRANCHES,
   additionalProperties: false,
 });

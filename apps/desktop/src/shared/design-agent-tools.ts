@@ -4,6 +4,7 @@ export {
 } from "./design-apply-input";
 export {
   DESIGN_BOOTSTRAP_EDIT_TOOL_INPUT_SCHEMA,
+  DESIGN_CONTINUATION_EDIT_TOOL_INPUT_SCHEMA,
   DESIGN_EDIT_TOOL_INPUT_SCHEMA,
   EditDesignContract,
   INTERNAL_DESIGN_EDIT_TOOL_INPUT_SCHEMA,
@@ -123,6 +124,7 @@ export { DESIGN_STYLE_TOOL_INPUT_SCHEMA } from "./design-style-tool-schema";
 export type { DesignStyleToolInput } from "./design-style-tool";
 export {
   DesignSystemContract,
+  DESIGN_SYSTEM_NEW_DESIGN_INPUT_SCHEMA,
   DESIGN_SYSTEM_TOOL_INPUT_SCHEMA,
 } from "./design-system-tool";
 export type { DesignSystemToolInput } from "./design-system-tool";

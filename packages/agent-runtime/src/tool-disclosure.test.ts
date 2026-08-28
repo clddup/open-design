@@ -161,6 +161,33 @@ describe("model tool disclosure", () => {
     ).toEqual([generalOnly.name, compact.name]);
   });
 
+  it("uses a continuation-specific Provider schema without changing execution", () => {
+    const continuationSchema = {
+      type: "object",
+      additionalProperties: false,
+    } as const;
+    const continuation = {
+      ...definition,
+      modelDisclosure: {
+        bootstrap: "deferred" as const,
+        continuationDescription: "Compact continuation",
+        continuationInputSchema: continuationSchema,
+      },
+    };
+
+    const [projected] = disclosedToolDefinitions(
+      [continuation],
+      "continuation",
+      { surface: "general" },
+    );
+
+    expect(projected).toMatchObject({
+      description: "Compact continuation",
+      inputSchema: continuationSchema,
+    });
+    expect(projected?.validateInputIssues?.({})).toEqual([]);
+  });
+
   it("allows a compact first material slice beside Plan on the host-inspected surface", () => {
     const inspection = {
       ...definition,

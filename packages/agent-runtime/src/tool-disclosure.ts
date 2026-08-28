@@ -36,9 +36,9 @@ export function disclosedToolDefinitions(
   });
   if (phase === "expanded") return visibleDefinitions;
   if (phase === "continuation") {
-    return visibleDefinitions.filter(
-      (definition) => definition.modelDisclosure?.role !== "plan",
-    );
+    return visibleDefinitions
+      .filter((definition) => definition.modelDisclosure?.role !== "plan")
+      .map((definition) => projectDisclosure(definition, phase));
   }
   return visibleDefinitions.flatMap((definition) => {
     const disclosure = definition.modelDisclosure;
@@ -56,14 +56,31 @@ export function disclosedToolDefinitions(
     ) {
       return [];
     }
-    return [
-      {
-        ...definition,
-        description: disclosure.bootstrapDescription ?? definition.description,
-        inputSchema: disclosure.bootstrapInputSchema ?? definition.inputSchema,
-      },
-    ];
+    return [projectDisclosure(definition, phase)];
   });
+}
+
+function projectDisclosure(
+  definition: AgentToolDefinition,
+  phase: ModelToolDisclosurePhase,
+): AgentToolDefinition {
+  const disclosure = definition.modelDisclosure;
+  if (disclosure === undefined) return definition;
+  return {
+    ...definition,
+    description:
+      phase === "continuation"
+        ? (disclosure.continuationDescription ??
+          disclosure.bootstrapDescription ??
+          definition.description)
+        : (disclosure.bootstrapDescription ?? definition.description),
+    inputSchema:
+      phase === "continuation"
+        ? (disclosure.continuationInputSchema ??
+          disclosure.bootstrapInputSchema ??
+          definition.inputSchema)
+        : (disclosure.bootstrapInputSchema ?? definition.inputSchema),
+  };
 }
 
 export function deliveryScopeReviewToolDefinitions(

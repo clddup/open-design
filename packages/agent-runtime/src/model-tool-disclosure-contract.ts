@@ -42,6 +42,10 @@ export const ModelToolDisclosureSchema = Type.Object(
       Type.String({ minLength: 1, maxLength: 20_000 }),
     ),
     bootstrapInputSchema: Type.Optional(ProviderObjectInputSchema),
+    continuationDescription: Type.Optional(
+      Type.String({ minLength: 1, maxLength: 20_000 }),
+    ),
+    continuationInputSchema: Type.Optional(ProviderObjectInputSchema),
     whenDeliveryScopeReview: Type.Optional(Type.Literal("required")),
   },
   { additionalProperties: false },
@@ -54,6 +58,8 @@ export type ModelToolDisclosure = Omit<
 > & {
   surfaces?: readonly ModelToolSurface[];
   bootstrapInputSchema?: Record<string, unknown>;
+  continuationDescription?: string;
+  continuationInputSchema?: Record<string, unknown>;
 };
 
 export const ModelToolDisclosureContract = defineContract<ModelToolDisclosure>({

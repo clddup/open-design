@@ -13,6 +13,7 @@ import {
 import { DesignApplyContract } from "./design-apply-input";
 import {
   DESIGN_BOOTSTRAP_EDIT_TOOL_INPUT_SCHEMA,
+  DESIGN_CONTINUATION_EDIT_TOOL_INPUT_SCHEMA,
   DESIGN_EDIT_TOOL_INPUT_SCHEMA,
   EditDesignContract,
 } from "./design-edit-tool";
@@ -104,6 +105,7 @@ import { DesignVariableContract } from "./design-variable-tool";
 import { DesignStyleContract } from "./design-style-tool";
 import {
   DesignSystemContract,
+  DESIGN_SYSTEM_NEW_DESIGN_INPUT_SCHEMA,
   DESIGN_SYSTEM_TOOL_INPUT_SCHEMA,
 } from "./design-system-tool";
 
@@ -345,6 +347,9 @@ export const DESIGN_AGENT_TOOL_SPECS = [
       bootstrapDescription:
         "Perform one basic inspected node edit inside an existing planned artboard. Use one node edit entry and the compact insert, property update, move, and delete command schema. New artboard roots still use opendesign_generate_first_slice. After a material revision, this same tool expands to hierarchy and layout edits without changing tool names.",
       bootstrapInputSchema: DESIGN_BOOTSTRAP_EDIT_TOOL_INPUT_SCHEMA,
+      continuationDescription:
+        "Continue the current design with basic node edits plus compact visual layout repair. Use align, distribute, spacing, repair-overflow, or resize-frame when the inspected capture shows a geometry problem; keep all targets inside the active delivery artboard.",
+      continuationInputSchema: DESIGN_CONTINUATION_EDIT_TOOL_INPUT_SCHEMA,
     },
     description:
       "Edit the current OpenDesign document through one ordered atomic operation. Combine one direct node transaction with related hierarchy or layout edits when they belong together; the host projects every edit in order, routes hierarchy and arrangement through the existing Figma-style planners, then commits the complete command set as one revision and one undo step. Node edits support insert, property update, move, delete, and subtree replacement, including properties.network for editable vectors and exact imported SVG path data; never provide path and network together. Text node edits use the trusted provider that measures Auto Size and derived ending ellipsis. Hierarchy edits support group/ungroup, masks, Boolean groups, sibling order, and reparent while preserving world geometry. Arrange edits support host-computed geometry for alignment, distribution, spacing, two-dimensional Tidy up, responsive Frame resize, Constraints v1, Auto gap, linear/Wrap/Grid Auto Layout, first-line baseline, Fill child's minimum width, stretched rows, counterAxisAlignContent, min/max clamping, absolute child positioning, Grid placement/track order, Layout Guides, and overflow repair. Smart Selection canvas handles remain a human canvas surface. Use stable IDs from inspection, keep all edits inside one delivery artboard, and order dependent edits exactly as they should execute. Do not calculate planner-owned transforms or derived layout geometry yourself. Component, Style, Variable, Vector, typography, image, Page, and export semantics remain dedicated tools.",
@@ -372,6 +377,9 @@ export const DESIGN_AGENT_TOOL_SPECS = [
       bootstrap: "deferred" as const,
       role: "material-write" as const,
       surfaces: ["general" as const, "new-design" as const],
+      continuationDescription:
+        "Create a justified reusable Component Main or linked Component Instance for the current design. Use this only when the design intent identifies a repeated semantic object; otherwise keep the object as an ordinary named Frame/Group.",
+      continuationInputSchema: DESIGN_SYSTEM_NEW_DESIGN_INPUT_SCHEMA,
     },
     description:
       "Manage the current Design File's reusable design system through one typed boundary. Choose kind=component for Component Mains, Instances, Variants, properties, Slots, overrides, detach, and Go to main; kind=variable for collections, modes, values, aliases, scopes, code syntax, bindings, and mode overrides; or kind=style for local Paint, Text, Effect, and Grid Style creation, metadata, ordering, references, detach, and deletion. Each kind preserves its dedicated versioned service, stable inspected IDs, Page scope, preview, atomic revision, and one undo step. Imported Library snapshots remain read-only. Do not write Component definitions, Style registries, Variable registries, or their references through generic node edits.",
