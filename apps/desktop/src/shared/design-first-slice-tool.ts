@@ -181,7 +181,7 @@ function chunkRequiredContent(value: string): string[] {
 }
 
 function refineFirstSlice(
-  input: DesignFirstSliceCanonicalInput,
+  input: DesignFirstSliceToolInput,
   context: FirstSliceContractContext,
 ): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
@@ -249,7 +249,7 @@ function refineFirstSlice(
       ...(input.logoColorStrategy === undefined
         ? {}
         : {
-            strategy: input.logoColorStrategy as DesignLogoColorStrategy,
+            strategy: input.logoColorStrategy,
           }),
     }),
   );

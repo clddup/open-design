@@ -32,6 +32,7 @@ Monochrome 是必要的鲁棒性测试，不应默认成为品牌主方案。颜
 ## 验证
 
 - 纯黑白 `brand-color` palette 在 Plan 与 First Slice 都返回准确字段路径。
+- compact First Slice 的同一可执行 schema 按 `deliverable` 选择条件分支：`logo` 必须提供 `logoColorStrategy`，非 Logo 交付不被强制提供；Provider 与 Runtime 共用该结构，避免 Logo 缺字段或非 Logo 节点错误被泛化为无进展重试。
 - `monochrome-by-brief` 会拒绝“包含 monochrome 测试”的普通 brief，只接受明确 monochrome-only 的权威 brief。
 - 三方向重复 palette、缺少 chromatic color 分别返回结构化 issue。
 - 独立 Critic 会因主品牌色、方向配色差异或 App Icon 生态区分度任一低分而失败。

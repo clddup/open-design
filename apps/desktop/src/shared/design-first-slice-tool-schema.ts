@@ -1,4 +1,10 @@
-import { Type, type Static } from "@opendesign/design-contracts";
+import {
+  executableJsonSchema,
+  Type,
+  type Static,
+  type TSchema,
+} from "@opendesign/design-contracts";
+import type { TObject } from "@sinclair/typebox";
 import {
   DESIGN_FIRST_SLICE_MAX_ELEMENTS,
   DESIGN_FIRST_SLICE_MAX_STAGES,
@@ -558,61 +564,106 @@ const SKILL_REFS_SCHEMA = Type.Array(Type.Object({ id: idSchema() }, CLOSED), {
   maxItems: 8,
 });
 
-export const DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA = Type.Object(
-  {
-    version: Type.Literal(1),
-    deliverable: DELIVERABLE_SCHEMA,
-    objective: textSchema(1, 2_000),
-    designIntent: DESIGN_INTENT_SCHEMA,
-    targets: Type.Array(TARGET_MODEL_SCHEMA, { minItems: 1, maxItems: 32 }),
-    visualSystem: VISUAL_SYSTEM_SCHEMA,
-    rasterAssetRoles: RASTER_ASSET_ROLES_SCHEMA,
-    semanticObjects: Type.Optional(
-      Type.Array(SEMANTIC_OBJECT_SCHEMA, { maxItems: 24 }),
-    ),
-    logoColorStrategy: Type.Optional(LOGO_COLOR_STRATEGY_SCHEMA),
-    logoOutputs: Type.Optional(LOGO_OUTPUTS_SCHEMA),
-    logoExploration: Type.Optional(LOGO_EXPLORATION_SCHEMA),
-    firstSlice: FIRST_SLICE_SCHEMA,
-  },
-  {
-    ...CLOSED,
-    description:
-      "Real artboard roots and one editable first slice. In this same call, provide one concise brief-specific direction, target job/layout, visual system, image roles, and reusable semantic objects; never explain every primitive. Logo work also declares its primary color strategy and distinct exploration palettes, with monochrome kept as evidence unless explicitly requested as the identity. Main binds host-owned skills, complete brief fidelity, and quality defaults before domain refinement.",
-  },
-);
+const NON_LOGO_DELIVERABLE_SCHEMA = Type.Union([
+  Type.Literal("ui"),
+  Type.Literal("poster"),
+  Type.Literal("brand-asset"),
+  Type.Literal("illustration"),
+  Type.Literal("presentation-visual"),
+  Type.Literal("other"),
+]);
 
-export const DESIGN_FIRST_SLICE_CANONICAL_INPUT_SCHEMA = Type.Object(
-  {
-    version: Type.Literal(1),
-    deliverable: DELIVERABLE_SCHEMA,
-    objective: textSchema(1, 2_000),
-    designIntent: DESIGN_INTENT_SCHEMA,
-    skillRefs: SKILL_REFS_SCHEMA,
-    briefFidelity: BRIEF_FIDELITY_SCHEMA,
-    targets: Type.Array(TARGET_CANONICAL_SCHEMA, {
-      minItems: 1,
-      maxItems: 32,
-    }),
-    visualSystem: VISUAL_SYSTEM_SCHEMA,
-    rasterAssetRoles: RASTER_ASSET_ROLES_SCHEMA,
-    referenceStrategy: Type.Optional(REFERENCE_STRATEGY_SCHEMA),
-    logoColorStrategy: Type.Optional(LOGO_COLOR_STRATEGY_SCHEMA),
-    logoOutputs: Type.Optional(LOGO_OUTPUTS_SCHEMA),
-    logoExploration: Type.Optional(LOGO_EXPLORATION_SCHEMA),
-    semanticObjects: Type.Optional(
-      Type.Array(SEMANTIC_OBJECT_SCHEMA, { maxItems: 24 }),
-    ),
-    firstSlice: FIRST_SLICE_SCHEMA,
-  },
+const FIRST_SLICE_MODEL_PROPERTIES = {
+  version: Type.Literal(1),
+  deliverable: DELIVERABLE_SCHEMA,
+  objective: textSchema(1, 2_000),
+  designIntent: DESIGN_INTENT_SCHEMA,
+  targets: Type.Array(TARGET_MODEL_SCHEMA, { minItems: 1, maxItems: 32 }),
+  visualSystem: VISUAL_SYSTEM_SCHEMA,
+  rasterAssetRoles: RASTER_ASSET_ROLES_SCHEMA,
+  semanticObjects: Type.Optional(
+    Type.Array(SEMANTIC_OBJECT_SCHEMA, { maxItems: 24 }),
+  ),
+  logoOutputs: Type.Optional(LOGO_OUTPUTS_SCHEMA),
+  logoExploration: Type.Optional(LOGO_EXPLORATION_SCHEMA),
+  logoColorStrategy: Type.Optional(LOGO_COLOR_STRATEGY_SCHEMA),
+  firstSlice: FIRST_SLICE_SCHEMA,
+};
+
+const FIRST_SLICE_CANONICAL_PROPERTIES = {
+  version: Type.Literal(1),
+  deliverable: DELIVERABLE_SCHEMA,
+  objective: textSchema(1, 2_000),
+  designIntent: DESIGN_INTENT_SCHEMA,
+  skillRefs: SKILL_REFS_SCHEMA,
+  briefFidelity: BRIEF_FIDELITY_SCHEMA,
+  targets: Type.Array(TARGET_CANONICAL_SCHEMA, {
+    minItems: 1,
+    maxItems: 32,
+  }),
+  visualSystem: VISUAL_SYSTEM_SCHEMA,
+  rasterAssetRoles: RASTER_ASSET_ROLES_SCHEMA,
+  referenceStrategy: Type.Optional(REFERENCE_STRATEGY_SCHEMA),
+  logoOutputs: Type.Optional(LOGO_OUTPUTS_SCHEMA),
+  logoExploration: Type.Optional(LOGO_EXPLORATION_SCHEMA),
+  logoColorStrategy: Type.Optional(LOGO_COLOR_STRATEGY_SCHEMA),
+  semanticObjects: Type.Optional(
+    Type.Array(SEMANTIC_OBJECT_SCHEMA, { maxItems: 24 }),
+  ),
+  firstSlice: FIRST_SLICE_SCHEMA,
+};
+
+const FIRST_SLICE_MODEL_PROPERTIES_SCHEMA = Type.Object(
+  FIRST_SLICE_MODEL_PROPERTIES,
+  CLOSED,
+);
+const FIRST_SLICE_CANONICAL_PROPERTIES_SCHEMA = Type.Object(
+  FIRST_SLICE_CANONICAL_PROPERTIES,
   CLOSED,
 );
 
+function firstSliceSchema<TProperties extends Record<string, TSchema>>(
+  base: TObject<TProperties>,
+  description?: string,
+): TSchema {
+  return executableJsonSchema({
+    ...base,
+    ...(description === undefined ? {} : { description }),
+    anyOf: [
+      {
+        type: "object",
+        properties: {
+          deliverable: { const: "logo" },
+          logoColorStrategy: LOGO_COLOR_STRATEGY_SCHEMA,
+        },
+        required: ["deliverable", "logoColorStrategy"],
+      },
+      {
+        type: "object",
+        properties: { deliverable: NON_LOGO_DELIVERABLE_SCHEMA },
+        required: ["deliverable"],
+      },
+    ],
+  });
+}
+
+const FIRST_SLICE_LOGO_DESCRIPTION =
+  "Logo work declares its primary color strategy and distinct exploration palettes, with monochrome kept as evidence unless explicitly requested as the identity.";
+
+export const DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA = firstSliceSchema(
+  FIRST_SLICE_MODEL_PROPERTIES_SCHEMA,
+  `Real artboard roots and one editable first slice. In this same call, provide one concise brief-specific direction, target job/layout, visual system, image roles, and reusable semantic objects; never explain every primitive. ${FIRST_SLICE_LOGO_DESCRIPTION} Main binds host-owned skills, complete brief fidelity, and quality defaults before domain refinement.`,
+);
+
+export const DESIGN_FIRST_SLICE_CANONICAL_INPUT_SCHEMA = firstSliceSchema(
+  FIRST_SLICE_CANONICAL_PROPERTIES_SCHEMA,
+);
+
 export type DesignFirstSliceModelInput = Static<
-  typeof DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA
+  typeof FIRST_SLICE_MODEL_PROPERTIES_SCHEMA
 >;
 export type DesignFirstSliceCanonicalInput = Static<
-  typeof DESIGN_FIRST_SLICE_CANONICAL_INPUT_SCHEMA
+  typeof FIRST_SLICE_CANONICAL_PROPERTIES_SCHEMA
 >;
 export type DesignFirstSliceElementInput = Static<
   typeof DESIGN_FIRST_SLICE_ELEMENT_SCHEMA

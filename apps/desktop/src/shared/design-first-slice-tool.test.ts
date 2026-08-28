@@ -16,7 +16,29 @@ import { DesignApplyContract, DesignPlanContract } from "./design-agent-tools";
 
 describe("compact first-slice tool", () => {
   it("keeps Provider schema budgets aligned with runtime validation", () => {
-    const properties = DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA.properties;
+    type SchemaNode = {
+      anyOf?: readonly SchemaNode[];
+      const?: unknown;
+      description: string;
+      items: SchemaNode;
+      maxItems: number;
+      maxLength: number;
+      properties: Record<string, SchemaNode>;
+      required?: readonly string[];
+    };
+    const schema =
+      DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA as unknown as SchemaNode;
+    const conditions = schema.anyOf ?? [];
+    const logoCondition = conditions.find(
+      (condition) => condition.properties.deliverable?.const === "logo",
+    );
+    const nonLogoCondition = conditions.find(
+      (condition) => condition.properties.deliverable?.anyOf !== undefined,
+    );
+    if (!logoCondition || !nonLogoCondition) {
+      throw new Error("Missing conditional deliverable schema");
+    }
+    const properties = schema.properties;
     expect(properties.firstSlice.properties.stages.maxItems).toBe(3);
     expect(Object.keys(properties).sort()).toEqual(
       [
@@ -61,7 +83,7 @@ describe("compact first-slice tool", () => {
     ).toContain('"graphic"');
     expect(properties.targets.items.properties.layout.maxLength).toBe(320);
     expect(properties.visualSystem.properties.typography.maxItems).toBe(4);
-    expect(DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA.required).toEqual([
+    expect(schema.required).toEqual([
       "version",
       "deliverable",
       "objective",
@@ -71,6 +93,9 @@ describe("compact first-slice tool", () => {
       "rasterAssetRoles",
       "firstSlice",
     ]);
+    expect(properties.logoColorStrategy).toBeDefined();
+    expect(logoCondition.required).toContain("logoColorStrategy");
+    expect(nonLogoCondition.required).not.toContain("logoColorStrategy");
     const valid = providerInput(fixture());
     expect(
       schemaValidationIssues(DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA, valid),
@@ -81,6 +106,30 @@ describe("compact first-slice tool", () => {
       schemaValidationIssues(DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA, unexpected),
     ).not.toHaveLength(0);
     expect(FirstSliceContract.parse(unexpected).ok).toBe(false);
+
+    const logo = fixture();
+    logo.deliverable = "logo";
+    logo.designIntent.calibration.surfaceMode = "graphic";
+    logo.targets = logo.targets.map((target) => ({
+      ...target,
+      qualityProfile: { kind: "graphic" },
+    }));
+    const missingLogoStrategy = providerInput(logo);
+    expect(
+      schemaValidationIssues(
+        DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA,
+        missingLogoStrategy,
+      ),
+    ).toContainEqual(expect.objectContaining({ path: "/logoColorStrategy" }));
+    expect(FirstSliceContract.parse(missingLogoStrategy)).toMatchObject({
+      ok: false,
+      issues: [
+        expect.objectContaining({
+          path: "/logoColorStrategy",
+          code: "first_slice.schema_invalid",
+        }),
+      ],
+    });
   });
 
   it("preserves the model's brief-specific direction while binding only trusted host metadata", () => {

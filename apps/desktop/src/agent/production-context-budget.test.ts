@@ -34,6 +34,7 @@ import {
   DESIGN_DELIVERY_SCOPE_TOOL_NAME,
   DESIGN_FIRST_SLICE_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
+  READ_IMAGE_TOOL_NAME,
   DESIGN_PAGE_TOOL_NAME,
   DESIGN_REVIEW_TOOL_NAME,
   EXPORT_RASTER_TOOL_NAME,
@@ -141,7 +142,7 @@ describe("production Agent context budget", () => {
     }
   });
 
-  it("starts a blank host-inspected Run with only the compact first-slice kernel and recovery inspection", async () => {
+  it("starts a blank host-inspected Run with the compact first-slice kernel and allowed material inputs", async () => {
     const directory = await mkdtemp(
       join(tmpdir(), "opendesign-host-inspected-context-"),
     );
@@ -221,6 +222,8 @@ describe("production Agent context budget", () => {
       expect(gateway.requests[0]?.tools.map((tool) => tool.name)).toEqual([
         DESIGN_FIRST_SLICE_TOOL_NAME,
         DESIGN_INSPECT_TOOL_NAME,
+        READ_IMAGE_TOOL_NAME,
+        DESIGN_EDIT_TOOL_NAME,
       ]);
       expect(
         JSON.stringify(
@@ -232,7 +235,7 @@ describe("production Agent context budget", () => {
       expect(
         (gateway.requests[0]?.system.length ?? 0) +
           JSON.stringify(gateway.requests[0]?.tools).length,
-      ).toBeLessThan(34_000);
+      ).toBeLessThan(50_000);
       expect(gateway.requests[0]?.tools).not.toContainEqual(
         expect.objectContaining({ name: GENERATE_IMAGE_TOOL_NAME }),
       );
