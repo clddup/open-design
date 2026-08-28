@@ -483,6 +483,20 @@ export function designAgentToolInputIssues(
       ];
 }
 
+/** Main-to-Renderer validation accepts canonical host-only fields. */
+export function rendererDesignToolInputIssues(
+  toolName: string,
+  input: unknown,
+): readonly AgentToolFailureIssue[] {
+  if (toolName === DESIGN_EDIT_TOOL_NAME) {
+    return EditDesignContract.issues(input, {
+      canonical: true,
+      internal: true,
+    });
+  }
+  return designAgentToolInputIssues(toolName, input);
+}
+
 export function validateDesignAgentToolInput(
   toolName: string,
   input: unknown,

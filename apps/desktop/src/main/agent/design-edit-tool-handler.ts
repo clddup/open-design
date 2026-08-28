@@ -82,13 +82,18 @@ export async function handleEditDesignTool(input: {
       "A planned insert can rebase over a pure Frame translation only when it is the sole Edit Design entry; inspect the current document before combining hierarchy or layout changes",
     );
   }
+  const rebaseGuard = canRebasePlannedInsert(
+    authorization,
+    canonicalEdits,
+    nodeInput,
+  );
   const canonicalInput: InternalDesignEditToolInput = {
     label: parsed.value.label,
     edits: canonicalEdits.map((edit) =>
-      edit.kind === "node" && authorization?.rebaseGuard
+      edit.kind === "node" && rebaseGuard
         ? {
             kind: edit.kind,
-            input: { ...edit.input, rebaseGuard: authorization.rebaseGuard },
+            input: { ...edit.input, rebaseGuard },
           }
         : edit,
     ),
@@ -113,6 +118,26 @@ export async function handleEditDesignTool(input: {
     [...createdNodeIds],
   );
   return input.withDelivery(result, context.runId);
+}
+
+function canRebasePlannedInsert(
+  authorization: DesignPlanApplyAuthorization | undefined,
+  edits: readonly InternalDesignEditToolInput["edits"][number][],
+  nodeInput:
+    | Extract<
+        InternalDesignEditToolInput["edits"][number],
+        { kind: "node" }
+      >["input"]
+    | undefined,
+): NonNullable<DesignPlanApplyAuthorization["rebaseGuard"]> | undefined {
+  return authorization?.rebaseGuard !== undefined &&
+    edits.length === 1 &&
+    edits[0]?.kind === "node" &&
+    nodeInput?.commands.every(
+      (command) => command.type === "insert_element",
+    ) === true
+    ? authorization.rebaseGuard
+    : undefined;
 }
 
 function hierarchyTargetRefs(input: DesignHierarchyToolInput): {

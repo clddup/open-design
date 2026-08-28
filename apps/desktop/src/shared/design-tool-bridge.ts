@@ -20,9 +20,9 @@ import {
 } from "./design-plan-quality-profile";
 import {
   DESIGN_CAPTURE_TOOL_NAME,
-  designAgentToolInputIssues,
   isPreparedImageEditSource,
   isPreparedAgentRasterExport,
+  rendererDesignToolInputIssues,
 } from "./design-agent-tools";
 import { defineContract, type ValidationIssue } from "./contract-validation";
 
@@ -174,7 +174,10 @@ export const RendererDesignToolRequestContract =
     clone: false,
     refine: (value) => {
       const issues: ValidationIssue[] = [
-        ...toolInputValidationIssues(value.call.toolName, value.call.input),
+        ...rendererToolInputValidationIssues(
+          value.call.toolName,
+          value.call.input,
+        ),
         ...prefixIssues(
           TrustedToolContextContract.issues(value.context),
           "/context",
@@ -283,11 +286,11 @@ function rendererTrustedToolResultIssues(
   return TrustedToolResultContract.issues({ ...value, content: null });
 }
 
-function toolInputValidationIssues(
+function rendererToolInputValidationIssues(
   toolName: string,
   input: unknown,
 ): ValidationIssue[] {
-  return designAgentToolInputIssues(toolName, input).map((issue) =>
+  return rendererDesignToolInputIssues(toolName, input).map((issue) =>
     inputIssue(issue, "/call/input"),
   );
 }

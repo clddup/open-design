@@ -1742,6 +1742,9 @@ function executeAtomicEditDesign(
       },
       designRevision: {
         previousRevision: transaction.baseRevision,
+        ...(document.revision === request.context.revision
+          ? {}
+          : { rebasedFromRevision: request.context.revision }),
         revision: result.revision.revision,
         transactionId: transaction.transactionId,
       },

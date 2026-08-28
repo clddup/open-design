@@ -243,5 +243,6 @@ export * from "./design-agent-tool-names";
 export {
   DESIGN_AGENT_TOOL_SPECS,
   designAgentToolInputIssues,
+  rendererDesignToolInputIssues,
   validateDesignAgentToolInput,
 } from "./design-agent-tool-catalog";

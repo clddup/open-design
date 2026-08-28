@@ -461,6 +461,74 @@ describe("Renderer design tool bridge", () => {
     ).toBe(false);
   });
 
+  it("accepts canonical Edit Design rebase guards sent by Main", () => {
+    const request = {
+      requestId: "renderer_edit_rebase",
+      call: {
+        toolCallId: "edit_rebase_1",
+        toolName: "opendesign_edit_design",
+        input: {
+          label: "Continue translated target",
+          edits: [
+            {
+              kind: "node",
+              input: {
+                label: "Insert continuation",
+                rebaseGuard: {
+                  fromRevision: 4,
+                  targets: [
+                    {
+                      frameId: "frame_1",
+                      pageId: "page_1",
+                      width: 1440,
+                      height: 960,
+                    },
+                  ],
+                },
+                commands: [
+                  {
+                    commandId: "insert_1",
+                    type: "insert_element",
+                    pageId: "page_1",
+                    parentId: "frame_1",
+                    index: 0,
+                    node: {
+                      id: "node_1",
+                      name: "Inserted node",
+                      parentId: "frame_1",
+                      childIds: [],
+                      visible: true,
+                      locked: false,
+                      transform: [1, 0, 0, 1, 0, 0],
+                      size: { width: 100, height: 100 },
+                      opacity: 1,
+                      exportSettings: [],
+                      extensions: {},
+                      kind: "rectangle",
+                      properties: {
+                        fills: [
+                          { type: "solid", color: "#ffffff", opacity: 1 },
+                        ],
+                        strokes: [],
+                        strokeWidth: 0,
+                        cornerRadius: 0,
+                      },
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      },
+      context,
+    };
+
+    expect(RendererDesignToolRequestContract.parse(request)).toMatchObject({
+      ok: true,
+    });
+  });
+
   it("accepts only bounded structured transaction failures", () => {
     const failure = {
       requestId: "renderer_failure_1",

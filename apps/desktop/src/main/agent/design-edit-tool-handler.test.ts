@@ -83,6 +83,75 @@ describe("Edit Design Main boundary", () => {
     );
   });
 
+  it("keeps the planned rebase guard off non-insert edits", async () => {
+    const nodeInput = {
+      label: "Refine card",
+      commands: [
+        {
+          commandId: "update_card",
+          type: "update_properties",
+          nodeId: "card_a",
+          opacity: 0.92,
+        },
+      ],
+    } as const;
+    const authorization = {
+      input: structuredClone(nodeInput),
+      plan: {} as never,
+      targetIds: ["target_main"],
+      rebaseGuard: {
+        fromRevision: 4,
+        targets: [
+          {
+            frameId: "frame_main",
+            pageId: "page_main",
+            width: 960,
+            height: 640,
+          },
+        ],
+      },
+    };
+    const execute = vi.fn().mockResolvedValue({
+      content: { ok: true },
+      designRevision: {
+        previousRevision: 4,
+        revision: 5,
+        transactionId: "transaction_node_edit",
+      },
+    } satisfies TrustedToolResult);
+    const coordinator = {
+      assertVisualReviewBeforeWrite: vi.fn(),
+      assertDesignPlanForApply: vi.fn(() => authorization),
+      assertDesignApplyResult: vi.fn(),
+      recordDesignApplyCompleted: vi.fn(),
+      recordMaterialDesignWriteCompleted: vi.fn(),
+    };
+
+    await handleEditDesignTool({
+      call: {
+        toolCallId: "node_edit_call",
+        toolName: DESIGN_EDIT_TOOL_NAME,
+        input: {
+          label: "Refine current card",
+          edits: [{ kind: "node", input: nodeInput }],
+        },
+      },
+      context,
+      coordinator: coordinator as never,
+      execute,
+      withDelivery: (value) => value,
+    });
+
+    expect(execute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        input: {
+          label: "Refine current card",
+          edits: [{ kind: "node", input: structuredClone(nodeInput) }],
+        },
+      }),
+    );
+  });
+
   it("authorizes all entries against one delivery target and dispatches once", async () => {
     const result: TrustedToolResult = {
       content: { ok: true },
