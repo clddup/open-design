@@ -1,6 +1,7 @@
-import { Type, type Static, type TSchema } from "@sinclair/typebox";
+import { Type, type Static } from "@sinclair/typebox";
 import {
   defineContract,
+  selectDiscriminatedUnionSchema,
   type ValidationIssue,
 } from "@opendesign/contract-runtime";
 import { type AgentToolFailureIssue } from "./tool-failure.js";
@@ -175,7 +176,7 @@ export const ToolExecutionEventContract = defineContract<ToolExecutionEvent>({
   subject: "tool execution event",
   recovery: "Correct the reported tool execution event before retrying.",
   selectSchema: (value) =>
-    unionVariant(ToolExecutionEventSchema, value, "type"),
+    selectDiscriminatedUnionSchema(ToolExecutionEventSchema, value, "type"),
   refine: toolExecutionEventDomainIssues,
   clone: false,
 });
@@ -218,7 +219,11 @@ export const DesignToolBridgeResponseContract =
     code: "design_tool_bridge_response.schema_invalid",
     subject: "design tool bridge response",
     selectSchema: (value) =>
-      unionVariant(DesignToolBridgeResponseSchema, value, "ok"),
+      selectDiscriminatedUnionSchema(
+        DesignToolBridgeResponseSchema,
+        value,
+        "ok",
+      ),
     refine: designToolBridgeResponseDomainIssues,
     clone: false,
   });
@@ -376,19 +381,6 @@ function designToolBridgeResponseDomainIssues(
     : prefixIssues(trustedToolFailureDomainIssues(value.error), "/error");
 }
 
-function unionVariant(
-  schema: { anyOf: TSchema[] },
-  value: unknown,
-  discriminant: string,
-): TSchema | undefined {
-  const selected = record(value)?.[discriminant];
-  return schema.anyOf.find((variant) => {
-    const properties = record(record(variant)?.properties);
-    const literal = record(properties?.[discriminant]);
-    return literal?.const === selected;
-  });
-}
-
 function prefixIssues(
   issues: readonly ValidationIssue[],
   prefix: string,
@@ -401,10 +393,4 @@ function prefixIssues(
 
 function prefixedPath(prefix: string, path: string): string {
   return path === "/" ? prefix : `${prefix}${path}`;
-}
-
-function record(value: unknown): Record<string, unknown> | undefined {
-  return value !== null && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
 }

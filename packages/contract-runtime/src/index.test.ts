@@ -1,6 +1,10 @@
 import { Type } from "@sinclair/typebox";
 import { describe, expect, it } from "vitest";
-import { defineContract, schemaValidationIssues } from "./index.js";
+import {
+  defineContract,
+  schemaValidationIssues,
+  selectDiscriminatedUnionSchema,
+} from "./index.js";
 
 describe("contract runtime", () => {
   it("returns the actionable field for a discriminated union", () => {
@@ -46,5 +50,28 @@ describe("contract runtime", () => {
       value: { id: "ready" },
     });
     expect(refined).toBe(true);
+  });
+
+  it("selects only a matching literal-discriminated union branch", () => {
+    const schema = Type.Union([
+      Type.Object(
+        { kind: Type.Literal("text"), text: Type.String() },
+        { additionalProperties: false },
+      ),
+      Type.Object(
+        { kind: Type.Literal("image"), assetId: Type.String() },
+        { additionalProperties: false },
+      ),
+    ]);
+
+    expect(
+      selectDiscriminatedUnionSchema(schema, { kind: "image" }, "kind"),
+    ).toBe(schema.anyOf[1]);
+    expect(
+      selectDiscriminatedUnionSchema(schema, { kind: "video" }, "kind"),
+    ).toBeUndefined();
+    expect(
+      selectDiscriminatedUnionSchema(schema, null, "kind"),
+    ).toBeUndefined();
   });
 });

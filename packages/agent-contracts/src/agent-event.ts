@@ -3,6 +3,7 @@ import { Value } from "@sinclair/typebox/value";
 import {
   defineContract,
   formatContractFailure,
+  selectDiscriminatedUnionSchema,
   type ValidationIssue,
 } from "@opendesign/contract-runtime";
 import { AgentContinuationSchemas } from "./continuation.js";
@@ -280,7 +281,7 @@ function agentEventIssue(
 }
 
 function agentEventSchemaForInput(value: unknown): TSchema | undefined {
-  return agentEventVariant(agentEventType(value));
+  return selectDiscriminatedUnionSchema(AgentEventSchema, value, "type");
 }
 
 function agentEventType(value: unknown): string {
@@ -290,19 +291,4 @@ function agentEventType(value: unknown): string {
     typeof value.type === "string"
     ? value.type.slice(0, 256)
     : "unknown";
-}
-
-function agentEventVariant(type: string): TSchema | undefined {
-  const variants = (AgentEventSchema as { anyOf?: TSchema[] }).anyOf ?? [];
-  return variants.find((variant) => {
-    const properties = (variant as { properties?: Record<string, unknown> })
-      .properties;
-    const discriminator = properties?.type;
-    return (
-      typeof discriminator === "object" &&
-      discriminator !== null &&
-      "const" in discriminator &&
-      discriminator.const === type
-    );
-  });
 }

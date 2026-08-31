@@ -143,7 +143,14 @@ describe("transaction design contracts", () => {
     };
     delete legacyFailure.error.issues;
     legacyFailure.error.commandId = "update_node";
-    expect(DesignTransactionResultContract.parse(legacyFailure).ok).toBe(false);
+    expect(DesignTransactionResultContract.issues(legacyFailure)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "design.result_structure_invalid",
+          path: "/error/issues",
+        }),
+      ]),
+    );
   });
 
   it("validates explicit constraints and nullable update removal", () => {

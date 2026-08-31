@@ -10,7 +10,11 @@ import { DESIGN_VARIABLE_TOOL_INPUT_SCHEMA } from "./design-variable-tool-schema
 import { refineDesignComponent } from "./design-component-tool";
 import { refineDesignVariable } from "./design-variable-tool";
 import { executableJsonSchema } from "@opendesign/design-contracts";
-import { defineContract, type ValidationIssue } from "./contract-validation";
+import {
+  defineContract,
+  selectDiscriminatedUnionSchema,
+  type ValidationIssue,
+} from "./contract-validation";
 
 export type DesignSystemToolInput =
   | { kind: "component"; input: DesignComponentToolInput }
@@ -95,7 +99,12 @@ export const DesignSystemContract = defineContract<DesignSystemToolInput>({
   subject: "Design system",
   maximum: 64,
   refine: refineDesignSystem,
-  selectSchema: selectDesignSystemSchema,
+  selectSchema: (input) =>
+    selectDiscriminatedUnionSchema(
+      DESIGN_SYSTEM_TOOL_INPUT_SCHEMA,
+      input,
+      "kind",
+    ),
 });
 
 function refineDesignSystem(input: DesignSystemToolInput): ValidationIssue[] {
@@ -109,15 +118,4 @@ function refineDesignSystem(input: DesignSystemToolInput): ValidationIssue[] {
     ...issue,
     path: issue.path === "/" ? "/input" : `/input${issue.path}`,
   }));
-}
-
-function selectDesignSystemSchema(input: unknown) {
-  if (typeof input !== "object" || input === null || Array.isArray(input)) {
-    return undefined;
-  }
-  const kind = (input as { kind?: unknown }).kind;
-  if (kind === "component") return DESIGN_SYSTEM_INPUT_BRANCHES[0];
-  if (kind === "variable") return DESIGN_SYSTEM_INPUT_BRANCHES[1];
-  if (kind === "style") return DESIGN_SYSTEM_INPUT_BRANCHES[2];
-  return undefined;
 }

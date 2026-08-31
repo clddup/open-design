@@ -24,7 +24,11 @@ import {
   isPreparedAgentRasterExport,
   rendererDesignToolInputIssues,
 } from "./design-agent-tools";
-import { defineContract, type ValidationIssue } from "./contract-validation";
+import {
+  defineContract,
+  selectDiscriminatedUnionSchema,
+  type ValidationIssue,
+} from "./contract-validation";
 
 const RendererBridgeIdSchema = Type.String({
   minLength: 1,
@@ -224,7 +228,12 @@ export const RendererDesignToolResponseContract =
     code: "renderer_design_tool_response.schema_invalid",
     subject: "Renderer design tool response",
     clone: false,
-    selectSchema: rendererResponseSchemaForInput,
+    selectSchema: (value) =>
+      selectDiscriminatedUnionSchema(
+        RendererDesignToolResponseSchema,
+        value,
+        "ok",
+      ),
     refine: (value) => {
       return value.ok
         ? prefixIssues(rendererTrustedToolResultIssues(value.result), "/result")
@@ -306,15 +315,6 @@ function inputIssue(
   };
 }
 
-function rendererResponseSchemaForInput(value: unknown): TSchema | undefined {
-  if (!isRecord(value) || typeof value.ok !== "boolean") return undefined;
-  return RendererDesignToolResponseSchema.anyOf.find((schema) => {
-    const properties = isRecord(schema) ? schema.properties : undefined;
-    const ok = isRecord(properties) ? properties.ok : undefined;
-    return isRecord(ok) && ok.const === value.ok;
-  });
-}
-
 function prefixIssues(
   issues: readonly ValidationIssue[],
   prefix: string,
@@ -323,10 +323,6 @@ function prefixIssues(
     ...issue,
     path: issue.path === "/" ? prefix : `${prefix}${issue.path}`,
   }));
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 function bridgeIssue(

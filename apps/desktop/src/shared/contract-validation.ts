@@ -3,6 +3,7 @@ export {
   defineContract,
   formatValidationFailure,
   schemaValidationIssues,
+  selectDiscriminatedUnionSchema,
   validateContract,
 } from "@opendesign/contract-runtime";
 export type {

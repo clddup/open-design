@@ -1,6 +1,7 @@
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
 import {
   defineContract,
+  selectDiscriminatedUnionSchema,
   type ValidationIssue,
 } from "@opendesign/contract-runtime";
 import {
@@ -274,7 +275,10 @@ function agentRequestDomainIssues(value: AgentRequest): ValidationIssue[] {
 }
 
 function agentRequestSchemaForInput(input: unknown): TSchema {
-  return unionSchemaFor(AgentRequestSchema, input, "type");
+  return (
+    selectDiscriminatedUnionSchema(AgentRequestSchema, input, "type") ??
+    AgentRequestSchema
+  );
 }
 
 function attachmentSchemaForInput(input: unknown): TSchema {
@@ -284,20 +288,6 @@ function attachmentSchemaForInput(input: unknown): TSchema {
   if (attachmentId.startsWith("file_")) return AgentDocumentAttachmentSchema;
   if (attachmentId.startsWith("svg_")) return AgentSvgAttachmentSchema;
   return AgentAttachmentSchema;
-}
-
-function unionSchemaFor(
-  schema: TSchema & { anyOf: TSchema[] },
-  input: unknown,
-  discriminant: string,
-): TSchema {
-  const selected = record(input)?.[discriminant];
-  return (
-    schema.anyOf.find((variant) => {
-      const properties = record(record(variant)?.properties);
-      return record(properties?.[discriminant])?.const === selected;
-    }) ?? schema
-  );
 }
 
 function prefixIssues(

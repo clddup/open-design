@@ -61,6 +61,22 @@ export type ContractValidationOptions = {
   structureValidated?: boolean;
 };
 
+/** Selects one literal-discriminated `anyOf` branch without validating it. */
+export function selectDiscriminatedUnionSchema(
+  schema: TSchema,
+  input: unknown,
+  discriminant: string,
+): TSchema | undefined {
+  const variants = Array.isArray((schema as { anyOf?: unknown }).anyOf)
+    ? (schema as unknown as { anyOf: TSchema[] }).anyOf
+    : [];
+  const selected = recordValue(input)?.[discriminant];
+  return variants.find((variant) => {
+    const properties = recordValue(recordValue(variant)?.properties);
+    return recordValue(properties?.[discriminant])?.const === selected;
+  });
+}
+
 /**
  * Runs one executable structure contract, optional model refinement, trusted
  * host binding, optional canonical structure contract, and one domain
@@ -371,4 +387,10 @@ function boundedJson(value: unknown): string {
   } catch {
     return "[unserializable]";
   }
+}
+
+function recordValue(value: unknown): Record<string, unknown> | undefined {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
 }
