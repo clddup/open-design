@@ -1,7 +1,6 @@
 import {
   DEFAULT_AUTO_LAYOUT_FRAME_SIZING,
   DEFAULT_LAYOUT_SIZING,
-  isValidLayoutLimits,
   layoutGuideGeometryIsValid,
   type DesignDocument,
   type DesignIssue,
@@ -244,13 +243,6 @@ export function validateNodeLayoutInvariants(
         path: `/nodesById/${nodeId}/layoutLimits`,
         message:
           "layout limits are only valid on an Auto Layout Frame or its direct flow child",
-      });
-    }
-    if (!isValidLayoutLimits(node.layoutLimits)) {
-      issues.push({
-        path: `/nodesById/${nodeId}/layoutLimits`,
-        message:
-          "layout limits must be non-empty, finite, non-negative, and each minimum must not exceed its maximum",
       });
     }
   }
