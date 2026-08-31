@@ -62,6 +62,12 @@ describe("OpenDesign Agent system prompt", () => {
     );
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain("editable SVG Path");
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
+      "canonical fills/strokes, gradients",
+    );
+    expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
+      "instead of flat rectangle stacks",
+    );
+    expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
       "inspection.document.componentCatalog",
     );
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain("linked Instances");

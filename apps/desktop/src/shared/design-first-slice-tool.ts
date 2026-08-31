@@ -346,6 +346,7 @@ function refineFirstSlice(
     firstTarget.regions.map((region) => [region.nodeId, region.parentId]),
   );
   for (const { element, path } of flattened) {
+    refineElementAppearance(element, path, issues);
     registerUniqueId(
       elementIds,
       element.id,
@@ -436,6 +437,47 @@ function refineFirstSlice(
   refineLogoExploration(input, elementsById, parentById, issues);
   refineReferenceStrategy(input.referenceStrategy, issues);
   return issues.slice(0, 64);
+}
+
+function refineElementAppearance(
+  element: DesignFirstSliceElementInput,
+  path: string,
+  issues: ValidationIssue[],
+): void {
+  if (element.kind !== "group") return;
+  if (element.fills.length > 0) {
+    issues.push(
+      issue(
+        "first_slice.group_fills_unsupported",
+        `${path}/fills`,
+        "Group does not own shape fills; apply appearance to a child shape or use a Frame",
+        0,
+        element.fills.length,
+      ),
+    );
+  }
+  if (element.strokes.length > 0) {
+    issues.push(
+      issue(
+        "first_slice.group_strokes_unsupported",
+        `${path}/strokes`,
+        "Group does not own shape strokes; apply appearance to a child shape or use a Frame",
+        0,
+        element.strokes.length,
+      ),
+    );
+  }
+  if (element.strokeWidth !== 0) {
+    issues.push(
+      issue(
+        "first_slice.group_stroke_width_unsupported",
+        `${path}/strokeWidth`,
+        "Group strokeWidth must remain zero because Group has no shape stroke",
+        0,
+        element.strokeWidth,
+      ),
+    );
+  }
 }
 
 function refineQualityProfile(
@@ -733,13 +775,8 @@ export function compileDesignFirstSliceToolInput(
 }
 
 function isMaterialElement(element: DesignFirstSliceElementInput): boolean {
-  return (
-    element.kind === "text" ||
-    element.kind === "rectangle" ||
-    element.kind === "ellipse" ||
-    element.kind === "path" ||
-    (element.kind === "frame" && element.fill !== undefined)
-  );
+  if (element.kind === "group") return false;
+  return element.fills.length > 0 || element.strokes.length > 0;
 }
 
 function parentChainReaches(

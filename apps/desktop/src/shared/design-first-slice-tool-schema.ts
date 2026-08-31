@@ -1,10 +1,20 @@
 import {
+  AngularGradientPaintSchema,
+  BackgroundBlurEffectSchema,
+  BlendModeSchema,
+  DropShadowEffectSchema,
+  InnerShadowEffectSchema,
+  LayerBlurEffectSchema,
+  LinearGradientPaintSchema,
+  OuterGlowEffectSchema,
+  RadialGradientPaintSchema,
+  SolidPaintSchema,
   executableJsonSchema,
   Type,
   type Static,
   type TSchema,
 } from "@opendesign/design-contracts";
-import type { TObject } from "@sinclair/typebox";
+import type { TObject, TUnion } from "@sinclair/typebox";
 import {
   DESIGN_FIRST_SLICE_MAX_ELEMENTS,
   DESIGN_FIRST_SLICE_MAX_STAGES,
@@ -59,22 +69,26 @@ const DELIVERABLE_SCHEMA = Type.Union([
   Type.Literal("other"),
 ]);
 
-const PAINT_SCHEMA = Type.Object(
-  {
-    color: textSchema(128),
-    opacity: Type.Optional(UNIT_SCHEMA),
-  },
-  CLOSED,
-);
+const FIRST_SLICE_PAINT_SCHEMA = Type.Union([
+  Type.Omit(SolidPaintSchema, ["boundVariables", "blendMode", "visible"]),
+  Type.Omit(LinearGradientPaintSchema, ["blendMode", "visible"]),
+  Type.Omit(RadialGradientPaintSchema, ["blendMode", "visible"]),
+  Type.Omit(AngularGradientPaintSchema, ["blendMode", "visible"]),
+]);
 
-const STROKE_SCHEMA = Type.Object(
-  {
-    color: textSchema(128),
-    opacity: Type.Optional(UNIT_SCHEMA),
-    width: Type.Number({ exclusiveMinimum: 0, maximum: 10_000 }),
-  },
-  CLOSED,
-);
+const FIRST_SLICE_EFFECT_SCHEMA = Type.Union([
+  Type.Omit(DropShadowEffectSchema, ["blendMode", "visible"]),
+  Type.Omit(InnerShadowEffectSchema, ["blendMode", "visible"]),
+  Type.Omit(OuterGlowEffectSchema, ["blendMode", "visible"]),
+  Type.Omit(LayerBlurEffectSchema, ["visible"]),
+  Type.Omit(BackgroundBlurEffectSchema, ["visible"]),
+]);
+
+const SHAPE_APPEARANCE_PROPERTIES = {
+  fills: Type.Array(FIRST_SLICE_PAINT_SCHEMA, { maxItems: 4 }),
+  strokes: Type.Array(FIRST_SLICE_PAINT_SCHEMA, { maxItems: 4 }),
+  strokeWidth: Type.Number({ minimum: 0, maximum: 10_000 }),
+};
 
 const ELEMENT_BASE_PROPERTIES = {
   id: idSchema(),
@@ -85,6 +99,11 @@ const ELEMENT_BASE_PROPERTIES = {
   width: DIMENSION_SCHEMA,
   height: DIMENSION_SCHEMA,
   opacity: Type.Optional(UNIT_SCHEMA),
+  blendMode: Type.Optional(BlendModeSchema),
+  effects: Type.Optional(
+    Type.Array(FIRST_SLICE_EFFECT_SCHEMA, { maxItems: 4 }),
+  ),
+  ...SHAPE_APPEARANCE_PROPERTIES,
 };
 
 const GROUP_ELEMENT_SCHEMA = Type.Object(
@@ -99,8 +118,6 @@ const FRAME_ELEMENT_SCHEMA = Type.Object(
   {
     ...ELEMENT_BASE_PROPERTIES,
     kind: Type.Literal("frame"),
-    fill: Type.Optional(PAINT_SCHEMA),
-    stroke: Type.Optional(STROKE_SCHEMA),
     cornerRadius: Type.Optional(Type.Number({ minimum: 0, maximum: 100_000 })),
     clipsContent: Type.Optional(Type.Boolean()),
   },
@@ -111,8 +128,6 @@ const RECTANGLE_ELEMENT_SCHEMA = Type.Object(
   {
     ...ELEMENT_BASE_PROPERTIES,
     kind: Type.Literal("rectangle"),
-    fill: PAINT_SCHEMA,
-    stroke: Type.Optional(STROKE_SCHEMA),
     cornerRadius: Type.Optional(Type.Number({ minimum: 0, maximum: 100_000 })),
   },
   CLOSED,
@@ -122,8 +137,6 @@ const ELLIPSE_ELEMENT_SCHEMA = Type.Object(
   {
     ...ELEMENT_BASE_PROPERTIES,
     kind: Type.Literal("ellipse"),
-    fill: PAINT_SCHEMA,
-    stroke: Type.Optional(STROKE_SCHEMA),
   },
   CLOSED,
 );
@@ -133,7 +146,6 @@ const PATH_ELEMENT_SCHEMA = Type.Object(
     ...ELEMENT_BASE_PROPERTIES,
     kind: Type.Literal("path"),
     path: Type.String({ minLength: 1, maxLength: 20_000 }),
-    fill: PAINT_SCHEMA,
   },
   CLOSED,
 );
@@ -152,7 +164,6 @@ const TEXT_ELEMENT_SCHEMA = Type.Object(
         fontSize: DIMENSION_SCHEMA,
         lineHeight: DIMENSION_SCHEMA,
         letterSpacing: Type.Optional(Type.Number()),
-        color: textSchema(128),
         textResize: Type.Union([
           Type.Literal("auto-width"),
           Type.Literal("auto-height"),
@@ -173,14 +184,70 @@ const TEXT_ELEMENT_SCHEMA = Type.Object(
   CLOSED,
 );
 
-export const DESIGN_FIRST_SLICE_ELEMENT_SCHEMA = Type.Union([
-  GROUP_ELEMENT_SCHEMA,
-  FRAME_ELEMENT_SCHEMA,
-  RECTANGLE_ELEMENT_SCHEMA,
-  ELLIPSE_ELEMENT_SCHEMA,
-  PATH_ELEMENT_SCHEMA,
-  TEXT_ELEMENT_SCHEMA,
+const ELEMENT_KIND_SCHEMA = Type.Union([
+  Type.Literal("group"),
+  Type.Literal("frame"),
+  Type.Literal("rectangle"),
+  Type.Literal("ellipse"),
+  Type.Literal("path"),
+  Type.Literal("text"),
 ]);
+
+export const DESIGN_FIRST_SLICE_ELEMENT_SCHEMA = executableJsonSchema({
+  type: "object",
+  description:
+    "One editable document node. Every node uses canonical Figma-shaped fills, strokes, opacity, blendMode and effects at node level. Group appearance must be empty; Path additionally requires path; Text additionally requires text.",
+  properties: {
+    ...ELEMENT_BASE_PROPERTIES,
+    kind: ELEMENT_KIND_SCHEMA,
+    cornerRadius: Type.Optional(Type.Number({ minimum: 0, maximum: 100_000 })),
+    clipsContent: Type.Optional(Type.Boolean()),
+    path: Type.Optional(Type.String({ minLength: 1, maxLength: 20_000 })),
+    text: Type.Optional(TEXT_ELEMENT_SCHEMA.properties.text),
+  },
+  required: [
+    "id",
+    "name",
+    "parentId",
+    "x",
+    "y",
+    "width",
+    "height",
+    "fills",
+    "strokes",
+    "strokeWidth",
+    "kind",
+  ],
+  additionalProperties: false,
+  anyOf: [
+    elementKindBranch(GROUP_ELEMENT_SCHEMA),
+    elementKindBranch(FRAME_ELEMENT_SCHEMA),
+    elementKindBranch(RECTANGLE_ELEMENT_SCHEMA),
+    elementKindBranch(ELLIPSE_ELEMENT_SCHEMA),
+    elementKindBranch(PATH_ELEMENT_SCHEMA, ["path"]),
+    elementKindBranch(TEXT_ELEMENT_SCHEMA, ["text"]),
+  ],
+}) as unknown as TUnion<
+  [
+    typeof GROUP_ELEMENT_SCHEMA,
+    typeof FRAME_ELEMENT_SCHEMA,
+    typeof RECTANGLE_ELEMENT_SCHEMA,
+    typeof ELLIPSE_ELEMENT_SCHEMA,
+    typeof PATH_ELEMENT_SCHEMA,
+    typeof TEXT_ELEMENT_SCHEMA,
+  ]
+>;
+
+function elementKindBranch<TProperties extends { kind: TSchema }>(
+  schema: TObject<TProperties>,
+  required: string[] = [],
+) {
+  return {
+    type: "object" as const,
+    properties: { kind: schema.properties.kind },
+    required: ["kind", ...required],
+  };
+}
 
 const REGION_SCHEMA = Type.Object(
   {
@@ -614,7 +681,7 @@ const FIRST_SLICE_LOGO_DESCRIPTION =
 
 export const DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA = firstSliceSchema(
   FIRST_SLICE_MODEL_PROPERTIES_SCHEMA,
-  `Create exactly one current target's real artboard and editable first slice. Provide one concise brief-specific direction, target job/layout, visual system, image roles, and actual content layers; never restate the complete suite or explain every primitive. Reusable Component decisions happen after this real hierarchy exists, using inspected Frame/Group roots like Figma's create-component-from-node flow. ${FIRST_SLICE_LOGO_DESCRIPTION} Main binds host-owned skills, complete brief fidelity, and quality defaults before domain refinement.`,
+  `Create exactly one current target's real artboard and editable first slice. Provide one concise brief-specific direction, target job/layout, visual system, image roles, and actual content layers; never restate the complete suite or explain every primitive. Frame, Rectangle, Ellipse, Path and Text appearance uses the same canonical fills/strokes, blend modes, shadows and blur effects as the editable document; use solid, linear, radial or angular paints directly instead of approximating material depth with extra flat rectangles. Reusable Component decisions happen after this real hierarchy exists, using inspected Frame/Group roots like Figma's create-component-from-node flow. ${FIRST_SLICE_LOGO_DESCRIPTION} Main binds host-owned skills, complete brief fidelity, and quality defaults before domain refinement.`,
 );
 
 export const DESIGN_FIRST_SLICE_CANONICAL_INPUT_SCHEMA = firstSliceSchema(
@@ -627,6 +694,10 @@ export type DesignFirstSliceModelInput = Static<
 export type DesignFirstSliceCanonicalInput = Static<
   typeof FIRST_SLICE_CANONICAL_PROPERTIES_SCHEMA
 >;
-export type DesignFirstSliceElementInput = Static<
-  typeof DESIGN_FIRST_SLICE_ELEMENT_SCHEMA
->;
+export type DesignFirstSliceElementInput =
+  | Static<typeof GROUP_ELEMENT_SCHEMA>
+  | Static<typeof FRAME_ELEMENT_SCHEMA>
+  | Static<typeof RECTANGLE_ELEMENT_SCHEMA>
+  | Static<typeof ELLIPSE_ELEMENT_SCHEMA>
+  | Static<typeof PATH_ELEMENT_SCHEMA>
+  | Static<typeof TEXT_ELEMENT_SCHEMA>;

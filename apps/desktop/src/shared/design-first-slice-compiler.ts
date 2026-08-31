@@ -207,7 +207,13 @@ function compileElement(element: DesignFirstSliceElement): DesignNode {
     size: { width: element.width, height: element.height },
     exportSettings: [],
     opacity: element.opacity ?? 1,
-    extensions: { generatedBy: "compact-first-slice-v1" },
+    ...(element.blendMode === undefined
+      ? {}
+      : { blendMode: element.blendMode }),
+    ...(element.effects === undefined
+      ? {}
+      : { effects: structuredClone(element.effects) }),
+    extensions: { generatedBy: "compact-first-slice" },
   };
   if (element.kind === "group") {
     return { ...base, kind: "group" as const, properties: {} };
@@ -233,11 +239,9 @@ function compileElement(element: DesignFirstSliceElement): DesignNode {
       textOverflow: "visible" as const,
       textTruncation: "disabled" as const,
       maxLines: null,
-      fills: [
-        { type: "solid" as const, color: element.text.color, opacity: 1 },
-      ],
-      strokes: [],
-      strokeWidth: 0,
+      fills: structuredClone(element.fills),
+      strokes: structuredClone(element.strokes),
+      strokeWidth: element.strokeWidth,
     };
     const properties =
       element.text.textResize === "auto-width"
@@ -264,41 +268,18 @@ function compileElement(element: DesignFirstSliceElement): DesignNode {
       ...base,
       kind: "path" as const,
       properties: {
-        fills: [
-          {
-            type: "solid" as const,
-            color: element.fill.color,
-            opacity: element.fill.opacity ?? 1,
-          },
-        ],
-        strokes: [],
-        strokeWidth: 0,
+        fills: structuredClone(element.fills),
+        strokes: structuredClone(element.strokes),
+        strokeWidth: element.strokeWidth,
         path: element.path,
         fillRule: "nonzero" as const,
       },
     };
   }
-  const strokes = element.stroke
-    ? [
-        {
-          type: "solid" as const,
-          color: element.stroke.color,
-          opacity: element.stroke.opacity ?? 1,
-        },
-      ]
-    : [];
   const shape = {
-    fills: element.fill
-      ? [
-          {
-            type: "solid" as const,
-            color: element.fill.color,
-            opacity: element.fill.opacity ?? 1,
-          },
-        ]
-      : [],
-    strokes,
-    strokeWidth: element.stroke?.width ?? 0,
+    fills: structuredClone(element.fills),
+    strokes: structuredClone(element.strokes),
+    strokeWidth: element.strokeWidth,
   };
   if (element.kind === "frame") {
     return {

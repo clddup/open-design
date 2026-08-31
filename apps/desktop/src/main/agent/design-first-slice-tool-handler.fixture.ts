@@ -114,6 +114,9 @@ export function firstSliceInput(): DesignFirstSliceToolInput {
               y: 24,
               width: 294,
               height: 84,
+              fills: [{ type: "solid", color: "#0F172A", opacity: 1 }],
+              strokes: [],
+              strokeWidth: 0,
               text: {
                 content: "Design with momentum",
                 fontFamily: "Inter",
@@ -122,7 +125,6 @@ export function firstSliceInput(): DesignFirstSliceToolInput {
                 fontSlant: "normal",
                 fontSize: 32,
                 lineHeight: 38,
-                color: "#0F172A",
                 textResize: "auto-height",
               },
             },

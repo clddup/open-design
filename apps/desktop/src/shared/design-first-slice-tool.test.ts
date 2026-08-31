@@ -62,6 +62,20 @@ describe("compact first-slice tool", () => {
       properties.firstSlice.properties.stages.items.properties.elements
         .maxItems,
     ).toBe(48);
+    const elementSchema =
+      properties.firstSlice.properties.stages.items.properties.elements.items;
+    expect(elementSchema.required).toEqual(
+      expect.arrayContaining(["fills", "strokes", "strokeWidth", "kind"]),
+    );
+    expect(Object.keys(elementSchema.properties)).toEqual(
+      expect.arrayContaining([
+        "fills",
+        "strokes",
+        "strokeWidth",
+        "blendMode",
+        "effects",
+      ]),
+    );
     expect(properties.firstSlice.properties.stages.description).toContain(
       "total across all stages",
     );
@@ -262,16 +276,79 @@ describe("compact first-slice tool", () => {
     const firstSlice = modelInput.firstSlice as {
       stages: Array<{ elements: Array<Record<string, unknown>> }>;
     };
-    Reflect.deleteProperty(firstSlice.stages[0].elements[0], "fill");
+    Reflect.deleteProperty(firstSlice.stages[0].elements[0], "fills");
 
     const result = FirstSliceContract.parse(modelInput);
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("Expected element schema failure");
     expect(result.issues[0]).toMatchObject({
       code: "first_slice.schema_invalid",
-      path: "/firstSlice/stages/0/elements/0/fill",
+      path: "/firstSlice/stages/0/elements/0/fills",
     });
     expect(result.issues[0]?.message).not.toContain("union");
+  });
+
+  it("rejects Group shape appearance without discarding node effects", () => {
+    const input = fixture();
+    input.firstSlice.stages[0].elements.unshift({
+      id: "hero_group",
+      kind: "group",
+      name: "Hero Group",
+      parentId: "home_hero",
+      x: 0,
+      y: 0,
+      width: 342,
+      height: 260,
+      fills: [{ type: "solid", color: "#FFFFFF", opacity: 1 }],
+      strokes: [{ type: "solid", color: "#0F172A", opacity: 1 }],
+      strokeWidth: 2,
+      blendMode: "multiply",
+      effects: [{ type: "layer-blur", radius: 4 }],
+    });
+
+    const result = parseCanonicalProjection(input);
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("Expected Group appearance failure");
+    expect(result.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "first_slice.group_fills_unsupported",
+          path: "/firstSlice/stages/0/elements/0/fills",
+        }),
+        expect.objectContaining({
+          code: "first_slice.group_strokes_unsupported",
+          path: "/firstSlice/stages/0/elements/0/strokes",
+        }),
+        expect.objectContaining({
+          code: "first_slice.group_stroke_width_unsupported",
+          path: "/firstSlice/stages/0/elements/0/strokeWidth",
+        }),
+      ]),
+    );
+    expect(result.issues).not.toContainEqual(
+      expect.objectContaining({
+        path: "/firstSlice/stages/0/elements/0/effects",
+      }),
+    );
+  });
+
+  it("does not count invisible Text as first-slice material", () => {
+    const input = fixture();
+    const title = input.firstSlice.stages[0].elements[1];
+    if (title?.kind !== "text") throw new Error("Expected Text fixture");
+    input.firstSlice.stages[0].elements = [
+      { ...title, fills: [], strokes: [], strokeWidth: 0 },
+    ];
+
+    const result = parseCanonicalProjection(input);
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("Expected invisible material failure");
+    expect(result.issues).toContainEqual(
+      expect.objectContaining({
+        code: "first_slice.empty_referenced_region",
+        path: "/targets/0/regions/0",
+      }),
+    );
   });
 
   it("binds the complete Run prompt as authoritative brief fidelity", () => {
@@ -405,6 +482,84 @@ describe("compact first-slice tool", () => {
         },
       },
     ]);
+  });
+
+  it("preserves canonical gradient, stroke, blend and effect appearance in the first real revision", () => {
+    const input = fixture();
+    const [panel, title] = input.firstSlice.stages[0].elements;
+    if (panel?.kind !== "rectangle" || title?.kind !== "text") {
+      throw new Error("Expected rectangle and text fixture elements");
+    }
+    panel.fills = [
+      {
+        type: "linear-gradient",
+        opacity: 0.92,
+        from: { x: 0, y: 0 },
+        to: { x: 1, y: 1 },
+        stops: [
+          { offset: 0, color: "#5B5CE2", opacity: 1 },
+          { offset: 1, color: "#13B8A6", opacity: 0.76 },
+        ],
+      },
+    ];
+    panel.strokes = [{ type: "solid", color: "#FFFFFF", opacity: 0.28 }];
+    panel.strokeWidth = 1;
+    panel.blendMode = "screen";
+    panel.effects = [
+      {
+        type: "drop-shadow",
+        color: "#101828",
+        opacity: 0.28,
+        offset: { x: 0, y: 18 },
+        blur: 42,
+        spread: -8,
+      },
+      { type: "background-blur", radius: 18 },
+    ];
+    title.fills = [
+      {
+        type: "linear-gradient",
+        opacity: 1,
+        from: { x: 0, y: 0.5 },
+        to: { x: 1, y: 0.5 },
+        stops: [
+          { offset: 0, color: "#FFFFFF", opacity: 1 },
+          { offset: 1, color: "#D7F9F4", opacity: 1 },
+        ],
+      },
+    ];
+
+    const normalized = parsedFirstSlice(providerInput(input));
+    expect(normalized).toBeDefined();
+    if (!normalized) throw new Error("Expected canonical appearance input");
+    const compiled = compileDesignFirstSliceToolInput(normalized);
+    expect(
+      DesignApplyContract.parse(compiled.apply, {
+        canonical: true,
+        internal: true,
+      }).ok,
+    ).toBe(true);
+    expect(compiled.apply.commands[0]).toMatchObject({
+      node: {
+        blendMode: "screen",
+        effects: [
+          { type: "drop-shadow", blur: 42, spread: -8 },
+          { type: "background-blur", radius: 18 },
+        ],
+        properties: {
+          fills: [{ type: "linear-gradient", opacity: 0.92 }],
+          strokes: [{ type: "solid", opacity: 0.28 }],
+          strokeWidth: 1,
+        },
+      },
+    });
+    expect(compiled.apply.commands[1]).toMatchObject({
+      node: {
+        properties: {
+          fills: [{ type: "linear-gradient" }],
+        },
+      },
+    });
   });
 
   it("lets Main bind the current skill IDs instead of trusting model input", () => {
@@ -734,7 +889,7 @@ describe("compact first-slice tool", () => {
         y: 160 + Math.floor(index / 11) * 24,
         width: 16,
         height: 16,
-        fill: { color: "#7C3AED" },
+        ...solidAppearance("#7C3AED"),
       })),
     });
 
@@ -801,7 +956,7 @@ describe("compact first-slice tool", () => {
             y: Math.floor(index / 3) * 30,
             width: 80,
             height: 24,
-            fill: { color: "#F8FAFC" },
+            ...solidAppearance("#F8FAFC"),
             cornerRadius: 6,
           })),
           {
@@ -852,7 +1007,7 @@ describe("compact first-slice tool", () => {
         y: 160,
         width: 8,
         height: 8,
-        fill: { color: "#7C3AED" },
+        ...solidAppearance("#7C3AED"),
       });
     }
     tooManyElements.firstSlice.stages.push({
@@ -867,7 +1022,7 @@ describe("compact first-slice tool", () => {
         y: 180,
         width: 8,
         height: 8,
-        fill: { color: "#7C3AED" },
+        ...solidAppearance("#7C3AED"),
       })),
     });
     const tooManyResult = parseCanonicalProjection(tooManyElements);
@@ -897,7 +1052,7 @@ describe("compact first-slice tool", () => {
             y: 180,
             width: 8,
             height: 8,
-            fill: { color: "#7C3AED" },
+            ...solidAppearance("#7C3AED"),
           },
         ],
       });
@@ -928,7 +1083,7 @@ describe("compact first-slice tool", () => {
           y: 0,
           width: 40,
           height: 40,
-          fill: { color: "#7C3AED" },
+          ...solidAppearance("#7C3AED"),
         },
       ],
     });
@@ -1098,7 +1253,7 @@ export function fixture(): DesignFirstSliceToolInput {
               y: 0,
               width: 342,
               height: 260,
-              fill: { color: "#EDE9FE" },
+              ...solidAppearance("#EDE9FE"),
               cornerRadius: 24,
             },
             {
@@ -1110,6 +1265,7 @@ export function fixture(): DesignFirstSliceToolInput {
               y: 28,
               width: 294,
               height: 92,
+              ...solidAppearance("#0F172A"),
               text: {
                 content: "Design with momentum",
                 fontFamily: "Inter",
@@ -1118,7 +1274,6 @@ export function fixture(): DesignFirstSliceToolInput {
                 fontSlant: "normal",
                 fontSize: 32,
                 lineHeight: 38,
-                color: "#0F172A",
                 textResize: "auto-height",
               },
             },
@@ -1173,7 +1328,7 @@ function logoDirectionElements(
       y: 0,
       width: 342,
       height: 220,
-      fill: { color: "#FFF7F2" },
+      ...solidAppearance("#FFF7F2"),
     },
     {
       id: `${prefix}_mono`,
@@ -1185,7 +1340,7 @@ function logoDirectionElements(
       width: 96,
       height: 96,
       path: "M 0 0 H 96 V 28 H 28 V 96 H 0 Z",
-      fill: { color: "#111827" },
+      ...solidAppearance("#111827"),
     },
     ...[32, 24, 16].map((size) => ({
       id: `${prefix}_${size}`,
@@ -1196,8 +1351,16 @@ function logoDirectionElements(
       y: 40,
       width: size,
       height: size,
-      fill: { color },
+      ...solidAppearance(color),
       cornerRadius: Math.max(2, size / 6),
     })),
   ];
+}
+
+function solidAppearance(color: string) {
+  return {
+    fills: [{ type: "solid" as const, color, opacity: 1 }],
+    strokes: [],
+    strokeWidth: 0,
+  };
 }
