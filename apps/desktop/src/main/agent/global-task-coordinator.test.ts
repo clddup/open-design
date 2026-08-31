@@ -2892,16 +2892,22 @@ describe("GlobalTaskCoordinator", () => {
       scope: { kind: "page" as const, pageId, selectedNodeIds: [] },
       mutationTarget: { kind: "page" as const, pageId },
     };
-    coordinator.recordDocumentInspection(
-      context,
-      inspectionResult(opened.document, pageId),
-    );
+    const inspected = inspectionResult(opened.document, pageId);
+    const idAllocation = createAgentDesignIdAllocation(context.runId);
+    coordinator.recordDocumentInspection(context, {
+      ...inspected,
+      content: {
+        ...inspected.content,
+        idAllocation,
+      },
+    });
     const plan = multiTargetPlan(pageId);
     const targetTemplate = plan.targets[0];
     if (!targetTemplate) throw new Error("Target template is missing");
     plan.objective = "Design the complete 24-screen product suite";
     plan.targets = Array.from({ length: 24 }, (_, index) => {
       const frameId = `frame_screen_${index + 1}`;
+      const regionId = `${idAllocation.newNodeIdPrefix}screen_${index + 1}_content`;
       return {
         ...structuredClone(targetTemplate),
         targetId: `target_screen_${index + 1}`,
@@ -2917,12 +2923,12 @@ describe("GlobalTaskCoordinator", () => {
           ...structuredClone(targetTemplate.composition),
           regions: targetTemplate.composition.regions.map((region) => ({
             ...region,
-            nodeId: `${frameId}_content`,
+            nodeId: regionId,
           })),
         },
         qualityProfile: {
           ...structuredClone(targetTemplate.qualityProfile),
-          safeAreaNodeIds: [`${frameId}_content`],
+          safeAreaNodeIds: [regionId],
         },
       };
     });
@@ -2941,6 +2947,10 @@ describe("GlobalTaskCoordinator", () => {
         targetId: target.targetId,
         label: target.label,
         objective: target.objective,
+        artboard: {
+          width: target.artboard.width,
+          height: target.artboard.height,
+        },
         requiredContent: [`${target.label} content`],
       })),
       exclusions: ["No unrequested product capability"],
@@ -2952,11 +2962,27 @@ describe("GlobalTaskCoordinator", () => {
       "scope_call",
       reviewedScope,
     );
-    coordinator.recordDeliveryScopeReviewed(
+    const scopeAllocation = coordinator.createDeliveryScopeAllocation(
       context,
       "scope_call",
       reviewedScope,
     );
+    const scopeRevision = opened.document.revision + 1;
+    coordinator.recordDeliveryScopeCompleted(
+      context,
+      "scope_call",
+      reviewedScope,
+      scopeAllocation,
+      scopeRevision,
+    );
+    coordinator.handleAgentEvent({
+      type: "tool.completed",
+      runId: context.runId,
+      toolCallId: "scope_call",
+      result: { ok: true },
+      revision: scopeRevision,
+    });
+    const contextAfterScope = { ...context, revision: scopeRevision };
     expect(
       coordinator.hasDeliveryScopeAuthorization(
         context.runId,
@@ -2965,10 +2991,12 @@ describe("GlobalTaskCoordinator", () => {
       ),
     ).toBe(false);
     expect(() =>
-      coordinator.recordDeliveryScopeReviewed(
-        context,
+      coordinator.recordDeliveryScopeCompleted(
+        contextAfterScope,
         "scope_call",
         reviewedScope,
+        scopeAllocation,
+        scopeRevision,
       ),
     ).toThrow("delivery_scope_already_reviewed");
     plan.objective = "Paraphrased executable objective";
@@ -2984,7 +3012,7 @@ describe("GlobalTaskCoordinator", () => {
       targets: plan.targets.slice(0, 1),
     };
     const registration = coordinator.registerDesignPlan(
-      context,
+      contextAfterScope,
       firstStagePlan,
     );
     expect(registration).toMatchObject({
@@ -3024,9 +3052,9 @@ describe("GlobalTaskCoordinator", () => {
     expect(
       coordinator.getDeliveryStageContext(context.runId)?.nextTarget,
     ).toBeUndefined();
-    expect(() => coordinator.registerDesignPlan(context, plan)).toThrow(
-      "current stage has 1 target(s)",
-    );
+    expect(() =>
+      coordinator.registerDesignPlan(contextAfterScope, plan),
+    ).toThrow("current stage has 1 target(s)");
     expect(new Set(plan.targets.map((target) => target.pageId))).toEqual(
       new Set([pageId]),
     );
@@ -3046,7 +3074,7 @@ describe("GlobalTaskCoordinator", () => {
       sessionId: context.sessionId,
       prompt: "Continue the confirmed delivery scope",
       documentId: context.documentId,
-      revision: opened.document.revision,
+      revision: scopeRevision,
       modelSelection,
       generationMode: "fast",
       deliveryScopeReview: "required",

@@ -37,6 +37,17 @@ export const DESIGN_DELIVERY_SCOPE_TOOL_INPUT_SCHEMA = Type.Object(
           }),
           label: text(1, 128),
           objective: text(8, 500),
+          artboard: Type.Object(
+            {
+              width: Type.Number({ minimum: 16, maximum: 100_000 }),
+              height: Type.Number({ minimum: 16, maximum: 100_000 }),
+            },
+            {
+              ...CLOSED,
+              description:
+                "The real editable artboard size to allocate immediately after the user confirms this delivery scope.",
+            },
+          ),
           requiredContent: Type.Array(text(2, 240), {
             minItems: 1,
             maxItems: 8,
@@ -90,7 +101,8 @@ export function deliveryScopeApprovalPrompt(
   const chinese = /[\u3400-\u9fff]/u.test(request.prompt);
   const targets = scope.targets
     .map(
-      (target, index) => `${index + 1}. ${target.label} — ${target.objective}`,
+      (target, index) =>
+        `${index + 1}. ${target.label} · ${target.artboard.width}×${target.artboard.height} — ${target.objective}`,
     )
     .join("\n");
   const boundary =

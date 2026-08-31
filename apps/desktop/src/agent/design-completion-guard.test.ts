@@ -66,12 +66,14 @@ const deliveryScope: AgentToolCallRecord = {
           targetId: "target_home",
           label: "Home",
           objective: "Design the complete Home experience",
+          artboard: { width: 1440, height: 900 },
           requiredContent: ["Primary Home content"],
         },
         {
           targetId: "target_profile",
           label: "Profile",
           objective: "Design the complete Profile experience",
+          artboard: { width: 1440, height: 900 },
           requiredContent: ["Primary Profile content"],
         },
       ],
@@ -322,6 +324,15 @@ describe("design completion guard", () => {
                   label: "Profile",
                   objective: "Design the complete Profile experience",
                   requiredContent: ["Primary Profile content"],
+                  artboard: {
+                    pageId: "page_1",
+                    frameId: "frame_profile",
+                    x: 1600,
+                    y: 0,
+                    width: 1440,
+                    height: 900,
+                    allocatedRevision: 5,
+                  },
                 },
               },
             },
@@ -334,6 +345,69 @@ describe("design completion guard", () => {
       throw new Error("Expected continuation scope to remain active");
     }
     expect(continuedStage.message).toContain("target_profile");
+  });
+
+  it("asks for the first executable Plan after scope artboards are allocated", () => {
+    const allocatedScope = structuredClone(deliveryScope);
+    allocatedScope.result = {
+      ...(allocatedScope.result as Record<string, unknown>),
+      delivery: {
+        version: 3,
+        targets: [
+          {
+            targetId: "target_home",
+            label: "Home",
+            pageId: "page_1",
+            rootNodeId: "run_scope_scope_1",
+            reservedNodeIds: ["run_scope_scope_1"],
+            status: "allocated",
+            allocatedRevision: 5,
+          },
+          {
+            targetId: "target_profile",
+            label: "Profile",
+            pageId: "page_1",
+            rootNodeId: "run_scope_scope_2",
+            reservedNodeIds: ["run_scope_scope_2"],
+            status: "allocated",
+            allocatedRevision: 5,
+          },
+        ],
+        activeTargetId: "target_home",
+      },
+      deliveryStage: {
+        totalTargets: 2,
+        plannedTargets: 0,
+        verifiedTargets: 0,
+        nextTarget: {
+          stage: 1,
+          targetId: "target_home",
+          label: "Home",
+          objective: "Design the complete Home experience",
+          requiredContent: ["Primary Home content"],
+          artboard: {
+            pageId: "page_1",
+            frameId: "run_scope_scope_1",
+            x: 0,
+            y: 0,
+            width: 1440,
+            height: 900,
+            allocatedRevision: 5,
+          },
+        },
+      },
+    };
+
+    const result = reviewDesignCompletion(
+      context([allocatedScope], undefined, {
+        deliveryScopeReview: "required",
+      }),
+    );
+
+    expect(result.allow).toBe(false);
+    if (result.allow) throw new Error("Expected executable Plan requirement");
+    expect(result.message).toContain("no executable target Plan");
+    expect(result.message).toContain("target_home");
   });
 
   it("rejects a completion claim when planning never produced a design write", () => {

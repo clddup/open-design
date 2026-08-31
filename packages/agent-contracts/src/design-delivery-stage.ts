@@ -35,10 +35,24 @@ const DeliveryStageCurrentPlanSchema = Type.Object(
   { additionalProperties: false },
 );
 
+const DeliveryStageArtboardSchema = Type.Object(
+  {
+    pageId: StableIdSchema,
+    frameId: StableIdSchema,
+    x: Type.Number(),
+    y: Type.Number(),
+    width: Type.Number({ minimum: 16, maximum: 100_000 }),
+    height: Type.Number({ minimum: 16, maximum: 100_000 }),
+    allocatedRevision: Type.Integer({ minimum: 0 }),
+  },
+  { additionalProperties: false },
+);
+
 const DeliveryStageNextTargetSchema = Type.Object(
   {
     stage: Type.Integer({ minimum: 1, maximum: MAX_DELIVERY_STAGE_TARGETS }),
     ...DeliveryStageTargetSchema.properties,
+    artboard: DeliveryStageArtboardSchema,
   },
   { additionalProperties: false },
 );

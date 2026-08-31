@@ -1,6 +1,5 @@
 import type { ToolCallRequest } from "@opendesign/agent-contracts";
 import { describe, expect, it, vi } from "vitest";
-import { BUILTIN_UI_DESIGN_SKILL_REFS } from "@opendesign/design-skills";
 import {
   compileDesignFirstSliceToolInput,
   DESIGN_FIRST_SLICE_TOOL_NAME,
@@ -8,6 +7,10 @@ import {
   type DesignFirstSliceToolInput,
 } from "@/shared/design-agent-tools.js";
 import { handleDesignFirstSliceTool } from "./design-first-slice-tool-handler.js";
+import {
+  firstSliceInput,
+  firstSliceModelInput,
+} from "./design-first-slice-tool-handler.fixture.js";
 
 const context = {
   runId: "run_slice",
@@ -41,6 +44,7 @@ describe("handleDesignFirstSliceTool", () => {
       authoritativeDesignPrompt: vi
         .fn()
         .mockReturnValue("Create a focused home screen"),
+      bindFirstSliceToDeliveryScope: vi.fn(passthroughFirstSlice),
       registerDesignPlan: vi.fn().mockReturnValue({
         status: "accepted",
         planRevision: 1,
@@ -175,6 +179,7 @@ describe("handleDesignFirstSliceTool", () => {
       authoritativeDesignPrompt: vi
         .fn()
         .mockReturnValue("Create a focused home screen"),
+      bindFirstSliceToDeliveryScope: vi.fn(passthroughFirstSlice),
       registerDesignPlan: vi.fn().mockReturnValue({
         status: "accepted",
         planRevision: 1,
@@ -220,6 +225,72 @@ describe("handleDesignFirstSliceTool", () => {
     expect(coordinator.recordDesignApplyCompleted).not.toHaveBeenCalled();
   });
 
+  it("fills an allocated scope Frame without inserting the root again", async () => {
+    const input = firstSliceInput();
+    const compiled = compileDesignFirstSliceToolInput(input);
+    const coordinator = {
+      authoritativeDesignPrompt: vi.fn(() => "Create a focused home screen"),
+      bindFirstSliceToDeliveryScope: vi.fn(passthroughFirstSlice),
+      registerDesignPlan: vi.fn(() => ({
+        status: "accepted",
+        planRevision: 1,
+        changedTargetIds: ["home"],
+        plan: compiled.plan,
+      })),
+      createDesignPlanAllocation: vi.fn(() => undefined),
+      assertVisualReviewBeforeWrite: vi.fn(),
+      assertDesignPlanForApply: vi.fn(() => ({
+        input: compiled.apply,
+        plan: compiled.plan,
+        targetIds: ["home"],
+      })),
+      assertDesignApplyResult: vi.fn(),
+      recordDesignPlanAllocated: vi.fn(),
+      recordDesignApplyCompleted: vi.fn(),
+      getDeliveryLedger: vi.fn(() => ({
+        targets: [
+          { targetId: "previous", allocatedRevision: 2 },
+          { targetId: "home", allocatedRevision: 4 },
+        ],
+      })),
+      getDeliveryStageContext: vi.fn(() => undefined),
+    };
+    const rendererHost = {
+      execute: vi.fn().mockResolvedValue({
+        content: { ok: true },
+        designRevision: {
+          previousRevision: 4,
+          revision: 5,
+          transactionId: "transaction_scope_slice",
+        },
+      }),
+    };
+
+    const result = await handleDesignFirstSliceTool(
+      coordinator as never,
+      rendererHost as never,
+      {
+        toolCallId: "slice_scope",
+        toolName: DESIGN_FIRST_SLICE_TOOL_NAME,
+        input: firstSliceModelInput(input),
+      },
+      context,
+      context,
+      new AbortController().signal,
+    );
+
+    expect(rendererHost.execute).toHaveBeenCalledWith(
+      expect.objectContaining({ input: compiled.apply }),
+      context,
+      expect.any(AbortSignal),
+      {},
+    );
+    expect(coordinator.recordDesignPlanAllocated).not.toHaveBeenCalled();
+    expect(result.content).toMatchObject({
+      allocation: { targetIds: ["home"], revision: 4 },
+    });
+  });
+
   it("rejects a one-direction compact Logo call when the authoritative brief requests three", async () => {
     const input = firstSliceInput();
     input.deliverable = "logo";
@@ -239,6 +310,7 @@ describe("handleDesignFirstSliceTool", () => {
       authoritativeDesignPrompt: vi
         .fn()
         .mockReturnValue("Concept Exploration 提供 3 个真正不同的设计方向"),
+      bindFirstSliceToDeliveryScope: vi.fn(passthroughFirstSlice),
       registerDesignPlan: vi.fn(),
     };
     const rendererHost = { execute: vi.fn() };
@@ -298,134 +370,9 @@ describe("handleDesignFirstSliceTool", () => {
   });
 });
 
-function firstSliceModelInput(
-  input: DesignFirstSliceToolInput,
-): Record<string, unknown> {
-  const value = structuredClone(input) as unknown as Record<string, unknown>;
-  for (const key of ["skillRefs", "briefFidelity", "referenceStrategy"]) {
-    Reflect.deleteProperty(value, key);
-  }
-  for (const target of value.targets as Array<Record<string, unknown>>) {
-    Reflect.deleteProperty(target, "qualityProfile");
-  }
+function passthroughFirstSlice(
+  _context: unknown,
+  value: DesignFirstSliceToolInput,
+): DesignFirstSliceToolInput {
   return value;
-}
-
-function firstSliceInput(): DesignFirstSliceToolInput {
-  return {
-    version: 1,
-    deliverable: "ui",
-    objective: "Create a focused home screen",
-    designIntent: {
-      subject: "A mobile product home for focused creative work",
-      audience: "Independent designers continuing time-sensitive work",
-      primaryJob: "Recognize the next task and continue it immediately",
-      calibration: {
-        surfaceMode: "operate",
-        expressiveness: "expressive",
-        density: "balanced",
-      },
-      visualThesis:
-        "A directional editorial field expresses momentum instead of a generic mobile card stack.",
-      signatureMotif:
-        "One cropped signal rail connects identity, next action, and progress.",
-      typographyLanguage:
-        "Editorial display type sets pace while compact neutral text preserves clarity.",
-      colorMaterialLanguage:
-        "Tinted ink planes and one electric signal color create controlled hierarchy.",
-      compositionTension:
-        "Offset alignment and decisive scale contrast pull attention toward action.",
-      antiPatterns: [
-        "No centered card floating on a decorative background",
-        "No equal grid of same-radius feature tiles",
-        "No generic purple gradient used as the only identity",
-      ],
-    },
-    skillRefs: BUILTIN_UI_DESIGN_SKILL_REFS.map((reference) => ({
-      ...reference,
-    })),
-    briefFidelity: {
-      requiredContent: ["Focused home screen"],
-      preservedSemantics: [],
-      prohibitedAdditions: ["No unrequested product capability"],
-      assumptions: ["Use an iOS mobile viewport"],
-    },
-    targets: [
-      {
-        targetId: "home",
-        label: "Home",
-        pageId: "page_1",
-        objective: "Show the product value immediately",
-        frame: {
-          frameId: "frame_home",
-          x: 80,
-          y: 40,
-          width: 390,
-          height: 844,
-        },
-        layout: "Vertical mobile composition",
-        spacing: "8px base with 24px sections",
-        qualityProfile: {
-          kind: "ui",
-          platform: "ios",
-          input: "touch",
-          insets: [59, 0, 34, 0],
-          safeNodeIds: ["home_hero"],
-          hitNodeIds: [],
-        },
-        regions: [
-          {
-            nodeId: "home_hero",
-            name: "Hero",
-            role: "content",
-            parentId: "frame_home",
-            x: 24,
-            y: 80,
-            width: 342,
-            height: 240,
-          },
-        ],
-      },
-    ],
-    visualSystem: {
-      formLanguage: "Calm editorial geometry",
-      palette: ["#0F172A", "#F8FAFC", "#7C3AED"],
-      surfaceAndDepth: "Flat with one elevated focal surface",
-      typography: ["Inter Bold 32/38", "Inter Regular 16/24"],
-    },
-    rasterAssetRoles: [],
-    firstSlice: {
-      targetId: "home",
-      label: "Create Home hero",
-      stages: [
-        {
-          stageId: "hero",
-          label: "Build hero",
-          elements: [
-            {
-              id: "hero_title",
-              kind: "text",
-              name: "Hero Title",
-              parentId: "home_hero",
-              x: 24,
-              y: 24,
-              width: 294,
-              height: 84,
-              text: {
-                content: "Design with momentum",
-                fontFamily: "Inter",
-                fontStyleName: "Bold",
-                fontWeight: 700,
-                fontSlant: "normal",
-                fontSize: 32,
-                lineHeight: 38,
-                color: "#0F172A",
-                textResize: "auto-height",
-              },
-            },
-          ],
-        },
-      ],
-    },
-  };
 }

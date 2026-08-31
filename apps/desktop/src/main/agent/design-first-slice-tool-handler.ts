@@ -35,7 +35,10 @@ export async function handleDesignFirstSliceTool(
       formatValidationFailure("opendesign_generate_first_slice", parsed.issues),
     );
   }
-  const input = parsed.value;
+  const input = coordinator.bindFirstSliceToDeliveryScope(
+    context,
+    parsed.value,
+  );
   if (
     input.deliverable === "logo" &&
     logoBriefRequiresExploration(authoritativePrompt) &&
@@ -73,7 +76,7 @@ export async function handleDesignFirstSliceTool(
   const registration = coordinator.registerDesignPlan(context, compiled.plan);
   const allocation = coordinator.createDesignPlanAllocation(context.runId);
   if (
-    !allocation ||
+    allocation &&
     allocation.targetIds.length !== compiled.plan.targets.length
   ) {
     throw designWorkflowError(
@@ -82,43 +85,55 @@ export async function handleDesignFirstSliceTool(
     );
   }
   coordinator.assertVisualReviewBeforeWrite(context);
-  const authorization = coordinator.assertDesignPlanForAllocatedApply(
-    context,
-    normalizedApply,
-    allocation.targetIds,
-  );
+  const authorization = allocation
+    ? coordinator.assertDesignPlanForAllocatedApply(
+        context,
+        normalizedApply,
+        allocation.targetIds,
+      )
+    : coordinator.assertDesignPlanForApply(context, normalizedApply);
+  if (!authorization) {
+    throw designWorkflowError(
+      "material_write_required",
+      "Compiled first-slice content did not resolve to the registered delivery target",
+    );
+  }
   const resolvedApply = authorization.input;
-  const allocationStepId = uniqueStepId(
-    "allocate_artboards",
-    new Set(resolvedApply.steps?.map((step) => step.stepId) ?? []),
-  );
-  const combinedInput = {
-    label: `Allocate artboards and ${resolvedApply.label}`,
-    summary:
-      "Create every stable delivery Frame root, then commit the first meaningful editable slice as real semantic revisions",
-    steps: [
-      {
-        stepId: allocationStepId,
-        label:
-          allocation.targetIds.length === 1
-            ? "Create real artboard"
-            : `Create ${allocation.targetIds.length} real artboards`,
-        commandIds: allocation.input.commands.map(
-          (command) => command.commandId,
-        ),
-      },
-      ...(resolvedApply.steps ?? [
-        {
-          stepId: "first_slice",
-          label: resolvedApply.label,
-          commandIds: resolvedApply.commands.map(
-            (command) => command.commandId,
-          ),
-        },
-      ]),
-    ],
-    commands: [...allocation.input.commands, ...resolvedApply.commands],
-  };
+  const allocationStepId = allocation
+    ? uniqueStepId(
+        "allocate_artboards",
+        new Set(resolvedApply.steps?.map((step) => step.stepId) ?? []),
+      )
+    : undefined;
+  const combinedInput = allocation
+    ? {
+        label: `Allocate artboards and ${resolvedApply.label}`,
+        summary:
+          "Create every stable delivery Frame root, then commit the first meaningful editable slice as real semantic revisions",
+        steps: [
+          {
+            stepId: allocationStepId!,
+            label:
+              allocation.targetIds.length === 1
+                ? "Create real artboard"
+                : `Create ${allocation.targetIds.length} real artboards`,
+            commandIds: allocation.input.commands.map(
+              (command) => command.commandId,
+            ),
+          },
+          ...(resolvedApply.steps ?? [
+            {
+              stepId: "first_slice",
+              label: resolvedApply.label,
+              commandIds: resolvedApply.commands.map(
+                (command) => command.commandId,
+              ),
+            },
+          ]),
+        ],
+        commands: [...allocation.input.commands, ...resolvedApply.commands],
+      }
+    : resolvedApply;
 
   const applied = await rendererHost.execute(
     {
@@ -131,15 +146,20 @@ export async function handleDesignFirstSliceTool(
     reportProgress ? { reportProgress } : {},
   );
   coordinator.assertDesignApplyResult(context, authorization, applied);
-  const allocationRevision = committedStepRevision(
-    applied.content,
-    allocationStepId,
-  );
-  coordinator.recordDesignPlanAllocated(
-    context.runId,
-    allocation.targetIds,
-    allocationRevision,
-  );
+  const allocationRevision = allocation
+    ? committedStepRevision(applied.content, allocationStepId!)
+    : coordinator
+        .getDeliveryLedger(context.runId)
+        ?.targets.find(
+          (target) => target.targetId === input.firstSlice.targetId,
+        )?.allocatedRevision;
+  if (allocation) {
+    coordinator.recordDesignPlanAllocated(
+      context.runId,
+      allocation.targetIds,
+      allocationRevision,
+    );
+  }
   coordinator.recordDesignApplyCompleted(
     context.runId,
     resolvedApply,
@@ -163,7 +183,7 @@ export async function handleDesignFirstSliceTool(
       targets: designPlanTargets(registration.plan),
       rasterAssetRoles: registration.plan.rasterAssetRoles,
       allocation: {
-        targetIds: allocation.targetIds,
+        targetIds: allocation?.targetIds ?? [input.firstSlice.targetId],
         revision: allocationRevision,
       },
       firstSlice: {

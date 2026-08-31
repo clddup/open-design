@@ -37,6 +37,7 @@ import {
   type DesignApplyToolInput,
   type DesignDeliveryScope,
   type DesignComponentToolInput,
+  type DesignFirstSliceToolInput,
   type DesignPlanTarget,
   type DesignPlanToolInput,
   type DesignReferenceStrategy,
@@ -72,6 +73,15 @@ import type {
 } from "./design-visual-critic.js";
 import { AgentRunAdmissionError } from "./agent-run-admission-error.js";
 import { projectDesignDeliveryStage } from "./design-delivery-stage-projection.js";
+import {
+  bindFirstSliceToScopeAllocation,
+  createScopeArtboardAllocation,
+  finalizeScopeAllocation,
+  projectScopeAllocationIntoInspection,
+  scopeAllocationLedger,
+  type DeliveryScopeAllocation,
+  type DeliveryScopeArtboardAllocation,
+} from "./delivery-scope-artboard-allocation.js";
 
 type RunStartRequest = Extract<AgentRequest, { type: "run.start" }>;
 
@@ -156,6 +166,10 @@ export class GlobalTaskCoordinator {
     }
   >();
   readonly #deliveryScopesByRunId = new Map<string, DesignDeliveryScope>();
+  readonly #deliveryScopeAllocationsByRunId = new Map<
+    string,
+    Map<string, DeliveryScopeArtboardAllocation>
+  >();
 
   constructor(
     private readonly projectHost: ProjectHost,
@@ -241,6 +255,19 @@ export class GlobalTaskCoordinator {
     const continuedPlan = request.continuation
       ? this.#designPlansByRunId.get(request.runId)
       : undefined;
+    const continuedScopeAllocation = request.continuation
+      ? this.#deliveryScopeAllocationsByRunId.get(request.runId)
+      : undefined;
+    const continuedScopeRevision = continuedScopeAllocation?.values().next()
+      .value?.allocatedRevision;
+    const continuedDelivery = continuedPlan
+      ? deliveryLedger(continuedPlan)
+      : continuedScopeAllocation && validRevision(continuedScopeRevision)
+        ? scopeAllocationLedger(
+            [...continuedScopeAllocation.values()],
+            continuedScopeRevision,
+          )
+        : undefined;
     const task: GlobalTaskProjection = {
       version: WORKSPACE_CONTRACT_VERSION,
       taskId: `task_${request.runId}`,
@@ -249,7 +276,7 @@ export class GlobalTaskCoordinator {
       title: conversation.title,
       lifecycle: "queued",
       targetSet: { targets: [primaryTarget], primaryTarget },
-      ...(continuedPlan ? { delivery: deliveryLedger(continuedPlan) } : {}),
+      ...(continuedDelivery ? { delivery: continuedDelivery } : {}),
       createdAt: timestamp,
       updatedAt: timestamp,
     };
@@ -323,6 +350,18 @@ export class GlobalTaskCoordinator {
     return binding.prompt;
   }
 
+  bindFirstSliceToDeliveryScope(
+    context: TrustedToolContext,
+    input: DesignFirstSliceToolInput,
+  ): DesignFirstSliceToolInput {
+    this.assertDesignToolContext(context);
+    return bindFirstSliceToScopeAllocation(
+      this.#deliveryScopesByRunId.get(context.runId),
+      this.#deliveryScopeAllocationsByRunId.get(context.runId),
+      input,
+    );
+  }
+
   grantDeliveryScopeAuthorization(
     runId: string,
     approvalId: string,
@@ -360,12 +399,77 @@ export class GlobalTaskCoordinator {
     );
   }
 
-  recordDeliveryScopeReviewed(
+  createDeliveryScopeAllocation(
     context: TrustedToolContext,
     toolCallId: string,
     scope: DesignDeliveryScope,
-  ): DesignDeliveryScope {
+  ): DeliveryScopeAllocation {
     this.assertDesignToolContext(context);
+    this.#assertDeliveryScopeCanBeReviewed(context, toolCallId, scope);
+    const inspection = this.#requireDocumentInspection(context);
+    const binding = this.#toolBindingsByRunId.get(context.runId);
+    const pageId =
+      binding?.mutationTarget.kind === "page"
+        ? binding.mutationTarget.pageId
+        : context.scope.pageId;
+    if (!pageId || !inspection.pageRootsById.has(pageId)) {
+      throw designWorkflowError(
+        "allocated_artboard_invalid",
+        "Delivery scope artboards require the current inspected Page",
+      );
+    }
+    if (!inspection.newNodeIdPrefix) {
+      throw designWorkflowError(
+        "allocated_artboard_invalid",
+        "Delivery scope artboards require the current Run node ID allocation",
+      );
+    }
+    return createScopeArtboardAllocation(scope, pageId, inspection);
+  }
+
+  recordDeliveryScopeCompleted(
+    context: TrustedToolContext,
+    toolCallId: string,
+    scope: DesignDeliveryScope,
+    allocation: DeliveryScopeAllocation,
+    revision?: number,
+  ): {
+    scope: DesignDeliveryScope;
+    artboards: DeliveryScopeArtboardAllocation[];
+  } {
+    this.assertDesignToolContext(context);
+    this.#assertDeliveryScopeCanBeReviewed(context, toolCallId, scope);
+    if (!validRevision(revision)) {
+      throw designWorkflowError(
+        "allocation_revision_invalid",
+        "Delivery scope artboard allocation did not return a valid document revision",
+      );
+    }
+    const accepted = structuredClone(scope);
+    const artboards = finalizeScopeAllocation(accepted, allocation, revision);
+    this.#deliveryScopesByRunId.set(context.runId, accepted);
+    this.#deliveryScopeAllocationsByRunId.set(
+      context.runId,
+      new Map(artboards.map((artboard) => [artboard.targetId, artboard])),
+    );
+    this.#deliveryScopeAuthorizationsByRunId.delete(context.runId);
+    projectScopeAllocationIntoInspection(
+      this.#inspectionsByRunId.get(context.runId),
+      artboards,
+      revision,
+    );
+    this.#persistScopeAllocation(context.runId, artboards, revision);
+    return {
+      scope: structuredClone(accepted),
+      artboards: structuredClone(artboards),
+    };
+  }
+
+  #assertDeliveryScopeCanBeReviewed(
+    context: TrustedToolContext,
+    toolCallId: string,
+    scope: DesignDeliveryScope,
+  ): void {
     if (this.#deliveryScopesByRunId.has(context.runId)) {
       throw designWorkflowError(
         "delivery_scope_already_reviewed",
@@ -384,10 +488,6 @@ export class GlobalTaskCoordinator {
         "Review delivery scope before defining an executable design Plan or writing canvas content",
       );
     }
-    const accepted = structuredClone(scope);
-    this.#deliveryScopesByRunId.set(context.runId, accepted);
-    this.#deliveryScopeAuthorizationsByRunId.delete(context.runId);
-    return structuredClone(accepted);
   }
 
   assertDeliveryScopeReviewed(context: TrustedToolContext): void {
@@ -572,6 +672,7 @@ export class GlobalTaskCoordinator {
     const executablePlan = bindPlanToReviewedScope(
       binding.deliveryScopeReview,
       this.#deliveryScopesByRunId.get(context.runId),
+      this.#deliveryScopeAllocationsByRunId.get(context.runId),
       existingPlan,
       plan,
     );
@@ -1658,13 +1759,19 @@ export class GlobalTaskCoordinator {
 
   getDeliveryLedger(runId: string): DesignDeliveryLedger | undefined {
     const state = this.#designPlansByRunId.get(runId);
-    return state ? deliveryLedger(state) : undefined;
+    if (state) return deliveryLedger(state);
+    const allocation = this.#deliveryScopeAllocationsByRunId.get(runId);
+    const revision = allocation?.values().next().value?.allocatedRevision;
+    return allocation && validRevision(revision)
+      ? scopeAllocationLedger([...allocation.values()], revision)
+      : undefined;
   }
 
   getDeliveryStageContext(runId: string): DesignDeliveryStage | undefined {
     return projectDesignDeliveryStage(
       this.#designPlansByRunId.get(runId),
       this.#deliveryScopesByRunId.get(runId),
+      this.#deliveryScopeAllocationsByRunId.get(runId),
     );
   }
 
@@ -1743,6 +1850,22 @@ export class GlobalTaskCoordinator {
     this.workspaceStore.saveGlobalTask(updated);
   }
 
+  #persistScopeAllocation(
+    runId: string,
+    artboards: readonly DeliveryScopeArtboardAllocation[],
+    revision: number,
+  ): void {
+    const task = this.#tasksByRunId.get(runId);
+    if (!task) return;
+    const updated: GlobalTaskProjection = {
+      ...task,
+      delivery: scopeAllocationLedger(artboards, revision),
+      updatedAt: this.now().toISOString(),
+    };
+    this.#tasksByRunId.set(runId, updated);
+    this.workspaceStore.saveGlobalTask(updated);
+  }
+
   handleAgentEvent(event: AgentEvent): void {
     if (event.type === "agent.error" && event.runId === undefined) {
       this.#interruptActiveTasks();
@@ -1768,6 +1891,13 @@ export class GlobalTaskCoordinator {
         this.#deliveryScopesByRunId.set(
           event.nextRunId,
           structuredClone(deliveryScope),
+        );
+      }
+      const scopeAllocations = this.#deliveryScopeAllocationsByRunId.get(runId);
+      if (scopeAllocations) {
+        this.#deliveryScopeAllocationsByRunId.set(
+          event.nextRunId,
+          structuredClone(scopeAllocations),
         );
       }
       const rasterRoles = this.#generatedRasterRolesByRunId.get(runId);
@@ -1807,6 +1937,7 @@ export class GlobalTaskCoordinator {
             : runId;
         this.#designPlansByRunId.delete(abandonedRunId);
         this.#generatedRasterRolesByRunId.delete(abandonedRunId);
+        this.#deliveryScopeAllocationsByRunId.delete(abandonedRunId);
       }
       return;
     }
@@ -1826,6 +1957,7 @@ export class GlobalTaskCoordinator {
         this.#pageStructureAccessByRunId.delete(runId);
         this.#deliveryScopeAuthorizationsByRunId.delete(runId);
         this.#deliveryScopesByRunId.delete(runId);
+        this.#deliveryScopeAllocationsByRunId.delete(runId);
       }
       return;
     }
@@ -1854,6 +1986,7 @@ export class GlobalTaskCoordinator {
       this.#pageStructureAccessByRunId.delete(runId);
       this.#deliveryScopeAuthorizationsByRunId.delete(runId);
       this.#deliveryScopesByRunId.delete(runId);
+      this.#deliveryScopeAllocationsByRunId.delete(runId);
     }
   }
 
@@ -1873,6 +2006,7 @@ export class GlobalTaskCoordinator {
       this.#pageStructureAccessByRunId.delete(runId);
       this.#deliveryScopeAuthorizationsByRunId.delete(runId);
       this.#deliveryScopesByRunId.delete(runId);
+      this.#deliveryScopeAllocationsByRunId.delete(runId);
       this.#touchConversation(task.conversationId, timestamp);
     }
   }
@@ -2965,6 +3099,7 @@ function sameScope(left: SelectionScope, right: SelectionScope): boolean {
 function bindPlanToReviewedScope(
   reviewMode: "direct" | "required",
   scope: DesignDeliveryScope | undefined,
+  allocations: ReadonlyMap<string, DeliveryScopeArtboardAllocation> | undefined,
   existing: DesignWorkflowState | undefined,
   plan: DesignPlanToolInput,
 ): DesignPlanToolInput {
@@ -3033,6 +3168,18 @@ function bindPlanToReviewedScope(
     if (!target) mismatch(`Target ${index + 1} is missing`);
     target.label = confirmed.label;
     target.objective = confirmed.objective;
+    const allocation = allocations?.get(confirmed.targetId);
+    if (allocation) {
+      target.pageId = allocation.pageId;
+      target.artboard = {
+        mode: "existing",
+        frameId: allocation.frameId,
+        x: allocation.x,
+        y: allocation.y,
+        width: allocation.width,
+        height: allocation.height,
+      };
+    }
   }
   bound.briefFidelity = {
     ...bound.briefFidelity,

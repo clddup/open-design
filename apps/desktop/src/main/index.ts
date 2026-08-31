@@ -882,7 +882,15 @@ async function startDesktopApplication(
       });
       if (designPageResult) return designPageResult;
       if (call.toolName === DESIGN_DELIVERY_SCOPE_TOOL_NAME) {
-        return handleDeliveryScopeTool(globalTaskCoordinator, call, context);
+        return await handleDeliveryScopeTool(
+          globalTaskCoordinator,
+          rendererDesignToolHost,
+          call,
+          context,
+          executionContext,
+          signal,
+          reportProgress,
+        );
       }
       if (call.toolName === DESIGN_FIRST_SLICE_TOOL_NAME) {
         return await handleFirstSliceCheckpoint(

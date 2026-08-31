@@ -82,6 +82,17 @@ export function reviewDesignCompletion(
           "The host delivery ledger is not an ordered prefix of the user-confirmed Delivery Plan. Preserve completed target IDs and plan only the next confirmed target instead of skipping, replacing, or reordering scope.",
       };
     }
+    if (
+      reviewedScope &&
+      deliveryStage?.plannedTargets === 0 &&
+      !context.toolCalls.some(isExecutablePlanCall)
+    ) {
+      const nextTarget = deliveryStage.nextTarget ?? reviewedScope.targets[0];
+      return {
+        allow: false,
+        message: `The confirmed delivery artboards are allocated but no executable target Plan exists yet. Define the first bounded Plan for ${nextTarget?.targetId ?? "the first confirmed target"} using its host-owned existing artboard, then create its first meaningful editable slice. Empty allocated Frames are not completed design.`,
+      };
+    }
     const incomplete = delivery.targets.find(
       (target) => target.status !== "verified",
     );
@@ -371,6 +382,13 @@ function materialNodeCommands(call: AgentToolCallRecord) {
 function isPlanBearingCall(call: AgentToolCallRecord): boolean {
   return (
     call.toolName === DESIGN_DELIVERY_SCOPE_TOOL_NAME ||
+    call.toolName === DESIGN_PLAN_TOOL_NAME ||
+    call.toolName === DESIGN_FIRST_SLICE_TOOL_NAME
+  );
+}
+
+function isExecutablePlanCall(call: AgentToolCallRecord): boolean {
+  return (
     call.toolName === DESIGN_PLAN_TOOL_NAME ||
     call.toolName === DESIGN_FIRST_SLICE_TOOL_NAME
   );

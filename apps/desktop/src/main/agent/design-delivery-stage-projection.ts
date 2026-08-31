@@ -8,10 +8,12 @@ import {
   type DesignDeliveryScope,
 } from "@/shared/design-agent-tools.js";
 import type { DesignWorkflowState } from "./design-plan-registration.js";
+import type { DeliveryScopeArtboardAllocation } from "./delivery-scope-artboard-allocation.js";
 
 export function projectDesignDeliveryStage(
   state: DesignWorkflowState | undefined,
   scope: DesignDeliveryScope | undefined,
+  allocations?: ReadonlyMap<string, DeliveryScopeArtboardAllocation>,
 ): DesignDeliveryStage | undefined {
   if (!state && !scope) return undefined;
   const currentTargets = state ? designPlanTargets(state.plan) : [];
@@ -49,6 +51,31 @@ export function projectDesignDeliveryStage(
         (target) => target.targetId === next.targetId,
       ) ?? -1)
     : -1;
+  const nextArtboard = next ? allocations?.get(next.targetId) : undefined;
+  if (next && nextArtboard?.allocatedRevision === undefined) {
+    throw new TypeError(
+      `Next delivery target ${next.targetId} has no host-owned allocated artboard`,
+    );
+  }
+  const nextTarget =
+    next && nextArtboard?.allocatedRevision !== undefined
+      ? {
+          stage: nextIndex >= 0 ? nextIndex + 1 : 1,
+          targetId: next.targetId,
+          label: next.label,
+          objective: next.objective,
+          requiredContent: [...next.requiredContent],
+          artboard: {
+            pageId: nextArtboard.pageId,
+            frameId: nextArtboard.frameId,
+            x: nextArtboard.x,
+            y: nextArtboard.y,
+            width: nextArtboard.width,
+            height: nextArtboard.height,
+            allocatedRevision: nextArtboard.allocatedRevision,
+          },
+        }
+      : undefined;
   return parseProjection({
     totalTargets: scope?.targets.length ?? state?.targetOrder.length ?? 0,
     plannedTargets: state?.targetOrder.length ?? 0,
@@ -68,17 +95,7 @@ export function projectDesignDeliveryStage(
             targets: currentPlanTargets,
           },
         }),
-    ...(!next
-      ? {}
-      : {
-          nextTarget: {
-            stage: nextIndex >= 0 ? nextIndex + 1 : 1,
-            targetId: next.targetId,
-            label: next.label,
-            objective: next.objective,
-            requiredContent: [...next.requiredContent],
-          },
-        }),
+    ...(nextTarget ? { nextTarget } : {}),
   });
 }
 

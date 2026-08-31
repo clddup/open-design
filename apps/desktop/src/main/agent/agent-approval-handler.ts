@@ -43,7 +43,7 @@ export function handleAgentApprovalRequest(
   }
   if (pending.toolName === DESIGN_DELIVERY_SCOPE_TOOL_NAME) {
     if (
-      pending.risk !== "read" ||
+      pending.risk !== "design_write" ||
       !deliveryScopeInput ||
       request.decision === "allow_session"
     ) {

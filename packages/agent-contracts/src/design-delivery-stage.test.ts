@@ -111,5 +111,17 @@ function targetSummary(targetId: string) {
 }
 
 function target(targetId: string, stage: number) {
-  return { stage, ...targetSummary(targetId) };
+  return {
+    stage,
+    ...targetSummary(targetId),
+    artboard: {
+      pageId: "page_1",
+      frameId: `frame_${targetId}`,
+      x: (stage - 1) * 1600,
+      y: 0,
+      width: 1440,
+      height: 900,
+      allocatedRevision: 1,
+    },
+  };
 }

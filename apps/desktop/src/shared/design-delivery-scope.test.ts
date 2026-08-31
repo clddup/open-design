@@ -13,12 +13,14 @@ const scope = () => ({
       targetId: "login",
       label: "登录与注册",
       objective: "完成账户进入与注册流程",
+      artboard: { width: 390, height: 844 },
       requiredContent: ["登录", "注册"],
     },
     {
       targetId: "home",
       label: "首页",
       objective: "呈现核心入口与当前状态",
+      artboard: { width: 390, height: 844 },
       requiredContent: ["核心入口", "状态摘要"],
     },
   ],
@@ -71,7 +73,7 @@ describe("delivery scope contract", () => {
     ).toEqual({
       title: "确认交付计划（2 项）",
       summary:
-        "将在当前 Page 创建 2 个画板。\n\n1. 登录与注册 — 完成账户进入与注册流程\n2. 首页 — 呈现核心入口与当前状态\n\n本次不包含: 后台管理",
+        "将在当前 Page 创建 2 个画板。\n\n1. 登录与注册 · 390×844 — 完成账户进入与注册流程\n2. 首页 · 390×844 — 呈现核心入口与当前状态\n\n本次不包含: 后台管理",
     });
   });
 
@@ -81,6 +83,7 @@ describe("delivery scope contract", () => {
       targetId: `screen-${index + 1}`,
       label: `界面 ${index + 1}`,
       objective: `完成产品界面 ${index + 1} 的完整设计`,
+      artboard: { width: 390, height: 844 },
       requiredContent: [`界面 ${index + 1} 的核心内容`],
     }));
 
@@ -103,6 +106,7 @@ describe("delivery scope contract", () => {
         targetId: `screen-${index + 1}`,
         label: `界面 ${index + 1}`,
         objective: `完成产品界面 ${index + 1} 的完整设计`,
+        artboard: { width: 390, height: 844 },
         requiredContent: Array.from(
           { length: count },
           (_, contentIndex) => `界面 ${index + 1} 的内容 ${contentIndex + 1}`,
