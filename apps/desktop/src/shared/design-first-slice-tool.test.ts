@@ -50,7 +50,6 @@ describe("compact first-slice tool", () => {
         "logoOutputs",
         "objective",
         "rasterAssetRoles",
-        "semanticObjects",
         "targets",
         "version",
         "visualSystem",
@@ -217,44 +216,26 @@ describe("compact first-slice tool", () => {
     );
   });
 
-  it("carries image roles and reusable semantic objects into the executable Plan", () => {
+  it("keeps the first material write focused on real hierarchy and defers Component promotion", () => {
     const modelInput = providerInput(fixture());
     modelInput.rasterAssetRoles = ["hero", "supporting-content"];
-    modelInput.semanticObjects = [
-      {
-        decisionId: "shared_navigation",
-        label: "Shared bottom navigation",
-        decision: "component",
-        componentId: "component_bottom_navigation",
-        main: { targetId: "home", nodeId: "home_bottom_navigation" },
-        instances: [
-          { targetId: "profile", nodeId: "profile_bottom_navigation" },
-        ],
-      },
-    ];
 
     const normalized = parsedFirstSlice(modelInput);
     expect(normalized?.rasterAssetRoles).toEqual([
       "hero",
       "supporting-content",
     ]);
-    expect(normalized?.semanticObjects).toEqual(modelInput.semanticObjects);
     expect(
       normalized && compileDesignFirstSliceToolInput(normalized).plan,
     ).toMatchObject({
       rasterAssetRoles: ["hero", "supporting-content"],
       componentStrategy: {
-        candidates: [
-          {
-            decision: "component",
-            componentId: "component_bottom_navigation",
-          },
-        ],
+        candidates: [],
       },
     });
   });
 
-  it("rejects semantic occurrences that reuse planned or material node identities before compilation", () => {
+  it("rejects the removed parallel semantic identity payload", () => {
     const modelInput = providerInput(fixture());
     modelInput.semanticObjects = [
       {
@@ -267,12 +248,11 @@ describe("compact first-slice tool", () => {
 
     const result = FirstSliceContract.parse(modelInput);
     expect(result.ok).toBe(false);
-    if (result.ok) throw new Error("Expected semantic identity failure");
+    if (result.ok) throw new Error("Expected removed semantic payload failure");
     expect(result.issues).toContainEqual(
       expect.objectContaining({
-        code: "first_slice.semantic_occurrence_reuses_node_id",
-        path: "/semanticObjects/0/occurrences/0/nodeId",
-        actual: "home_hero",
+        code: "first_slice.schema_invalid",
+        path: "/semanticObjects",
       }),
     );
   });
@@ -349,17 +329,6 @@ describe("compact first-slice tool", () => {
 
   it("compiles all targets into the current Plan with pinned skills and a canonical first slice", () => {
     const input = fixture();
-    input.semanticObjects = [
-      {
-        decisionId: "catalog-navigation",
-        label: "Product navigation",
-        decision: "reuse-component",
-        componentId: "component_catalog_navigation",
-        instances: [
-          { targetId: "profile", nodeId: "profile_navigation_instance" },
-        ],
-      },
-    ];
     input.referenceStrategy = {
       synthesis:
         "Transfer the attached reference's tonal hierarchy without changing the requested product semantics.",
@@ -399,18 +368,7 @@ describe("compact first-slice tool", () => {
       },
       referenceStrategy: input.referenceStrategy,
       componentStrategy: {
-        candidates: [
-          {
-            decision: "reuse-component",
-            componentId: "component_catalog_navigation",
-            instances: [
-              {
-                targetId: "profile",
-                nodeId: "profile_navigation_instance",
-              },
-            ],
-          },
-        ],
+        candidates: [],
       },
     });
     expect(
@@ -506,7 +464,7 @@ describe("compact first-slice tool", () => {
     }));
     input.targets[0].regions.push(
       {
-        nodeId: "negative_root",
+        nodeId: "negative_region",
         name: "Negative Space Direction",
         role: "content",
         parentId: "frame_home",
@@ -516,7 +474,7 @@ describe("compact first-slice tool", () => {
         height: 220,
       },
       {
-        nodeId: "modular_root",
+        nodeId: "modular_region",
         name: "Modular Direction",
         role: "content",
         parentId: "frame_home",
@@ -526,7 +484,7 @@ describe("compact first-slice tool", () => {
         height: 220,
       },
       {
-        nodeId: "typographic_root",
+        nodeId: "typographic_region",
         name: "Typographic Direction",
         role: "content",
         parentId: "frame_home",
@@ -548,19 +506,11 @@ describe("compact first-slice tool", () => {
         ),
       ],
     };
-    input.firstSlice.stages[0].elements[0] = {
-      id: "hero_panel",
-      kind: "path",
-      name: "Editable Identity Contour",
-      parentId: "negative_root",
-      x: 24,
-      y: 24,
-      width: 160,
-      height: 160,
-      path: "M 0 0 H 160 V 48 H 48 V 160 H 0 Z",
-      fill: { color: "#0F172A" },
-    };
-    input.firstSlice.stages[0].elements[1].parentId = "negative_root";
+    input.firstSlice.stages[0].elements = [
+      ...logoDirectionElements("negative", "negative_region", "#FF5A5F"),
+      ...logoDirectionElements("modular", "modular_region", "#2563EB"),
+      ...logoDirectionElements("typographic", "typographic_region", "#7C3AED"),
+    ];
 
     const modelInput = providerInput(input);
     const normalized = parsedFirstSlice(modelInput);
@@ -570,10 +520,9 @@ describe("compact first-slice tool", () => {
         compileDesignFirstSliceToolInput(normalized).apply.commands[0],
     ).toMatchObject({
       node: {
-        kind: "path",
+        kind: "frame",
         properties: {
-          path: "M 0 0 H 160 V 48 H 48 V 160 H 0 Z",
-          fillRule: "nonzero",
+          fills: [{ color: "#FFF7F2", opacity: 1, type: "solid" }],
         },
       },
     });
@@ -1207,4 +1156,48 @@ function logoDirection(
       `${prefix}_16`,
     ] as [string, string, string, string],
   };
+}
+
+function logoDirectionElements(
+  prefix: string,
+  regionId: string,
+  color: string,
+): DesignFirstSliceToolInput["firstSlice"]["stages"][number]["elements"] {
+  return [
+    {
+      id: `${prefix}_root`,
+      kind: "frame",
+      name: `${prefix} concept`,
+      parentId: regionId,
+      x: 0,
+      y: 0,
+      width: 342,
+      height: 220,
+      fill: { color: "#FFF7F2" },
+    },
+    {
+      id: `${prefix}_mono`,
+      kind: "path",
+      name: `${prefix} monochrome master`,
+      parentId: `${prefix}_root`,
+      x: 24,
+      y: 24,
+      width: 96,
+      height: 96,
+      path: "M 0 0 H 96 V 28 H 28 V 96 H 0 Z",
+      fill: { color: "#111827" },
+    },
+    ...[32, 24, 16].map((size) => ({
+      id: `${prefix}_${size}`,
+      kind: "rectangle" as const,
+      name: `${prefix} ${size}px test`,
+      parentId: `${prefix}_root`,
+      x: 152 + (32 - size) * 3,
+      y: 40,
+      width: size,
+      height: size,
+      fill: { color },
+      cornerRadius: Math.max(2, size / 6),
+    })),
+  ];
 }

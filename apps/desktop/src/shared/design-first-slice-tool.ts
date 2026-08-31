@@ -341,6 +341,7 @@ function refineFirstSlice(
   const allFrameIds = new Set(frameIds.keys());
   const allRegionIds = new Set(regionIds.keys());
   const elementIds = new Map<string, string>();
+  const elementsById = new Map<string, DesignFirstSliceElementInput>();
   const parentById = new Map(
     firstTarget.regions.map((region) => [region.nodeId, region.parentId]),
   );
@@ -353,6 +354,7 @@ function refineFirstSlice(
       "Element ID",
       issues,
     );
+    if (!elementsById.has(element.id)) elementsById.set(element.id, element);
     if (allFrameIds.has(element.id)) {
       issues.push(
         issue(
@@ -431,18 +433,7 @@ function refineFirstSlice(
     }
   }
 
-  refineLogoExploration(
-    input,
-    firstTargetRegionIds,
-    materializedRegions,
-    issues,
-  );
-  refineSemanticObjects(
-    input,
-    new Set(targetIds.keys()),
-    new Set([...allFrameIds, ...allRegionIds, ...elementIds.keys()]),
-    issues,
-  );
+  refineLogoExploration(input, elementsById, parentById, issues);
   refineReferenceStrategy(input.referenceStrategy, issues);
   return issues.slice(0, 64);
 }
@@ -552,8 +543,8 @@ function refineRegionHierarchy(
 
 function refineLogoExploration(
   input: DesignFirstSliceCanonicalInput,
-  firstTargetRegionIds: ReadonlySet<string>,
-  materializedRegions: ReadonlySet<string>,
+  elementsById: ReadonlyMap<string, DesignFirstSliceElementInput>,
+  parentById: ReadonlyMap<string, string>,
   issues: ValidationIssue[],
 ): void {
   const exploration = input.logoExploration;
@@ -593,13 +584,14 @@ function refineLogoExploration(
       "Logo generative principle",
       issues,
     );
-    if (!firstTargetRegionIds.has(direction.rootNodeId)) {
+    const root = elementsById.get(direction.rootNodeId);
+    if (!root || (root.kind !== "frame" && root.kind !== "group")) {
       issues.push(
         issue(
-          "first_slice.logo_root_not_planned",
+          "first_slice.logo_root_not_materialized",
           `${path}/rootNodeId`,
-          "Logo concept root must be a declared first-target region",
-          "first-target region nodeId",
+          "Logo concept root must be an actual first-slice Frame or Group",
+          "firstSlice Frame/Group element ID",
           direction.rootNodeId,
         ),
       );
@@ -621,101 +613,41 @@ function refineLogoExploration(
         issues,
       );
     }
-  }
-  if (
-    !exploration.directions.some((direction) =>
-      materializedRegions.has(direction.rootNodeId),
-    )
-  ) {
-    issues.push(
-      issue(
-        "first_slice.logo_direction_material_required",
-        "/firstSlice/stages",
-        "At least one declared Logo direction must contain editable material",
-      ),
-    );
-  }
-}
-
-function refineSemanticObjects(
-  input: DesignFirstSliceCanonicalInput,
-  targetIds: ReadonlySet<string>,
-  reservedNodeIds: ReadonlySet<string>,
-  issues: ValidationIssue[],
-): void {
-  if (!input.semanticObjects) return;
-  const decisions = new Map<string, string>();
-  const components = new Map<string, string>();
-  const nodes = new Map<string, string>();
-  for (const [objectIndex, object] of input.semanticObjects.entries()) {
-    const path = `/semanticObjects/${objectIndex}`;
-    registerUniqueId(
-      decisions,
-      object.decisionId,
-      `${path}/decisionId`,
-      "first_slice.duplicate_semantic_decision",
-      "Semantic decision ID",
-      issues,
-    );
-    if (object.decision !== "ordinary") {
-      registerUniqueId(
-        components,
-        object.componentId,
-        `${path}/componentId`,
-        "first_slice.duplicate_component_id",
-        "Component ID",
-        issues,
-      );
+    for (const [
+      evidenceIndex,
+      evidenceNodeId,
+    ] of direction.evidenceNodeIds.entries()) {
+      if (
+        !elementsById.has(evidenceNodeId) ||
+        !parentChainReaches(evidenceNodeId, direction.rootNodeId, parentById)
+      ) {
+        issues.push(
+          issue(
+            "first_slice.logo_evidence_not_materialized",
+            `${path}/evidenceNodeIds/${evidenceIndex}`,
+            "Logo evidence must be an actual descendant of the declared concept root",
+            `firstSlice descendant of ${direction.rootNodeId}`,
+            evidenceNodeId,
+          ),
+        );
+      }
     }
-    const occurrences =
-      object.decision === "ordinary"
-        ? object.occurrences.map((occurrence, index) => ({
-            occurrence,
-            path: `${path}/occurrences/${index}`,
-          }))
-        : object.decision === "component"
-          ? [
-              { occurrence: object.main, path: `${path}/main` },
-              ...object.instances.map((occurrence, index) => ({
-                occurrence,
-                path: `${path}/instances/${index}`,
-              })),
-            ]
-          : object.instances.map((occurrence, index) => ({
-              occurrence,
-              path: `${path}/instances/${index}`,
-            }));
-    for (const { occurrence, path: occurrencePath } of occurrences) {
-      if (!targetIds.has(occurrence.targetId)) {
-        issues.push(
-          issue(
-            "first_slice.semantic_target_not_declared",
-            `${occurrencePath}/targetId`,
-            "Semantic occurrence references an undeclared target",
-            [...targetIds],
-            occurrence.targetId,
-          ),
-        );
-      }
-      registerUniqueId(
-        nodes,
-        occurrence.nodeId,
-        `${occurrencePath}/nodeId`,
-        "first_slice.duplicate_semantic_node",
-        "Semantic occurrence node ID",
-        issues,
+    const hasMaterial = [...elementsById.values()].some(
+      (element) =>
+        element.id !== direction.rootNodeId &&
+        isMaterialElement(element) &&
+        parentChainReaches(element.parentId, direction.rootNodeId, parentById),
+    );
+    if (!hasMaterial) {
+      issues.push(
+        issue(
+          "first_slice.logo_direction_material_required",
+          `${path}/rootNodeId`,
+          "Logo direction root must contain editable material in this first slice",
+          "visible editable descendant",
+          direction.rootNodeId,
+        ),
       );
-      if (reservedNodeIds.has(occurrence.nodeId)) {
-        issues.push(
-          issue(
-            "first_slice.semantic_occurrence_reuses_node_id",
-            `${occurrencePath}/nodeId`,
-            "Semantic occurrence cannot reuse a delivery Frame, planned region, or first-slice content node ID",
-            "a unique semantic node ID",
-            occurrence.nodeId,
-          ),
-        );
-      }
     }
   }
 }

@@ -47,7 +47,7 @@ reuse-component
 
 Main 在接受 Plan 时验证 reuse componentId 仍位于同一 revision 的目录；缺失或被目录上限截断的 ID 失败关闭并要求重新 inspect/选择当前条目。目录不授予写权限，模型不得修改其他 Page 的 Main。实际 Instance 仍通过 `opendesign_manage_components create-instance`、当前 Page Mutation Target、Component Service 和唯一 EditorRuntime 事务创建；最终 exact-revision component quality report 继续验证 linked componentId。
 
-Compact first-slice 可以在 Plan 中声明稍后复用的 Instance，但紧凑元素词汇不新增 Instance 私有构造。首个真实区域提交后，完整 typed component tool 出现，再创建 linked Instance；不增加目录读取或 skill 工具往返。
+Compact first-slice 只创建真实命名层级，不声明未来 Instance occurrence。首个真实材料 revision 提交并重新 inspection 后，完整 typed component tool 才可复用目录 Main、从 inspected Frame/Group 提升 Main 并创建 linked Instance；不增加目录读取或 skill 工具往返。见 ADR-0233。
 
 ## 后果与边界
 

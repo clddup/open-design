@@ -6,6 +6,8 @@
 - Agent tool contracts：不变；`record_visual_review` 降为 recovery path
 - 关联：ADR-0075、ADR-0098、ADR-0099、ADR-0116
 
+> ADR-0233 已取代本文中 Draft 必须返回至少两条 refinement 且必然进入 refinement 的部分；独立上下文、exact revision、宿主阈值和真实失败后的 refinement 继续有效。
+
 ## 背景
 
 既有 Visual Review 把 deliverable-scoped critic skill 注入作者 Agent，再由同一个模型提交文字评价。Main 只校验字段完整、九项通用 criterion 文本、至少两个 `failedCriteria` 和 refinement 数量；它没有发起独立视觉请求，也没有对截图评分。因此作者可以在结构和文字上满足协议，同时让通用方块 Logo、弱轮廓、模板化 UI 或未完成 App Icon 进入 refinement，最终 capture 又只受确定性几何门禁约束。文档中“独立 critic”的表述与运行事实不一致。

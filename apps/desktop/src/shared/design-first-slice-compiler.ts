@@ -1,9 +1,6 @@
 import type { DesignNode, DesignOperation } from "@opendesign/design-contracts";
 import type { DesignApplyToolInput } from "./design-apply-input";
-import type {
-  DesignPlanComponentCandidate,
-  DesignPlanComponentStrategy,
-} from "./design-plan-component-strategy";
+import type { DesignPlanComponentStrategy } from "./design-plan-component-strategy";
 import type {
   DesignPlanTarget,
   DesignPlanToolInput,
@@ -28,9 +25,11 @@ export function compileValidatedDesignFirstSliceToolInput(
         : undefined,
     ),
   );
-  const componentStrategy = compileComponentStrategy(
-    input.semanticObjects ?? [],
-  );
+  const componentStrategy: DesignPlanComponentStrategy = {
+    summary:
+      "Component decisions are made from the inspected real hierarchy after the first material revision.",
+    candidates: [],
+  };
   const plan: DesignPlanToolInput = {
     version: 1,
     deliverable: input.deliverable,
@@ -186,50 +185,6 @@ function compileQualityProfile(
     safeAreaInsets: { top, right, bottom, left },
     safeAreaNodeIds: [...profile.safeNodeIds],
     interactiveNodeIds: [...profile.hitNodeIds],
-  };
-}
-
-function compileComponentStrategy(
-  objects: NonNullable<DesignFirstSliceToolInput["semanticObjects"]>,
-): DesignPlanComponentStrategy {
-  const candidates: DesignPlanComponentCandidate[] = objects.map((object) => {
-    if (object.decision === "ordinary") {
-      return {
-        decisionId: object.decisionId,
-        label: object.label,
-        decision: "ordinary",
-        rationale: `${object.label} remains ordinary because this delivery does not require centralized reusable instance behavior.`,
-        occurrences: object.occurrences.map((occurrence) => ({
-          ...occurrence,
-        })),
-      };
-    }
-    if (object.decision === "reuse-component") {
-      return {
-        decisionId: object.decisionId,
-        label: object.label,
-        decision: "reuse-component",
-        rationale: `${object.label} reuses a compatible Component Main already available in the Design File.`,
-        componentId: object.componentId,
-        instances: object.instances.map((instance) => ({ ...instance })),
-      };
-    }
-    return {
-      decisionId: object.decisionId,
-      label: object.label,
-      decision: "component",
-      rationale: `${object.label} is reusable and should preserve centralized structure with explicit instances.`,
-      componentId: object.componentId,
-      main: { ...object.main, mode: "create" },
-      instances: object.instances.map((instance) => ({ ...instance })),
-    };
-  });
-  return {
-    summary:
-      candidates.length === 0
-        ? "No reusable semantic object is justified in this generated delivery."
-        : "Reusable semantic objects are declared only where stable identity and centralized updates improve the delivery.",
-    candidates,
   };
 }
 

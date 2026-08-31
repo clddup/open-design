@@ -2266,6 +2266,85 @@ describe("GlobalTaskCoordinator", () => {
     store.close();
   });
 
+  it("accepts a delivery-ready first capture without forcing a ceremonial refinement", async () => {
+    const { store, host, file, opened, pageId } = await setup();
+    const coordinator = new GlobalTaskCoordinator(host, store);
+    await coordinator.registerRun({
+      type: "run.start",
+      runId: "run_first_capture_passes",
+      sessionId: "conversation_mobile",
+      prompt: "Design the Home and Profile screens",
+      documentId: file.documentId,
+      revision: opened.document.revision,
+      modelSelection,
+      generationMode: "fast",
+      scope: { kind: "page", pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page", pageId },
+    });
+    const context = {
+      runId: "run_first_capture_passes",
+      sessionId: "conversation_mobile",
+      documentId: file.documentId,
+      revision: opened.document.revision,
+      scope: { kind: "page" as const, pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page" as const, pageId },
+    };
+    coordinator.recordDocumentInspection(
+      context,
+      inspectionResult(opened.document, pageId),
+    );
+    const plan = multiTargetPlan(pageId);
+    const home = plan.targets[0];
+    if (!home) throw new Error("Home target is missing");
+    coordinator.registerDesignPlan(context, plan);
+    const allocation = coordinator.createDesignPlanAllocation(context.runId);
+    coordinator.recordDesignPlanAllocated(
+      context.runId,
+      allocation?.targetIds ?? [],
+      1,
+    );
+    const homeDraft = draftTargets(pageId, [home]);
+    const authorization = coordinator.assertDesignPlanForApply(
+      context,
+      homeDraft,
+    );
+    coordinator.recordDesignApplyCompleted(
+      context.runId,
+      authorization?.input ?? homeDraft,
+      authorization,
+      2,
+    );
+    const draftedHome = withDraftedTargets(opened.document, pageId, [home], 2);
+    coordinator.recordDocumentInspection(
+      context,
+      inspectionResult(draftedHome, pageId),
+    );
+
+    expect(
+      coordinator.recordCanvasCapture(
+        context,
+        2,
+        diagnoseDesignTargetLayout(
+          draftedHome,
+          pageId,
+          home.artboard.frameId,
+          home.qualityProfile,
+        ),
+        independentCritic(2, true),
+      ),
+    ).toMatchObject({
+      deliveryTargetId: home.targetId,
+      nextAction: "continue-next-target",
+      verification: "independent-visual-critic",
+      verified: true,
+      critic: { passed: true },
+    });
+    expect(
+      coordinator.getDeliveryLedger(context.runId)?.targets[0]?.status,
+    ).toBe("verified");
+    store.close();
+  });
+
   it("keeps a bounded visual critic for fast Logo work and binds repeated command Pages to the registered Run", async () => {
     const { store, host, file, opened, pageId } = await setup();
     const coordinator = new GlobalTaskCoordinator(host, store);

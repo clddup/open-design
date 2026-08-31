@@ -27,9 +27,9 @@ function idSchema(maxLength = 256) {
   });
 }
 
-function textSchema(minLength: number, maxLength: number) {
+function textSchema(maxLength: number) {
   return Type.String({
-    minLength,
+    minLength: 1,
     maxLength,
     pattern: NON_WHITESPACE_PATTERN,
   });
@@ -61,7 +61,7 @@ const DELIVERABLE_SCHEMA = Type.Union([
 
 const PAINT_SCHEMA = Type.Object(
   {
-    color: textSchema(1, 128),
+    color: textSchema(128),
     opacity: Type.Optional(UNIT_SCHEMA),
   },
   CLOSED,
@@ -69,7 +69,7 @@ const PAINT_SCHEMA = Type.Object(
 
 const STROKE_SCHEMA = Type.Object(
   {
-    color: textSchema(1, 128),
+    color: textSchema(128),
     opacity: Type.Optional(UNIT_SCHEMA),
     width: Type.Number({ exclusiveMinimum: 0, maximum: 10_000 }),
   },
@@ -146,13 +146,13 @@ const TEXT_ELEMENT_SCHEMA = Type.Object(
       {
         content: Type.String({ minLength: 1, maxLength: 100_000 }),
         fontFamily: idSchema(4_096),
-        fontStyleName: textSchema(1, 512),
+        fontStyleName: textSchema(512),
         fontWeight: Type.Integer({ minimum: 1, maximum: 1_000 }),
         fontSlant: Type.Union([Type.Literal("normal"), Type.Literal("italic")]),
         fontSize: DIMENSION_SCHEMA,
         lineHeight: DIMENSION_SCHEMA,
         letterSpacing: Type.Optional(Type.Number()),
-        color: textSchema(1, 128),
+        color: textSchema(128),
         textResize: Type.Union([
           Type.Literal("auto-width"),
           Type.Literal("auto-height"),
@@ -185,7 +185,7 @@ export const DESIGN_FIRST_SLICE_ELEMENT_SCHEMA = Type.Union([
 const REGION_SCHEMA = Type.Object(
   {
     nodeId: idSchema(),
-    name: textSchema(1, 128),
+    name: textSchema(128),
     parentId: idSchema(),
     role: Type.Union([
       Type.Literal("structure"),
@@ -225,16 +225,16 @@ const TARGET_MODEL_SCHEMA = Type.Object(
     targetId: idSchema(128),
     label: idSchema(),
     pageId: idSchema(),
-    objective: textSchema(8, 500),
+    objective: textSchema(500),
     frame: FRAME_SCHEMA,
-    layout: textSchema(12, 320),
-    spacing: textSchema(8, 160),
+    layout: textSchema(320),
+    spacing: textSchema(160),
     regions: Type.Array(REGION_SCHEMA, { minItems: 1, maxItems: 12 }),
   },
   {
     ...CLOSED,
     description:
-      "Concise target job and spatial strategy. Describe the target once; do not justify individual primitives.",
+      "The one current rolling-stage target. Concisely describe its job and spatial strategy; do not restate the complete delivery suite or justify individual primitives.",
   },
 );
 
@@ -284,10 +284,10 @@ const TARGET_CANONICAL_SCHEMA = Type.Object(
     targetId: idSchema(128),
     label: idSchema(),
     pageId: idSchema(),
-    objective: textSchema(1, 2_000),
+    objective: textSchema(2_000),
     frame: FRAME_SCHEMA,
-    layout: textSchema(1, 1_000),
-    spacing: textSchema(1, 500),
+    layout: textSchema(1_000),
+    spacing: textSchema(500),
     qualityProfile: Type.Union([
       GRAPHIC_QUALITY_PROFILE_SCHEMA,
       UI_QUALITY_PROFILE_SCHEMA,
@@ -320,7 +320,11 @@ const FIRST_SLICE_SCHEMA = Type.Object(
       },
     ),
   },
-  CLOSED,
+  {
+    ...CLOSED,
+    description:
+      "Materialize targets[0]. targetId must equal targets[0].targetId. Element parentId must name a declared targets[0] region or an earlier element in this call.",
+  },
 );
 
 const LOGO_OUTPUTS_SCHEMA = Type.Array(
@@ -345,20 +349,20 @@ const LOGO_COLOR_STRATEGY_SCHEMA = Type.Object(
         ...ReturnType<typeof Type.Literal>[],
       ],
     ),
-    rationale: textSchema(16, 1_000),
-    lightDarkAdaptation: textSchema(16, 1_000),
+    rationale: textSchema(1_000),
+    lightDarkAdaptation: textSchema(1_000),
   },
   CLOSED,
 );
 
 const LOGO_DIRECTION_COLOR_SYSTEM_SCHEMA = Type.Object(
   {
-    palette: Type.Array(textSchema(1, 128), {
+    palette: Type.Array(textSchema(128), {
       minItems: 1,
       maxItems: 6,
       uniqueItems: true,
     }),
-    rationale: textSchema(16, 1_000),
+    rationale: textSchema(1_000),
   },
   CLOSED,
 );
@@ -378,14 +382,22 @@ const LOGO_EXPLORATION_SCHEMA = Type.Object(
               ...ReturnType<typeof Type.Literal>[],
             ],
           ),
-          thesis: textSchema(16, 1_000),
-          constructionLogic: textSchema(24, 1_000),
+          thesis: textSchema(1_000),
+          constructionLogic: textSchema(1_000),
           colorSystem: LOGO_DIRECTION_COLOR_SYSTEM_SCHEMA,
-          rootNodeId: idSchema(),
+          rootNodeId: Type.String({
+            minLength: 1,
+            maxLength: 256,
+            pattern: ID_PATTERN,
+            description:
+              "ID of this direction's actual Frame/Group element in firstSlice, not a planned region ID.",
+          }),
           evidenceNodeIds: Type.Array(idSchema(), {
             minItems: 4,
             maxItems: 4,
             uniqueItems: true,
+            description:
+              "Four distinct firstSlice descendant node IDs under rootNodeId, ordered as monochrome, 32 px, 24 px, and 16 px evidence. Do not repeat rootNodeId.",
           }),
         },
         CLOSED,
@@ -398,9 +410,9 @@ const LOGO_EXPLORATION_SCHEMA = Type.Object(
 
 const DESIGN_INTENT_SCHEMA = Type.Object(
   {
-    subject: textSchema(8, 200),
-    audience: textSchema(8, 200),
-    primaryJob: textSchema(8, 240),
+    subject: textSchema(200),
+    audience: textSchema(200),
+    primaryJob: textSchema(240),
     calibration: Type.Object(
       {
         surfaceMode: Type.Union([
@@ -423,12 +435,12 @@ const DESIGN_INTENT_SCHEMA = Type.Object(
       },
       CLOSED,
     ),
-    visualThesis: textSchema(16, 320),
-    signatureMotif: textSchema(16, 320),
-    typographyLanguage: textSchema(12, 240),
-    colorMaterialLanguage: textSchema(12, 240),
-    compositionTension: textSchema(12, 240),
-    antiPatterns: Type.Array(textSchema(8, 160), {
+    visualThesis: textSchema(320),
+    signatureMotif: textSchema(320),
+    typographyLanguage: textSchema(240),
+    colorMaterialLanguage: textSchema(240),
+    compositionTension: textSchema(240),
+    antiPatterns: Type.Array(textSchema(160), {
       minItems: 3,
       maxItems: 5,
       uniqueItems: true,
@@ -441,7 +453,7 @@ const DESIGN_INTENT_SCHEMA = Type.Object(
   },
 );
 
-const FIDELITY_ITEM_SCHEMA = textSchema(1, 500);
+const FIDELITY_ITEM_SCHEMA = textSchema(500);
 const BRIEF_FIDELITY_SCHEMA = Type.Object(
   {
     requiredContent: Type.Array(FIDELITY_ITEM_SCHEMA, {
@@ -460,11 +472,11 @@ const BRIEF_FIDELITY_SCHEMA = Type.Object(
 
 const VISUAL_SYSTEM_SCHEMA = Type.Object(
   {
-    formLanguage: textSchema(1, 320),
-    palette: Type.Array(textSchema(1, 128), { minItems: 1, maxItems: 8 }),
-    surfaceAndDepth: textSchema(1, 320),
-    typography: Type.Array(textSchema(1, 160), { minItems: 1, maxItems: 4 }),
-    effects: Type.Optional(Type.Array(textSchema(1, 160), { maxItems: 6 })),
+    formLanguage: textSchema(320),
+    palette: Type.Array(textSchema(128), { minItems: 1, maxItems: 8 }),
+    surfaceAndDepth: textSchema(320),
+    typography: Type.Array(textSchema(160), { minItems: 1, maxItems: 4 }),
+    effects: Type.Optional(Type.Array(textSchema(160), { maxItems: 6 })),
   },
   {
     ...CLOSED,
@@ -485,7 +497,7 @@ const RASTER_ASSET_ROLES_SCHEMA = Type.Array(
 
 const REFERENCE_STRATEGY_SCHEMA = Type.Object(
   {
-    synthesis: textSchema(12, 1_000),
+    synthesis: textSchema(1_000),
     references: Type.Array(
       Type.Object(
         {
@@ -497,12 +509,12 @@ const REFERENCE_STRATEGY_SCHEMA = Type.Object(
             Type.Literal("content-asset"),
             Type.Literal("ignore"),
           ]),
-          application: textSchema(12, 1_000),
-          preserve: Type.Array(textSchema(4, 256), {
+          application: textSchema(1_000),
+          preserve: Type.Array(textSchema(256), {
             maxItems: 6,
             uniqueItems: true,
           }),
-          avoid: Type.Array(textSchema(4, 256), {
+          avoid: Type.Array(textSchema(256), {
             maxItems: 6,
             uniqueItems: true,
           }),
@@ -514,50 +526,6 @@ const REFERENCE_STRATEGY_SCHEMA = Type.Object(
   },
   CLOSED,
 );
-
-const OCCURRENCE_SCHEMA = Type.Object(
-  { targetId: idSchema(128), nodeId: idSchema() },
-  CLOSED,
-);
-
-const SEMANTIC_OBJECT_SCHEMA = Type.Union([
-  Type.Object(
-    {
-      decisionId: idSchema(128),
-      label: idSchema(),
-      decision: Type.Literal("ordinary"),
-      occurrences: Type.Array(OCCURRENCE_SCHEMA, {
-        minItems: 1,
-        maxItems: 33,
-      }),
-    },
-    CLOSED,
-  ),
-  Type.Object(
-    {
-      decisionId: idSchema(128),
-      label: idSchema(),
-      decision: Type.Literal("component"),
-      componentId: idSchema(),
-      main: OCCURRENCE_SCHEMA,
-      instances: Type.Array(OCCURRENCE_SCHEMA, { maxItems: 32 }),
-    },
-    CLOSED,
-  ),
-  Type.Object(
-    {
-      decisionId: idSchema(128),
-      label: idSchema(),
-      decision: Type.Literal("reuse-component"),
-      componentId: idSchema(),
-      instances: Type.Array(OCCURRENCE_SCHEMA, {
-        minItems: 1,
-        maxItems: 32,
-      }),
-    },
-    CLOSED,
-  ),
-]);
 
 const SKILL_REFS_SCHEMA = Type.Array(Type.Object({ id: idSchema() }, CLOSED), {
   minItems: 1,
@@ -576,14 +544,11 @@ const NON_LOGO_DELIVERABLE_SCHEMA = Type.Union([
 const FIRST_SLICE_MODEL_PROPERTIES = {
   version: Type.Literal(1),
   deliverable: DELIVERABLE_SCHEMA,
-  objective: textSchema(1, 2_000),
+  objective: textSchema(2_000),
   designIntent: DESIGN_INTENT_SCHEMA,
   targets: Type.Array(TARGET_MODEL_SCHEMA, { minItems: 1, maxItems: 32 }),
   visualSystem: VISUAL_SYSTEM_SCHEMA,
   rasterAssetRoles: RASTER_ASSET_ROLES_SCHEMA,
-  semanticObjects: Type.Optional(
-    Type.Array(SEMANTIC_OBJECT_SCHEMA, { maxItems: 24 }),
-  ),
   logoOutputs: Type.Optional(LOGO_OUTPUTS_SCHEMA),
   logoExploration: Type.Optional(LOGO_EXPLORATION_SCHEMA),
   logoColorStrategy: Type.Optional(LOGO_COLOR_STRATEGY_SCHEMA),
@@ -593,7 +558,7 @@ const FIRST_SLICE_MODEL_PROPERTIES = {
 const FIRST_SLICE_CANONICAL_PROPERTIES = {
   version: Type.Literal(1),
   deliverable: DELIVERABLE_SCHEMA,
-  objective: textSchema(1, 2_000),
+  objective: textSchema(2_000),
   designIntent: DESIGN_INTENT_SCHEMA,
   skillRefs: SKILL_REFS_SCHEMA,
   briefFidelity: BRIEF_FIDELITY_SCHEMA,
@@ -607,9 +572,6 @@ const FIRST_SLICE_CANONICAL_PROPERTIES = {
   logoOutputs: Type.Optional(LOGO_OUTPUTS_SCHEMA),
   logoExploration: Type.Optional(LOGO_EXPLORATION_SCHEMA),
   logoColorStrategy: Type.Optional(LOGO_COLOR_STRATEGY_SCHEMA),
-  semanticObjects: Type.Optional(
-    Type.Array(SEMANTIC_OBJECT_SCHEMA, { maxItems: 24 }),
-  ),
   firstSlice: FIRST_SLICE_SCHEMA,
 };
 
@@ -652,7 +614,7 @@ const FIRST_SLICE_LOGO_DESCRIPTION =
 
 export const DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA = firstSliceSchema(
   FIRST_SLICE_MODEL_PROPERTIES_SCHEMA,
-  `Real artboard roots and one editable first slice. In this same call, provide one concise brief-specific direction, target job/layout, visual system, image roles, and reusable semantic objects; never explain every primitive. ${FIRST_SLICE_LOGO_DESCRIPTION} Main binds host-owned skills, complete brief fidelity, and quality defaults before domain refinement.`,
+  `Create exactly one current target's real artboard and editable first slice. Provide one concise brief-specific direction, target job/layout, visual system, image roles, and actual content layers; never restate the complete suite or explain every primitive. Reusable Component decisions happen after this real hierarchy exists, using inspected Frame/Group roots like Figma's create-component-from-node flow. ${FIRST_SLICE_LOGO_DESCRIPTION} Main binds host-owned skills, complete brief fidelity, and quality defaults before domain refinement.`,
 );
 
 export const DESIGN_FIRST_SLICE_CANONICAL_INPUT_SCHEMA = firstSliceSchema(

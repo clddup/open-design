@@ -106,6 +106,15 @@ function publicCriticResult(result: DesignVisualCriticResult) {
   };
 }
 
+function requireFailedCriticReview(
+  result: DesignVisualCriticResult,
+): DesignVisualReviewToolInput {
+  if (result.review) return result.review;
+  throw new TypeError(
+    "A failed visual critic result requires a review payload",
+  );
+}
+
 export class GlobalTaskCoordinator {
   readonly #tasksByRunId = new Map<string, GlobalTaskProjection>();
   readonly #toolBindingsByRunId = new Map<
@@ -901,13 +910,60 @@ export class GlobalTaskCoordinator {
       };
     }
     if (
+      visualCritic?.passed === true &&
+      (target.delivery.status === "drafted" ||
+        target.delivery.status === "captured")
+    ) {
+      const inspection = this.#inspectionsByRunId.get(context.runId);
+      if (!inspection || inspection.revision !== observedRevision) {
+        throw designWorkflowError(
+          "delivery_verification_required",
+          "Passed visual delivery still requires authoritative structure from the exact captured revision",
+        );
+      }
+      const componentStrategy = assertDeliveryTargetStructure(
+        inspection,
+        target,
+        state.plan,
+      );
+      target.captureCount = captureSequence;
+      target.lastCaptureRevision = observedRevision;
+      target.reviewedCaptureCount = captureSequence;
+      target.reviewedCaptureRevision = observedRevision;
+      target.delivery = {
+        ...target.delivery,
+        status: "verified",
+        captureRevision: observedRevision,
+        reviewRevision: observedRevision,
+        verifiedRevision: observedRevision,
+      };
+      this.#persistDelivery(context.runId, state);
+      return {
+        captureSequence,
+        capturedRevision: observedRevision,
+        deliveryTargetId: target.delivery.targetId,
+        nextAction: nextIncompleteTarget(state)
+          ? "continue-next-target"
+          : this.#nextUnplannedScopeTarget(context.runId, state)
+            ? "define-next-plan"
+            : "complete-delivery",
+        reviewEligible: false,
+        verified: true,
+        verification: "independent-visual-critic",
+        critic: publicCriticResult(visualCritic),
+        ...(componentStrategy.issueCount === 0 ? {} : { componentStrategy }),
+      };
+    }
+    if (
       visualCritic !== undefined &&
       (target.delivery.status === "drafted" ||
         target.delivery.status === "captured")
     ) {
       target.captureCount = captureSequence;
       target.lastCaptureRevision = observedRevision;
-      target.lastReview = structuredClone(visualCritic.review);
+      target.lastReview = structuredClone(
+        requireFailedCriticReview(visualCritic),
+      );
       target.reviewedCaptureCount = captureSequence;
       target.reviewedCaptureRevision = observedRevision;
       target.delivery = {
@@ -933,7 +989,9 @@ export class GlobalTaskCoordinator {
     ) {
       target.captureCount = captureSequence;
       target.lastCaptureRevision = observedRevision;
-      target.lastReview = structuredClone(visualCritic.review);
+      target.lastReview = structuredClone(
+        requireFailedCriticReview(visualCritic),
+      );
       target.reviewedCaptureCount = captureSequence;
       target.reviewedCaptureRevision = observedRevision;
       this.#persistDelivery(context.runId, state);

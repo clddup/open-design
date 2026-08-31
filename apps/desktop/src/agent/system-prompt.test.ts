@@ -227,7 +227,7 @@ describe("OpenDesign Agent system prompt", () => {
       "A successful first-slice call already registered that bounded stage",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
-      "On a new-design continuation, use opendesign_edit_design and capture_canvas",
+      "On a new-design continuation, use opendesign_edit_design, promote justified inspected roots through opendesign_manage_design_system, and capture_canvas",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).not.toContain(
       "finish it directly with apply/checkpoint",

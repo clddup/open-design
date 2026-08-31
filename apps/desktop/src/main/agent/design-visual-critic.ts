@@ -75,7 +75,7 @@ export type DesignVisualCriticResult = {
   >;
   failedCriteria: CriticCriterionId[];
   refinements: string[];
-  review: DesignVisualReviewToolInput;
+  review: DesignVisualReviewToolInput | null;
 };
 
 export type DesignVisualCriticContext = {
@@ -260,7 +260,9 @@ export async function runIndependentDesignVisualCritic(
     criteria: verdict.criteria,
     failedCriteria,
     refinements,
-    review: toLedgerVisualReview(context.plan, verdict, refinements),
+    review: passed
+      ? null
+      : toLedgerVisualReview(context.plan, verdict, refinements),
   };
 }
 

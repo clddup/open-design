@@ -3736,7 +3736,7 @@ describe("design Agent tool contract", () => {
       approval: "never",
     });
     expect(tool?.description).toContain(
-      "stable Page, node, path, vertex, and segment IDs",
+      "stable Page, node, path, region, vertex, and segment IDs",
     );
     expect(tool?.description).toContain("host-created editable sibling layers");
     expect(tool?.description).toContain("same-side cut connectors");

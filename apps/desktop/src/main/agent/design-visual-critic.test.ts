@@ -130,7 +130,7 @@ describe("independent design visual critic", () => {
       failedCriteria: [],
       observedRevision: 8,
     });
-    expect(result.review.failedCriteria).toHaveLength(2);
+    expect(result.review).toBeNull();
   });
 
   it("treats primary brand color, exploration color divergence, and desktop icon distinction as critical", async () => {
@@ -174,6 +174,7 @@ describe("independent design visual critic", () => {
         "app-icon-ecosystem-distinction",
       ]),
     );
+    expect(result.review?.failedCriteria).toHaveLength(2);
   });
 
   it("reviews one requested Logo/Icon without invented exploration or system criteria", async () => {

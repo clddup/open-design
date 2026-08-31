@@ -4797,6 +4797,7 @@ describe("App", () => {
             selectedVertexIds: [],
           },
         ],
+        paint: [{ type: "solid", color: "#4f7fff", opacity: 1 }],
         tool: "move",
       }),
     );
