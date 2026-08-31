@@ -1,6 +1,7 @@
 import type { VectorNetwork } from "@opendesign/design-contracts";
 import { describe, expect, it } from "vitest";
 import {
+  bendVectorSegment,
   connectVectorEndpoints,
   cutVectorNetworkByLine,
   cutVectorPath,
@@ -271,6 +272,87 @@ function concaveFourCrossingNetwork(): VectorNetwork {
 }
 
 describe("editable vector point operations", () => {
+  it("bends straight and reversed path segments through an explicit point", () => {
+    const bent = bendVectorSegment(
+      openNetwork(),
+      "path_open",
+      "segment_ab",
+      0.5,
+      { x: 30, y: 45 },
+    );
+    if (!bent.ok) throw new Error(bent.message);
+    expect(bent.network.segments[0]).toMatchObject({
+      tangentStart: { x: 20, y: 50 },
+      tangentEnd: { x: -20, y: 30 },
+    });
+    expect(
+      nearestVectorSegmentPoint(bent.network, { x: 30, y: 45 }),
+    ).toMatchObject({
+      pathId: "path_open",
+      point: { x: 30, y: 45 },
+      segmentId: "segment_ab",
+      t: 0.5,
+    });
+
+    const reversed = openNetwork();
+    reversed.vertices = reversed.vertices.slice(0, 2);
+    reversed.segments = reversed.segments.slice(0, 1);
+    reversed.paths[0] = {
+      id: "path_open",
+      closed: false,
+      segments: [{ segmentId: "segment_ab", reversed: true }],
+    };
+    const reversedBent = bendVectorSegment(
+      reversed,
+      "path_open",
+      "segment_ab",
+      0.25,
+      { x: 45, y: 38 },
+    );
+    if (!reversedBent.ok) throw new Error(reversedBent.message);
+    expect(
+      nearestVectorSegmentPoint(reversedBent.network, { x: 45, y: 38 }),
+    ).toMatchObject({
+      pathId: "path_open",
+      point: { x: 45, y: 38 },
+      segmentId: "segment_ab",
+      t: 0.25,
+    });
+  });
+
+  it("adds editable collinear handles on Bend click and rejects invalid targets", () => {
+    const converted = bendVectorSegment(
+      openNetwork(),
+      "path_open",
+      "segment_ab",
+      0.5,
+      { x: 30, y: 15 },
+    );
+    if (!converted.ok) throw new Error(converted.message);
+    expect(converted.network.segments[0]).toMatchObject({
+      tangentStart: { x: 20, y: 10 },
+      tangentEnd: { x: -20, y: -10 },
+    });
+    expect(
+      bendVectorSegment(converted.network, "path_open", "segment_ab", 0.5, {
+        x: 30,
+        y: 15,
+      }),
+    ).toMatchObject({ ok: false, code: "no-op" });
+    expect(
+      bendVectorSegment(openNetwork(), "path_missing", "segment_ab", 0.5, {
+        x: 30,
+        y: 15,
+      }),
+    ).toMatchObject({ ok: false, code: "missing-path" });
+    expect(
+      bendVectorSegment(openNetwork(), "path_open", "segment_ab", 0, {
+        x: 0,
+        y: 0,
+      }),
+    ).toMatchObject({ ok: false, code: "invalid-network" });
+  });
+
   it("moves multiple selected vertices without changing tangent offsets", () => {
     const network = openNetwork();
     network.segments[0]!.tangentEnd = { x: -10, y: 5 };

@@ -19,6 +19,7 @@ const HIERARCHY_ACTIONS = [
 
 const VECTOR_ACTIONS = [
   "set-closed",
+  "bend-segment",
   "reverse-path",
   "connect-endpoints",
   "disconnect-vertex",
@@ -267,6 +268,7 @@ const VECTOR_COMMON_PROPERTIES = {
 const FULL_VECTOR_BRANCH_PROPERTIES = new Set([
   "at",
   "nodeIds",
+  "point",
   "targets",
   "vertexIds",
 ]);
@@ -318,6 +320,17 @@ const VECTOR_ACTION_BRANCHES = [
       closed: { type: "boolean" },
     },
     ["nodeId", "closed"],
+  ),
+  vectorBranch(
+    "bend-segment",
+    {
+      nodeId: ID_SCHEMA,
+      pathId: VECTOR_ID_SCHEMA,
+      segmentId: VECTOR_ID_SCHEMA,
+      t: { type: "number", exclusiveMinimum: 0, exclusiveMaximum: 1 },
+      point: BOUNDED_POINT_SCHEMA,
+    },
+    ["nodeId", "pathId", "segmentId", "t", "point"],
   ),
   vectorBranch(
     "reverse-path",
@@ -376,7 +389,7 @@ const VECTOR_ACTION_BRANCHES = [
 export const DESIGN_VECTOR_TOOL_INPUT_SCHEMA = executableJsonSchema({
   type: "object",
   description:
-    "Edit explicit existing editable Vector Networks by stable Page, node, path, vertex, and segment IDs from current inspection. Every action has one closed field shape. The host derives local transforms, topology, result layer IDs, bounds, and one atomic transaction. transform-vertices uses one node-local affine matrix; transform-layers-vertices uses one document-space matrix across explicit layer targets. Cut, connect, disconnect, open, close, and reverse preserve unaffected stable IDs and reject unsupported branching or ambiguous geometry.",
+    "Edit explicit existing editable Vector Networks by stable Page, node, path, vertex, and segment IDs from current inspection. Every action has one closed field shape. The host derives local transforms, topology, result layer IDs, bounds, and one atomic transaction. bend-segment moves one inspected point on a segment to a node-local point and derives its Bézier handles. transform-vertices uses one node-local affine matrix; transform-layers-vertices uses one document-space matrix across explicit layer targets. Bend, Cut, connect, disconnect, open, close, and reverse preserve unaffected stable IDs and reject unsupported branching or ambiguous geometry.",
   properties: {
     action: { enum: VECTOR_ACTIONS },
     label: LABEL_SCHEMA,
@@ -384,6 +397,9 @@ export const DESIGN_VECTOR_TOOL_INPUT_SCHEMA = executableJsonSchema({
     nodeId: ID_SCHEMA,
     nodeIds: nodeIdsSchema(1, 500),
     pathId: VECTOR_ID_SCHEMA,
+    point: BOUNDED_POINT_SCHEMA,
+    segmentId: VECTOR_ID_SCHEMA,
+    t: { type: "number", exclusiveMinimum: 0, exclusiveMaximum: 1 },
     vertexId: VECTOR_ID_SCHEMA,
     vertexIds: vertexIdsSchema(1, 16_384),
     transform: BOUNDED_TRANSFORM_SCHEMA,

@@ -7532,6 +7532,60 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
+  it("previews Bend on the disposable overlay and commits one editable cubic", async () => {
+    const onVectorEdit = vi.fn<(request: LeaferVectorEditRequest) => boolean>(
+      () => true,
+    );
+    const onVectorEditSelectionChange = vi.fn();
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onVectorEdit,
+      onVectorEditSelectionChange,
+    });
+    const input = withVectorEditFixture(createInput());
+    adapter.sync({
+      ...input,
+      vectorEditScope: { ...input.vectorEditScope!, tool: "bend" },
+    });
+    const app = leaferHarness.app;
+    const path = app && findElement(app.tree, "editable_curve");
+    if (!app || !path?.parent) throw new Error("Missing editable vector");
+    const overlay = path.parent.children.at(-1);
+    if (!(overlay instanceof FakeGroup)) {
+      throw new Error("Missing vector overlay");
+    }
+    const hitPath = overlay.children.filter(
+      (child): child is FakePath => child instanceof FakePath,
+    )[0];
+    if (!hitPath) throw new Error("Missing Bend hit path");
+
+    const editablePath = path as FakePath;
+    const before = editablePath.path;
+    app.emit("pointer.down", pointerEvent(30, 15, hitPath));
+    app.emit("pointer.move", pointerEvent(30, 45, hitPath));
+    expect(editablePath.path).not.toBe(before);
+    expect(onVectorEdit).not.toHaveBeenCalled();
+    emitWindowKey("Escape");
+    expect(editablePath.path).toBe(before);
+    expect(onVectorEdit).not.toHaveBeenCalled();
+
+    app.emit("pointer.down", pointerEvent(30, 15, hitPath));
+    app.emit("pointer.move", pointerEvent(30, 45, hitPath));
+    app.emit("pointer.up", pointerEvent(30, 45, hitPath));
+    expect(onVectorEdit).toHaveBeenCalledTimes(1);
+    const request = onVectorEdit.mock.calls[0]?.[0];
+    if (!request || request.deleteNode) throw new Error("Missing Bend edit");
+    expect(request.edits[0]!.network.segments[0]).toMatchObject({
+      tangentStart: { x: 20, y: 50 },
+      tangentEnd: { x: -20, y: 30 },
+    });
+    expect(onVectorEditSelectionChange).toHaveBeenCalledWith("editable_curve", {
+      segmentIds: ["segment_ab"],
+      vertexIds: ["vertex_a", "vertex_b"],
+    });
+    adapter.dispose();
+  });
+
   it("keeps multiple Vector layers in one edit scope and submits one shared line Cut", async () => {
     const onVectorEditActiveNodeChange = vi.fn();
     const onVectorEditScopeChange = vi.fn();

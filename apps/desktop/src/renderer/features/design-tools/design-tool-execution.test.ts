@@ -5044,6 +5044,53 @@ describe("Renderer semantic hierarchy tool", () => {
     expect(runtime.redo()).toMatchObject({ ok: true, mode: "redo" });
   });
 
+  it("bends an inspected segment without model-authored handles", async () => {
+    const runtime = createEditableVectorRuntime();
+    const result = await executeDesignToolRequest(
+      {
+        requestId: "vector_bend",
+        call: {
+          toolCallId: "tool_vector_bend",
+          toolName: DESIGN_VECTOR_TOOL_NAME,
+          input: {
+            action: "bend-segment",
+            label: "Bend the logo contour",
+            nodeId: "editable_logo_contour",
+            pageId: "page_welcome",
+            pathId: "logo_path",
+            point: { x: 90, y: 45 },
+            segmentId: "segment_bc",
+            t: 0.5,
+          },
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(result).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "bend-segment",
+          atomic: true,
+          nodeId: "editable_logo_contour",
+          pageId: "page_welcome",
+          pathId: "logo_path",
+          revision: 1,
+        },
+      },
+    });
+    expect(
+      editableVectorNetwork(runtime).segments[1]?.tangentStart,
+    ).toBeDefined();
+    expect(
+      editableVectorNetwork(runtime).segments[1]?.tangentEnd,
+    ).toBeDefined();
+    expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
+    expect(runtime.undo()).toMatchObject({ ok: true, mode: "undo" });
+  });
+
   it("disconnects and reconnects inspected vector endpoints without model-authored geometry", async () => {
     const runtime = createEditableVectorRuntime();
     const disconnected = await executeDesignToolRequest(

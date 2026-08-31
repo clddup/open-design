@@ -90,6 +90,16 @@ export type DesignVectorToolInput =
       pathId?: string;
     }
   | {
+      action: "bend-segment";
+      label: string;
+      nodeId: string;
+      pageId: string;
+      pathId: string;
+      point: Point;
+      segmentId: string;
+      t: number;
+    }
+  | {
       action: "reverse-path";
       label: string;
       nodeId: string;

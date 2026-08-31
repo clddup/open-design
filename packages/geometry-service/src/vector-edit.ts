@@ -1985,6 +1985,66 @@ export function setVectorPointMode(
   return validated(next);
 }
 
+/**
+ * Moves one point on a path segment to an explicit node-local position while
+ * preserving both endpoints. Straight segments gain collinear cubic handles
+ * on click; dragging offsets both controls so the cubic passes through the
+ * requested point at the same directed path parameter.
+ */
+export function bendVectorSegment(
+  network: VectorNetwork,
+  pathId: string,
+  segmentId: string,
+  t: number,
+  point: Point,
+): VectorEditResult {
+  const failure = editableFailure(network);
+  if (failure) return failure;
+  if (
+    !Number.isFinite(t) ||
+    t <= HANDLE_EPSILON ||
+    t >= 1 - HANDLE_EPSILON ||
+    !Number.isFinite(point.x) ||
+    !Number.isFinite(point.y)
+  ) {
+    return invalidNetwork(
+      "Vector Bend requires a finite interior path parameter and point",
+    );
+  }
+  const target = resolveBendTarget(network, pathId, segmentId, t);
+  if ("ok" in target) return target;
+  const { end, source, start, storageT } = target;
+  const alreadyCubic =
+    meaningful(source.tangentStart) || meaningful(source.tangentEnd);
+  const { controlEnd, controlStart } = bendControls(
+    source,
+    start,
+    end,
+    alreadyCubic,
+  );
+  const current = cubicPoint(start, controlStart, controlEnd, end, storageT);
+  const controlDelta = scale(
+    subtract(point, current),
+    1 / (3 * storageT * (1 - storageT)),
+  );
+  if (alreadyCubic && !meaningful(controlDelta)) {
+    return noOp(`Vector segment ${segmentId} already passes through the point`);
+  }
+
+  const next = structuredClone(network);
+  const segment = next.segments.find(
+    (candidate) => candidate.id === segmentId,
+  )!;
+  segment.tangentStart = normalizePoint(
+    subtract(add(controlStart, controlDelta), start),
+  );
+  segment.tangentEnd = normalizePoint(
+    subtract(add(controlEnd, controlDelta), end),
+  );
+  refreshPointModes(next, [segment.startVertexId, segment.endVertexId]);
+  return validated(next);
+}
+
 export function moveVectorHandle(
   network: VectorNetwork,
   reference: VectorHandleReference,
@@ -3144,6 +3204,84 @@ function samePoint(left: Point, right: Point): boolean {
   );
 }
 
+function resolveBendTarget(
+  network: VectorNetwork,
+  pathId: string,
+  segmentId: string,
+  t: number,
+):
+  | {
+      end: VectorVertex;
+      source: VectorSegment;
+      start: VectorVertex;
+      storageT: number;
+    }
+  | Extract<VectorEditResult, { ok: false }> {
+  const path = network.paths.find((candidate) => candidate.id === pathId);
+  if (!path) return missingPath(`Vector path ${pathId} does not exist`);
+  const reference = path.segments.find(
+    (candidate) => candidate.segmentId === segmentId,
+  );
+  if (!reference) {
+    return missingSegment(
+      `Vector segment ${segmentId} does not belong to path ${pathId}`,
+    );
+  }
+  const source = network.segments.find(
+    (candidate) => candidate.id === segmentId,
+  );
+  if (!source)
+    return missingSegment(`Vector segment ${segmentId} does not exist`);
+  const start = network.vertices.find(
+    (candidate) => candidate.id === source.startVertexId,
+  );
+  const end = network.vertices.find(
+    (candidate) => candidate.id === source.endVertexId,
+  );
+  return start && end
+    ? { end, source, start, storageT: reference.reversed ? 1 - t : t }
+    : missingVertex(
+        `Vector segment ${segmentId} references a missing endpoint`,
+      );
+}
+
+function bendControls(
+  segment: VectorSegment,
+  start: Point,
+  end: Point,
+  alreadyCubic: boolean,
+): { controlEnd: Point; controlStart: Point } {
+  const chord = subtract(end, start);
+  return {
+    controlStart: add(
+      start,
+      alreadyCubic
+        ? (segment.tangentStart ?? { x: 0, y: 0 })
+        : scale(chord, 1 / 3),
+    ),
+    controlEnd: add(
+      end,
+      alreadyCubic
+        ? (segment.tangentEnd ?? { x: 0, y: 0 })
+        : scale(chord, -1 / 3),
+    ),
+  };
+}
+
+function refreshPointModes(
+  network: VectorNetwork,
+  vertexIds: readonly string[],
+): void {
+  for (const vertexId of vertexIds) {
+    const vertex = network.vertices.find(
+      (candidate) => candidate.id === vertexId,
+    );
+    if (!vertex) continue;
+    delete vertex.handleMode;
+    vertex.handleMode = inferVectorPointMode(network, vertexId);
+  }
+}
+
 function transformVectorPoint(point: Point, transform: Transform): Point {
   return normalizePoint({
     x: transform[0] * point.x + transform[2] * point.y + transform[4],
@@ -3156,6 +3294,28 @@ function lerp(start: Point, end: Point, t: number): Point {
     x: start.x + (end.x - start.x) * t,
     y: start.y + (end.y - start.y) * t,
   };
+}
+
+function cubicPoint(
+  start: Point,
+  controlStart: Point,
+  controlEnd: Point,
+  end: Point,
+  t: number,
+): Point {
+  const inverse = 1 - t;
+  return normalizePoint({
+    x:
+      inverse ** 3 * start.x +
+      3 * inverse ** 2 * t * controlStart.x +
+      3 * inverse * t ** 2 * controlEnd.x +
+      t ** 3 * end.x,
+    y:
+      inverse ** 3 * start.y +
+      3 * inverse ** 2 * t * controlStart.y +
+      3 * inverse * t ** 2 * controlEnd.y +
+      t ** 3 * end.y,
+  });
 }
 
 function scale(point: Point, factor: number): Point {

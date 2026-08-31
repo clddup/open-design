@@ -7,6 +7,7 @@ import type {
 } from "@opendesign/design-contracts";
 import { serializeVectorNetwork } from "@opendesign/geometry-service/editable-vector";
 import {
+  bendVectorSegment,
   deleteVectorSelection,
   findVectorPathIdForVertex,
   listVectorVertexHandles,
@@ -87,6 +88,16 @@ type VectorEditDrag =
       startDocument: Point;
       vertexIdsByNode: ReadonlyMap<string, readonly string[]>;
       worldByNode: ReadonlyMap<string, Transform>;
+    }
+  | {
+      before: VectorNetwork;
+      kind: "bend";
+      moved: boolean;
+      pathId: string;
+      segmentId: string;
+      startClient: Point;
+      startPoint: Point;
+      t: number;
     }
   | {
       before: VectorNetwork;
@@ -431,8 +442,10 @@ export class VectorEditController {
         this.#vectorEdits.set(item.nodeId, session);
       } else {
         if (
-          session.drag?.kind === "cut" &&
-          (scope.tool !== "cut" || item.readOnly)
+          (session.drag?.kind === "cut" &&
+            (scope.tool !== "cut" || item.readOnly)) ||
+          (session.drag?.kind === "bend" &&
+            (scope.tool !== "bend" || item.readOnly))
         ) {
           this.#cancelVectorEditDrag(session);
         }
@@ -476,10 +489,10 @@ export class VectorEditController {
       stroke: LEAFER_EDITOR_SELECTION_COLOR,
     }) as LeaferElement;
     const cutHitPath = new this.#options.leafer.Path({
-      cursor: "crosshair",
+      cursor: tool === "bend" ? "pointer" : "crosshair",
       editable: false,
       fill: null,
-      hittable: tool === "cut" && !readOnly,
+      hittable: (tool === "cut" || tool === "bend") && !readOnly,
       stroke: "rgba(0, 0, 0, 0.001)",
     }) as LeaferElement;
     const cutGuidePath = new this.#options.leafer.Path({
@@ -567,7 +580,10 @@ export class VectorEditController {
     const handleSize = 6 / zoom;
     session.pathElement.set({ path: serialized.path });
     session.cutHitPath.set({
-      hittable: session.tool === "cut" && !session.readOnly,
+      cursor: session.tool === "bend" ? "pointer" : "crosshair",
+      hittable:
+        (session.tool === "cut" || session.tool === "bend") &&
+        !session.readOnly,
       path: serialized.path,
       strokeWidth: 14 / zoom,
     });
@@ -620,7 +636,7 @@ export class VectorEditController {
     }
 
     const handleParts: string[] = [];
-    for (const vertexId of session.tool === "move"
+    for (const vertexId of session.tool === "move" || session.tool === "bend"
       ? session.selectedVertexIds
       : []) {
       const vertex = session.network.vertices.find(
@@ -1044,6 +1060,51 @@ export class VectorEditController {
       };
       return;
     }
+    if (session.tool === "bend" && control?.kind !== "handle") {
+      if (session.readOnly) return;
+      if (control?.kind === "vertex") {
+        this.#setVectorSelection(session, [], [control.vertexId]);
+        if (listVectorVertexHandles(session.network, control.vertexId).length) {
+          return;
+        }
+        const curved = setVectorPointMode(
+          session.network,
+          [control.vertexId],
+          "smooth",
+        );
+        if (!curved.ok) {
+          this.#options.report(new Error(curved.message));
+          return;
+        }
+        this.#submitVectorEdit(session, curved.network);
+        return;
+      }
+      if (target !== session.cutHitPath) return;
+      const hit = nearestVectorSegmentPoint(
+        session.network,
+        pointer.getInnerPoint(session.pathElement),
+      );
+      if (!hit) return;
+      const segment = session.network.segments.find(
+        (candidate) => candidate.id === hit.segmentId,
+      );
+      this.#setVectorSelection(
+        session,
+        [hit.segmentId],
+        segment ? [segment.startVertexId, segment.endVertexId] : [],
+      );
+      session.drag = {
+        before: structuredClone(session.network),
+        kind: "bend",
+        moved: false,
+        pathId: hit.pathId,
+        segmentId: hit.segmentId,
+        startClient: eventClientPoint(pointer),
+        startPoint: hit.point,
+        t: hit.t,
+      };
+      return;
+    }
     if (!control || control.kind === "path") {
       if (target && this.#options.nodeId(target) === session.nodeId) {
         const local = pointer.getInnerPoint(session.pathElement);
@@ -1158,6 +1219,26 @@ export class VectorEditController {
       drag.currentDocument = pointer.getInnerPoint(this.#options.root);
       drag.currentLocal = pointer.getInnerPoint(session.pathElement);
       this.#renderVectorCutGuide(session);
+      return;
+    }
+    if (drag.kind === "bend") {
+      const result = bendVectorSegment(
+        drag.before,
+        drag.pathId,
+        drag.segmentId,
+        drag.t,
+        pointer.getInnerPoint(session.pathElement),
+      );
+      if (!result.ok) {
+        drag.moved = false;
+        session.network = structuredClone(drag.before);
+        if (result.code !== "no-op") {
+          this.#options.report(new Error(result.message));
+        }
+      } else {
+        session.network = result.network;
+      }
+      this.#renderVectorEditOverlay(session);
       return;
     }
     if (drag.kind === "selection-transform") {
@@ -1326,6 +1407,28 @@ export class VectorEditController {
       else if (clickTarget) {
         this.#submitVectorCut(clickTarget.pathId, clickTarget.at);
       }
+      return;
+    }
+    if (drag.kind === "bend") {
+      session.drag = null;
+      const result = moved
+        ? { ok: true as const, network: session.network }
+        : bendVectorSegment(
+            drag.before,
+            drag.pathId,
+            drag.segmentId,
+            drag.t,
+            drag.startPoint,
+          );
+      if (!result.ok) {
+        session.network = structuredClone(drag.before);
+        this.#renderVectorEditOverlays();
+        if (result.code !== "no-op") {
+          this.#options.report(new Error(result.message));
+        }
+        return;
+      }
+      this.#submitVectorEdit(session, result.network);
       return;
     }
     if (drag.kind === "selection-transform") {

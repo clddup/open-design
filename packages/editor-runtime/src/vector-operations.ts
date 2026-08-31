@@ -7,6 +7,7 @@ import type {
   VectorPointMode,
 } from "@opendesign/design-contracts";
 import {
+  bendVectorSegment,
   connectVectorEndpoints,
   cutVectorNetworkByLine,
   cutVectorPath,
@@ -39,6 +40,13 @@ export type VectorOperationFailureCode =
 export type VectorSemanticEdit =
   | { action: "set-closed"; closed: boolean; pathId?: string }
   | { action: "reverse-path"; pathId?: string }
+  | {
+      action: "bend-segment";
+      pathId: string;
+      point: Point;
+      segmentId: string;
+      t: number;
+    }
   | {
       action: "connect-endpoints";
       vertexIds: readonly [string, string];
@@ -515,6 +523,17 @@ export function planVectorSemanticEdit(
     );
     if (!connected.ok) return vectorOperationFailure(connected);
     return planVectorNetworkUpdate(document, pageId, nodeId, connected.network);
+  }
+  if (edit.action === "bend-segment") {
+    const bent = bendVectorSegment(
+      node.properties.network,
+      edit.pathId,
+      edit.segmentId,
+      edit.t,
+      edit.point,
+    );
+    if (!bent.ok) return vectorOperationFailure(bent);
+    return planVectorNetworkUpdate(document, pageId, nodeId, bent.network);
   }
   if (edit.action === "transform-vertices") {
     const transformed = transformVectorVertices(

@@ -4806,6 +4806,19 @@ describe("App", () => {
       "aria-pressed",
       "true",
     );
+    await user.click(screen.getByRole("button", { name: "Bend" }));
+    await waitFor(() =>
+      expect(leaferHarness.input?.vectorEditScope?.tool).toBe("bend"),
+    );
+    expect(
+      screen.getByText(
+        "Click a point or path to add handles, or drag a path to bend it",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Bend" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
     fireEvent.keyDown(canvas, { key: "x", code: "KeyX" });
     await waitFor(() =>
       expect(leaferHarness.input?.vectorEditScope?.tool).toBe("cut"),

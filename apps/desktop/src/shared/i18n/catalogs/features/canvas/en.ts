@@ -44,6 +44,8 @@ export const canvasMessages = {
     "{{pointCount}} points · {{pathCount}} paths selected · Shift-click adds",
   "canvas.vectorCutHint":
     "Click a point or path to create a break, or drag across the object to divide it into layers",
+  "canvas.vectorBendHint":
+    "Click a point or path to add handles, or drag a path to bend it",
   "canvas.vectorLassoHint":
     "Draw around vector points and paths · Hold Shift to toggle enclosed content",
   "canvas.vectorCutUnavailable": "Vector cut result is unavailable",
@@ -57,6 +59,7 @@ export const canvasMessages = {
   "canvas.exitVectorEditing": "Finish editing vector points",
   "canvas.vectorEditTool": "Vector edit tool",
   "canvas.vectorToolMove": "Move",
+  "canvas.vectorToolBend": "Bend",
   "canvas.vectorToolCut": "Cut",
   "canvas.vectorToolLasso": "Lasso",
   "canvas.vectorPointMode": "Bézier point mode",

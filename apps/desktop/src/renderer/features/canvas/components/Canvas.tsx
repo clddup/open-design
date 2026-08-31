@@ -1688,14 +1688,16 @@ export function Canvas({
                       ? t("canvas.vectorEditingReadOnly")
                       : vectorEditState?.tool === "cut"
                         ? t("canvas.vectorCutHint")
-                        : vectorEditState?.tool === "lasso"
-                          ? t("canvas.vectorLassoHint")
-                          : t("canvas.vectorEditingHint", {
-                              pathCount:
-                                vectorEditScope.selectedSegmentIds.length,
-                              pointCount:
-                                vectorEditScope.selectedVertexIds.length,
-                            })}
+                        : vectorEditState?.tool === "bend"
+                          ? t("canvas.vectorBendHint")
+                          : vectorEditState?.tool === "lasso"
+                            ? t("canvas.vectorLassoHint")
+                            : t("canvas.vectorEditingHint", {
+                                pathCount:
+                                  vectorEditScope.selectedSegmentIds.length,
+                                pointCount:
+                                  vectorEditScope.selectedVertexIds.length,
+                              })}
                   </small>
                 </span>
                 <span className={styles.vectorTools}>
@@ -1707,14 +1709,18 @@ export function Canvas({
                     {(
                       [
                         ["move", "canvas.vectorToolMove", "V"],
+                        ["bend", "canvas.vectorToolBend", null],
                         ["cut", "canvas.vectorToolCut", "X"],
                         ["lasso", "canvas.vectorToolLasso", "Q"],
                       ] as const
                     ).map(([mode, label, shortcut]) => (
                       <button
-                        aria-keyshortcuts={shortcut}
+                        aria-keyshortcuts={shortcut ?? undefined}
                         aria-pressed={vectorEditState?.tool === mode}
-                        disabled={vectorEditScope.readOnly && mode === "cut"}
+                        disabled={
+                          vectorEditScope.readOnly &&
+                          (mode === "bend" || mode === "cut")
+                        }
                         key={mode}
                         onClick={() => {
                           setVectorEditState((current) =>
@@ -1722,7 +1728,9 @@ export function Canvas({
                           );
                           requestAnimationFrame(() => host.current?.focus());
                         }}
-                        title={`${t(label)} (${shortcut})`}
+                        title={
+                          shortcut ? `${t(label)} (${shortcut})` : t(label)
+                        }
                         type="button"
                       >
                         {t(label)}

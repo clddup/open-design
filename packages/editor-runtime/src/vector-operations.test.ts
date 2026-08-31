@@ -437,6 +437,47 @@ describe("vector editing runtime plans", () => {
     expect(vectorNetworkFrom(runtime).regions).toEqual([]);
   });
 
+  it("bends one segment through preview, revision, undo, and reopen", () => {
+    const runtime = new EditorRuntime(documentWithVector());
+    const before = runtime.getSnapshot();
+    const plan = planVectorSemanticEdit(
+      before.document,
+      "page_welcome",
+      "vector_editable",
+      {
+        action: "bend-segment",
+        pathId: "path_open",
+        point: { x: 90, y: 36 },
+        segmentId: "segment_bc",
+        t: 0.5,
+      },
+    );
+    if (!plan.ok) throw new Error(plan.message);
+    const transaction = {
+      transactionId: "bend_vector",
+      documentId: before.document.documentId,
+      baseRevision: before.document.revision,
+      actor: { type: "user" as const, id: "local-user" },
+      label: "Bend vector segment",
+      commands: [...plan.operations],
+    };
+    expect(runtime.preview(transaction)).toMatchObject({ ok: true });
+    expect(runtime.getSnapshot().document.revision).toBe(0);
+    expect(runtime.apply(transaction)).toMatchObject({ ok: true });
+    expect(runtime.getSnapshot().document.revision).toBe(1);
+    expect(vectorNetworkFrom(runtime).segments[1]?.tangentStart).toBeDefined();
+    expect(vectorNetworkFrom(runtime).segments[1]?.tangentEnd).toBeDefined();
+    expect(runtime.undo()).toMatchObject({ ok: true, mode: "undo" });
+    expect(
+      vectorNetworkFrom(runtime).segments[1]?.tangentStart,
+    ).toBeUndefined();
+    expect(runtime.redo()).toMatchObject({ ok: true, mode: "redo" });
+    const reopened = new EditorRuntime(
+      JSON.parse(JSON.stringify(runtime.getSnapshot().document)) as unknown,
+    );
+    expect(vectorNetworkFrom(reopened)).toEqual(vectorNetworkFrom(runtime));
+  });
+
   it("rejects semantic no-ops, unsupported topology, and inherited locks", () => {
     const document = documentWithVector();
     expect(

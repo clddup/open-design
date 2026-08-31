@@ -98,6 +98,16 @@ const vectorInputs: DesignVectorToolInput[] = [
     closed: true,
   },
   {
+    action: "bend-segment",
+    label: "Bend logo contour",
+    pageId: "page_brand",
+    nodeId: "logo_path",
+    pathId: "outer_path",
+    point: { x: 72, y: 32 },
+    segmentId: "segment_curve",
+    t: 0.4,
+  },
+  {
     action: "reverse-path",
     label: "Reverse logo contour",
     pageId: "page_brand",
@@ -163,13 +173,13 @@ const vectorInputs: DesignVectorToolInput[] = [
 ];
 
 describe("Hierarchy and Vector Agent contracts", () => {
-  it("uses one disclosed executable schema for all 19 action branches", () => {
+  it("uses one disclosed executable schema for all 20 action branches", () => {
     expect(DesignHierarchyContract.schema).toBe(
       DESIGN_HIERARCHY_TOOL_INPUT_SCHEMA,
     );
     expect(DesignVectorContract.schema).toBe(DESIGN_VECTOR_TOOL_INPUT_SCHEMA);
     expect(hierarchyInputs).toHaveLength(10);
-    expect(vectorInputs).toHaveLength(9);
+    expect(vectorInputs).toHaveLength(10);
     for (const input of hierarchyInputs) {
       expect(
         schemaValidationIssues(DesignHierarchyContract.schema, input),
@@ -258,6 +268,26 @@ describe("Hierarchy and Vector Agent contracts", () => {
       }),
     ).toEqual(
       expect.arrayContaining([expect.objectContaining({ path: "/pathId" })]),
+    );
+  });
+
+  it("reports Bend fields through the disclosed discriminated branch", () => {
+    expect(
+      DesignVectorContract.issues({
+        action: "bend-segment",
+        label: "Bend logo",
+        pageId: "page_brand",
+        nodeId: "logo_path",
+        pathId: "outer_path",
+        point: { x: 72, y: "bad" },
+        segmentId: "segment_curve",
+        t: 1,
+      }),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: "/point/y" }),
+        expect.objectContaining({ path: "/t" }),
+      ]),
     );
   });
 
