@@ -76,6 +76,7 @@ export {
   designPlanReferenceStrategy,
   designPlanSkillRefs,
   designPlanTargets,
+  isPlaceableRasterAssetRole,
 } from "./design-agent-plan-review";
 export type {
   DesignDeliverable,

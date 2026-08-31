@@ -62,11 +62,17 @@ function nodeMap(
     Object.entries(document.nodesById).map(([nodeId, node]) => [
       nodeId,
       {
+        ...(node.kind === "image" && node.properties?.assetId
+          ? { assetId: node.properties.assetId }
+          : {}),
         childIds: [...node.childIds],
         componentId:
           node.kind === "instance"
             ? (node.properties?.componentId ?? null)
             : null,
+        ...(node.kind === "image" && node.extensions?.designRole
+          ? { designRole: node.extensions.designRole }
+          : {}),
         id: nodeId,
         kind: node.kind,
         locked: node.locked,

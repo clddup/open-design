@@ -134,7 +134,15 @@ describe("Agent design inspection component strategy", () => {
               },
             },
             nodesById: {
-              component_main: inspectedNode("component_main", "group", null),
+              component_main: {
+                ...inspectedNode("component_main", "group", null),
+                childIds: ["image_hero"],
+              },
+              image_hero: {
+                ...inspectedNode("image_hero", "image", "component_main"),
+                properties: { assetId: "asset_hero" },
+                extensions: { designRole: "hero" },
+              },
               instance_1: {
                 ...inspectedNode("instance_1", "instance", null),
                 properties: {
@@ -181,6 +189,8 @@ describe("Agent design inspection component strategy", () => {
     expect(inspection.nodesById.get("instance_1")?.componentId).toBe(
       "component_navigation",
     );
+    expect(inspection.nodesById.get("image_hero")?.designRole).toBe("hero");
+    expect(inspection.nodesById.get("image_hero")?.assetId).toBe("asset_hero");
     expect(
       inspection.catalogComponentsById.get("component_navigation")?.name,
     ).toBe("Navigation");

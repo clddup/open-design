@@ -232,6 +232,7 @@ function existingArtboardPlan(
   const plan = designPlanForPage(pageId);
   return {
     ...plan,
+    rasterAssetRoles: [],
     targets: plan.targets.map((target) => ({
       ...target,
       artboard: {
@@ -1161,7 +1162,7 @@ describe("GlobalTaskCoordinator", () => {
           surfaceMode: "graphic",
         },
       },
-      rasterAssetRoles: ["hero"],
+      rasterAssetRoles: [],
       skillRefs: BUILTIN_GRAPHIC_DESIGN_SKILL_REFS.map((reference) => ({
         ...reference,
       })),
@@ -1197,13 +1198,6 @@ describe("GlobalTaskCoordinator", () => {
       ),
     );
 
-    expect(() =>
-      coordinator.assertDesignPlanForImagePlacement(
-        context,
-        "hero",
-        plan.targets[0].artboard.frameId,
-      ),
-    ).not.toThrow();
     expect(coordinator.resolveVisualReviewSkillRefs(context)).toEqual(
       BUILTIN_GRAPHIC_DESIGN_SKILL_REFS,
     );
@@ -1439,6 +1433,21 @@ describe("GlobalTaskCoordinator", () => {
       ),
     ).toThrow("cannot be placed as background");
     expect(() =>
+      coordinator.assertDesignPlanForImagePlacement(
+        context,
+        "hero",
+        "wrong_parent",
+      ),
+    ).toThrow("planned artboard Frame");
+    expect(() =>
+      coordinator.assertDesignPlanForImagePlacement(
+        context,
+        "background",
+        "workspace_artboard",
+        "image_generated",
+      ),
+    ).toThrow("declared as hero");
+    expect(() =>
       coordinator.registerDesignPlan(context, {
         ...designPlanForPage(pageId),
         outputMode: "single-raster",
@@ -1446,7 +1455,10 @@ describe("GlobalTaskCoordinator", () => {
         singleRasterEvidence: "Refine the mobile experience",
       }),
     ).toThrow("explicitly requests one flattened image");
-
+    coordinator.registerDesignPlan(context, {
+      ...designPlanForPage(pageId),
+      rasterAssetRoles: [],
+    });
     const scatteredDraft: DesignApplyToolInput = {
       label: "Scatter one root layer",
       commands: [
@@ -1827,30 +1839,6 @@ describe("GlobalTaskCoordinator", () => {
     expect(() =>
       coordinator.assertDesignPlanForApply(context, scatteredDraft),
     ).toThrow("outside the planned artboard Frame");
-    expect(() =>
-      coordinator.assertDesignPlanForImagePlacement(
-        context,
-        "hero",
-        "wrong_parent",
-      ),
-    ).toThrow("planned artboard Frame");
-    expect(() =>
-      coordinator.assertDesignPlanForImagePlacement(
-        context,
-        "background",
-        "workspace_artboard",
-        "image_generated",
-      ),
-    ).toThrow("declared as hero");
-    expect(() =>
-      coordinator.assertDesignPlanForImagePlacement(
-        context,
-        "hero",
-        "workspace_artboard",
-        "image_generated",
-      ),
-    ).not.toThrow();
-
     store.close();
   });
 
@@ -2262,6 +2250,141 @@ describe("GlobalTaskCoordinator", () => {
       nextAction: "complete-delivery",
       verification: "deterministic-fast-delivery",
       verified: true,
+    });
+    store.close();
+  });
+
+  it("defers visual critique until every required raster role is placed in the target", async () => {
+    const { store, host, file, opened, pageId } = await setup();
+    const coordinator = new GlobalTaskCoordinator(host, store);
+    const runId = "run_raster_before_critic";
+    await coordinator.registerRun({
+      type: "run.start",
+      runId,
+      sessionId: "conversation_mobile",
+      prompt: "Design a summer camp landing screen with a real hero image",
+      documentId: file.documentId,
+      revision: opened.document.revision,
+      modelSelection,
+      generationMode: "fast",
+      scope: { kind: "page", pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page", pageId },
+    });
+    const context = {
+      runId,
+      sessionId: "conversation_mobile",
+      documentId: file.documentId,
+      revision: opened.document.revision,
+      scope: { kind: "page" as const, pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page" as const, pageId },
+    };
+    coordinator.recordDocumentInspection(
+      context,
+      inspectionResult(opened.document, pageId),
+    );
+    const plan = {
+      ...qualityProfilePlan(pageId),
+      rasterAssetRoles: ["hero" as const],
+    };
+    const target = plan.targets[0];
+    if (!target) throw new Error("Raster target is missing");
+    coordinator.registerDesignPlan(context, plan);
+    const allocation = coordinator.createDesignPlanAllocation(runId);
+    coordinator.recordDesignPlanAllocated(
+      runId,
+      allocation?.targetIds ?? [],
+      1,
+    );
+    const draft = draftTargets(pageId, [target]);
+    const authorization = coordinator.assertDesignPlanForApply(context, draft);
+    coordinator.recordDesignApplyCompleted(
+      runId,
+      authorization?.input ?? draft,
+      authorization,
+      2,
+    );
+    const drafted = withDraftedTargets(opened.document, pageId, [target], 2);
+    coordinator.recordDocumentInspection(
+      context,
+      inspectionResult(drafted, pageId),
+    );
+    expect(
+      coordinator.resolveVisualCriticContext(context, 2, {
+        attachmentId: "capture_without_hero",
+        byteSize: 12_000,
+        mimeType: "image/jpeg",
+        name: "draft.jpg",
+      }),
+    ).toBeNull();
+    expect(
+      coordinator.recordCanvasCapture(
+        context,
+        2,
+        diagnoseDesignTargetLayout(
+          drafted,
+          pageId,
+          target.artboard.frameId,
+          target.qualityProfile,
+        ),
+      ),
+    ).toMatchObject({
+      nextAction: "place-required-raster-assets",
+      pendingRasterRoles: ["hero"],
+      reviewEligible: false,
+    });
+    expect(() =>
+      coordinator.registerVisualReview(context, visualReview),
+    ).toThrow("design_workflow.material_write_required");
+
+    const region = target.composition.regions[0];
+    if (!region) throw new Error("Raster target region is missing");
+    const withHero = structuredClone(drafted);
+    withHero.revision = 3;
+    withHero.nodesById[region.nodeId]?.childIds.push("summer_camp_hero");
+    withHero.nodesById.summer_camp_hero = {
+      id: "summer_camp_hero",
+      kind: "image",
+      name: "Summer Camp Hero",
+      parentId: region.nodeId,
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 0, 0],
+      size: { width: region.width, height: region.height },
+      exportSettings: [],
+      opacity: 1,
+      properties: {
+        assetId: "asset_summer_camp_hero",
+        placement: {
+          mode: "fill",
+          focalPoint: { x: 0.5, y: 0.45 },
+        },
+        altText: "Children participating in a summer camp activity",
+        cornerRadius: 0,
+      },
+      extensions: { designRole: "hero" },
+    };
+    coordinator.recordMaterialDesignWriteCompleted(
+      runId,
+      [target.targetId],
+      3,
+      ["summer_camp_hero"],
+    );
+    coordinator.recordDocumentInspection(
+      context,
+      inspectionResult(withHero, pageId),
+    );
+    expect(
+      coordinator.resolveVisualCriticContext(context, 3, {
+        attachmentId: "capture_with_hero",
+        byteSize: 12_000,
+        mimeType: "image/jpeg",
+        name: "draft-with-hero.jpg",
+      }),
+    ).toMatchObject({
+      observedRevision: 3,
+      phase: "draft",
+      target: { targetId: target.targetId },
     });
     store.close();
   });
@@ -3898,11 +4021,7 @@ describe("GlobalTaskCoordinator", () => {
       nextAction: "complete-delivery",
     });
     expect(() =>
-      coordinator.assertDesignPlanForImagePlacement(
-        contextAtRevision2,
-        "hero",
-        "existing_nested_frame",
-      ),
+      coordinator.assertDesignPlanForApply(contextAtRevision2, refinement),
     ).toThrow("design_workflow.delivery_already_verified");
     expect(() =>
       coordinator.assertDesignPlanForApply(

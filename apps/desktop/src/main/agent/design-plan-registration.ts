@@ -27,8 +27,10 @@ export type InspectedHierarchy = {
   nodesById: Map<
     string,
     {
+      assetId?: string;
       childIds: string[];
       componentId: string | null;
+      designRole?: string;
       id: string;
       kind: string;
       locked: boolean;

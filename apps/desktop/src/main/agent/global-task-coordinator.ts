@@ -34,6 +34,7 @@ import {
   designPlanComponentStrategy,
   designPlanReferenceStrategy,
   designPlanTargets,
+  isPlaceableRasterAssetRole,
   type DesignApplyToolInput,
   type DesignDeliveryScope,
   type DesignComponentToolInput,
@@ -953,6 +954,36 @@ export class GlobalTaskCoordinator {
         "The independent visual critic does not match the exact captured revision",
       );
     }
+    const pendingRasterRoles = pendingPlaceableRasterRoles(
+      state,
+      target,
+      this.#inspectionsByRunId.get(context.runId),
+      observedRevision,
+    );
+    if (pendingRasterRoles.length > 0) {
+      if (visualCritic !== undefined) {
+        throw designWorkflowError(
+          "visual_critic_unavailable",
+          "Independent visual review cannot run before every required raster role is present in the captured target",
+        );
+      }
+      target.captureCount = captureSequence;
+      target.lastCaptureRevision = observedRevision;
+      target.delivery = {
+        ...target.delivery,
+        status: "captured",
+        captureRevision: observedRevision,
+      };
+      this.#persistDelivery(context.runId, state);
+      return {
+        captureSequence,
+        capturedRevision: observedRevision,
+        deliveryTargetId: target.delivery.targetId,
+        nextAction: "place-required-raster-assets",
+        pendingRasterRoles,
+        reviewEligible: false,
+      };
+    }
     const generationMode = this.#toolBindingsByRunId.get(
       context.runId,
     )?.generationMode;
@@ -1228,6 +1259,16 @@ export class GlobalTaskCoordinator {
     ) {
       return null;
     }
+    if (
+      pendingPlaceableRasterRoles(
+        state,
+        target,
+        this.#inspectionsByRunId.get(context.runId),
+        observedRevision,
+      ).length > 0
+    ) {
+      return null;
+    }
     return {
       runId: context.runId,
       generationMode: binding.generationMode,
@@ -1283,6 +1324,19 @@ export class GlobalTaskCoordinator {
       throw designWorkflowError(
         "material_write_required",
         "Apply one successful material design transaction from the accepted plan, then call opendesign_capture_canvas before recording a visual review; do not retry the review yet",
+      );
+    }
+    if (
+      pendingPlaceableRasterRoles(
+        state,
+        target,
+        this.#inspectionsByRunId.get(context.runId),
+        target.lastCaptureRevision,
+      ).length > 0
+    ) {
+      throw designWorkflowError(
+        "material_write_required",
+        "Place every raster asset required by the accepted plan in the current target, then capture that exact revision before recording a visual review",
       );
     }
     if (target.captureCount <= target.reviewedCaptureCount) {
@@ -2923,6 +2977,33 @@ function requiresFastDraftVisualCritic(
     (target.delivery.status === "drafted" ||
       target.delivery.status === "captured")
   );
+}
+
+function pendingPlaceableRasterRoles(
+  state: DesignWorkflowState,
+  target: DesignDeliveryTargetState,
+  inspection: InspectedHierarchy | undefined,
+  expectedRevision: number | null,
+): PlaceableRasterAssetRole[] {
+  const required = state.plan.rasterAssetRoles.filter(
+    (role): role is PlaceableRasterAssetRole => role !== "reference",
+  );
+  if (required.length === 0) return [];
+  if (!inspection || inspection.revision !== expectedRevision) return required;
+  const placed = new Set<PlaceableRasterAssetRole>();
+  for (const nodeId of target.artboardDescendantIds) {
+    const node = inspection?.nodesById.get(nodeId);
+    const role = node?.designRole;
+    if (
+      node?.kind === "image" &&
+      node.assetId !== undefined &&
+      isPlaceableRasterAssetRole(role) &&
+      required.includes(role)
+    ) {
+      placed.add(role);
+    }
+  }
+  return required.filter((role) => !placed.has(role));
 }
 
 function assertDeliveryAcceptsMaterialWrites(state: DesignWorkflowState): void {

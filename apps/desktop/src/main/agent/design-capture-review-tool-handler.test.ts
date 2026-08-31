@@ -273,6 +273,34 @@ describe("Design capture/review Main session", () => {
     );
   });
 
+  it("skips the independent critic while the target still needs planned raster assets", async () => {
+    const state = setup();
+    const attachment = {
+      attachmentId: "capture_attachment",
+      byteSize: 128,
+      mimeType: "image/jpeg" as const,
+      name: "capture.jpg",
+    };
+    vi.mocked(requireDesignVisualCriticAttachment).mockReturnValue(attachment);
+    state.coordinator.resolveVisualCriticContext.mockReturnValue(null);
+
+    await state.session.capture(captureCall);
+
+    expect(state.coordinator.resolveVisualCriticContext).toHaveBeenCalledWith(
+      context,
+      7,
+      attachment,
+    );
+    expect(state.getModelProviderHost).not.toHaveBeenCalled();
+    expect(runIndependentDesignVisualCritic).not.toHaveBeenCalled();
+    expect(state.coordinator.recordCanvasCapture).toHaveBeenCalledWith(
+      context,
+      7,
+      state.layoutQuality,
+      undefined,
+    );
+  });
+
   it("runs the independent critic only for a clean eligible capture", async () => {
     const state = setup();
     const attachment = {

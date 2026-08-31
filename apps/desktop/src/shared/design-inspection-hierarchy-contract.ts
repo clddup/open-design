@@ -61,7 +61,20 @@ const InspectedNodeSchema = Type.Object(
     transform: HierarchyTransformSchema,
     properties: Type.Optional(
       Type.Object(
-        { componentId: Type.Optional(HierarchyIdSchema) },
+        {
+          assetId: Type.Optional(HierarchyIdSchema),
+          componentId: Type.Optional(HierarchyIdSchema),
+        },
+        { additionalProperties: true },
+      ),
+    ),
+    extensions: Type.Optional(
+      Type.Object(
+        {
+          designRole: Type.Optional(
+            Type.String({ minLength: 1, maxLength: 64 }),
+          ),
+        },
         { additionalProperties: true },
       ),
     ),
