@@ -1,11 +1,12 @@
-import type {
-  DesignDocument,
-  DesignNode,
-  Paint,
-  VariableAlias,
-  VariableCollectionDefinition,
-  VariableResolvedDataType,
-  VariableValue,
+import {
+  nodePaintCollections,
+  type DesignDocument,
+  type DesignNode,
+  type Paint,
+  type VariableAlias,
+  type VariableCollectionDefinition,
+  type VariableResolvedDataType,
+  type VariableValue,
 } from "@opendesign/design-contracts";
 import {
   colorToHex,
@@ -829,28 +830,11 @@ function nodeBindingType(field: string): VariableResolvedDataType | undefined {
   return undefined;
 }
 
-function nodePaintFields(
-  node: DesignNode,
-): Array<["fills" | "strokes", Paint[]]> {
-  if (
-    node.kind === "frame" ||
-    node.kind === "slot" ||
-    node.kind === "rectangle" ||
-    node.kind === "ellipse" ||
-    node.kind === "line" ||
-    node.kind === "polygon" ||
-    node.kind === "star" ||
-    node.kind === "text" ||
-    node.kind === "path" ||
-    node.kind === "vector" ||
-    node.kind === "boolean"
-  ) {
-    return [
-      ["fills", node.properties.fills],
-      ["strokes", node.properties.strokes],
-    ];
-  }
-  return [];
+function nodePaintFields(node: DesignNode): Array<[string, readonly Paint[]]> {
+  return nodePaintCollections(node).map(({ paints, path }) => [
+    path.replace(/^\/properties\//, ""),
+    paints,
+  ]);
 }
 
 function hasVariableBinding(node: DesignNode): boolean {

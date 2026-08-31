@@ -1,6 +1,7 @@
 import type {
   DesignAsset,
   DesignDocument,
+  DesignNode,
   ImageNode,
   PathNode,
 } from "@opendesign/design-contracts";
@@ -1122,8 +1123,58 @@ describe("file image asset planners", () => {
       },
       extensions: {},
     };
+    const vector: DesignNode = {
+      ...path,
+      id: "region_paint_reference",
+      kind: "vector",
+      name: "Region paint reference",
+      properties: {
+        fills: [],
+        strokes: [],
+        strokeWidth: 0,
+        network: {
+          vertices: [
+            { id: "a", x: 0, y: 0 },
+            { id: "b", x: 100, y: 0 },
+            { id: "c", x: 50, y: 100 },
+          ],
+          segments: [
+            { id: "ab", startVertexId: "a", endVertexId: "b" },
+            { id: "bc", startVertexId: "b", endVertexId: "c" },
+            { id: "ca", startVertexId: "c", endVertexId: "a" },
+          ],
+          paths: [
+            {
+              id: "outline",
+              closed: true,
+              segments: [
+                { segmentId: "ab", reversed: false },
+                { segmentId: "bc", reversed: false },
+                { segmentId: "ca", reversed: false },
+              ],
+            },
+          ],
+          regions: [
+            {
+              id: "face",
+              windingRule: "nonzero",
+              loops: [{ pathId: "outline", reversed: false }],
+              fills: [
+                {
+                  type: "image",
+                  assetId: oldAsset.id,
+                  fit: "cover",
+                  opacity: 1,
+                },
+              ],
+            },
+          ],
+        },
+      },
+    };
     document.nodesById.paint_reference = path;
-    document.nodesById.frame_welcome!.childIds.push(path.id);
+    document.nodesById[vector.id] = vector;
+    document.nodesById.frame_welcome!.childIds.push(path.id, vector.id);
     const plan = planReplaceImageAsset(document, oldAsset.id, newAsset);
     expect(plan).toMatchObject({ ok: true, assetId: newAsset.id });
     if (!plan.ok) return;
@@ -1140,6 +1191,8 @@ describe("file image asset planners", () => {
     ).toBe(true);
     const nextImage = runtime.getSnapshot().document.nodesById.hero;
     const nextPath = runtime.getSnapshot().document.nodesById.paint_reference;
+    const nextVector =
+      runtime.getSnapshot().document.nodesById.region_paint_reference;
     expect(nextImage).toMatchObject({
       properties: {
         assetId: newAsset.id,
@@ -1155,6 +1208,17 @@ describe("file image asset planners", () => {
           }),
         ],
         strokes: [expect.objectContaining({ assetId: newAsset.id })],
+      },
+    });
+    expect(nextVector).toMatchObject({
+      properties: {
+        network: {
+          regions: [
+            {
+              fills: [expect.objectContaining({ assetId: newAsset.id })],
+            },
+          ],
+        },
       },
     });
     expect(

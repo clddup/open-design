@@ -20,7 +20,8 @@ import {
 import type { BooleanGeometryResolution } from "@opendesign/geometry-service/boolean-resolver";
 import {
   resolvePathPropertiesData,
-  vectorNetworkHasFillRegion,
+  serializeVectorNetwork,
+  serializeVectorRegion,
 } from "@opendesign/geometry-service/editable-vector";
 import type {
   BooleanEditProjectionOptions,
@@ -47,6 +48,10 @@ export type {
 
 export const BOOLEAN_RESULT_ELEMENT_PREFIX =
   "__opendesign_boolean_result__:" as const;
+export const VECTOR_REGION_ELEMENT_PREFIX =
+  "__opendesign_vector_region__:" as const;
+export const VECTOR_STROKE_ELEMENT_PREFIX =
+  "__opendesign_vector_stroke__:" as const;
 export const LEAFER_EDITOR_SELECTION_COLOR = "#4f7fff" as const;
 export function projectDesignPage(
   document: DesignDocument,
@@ -129,6 +134,12 @@ export function projectDesignPage(
   };
   page.rootNodeIds.forEach(visit);
 
+  projectEditableVectorNetworkChildren(
+    projectionDocument,
+    elementsById,
+    warnings,
+  );
+
   return {
     documentId: document.documentId,
     elementsById,
@@ -157,6 +168,18 @@ export function projectDesignPageIncrementally(
   if (!page) throw new Error(`Page ${pageId} does not exist`);
 
   if (
+    [...previous.elementsById.keys()].some(
+      (id) =>
+        id.startsWith(VECTOR_REGION_ELEMENT_PREFIX) ||
+        id.startsWith(VECTOR_STROKE_ELEMENT_PREFIX),
+    ) ||
+    [...collectPageNodeIds(document, page.rootNodeIds)].some((nodeId) => {
+      const node = document.nodesById[nodeId];
+      return (
+        (node?.kind === "path" || node?.kind === "vector") &&
+        "network" in node.properties
+      );
+    }) ||
     [...previous.elementsById.keys()].some((id) =>
       id.startsWith(COMPONENT_PROJECTION_PREFIX),
     ) ||
@@ -574,7 +597,8 @@ function toElementSpec(
     }
     case "vector":
     case "path": {
-      tag = "Path";
+      const editableNetwork = "network" in node.properties;
+      tag = editableNetwork ? "Group" : "Path";
       const pathData = resolvePathPropertiesData(node.properties);
       const path = pathData === null ? null : readPath(pathData);
       if (!path) {
@@ -590,19 +614,22 @@ function toElementSpec(
         node.properties,
         warnings,
       );
-      data = {
-        ...base,
-        ...shape,
-        ...("network" in node.properties &&
-        !vectorNetworkHasFillRegion(node.properties.network)
-          ? { fill: null }
-          : {}),
-        width: node.size.width,
-        height: node.size.height,
-        editConfig: { editSize: "scale" },
-        path: path ?? null,
-        windingRule: node.properties.fillRule ?? "nonzero",
-      };
+      data = editableNetwork
+        ? {
+            ...base,
+            fill: null,
+            hitChildren: true,
+            stroke: null,
+          }
+        : {
+            ...base,
+            ...shape,
+            width: node.size.width,
+            height: node.size.height,
+            editConfig: { editSize: "scale" },
+            path: path ?? null,
+            windingRule: node.properties.fillRule ?? "nonzero",
+          };
       break;
     }
     case "instance":
@@ -641,6 +668,117 @@ function toElementSpec(
       : {}),
     transform: [...node.transform],
   };
+}
+
+function projectEditableVectorNetworkChildren(
+  document: DesignDocument,
+  elementsById: Map<string, LeaferElementSpec>,
+  warnings: LeaferFidelityWarning[],
+): void {
+  for (const spec of [...elementsById.values()]) {
+    const node = document.nodesById[spec.id];
+    if (
+      !node ||
+      (node.kind !== "path" && node.kind !== "vector") ||
+      !("network" in node.properties)
+    ) {
+      continue;
+    }
+    const serialized = serializeVectorNetwork(node.properties.network);
+    if (!serialized.ok) continue;
+    const metadata = projectionMetadata(spec.data.data);
+    const shape = mapShapeProperties(
+      document,
+      node.id,
+      node.properties,
+      warnings,
+    );
+    const childIds: string[] = [];
+    for (const region of node.properties.network.regions) {
+      const result = serializeVectorRegion(node.properties.network, region.id);
+      if (!result.ok) continue;
+      const id = vectorRegionElementId(node.id, region.id);
+      childIds.push(id);
+      elementsById.set(id, {
+        childIds: [],
+        data: {
+          data: {
+            ...metadata,
+            opendesignProjectionId: id,
+            opendesignSynthetic: true,
+            opendesignVectorRegionId: region.id,
+          },
+          editable: false,
+          id,
+          fill: mapPaints(
+            document,
+            node.id,
+            region.fills ?? node.properties.fills,
+            warnings,
+          ),
+          hitFill: "all",
+          hittable: true,
+          name: `${node.name} · ${region.id}`,
+          path: result.path,
+          stroke: null,
+          windingRule: region.windingRule,
+        },
+        id,
+        kind: "path",
+        parentId: node.id,
+        tag: "Path",
+        transform: [1, 0, 0, 1, 0, 0],
+      });
+    }
+    const strokeId = vectorStrokeElementId(node.id);
+    childIds.push(strokeId);
+    elementsById.set(strokeId, {
+      childIds: [],
+      data: {
+        data: {
+          ...metadata,
+          opendesignProjectionId: strokeId,
+          opendesignSynthetic: true,
+        },
+        dashPattern: shape.dashPattern,
+        editable: false,
+        fill: null,
+        hitStroke: "all",
+        hittable: true,
+        id: strokeId,
+        name: `${node.name} · stroke`,
+        path: serialized.path,
+        stroke: shape.stroke,
+        strokeAlign: shape.strokeAlign,
+        strokeCap: shape.strokeCap,
+        strokeJoin: shape.strokeJoin,
+        strokeWidth: shape.strokeWidth,
+      },
+      id: strokeId,
+      kind: "path",
+      parentId: node.id,
+      tag: "Path",
+      transform: [1, 0, 0, 1, 0, 0],
+    });
+    elementsById.set(node.id, { ...spec, childIds });
+  }
+}
+
+export function vectorRegionElementId(
+  nodeId: string,
+  regionId: string,
+): string {
+  return `${VECTOR_REGION_ELEMENT_PREFIX}${nodeId}:${regionId}`;
+}
+
+export function vectorStrokeElementId(nodeId: string): string {
+  return `${VECTOR_STROKE_ELEMENT_PREFIX}${nodeId}`;
+}
+
+function projectionMetadata(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null
+    ? (value as Record<string, unknown>)
+    : {};
 }
 
 function mapLineEndpoint(

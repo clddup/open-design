@@ -1,5 +1,6 @@
 import type {
   BooleanOperation,
+  Paint,
   Point,
   Transform,
 } from "@opendesign/design-contracts";
@@ -98,6 +99,14 @@ export type DesignVectorToolInput =
       point: Point;
       segmentId: string;
       t: number;
+    }
+  | {
+      action: "set-region-fills";
+      fills: Paint[];
+      label: string;
+      nodeId: string;
+      pageId: string;
+      regionId: string;
     }
   | {
       action: "reverse-path";

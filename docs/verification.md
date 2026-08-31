@@ -3,9 +3,9 @@
 - 日期：2026-08-25
 
 - 环境基线：Node.js 24.14.0、pnpm 10.32.1、Electron 43.3.0、Vite 8.2.1
-- 文档协议：`DesignDocument 1.47.0`
-- Agent 协议：`3.12.0`
-- Geometry Service：`contract 14`
+- 文档协议：`DesignDocument 1.48.0`
+- Agent 协议：`3.13.0`
+- Geometry Service：`contract 15`
 - Text Layout Service：`contract v5`
 - Text Range Service：`contract v1`（DesignDocument rich-text runs 已接入）
 - Text Paragraph Service：`contract v2`（逐段 indent/spacing/list 已接入）
@@ -139,6 +139,7 @@ pnpm build
 - Geometry Service contract v12 增加稳定节点 bounds 与 node-local affine transform，并同步变换所选节点附着的 Bézier tangent endpoints。Canvas Vector Edit 新增 `Q` 节点 Lasso v1，以及同一 Vector 两个以上节点的内部移动、八向 resize 和四角 rotation hit area；Shift 支持比例缩放/15° 旋转吸附，Option/Alt 支持中心缩放。Lasso/preview 保持 session-only，pointer-up 经 `planVectorNetworkUpdate` 只提交一条 revision/undo；Agent `transform-vertices` 只接受 inspection 的 vertex IDs 和有限 6 元矩阵。专项自动化覆盖 polygon 边界、Shift toggle、resize/rotate、modifier、Bézier tangent、tight bounds、Runtime/Agent 原子事务、Canvas `Q` 快捷键和 Cut overlay 回归。path segment selection 后由 ADR-0114 完成；跨 Vector 统一节点框与 Space 中途平移后由 ADR-0115 完成；双平台打包 GUI 证据仍未完成。ADR-0113。
 - Geometry Service contract v13 增加稳定 segment 与 mixed point/path deletion。Leafer Vector Edit 的 Move 点击和 `Q` Lasso 分别维护 session-only `selectedVertexIds/selectedSegmentIds`；line/cubic 完整 polygon containment 使用有界自适应曲线投影，选中路径由当前 network 派生 overlay。Delete 区分节点重连与 segment 断开，开放/闭合 contour 确定性拆分 open runs、清理失效 region，并经现有 Runtime 只提交一次 revision/undo。专项覆盖 direct click、Shift toggle、line/cubic Lasso、稳定 path ID、region、mixed selection、只读和 Cut 回归。ADR-0114。
 - Geometry Service contract 14 增加稳定 segment Bend：直线点击建立保持外观的 cubic handles，segment 拖动让当前有向参数精确经过 node-local 指针点，已有 cubic 继续从当前 controls 调整。Leafer preview/selection/handles 保持 disposable，Escape 恢复且零 revision，pointer-up 经 Runtime 单 revision/undo；Agent `bend-segment` 只提交 inspection ID、参数和目标点。专项覆盖 reversed path、no-op/非法目标、Runtime preview/history/reopen、Leafer click/drag/Escape、双语工具栏和 Contract/Provider 一致性。ADR-0231。
+- `DesignDocument 1.48.0`、Geometry Service contract 15 与 Agent 协议 3.13.0 增加 Figma-compatible Vector Region Fill：`VectorRegion.fills` 保留继承、显式空数组与 region-local Paint 三态，`set-region-fills` 由人工 Paint/Alt-clear、Agent 和 Runtime 共用；Cut 重建 region 时传承 Fill，Leafer synthetic region/stroke children 不进入文档、history 或保存。图片资产校验/删除保护/替换/inspection、Variable 与 Library dependency 统一遍历 node、Text run 和 region Paint。受控 SVG metadata v3 输出标准 region paths 并恢复一个 editable Vector；v1/v2 继续读取，metadata 超限安全退化为普通标准 SVG。专项覆盖 Contract/migration、Geometry/Runtime、资产/变量、Canvas hit/只读/undo、Agent typed execution 与 SVG round-trip。ADR-0232。
 - 在不虚增 Geometry contract 的前提下完成跨 Vector document-space 节点变换：Leafer `sky` 中只有一个 session-only 统一 box，任意不同 parent transform 下的选中节点先由 world transform 汇总 bounds，再把 move/resize/rotate matrix 共轭回各 node-local network；Shift/Option modifier 保持，resize/rotate 中 Space 冻结原操作并累计 reposition offset，松开后继续无跳变。Escape、pointer cancel、scope/tool/revision 失效恢复全部 preview 且零 revision；pointer-up 通过 `planVectorNetworkUpdates` 与 `LeaferVectorEditRequest.edits` 一次提交。Agent `transform-layers-vertices` 接受明确 node/vertex groups 与 document-space matrix，复用 `planVectorLayersVertexTransform`，缺失、锁定、不可逆、重复或 stale target 整体失败。专项覆盖不同 translate/rotate/scale、公共 bounds、Space keydown/move/keyup、单回调/单 transaction/undo、read-only 与单 Vector 回归。ADR-0115。
 
 Node.js 在涉及 `node:sqlite` 的测试中输出 experimental warning；测试仍通过。该 API 的 Electron 长期兼容策略尚未最终确定。

@@ -11,6 +11,7 @@ import type { BooleanGeometryResolution } from "@opendesign/geometry-service/boo
 import type { VectorFillRule } from "@opendesign/geometry-service/vector-path";
 import {
   resolvePathPropertiesData,
+  serializeVectorRegion,
   vectorNetworkHasFillRegion,
 } from "@opendesign/geometry-service/editable-vector";
 import { applyToPoint } from "transformation-matrix";
@@ -282,12 +283,24 @@ function exportNode(
         );
         return null;
       }
+      if (
+        "network" in node.properties &&
+        node.properties.network.regions.some(
+          (region) => region.fills !== undefined,
+        )
+      ) {
+        return exportEditableVectorRegions(context, node, path, options);
+      }
       element = context.document.createElementNS(SVG_NAMESPACE, "path");
       element.setAttribute("d", path);
       element.setAttribute("fill-rule", node.properties.fillRule ?? "nonzero");
       if (
         "network" in node.properties &&
-        !writeSvgEditableVector(element, node.properties.network)
+        !writeSvgEditableVector(
+          element,
+          node.properties.network,
+          node.properties.fills,
+        )
       ) {
         context.issues.push(
           createSvgIssue(
@@ -365,6 +378,88 @@ function exportNode(
   } finally {
     context.visiting.delete(nodeId);
   }
+}
+
+function exportEditableVectorRegions(
+  context: ExportContext,
+  node: Extract<DesignNode, { kind: "path" | "vector" }>,
+  pathData: string,
+  options: ExportNodeOptions,
+): Element {
+  if (!("network" in node.properties)) {
+    throw new Error("Editable vector region export requires a network");
+  }
+  const group = context.document.createElementNS(SVG_NAMESPACE, "g");
+  group.setAttribute("data-opendesign-vector-region-container", "true");
+  applyExportMetadata(context, group, node);
+  applyExportTransform(context, group, node, options.selectedRoot === true);
+  applyExportNodeAppearance(context, group, node, options.maskSource === true);
+
+  if (
+    node.properties.network.regions.every(
+      (region) => region.fills !== undefined,
+    ) &&
+    node.properties.fills.some((paint) => paint.type === "image")
+  ) {
+    context.issues.push(
+      createSvgIssue(
+        "unsupported-paint",
+        "error",
+        `Image fallback fill on ${node.id} is not supported by the current SVG vector slice`,
+        { nodeId: node.id },
+      ),
+    );
+  }
+
+  for (const region of node.properties.network.regions) {
+    const serialized = serializeVectorRegion(
+      node.properties.network,
+      region.id,
+    );
+    if (!serialized.ok) continue;
+    const element = context.document.createElementNS(SVG_NAMESPACE, "path");
+    element.setAttribute("d", serialized.path);
+    element.setAttribute("fill-rule", region.windingRule);
+    element.setAttribute("data-opendesign-vector-region-id", region.id);
+    applyExportShapeAppearance(context, element, `${node.id}_${region.id}`, {
+      ...node.properties,
+      fills: region.fills ?? node.properties.fills,
+      strokes: [],
+      strokeWidth: 0,
+    });
+    group.appendChild(element);
+  }
+
+  const source = context.document.createElementNS(SVG_NAMESPACE, "path");
+  source.setAttribute("d", pathData);
+  source.setAttribute("fill-rule", node.properties.fillRule ?? "nonzero");
+  source.setAttribute("data-opendesign-vector-source", "true");
+  source.setAttribute("data-opendesign-kind", node.kind);
+  source.setAttribute("data-name", node.name);
+  applyExportShapeAppearance(context, source, node.id, {
+    ...node.properties,
+    fills: [],
+  });
+  if (
+    !writeSvgEditableVector(
+      source,
+      node.properties.network,
+      node.properties.fills,
+    )
+  ) {
+    group.removeAttribute("data-opendesign-vector-region-container");
+    source.removeAttribute("data-opendesign-vector-source");
+    context.issues.push(
+      createSvgIssue(
+        "size-limit",
+        "warning",
+        `Editable vector metadata for ${node.id} exceeds its interchange limit and was omitted; standard region paths remain exported`,
+        { nodeId: node.id },
+      ),
+    );
+  }
+  group.appendChild(source);
+  return group;
 }
 
 function applyExportLineEndpoints(

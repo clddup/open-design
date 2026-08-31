@@ -11,9 +11,106 @@ import {
   projectDesignPage,
   projectDesignPageIncrementally,
   projectResolvedBooleanGeometry,
+  vectorRegionElementId,
+  vectorStrokeElementId,
 } from "./mapping.js";
 
 describe("Leafer scene projection", () => {
+  it("projects editable vector regions as disposable paint paths", () => {
+    const document = structuredClone(createWelcomeDocument());
+    const frame = document.nodesById.frame_welcome;
+    if (!frame || frame.kind !== "frame") throw new Error("Missing frame");
+    document.nodesById.vector_regions = {
+      id: "vector_regions",
+      kind: "vector",
+      name: "Two tone mark",
+      parentId: frame.id,
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 20, 20],
+      size: { width: 100, height: 100 },
+      exportSettings: [],
+      opacity: 1,
+      properties: {
+        fills: [{ type: "solid", color: "#111827", opacity: 1 }],
+        strokes: [{ type: "solid", color: "#0f172a", opacity: 1 }],
+        strokeWidth: 2,
+        network: {
+          vertices: [
+            { id: "va", x: 0, y: 0 },
+            { id: "vb", x: 100, y: 0 },
+            { id: "vc", x: 100, y: 100 },
+            { id: "vd", x: 0, y: 100 },
+          ],
+          segments: [
+            { id: "sab", startVertexId: "va", endVertexId: "vb" },
+            { id: "sbc", startVertexId: "vb", endVertexId: "vc" },
+            { id: "sca", startVertexId: "vc", endVertexId: "va" },
+            { id: "sca_bottom", startVertexId: "vc", endVertexId: "va" },
+            { id: "scd", startVertexId: "vc", endVertexId: "vd" },
+            { id: "sda", startVertexId: "vd", endVertexId: "va" },
+          ],
+          paths: [
+            {
+              id: "top",
+              closed: true,
+              segments: [
+                { segmentId: "sab", reversed: false },
+                { segmentId: "sbc", reversed: false },
+                { segmentId: "sca", reversed: false },
+              ],
+            },
+            {
+              id: "bottom",
+              closed: true,
+              segments: [
+                { segmentId: "sca_bottom", reversed: true },
+                { segmentId: "scd", reversed: false },
+                { segmentId: "sda", reversed: false },
+              ],
+            },
+          ],
+          regions: [
+            {
+              id: "warm",
+              windingRule: "nonzero",
+              loops: [{ pathId: "top", reversed: false }],
+              fills: [{ type: "solid", color: "#f97316", opacity: 1 }],
+            },
+            {
+              id: "cool",
+              windingRule: "nonzero",
+              loops: [{ pathId: "bottom", reversed: false }],
+              fills: [{ type: "solid", color: "#06b6d4", opacity: 1 }],
+            },
+          ],
+        },
+      },
+      extensions: {},
+    };
+    frame.childIds.push("vector_regions");
+    const projection = projectDesignPage(document, "page_welcome");
+    expect(projection.elementsById.get("vector_regions")).toMatchObject({
+      tag: "Group",
+      childIds: [
+        vectorRegionElementId("vector_regions", "warm"),
+        vectorRegionElementId("vector_regions", "cool"),
+        vectorStrokeElementId("vector_regions"),
+      ],
+    });
+    expect(
+      projection.elementsById.get(
+        vectorRegionElementId("vector_regions", "warm"),
+      )?.data.fill,
+    ).toEqual([{ type: "solid", color: "#f97316", opacity: 1, visible: true }]);
+    expect(
+      projection.elementsById.get(
+        vectorRegionElementId("vector_regions", "cool"),
+      )?.data.fill,
+    ).toEqual([{ type: "solid", color: "#06b6d4", opacity: 1, visible: true }]);
+  });
+
   it("projects Slice as an invisible hittable export region", () => {
     const document = structuredClone(createWelcomeDocument());
     document.nodesById.slice_1 = {
@@ -904,7 +1001,7 @@ describe("Leafer scene projection", () => {
     });
   });
 
-  it("projects editable vector networks through the same Leafer Path backend", () => {
+  it("projects editable vector networks as disposable region and stroke paths", () => {
     const document = structuredClone(createWelcomeDocument());
     const frame = document.nodesById.frame_welcome;
     if (!frame || frame.kind !== "frame") throw new Error("Missing frame");
@@ -973,14 +1070,20 @@ describe("Leafer scene projection", () => {
     };
     frame.childIds.push("editable_vector");
 
-    expect(
-      projectDesignPage(document, "page_welcome").elementsById.get(
-        "editable_vector",
-      ),
-    ).toMatchObject({
+    const initialProjection = projectDesignPage(document, "page_welcome");
+    const regionId = vectorRegionElementId("editable_vector", "region_1");
+    const strokeId = vectorStrokeElementId("editable_vector");
+    expect(initialProjection.elementsById.get("editable_vector")).toMatchObject(
+      {
+        tag: "Group",
+        childIds: [regionId, strokeId],
+      },
+    );
+    expect(initialProjection.elementsById.get(regionId)).toMatchObject({
       tag: "Path",
       data: {
         path: "M 0 0 C 25 0 75 0 100 0 L 50 100 L 0 0 Z",
+        fill: [{ type: "solid", color: "#4f7fff", opacity: 1, visible: true }],
         windingRule: "nonzero",
       },
     });
@@ -1007,10 +1110,18 @@ describe("Leafer scene projection", () => {
     document.nodesById[extracted.id] = extracted;
     frame.childIds.push(extracted.id);
     const dividedProjection = projectDesignPage(document, "page_welcome");
-    for (const nodeId of [editable.id, extracted.id]) {
-      const path = dividedProjection.elementsById.get(nodeId)?.data.path;
+    for (const [nodeId, network] of [
+      [editable.id, divided.retainedNetwork],
+      [extracted.id, divided.extractedNetwork],
+    ] as const) {
+      const region = network.regions[0];
+      if (!region) throw new Error("Missing divided region");
+      const element = dividedProjection.elementsById.get(
+        vectorRegionElementId(nodeId, region.id),
+      );
+      const path = element?.data.path;
       expect(typeof path === "string" && path.endsWith(" Z")).toBe(true);
-      expect(dividedProjection.elementsById.get(nodeId)?.data.fill).toEqual([
+      expect(element?.data.fill).toEqual([
         { type: "solid", color: "#4f7fff", opacity: 1, visible: true },
       ]);
     }
@@ -1044,9 +1155,8 @@ describe("Leafer scene projection", () => {
     });
     editable.properties.network = compoundNetwork;
     expect(
-      projectDesignPage(document, "page_welcome").elementsById.get(
-        "editable_vector",
-      )?.data,
+      projectDesignPage(document, "page_welcome").elementsById.get(regionId)
+        ?.data,
     ).toMatchObject({
       path: "M 0 0 C 25 0 75 0 100 0 L 50 100 L 0 0 Z M 35 30 L 50 60 L 65 30 L 35 30 Z",
       fill: [{ type: "solid", color: "#4f7fff", opacity: 1, visible: true }],
@@ -1072,9 +1182,8 @@ describe("Leafer scene projection", () => {
     ];
     editable.properties.strokeWidth = 2;
     expect(
-      projectDesignPage(document, "page_welcome").elementsById.get(
-        "editable_vector",
-      )?.data,
+      projectDesignPage(document, "page_welcome").elementsById.get(strokeId)
+        ?.data,
     ).toMatchObject({
       path: "M 0 0 C 12.5 0 31.25 0 50 0 M 50 0 C 68.75 0 87.5 0 100 0 L 50 100",
       fill: null,

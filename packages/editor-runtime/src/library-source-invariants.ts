@@ -1,9 +1,10 @@
-import type {
-  ComponentDefinition,
-  DesignAsset,
-  DesignDocument,
-  DesignNode,
-  LibraryComponentSource,
+import {
+  nodePaints,
+  type ComponentDefinition,
+  type DesignAsset,
+  type DesignDocument,
+  type DesignNode,
+  type LibraryComponentSource,
 } from "@opendesign/design-contracts";
 import type { DocumentInvariantIssue } from "./layout-document-invariants.js";
 import {
@@ -325,25 +326,8 @@ function componentDefinitions(document: DesignDocument): ComponentDefinition[] {
 function nodeAssetIds(node: DesignNode): string[] {
   const ids: string[] = [];
   if (node.kind === "image") ids.push(node.properties.assetId);
-  if (
-    node.kind === "frame" ||
-    node.kind === "slot" ||
-    node.kind === "rectangle" ||
-    node.kind === "ellipse" ||
-    node.kind === "line" ||
-    node.kind === "polygon" ||
-    node.kind === "star" ||
-    node.kind === "text" ||
-    node.kind === "path" ||
-    node.kind === "vector" ||
-    node.kind === "boolean"
-  ) {
-    for (const paint of [
-      ...node.properties.fills,
-      ...node.properties.strokes,
-    ]) {
-      if (paint.type === "image") ids.push(paint.assetId);
-    }
+  for (const paint of nodePaints(node)) {
+    if (paint.type === "image") ids.push(paint.assetId);
   }
   return ids;
 }

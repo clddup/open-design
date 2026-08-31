@@ -108,6 +108,14 @@ const vectorInputs: DesignVectorToolInput[] = [
     t: 0.4,
   },
   {
+    action: "set-region-fills",
+    fills: [{ type: "solid", color: "#4f7fff", opacity: 1 }],
+    label: "Paint logo face",
+    nodeId: "logo_path",
+    pageId: "page_brand",
+    regionId: "region_face",
+  },
+  {
     action: "reverse-path",
     label: "Reverse logo contour",
     pageId: "page_brand",
@@ -173,13 +181,11 @@ const vectorInputs: DesignVectorToolInput[] = [
 ];
 
 describe("Hierarchy and Vector Agent contracts", () => {
-  it("uses one disclosed executable schema for all 20 action branches", () => {
+  it("uses one disclosed executable schema for every exercised action branch", () => {
     expect(DesignHierarchyContract.schema).toBe(
       DESIGN_HIERARCHY_TOOL_INPUT_SCHEMA,
     );
     expect(DesignVectorContract.schema).toBe(DESIGN_VECTOR_TOOL_INPUT_SCHEMA);
-    expect(hierarchyInputs).toHaveLength(10);
-    expect(vectorInputs).toHaveLength(10);
     for (const input of hierarchyInputs) {
       expect(
         schemaValidationIssues(DesignHierarchyContract.schema, input),

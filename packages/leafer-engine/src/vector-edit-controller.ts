@@ -5,7 +5,10 @@ import type {
   VectorNetwork,
   VectorPointMode,
 } from "@opendesign/design-contracts";
-import { serializeVectorNetwork } from "@opendesign/geometry-service/editable-vector";
+import {
+  serializeVectorNetwork,
+  serializeVectorRegion,
+} from "@opendesign/geometry-service/editable-vector";
 import {
   bendVectorSegment,
   deleteVectorSelection,
@@ -15,6 +18,7 @@ import {
   moveVectorVertices,
   nearestVectorSegmentPoint,
   setVectorPointMode,
+  setVectorRegionFills,
   transformVectorVertices,
   type VectorCutLocation,
   type VectorHandleReference,
@@ -43,6 +47,7 @@ import {
 import type {
   LeaferEngineCallbacks,
   LeaferEngineSyncInput,
+  LeaferVectorEditScope,
   LeaferVectorEditTool,
 } from "./types.js";
 
@@ -52,6 +57,7 @@ type LeaferGroup = InstanceType<LeaferModule["Group"]>;
 
 type VectorEditControl =
   | { kind: "path"; nodeId: string }
+  | { kind: "region"; nodeId: string; regionId: string }
   | { kind: "vertex"; nodeId: string; vertexId: string }
   | { kind: "selection-box" }
   | { handle: VectorResizeHandle; kind: "resize" }
@@ -130,6 +136,7 @@ interface VectorEditSession {
   nodeId: string;
   overlayGroup: LeaferGroup;
   pathElement: LeaferElement;
+  paint: NonNullable<LeaferVectorEditScope["paint"]>;
   readOnly: boolean;
   segmentSelectionPath: LeaferElement;
   selectedSegmentIds: string[];
@@ -167,6 +174,7 @@ interface VectorEditControllerOptions {
   >;
   current(): { disposed: boolean };
   element(nodeId: string): LeaferElement | undefined;
+  regionElement(nodeId: string, regionId: string): LeaferElement | undefined;
   finishNodePresentation(nodeId: string): void;
   leafer: LeaferModule;
   nodeId(element: LeaferElement): string | undefined;
@@ -436,6 +444,7 @@ export class VectorEditController {
           selectedSegmentIds,
           selectedVertexIds,
           item.readOnly,
+          scope.paint ?? [{ type: "solid", color: "#4f7fff", opacity: 1 }],
           scope.tool,
         );
         if (!session) continue;
@@ -451,6 +460,9 @@ export class VectorEditController {
         }
         session.pathElement = pathElement;
         session.readOnly = item.readOnly;
+        session.paint = scope.paint ?? [
+          { type: "solid", color: "#4f7fff", opacity: 1 },
+        ];
         session.selectedSegmentIds = selectedSegmentIds;
         session.selectedVertexIds = selectedVertexIds;
         session.tool = scope.tool;
@@ -473,6 +485,7 @@ export class VectorEditController {
     selectedSegmentIds: string[],
     selectedVertexIds: string[],
     readOnly: boolean,
+    paint: NonNullable<LeaferVectorEditScope["paint"]>,
     tool: LeaferVectorEditTool,
   ): VectorEditSession | undefined {
     const parent = pathElement.parent as LeaferGroup | undefined;
@@ -542,6 +555,7 @@ export class VectorEditController {
       nodeId,
       overlayGroup,
       pathElement,
+      paint,
       readOnly,
       segmentSelectionPath,
       selectedSegmentIds,
@@ -587,6 +601,23 @@ export class VectorEditController {
       path: serialized.path,
       strokeWidth: 14 / zoom,
     });
+    for (const region of session.network.regions) {
+      const element = this.#options.regionElement(session.nodeId, region.id);
+      const serializedRegion = serializeVectorRegion(
+        session.network,
+        region.id,
+      );
+      if (!element || !serializedRegion.ok) continue;
+      element.set({
+        cursor: session.tool === "paint" ? "crosshair" : "pointer",
+        path: serializedRegion.path,
+      });
+      this.#vectorEditControls.set(element, {
+        kind: "region",
+        nodeId: session.nodeId,
+        regionId: region.id,
+      });
+    }
     session.tracePath.set({ path: serialized.path, strokeWidth: 1.5 / zoom });
     session.segmentSelectionPath.set({
       path: vectorSegmentSelectionPath(
@@ -1018,6 +1049,21 @@ export class VectorEditController {
       session.lassoPath.set({ path: "", visible: false });
       return;
     }
+    if (session.tool === "paint") {
+      if (session.readOnly || control?.kind !== "region") return;
+      const painted = setVectorRegionFills(
+        session.network,
+        control.regionId,
+        pointer.altKey ? [] : session.paint,
+      );
+      if (!painted.ok) {
+        if (painted.code !== "no-op")
+          this.#options.report(new Error(painted.message));
+        return;
+      }
+      this.#submitVectorEdit(session, painted.network);
+      return;
+    }
     if (session.tool === "cut") {
       if (session.readOnly) return;
       let clickTarget: { at: VectorCutLocation; pathId: string } | undefined;
@@ -1158,6 +1204,8 @@ export class VectorEditController {
       };
       return;
     }
+
+    if (control.kind === "region") return;
 
     if (!session.selectedVertexIds.includes(control.vertexId)) {
       this.#setVectorSelection(session, [], [control.vertexId]);

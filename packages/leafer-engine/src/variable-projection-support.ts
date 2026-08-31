@@ -1,4 +1,8 @@
-import type { DesignDocument, DesignNode } from "@opendesign/design-contracts";
+import {
+  nodePaints,
+  type DesignDocument,
+  type DesignNode,
+} from "@opendesign/design-contracts";
 
 export function pageUsesVariables(
   document: DesignDocument,
@@ -30,22 +34,7 @@ function collectNodeIds(
 }
 
 function nodeHasBoundPaint(node: DesignNode): boolean {
-  if (
-    node.kind !== "frame" &&
-    node.kind !== "slot" &&
-    node.kind !== "rectangle" &&
-    node.kind !== "ellipse" &&
-    node.kind !== "line" &&
-    node.kind !== "polygon" &&
-    node.kind !== "star" &&
-    node.kind !== "text" &&
-    node.kind !== "path" &&
-    node.kind !== "vector" &&
-    node.kind !== "boolean"
-  ) {
-    return false;
-  }
-  return [...node.properties.fills, ...node.properties.strokes].some(
+  return nodePaints(node).some(
     (paint) => paint.type === "solid" && Boolean(paint.boundVariables?.color),
   );
 }

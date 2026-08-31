@@ -5,7 +5,7 @@ describe("projectAgentEvent", () => {
   it("preserves an already valid Agent event", () => {
     const event = {
       type: "agent.connected",
-      protocolVersion: "3.12.0",
+      protocolVersion: "3.13.0",
     } as const;
     expect(projectAgentEvent(event)).toBe(event);
   });

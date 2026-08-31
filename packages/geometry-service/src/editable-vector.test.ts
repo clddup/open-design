@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   normalizeVectorNetwork,
   serializeVectorNetwork,
+  serializeVectorRegion,
   validateVectorNetwork,
   vectorNetworkHasBranches,
 } from "./editable-vector.js";
@@ -79,6 +80,18 @@ function closedNetwork(): VectorNetwork {
 }
 
 describe("editable vector geometry", () => {
+  it("serializes one explicit region independently", () => {
+    expect(serializeVectorRegion(closedNetwork(), "region_face")).toEqual({
+      ok: true,
+      path: "M 10 20 L 110 20 L 110 120 L 10 20 Z",
+      regionId: "region_face",
+    });
+    expect(serializeVectorRegion(closedNetwork(), "missing")).toMatchObject({
+      ok: false,
+      issues: [{ message: "region missing does not exist" }],
+    });
+  });
+
   it("serializes open cubic paths deterministically with tight bounds", () => {
     expect(serializeVectorNetwork(openCubicNetwork())).toEqual({
       ok: true,

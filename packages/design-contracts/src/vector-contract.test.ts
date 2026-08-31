@@ -99,6 +99,7 @@ describe("vector design contracts", () => {
               id: "region_outer",
               windingRule: "nonzero",
               loops: [{ pathId: "path_outer", reversed: false }],
+              fills: [{ type: "solid", color: "#22c55e", opacity: 1 }],
             },
           ],
         },
@@ -110,6 +111,23 @@ describe("vector design contracts", () => {
     };
 
     expect(Value.Check(DesignNodeSchema, vectorNode)).toBe(true);
+    expect(
+      Value.Check(DesignNodeSchema, {
+        ...vectorNode,
+        properties: {
+          ...vectorNode.properties,
+          network: {
+            ...vectorNode.properties.network,
+            regions: [
+              {
+                ...vectorNode.properties.network.regions[0],
+                fills: [{ type: "solid", color: "green", opacity: 2 }],
+              },
+            ],
+          },
+        },
+      }),
+    ).toBe(false);
     expect(
       Value.Check(DesignNodeSchema, {
         ...vectorNode,

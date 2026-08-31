@@ -1,15 +1,16 @@
-import type {
-  DesignAsset,
-  DesignDocument,
-  DesignNode,
-  DesignOperation,
-  ImageFilters,
-  ImagePaint,
-  ImagePlacement,
-  ImageNode,
-  ImageAssetDerivation,
-  JsonObject,
-  Point,
+import {
+  nodePaints,
+  type DesignAsset,
+  type DesignDocument,
+  type DesignNode,
+  type DesignOperation,
+  type ImageFilters,
+  type ImagePaint,
+  type ImagePlacement,
+  type ImageNode,
+  type ImageAssetDerivation,
+  type JsonObject,
+  type Point,
 } from "@opendesign/design-contracts";
 import { MAX_TRANSACTION_COMMANDS } from "@opendesign/design-contracts";
 import { isImageLightingPreset } from "@opendesign/design-contracts";
@@ -1339,28 +1340,9 @@ export function nodeReferencesAsset(
   assetId: string,
 ): boolean {
   if (node.kind === "image") return node.properties.assetId === assetId;
-  if (
-    node.kind !== "frame" &&
-    node.kind !== "slot" &&
-    node.kind !== "rectangle" &&
-    node.kind !== "ellipse" &&
-    node.kind !== "line" &&
-    node.kind !== "polygon" &&
-    node.kind !== "star" &&
-    node.kind !== "text" &&
-    node.kind !== "path" &&
-    node.kind !== "vector" &&
-    node.kind !== "boolean"
-  ) {
-    return false;
-  }
-  return [
-    ...node.properties.fills,
-    ...node.properties.strokes,
-    ...(node.kind === "text"
-      ? (node.properties.runs ?? []).flatMap((run) => run.style.fills)
-      : []),
-  ].some((paint) => paint.type === "image" && paint.assetId === assetId);
+  return nodePaints(node).some(
+    (paint) => paint.type === "image" && paint.assetId === assetId,
+  );
 }
 
 function replacementReferenceCommand(
@@ -1376,7 +1358,15 @@ function replacementReferenceCommand(
         (paint) => paint.type === "image" && paint.assetId === previousAssetId,
       ),
     );
-  if (!textRunReference) {
+  const vectorRegionReference =
+    (node.kind === "path" || node.kind === "vector") &&
+    "network" in node.properties &&
+    node.properties.network.regions.some((region) =>
+      (region.fills ?? []).some(
+        (paint) => paint.type === "image" && paint.assetId === previousAssetId,
+      ),
+    );
+  if (!textRunReference && !vectorRegionReference) {
     return {
       commandId,
       type: "update_properties",
@@ -1385,21 +1375,32 @@ function replacementReferenceCommand(
     };
   }
   const replacement = structuredClone(node);
-  if (replacement.kind !== "text") {
-    throw new Error("Text run image replacement target changed kind");
-  }
   const replace = (paint: (typeof replacement.properties.fills)[number]) =>
     paint.type === "image" && paint.assetId === previousAssetId
       ? { ...paint, assetId: nextAssetId }
       : paint;
   replacement.properties.fills = replacement.properties.fills.map(replace);
   replacement.properties.strokes = replacement.properties.strokes.map(replace);
-  replacement.properties.runs = (replacement.properties.runs ?? []).map(
-    (run) => ({
-      ...run,
-      style: { ...run.style, fills: run.style.fills.map(replace) },
-    }),
-  );
+  if (replacement.kind === "text") {
+    replacement.properties.runs = (replacement.properties.runs ?? []).map(
+      (run) => ({
+        ...run,
+        style: { ...run.style, fills: run.style.fills.map(replace) },
+      }),
+    );
+  }
+  if (
+    (replacement.kind === "path" || replacement.kind === "vector") &&
+    "network" in replacement.properties
+  ) {
+    replacement.properties.network.regions =
+      replacement.properties.network.regions.map((region) => ({
+        ...region,
+        ...(region.fills === undefined
+          ? {}
+          : { fills: region.fills.map(replace) }),
+      }));
+  }
   return {
     commandId,
     type: "replace_subtree",

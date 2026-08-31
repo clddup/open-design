@@ -1,8 +1,9 @@
-import type {
-  DesignAsset,
-  DesignDocument,
-  DesignNode,
-  ImageAssetDerivationOperation,
+import {
+  nodePaints,
+  type DesignAsset,
+  type DesignDocument,
+  type DesignNode,
+  type ImageAssetDerivationOperation,
 } from "@opendesign/design-contracts";
 import {
   indexImageAssetFamilies,
@@ -223,18 +224,8 @@ export function assetPreviewDataUrl(asset: DesignAsset | null): string | null {
 function assetIdsForNode(node: DesignNode): string[] {
   const assetIds: string[] = [];
   if (node.kind === "image") assetIds.push(node.properties.assetId);
-  if (
-    node.kind !== "group" &&
-    node.kind !== "image" &&
-    node.kind !== "instance" &&
-    node.kind !== "slice"
-  ) {
-    for (const paint of [
-      ...node.properties.fills,
-      ...node.properties.strokes,
-    ]) {
-      if (paint.type === "image") assetIds.push(paint.assetId);
-    }
+  for (const paint of nodePaints(node)) {
+    if (paint.type === "image") assetIds.push(paint.assetId);
   }
   return [...new Set(assetIds)];
 }

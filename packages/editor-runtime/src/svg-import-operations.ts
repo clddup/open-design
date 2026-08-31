@@ -1,6 +1,7 @@
 import {
   DesignNodeSchema,
   MAX_TRANSACTION_COMMANDS,
+  nodePaints,
   schemaValidationIssues,
   type DesignDocument,
   type DesignNode,
@@ -348,23 +349,7 @@ function isEffectivelyLocked(
 
 function nodeReferencesAsset(node: DesignNode): boolean {
   if (node.kind === "image") return true;
-  if (
-    node.kind !== "frame" &&
-    node.kind !== "rectangle" &&
-    node.kind !== "ellipse" &&
-    node.kind !== "line" &&
-    node.kind !== "polygon" &&
-    node.kind !== "star" &&
-    node.kind !== "text" &&
-    node.kind !== "path" &&
-    node.kind !== "vector" &&
-    node.kind !== "boolean"
-  ) {
-    return false;
-  }
-  return [...node.properties.fills, ...node.properties.strokes].some(
-    (paint) => paint.type === "image",
-  );
+  return nodePaints(node).some((paint) => paint.type === "image");
 }
 
 function isFiniteTransform(value: readonly number[]): value is Transform {

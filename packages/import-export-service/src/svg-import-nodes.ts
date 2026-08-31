@@ -6,7 +6,10 @@ import {
   type Transform,
 } from "@opendesign/design-contracts";
 import type { VectorGeometryProvider } from "@opendesign/geometry-service/vector-path";
-import { normalizeVectorNetwork } from "@opendesign/geometry-service/editable-vector";
+import {
+  normalizeVectorNetwork,
+  serializeVectorRegion,
+} from "@opendesign/geometry-service/editable-vector";
 import { compose, translate } from "transformation-matrix";
 import {
   collectSvgGradientDefinitions,
@@ -737,6 +740,18 @@ function importElement(
   }
 
   if (tag === "g") {
+    if (
+      element.getAttribute("data-opendesign-vector-region-container") === "true"
+    ) {
+      return importEditableVectorRegionContainer(
+        context,
+        element,
+        nodeId,
+        common,
+        localStyle,
+        transform,
+      );
+    }
     if (element.getAttribute("data-opendesign-kind") === "frame") {
       return importFrameElement(
         context,
@@ -1138,6 +1153,155 @@ function importElement(
   };
   context.nodes.push(node);
   return nodeId;
+}
+
+function importEditableVectorRegionContainer(
+  context: ImportContext,
+  element: Element,
+  nodeId: string,
+  common: ImportedNodeBase,
+  inheritedStyle: ImportedSvgStyle,
+  transform: Transform,
+): string | null {
+  const children = elementChildren(element);
+  const sources = children.filter(
+    (child) => child.getAttribute("data-opendesign-vector-source") === "true",
+  );
+  const source = sources[0];
+  if (sources.length !== 1) {
+    context.issues.push(
+      createSvgIssue(
+        "invalid-geometry",
+        "error",
+        "Editable vector region container requires exactly one source path",
+        { nodeId, sourceElement: element.localName },
+      ),
+    );
+    return null;
+  }
+  if (!source || source.localName.toLowerCase() !== "path") {
+    context.issues.push(
+      createSvgIssue(
+        "invalid-geometry",
+        "error",
+        "Editable vector region container requires one source path",
+        { nodeId, sourceElement: element.localName },
+      ),
+    );
+    return null;
+  }
+  const pathData = source.getAttribute("d")?.trim();
+  if (!pathData) return null;
+  const editable = readSvgEditableVector(source, pathData);
+  if (editable.status !== "valid") {
+    context.issues.push(
+      createSvgIssue(
+        "invalid-geometry",
+        "error",
+        editable.status === "invalid"
+          ? editable.message
+          : "Editable vector region metadata is missing",
+        { nodeId, sourceElement: source.localName },
+      ),
+    );
+    return null;
+  }
+  if (!renderedVectorRegionsMatch(context, children, editable.network)) {
+    return null;
+  }
+  const normalized = normalizeVectorNetwork(editable.network);
+  if (!normalized.ok || !normalized.offset) return null;
+  const sourceStyle = readImportedSvgStyle(
+    source,
+    inheritedStyle,
+    context.issues,
+  );
+  const properties = importSvgShapeProperties(
+    context,
+    source,
+    sourceStyle,
+    nodeId,
+  );
+  if (!properties) return null;
+  const sourceKind = source.getAttribute("data-opendesign-kind");
+  const node: DesignNode = {
+    ...common,
+    kind: sourceKind === "path" ? "path" : "vector",
+    transform: transformFromSvgMatrix(
+      compose(
+        transformToSvgMatrix(transform),
+        translate(normalized.offset.x, normalized.offset.y),
+      ),
+    ),
+    size: {
+      width: normalized.bounds.width,
+      height: normalized.bounds.height,
+    },
+    properties: {
+      ...properties,
+      fills: editable.fallbackFills,
+      network: normalized.network,
+      fillRule: sourceStyle.fillRule,
+    },
+  };
+  context.nodes.push(node);
+  return nodeId;
+}
+
+function renderedVectorRegionsMatch(
+  context: ImportContext,
+  children: readonly Element[],
+  network: Extract<
+    ReturnType<typeof readSvgEditableVector>,
+    { status: "valid" }
+  >["network"],
+): boolean {
+  const rendered = children.filter((child) =>
+    child.hasAttribute("data-opendesign-vector-region-id"),
+  );
+  if (
+    rendered.length !== network.regions.length ||
+    children.length !== rendered.length + 1
+  ) {
+    context.issues.push(
+      createSvgIssue(
+        "invalid-geometry",
+        "error",
+        "Editable vector region metadata does not match rendered region count",
+      ),
+    );
+    return false;
+  }
+  for (const region of network.regions) {
+    const element = rendered.find(
+      (candidate) =>
+        candidate.getAttribute("data-opendesign-vector-region-id") ===
+        region.id,
+    );
+    const serialized = serializeVectorRegion(network, region.id);
+    if (
+      !element ||
+      element.localName.toLowerCase() !== "path" ||
+      element.getAttribute("fill-rule") !== region.windingRule ||
+      !serialized.ok ||
+      normalizeSvgPath(element.getAttribute("d") ?? "") !==
+        normalizeSvgPath(serialized.path)
+    ) {
+      context.issues.push(
+        createSvgIssue(
+          "invalid-geometry",
+          "error",
+          `Editable vector region ${region.id} does not match its rendered path`,
+        ),
+      );
+      return false;
+    }
+  }
+  return true;
+}
+
+function normalizeSvgPath(value: string): string {
+  return value.trim().replace(/[\t\n\r ]+/g, " ");
 }
 
 function importFrameElement(

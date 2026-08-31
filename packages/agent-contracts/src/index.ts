@@ -25,7 +25,7 @@ export type {
   ValidationResult as RuntimeContractResult,
 } from "@opendesign/contract-runtime";
 
-export const AGENT_PROTOCOL_VERSION = "3.12.0" as const;
+export const AGENT_PROTOCOL_VERSION = "3.13.0" as const;
 
 export interface JsonRpcRequest<T = unknown> {
   jsonrpc: "2.0";

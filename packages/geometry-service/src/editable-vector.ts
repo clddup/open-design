@@ -27,6 +27,10 @@ export type VectorNetworkResolution =
       issues: readonly VectorNetworkIssue[];
     };
 
+export type VectorRegionResolution =
+  | { ok: true; path: string; regionId: string }
+  | { ok: false; issues: readonly VectorNetworkIssue[] };
+
 export function isVectorNetworkProperties(
   properties: PathDataProperties | VectorNetworkProperties,
 ): properties is VectorNetworkProperties {
@@ -114,6 +118,63 @@ export function serializeVectorNetwork(
 
   const resolvedBounds = boundsToRect(bounds);
   return { ok: true, bounds: resolvedBounds, network, path: parts.join(" ") };
+}
+
+/** Serializes one explicit fill region without inventing geometry. */
+export function serializeVectorRegion(
+  network: VectorNetwork,
+  regionId: string,
+): VectorRegionResolution {
+  const issues = validateVectorNetwork(network);
+  if (issues.length > 0) return { ok: false, issues };
+  const region = network.regions.find((candidate) => candidate.id === regionId);
+  if (!region) {
+    return {
+      ok: false,
+      issues: [
+        { path: "/regions", message: `region ${regionId} does not exist` },
+      ],
+    };
+  }
+  const vertices = new Map(
+    network.vertices.map((vertex) => [vertex.id, vertex]),
+  );
+  const segments = new Map(
+    network.segments.map((segment) => [segment.id, segment]),
+  );
+  const paths = new Map(network.paths.map((path) => [path.id, path]));
+  const parts: string[] = [];
+  for (const loop of region.loops) {
+    const path = paths.get(loop.pathId)!;
+    const references = loop.reversed
+      ? [...path.segments].reverse().map((reference) => ({
+          segmentId: reference.segmentId,
+          reversed: !reference.reversed,
+        }))
+      : path.segments;
+    const first = segments.get(references[0]!.segmentId)!;
+    const firstVertex = directedVertices(first, references[0]!, vertices).start;
+    parts.push(`M ${formatPoint(firstVertex)}`);
+    for (const reference of references) {
+      const segment = segments.get(reference.segmentId)!;
+      const directed = directedVertices(segment, reference, vertices);
+      const tangentStart = reference.reversed
+        ? segment.tangentEnd
+        : segment.tangentStart;
+      const tangentEnd = reference.reversed
+        ? segment.tangentStart
+        : segment.tangentEnd;
+      if (meaningfulPoint(tangentStart) || meaningfulPoint(tangentEnd)) {
+        parts.push(
+          `C ${formatPoint(addPoint(directed.start, tangentStart))} ${formatPoint(addPoint(directed.end, tangentEnd))} ${formatPoint(directed.end)}`,
+        );
+      } else {
+        parts.push(`L ${formatPoint(directed.end)}`);
+      }
+    }
+    parts.push("Z");
+  }
+  return { ok: true, path: parts.join(" "), regionId };
 }
 
 function renderTraversalIssues(

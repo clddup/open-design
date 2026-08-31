@@ -19,6 +19,8 @@ import {
   LEAFER_EDITOR_SELECTION_COLOR,
   type LeaferElementSpec,
   type LeaferSceneProjection,
+  vectorRegionElementId,
+  vectorStrokeElementId,
 } from "./mapping.js";
 import type { GenerationTweenEndpoint } from "./generation-tween.js";
 import { createLeaferTextLayoutProvider } from "./text-layout.js";
@@ -254,12 +256,16 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     this.#vectorEditController = new VectorEditController({
       callbacks: this.#callbacks,
       current: () => ({ disposed: this.#disposed }),
-      element: (nodeId) => this.#scene.element(nodeId),
+      element: (nodeId) =>
+        this.#scene.element(vectorStrokeElementId(nodeId)) ??
+        this.#scene.element(nodeId),
       finishNodePresentation: (nodeId) =>
         this.#generationPresentation.finishNode(nodeId),
       leafer,
       nodeId: (element) => this.#nodeId(element),
       presentationRoot: this.#generationPresentationRoot,
+      regionElement: (nodeId, regionId) =>
+        this.#scene.element(vectorRegionElementId(nodeId, regionId)),
       report: (error) => this.#report(error),
       restoreProjection: () => this.#restoreProjection(),
       root: this.#app.tree as unknown as LeaferGroup,

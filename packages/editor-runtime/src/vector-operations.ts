@@ -1,6 +1,7 @@
 import type {
   DesignDocument,
   DesignOperation,
+  Paint,
   Point,
   Transform,
   VectorNetwork,
@@ -15,6 +16,7 @@ import {
   findVectorPathIdForVertex,
   inferVectorPointMode,
   reverseVectorPath,
+  setVectorRegionFills,
   setVectorPathClosed,
   transformVectorVertices,
   vectorNetworkEditability,
@@ -46,6 +48,11 @@ export type VectorSemanticEdit =
       point: Point;
       segmentId: string;
       t: number;
+    }
+  | {
+      action: "set-region-fills";
+      fills: readonly Paint[];
+      regionId: string;
     }
   | {
       action: "connect-endpoints";
@@ -535,6 +542,15 @@ export function planVectorSemanticEdit(
     if (!bent.ok) return vectorOperationFailure(bent);
     return planVectorNetworkUpdate(document, pageId, nodeId, bent.network);
   }
+  if (edit.action === "set-region-fills") {
+    const painted = setVectorRegionFills(
+      node.properties.network,
+      edit.regionId,
+      edit.fills,
+    );
+    if (!painted.ok) return vectorOperationFailure(painted);
+    return planVectorNetworkUpdate(document, pageId, nodeId, painted.network);
+  }
   if (edit.action === "transform-vertices") {
     const transformed = transformVectorVertices(
       node.properties.network,
@@ -843,6 +859,7 @@ function vectorOperationFailure(failure: {
     | "invalid-network"
     | "missing-handle"
     | "missing-path"
+    | "missing-region"
     | "missing-segment"
     | "missing-vertex"
     | "no-op"
@@ -857,6 +874,7 @@ function vectorOperationFailure(failure: {
         : failure.code === "unsupported-topology"
           ? "unsupported-topology"
           : failure.code === "missing-path" ||
+              failure.code === "missing-region" ||
               failure.code === "missing-segment" ||
               failure.code === "missing-vertex"
             ? "not-found"

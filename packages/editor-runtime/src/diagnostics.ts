@@ -1,10 +1,10 @@
 import {
   isFrameLikeNode,
+  nodePaints,
   type DesignDocument,
   type DesignNode,
   type Effect,
   type FrameLikeNode,
-  type Paint,
   type Rect,
 } from "@opendesign/design-contracts";
 import { resolvePathPropertiesData } from "@opendesign/geometry-service/editable-vector";
@@ -258,24 +258,6 @@ function countFeatures(node: DesignNode, summary: DesignFeatureSummary): void {
   }
 }
 
-function nodePaints(node: DesignNode): readonly Paint[] {
-  if (
-    isFrameLikeNode(node) ||
-    node.kind === "rectangle" ||
-    node.kind === "ellipse" ||
-    node.kind === "line" ||
-    node.kind === "polygon" ||
-    node.kind === "star" ||
-    node.kind === "text" ||
-    node.kind === "path" ||
-    node.kind === "vector" ||
-    node.kind === "boolean"
-  ) {
-    return [...node.properties.fills, ...node.properties.strokes];
-  }
-  return [];
-}
-
 function hasVisibleAppearance(node: DesignNode): boolean {
   if (node.kind === "image") return true;
   if (
@@ -291,7 +273,13 @@ function hasVisibleAppearance(node: DesignNode): boolean {
   ) {
     return true;
   }
-  const visibleFill = node.properties.fills.some(hasVisiblePaint);
+  const visibleFill =
+    (node.kind === "path" || node.kind === "vector") &&
+    "network" in node.properties
+      ? node.properties.network.regions.some((region) =>
+          (region.fills ?? node.properties.fills).some(hasVisiblePaint),
+        )
+      : node.properties.fills.some(hasVisiblePaint);
   const visibleStroke =
     node.properties.strokeWidth > 0 &&
     node.properties.strokes.some(hasVisiblePaint);
@@ -300,7 +288,9 @@ function hasVisibleAppearance(node: DesignNode): boolean {
   );
 }
 
-function hasVisiblePaint(paint: Paint): boolean {
+function hasVisiblePaint(
+  paint: ReturnType<typeof nodePaints>[number],
+): boolean {
   return paint.visible !== false && paint.opacity > 0;
 }
 

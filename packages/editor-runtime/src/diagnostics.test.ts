@@ -138,6 +138,67 @@ describe("design render diagnostics", () => {
     ).toEqual([]);
   });
 
+  it("honors explicit empty and inherited editable Vector region fills", () => {
+    const document = structuredClone(
+      createEmptyDesignDocument("document_region", "page_region"),
+    );
+    document.nodesById.vector_region = {
+      ...baseNode("vector_region", "vector", null),
+      properties: {
+        network: {
+          vertices: [
+            { id: "a", x: 0, y: 0 },
+            { id: "b", x: 40, y: 0 },
+            { id: "c", x: 20, y: 40 },
+          ],
+          segments: [
+            { id: "ab", startVertexId: "a", endVertexId: "b" },
+            { id: "bc", startVertexId: "b", endVertexId: "c" },
+            { id: "ca", startVertexId: "c", endVertexId: "a" },
+          ],
+          paths: [
+            {
+              id: "outline",
+              closed: true,
+              segments: [
+                { segmentId: "ab", reversed: false },
+                { segmentId: "bc", reversed: false },
+                { segmentId: "ca", reversed: false },
+              ],
+            },
+          ],
+          regions: [
+            {
+              id: "face",
+              windingRule: "nonzero",
+              loops: [{ pathId: "outline", reversed: false }],
+              fills: [],
+            },
+          ],
+        },
+        fills: [{ type: "solid", color: "#4f7fff", opacity: 1 }],
+        strokes: [],
+        strokeWidth: 0,
+      },
+    };
+    document.pagesById.page_region!.rootNodeIds = ["vector_region"];
+
+    expect(diagnoseDesignPages(document, ["page_region"]).items).toContainEqual(
+      expect.objectContaining({ code: "no-visible-paint" }),
+    );
+
+    const vector = document.nodesById.vector_region;
+    if (!vector || !("network" in vector.properties)) {
+      throw new Error("Missing editable Vector region fixture");
+    }
+    delete vector.properties.network.regions[0]!.fills;
+    expect(
+      diagnoseDesignPages(document, ["page_region"]).items.some(
+        (item) => item.code === "no-visible-paint",
+      ),
+    ).toBe(false);
+  });
+
   it("returns exact Contract paths for count and Page-scope drift", () => {
     const report = diagnoseDesignPages(brokenDocument(), ["page_diagnostics"]);
     expect(

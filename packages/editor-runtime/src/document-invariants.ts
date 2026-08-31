@@ -1,4 +1,7 @@
-import type { DesignDocument } from "@opendesign/design-contracts";
+import {
+  nodePaintCollections,
+  type DesignDocument,
+} from "@opendesign/design-contracts";
 import {
   componentDefinition,
   componentSourceNode,
@@ -361,31 +364,13 @@ export function validateDocumentInvariants(
         });
       }
     }
-    if (
-      node.kind === "frame" ||
-      node.kind === "slot" ||
-      node.kind === "rectangle" ||
-      node.kind === "ellipse" ||
-      node.kind === "line" ||
-      node.kind === "polygon" ||
-      node.kind === "star" ||
-      node.kind === "text" ||
-      node.kind === "path" ||
-      node.kind === "vector" ||
-      node.kind === "boolean"
-    ) {
-      for (const [paintIndex, paint] of [
-        ...node.properties.fills,
-        ...node.properties.strokes,
-        ...(node.kind === "text"
-          ? (node.properties.runs ?? []).flatMap((run) => run.style.fills)
-          : []),
-      ].entries()) {
+    for (const collection of nodePaintCollections(node)) {
+      for (const [paintIndex, paint] of collection.paints.entries()) {
         if (paint.type !== "image") continue;
         const asset = ownValue(document.assetsById, paint.assetId);
         if (!asset || asset.kind !== "image") {
           issues.push({
-            path: `/nodesById/${nodeId}/properties/paints/${paintIndex}/assetId`,
+            path: `/nodesById/${nodeId}${collection.path}/${paintIndex}/assetId`,
             message: `image paint asset ${paint.assetId} does not exist`,
           });
         }

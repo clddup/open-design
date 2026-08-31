@@ -1,6 +1,7 @@
 import { Type, type TProperties, type TSchema } from "@sinclair/typebox";
 
 interface VectorSchemaDependencies {
+  paintSchema: TSchema;
   shapeProperties: TProperties;
   pointSchema: TSchema;
   pathDataSchema: TSchema;
@@ -10,6 +11,7 @@ export function createVectorSchemas<
   const TDependencies extends VectorSchemaDependencies,
 >(dependencies: TDependencies) {
   const shapeProperties = dependency(dependencies, "shapeProperties");
+  const paintSchema = dependency(dependencies, "paintSchema");
   const pointSchema = dependency(dependencies, "pointSchema");
   const pathDataSchema = dependency(dependencies, "pathDataSchema");
   const VectorGeometryIdSchema = Type.String({
@@ -61,6 +63,7 @@ export function createVectorSchemas<
     {
       id: VectorGeometryIdSchema,
       windingRule: fillRuleSchema(),
+      fills: Type.Optional(Type.Array(paintSchema, { maxItems: 4_096 })),
       loops: Type.Array(
         Type.Object(
           { pathId: VectorGeometryIdSchema, reversed: Type.Boolean() },

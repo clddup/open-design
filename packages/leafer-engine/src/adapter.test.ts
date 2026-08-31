@@ -15,7 +15,11 @@ import type { VectorGeometryProvider } from "@opendesign/geometry-service/vector
 import { cutVectorPath } from "@opendesign/geometry-service/vector-edit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createLeaferEngineAdapter } from "./adapter.js";
-import { booleanResultElementId } from "./mapping.js";
+import {
+  booleanResultElementId,
+  vectorRegionElementId,
+  vectorStrokeElementId,
+} from "./mapping.js";
 import {
   textRunFragmentElementId,
   type LeaferTextRunProjectionResolution,
@@ -6861,7 +6865,8 @@ describe("Leafer engine selection bounds synchronization", () => {
     });
     adapter.sync(withVectorEditFixture(createInput()));
     const app = leaferHarness.app;
-    const path = app && findElement(app.tree, "editable_curve");
+    const path =
+      app && findElement(app.tree, vectorStrokeElementId("editable_curve"));
     if (!app || !path?.parent) throw new Error("Missing editable vector");
     const overlay = path.parent.children.at(-1);
     if (!(overlay instanceof FakeGroup))
@@ -6908,7 +6913,8 @@ describe("Leafer engine selection bounds synchronization", () => {
     const input = withVectorEditFixture(createInput(), ["vertex_a"]);
     adapter.sync(input);
     const app = leaferHarness.app;
-    const path = app && findElement(app.tree, "editable_curve");
+    const path =
+      app && findElement(app.tree, vectorStrokeElementId("editable_curve"));
     if (!app || !(path instanceof FakePath) || !path.parent) {
       throw new Error("Missing editable Vector fixture");
     }
@@ -6966,7 +6972,8 @@ describe("Leafer engine selection bounds synchronization", () => {
       vectorEditScope: { ...input.vectorEditScope!, tool: "lasso" },
     });
     const app = leaferHarness.app;
-    const path = app && findElement(app.tree, "editable_curve");
+    const path =
+      app && findElement(app.tree, vectorStrokeElementId("editable_curve"));
     if (!app || !path?.parent) throw new Error("Missing editable vector");
     const overlay = path.parent.children.at(-1);
     if (!(overlay instanceof FakeGroup)) {
@@ -7022,7 +7029,8 @@ describe("Leafer engine selection bounds synchronization", () => {
     });
     adapter.sync(withVectorEditFixture(createInput()));
     const app = leaferHarness.app;
-    const path = app && findElement(app.tree, "editable_curve");
+    const path =
+      app && findElement(app.tree, vectorStrokeElementId("editable_curve"));
     if (!app || !path) throw new Error("Missing editable vector");
 
     app.emit("pointer.down", pointerEvent(30, 15, path));
@@ -7048,7 +7056,8 @@ describe("Leafer engine selection bounds synchronization", () => {
     });
     adapter.sync(input);
     const app = leaferHarness.app;
-    const path = app && findElement(app.tree, "editable_curve");
+    const path =
+      app && findElement(app.tree, vectorStrokeElementId("editable_curve"));
     if (!app || !path?.parent) throw new Error("Missing editable vector");
     const overlay = app.sky.children.find(
       (child): child is FakeGroup =>
@@ -7245,7 +7254,8 @@ describe("Leafer engine selection bounds synchronization", () => {
     });
     adapter.sync(input);
     const app = leaferHarness.app;
-    const path = app && findElement(app.tree, "editable_curve");
+    const path =
+      app && findElement(app.tree, vectorStrokeElementId("editable_curve"));
     if (!app || !(path instanceof FakePath)) {
       throw new Error("Missing editable Vector path");
     }
@@ -7331,7 +7341,8 @@ describe("Leafer engine selection bounds synchronization", () => {
       vectorEditScope: { ...input.vectorEditScope!, tool: "cut" },
     });
     const app = leaferHarness.app;
-    const path = app && findElement(app.tree, "editable_curve");
+    const path =
+      app && findElement(app.tree, vectorStrokeElementId("editable_curve"));
     if (!app || !path?.parent) throw new Error("Missing editable vector");
     const overlay = path.parent.children.at(-1);
     if (!(overlay instanceof FakeGroup)) {
@@ -7401,7 +7412,8 @@ describe("Leafer engine selection bounds synchronization", () => {
       vectorEditScope: { ...input.vectorEditScope!, tool: "cut" },
     });
     const app = leaferHarness.app;
-    const path = app && findElement(app.tree, "editable_curve");
+    const path =
+      app && findElement(app.tree, vectorStrokeElementId("editable_curve"));
     if (!app || !path?.parent) throw new Error("Missing editable vector");
     const overlay = path.parent.children.at(-1);
     if (!(overlay instanceof FakeGroup)) {
@@ -7489,7 +7501,8 @@ describe("Leafer engine selection bounds synchronization", () => {
       vectorEditScope: { ...input.vectorEditScope!, tool: "cut" },
     });
     const app = leaferHarness.app;
-    const path = app && findElement(app.tree, "editable_curve");
+    const path =
+      app && findElement(app.tree, vectorStrokeElementId("editable_curve"));
     if (!app || !path?.parent) throw new Error("Missing editable vector");
     const overlay = path.parent.children.at(-1);
     if (!(overlay instanceof FakeGroup)) {
@@ -7548,7 +7561,8 @@ describe("Leafer engine selection bounds synchronization", () => {
       vectorEditScope: { ...input.vectorEditScope!, tool: "bend" },
     });
     const app = leaferHarness.app;
-    const path = app && findElement(app.tree, "editable_curve");
+    const path =
+      app && findElement(app.tree, vectorStrokeElementId("editable_curve"));
     if (!app || !path?.parent) throw new Error("Missing editable vector");
     const overlay = path.parent.children.at(-1);
     if (!(overlay instanceof FakeGroup)) {
@@ -7586,6 +7600,68 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
+  it("paints and clears one projected Vector region without mutating projection children", async () => {
+    const onVectorEdit = vi.fn<(request: LeaferVectorEditRequest) => boolean>(
+      () => true,
+    );
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onVectorEdit,
+    });
+    const input = withClosedVectorEditFixture(createInput());
+    adapter.sync({
+      ...input,
+      vectorEditScope: {
+        ...input.vectorEditScope!,
+        paint: [{ type: "solid", color: "#22c55e", opacity: 1 }],
+        tool: "paint",
+      },
+    });
+    const app = leaferHarness.app;
+    const region =
+      app &&
+      findElement(
+        app.tree,
+        vectorRegionElementId("editable_curve", "region_curve"),
+      );
+    if (!app || !region) throw new Error("Missing projected Vector region");
+
+    app.emit("pointer.down", pointerEvent(30, 15, region));
+    expect(onVectorEdit).toHaveBeenCalledTimes(1);
+    const paint = onVectorEdit.mock.calls[0]?.[0];
+    if (!paint || paint.deleteNode)
+      throw new Error("Missing region Paint edit");
+    expect(paint.edits[0]?.network.regions[0]?.fills).toEqual([
+      { type: "solid", color: "#22c55e", opacity: 1 },
+    ]);
+
+    onVectorEdit.mockClear();
+    app.emit("pointer.down", {
+      ...pointerEvent(30, 15, region),
+      altKey: true,
+    });
+    const clear = onVectorEdit.mock.calls[0]?.[0];
+    if (!clear || clear.deleteNode)
+      throw new Error("Missing region clear edit");
+    expect(clear.edits[0]?.network.regions[0]?.fills).toEqual([]);
+    onVectorEdit.mockClear();
+    adapter.sync({
+      ...input,
+      vectorEditScope: {
+        ...input.vectorEditScope!,
+        nodes: input.vectorEditScope!.nodes.map((node) => ({
+          ...node,
+          readOnly: true,
+        })),
+        paint: [{ type: "solid", color: "#22c55e", opacity: 1 }],
+        tool: "paint",
+      },
+    });
+    app.emit("pointer.down", pointerEvent(30, 15, region));
+    expect(onVectorEdit).not.toHaveBeenCalled();
+    adapter.dispose();
+  });
+
   it("keeps multiple Vector layers in one edit scope and submits one shared line Cut", async () => {
     const onVectorEditActiveNodeChange = vi.fn();
     const onVectorEditScopeChange = vi.fn();
@@ -7620,8 +7696,11 @@ describe("Leafer engine selection bounds synchronization", () => {
       },
     });
     const app = leaferHarness.app;
-    const firstPath = app && findElement(app.tree, "editable_curve");
-    const secondPath = app && findElement(app.tree, "editable_curve_second");
+    const firstPath =
+      app && findElement(app.tree, vectorStrokeElementId("editable_curve"));
+    const secondPath =
+      app &&
+      findElement(app.tree, vectorStrokeElementId("editable_curve_second"));
     if (!app || !firstPath?.parent || !secondPath?.parent) {
       throw new Error("Missing multi-Vector fixture");
     }
@@ -7640,12 +7719,14 @@ describe("Leafer engine selection bounds synchronization", () => {
       mode: "toggle",
       nodeId: "editable_curve_second",
     });
-    const overlays = firstPath.parent.children.filter(
-      (child): child is FakeGroup =>
-        child instanceof FakeGroup &&
-        child.children.filter(
-          (control): control is FakeEllipse => control instanceof FakeEllipse,
-        ).length === 3,
+    const overlays = [firstPath.parent, secondPath.parent].flatMap((parent) =>
+      parent.children.filter(
+        (child): child is FakeGroup =>
+          child instanceof FakeGroup &&
+          child.children.filter(
+            (control): control is FakeEllipse => control instanceof FakeEllipse,
+          ).length === 3,
+      ),
     );
     expect(overlays).toHaveLength(2);
     const secondAnchor = overlays[1]?.children.find(
@@ -7689,7 +7770,8 @@ describe("Leafer engine selection bounds synchronization", () => {
     const input = withVectorEditFixture(createInput(), ["vertex_b"], true);
     adapter.sync(input);
     const app = leaferHarness.app;
-    const path = app && findElement(app.tree, "editable_curve");
+    const path =
+      app && findElement(app.tree, vectorStrokeElementId("editable_curve"));
     if (!app || !path?.parent) throw new Error("Missing editable vector");
     const overlay = path.parent.children.at(-1);
     if (!(overlay instanceof FakeGroup))
@@ -8501,6 +8583,38 @@ function withVectorEditFixture(
       tool: "move",
     },
   };
+}
+
+function withClosedVectorEditFixture(
+  input: LeaferEngineSyncInput,
+): LeaferEngineSyncInput {
+  const fixture = withVectorEditFixture(input);
+  const document = structuredClone(fixture.document);
+  const vector = document.nodesById.editable_curve;
+  if (
+    !vector ||
+    vector.kind !== "vector" ||
+    !("network" in vector.properties)
+  ) {
+    throw new Error("Missing editable Vector fixture");
+  }
+  vector.properties.network.segments.push({
+    id: "segment_ca",
+    startVertexId: "vertex_c",
+    endVertexId: "vertex_a",
+  });
+  const path = vector.properties.network.paths[0];
+  if (!path) throw new Error("Missing editable Vector path");
+  path.closed = true;
+  path.segments.push({ segmentId: "segment_ca", reversed: false });
+  vector.properties.network.regions = [
+    {
+      id: "region_curve",
+      windingRule: "nonzero",
+      loops: [{ pathId: path.id, reversed: false }],
+    },
+  ];
+  return { ...fixture, document };
 }
 
 function withMultiVectorEditFixture(

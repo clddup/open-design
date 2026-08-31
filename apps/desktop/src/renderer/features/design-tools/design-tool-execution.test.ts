@@ -5518,6 +5518,47 @@ describe("Renderer semantic hierarchy tool", () => {
     expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
   });
 
+  it("paints one inspected vector region through the shared semantic planner", async () => {
+    const runtime = createClosedEditableVectorRuntime();
+    const result = await executeDesignToolRequest(
+      {
+        requestId: "vector_paint_region",
+        call: {
+          toolCallId: "tool_vector_paint_region",
+          toolName: DESIGN_VECTOR_TOOL_NAME,
+          input: {
+            action: "set-region-fills",
+            label: "Paint the logo region",
+            nodeId: "editable_logo_contour",
+            pageId: "page_welcome",
+            regionId: "region_logo",
+            fills: [{ type: "solid", color: "#22c55e", opacity: 1 }],
+          },
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(result).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "set-region-fills",
+          atomic: true,
+          nodeId: "editable_logo_contour",
+          pageId: "page_welcome",
+          revision: 1,
+        },
+      },
+    });
+    expect(editableVectorNetwork(runtime).regions[0]?.fills).toEqual([
+      { type: "solid", color: "#22c55e", opacity: 1 },
+    ]);
+    expect(runtime.undo()).toMatchObject({ ok: true, mode: "undo" });
+    expect(editableVectorNetwork(runtime).regions[0]?.fills).toBeUndefined();
+  });
+
   it("divides multiple explicit Vector layers with one document-space line and one undo step", async () => {
     const sourceRuntime = createClosedEditableVectorRuntime();
     const document = structuredClone(sourceRuntime.getSnapshot().document);

@@ -60,6 +60,8 @@ export const canvasMessages = {
   "canvas.vectorEditTool": "Vector edit tool",
   "canvas.vectorToolMove": "Move",
   "canvas.vectorToolBend": "Bend",
+  "canvas.vectorToolPaint": "Paint",
+  "canvas.vectorPaintColor": "Region color",
   "canvas.vectorToolCut": "Cut",
   "canvas.vectorToolLasso": "Lasso",
   "canvas.vectorPointMode": "Bézier point mode",

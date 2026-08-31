@@ -1,15 +1,16 @@
 import { componentSourceNodeIds } from "@opendesign/component-service";
-import type {
-  DesignAsset,
-  DesignDocument,
-  DesignNode,
-  DesignOperation,
-  LibraryComponentSource,
-  LibraryReleaseSnapshot,
-  LibraryStyleSource,
-  LibraryVariableCollectionSource,
-  LibraryVariableSource,
-  VariableDefinition,
+import {
+  nodePaints,
+  type DesignAsset,
+  type DesignDocument,
+  type DesignNode,
+  type DesignOperation,
+  type LibraryComponentSource,
+  type LibraryReleaseSnapshot,
+  type LibraryStyleSource,
+  type LibraryVariableCollectionSource,
+  type LibraryVariableSource,
+  type VariableDefinition,
 } from "@opendesign/design-contracts";
 
 export const LIBRARY_SERVICE_VERSION = 2 as const;
@@ -440,13 +441,8 @@ function componentDependencies(
 function nodeAssetIds(node: DesignNode): string[] {
   const assets = new Set<string>();
   if (node.kind === "image") assets.add(node.properties.assetId);
-  if (hasPaints(node)) {
-    for (const paint of [
-      ...node.properties.fills,
-      ...node.properties.strokes,
-    ]) {
-      if (paint.type === "image") assets.add(paint.assetId);
-    }
+  for (const paint of nodePaints(node)) {
+    if (paint.type === "image") assets.add(paint.assetId);
   }
   return [...assets];
 }
@@ -476,14 +472,9 @@ function nodeVariableIds(node: DesignNode): string[] {
   for (const alias of Object.values(node.boundVariables ?? {})) {
     ids.add(alias.id);
   }
-  if (hasPaints(node)) {
-    for (const paint of [
-      ...node.properties.fills,
-      ...node.properties.strokes,
-    ]) {
-      if (paint.type === "solid" && paint.boundVariables?.color) {
-        ids.add(paint.boundVariables.color.id);
-      }
+  for (const paint of nodePaints(node)) {
+    if (paint.type === "solid" && paint.boundVariables?.color) {
+      ids.add(paint.boundVariables.color.id);
     }
   }
   return [...ids];
@@ -547,12 +538,6 @@ function expandAliases(
       }
     }
   }
-}
-
-function hasPaints(
-  node: DesignNode,
-): node is Extract<DesignNode, { properties: { fills: unknown[] } }> {
-  return "fills" in node.properties && "strokes" in node.properties;
 }
 
 export function libraryReleaseAssets(

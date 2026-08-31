@@ -1147,40 +1147,46 @@ async function executeDesignToolRequestUnsafe(
                       segmentId: input.segmentId,
                       t: input.t,
                     }
-                  : input.action === "reverse-path"
+                  : input.action === "set-region-fills"
                     ? {
                         action: input.action,
-                        ...(input.pathId ? { pathId: input.pathId } : {}),
+                        fills: input.fills,
+                        regionId: input.regionId,
                       }
-                    : input.action === "connect-endpoints"
+                    : input.action === "reverse-path"
                       ? {
                           action: input.action,
-                          vertexIds: input.vertexIds,
+                          ...(input.pathId ? { pathId: input.pathId } : {}),
                         }
-                      : input.action === "disconnect-vertex"
+                      : input.action === "connect-endpoints"
                         ? {
                             action: input.action,
-                            pathId: input.pathId,
-                            vertexId: input.vertexId,
+                            vertexIds: input.vertexIds,
                           }
-                        : input.action === "transform-vertices"
+                        : input.action === "disconnect-vertex"
                           ? {
                               action: input.action,
-                              transform: input.transform,
-                              vertexIds: input.vertexIds,
+                              pathId: input.pathId,
+                              vertexId: input.vertexId,
                             }
-                          : input.action === "cut-path"
+                          : input.action === "transform-vertices"
                             ? {
                                 action: input.action,
-                                at: input.at,
-                                pathId: input.pathId,
+                                transform: input.transform,
+                                vertexIds: input.vertexIds,
                               }
-                            : {
-                                action: input.action,
-                                end: input.end,
-                                resultNodeId: `vector_cut_${safeToolCallId}_${document.revision}`,
-                                start: input.start,
-                              },
+                            : input.action === "cut-path"
+                              ? {
+                                  action: input.action,
+                                  at: input.at,
+                                  pathId: input.pathId,
+                                }
+                              : {
+                                  action: input.action,
+                                  end: input.end,
+                                  resultNodeId: `vector_cut_${safeToolCallId}_${document.revision}`,
+                                  start: input.start,
+                                },
             );
     if (!plan.ok) {
       throw new Error(`vector-edit.${plan.code}: ${plan.message}`);

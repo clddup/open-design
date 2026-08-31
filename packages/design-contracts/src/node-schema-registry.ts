@@ -104,6 +104,7 @@ export const { ImagePlacementSchema, ImagePropertiesSchema } = imageNodeSchemas;
 
 export { PathDataSchema } from "./path-schema.js";
 const vectorSchemas = createVectorSchemas({
+  paintSchema: PaintSchema,
   shapeProperties: ShapeProperties,
   pointSchema: PointSchema,
   pathDataSchema: PathDataSchema,

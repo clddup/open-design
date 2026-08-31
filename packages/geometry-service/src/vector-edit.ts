@@ -1,4 +1,5 @@
 import type {
+  Paint,
   Point,
   Rect,
   Transform,
@@ -33,6 +34,7 @@ export type VectorEditFailureCode =
   | "invalid-network"
   | "missing-handle"
   | "missing-path"
+  | "missing-region"
   | "missing-segment"
   | "missing-vertex"
   | "no-op"
@@ -41,6 +43,36 @@ export type VectorEditFailureCode =
 export type VectorEditResult =
   | { ok: true; network: VectorNetwork }
   | { ok: false; code: VectorEditFailureCode; message: string };
+
+export function setVectorRegionFills(
+  network: VectorNetwork,
+  regionId: string,
+  fills: readonly Paint[],
+): VectorEditResult {
+  const issues = validateVectorNetwork(network);
+  if (issues.length > 0)
+    return invalidNetwork(issues.map((issue) => issue.message).join("; "));
+  const regionIndex = network.regions.findIndex(
+    (candidate) => candidate.id === regionId,
+  );
+  if (regionIndex < 0) {
+    return {
+      ok: false,
+      code: "missing-region",
+      message: `Vector region ${regionId} does not exist`,
+    };
+  }
+  const current = network.regions[regionIndex]!.fills;
+  if (JSON.stringify(current ?? null) === JSON.stringify(fills)) {
+    return noOp(`Vector region ${regionId} already uses those fills`);
+  }
+  const next = structuredClone(network);
+  next.regions[regionIndex] = {
+    ...next.regions[regionIndex]!,
+    fills: fills.map((paint) => structuredClone(paint)),
+  };
+  return { ok: true, network: next };
+}
 
 export type VectorDeleteResult =
   | { ok: true; deleteNode: true }
@@ -1337,6 +1369,9 @@ function rebuildClosedPartitionPaths(
         id: regionId,
         windingRule: sourceRegion.windingRule,
         loops: [{ pathId, reversed: outerLoop.reversed }],
+        ...(sourceRegion.fills === undefined
+          ? {}
+          : { fills: structuredClone(sourceRegion.fills) }),
       });
     }
   }

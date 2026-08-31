@@ -1,4 +1,8 @@
-import type { DesignDocument, DesignNode } from "@opendesign/design-contracts";
+import {
+  nodePaints,
+  type DesignDocument,
+  type DesignNode,
+} from "@opendesign/design-contracts";
 import { indexImageAssetFamilies } from "@opendesign/editor-runtime";
 import {
   DesignImageInspectionContract,
@@ -70,30 +74,11 @@ function collectScopedAssetIds(
   const assetIds = new Set<string>();
   for (const node of Object.values(nodesById)) {
     if (node.kind === "image") assetIds.add(node.properties.assetId);
-    for (const paint of nodeImagePaints(node)) {
+    for (const paint of nodePaints(node)) {
       if (paint.type === "image") assetIds.add(paint.assetId);
     }
   }
   return assetIds;
-}
-
-function nodeImagePaints(node: DesignNode) {
-  if (
-    node.kind === "group" ||
-    node.kind === "slot" ||
-    node.kind === "image" ||
-    node.kind === "instance" ||
-    node.kind === "slice"
-  ) {
-    return [];
-  }
-  return [
-    ...node.properties.fills,
-    ...node.properties.strokes,
-    ...(node.kind === "text"
-      ? (node.properties.runs ?? []).flatMap((run) => run.style.fills)
-      : []),
-  ];
 }
 
 function addStagedAssetIds(

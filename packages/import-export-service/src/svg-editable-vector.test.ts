@@ -80,9 +80,9 @@ describe("controlled editable-vector SVG metadata", () => {
         element,
         "M 0 0 C 25 0 75 0 100 0 L 50 100 L 0 0 Z",
       ),
-    ).toEqual({ status: "valid", network });
+    ).toEqual({ status: "valid", fallbackFills: [], network });
     expect(element.getAttribute("data-opendesign-vector-network-version")).toBe(
-      "2",
+      "3",
     );
   });
 
@@ -96,7 +96,21 @@ describe("controlled editable-vector SVG metadata", () => {
         element,
         "M 0 0 C 25 0 75 0 100 0 L 50 100 L 0 0 Z",
       ),
-    ).toEqual({ status: "valid", network });
+    ).toEqual({ status: "valid", fallbackFills: [], network });
+  });
+
+  it("continues to read version 2 metadata without requiring fallback fills", () => {
+    const element = pathElement();
+    expect(writeSvgEditableVector(element, network)).toBe(true);
+    element.setAttribute("data-opendesign-vector-network-version", "2");
+    element.removeAttribute("data-opendesign-vector-fallback-fills");
+
+    expect(
+      readSvgEditableVector(
+        element,
+        "M 0 0 C 25 0 75 0 100 0 L 50 100 L 0 0 Z",
+      ),
+    ).toEqual({ status: "valid", fallbackFills: [], network });
   });
 
   it("round-trips open/closed and reversed traversal semantics exactly", () => {
@@ -110,6 +124,7 @@ describe("controlled editable-vector SVG metadata", () => {
     );
     expect(readSvgEditableVector(reversedElement, reversedPath.path)).toEqual({
       status: "valid",
+      fallbackFills: [],
       network: reversed.network,
     });
     expect(reversed.network.regions[0]?.loops[0]?.reversed).toBe(true);
@@ -122,10 +137,27 @@ describe("controlled editable-vector SVG metadata", () => {
     expect(writeSvgEditableVector(openElement, opened.network)).toBe(true);
     expect(readSvgEditableVector(openElement, openPath.path)).toEqual({
       status: "valid",
+      fallbackFills: [],
       network: opened.network,
     });
     expect(opened.network.paths[0]?.closed).toBe(false);
     expect(opened.network.regions).toEqual([]);
+  });
+
+  it("removes stale controlled metadata when the current network exceeds the limit", () => {
+    const element = pathElement();
+    expect(writeSvgEditableVector(element, network)).toBe(true);
+    const oversized = structuredClone(network);
+    oversized.vertices[0]!.id = "vertex_" + "x".repeat(1_000_000);
+
+    expect(writeSvgEditableVector(element, oversized)).toBe(false);
+    expect(element.hasAttribute("data-opendesign-vector-network-version")).toBe(
+      false,
+    );
+    expect(element.hasAttribute("data-opendesign-vector-network")).toBe(false);
+    expect(element.hasAttribute("data-opendesign-vector-fallback-fills")).toBe(
+      false,
+    );
   });
 
   it("rejects missing versions, malformed topology, and changed path data", () => {

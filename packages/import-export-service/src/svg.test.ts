@@ -1134,6 +1134,7 @@ describe("versioned SVG interchange", () => {
                   id: "region_1",
                   windingRule: "nonzero",
                   loops: [{ pathId: "path_1", reversed: false }],
+                  fills: [{ type: "solid", color: "#22c55e", opacity: 1 }],
                 },
               ],
             },
@@ -1174,8 +1175,12 @@ describe("versioned SVG interchange", () => {
     if (!exported.ok) return;
     expect(exported.issues).toEqual([]);
     expect(exported.svg).toContain(
-      'data-opendesign-vector-network-version="2"',
+      'data-opendesign-vector-network-version="3"',
     );
+    expect(exported.svg).toContain(
+      'data-opendesign-vector-region-id="region_1"',
+    );
+    expect(exported.svg).toContain('fill="#22c55e"');
     const imported = importSvg(
       { svg: exported.svg, idPrefix: "editable_vector" },
       geometry,
@@ -1343,12 +1348,13 @@ describe("versioned SVG interchange", () => {
     if (!dividedExport.ok) return;
     expect(dividedExport.issues).toEqual([]);
     expect(
-      dividedExport.svg.match(/data-opendesign-vector-network-version="2"/g),
+      dividedExport.svg.match(/data-opendesign-vector-network-version="3"/g),
     ).toHaveLength(2);
     expect(
-      [...dividedExport.svg.matchAll(/\sd="([^"]+)"/g)]
-        .map((match) => match[1])
-        .filter((path) => path?.endsWith(" Z")),
+      dividedExport.svg.match(/data-opendesign-vector-region-id=/g),
+    ).toHaveLength(2);
+    expect(
+      dividedExport.svg.match(/data-opendesign-vector-source="true"/g),
     ).toHaveLength(2);
 
     const dividedImported = importSvg(
@@ -1484,7 +1490,7 @@ describe("versioned SVG interchange", () => {
     expect(openDividedExport.issues).toEqual([]);
     expect(
       openDividedExport.svg.match(
-        /data-opendesign-vector-network-version="2"/g,
+        /data-opendesign-vector-network-version="3"/g,
       ),
     ).toHaveLength(2);
     const openPathData = [...openDividedExport.svg.matchAll(/\sd="([^"]+)"/g)]
@@ -1607,7 +1613,7 @@ describe("versioned SVG interchange", () => {
     if (!exported.ok) return;
     expect(exported.issues).toEqual([]);
     expect(
-      exported.svg.match(/data-opendesign-vector-network-version="2"/g),
+      exported.svg.match(/data-opendesign-vector-network-version="3"/g),
     ).toHaveLength(2);
     const pathData = [...exported.svg.matchAll(/\sd="([^"]+)"/g)]
       .map((match) => match[1])

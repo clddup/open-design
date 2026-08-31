@@ -5,6 +5,7 @@ import type {
   DesignOperation,
   GridTrack,
   ImagePlacement,
+  Paint,
   Point,
   SelectionState,
   Size,
@@ -90,7 +91,7 @@ export type LeaferVectorEditRequest =
       edits: readonly { network: VectorNetwork; nodeId: string }[];
     };
 
-export type LeaferVectorEditTool = "move" | "bend" | "cut" | "lasso";
+export type LeaferVectorEditTool = "move" | "bend" | "cut" | "lasso" | "paint";
 
 export interface LeaferImageCropCommitRequest {
   nodeId: string;
@@ -336,6 +337,7 @@ export interface LeaferVectorEditScope {
     selectedSegmentIds: readonly string[];
     selectedVertexIds: readonly string[];
   }[];
+  paint?: readonly Paint[];
   tool: LeaferVectorEditTool;
 }
 

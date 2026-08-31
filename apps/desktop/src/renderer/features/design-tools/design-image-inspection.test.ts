@@ -83,6 +83,23 @@ describe("design image inspection", () => {
     expect(inspection.imageAssetDerivationsTruncated).toBe(true);
     expect(inspection.assetsById.asset_64).toBeDefined();
   });
+
+  it("includes image assets used by editable vector regions", () => {
+    const document = structuredClone(createWelcomeDocument());
+    document.assetsById.asset_region = imageAsset(
+      "asset_region",
+      "cmVnaW9uLWltYWdl",
+    );
+
+    const inspection = createScopedImageInspection(document, {
+      region_vector: vectorImagePaintNode("asset_region"),
+    });
+
+    expect(inspection.assetsById.asset_region).toMatchObject({
+      id: "asset_region",
+      kind: "image",
+    });
+  });
 });
 
 function imageAsset(
@@ -137,5 +154,50 @@ function imageNode(assetId: string): DesignNode {
       cornerRadius: 0,
     },
     extensions: {},
+  };
+}
+
+function vectorImagePaintNode(assetId: string): DesignNode {
+  return {
+    ...imageNode(assetId),
+    id: "region_vector",
+    kind: "vector",
+    name: "Region vector",
+    properties: {
+      fills: [],
+      strokes: [],
+      strokeWidth: 0,
+      network: {
+        vertices: [
+          { id: "a", x: 0, y: 0 },
+          { id: "b", x: 256, y: 0 },
+          { id: "c", x: 128, y: 256 },
+        ],
+        segments: [
+          { id: "ab", startVertexId: "a", endVertexId: "b" },
+          { id: "bc", startVertexId: "b", endVertexId: "c" },
+          { id: "ca", startVertexId: "c", endVertexId: "a" },
+        ],
+        paths: [
+          {
+            id: "outline",
+            closed: true,
+            segments: [
+              { segmentId: "ab", reversed: false },
+              { segmentId: "bc", reversed: false },
+              { segmentId: "ca", reversed: false },
+            ],
+          },
+        ],
+        regions: [
+          {
+            id: "face",
+            windingRule: "nonzero",
+            loops: [{ pathId: "outline", reversed: false }],
+            fills: [{ type: "image", assetId, fit: "cover", opacity: 1 }],
+          },
+        ],
+      },
+    },
   };
 }

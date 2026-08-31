@@ -55,6 +55,8 @@ export const canvasMessages = {
   "canvas.vectorEditTool": "矢量编辑工具",
   "canvas.vectorToolMove": "移动",
   "canvas.vectorToolBend": "弯曲",
+  "canvas.vectorToolPaint": "上色",
+  "canvas.vectorPaintColor": "区域颜色",
   "canvas.vectorToolCut": "切断",
   "canvas.vectorToolLasso": "套索",
   "canvas.vectorPointMode": "贝塞尔节点模式",

@@ -18,6 +18,7 @@ import {
   reverseVectorPath,
   setVectorPathClosed,
   setVectorPointMode,
+  setVectorRegionFills,
   transformVectorVertices,
   vectorVertexBounds,
   vectorNetworkEditability,
@@ -272,6 +273,24 @@ function concaveFourCrossingNetwork(): VectorNetwork {
 }
 
 describe("editable vector point operations", () => {
+  it("sets one region fill without changing geometry or other stable ids", () => {
+    const source = closedNetwork();
+    const result = setVectorRegionFills(source, "region_face", [
+      { type: "solid", color: "#ef4444", opacity: 1 },
+    ]);
+    expect(result).toMatchObject({ ok: true });
+    if (!result.ok) return;
+    expect(result.network.regions[0]?.fills).toEqual([
+      { type: "solid", color: "#ef4444", opacity: 1 },
+    ]);
+    expect(result.network.paths).toEqual(source.paths);
+    expect(result.network.segments).toEqual(source.segments);
+    expect(setVectorRegionFills(source, "missing", [])).toMatchObject({
+      ok: false,
+      code: "missing-region",
+    });
+  });
+
   it("bends straight and reversed path segments through an explicit point", () => {
     const bent = bendVectorSegment(
       openNetwork(),
@@ -864,8 +883,12 @@ describe("editable vector point operations", () => {
   });
 
   it("divides a closed object with one finite drag line into two closed networks", () => {
+    const source = closedNetwork();
+    source.regions[0]!.fills = [
+      { type: "solid", color: "#2563eb", opacity: 0.75 },
+    ];
     const result = cutVectorNetworkByLine(
-      closedNetwork(),
+      source,
       { x: -20, y: 40 },
       { x: 120, y: 40 },
     );
@@ -893,9 +916,17 @@ describe("editable vector point operations", () => {
         id: "region_face",
         windingRule: "nonzero",
         loops: [{ pathId: "path_closed", reversed: false }],
+        fills: [{ type: "solid", color: "#2563eb", opacity: 0.75 }],
       },
     ]);
-    expect(result.extractedNetwork.regions).toHaveLength(1);
+    expect(result.extractedNetwork.regions).toEqual([
+      {
+        id: "region_edit_1",
+        windingRule: "nonzero",
+        loops: [{ pathId: "path_edit_1", reversed: false }],
+        fills: [{ type: "solid", color: "#2563eb", opacity: 0.75 }],
+      },
+    ]);
     for (const divided of [result.retainedNetwork, result.extractedNetwork]) {
       expect(vectorNetworkEditability(divided)).toEqual({ editable: true });
       const cutEdges = divided.segments.filter((segment) => {

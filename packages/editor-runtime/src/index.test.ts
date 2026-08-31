@@ -1050,21 +1050,32 @@ describe("EditorRuntime transactions", () => {
     "prevents deleting an image asset referenced by a %s paint",
     (kind) => {
       const runtime = new EditorRuntime(createWelcomeDocument());
-      const node = {
-        ...pathNode(`${kind}_image_paint`, "frame_welcome"),
-        kind,
-        properties: {
-          ...pathNode("template").properties,
-          fills: [
-            {
-              type: "image" as const,
-              assetId: "asset_path_paint",
-              fit: "cover" as const,
-              opacity: 1,
-            },
-          ],
-        },
+      const imagePaint = {
+        type: "image" as const,
+        assetId: "asset_path_paint",
+        fit: "cover" as const,
+        opacity: 1,
       };
+      const node =
+        kind === "path"
+          ? {
+              ...pathNode("path_image_paint", "frame_welcome"),
+              properties: {
+                ...pathNode("template").properties,
+                fills: [imagePaint],
+              },
+            }
+          : (() => {
+              const vector = editableVectorNode(
+                "vector_image_paint",
+                "frame_welcome",
+              );
+              if (!("network" in vector.properties)) {
+                throw new Error("Missing editable Vector network");
+              }
+              vector.properties.network.regions[0]!.fills = [imagePaint];
+              return vector;
+            })();
       const inserted = runtime.apply(
         transaction(runtime, `transaction_${kind}_image_paint`, [
           {

@@ -17,6 +17,7 @@ export * from "./export-settings.js";
 export * from "./image-filters.js";
 export * from "./layout.js";
 export * from "./limits.js";
+export * from "./node-paints.js";
 export * from "./schema-registry.js";
 export * from "./public-types.js";
 export * from "./contract-facade.js";

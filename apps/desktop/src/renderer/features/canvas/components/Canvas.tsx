@@ -6,6 +6,7 @@ import {
   type FrameNode,
   type GridTrack,
   type LineNode,
+  type Paint,
   type PolygonNode,
   type RectangleNode,
   type SliceNode,
@@ -257,6 +258,7 @@ export function Canvas({
     selectedSegmentIdsByNode: Readonly<Record<string, readonly string[]>>;
     selectedVertexIdsByNode: Readonly<Record<string, readonly string[]>>;
     tool: LeaferVectorEditTool;
+    paint: readonly Paint[];
   } | null>(null);
   const vectorEditStateRef = useRef(vectorEditState);
   vectorEditStateRef.current = vectorEditState;
@@ -504,6 +506,7 @@ export function Canvas({
         selectedVertexIdsByNode: Object.fromEntries(
           editableVectorNodeIds.map((nodeId) => [nodeId, []]),
         ),
+        paint: [{ type: "solid" as const, color: "#4f7fff", opacity: 1 }],
         tool: "move" as const,
       };
       vectorEditStateRef.current = nextState;
@@ -1327,6 +1330,9 @@ export function Canvas({
                 selectedSegmentIds: scope.selectedSegmentIds,
                 selectedVertexIds: scope.selectedVertexIds,
               })),
+              paint: vectorEditState?.paint ?? [
+                { type: "solid", color: "#4f7fff", opacity: 1 },
+              ],
               tool: vectorEditState?.tool ?? "move",
             },
           }
@@ -1710,6 +1716,7 @@ export function Canvas({
                       [
                         ["move", "canvas.vectorToolMove", "V"],
                         ["bend", "canvas.vectorToolBend", null],
+                        ["paint", "canvas.vectorToolPaint", null],
                         ["cut", "canvas.vectorToolCut", "X"],
                         ["lasso", "canvas.vectorToolLasso", "Q"],
                       ] as const
@@ -1719,7 +1726,9 @@ export function Canvas({
                         aria-pressed={vectorEditState?.tool === mode}
                         disabled={
                           vectorEditScope.readOnly &&
-                          (mode === "bend" || mode === "cut")
+                          (mode === "bend" ||
+                            mode === "paint" ||
+                            mode === "cut")
                         }
                         key={mode}
                         onClick={() => {
@@ -1737,6 +1746,33 @@ export function Canvas({
                       </button>
                     ))}
                   </span>
+                  {vectorEditState?.tool === "paint" && (
+                    <label className={styles.vectorPaint}>
+                      <span>{t("canvas.vectorPaintColor")}</span>
+                      <input
+                        aria-label={t("canvas.vectorPaintColor")}
+                        disabled={vectorEditScope.readOnly}
+                        onChange={(event) =>
+                          setVectorEditState((current) =>
+                            current
+                              ? {
+                                  ...current,
+                                  paint: [
+                                    {
+                                      type: "solid",
+                                      color: event.currentTarget.value,
+                                      opacity: 1,
+                                    },
+                                  ],
+                                }
+                              : current,
+                          )
+                        }
+                        type="color"
+                        value={solidPaintColor(vectorEditState.paint)}
+                      />
+                    </label>
+                  )}
                   <span
                     aria-label={t("canvas.vectorPointMode")}
                     className={styles.vectorModes}
@@ -2148,6 +2184,11 @@ function sameViewport(left: ViewportState, right: ViewportState) {
     Math.abs(left.width - right.width) < 0.000_001 &&
     Math.abs(left.height - right.height) < 0.000_001
   );
+}
+
+function solidPaintColor(paints: readonly Paint[]): string {
+  const solid = paints.find((paint) => paint.type === "solid");
+  return solid?.color.match(/^#[0-9a-f]{6}$/i) ? solid.color : "#4f7fff";
 }
 
 function sameFidelityWarnings(

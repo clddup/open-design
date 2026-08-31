@@ -184,6 +184,57 @@ function documentWithVector(): DesignDocument {
 }
 
 describe("vector editing runtime plans", () => {
+  it("plans one region paint as one undoable vector network update", () => {
+    const document = documentWithVector();
+    const vector = document.nodesById.vector_editable;
+    if (
+      !vector ||
+      vector.kind !== "vector" ||
+      !("network" in vector.properties)
+    ) {
+      throw new Error("Missing vector");
+    }
+    vector.properties.network = closedNetwork();
+    const plan = planVectorSemanticEdit(document, "page_welcome", vector.id, {
+      action: "set-region-fills",
+      regionId: "region_face",
+      fills: [{ type: "solid", color: "#22c55e", opacity: 1 }],
+    });
+    expect(plan).toMatchObject({ ok: true });
+    if (!plan.ok) return;
+    const runtime = new EditorRuntime(document);
+    const applied = runtime.apply({
+      transactionId: "paint_region",
+      documentId: document.documentId,
+      baseRevision: document.revision,
+      actor: { type: "user", id: "test" },
+      label: "Paint region",
+      commands: [...plan.operations],
+    });
+    expect(applied.ok).toBe(true);
+    const painted = runtime.getSnapshot().document.nodesById.vector_editable;
+    if (
+      !painted ||
+      painted.kind !== "vector" ||
+      !("network" in painted.properties)
+    ) {
+      throw new Error("Missing vector");
+    }
+    expect(painted.properties.network.regions[0]?.fills).toEqual([
+      { type: "solid", color: "#22c55e", opacity: 1 },
+    ]);
+    expect(runtime.undo().ok).toBe(true);
+    const restored = runtime.getSnapshot().document.nodesById.vector_editable;
+    if (
+      !restored ||
+      restored.kind !== "vector" ||
+      !("network" in restored.properties)
+    ) {
+      throw new Error("Missing vector");
+    }
+    expect(restored.properties.network.regions[0]?.fills).toBeUndefined();
+  });
+
   it("derives selected point mode and locked read-only state without persisting edit UI", () => {
     const document = documentWithVector();
     expect(
