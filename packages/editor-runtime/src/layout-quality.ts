@@ -32,6 +32,7 @@ import {
   getWorldTransform,
   invertTransform,
 } from "./geometry.js";
+import { diagnoseRepeatedLayoutConsistency } from "./layout-consistency-quality.js";
 
 export {
   DESIGN_LAYOUT_QUALITY_REPORT_VERSION,
@@ -273,6 +274,13 @@ export function diagnoseDesignTargetLayout(
     textLayoutEvidence,
     issues,
   );
+  for (const issue of diagnoseRepeatedLayoutConsistency(
+    sourceDocument,
+    artboardFrameId,
+    qualityProfile,
+  )) {
+    appendQualityIssue(issues, artboardFrameId, issue);
+  }
   return report(
     document,
     pageId,

@@ -739,7 +739,7 @@ function cleanLayoutQuality(
   qualityProfile: DesignPlanTarget["qualityProfile"],
 ): DesignLayoutQualityReport {
   return {
-    version: 6,
+    version: 7,
     documentId,
     revision,
     pageId,

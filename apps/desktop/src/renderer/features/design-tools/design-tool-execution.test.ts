@@ -2409,7 +2409,7 @@ describe("Renderer design tool scope", () => {
           attachment,
           attachments: [attachment],
           layoutQuality: {
-            version: 6,
+            version: 7,
             documentId: "document_welcome",
             revision: 0,
             pageId: "page_welcome",

@@ -10,7 +10,7 @@ const frameTarget = {
 };
 
 const report: DesignLayoutQualityReport = {
-  version: 6,
+  version: 7,
   documentId: "document_design",
   revision: 7,
   pageId: frameTarget.pageId,
@@ -85,6 +85,62 @@ describe("Main canvas capture layout-quality boundary", () => {
     expect(() =>
       requireCanvasCaptureLayoutQuality(
         captureResult({ ...qualityReport, qualityProfile: null }),
+        "document_design",
+        target,
+      ),
+    ).toThrow("design_workflow.layout_quality_unavailable");
+  });
+
+  it("accepts advisory repeated-layout evidence but rejects it as a blocking error", () => {
+    const qualityProfile = {
+      kind: "ui" as const,
+      platform: "web" as const,
+      interactionMode: "pointer" as const,
+      safeAreaInsets: { top: 0, right: 0, bottom: 0, left: 0 },
+      safeAreaNodeIds: [],
+      interactiveNodeIds: [],
+    };
+    const advisory: DesignLayoutQualityReport = {
+      ...report,
+      qualityProfile,
+      warningCount: 1,
+      issues: [
+        {
+          code: "repeated-layer-spacing-outlier",
+          severity: "warning",
+          nodeId: "item_4",
+          relatedNodeIds: ["frame_delivery", "item_3"],
+          message: "Repeated item spacing differs from its sibling pattern",
+          measurement: {
+            kind: "layout-spacing-outlier",
+            axis: "vertical",
+            actualGap: 28,
+            expectedGap: 24,
+            delta: -4,
+            tolerance: 1,
+            confidence: 2 / 3,
+            peerNodeIds: ["item_1", "item_2", "item_3", "item_4"],
+          },
+        },
+      ],
+    };
+    const target = { ...frameTarget, qualityProfile };
+    expect(
+      requireCanvasCaptureLayoutQuality(
+        captureResult(advisory),
+        "document_design",
+        target,
+      ),
+    ).toEqual(advisory);
+
+    expect(() =>
+      requireCanvasCaptureLayoutQuality(
+        captureResult({
+          ...advisory,
+          errorCount: 1,
+          warningCount: 0,
+          issues: [{ ...advisory.issues[0], severity: "error" }],
+        }),
         "document_design",
         target,
       ),

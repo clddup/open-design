@@ -19,7 +19,7 @@ describe("deterministic delivery layout quality", () => {
     );
 
     expect(report).toMatchObject({
-      version: 6,
+      version: 7,
       checkedNodeCount: 1,
       checkedQualityNodeCount: 0,
       checkedTextNodeCount: 0,
@@ -131,6 +131,162 @@ describe("deterministic delivery layout quality", () => {
     expect(report.issues.some((issue) => issue.nodeId === "hidden")).toBe(
       false,
     );
+  });
+
+  it("warns about one high-confidence spacing outlier in repeated UI siblings", () => {
+    const document = layoutDocument();
+    addRepeatedRow(document, [20, 80, 140, 206], [80, 80, 80, 80]);
+
+    const report = diagnoseDesignTargetLayout(
+      document,
+      "page_layout",
+      "artboard",
+      uiQualityProfile(),
+    );
+
+    expect(report).toMatchObject({
+      version: 7,
+      errorCount: 0,
+      warningCount: 1,
+    });
+    const spacingIssue = report.issues.find(
+      (issue) => issue.code === "repeated-layer-spacing-outlier",
+    );
+    expect(spacingIssue).toMatchObject({
+      severity: "warning",
+      nodeId: "repeated_3",
+      relatedNodeIds: ["artboard", "repeated_2"],
+      measurement: {
+        kind: "layout-spacing-outlier",
+        axis: "horizontal",
+        actualGap: 26,
+        expectedGap: 20,
+        delta: -6,
+        tolerance: 1,
+        confidence: 0.666667,
+        peerNodeIds: ["repeated_0", "repeated_1", "repeated_2", "repeated_3"],
+      },
+    });
+    const malformed = structuredClone(report);
+    const measurement = malformed.issues[0]?.measurement;
+    if (measurement?.kind !== "layout-spacing-outlier") {
+      throw new Error("Missing spacing measurement");
+    }
+    measurement.delta = 6;
+    expect(DesignLayoutQualityReportContract.issues(malformed)).toContainEqual(
+      expect.objectContaining({
+        code: "design.layout_quality_consistency_delta_invalid",
+        path: "/issues/0/measurement/delta",
+      }),
+    );
+  });
+
+  it("warns about one high-confidence cross-axis alignment outlier", () => {
+    const document = layoutDocument();
+    addRepeatedRow(document, [20, 80, 140, 200], [80, 80, 80, 83]);
+
+    const report = diagnoseDesignTargetLayout(
+      document,
+      "page_layout",
+      "artboard",
+      uiQualityProfile(),
+    );
+
+    expect(report).toMatchObject({ errorCount: 0, warningCount: 1 });
+    const alignmentIssue = report.issues.find(
+      (issue) => issue.code === "repeated-layer-alignment-outlier",
+    );
+    expect(alignmentIssue).toMatchObject({
+      severity: "warning",
+      nodeId: "repeated_3",
+      relatedNodeIds: ["artboard"],
+      measurement: {
+        kind: "layout-alignment-outlier",
+        axis: "y",
+        anchor: "start",
+        actualPosition: 163,
+        expectedPosition: 160,
+        delta: -3,
+        tolerance: 1,
+        confidence: 0.75,
+      },
+    });
+  });
+
+  it("accepts Figma-style one-pixel rounding and does not infer graphic or Auto Layout intent", () => {
+    const roundedDocument = layoutDocument();
+    addRepeatedRow(roundedDocument, [20, 80, 139, 199], [80, 80, 80, 80]);
+    expect(
+      diagnoseDesignTargetLayout(
+        roundedDocument,
+        "page_layout",
+        "artboard",
+        uiQualityProfile(),
+      ).issues.some((issue) => issue.code.includes("layer-spacing-outlier")),
+    ).toBe(false);
+
+    const graphicDocument = layoutDocument();
+    addRepeatedRow(graphicDocument, [20, 80, 140, 206], [80, 80, 80, 80]);
+    expect(
+      diagnoseDesignTargetLayout(graphicDocument, "page_layout", "artboard", {
+        kind: "graphic",
+      }).issues.some((issue) => issue.code.includes("layer-spacing-outlier")),
+    ).toBe(false);
+
+    const autoLayoutDocument = layoutDocument();
+    const artboard = autoLayoutDocument.nodesById.artboard;
+    if (artboard?.kind !== "frame") throw new Error("Missing artboard");
+    artboard.properties.autoLayout = {
+      mode: "horizontal",
+      padding: { top: 0, right: 0, bottom: 0, left: 0 },
+      gap: 20,
+      primaryAlignment: "start",
+      counterAlignment: "start",
+    };
+    addRepeatedRow(autoLayoutDocument, [20, 80, 140, 206], [80, 80, 80, 80]);
+    expect(
+      diagnoseDesignTargetLayout(
+        autoLayoutDocument,
+        "page_layout",
+        "artboard",
+        uiQualityProfile(),
+      ).issues.some((issue) => issue.code.includes("layer-spacing-outlier")),
+    ).toBe(false);
+  });
+
+  it("does not guess intent for multiple outliers or rotated freeform siblings", () => {
+    const multipleOutliers = layoutDocument();
+    addRepeatedRow(multipleOutliers, [20, 80, 146, 218], [80, 80, 80, 80]);
+    expect(
+      diagnoseDesignTargetLayout(
+        multipleOutliers,
+        "page_layout",
+        "artboard",
+        uiQualityProfile(),
+      ).issues.some((issue) => issue.code.startsWith("repeated-layer-")),
+    ).toBe(false);
+
+    const rotated = layoutDocument();
+    addRepeatedRow(rotated, [20, 80, 140, 206], [80, 80, 80, 80]);
+    const rotatedNode = rotated.nodesById.repeated_3;
+    if (!rotatedNode) throw new Error("Missing repeated node");
+    const angle = Math.PI / 12;
+    rotatedNode.transform = [
+      Math.cos(angle),
+      Math.sin(angle),
+      -Math.sin(angle),
+      Math.cos(angle),
+      206,
+      80,
+    ];
+    expect(
+      diagnoseDesignTargetLayout(
+        rotated,
+        "page_layout",
+        "artboard",
+        uiQualityProfile(),
+      ).issues.some((issue) => issue.code.startsWith("repeated-layer-")),
+    ).toBe(false);
   });
 
   it("rejects missing, non-Frame, and wrong-Page targets", () => {
@@ -429,7 +585,7 @@ describe("deterministic delivery layout quality", () => {
     );
 
     expect(report).toMatchObject({
-      version: 6,
+      version: 7,
       checkedQualityNodeCount: 2,
       checkedTextNodeCount: 0,
       errorCount: 2,
@@ -794,7 +950,7 @@ describe("deterministic delivery layout quality", () => {
     );
 
     expect(report).toMatchObject({
-      version: 6,
+      version: 7,
       checkedTextNodeCount: 1,
       errorCount: 1,
       warningCount: 0,
@@ -997,6 +1153,26 @@ function uiQualityProfile(...interactiveNodeIds: string[]) {
     safeAreaNodeIds: [...interactiveNodeIds],
     interactiveNodeIds: [...interactiveNodeIds],
   };
+}
+
+function addRepeatedRow(
+  document: DesignDocument,
+  xPositions: number[],
+  yPositions: number[],
+): void {
+  const artboard = document.nodesById.artboard;
+  if (artboard?.kind !== "frame") throw new Error("Missing artboard");
+  xPositions.forEach((x, index) => {
+    const node = rectangle(
+      `repeated_${index}`,
+      "artboard",
+      [1, 0, 0, 1, x, yPositions[index] ?? 80],
+      40,
+      40,
+    );
+    artboard.childIds.push(node.id);
+    document.nodesById[node.id] = node;
+  });
 }
 
 function rectangle(

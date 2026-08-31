@@ -13,7 +13,7 @@ import {
 } from "@opendesign/text-service";
 import { Type, type Static } from "@sinclair/typebox";
 
-export const DESIGN_LAYOUT_QUALITY_REPORT_VERSION = 6 as const;
+export const DESIGN_LAYOUT_QUALITY_REPORT_VERSION = 7 as const;
 export const MAX_DESIGN_LAYOUT_QUALITY_ISSUES = 128;
 
 const QualityIdSchema = Type.String({ minLength: 1, maxLength: 512 });
@@ -77,6 +77,41 @@ export const DesignLayoutQualityMeasurementSchema = Type.Union([
     },
     { additionalProperties: false },
   ),
+  Type.Object(
+    {
+      kind: Type.Literal("layout-spacing-outlier"),
+      axis: Type.Union([Type.Literal("horizontal"), Type.Literal("vertical")]),
+      actualGap: Type.Number(),
+      expectedGap: Type.Number(),
+      delta: Type.Number(),
+      tolerance: Type.Number({ minimum: 0 }),
+      confidence: Type.Number({ minimum: 0, maximum: 1 }),
+      peerNodeIds: Type.Array(QualityIdSchema, {
+        minItems: 4,
+        maxItems: 8,
+        uniqueItems: true,
+      }),
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      kind: Type.Literal("layout-alignment-outlier"),
+      axis: Type.Union([Type.Literal("x"), Type.Literal("y")]),
+      anchor: Type.Literal("start"),
+      actualPosition: Type.Number(),
+      expectedPosition: Type.Number(),
+      delta: Type.Number(),
+      tolerance: Type.Number({ minimum: 0 }),
+      confidence: Type.Number({ minimum: 0, maximum: 1 }),
+      peerNodeIds: Type.Array(QualityIdSchema, {
+        minItems: 4,
+        maxItems: 8,
+        uniqueItems: true,
+      }),
+    },
+    { additionalProperties: false },
+  ),
 ]);
 
 export const DesignLayoutQualityCodeSchema = Type.Union([
@@ -97,6 +132,8 @@ export const DesignLayoutQualityCodeSchema = Type.Union([
   Type.Literal("quality-node-missing"),
   Type.Literal("quality-node-not-visible"),
   Type.Literal("quality-profile-geometry-unavailable"),
+  Type.Literal("repeated-layer-alignment-outlier"),
+  Type.Literal("repeated-layer-spacing-outlier"),
   Type.Literal("quality-scan-truncated"),
   Type.Literal("text-content-clipped"),
   Type.Literal("text-content-overflow"),
@@ -211,5 +248,66 @@ function layoutQualityReportDomainIssues(
       recovery: "Set warningCount from the issue severities.",
     });
   }
+  report.issues.forEach((issue, index) => {
+    if (
+      issue.code !== "repeated-layer-spacing-outlier" &&
+      issue.code !== "repeated-layer-alignment-outlier"
+    ) {
+      return;
+    }
+    const expectedKind =
+      issue.code === "repeated-layer-spacing-outlier"
+        ? "layout-spacing-outlier"
+        : "layout-alignment-outlier";
+    if (report.qualityProfile?.kind !== "ui") {
+      issues.push({
+        code: "design.layout_quality_consistency_profile_invalid",
+        path: "/qualityProfile",
+        message:
+          "Inferred repeated-layout findings are only valid for an explicit UI quality profile",
+        expected: "ui",
+        actual: report.qualityProfile?.kind ?? null,
+        recovery:
+          "Remove the inferred finding from graphic delivery or bind the exact UI quality profile selected by Main.",
+      });
+    }
+    if (issue.severity !== "warning") {
+      issues.push({
+        code: "design.layout_quality_consistency_severity_invalid",
+        path: `/issues/${index}/severity`,
+        message: "Inferred layout consistency findings must remain warnings",
+        expected: "warning",
+        actual: issue.severity,
+        recovery:
+          "Keep inferred alignment and spacing findings advisory; only explicit geometry invariants may block delivery.",
+      });
+    }
+    if (issue.measurement?.kind !== expectedKind) {
+      issues.push({
+        code: "design.layout_quality_consistency_measurement_invalid",
+        path: `/issues/${index}/measurement`,
+        message: `${issue.code} requires its matching structured measurement`,
+        expected: expectedKind,
+        actual: issue.measurement?.kind ?? null,
+        recovery:
+          "Attach the matching alignment or spacing measurement generated from the exact revision.",
+      });
+      return;
+    }
+    const expectedDelta =
+      issue.measurement.kind === "layout-spacing-outlier"
+        ? issue.measurement.expectedGap - issue.measurement.actualGap
+        : issue.measurement.expectedPosition - issue.measurement.actualPosition;
+    if (Math.abs(issue.measurement.delta - expectedDelta) > 1e-6) {
+      issues.push({
+        code: "design.layout_quality_consistency_delta_invalid",
+        path: `/issues/${index}/measurement/delta`,
+        message: "Layout consistency delta must match expected minus actual",
+        expected: expectedDelta,
+        actual: issue.measurement.delta,
+        recovery: "Recompute the delta from the exact-revision measurement.",
+      });
+    }
+  });
   return issues;
 }
