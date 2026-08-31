@@ -284,6 +284,43 @@ describe("Renderer design tool bridge", () => {
     );
   });
 
+  it("keeps nested structure and domain failures on their owning contract paths", () => {
+    const malformedContext = {
+      requestId: "renderer_context_structure",
+      call: {
+        toolCallId: "inspect_1",
+        toolName: "opendesign_inspect_document",
+        input: {},
+      },
+      context: { ...context, revision: "4" },
+    };
+    expect(RendererDesignToolRequestContract.issues(malformedContext)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "renderer_design_tool_request.schema_invalid",
+          path: "/context/revision",
+        }),
+      ]),
+    );
+
+    const malformedResult = {
+      requestId: "renderer_result_structure",
+      ok: true,
+      result: {
+        observedRevision: "4",
+        content: { ok: true },
+      },
+    };
+    expect(RendererDesignToolResponseContract.issues(malformedResult)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "renderer_design_tool_response.schema_invalid",
+          path: "/result/observedRevision",
+        }),
+      ]),
+    );
+  });
+
   it("accepts a bounded internal Image update with an explicit node target", () => {
     const request = {
       requestId: "renderer_request_1",

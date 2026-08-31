@@ -312,7 +312,7 @@ function toolCallDomainIssues(
   }));
 }
 
-function trustedToolContextDomainIssues(
+export function trustedToolContextDomainIssues(
   value: TrustedToolContext,
 ): ValidationIssue[] {
   const issues = prefixIssues(

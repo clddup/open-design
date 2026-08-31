@@ -1,11 +1,11 @@
 import {
   ToolCallRequestSchema,
   TrustedToolContextSchema,
-  TrustedToolContextContract,
   TrustedToolFailureSchema,
-  TrustedToolFailureContract,
   TrustedToolResultSchema,
-  TrustedToolResultContract,
+  trustedToolContextDomainIssues,
+  trustedToolFailureDomainIssues,
+  trustedToolResultDomainIssues,
   type AgentToolFailureIssue,
   type ToolCallRequest,
   type TrustedToolContext,
@@ -179,7 +179,7 @@ export const RendererDesignToolRequestContract =
           value.call.input,
         ),
         ...prefixIssues(
-          TrustedToolContextContract.issues(value.context),
+          trustedToolContextDomainIssues(value.context),
           "/context",
         ),
       ];
@@ -228,10 +228,7 @@ export const RendererDesignToolResponseContract =
     refine: (value) => {
       return value.ok
         ? prefixIssues(rendererTrustedToolResultIssues(value.result), "/result")
-        : prefixIssues(
-            TrustedToolFailureContract.issues(value.error),
-            "/error",
-          );
+        : prefixIssues(trustedToolFailureDomainIssues(value.error), "/error");
     },
   });
 
@@ -276,14 +273,12 @@ export function isRendererDesignToolResponse(
 function rendererTrustedToolResultIssues(
   value: TrustedToolResult,
 ): ValidationIssue[] {
-  const content = value.content;
-  if (
-    !isPreparedAgentRasterExport(content) &&
-    !isPreparedImageEditSource(content)
-  ) {
-    return TrustedToolResultContract.issues(value);
-  }
-  return TrustedToolResultContract.issues({ ...value, content: null });
+  const domainValue =
+    isPreparedAgentRasterExport(value.content) ||
+    isPreparedImageEditSource(value.content)
+      ? { ...value, content: null }
+      : value;
+  return trustedToolResultDomainIssues(domainValue);
 }
 
 function rendererToolInputValidationIssues(
