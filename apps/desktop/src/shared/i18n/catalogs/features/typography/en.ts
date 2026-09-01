@@ -26,6 +26,8 @@ export const typographyMessages = {
   "properties.importingFont": "Importing…",
   "properties.fontImportSuccess": "Imported {{count}} font face(s)",
   "properties.fontImportFailed": "Font import failed: {{message}}",
+  "properties.systemFontAccessFailed":
+    "Exact local font outlines are unavailable: {{message}}. Import the font file to restore exact rendering.",
   "properties.replacementFontFamily": "Replacement font family",
   "properties.replacementFontStyleName": "Replacement face style",
   "properties.replacementFontWeight": "Replacement font weight",

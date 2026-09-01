@@ -100,13 +100,14 @@ export function useAppRouteContext() {
   } = conversationLifecycle;
   const { dismiss: dismissDiagnostic, events: diagnosticEvents } =
     useDiagnosticNotificationsController();
-  const fontBinaryRuntime = useFontBinaryRuntime();
+  const { document: designDocument } = snapshot;
+  const fontBinaryRuntime = useFontBinaryRuntime(designDocument);
   useRendererDesignToolHost(
     workspace,
     projectAutosave,
     fontBinaryRuntime.provider,
+    fontBinaryRuntime.ensureDocumentFonts,
   );
-  const { document: designDocument } = snapshot;
   const destinationProject =
     destination.kind === "project"
       ? (projectsById[destination.projectId] ?? null)

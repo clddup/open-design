@@ -31,6 +31,7 @@ type TextSelectionStyle = TextRunStyle & TextParagraphStyle;
 export type FontInspectorContext = {
   availability: TextFontAvailabilityResult;
   importState: FontBinaryImportState;
+  systemFontError?: string | null;
   matchingNodeCount: number;
   reflowableNodeCount: number;
   onImport: () => Promise<void>;
@@ -319,6 +320,16 @@ export function TypographySection({
             >
               {t("properties.fontImportFailed", {
                 message: fontContext.importState.message,
+              })}
+            </div>
+          )}
+          {fontContext?.systemFontError && (
+            <div
+              className={cx(styles.fontImportFeedback, styles.fontImportError)}
+              role="status"
+            >
+              {t("properties.systemFontAccessFailed", {
+                message: fontContext.systemFontError,
               })}
             </div>
           )}

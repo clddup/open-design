@@ -8,8 +8,10 @@ import {
   type TextRunLayoutProvider,
   type TextRunLayoutStyle,
 } from "@opendesign/text-service";
+import type { DesignDocument } from "@opendesign/design-contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FontBinaryDescriptor } from "@/shared/desktop-api";
+import { useSystemFontRuntime } from "./use-system-font-runtime";
 
 export type FontBinaryImportState =
   | { status: "idle" }
@@ -20,7 +22,7 @@ export type FontBinaryImportState =
 export type RendererTextRunStyle = TextRunLayoutStyle & { fill: unknown };
 export type FontBinaryRuntime = ReturnType<typeof useFontBinaryRuntime>;
 
-export function useFontBinaryRuntime() {
+export function useFontBinaryRuntime(document: DesignDocument) {
   const runtime = useRef<Promise<
     HarfBuzzTextRunLayoutRuntime<RendererTextRunStyle>
   > | null>(null);
@@ -43,18 +45,32 @@ export function useFontBinaryRuntime() {
     return runtime.current;
   }, []);
 
+  const registerFont = useCallback(
+    async (fontId: `font_${string}`, bytes: Uint8Array) => {
+      const shaping = await requireRuntime();
+      const existing = shaping
+        .listFonts()
+        .filter((face) => face.fontId === fontId);
+      return existing.length > 0
+        ? existing
+        : shaping.registerFont(fontId, bytes);
+    },
+    [requireRuntime],
+  );
+
+  const systemFonts = useSystemFontRuntime(document, registerFont);
+
   const hydrate = useCallback(
     async (descriptors: readonly FontBinaryDescriptor[]) => {
       const desktop = window.desktop;
       if (!desktop) throw new Error("Desktop font service is unavailable");
-      const shaping = await requireRuntime();
       const faces: HarfBuzzFontFaceDescriptor[] = [];
       for (const descriptor of descriptors) {
         if (hydratedFontIds.current.has(descriptor.fontId)) continue;
         const payload = await desktop.readFontBinary({
           fontId: descriptor.fontId,
         });
-        const registered = shaping.registerFont(payload.fontId, payload.bytes);
+        const registered = await registerFont(payload.fontId, payload.bytes);
         for (const face of registered) {
           await loadBrowserFace(
             payload.bytes,
@@ -68,7 +84,7 @@ export function useFontBinaryRuntime() {
       if (faces.length > 0) setEpoch((value) => value + 1);
       return faces;
     },
-    [requireRuntime],
+    [registerFont],
   );
 
   const importFonts = useCallback(async () => {
@@ -128,7 +144,14 @@ export function useFontBinaryRuntime() {
     };
   }, [hydrate]);
 
-  return { epoch, importFonts, provider, state };
+  return {
+    ensureDocumentFonts: systemFonts.ensureDocumentFonts,
+    epoch: epoch + systemFonts.epoch,
+    importFonts,
+    provider,
+    state,
+    systemFontError: systemFonts.error,
+  };
 }
 
 async function loadBrowserFace(

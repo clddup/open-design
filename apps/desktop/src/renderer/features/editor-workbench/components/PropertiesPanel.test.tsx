@@ -2432,9 +2432,15 @@ describe("PropertiesPanel text layout workflow", () => {
       fontContext: {
         ...baseContext,
         importState: { count: 2, status: "success" },
+        systemFontError: "Permission denied",
       },
     });
     expect(screen.getByText("Imported 2 font face(s)")).toBeVisible();
+    expect(
+      screen.getByText(
+        "Exact local font outlines are unavailable: Permission denied. Import the font file to restore exact rendering.",
+      ),
+    ).toBeVisible();
 
     cleanup();
     renderPanel({

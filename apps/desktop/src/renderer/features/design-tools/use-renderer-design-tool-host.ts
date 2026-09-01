@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { isTrustedToolFailure } from "@opendesign/agent-contracts";
 import type { LeaferTextRunStyle } from "@opendesign/leafer-engine";
+import type { DesignDocument } from "@opendesign/design-contracts";
 import type { TextRunLayoutProvider } from "@opendesign/text-service";
 import { reportRendererError } from "../diagnostics/diagnostics";
 import type { ProjectAutosaveCoordinator } from "../project/project-autosave";
@@ -15,6 +16,10 @@ export function useRendererDesignToolHost(
   workspace: WorkspaceRuntime,
   projectAutosave: ProjectAutosaveCoordinator,
   textRunLayoutProvider?: TextRunLayoutProvider<LeaferTextRunStyle>,
+  ensureTextRunFonts?: (
+    document: DesignDocument,
+    signal?: AbortSignal,
+  ) => Promise<void>,
 ): void {
   const controllers = useRef(new Map<string, AbortController>());
   useEffect(() => {
@@ -49,7 +54,7 @@ export function useRendererDesignToolHost(
       };
       controllers.current.set(request.requestId, controller);
       void Promise.resolve()
-        .then(() => {
+        .then(async () => {
           const target = workspace.getRuntimeByDocumentId(
             request.context.documentId,
           );
@@ -58,6 +63,11 @@ export function useRendererDesignToolHost(
               `Design tool document is not open: ${request.context.documentId}`,
             );
           }
+          await prepareRendererTextRunFonts(
+            target.runtime.getSnapshot().document,
+            ensureTextRunFonts,
+            controller.signal,
+          );
           return executeDesignToolRequest(
             request,
             target.runtime,
@@ -210,5 +220,18 @@ export function useRendererDesignToolHost(
       for (const controller of controllers.current.values()) controller.abort();
       controllers.current.clear();
     };
-  }, [projectAutosave, textRunLayoutProvider, workspace]);
+  }, [ensureTextRunFonts, projectAutosave, textRunLayoutProvider, workspace]);
+}
+
+export async function prepareRendererTextRunFonts(
+  document: DesignDocument,
+  ensureTextRunFonts:
+    | ((document: DesignDocument, signal?: AbortSignal) => Promise<void>)
+    | undefined,
+  signal: AbortSignal,
+): Promise<void> {
+  await ensureTextRunFonts?.(document, signal);
+  if (signal.aborted) {
+    throw new DOMException("Design tool request was cancelled", "AbortError");
+  }
 }

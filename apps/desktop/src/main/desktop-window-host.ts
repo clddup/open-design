@@ -42,6 +42,7 @@ export class DesktopWindowHost {
   #loadPromise: Promise<void> | null = null;
   #presentationDeferred = false;
   #readyToShow = false;
+  #releasePermissionPolicy: (() => void) | null = null;
   #window: BrowserWindow | null = null;
 
   constructor(options: DesktopWindowHostOptions) {
@@ -61,6 +62,8 @@ export class DesktopWindowHost {
     const packagedRendererUrl = pathToFileURL(
       this.#options.packagedRendererPath,
     ).toString();
+    this.#releasePermissionPolicy?.();
+    this.#releasePermissionPolicy = null;
     const window = this.#options.createWindow({
       width: 1440,
       height: 920,
@@ -85,6 +88,11 @@ export class DesktopWindowHost {
       },
     });
     this.#window = window;
+    this.#releasePermissionPolicy = installRendererPermissionPolicy(
+      window,
+      rendererUrl,
+      packagedRendererUrl,
+    );
 
     window.once("ready-to-show", () => {
       if (this.current() !== window) return;
@@ -117,6 +125,8 @@ export class DesktopWindowHost {
 
     window.on("closed", () => {
       if (this.#window === window) {
+        this.#releasePermissionPolicy?.();
+        this.#releasePermissionPolicy = null;
         this.#window = null;
         this.#loadPromise = null;
         this.#presentationDeferred = false;
@@ -161,6 +171,8 @@ export class DesktopWindowHost {
     this.#loadPromise = null;
     this.#presentationDeferred = false;
     this.#readyToShow = false;
+    this.#releasePermissionPolicy?.();
+    this.#releasePermissionPolicy = null;
     if (window && !window.isDestroyed()) window.destroy();
   }
 
@@ -197,6 +209,68 @@ export class DesktopWindowHost {
     }
     if (action === "close") window.close();
   }
+}
+
+interface RendererPermissionSession {
+  setPermissionCheckHandler(
+    handler:
+      | ((
+          webContents: WebContents | null,
+          permission: string,
+          requestingOrigin: string,
+          details: RendererPermissionDetails,
+        ) => boolean)
+      | null,
+  ): void;
+  setPermissionRequestHandler(
+    handler:
+      | ((
+          webContents: WebContents,
+          permission: string,
+          callback: (granted: boolean) => void,
+          details: RendererPermissionDetails,
+        ) => void)
+      | null,
+  ): void;
+}
+
+interface RendererPermissionDetails {
+  isMainFrame: boolean;
+  requestingUrl?: string;
+}
+
+function installRendererPermissionPolicy(
+  window: BrowserWindow,
+  developmentRendererUrl: string | null,
+  packagedRendererUrl: string,
+): () => void {
+  const renderer = window.webContents;
+  const session = renderer.session as unknown as RendererPermissionSession;
+  const permits = (
+    requester: WebContents | null,
+    permission: string,
+    details: RendererPermissionDetails,
+  ) =>
+    permission === "local-fonts" &&
+    requester === renderer &&
+    details.isMainFrame &&
+    isAllowedRendererNavigation(
+      details.requestingUrl ?? renderer.getURL(),
+      developmentRendererUrl,
+      packagedRendererUrl,
+    );
+  session.setPermissionCheckHandler((requester, permission, _origin, details) =>
+    permits(requester, permission, details),
+  );
+  session.setPermissionRequestHandler(
+    (requester, permission, callback, details) => {
+      callback(permits(requester, permission, details));
+    },
+  );
+  return () => {
+    session.setPermissionCheckHandler(null);
+    session.setPermissionRequestHandler(null);
+  };
 }
 
 export function resolveApplicationIconPath(input: {

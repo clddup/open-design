@@ -92,6 +92,46 @@ describe("DesktopWindowHost", () => {
     expect(denied.preventDefault).toHaveBeenCalledOnce();
   });
 
+  it("grants only local font access to the trusted renderer", () => {
+    const fixture = setup({ isPackaged: true });
+    fixture.host.create();
+    const check = fixture.handlers.permissionCheck;
+    const request = fixture.handlers.permissionRequest;
+    if (!check || !request) throw new Error("Permission policy is missing");
+
+    const renderer = fixture.webContents as unknown as WebContents;
+    const mainFrame = {
+      isMainFrame: true,
+      requestingUrl: pathToFileURL(
+        "/application/renderer/index.html",
+      ).toString(),
+    };
+    expect(check(renderer, "local-fonts", "file://", mainFrame)).toBe(true);
+    expect(check(renderer, "media", "file://", mainFrame)).toBe(false);
+    expect(check({} as WebContents, "local-fonts", "file://", mainFrame)).toBe(
+      false,
+    );
+    expect(
+      check(renderer, "local-fonts", "https://untrusted.example", {
+        isMainFrame: false,
+        requestingUrl: "https://untrusted.example/frame",
+      }),
+    ).toBe(false);
+    const callback = vi.fn();
+    request(renderer, "local-fonts", callback, mainFrame);
+    expect(callback).toHaveBeenCalledWith(true);
+    request(renderer, "clipboard-read", callback, mainFrame);
+    expect(callback).toHaveBeenLastCalledWith(false);
+
+    fixture.host.dispose();
+    expect(fixture.session.setPermissionCheckHandler).toHaveBeenLastCalledWith(
+      null,
+    );
+    expect(
+      fixture.session.setPermissionRequestHandler,
+    ).toHaveBeenLastCalledWith(null);
+  });
+
   it("shows and clears only the current window and recreates it on activation", () => {
     const fixture = setup();
     fixture.host.create();
@@ -258,12 +298,41 @@ function setup(
     closed?: () => void;
     navigate?: (event: { preventDefault(): void }, url: string) => void;
     openWindow?: (details: { url: string }) => { action: "deny" };
+    permissionCheck?: (
+      webContents: WebContents | null,
+      permission: string,
+      requestingOrigin: string,
+      details: { isMainFrame: boolean; requestingUrl?: string },
+    ) => boolean;
+    permissionRequest?: (
+      webContents: WebContents,
+      permission: string,
+      callback: (granted: boolean) => void,
+      details: { isMainFrame: boolean; requestingUrl?: string },
+    ) => void;
     ready?: () => void;
   } = {};
+  let currentUrl = "";
+  const session = {
+    setPermissionCheckHandler: vi.fn(
+      (handler: typeof handlers.permissionCheck | null) => {
+        if (handler) handlers.permissionCheck = handler;
+        else delete handlers.permissionCheck;
+      },
+    ),
+    setPermissionRequestHandler: vi.fn(
+      (handler: typeof handlers.permissionRequest | null) => {
+        if (handler) handlers.permissionRequest = handler;
+        else delete handlers.permissionRequest;
+      },
+    ),
+  };
   const webContents = {
+    getURL: vi.fn(() => currentUrl),
     on: vi.fn((event: string, handler: typeof handlers.navigate) => {
       if (event === "will-navigate") handlers.navigate = handler;
     }),
+    session,
     send: vi.fn(),
     setWindowOpenHandler: vi.fn((handler: typeof handlers.openWindow) => {
       handlers.openWindow = handler;
@@ -274,8 +343,14 @@ function setup(
     destroy: vi.fn(),
     isDestroyed: vi.fn(() => false),
     isMaximized: vi.fn(() => false),
-    loadFile: vi.fn(() => Promise.resolve()),
-    loadURL: vi.fn(() => Promise.resolve()),
+    loadFile: vi.fn((path: string) => {
+      currentUrl = pathToFileURL(path).toString();
+      return Promise.resolve();
+    }),
+    loadURL: vi.fn((url: string) => {
+      currentUrl = url;
+      return Promise.resolve();
+    }),
     maximize: vi.fn(),
     minimize: vi.fn(),
     on: vi.fn((event: string, handler: () => void) => {
@@ -314,6 +389,7 @@ function setup(
     handlers,
     host,
     openExternal,
+    session,
     showWindow,
     webContents,
     window,

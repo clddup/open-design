@@ -26,6 +26,8 @@ export const typographyMessages = {
   "properties.importingFont": "正在导入…",
   "properties.fontImportSuccess": "已导入 {{count}} 个字体字面",
   "properties.fontImportFailed": "字体导入失败：{{message}}",
+  "properties.systemFontAccessFailed":
+    "无法读取本机字体的精确轮廓：{{message}}。可导入字体文件恢复精确渲染。",
   "properties.replacementFontFamily": "替代字体",
   "properties.replacementFontStyleName": "替代字体样式",
   "properties.replacementFontWeight": "替代字重",

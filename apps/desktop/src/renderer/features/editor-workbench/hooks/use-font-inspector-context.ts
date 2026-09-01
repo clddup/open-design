@@ -35,7 +35,8 @@ export function useFontInspectorContext(options: {
     >[0],
   ) => boolean;
 }): FontInspectorContext | undefined {
-  const { epoch, importFonts, state } = options.fontBinaryRuntime;
+  const { epoch, importFonts, state, systemFontError } =
+    options.fontBinaryRuntime;
   return useMemo(() => {
     const { selectedNode } = options;
     if (!selectedNode || selectedNode.kind !== "text") return undefined;
@@ -113,6 +114,7 @@ export function useFontInspectorContext(options: {
     return {
       availability: options.runtime.inspectTextFont(expectedFont),
       importState: state,
+      systemFontError,
       matchingNodeCount: matching.length,
       reflowableNodeCount: reflowable.length,
       ...(range
@@ -153,7 +155,14 @@ export function useFontInspectorContext(options: {
           replacementFont,
         ),
     };
-  }, [epoch, importFonts, options, options.textLayoutProviderEpoch, state]);
+  }, [
+    epoch,
+    importFonts,
+    options,
+    options.textLayoutProviderEpoch,
+    state,
+    systemFontError,
+  ]);
 }
 
 function resolveInspectorTextRange(
