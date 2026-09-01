@@ -6,6 +6,7 @@ import type {
   LayoutLimits,
   LayoutPositioning,
   LayoutSizing,
+  RelativePoint,
 } from "@opendesign/design-contracts";
 
 export type DesignArrangeToolInput =
@@ -54,6 +55,13 @@ export type DesignArrangeToolInput =
       pageId: string;
       nodeIds: string[];
       spacing: number;
+    }
+  | {
+      action: "set-rotation-origin";
+      label: string;
+      pageId: string;
+      nodeId: string;
+      origin: RelativePoint | null;
     }
   | {
       action: "set-constraints";

@@ -13,6 +13,7 @@ export const editorMessages = {
   "history.setLayerSpacing": "设置图层间距",
   "history.flipHorizontal": "水平翻转",
   "history.flipVertical": "垂直翻转",
+  "history.updateRotationOrigin": "更新旋转原点",
   "history.groupLayers": "编组图层",
   "history.ungroupLayers": "解组图层",
   "history.createMask": "将图层用作蒙版",

@@ -3,6 +3,7 @@ import { Type, type TProperties, type TSchema } from "@sinclair/typebox";
 interface NodeSchemaDependencies {
   transformSchema: TSchema;
   sizeSchema: TSchema;
+  relativePointSchema: TSchema;
   layoutConstraintsSchema: TSchema;
   layoutPositioningSchema: TSchema;
   layoutSizingSchema: TSchema;
@@ -65,6 +66,7 @@ export function createNodeSchemas<
     locked: Type.Boolean(),
     transform: schema("transformSchema"),
     size: schema("sizeSchema"),
+    rotationOrigin: Type.Optional(schema("relativePointSchema")),
     opacity: Type.Number({ minimum: 0, maximum: 1 }),
     constraints: Type.Optional(schema("layoutConstraintsSchema")),
     layoutPositioning: Type.Optional(schema("layoutPositioningSchema")),

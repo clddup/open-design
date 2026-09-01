@@ -25,6 +25,7 @@ import {
   JsonValueSchema,
   NormalizedPointSchema,
   PointSchema,
+  RelativePointSchema,
   SizeSchema,
   TransformSchema,
 } from "./primitives.js";
@@ -158,6 +159,7 @@ export const {
 const nodeSchemas = createNodeSchemas({
   transformSchema: TransformSchema,
   sizeSchema: SizeSchema,
+  relativePointSchema: RelativePointSchema,
   layoutConstraintsSchema: layout.LayoutConstraintsSchema,
   layoutPositioningSchema: layout.LayoutPositioningSchema,
   layoutSizingSchema: layout.LayoutSizingSchema,

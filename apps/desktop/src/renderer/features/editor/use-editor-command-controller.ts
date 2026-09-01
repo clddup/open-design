@@ -6,6 +6,7 @@ import type {
   LayoutGuide,
   LayoutPositioning,
   LayoutSizing,
+  RelativePoint,
   GridTrack,
   Size,
   UpdatePropertiesCommand,
@@ -22,6 +23,7 @@ import {
   planSetFrameLayoutGuides,
   planSetNodeLayoutSizing,
   planSetNodeGridPlacement,
+  planSetNodeRotationOrigin,
   planResizeFrameWithConstraints,
   planSetNodeConstraints,
   type EditorRuntime,
@@ -406,10 +408,33 @@ export function useEditorCommandController({
     [applyCommands, runtime, setEditorError, t],
   );
 
+  const setNodeRotationOrigin = useCallback(
+    (nodeId: string, origin: RelativePoint | null): boolean => {
+      const current = runtime.getSnapshot().document;
+      const plan = planSetNodeRotationOrigin(
+        current,
+        pageIdForNode(current, nodeId),
+        nodeId,
+        origin,
+        `rotation_origin_${nodeId}`,
+      );
+      if (!plan.ok) {
+        setEditorError(plan.code === "no-op" ? null : plan.message);
+        return plan.code === "no-op";
+      }
+      return applyCommands(t("history.updateRotationOrigin"), plan.commands);
+    },
+    [applyCommands, runtime, setEditorError, t],
+  );
+
   const updateNode = useCallback(
     (nodeId: string, updates: UpdatePropertiesPatch) => {
       const current = runtime.getSnapshot().document;
       const node = current.nodesById[nodeId];
+      if (updates.rotationOrigin !== undefined) {
+        setNodeRotationOrigin(nodeId, updates.rotationOrigin);
+        return;
+      }
       if (updates.layoutLimits !== undefined) {
         setNodeLayoutLimits(nodeId, updates.layoutLimits);
         return;
@@ -475,6 +500,7 @@ export function useEditorCommandController({
       setFrameAutoLayout,
       setNodeLayoutLimits,
       setNodeLayoutSizing,
+      setNodeRotationOrigin,
       t,
     ],
   );
@@ -530,6 +556,7 @@ export function useEditorCommandController({
     setNodeLayoutPositioning,
     setFrameLayoutGuides,
     setNodeLayoutSizing,
+    setNodeRotationOrigin,
     updateNode,
   };
 }

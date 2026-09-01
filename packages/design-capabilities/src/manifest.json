@@ -1,7 +1,7 @@
 {
   "version": 1,
   "updatedAt": "2026-09-01",
-  "documentSchemaVersion": "1.54.0",
+  "documentSchemaVersion": "1.55.0",
   "engineBaseline": "leafer-editor@2.2.9",
   "categories": [
     {
@@ -199,10 +199,10 @@
         "zh-CN": "精确排列"
       },
       "description": {
-        "en": "Align multiple layers, distribute horizontal or vertical gaps with fixed outer anchors, set exact positive, zero, or negative one-dimensional spacing, and Tidy up rows, columns, or unequal/sparse two-dimensional grids through shared human and Agent planners.",
-        "zh-CN": "通过人工 UI 与 Agent 共用的 planner 对齐多层对象、固定两端均分横向或纵向间隙、设置正数/零/负数的一维精确间距，并整理行、列或不等尺寸/稀疏二维网格。"
+        "en": "Align one layer to its explicit parent or arrange multiple layers, edit Smart Selection spacing and reflow, flip layers, and set a persistent rotation origin through shared human and Agent planners.",
+        "zh-CN": "通过人工 UI 与 Agent 共用的 planner 将单层对齐到显式父级、排列多层对象、编辑 Smart Selection 间距与回流、翻转图层，并设置持久旋转原点。"
       },
-      "provider": "@opendesign/geometry-service contract v4 + EditorRuntime",
+      "provider": "DesignDocument 1.55.0 + Geometry Service contract 29 + EditorRuntime + Leafer editor projection",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
       "surfaces": {
         "contract": "available",
@@ -214,8 +214,8 @@
       },
       "limitations": [
         {
-          "en": "Single-layer alignment to its parent, Smart Selection canvas spacing handles and reflow editing, flip/origin controls, snapping, guides, rulers, and pixel-grid rounding remain incomplete.",
-          "zh-CN": "单层相对父级对齐、Smart Selection 画布间距手柄与回流编辑、翻转/原点、吸附、参考线、标尺和像素网格取整仍未补齐。"
+          "en": "Snapping, rulers, manual guides, pixel-grid rounding, and packaged macOS/Windows interaction evidence remain incomplete.",
+          "zh-CN": "吸附、标尺、手工参考线、像素网格取整和 macOS/Windows 打包产品交互证据仍未补齐。"
         },
         {
           "en": "The arrangement product path remains intentionally separate from the isolated PathKit vector provider; no vector product capability is implied here.",
@@ -226,15 +226,19 @@
         "automated": [
           "packages/geometry-service/src/arrangement.test.ts",
           "packages/editor-runtime/src/arrange-operations.test.ts",
+          "packages/editor-runtime/src/rotation-origin-operations.test.ts",
+          "packages/leafer-engine/src/adapter.test.ts",
           "apps/desktop/src/shared/design-agent-tools.test.ts",
           "apps/desktop/src/renderer/features/design-tools/design-tool-execution.test.ts",
+          "apps/desktop/src/renderer/features/canvas/components/RotationOriginOverlay.test.tsx",
           "apps/desktop/src/renderer/App.test.tsx",
           "apps/desktop/src/renderer/features/editor-workbench/components/PropertiesPanel.test.tsx"
         ],
         "manual": []
       },
       "references": [
-        "https://help.figma.com/hc/en-us/articles/360039956914-Adjust-alignment-dimensions-rotation-and-position",
+        "https://help.figma.com/hc/en-us/articles/360039956914-Adjust-alignment-rotation-position-and-dimensions",
+        "https://help.figma.com/hc/en-us/articles/41352588622615-Move-a-layer-s-anchor-point",
         "https://help.figma.com/hc/en-us/articles/360040450233-Arrange-layers-with-Smart-selection"
       ]
     },
@@ -250,7 +254,7 @@
         "en": "Create editable cubic contours with Pen, refine vertices and Bézier handles, connect endpoints within or across sibling Vector layers, override cap/join appearance and circular radius per vertex, apply direct Paint or shared Paint Styles to stable fill regions, convert visible strokes into filled editable Vector siblings, and flatten supported same-parent Frames, nested Groups, Booleans, exact glyph-outline Text, Images, shapes, Paths, and Vectors into one editable Vector while preserving one authoritative Vector Network.",
         "zh-CN": "使用 Pen 创建可编辑三次曲线轮廓、继续调整节点与贝塞尔手柄、连接同层或 sibling Vector 图层的端点、按顶点覆盖端帽、转角与 circular 圆角、给稳定填充区域设置直接 Paint 或共享 Paint Style、把可见描边转换为新的 filled editable Vector sibling，并将同父级受支持的 Frame、nested Group、Boolean、可信 glyph-outline Text、Image、图形、Path 与 Vector 拼合为一个 editable Vector，同时保持唯一权威 Vector Network。"
       },
-      "provider": "DesignDocument 1.54.0 + Geometry Service contract 27 point/path selection-delete/transform/Bend/Connect/Disconnect/Cut/region Fill/region Paint Style/vertex stroke appearance/vertex corner radius/Outline Stroke/Flatten + EditorRuntime document-space multi-Vector transform/Cut/cross-layer Connect/branch junction/Frame-Group-Boolean-Text-Image Flatten planner + Leafer synthetic region/stroke/corner projection and native editing overlays + controlled SVG metadata v6",
+      "provider": "DesignDocument 1.55.0 + Geometry Service contract 27 point/path selection-delete/transform/Bend/Connect/Disconnect/Cut/region Fill/region Paint Style/vertex stroke appearance/vertex corner radius/Outline Stroke/Flatten + EditorRuntime document-space multi-Vector transform/Cut/cross-layer Connect/branch junction/Frame-Group-Boolean-Text-Image Flatten planner + Leafer synthetic region/stroke/corner projection and native editing overlays + controlled SVG metadata v6",
       "requiredSurfaces": [
         "contract",
         "runtime",
@@ -464,7 +468,7 @@
         "en": "Create and refine open, closed, branching, and curved vector geometry using points and Bézier handles.",
         "zh-CN": "通过节点和贝塞尔手柄创建、编辑开放、闭合、分支与曲线矢量几何。"
       },
-      "provider": "DesignDocument 1.54.0 Vector Network + Geometry Service contract 27 point/path selection-delete/transform/Bend/Connect/Disconnect/Cut/region Fill/region Paint Style/vertex stroke appearance/vertex corner radius/Outline Stroke/Flatten + EditorRuntime document-space multi-Vector transform/Cut/cross-layer Connect/branch junction/Frame-Group-Boolean-Text-Image Flatten planner + Leafer synthetic region/stroke/corner projection and native editing overlays",
+      "provider": "DesignDocument 1.55.0 Vector Network + Geometry Service contract 27 point/path selection-delete/transform/Bend/Connect/Disconnect/Cut/region Fill/region Paint Style/vertex stroke appearance/vertex corner radius/Outline Stroke/Flatten + EditorRuntime document-space multi-Vector transform/Cut/cross-layer Connect/branch junction/Frame-Group-Boolean-Text-Image Flatten planner + Leafer synthetic region/stroke/corner projection and native editing overlays",
       "requiredSurfaces": ["contract", "runtime", "human", "agent"],
       "surfaces": {
         "contract": "available",
@@ -782,7 +786,7 @@
         "en": "Create, render, transform, and edit fixed, Auto Width, or Auto Height text with one shared font style, alignment, explicit wrapping, and fixed-box overflow controls.",
         "zh-CN": "创建、渲染、变换和编辑固定、自动宽度或自动高度文字，使用单一共享字体样式、对齐、明确换行以及固定框溢出控制。"
       },
-      "provider": "DesignDocument 1.54.0 + Text Layout Service v5 / Text Run Layout v7 + leafer-editor@2.2.9 Text/TextEditor + controlled SVG text metadata v9",
+      "provider": "DesignDocument 1.55.0 + Text Layout Service v5 / Text Run Layout v7 + leafer-editor@2.2.9 Text/TextEditor + controlled SVG text metadata v9",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
       "surfaces": {
         "contract": "available",
@@ -835,7 +839,7 @@
         "en": "Author Figma-compatible UTF-16 character and paragraph runs through one revisioned Runtime, live range Inspector, Agent tools, native/HarfBuzz projection, and structured Figma/SVG/raster interchange.",
         "zh-CN": "通过唯一版本化 Runtime、真实范围 Inspector、Agent 工具、native/HarfBuzz 投影及 Figma/SVG/位图结构往返创建 Figma-compatible UTF-16 字符与段落 runs。"
       },
-      "provider": "DesignDocument 1.54.0 + Text Paragraph Service v2 / Text List Service v1 / Text Editing Session Service v2 / Text Run Layout v7 + leafer-editor 2.2.9 + HarfBuzz provider 1.7.0 + SVG metadata v9",
+      "provider": "DesignDocument 1.55.0 + Text Paragraph Service v2 / Text List Service v1 / Text Editing Session Service v2 / Text Run Layout v7 + leafer-editor 2.2.9 + HarfBuzz provider 1.7.0 + SVG metadata v9",
       "requiredSurfaces": ["contract", "runtime", "human", "agent"],
       "surfaces": {
         "contract": "available",

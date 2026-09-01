@@ -15,6 +15,7 @@ import type {
   LayoutConstraints,
   LayoutGuide,
   LayoutPositioning,
+  RelativePoint,
   SlotSettings,
   VariableBindingTarget,
 } from "@opendesign/design-contracts";
@@ -131,6 +132,9 @@ export function PropertiesPanel({
   onSetFrameLayoutGuides,
   onDeleteGridTracks,
   onReorderGridTracks,
+  rotationOriginEditing,
+  onRotationOriginEditChange,
+  onSetRotationOrigin,
   onUpdate,
   onUpdateComponentOverride,
   onSetComponentProperty,
@@ -269,6 +273,9 @@ export function PropertiesPanel({
     fromIndices: readonly number[],
     insertionIndex: number,
   ) => void;
+  rotationOriginEditing: boolean;
+  onRotationOriginEditChange: (editing: boolean) => void;
+  onSetRotationOrigin: (origin: RelativePoint | null) => void;
   onUpdate: (updates: UpdatePropertiesPatch) => void;
   onUpdateComponentOverride: (
     sourcePath: readonly string[],
@@ -408,6 +415,9 @@ export function PropertiesPanel({
             onSetFrameLayoutGuides={onSetFrameLayoutGuides}
             onDeleteGridTracks={onDeleteGridTracks}
             onReorderGridTracks={onReorderGridTracks}
+            rotationOriginEditing={rotationOriginEditing}
+            onRotationOriginEditChange={onRotationOriginEditChange}
+            onSetRotationOrigin={onSetRotationOrigin}
             onUpdate={onUpdate}
             onUpdateComponentOverride={onUpdateComponentOverride}
             onSetComponentProperty={onSetComponentProperty}

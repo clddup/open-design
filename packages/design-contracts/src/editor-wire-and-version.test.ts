@@ -18,6 +18,7 @@ import {
   IMAGE_PAINT_ADJUSTMENTS_DESIGN_SCHEMA_VERSION,
   IMAGE_PAINT_CROP_DESIGN_SCHEMA_VERSION,
   ADVANCED_TEXT_DECORATION_DESIGN_SCHEMA_VERSION,
+  ROTATION_ORIGIN_DESIGN_SCHEMA_VERSION,
   IMAGE_ASSET_DERIVATIONS_DESIGN_SCHEMA_VERSION,
   IMAGE_BACKGROUND_REPLACEMENT_DESIGN_SCHEMA_VERSION,
   IMAGE_RELIGHTING_DESIGN_SCHEMA_VERSION,
@@ -37,6 +38,7 @@ import {
   RICH_TEXT_RUNS_DESIGN_SCHEMA_VERSION,
   TYPOGRAPHY_CORE_V2_DESIGN_SCHEMA_VERSION,
   DesignOperationSchema,
+  DesignNodeSchema,
   AUTO_LAYOUT_DESIGN_SCHEMA_VERSION,
   LAYOUT_GUIDE_COLUMNS_ROWS_DESIGN_SCHEMA_VERSION,
   LAYOUT_GUIDE_DESIGN_SCHEMA_VERSION,
@@ -307,9 +309,52 @@ it("keeps Auto Layout and Layout Guide schema milestones distinct", () => {
   expect(VECTOR_CORNER_SMOOTHING_DESIGN_SCHEMA_VERSION).toBe("1.52.0");
   expect(IMAGE_PAINT_CROP_DESIGN_SCHEMA_VERSION).toBe("1.53.0");
   expect(ADVANCED_TEXT_DECORATION_DESIGN_SCHEMA_VERSION).toBe("1.54.0");
-  expect(DESIGN_SCHEMA_VERSION).toBe(
-    ADVANCED_TEXT_DECORATION_DESIGN_SCHEMA_VERSION,
+  expect(ROTATION_ORIGIN_DESIGN_SCHEMA_VERSION).toBe("1.55.0");
+  expect(DESIGN_SCHEMA_VERSION).toBe(ROTATION_ORIGIN_DESIGN_SCHEMA_VERSION);
+});
+
+it("validates a normalized layer rotation origin from the shared contract", () => {
+  const source = textDocumentFixture();
+  const node = structuredClone(Object.values(source.nodesById)[0]!);
+  expect(
+    schemaValidationIssues(DesignNodeSchema, {
+      ...node,
+      rotationOrigin: { x: 0.25, y: 0.75 },
+    }),
+  ).toEqual([]);
+  expect(
+    schemaValidationIssues(DesignNodeSchema, {
+      ...node,
+      rotationOrigin: { x: -0.1, y: 1.75 },
+    }),
+  ).toEqual([]);
+  expect(
+    schemaValidationIssues(DesignNodeSchema, {
+      ...node,
+      rotationOrigin: { x: 0.5, y: 0.5, unit: "percent" },
+    }),
+  ).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ path: "/rotationOrigin/unit" }),
+    ]),
   );
+  expect(
+    schemaValidationIssues(DesignOperationSchema, {
+      commandId: "reset_origin",
+      type: "update_properties",
+      nodeId: node.id,
+      rotationOrigin: null,
+    }),
+  ).toEqual([]);
+});
+
+it("migrates 1.54 documents without inventing a rotation origin", () => {
+  const source = textDocumentFixture();
+  source.schemaVersion =
+    ADVANCED_TEXT_DECORATION_DESIGN_SCHEMA_VERSION as typeof source.schemaVersion;
+  const migrated = migrateDesignDocument(source);
+  expect(migrated?.schemaVersion).toBe(DESIGN_SCHEMA_VERSION);
+  expect(migrated?.nodesById).toEqual(source.nodesById);
 });
 
 it("migrates 1.52 documents without inventing Image Paint crop transforms", () => {

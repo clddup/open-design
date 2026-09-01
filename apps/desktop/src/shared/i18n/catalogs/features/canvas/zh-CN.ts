@@ -91,4 +91,5 @@ export const canvasMessages = {
   "canvas.newNode": "新建{{kind}}",
   "canvas.newText": "新文本",
   "canvas.dropImageAsset": "松开放置图片",
+  "canvas.rotationOriginHandle": "拖动 {{name}} 的旋转原点",
 } satisfies Record<keyof typeof englishMessages, string>;

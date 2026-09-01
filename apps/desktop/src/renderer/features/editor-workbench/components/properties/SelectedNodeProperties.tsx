@@ -16,11 +16,15 @@ import type {
   LayoutLimits,
   LayoutPositioning,
   LayoutSizing,
+  RelativePoint,
   LineEndpoint,
   SlotSettings,
   VariableBindingTarget,
 } from "@opendesign/design-contracts";
-import type { ArrangeOperation } from "@opendesign/editor-runtime";
+import {
+  isEffectivelyLocked,
+  type ArrangeOperation,
+} from "@opendesign/editor-runtime";
 import { Button, Icon, IconButton, type IconName } from "@opendesign/ui";
 import type { DesignImageEditAction } from "@/shared/desktop-api";
 import type { MessageKey } from "@/shared/i18n/messages";
@@ -48,6 +52,7 @@ import type {
   VectorVertexInspectorSelection,
   VectorVertexAppearancePatch,
 } from "./VectorVertexAppearanceSection";
+import { RotationOriginControl } from "./RotationOriginControl";
 
 const nodeIcons: Record<DesignNode["kind"], IconName> = {
   frame: "lucide:frame",
@@ -170,6 +175,9 @@ export function SelectedNodeProperties({
   onSetFrameLayoutGuides,
   onDeleteGridTracks,
   onReorderGridTracks,
+  rotationOriginEditing,
+  onRotationOriginEditChange,
+  onSetRotationOrigin,
   onUpdate,
   onUpdateComponentOverride,
   onSetComponentProperty,
@@ -294,6 +302,9 @@ export function SelectedNodeProperties({
     fromIndices: readonly number[],
     insertionIndex: number,
   ) => void;
+  rotationOriginEditing: boolean;
+  onRotationOriginEditChange: (editing: boolean) => void;
+  onSetRotationOrigin: (origin: RelativePoint | null) => void;
   onUpdate: (updates: UpdatePropertiesPatch) => void;
   onUpdateComponentOverride: (
     sourcePath: readonly string[],
@@ -777,6 +788,19 @@ export function SelectedNodeProperties({
             value={formatNumber(node.size.height)}
           />
         </div>
+        <RotationOriginControl
+          disabled={
+            isEffectivelyLocked(document, node.id) ||
+            node.size.width === 0 ||
+            node.size.height === 0
+          }
+          editing={rotationOriginEditing}
+          onChange={onSetRotationOrigin}
+          onToggleEditing={() =>
+            onRotationOriginEditChange(!rotationOriginEditing)
+          }
+          origin={node.rotationOrigin}
+        />
         {constraintsAvailable && (
           <div className={styles.grid}>
             <label className={styles.select}>

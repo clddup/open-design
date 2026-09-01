@@ -12,6 +12,9 @@ export function nodeGeometryUpdate(
   const sizeChanged =
     before.size.width !== after.size.width ||
     before.size.height !== after.size.height;
+  const rotationOriginChanged =
+    before.rotationOrigin?.x !== after.rotationOrigin?.x ||
+    before.rotationOrigin?.y !== after.rotationOrigin?.y;
   const constraintsChanged =
     before.constraints?.horizontal !== after.constraints?.horizontal ||
     before.constraints?.vertical !== after.constraints?.vertical;
@@ -28,6 +31,7 @@ export function nodeGeometryUpdate(
   if (
     !transformChanged &&
     !sizeChanged &&
+    !rotationOriginChanged &&
     !constraintsChanged &&
     !layoutPositioningChanged &&
     !layoutSizingChanged &&
@@ -41,6 +45,9 @@ export function nodeGeometryUpdate(
     nodeId: after.id,
     ...(transformChanged ? { transform: after.transform } : {}),
     ...(sizeChanged ? { size: after.size } : {}),
+    ...(rotationOriginChanged
+      ? { rotationOrigin: after.rotationOrigin ?? null }
+      : {}),
     ...(constraintsChanged ? { constraints: after.constraints ?? null } : {}),
     ...(layoutPositioningChanged
       ? { layoutPositioning: after.layoutPositioning ?? null }

@@ -1,10 +1,13 @@
 import type {
   ComponentOverridePatch,
+  RelativePoint,
   UpdatePropertiesCommand,
 } from "@opendesign/design-contracts";
+import { isEffectivelyLocked } from "@opendesign/editor-runtime";
 import { ResizeHandle, useMessage } from "@opendesign/ui";
 import {
   useCallback,
+  useEffect,
   useRef,
   useState,
   type CSSProperties,
@@ -120,6 +123,9 @@ export function EditorWorkbenchFeature({
     nodeId: string;
     vertexIds: readonly string[];
   } | null>(null);
+  const [rotationOriginNodeId, setRotationOriginNodeId] = useState<
+    string | null
+  >(null);
   const { activeConversation, conversations, requestDeleteConversation } =
     conversationLifecycle;
   const { createConversation, openConversation } = conversationNavigation;
@@ -161,6 +167,28 @@ export function EditorWorkbenchFeature({
       ? designDocument.nodesById[state.selection.nodeIds[0] ?? ""]
       : undefined;
   const componentTargetActive = state.selection.componentTarget !== undefined;
+  const rotationOriginEditing =
+    rotationOriginNodeId !== null &&
+    selectedNode?.id === rotationOriginNodeId &&
+    tool === "select" &&
+    !componentTargetActive;
+  useEffect(() => {
+    if (
+      rotationOriginNodeId &&
+      (!rotationOriginEditing ||
+        !selectedNode ||
+        selectedNode.size.width <= 0 ||
+        selectedNode.size.height <= 0 ||
+        isEffectivelyLocked(designDocument, selectedNode.id))
+    ) {
+      setRotationOriginNodeId(null);
+    }
+  }, [
+    designDocument,
+    rotationOriginEditing,
+    rotationOriginNodeId,
+    selectedNode,
+  ]);
   const selectedBooleanParent = selectedNode?.parentId
     ? designDocument.nodesById[selectedNode.parentId]
     : undefined;
@@ -752,6 +780,11 @@ export function EditorWorkbenchFeature({
               onMoveGridChildren={editorCommands.moveGridChildren}
               onResizeGridChildSpan={editorCommands.resizeGridChildSpan}
               onResizeFrame={resizeFrame}
+              rotationOriginNodeId={
+                rotationOriginEditing ? rotationOriginNodeId : null
+              }
+              onRotationOriginEditChange={setRotationOriginNodeId}
+              onSetRotationOrigin={editorCommands.setNodeRotationOrigin}
               onReorderGridTracks={editorCommands.reorderGridTracks}
               onSetGridTracks={editorCommands.setGridTracks}
               runtime={runtime}
@@ -1001,6 +1034,20 @@ export function EditorWorkbenchFeature({
                 onSetFrameLayoutGuides={editorCommands.setFrameLayoutGuides}
                 onDeleteGridTracks={deleteGridTracks}
                 onReorderGridTracks={editorCommands.reorderGridTracks}
+                rotationOriginEditing={rotationOriginEditing}
+                onRotationOriginEditChange={(editing) =>
+                  setRotationOriginNodeId(
+                    editing ? (selectedNode?.id ?? null) : null,
+                  )
+                }
+                onSetRotationOrigin={(origin: RelativePoint | null) => {
+                  if (selectedNode) {
+                    editorCommands.setNodeRotationOrigin(
+                      selectedNode.id,
+                      origin,
+                    );
+                  }
+                }}
                 onUpdate={(updates) => {
                   if (selectedNode) updateNode(selectedNode.id, updates);
                 }}

@@ -97,4 +97,5 @@ export const canvasMessages = {
   "canvas.newNode": "New {{kind}}",
   "canvas.newText": "New text",
   "canvas.dropImageAsset": "Drop to place image",
+  "canvas.rotationOriginHandle": "Drag rotation origin for {{name}}",
 } as const;

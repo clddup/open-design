@@ -6902,6 +6902,47 @@ describe("Renderer semantic hierarchy tool", () => {
     ).toEqual({ width: 1800, height: 1000 });
   });
 
+  it("sets a layer rotation origin through the shared Arrange transaction", async () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    const response = await executeDesignToolRequest(
+      {
+        requestId: "rotation_origin_set",
+        call: {
+          toolCallId: "tool_rotation_origin_set",
+          toolName: DESIGN_ARRANGE_TOOL_NAME,
+          input: {
+            action: "set-rotation-origin",
+            label: "Move title rotation origin",
+            pageId: "page_welcome",
+            nodeId: "title_welcome",
+            origin: { x: -0.25, y: 1.5 },
+          },
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_welcome",
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "set-rotation-origin",
+          nodeId: "title_welcome",
+          nodeIds: ["title_welcome"],
+          origin: { x: -0.25, y: 1.5 },
+          revision: 1,
+          atomic: true,
+        },
+      },
+    });
+    expect(
+      runtime.getSnapshot().document.nodesById.title_welcome?.rotationOrigin,
+    ).toEqual({ x: -0.25, y: 1.5 });
+    expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
+  });
+
   it("repairs trailing delivery overflow through one bounded Agent transaction", async () => {
     const document = structuredClone(createWelcomeDocument());
     const trailing = document.nodesById.feature_three;

@@ -127,6 +127,9 @@ function renderPanel(
       fromIndices: readonly number[],
       insertionIndex: number,
     ) => void;
+    rotationOriginEditing?: boolean;
+    onRotationOriginEditChange?: (editing: boolean) => void;
+    onSetRotationOrigin?: (origin: { x: number; y: number } | null) => void;
     onUpdate?: (updates: UpdatePropertiesPatch) => void;
     onUpdateImageFilters?: (filters: ImageFilters) => void;
     onUpdateImagePaintFilters?: (
@@ -238,6 +241,11 @@ function renderPanel(
           onSetFrameLayoutGuides={options.onSetFrameLayoutGuides ?? vi.fn()}
           onDeleteGridTracks={options.onDeleteGridTracks ?? vi.fn()}
           onReorderGridTracks={options.onReorderGridTracks ?? vi.fn()}
+          rotationOriginEditing={options.rotationOriginEditing ?? false}
+          onRotationOriginEditChange={
+            options.onRotationOriginEditChange ?? vi.fn()
+          }
+          onSetRotationOrigin={options.onSetRotationOrigin ?? vi.fn()}
           onSvgExportSettingsChange={onSvgExportSettingsChange}
           onSetComponentProperty={options.onSetComponentProperty ?? vi.fn()}
           onClearComponentSlot={options.onClearComponentSlot ?? vi.fn()}
@@ -857,6 +865,32 @@ describe("PropertiesPanel SVG workflow", () => {
       horizontal: "right",
       vertical: "center",
     });
+  });
+
+  it("enters and resets the selected layer rotation origin", async () => {
+    const user = userEvent.setup();
+    const onRotationOriginEditChange = vi.fn();
+    const onSetRotationOrigin = vi.fn();
+    renderPanel({
+      node: { ...textNode, rotationOrigin: { x: -0.25, y: 1.5 } },
+      selectionCount: 1,
+      rotationOriginEditing: true,
+      onRotationOriginEditChange,
+      onSetRotationOrigin,
+    });
+
+    const edit = screen.getByRole("button", {
+      name: "Edit rotation origin (Option/Alt+R)",
+    });
+    expect(edit).toHaveAttribute("aria-pressed", "true");
+    await user.click(edit);
+    expect(onRotationOriginEditChange).toHaveBeenCalledWith(false);
+    await user.click(
+      screen.getByRole("button", {
+        name: "Reset rotation origin to center",
+      }),
+    );
+    expect(onSetRotationOrigin).toHaveBeenCalledWith(null);
   });
 
   it("configures Frame Auto Layout direction, gap, padding, and alignment", async () => {

@@ -2,7 +2,7 @@
 
 # OpenDesign 专业设计能力
 
-能力清单版本：`1` · 更新日期：2026-09-01 · 文档协议：`1.54.0` · 画布基线：`leafer-editor@2.2.9`
+能力清单版本：`1` · 更新日期：2026-09-01 · 文档协议：`1.55.0` · 画布基线：`leafer-editor@2.2.9`
 
 当前状态：可用 0 项，降级可用 22 项，不可用 0 项。只有必需表面全部可用，并同时具备自动化与实机证据时，能力才允许标记为“可用”。
 
@@ -41,15 +41,16 @@
 
 ### 精确排列 — 降级可用
 
-通过人工 UI 与 Agent 共用的 planner 对齐多层对象、固定两端均分横向或纵向间隙、设置正数/零/负数的一维精确间距，并整理行、列或不等尺寸/稀疏二维网格。
+通过人工 UI 与 Agent 共用的 planner 将单层对齐到显式父级、排列多层对象、编辑 Smart Selection 间距与回流、翻转图层，并设置持久旋转原点。
 
 - ID：`transform.precise-arrangement`
-- 实现方：@opendesign/geometry-service contract v4 + EditorRuntime
+- 实现方：DesignDocument 1.55.0 + Geometry Service contract 29 + EditorRuntime + Leafer editor projection
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=unavailable
-- 证据：自动化 6 项；实机 0 项
-- 限制：单层相对父级对齐、Smart Selection 画布间距手柄与回流编辑、翻转/原点、吸附、参考线、标尺和像素网格取整仍未补齐。
+- 证据：自动化 9 项；实机 0 项
+- 限制：吸附、标尺、手工参考线、像素网格取整和 macOS/Windows 打包产品交互证据仍未补齐。
 - 限制：排列产品链与隔离的 PathKit 矢量 provider 保持明确分离；本能力不据此宣称任何矢量产品能力。
-- 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360039956914-Adjust-alignment-dimensions-rotation-and-position)
+- 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360039956914-Adjust-alignment-rotation-position-and-dimensions)
+- 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/41352588622615-Move-a-layer-s-anchor-point)
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360040450233-Arrange-layers-with-Smart-selection)
 
 ## 矢量
@@ -59,7 +60,7 @@
 使用 Pen 创建可编辑三次曲线轮廓、继续调整节点与贝塞尔手柄、连接同层或 sibling Vector 图层的端点、按顶点覆盖端帽、转角与 circular 圆角、给稳定填充区域设置直接 Paint 或共享 Paint Style、把可见描边转换为新的 filled editable Vector sibling，并将同父级受支持的 Frame、nested Group、Boolean、可信 glyph-outline Text、Image、图形、Path 与 Vector 拼合为一个 editable Vector，同时保持唯一权威 Vector Network。
 
 - ID：`vector.path-rendering`
-- 实现方：DesignDocument 1.54.0 + Geometry Service contract 27 point/path selection-delete/transform/Bend/Connect/Disconnect/Cut/region Fill/region Paint Style/vertex stroke appearance/vertex corner radius/Outline Stroke/Flatten + EditorRuntime document-space multi-Vector transform/Cut/cross-layer Connect/branch junction/Frame-Group-Boolean-Text-Image Flatten planner + Leafer synthetic region/stroke/corner projection and native editing overlays + controlled SVG metadata v6
+- 实现方：DesignDocument 1.55.0 + Geometry Service contract 27 point/path selection-delete/transform/Bend/Connect/Disconnect/Cut/region Fill/region Paint Style/vertex stroke appearance/vertex corner radius/Outline Stroke/Flatten + EditorRuntime document-space multi-Vector transform/Cut/cross-layer Connect/branch junction/Frame-Group-Boolean-Text-Image Flatten planner + Leafer synthetic region/stroke/corner projection and native editing overlays + controlled SVG metadata v6
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=degraded
 - 证据：自动化 27 项；实机 0 项
 - 限制：Pen 已支持点击放点、拖拽镜像三次曲线手柄、首点闭合、Enter/Escape 完成开放路径、Backspace 回退、切换工具收尾、精确 bounds 和单次可撤销事务；当前只创建单条非分叉轮廓。
@@ -112,7 +113,7 @@
 通过节点和贝塞尔手柄创建、编辑开放、闭合、分支与曲线矢量几何。
 
 - ID：`vector.pen-node-editing`
-- 实现方：DesignDocument 1.54.0 Vector Network + Geometry Service contract 27 point/path selection-delete/transform/Bend/Connect/Disconnect/Cut/region Fill/region Paint Style/vertex stroke appearance/vertex corner radius/Outline Stroke/Flatten + EditorRuntime document-space multi-Vector transform/Cut/cross-layer Connect/branch junction/Frame-Group-Boolean-Text-Image Flatten planner + Leafer synthetic region/stroke/corner projection and native editing overlays
+- 实现方：DesignDocument 1.55.0 Vector Network + Geometry Service contract 27 point/path selection-delete/transform/Bend/Connect/Disconnect/Cut/region Fill/region Paint Style/vertex stroke appearance/vertex corner radius/Outline Stroke/Flatten + EditorRuntime document-space multi-Vector transform/Cut/cross-layer Connect/branch junction/Frame-Group-Boolean-Text-Image Flatten planner + Leafer synthetic region/stroke/corner projection and native editing overlays
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=degraded
 - 证据：自动化 18 项；实机 0 项
 - 限制：Pen 当前创建单条非分支轮廓；已有节点编辑支持多 Vector collection、Open/Close/Reverse、同层或跨层 Connect/Disconnect、endpoint 到另一 path vertex 的 branch 创建、point/path Lasso 与 segment Delete、跨所选节点的统一 document-space 变换框、缩放/旋转中 Space 平移、点击/document-space Cut 和 region-local Paint 或共享 PAINT Style；branch junction 节点仍可选择、变换和删除，已有入射 handle 可独立拖动，明确 branch segment 可 Bend/Cut/Delete 且不改变其他入射边，明确 path 可在 shared junction 执行 Open/Close/Reverse/Cut，已有 branch network 内的唯一 endpoint 可继续合并，显式开放 path endpoint 或明确 incident edge 也可从开放或闭合 junction 断开。有限线 Cut 会按 shared vertex 与 region connectivity 分配 connected/branch network，未切 branch 会跟随真实 junction component。Bend 已支持节点/路径添加手柄和直接拖动 segment；顶点级 cap/join 外观、circular corner radius、节点级 corner smoothing 与 custom dash 连续 phase 已通过 Inspector 与 Agent 支持；嵌套或重叠 region、只切孔洞、shared-junction 精确命中和切后仍跨两侧的 connected Cut component、剩余 SceneNode 像素保真 Flatten 与打包证据仍未完成。Outline Stroke 会保留源层并创建 filled editable Vector sibling；同父级 Frame、nested Group、Boolean、Image、Rectangle、Ellipse、无端点装饰 Line、零圆角 Polygon/Star、Path 与 Vector 可用一个 editable 结果替换源层。
@@ -198,7 +199,7 @@
 创建、渲染、变换和编辑固定、自动宽度或自动高度文字，使用单一共享字体样式、对齐、明确换行以及固定框溢出控制。
 
 - ID：`text.single-style`
-- 实现方：DesignDocument 1.54.0 + Text Layout Service v5 / Text Run Layout v7 + leafer-editor@2.2.9 Text/TextEditor + controlled SVG text metadata v9
+- 实现方：DesignDocument 1.55.0 + Text Layout Service v5 / Text Run Layout v7 + leafer-editor@2.2.9 Text/TextEditor + controlled SVG text metadata v9
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=degraded
 - 证据：自动化 15 项；实机 0 项
 - 限制：family/style-name/weight/slant 精确身份、运行时字体可用性、全文件精确替换、显式 Auto Size 重排及 unresolved Figma 导出失败已通过单次 revision/undo 可用；字体二进制资源、可变字体轴、精确跨平台 shaping 及 macOS/Windows 视觉验收仍未完成。
@@ -210,7 +211,7 @@
 通过唯一版本化 Runtime、真实范围 Inspector、Agent 工具、native/HarfBuzz 投影及 Figma/SVG/位图结构往返创建 Figma-compatible UTF-16 字符与段落 runs。
 
 - ID：`text.rich-typography`
-- 实现方：DesignDocument 1.54.0 + Text Paragraph Service v2 / Text List Service v1 / Text Editing Session Service v2 / Text Run Layout v7 + leafer-editor 2.2.9 + HarfBuzz provider 1.7.0 + SVG metadata v9
+- 实现方：DesignDocument 1.55.0 + Text Paragraph Service v2 / Text List Service v1 / Text Editing Session Service v2 / Text Run Layout v7 + leafer-editor 2.2.9 + HarfBuzz provider 1.7.0 + SVG metadata v9
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=available
 - 证据：自动化 25 项；实机 0 项
 - 限制：富文本 runs 已覆盖精确 face、字号、字距、行高、大小写、装饰（包括 solid/wavy/dotted underline 的 offset、thickness 与独立 color）、fills、可选 Text/Paint Style ID、逐段 indent/spacing，以及语义化 ordered/unordered 列表、五级缩进、list spacing、节点级 hanging marker、确定性嵌套计数、换行 hanging indent 与 LTR/RTL logical-start 投影。Text Editing Session v2 会暂存非空范围修改和折叠光标输入样式，只在真实 UTF-16 输入后物化样式；可丢弃 edit-DOM marker 不进入 content/history，Inspector 焦点与 IME DOM identity 保持稳定，每次编辑 session 只提交一条 commit_text_edit Runtime transaction/reflow/revision。输入前缀列表与结构键继续可用。custom list marker、系统字体 exact outline、OpenType 控件、可变字体轴、本地 Style 修改向绑定 range 的实时传播、字体随文件打包/授权迁移、路径文字、更新 bidi 数据、原生 IME/undo smoke 和 macOS/Windows 打包视觉证据仍不可用。

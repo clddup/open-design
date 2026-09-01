@@ -130,6 +130,7 @@ function updateProperties(
     "locked",
     "transform",
     "size",
+    "rotationOrigin",
     "opacity",
     "constraints",
     "layoutPositioning",
@@ -153,6 +154,7 @@ function updateProperties(
         field === "layoutSizing" ||
         field === "layoutLimits" ||
         field === "gridPlacement" ||
+        field === "rotationOrigin" ||
         field === "componentPropertyReferences") &&
       value === null
     ) {

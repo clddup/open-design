@@ -10,6 +10,7 @@ interface NodeOperationSchemaDependencies {
   designNodeSchema: TSchema;
   transformSchema: TSchema;
   sizeSchema: TSchema;
+  relativePointSchema: TSchema;
   layoutConstraintsSchema: TSchema;
   layoutPositioningSchema: TSchema;
   layoutSizingSchema: TSchema;
@@ -32,6 +33,7 @@ export function createNodeOperationSchemas<
   const designNodeSchema = dependency(dependencies, "designNodeSchema");
   const transformSchema = dependency(dependencies, "transformSchema");
   const sizeSchema = dependency(dependencies, "sizeSchema");
+  const relativePointSchema = dependency(dependencies, "relativePointSchema");
   const layoutConstraintsSchema = dependency(
     dependencies,
     "layoutConstraintsSchema",
@@ -85,6 +87,7 @@ export function createNodeOperationSchemas<
       locked: Type.Optional(Type.Boolean()),
       transform: Type.Optional(transformSchema),
       size: Type.Optional(sizeSchema),
+      rotationOrigin: optionalNullable(relativePointSchema),
       opacity: Type.Optional(Type.Number({ minimum: 0, maximum: 1 })),
       constraints: optionalNullable(layoutConstraintsSchema),
       layoutPositioning: optionalNullable(layoutPositioningSchema),

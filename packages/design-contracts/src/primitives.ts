@@ -38,6 +38,10 @@ export const NormalizedPointSchema = Type.Object(
   },
   { additionalProperties: false },
 );
+export const RelativePointSchema = Type.Object(
+  { x: Type.Number(), y: Type.Number() },
+  { additionalProperties: false },
+);
 
 export type JsonValue = Static<typeof JsonValueSchema>;
 export type JsonObject = Static<typeof JsonObjectSchema>;
@@ -45,3 +49,4 @@ export type Transform = Static<typeof TransformSchema>;
 export type Size = Static<typeof SizeSchema>;
 export type Point = Static<typeof PointSchema>;
 export type NormalizedPoint = Static<typeof NormalizedPointSchema>;
+export type RelativePoint = Static<typeof RelativePointSchema>;

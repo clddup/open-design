@@ -11,6 +11,7 @@ export const editorMessages = {
   "history.setLayerSpacing": "Set layer spacing",
   "history.flipHorizontal": "Flip horizontally",
   "history.flipVertical": "Flip vertically",
+  "history.updateRotationOrigin": "Update rotation origin",
   "history.groupLayers": "Group layers",
   "history.ungroupLayers": "Ungroup layers",
   "history.createMask": "Use layers as mask",

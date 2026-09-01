@@ -1019,7 +1019,11 @@ async function executeDesignToolRequestUnsafe(
           label: input.label,
           pageId: input.pageId,
           nodeIds:
-            "selectionNodeIds" in plan ? plan.selectionNodeIds : plan.nodeIds,
+            "selectionNodeIds" in plan
+              ? plan.selectionNodeIds
+              : "nodeIds" in plan
+                ? plan.nodeIds
+                : [plan.nodeId],
           ...(input.action === "resize-frame"
             ? {
                 frameId: input.frameId,
@@ -1029,6 +1033,9 @@ async function executeDesignToolRequestUnsafe(
             : {}),
           ...(input.action === "set-constraints"
             ? { nodeId: input.nodeId, constraints: input.constraints }
+            : {}),
+          ...(input.action === "set-rotation-origin"
+            ? { nodeId: input.nodeId, origin: input.origin }
             : {}),
           ...(input.action === "set-auto-layout"
             ? { frameId: input.frameId, autoLayout: input.autoLayout }

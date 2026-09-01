@@ -126,6 +126,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   #input: LeaferEngineSyncInput | null = null;
   #projectionDirty = false;
   #smartSelectionMarkState: LeaferSmartSelectionMarkState | null = null;
+  #rotationOriginKey = "center";
   #synchronizing = false;
 
   constructor(
@@ -1009,15 +1010,17 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
 
   #syncSelection(selection: SelectionState): void {
     const marked = this.#smartSelectionMarkState;
-    const target = this.#selectionElements(
+    const markedSelection =
       marked &&
-        this.#input &&
-        marked.documentId === this.#input.document.documentId &&
-        marked.pageId === this.#input.pageId &&
-        marked.revision === this.#input.document.revision
+      this.#input &&
+      marked.documentId === this.#input.document.documentId &&
+      marked.pageId === this.#input.pageId &&
+      marked.revision === this.#input.document.revision
         ? { nodeIds: [...marked.markedNodeIds] }
-        : selection,
-    );
+        : null;
+    const effectiveSelection = markedSelection ?? selection;
+    this.#syncRotationOrigin(effectiveSelection, markedSelection !== null);
+    const target = this.#selectionElements(effectiveSelection);
     const current = this.#editor.list;
     if (
       current.length === target.length &&
@@ -1027,6 +1030,27 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     }
     this.#editor.target = target.length === 0 ? (null as never) : target;
     this.#scheduleEditorRefresh();
+  }
+
+  #syncRotationOrigin(selection: SelectionState, marked: boolean): void {
+    const nodeId =
+      !marked && !selection.componentTarget && selection.nodeIds.length === 1
+        ? selection.nodeIds[0]
+        : undefined;
+    const origin =
+      nodeId && this.#input
+        ? this.#input.document.nodesById[nodeId]?.rotationOrigin
+        : undefined;
+    const key = origin ? `${origin.x}:${origin.y}` : "center";
+    if (key === this.#rotationOriginKey) return;
+    this.#rotationOriginKey = key;
+    const config = this.#editor.config as unknown as {
+      rotateAround?: "center" | { type: "percent"; x: number; y: number };
+    };
+    config.rotateAround = origin
+      ? { type: "percent", x: origin.x, y: origin.y }
+      : "center";
+    this.#editor.updateEditBox();
   }
 
   #syncProjectedSelection(): void {

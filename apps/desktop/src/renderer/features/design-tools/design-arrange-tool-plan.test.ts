@@ -28,4 +28,30 @@ describe("planDesignArrangeTool", () => {
       ],
     });
   });
+
+  it("routes Agent rotation origin through the shared Runtime planner", () => {
+    const plan = planDesignArrangeTool(
+      createWelcomeDocument(),
+      {
+        action: "set-rotation-origin",
+        label: "Set the inspected title rotation origin",
+        pageId: "page_welcome",
+        nodeId: "title_welcome",
+        origin: { x: 0.25, y: 0.75 },
+      },
+      "agent_origin",
+    );
+
+    expect(plan).toMatchObject({
+      ok: true,
+      nodeId: "title_welcome",
+      commands: [
+        {
+          type: "update_properties",
+          nodeId: "title_welcome",
+          rotationOrigin: { x: 0.25, y: 0.75 },
+        },
+      ],
+    });
+  });
 });

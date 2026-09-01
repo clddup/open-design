@@ -328,6 +328,9 @@ class FakeTree extends FakeGroup {
 }
 
 class FakeEditor extends FakeEventTarget {
+  readonly config: {
+    rotateAround?: "center" | { type: "percent"; x: number; y: number };
+  } = {};
   readonly editBox = new FakeEventTarget() as FakeEventTarget & {
     dragging: boolean;
     gesturing: boolean;
@@ -350,6 +353,7 @@ class FakeEditor extends FakeEventTarget {
   rotating = false;
   skewing = false;
   update = vi.fn();
+  updateEditBox = vi.fn();
   children: FakeElement[] = [];
   enableTextDom = false;
   innerEditor: { editDom: HTMLDivElement } | null = null;
@@ -5963,6 +5967,38 @@ describe("Leafer engine selection bounds synchronization", () => {
         }),
       ],
     });
+    adapter.dispose();
+  });
+
+  it("uses a selected layer's persisted rotation origin and restores selection center", async () => {
+    const adapter = await createLeaferEngineAdapter(
+      createHost(),
+      createCallbacks(),
+    );
+    const input = createInput();
+    input.document = structuredClone(input.document);
+    input.document.nodesById.feature_one!.rotationOrigin = { x: 0.2, y: 0.8 };
+
+    adapter.sync(input);
+    flushAnimationFrames();
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+    expect(app.editor.config.rotateAround).toEqual({
+      type: "percent",
+      x: 0.2,
+      y: 0.8,
+    });
+    expect(app.editor.updateEditBox).toHaveBeenCalledOnce();
+
+    adapter.sync({
+      ...input,
+      selection: {
+        nodeIds: ["feature_one", "feature_two"],
+        anchorNodeId: "feature_two",
+      },
+    });
+    expect(app.editor.config.rotateAround).toBe("center");
+    expect(app.editor.updateEditBox).toHaveBeenCalledTimes(2);
     adapter.dispose();
   });
 

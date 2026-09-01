@@ -7,6 +7,7 @@ import {
   type FrameNode,
   type GridTrack,
   type LineNode,
+  type RelativePoint,
   type Paint,
   type PolygonNode,
   type RectangleNode,
@@ -109,6 +110,7 @@ import { ImageExpandOverlay } from "./ImageExpandOverlay";
 import { useCanvasInlineEditors } from "../use-canvas-inline-editors";
 import { canvasGridEditorScope } from "../canvas-grid-editor-scope";
 import { CanvasFrameLabels } from "./CanvasFrameLabels";
+import { RotationOriginOverlay } from "./RotationOriginOverlay";
 
 export function Canvas({
   activeAgentRunId,
@@ -143,6 +145,9 @@ export function Canvas({
   onReorderGridTracks,
   onSetGridTracks,
   onResizeFrame,
+  rotationOriginNodeId,
+  onRotationOriginEditChange,
+  onSetRotationOrigin,
   selectionActions,
   renderSelectionContextMenu,
   showAgentRunStatus,
@@ -241,6 +246,12 @@ export function Canvas({
     track: GridTrack,
   ) => boolean;
   onResizeFrame: ResizeFrameHandler;
+  rotationOriginNodeId: string | null;
+  onRotationOriginEditChange: (nodeId: string | null) => void;
+  onSetRotationOrigin: (
+    nodeId: string,
+    origin: RelativePoint | null,
+  ) => boolean;
   selectionActions?: ReactNode;
   renderSelectionContextMenu?: (trigger: ReactElement) => ReactElement;
   showAgentRunStatus: boolean;
@@ -744,6 +755,35 @@ export function Canvas({
       }
       const currentSelection = runtime.getSnapshot().state.selection.nodeIds;
       if (
+        event.altKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.shiftKey &&
+        event.code === "KeyR"
+      ) {
+        const current = runtime.getSnapshot();
+        const nodeId =
+          current.state.selection.nodeIds.length === 1 &&
+          !current.state.selection.componentTarget
+            ? current.state.selection.nodeIds[0]
+            : undefined;
+        const node = nodeId ? current.document.nodesById[nodeId] : undefined;
+        if (
+          nodeId &&
+          node &&
+          node.size.width > 0 &&
+          node.size.height > 0 &&
+          !isEffectivelyLocked(current.document, nodeId)
+        ) {
+          onRotationOriginEditChange(
+            rotationOriginNodeId === nodeId ? null : nodeId,
+          );
+          event.preventDefault();
+          event.stopPropagation();
+        }
+        return;
+      }
+      if (
         event.key === "Enter" &&
         !event.shiftKey &&
         enterVectorEdit(currentSelection)
@@ -753,6 +793,12 @@ export function Canvas({
         return;
       }
       if (event.key === "Escape") {
+        if (rotationOriginNodeId) {
+          onRotationOriginEditChange(null);
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
         runtime.setSelection([]);
         event.preventDefault();
         event.stopPropagation();
@@ -776,6 +822,8 @@ export function Canvas({
       enterVectorEdit,
       imageCropState,
       navigateSelection,
+      onRotationOriginEditChange,
+      rotationOriginNodeId,
       runtime,
       vectorEditScope,
     ],
@@ -1570,6 +1618,22 @@ export function Canvas({
         selectedNodeIds={snapshot.state.selection.nodeIds}
         viewport={snapshot.state.viewport}
       />
+      {rotationOriginNodeId &&
+        (() => {
+          const node = snapshot.document.nodesById[rotationOriginNodeId];
+          if (!node) return null;
+          return (
+            <RotationOriginOverlay
+              document={snapshot.document}
+              label={t("canvas.rotationOriginHandle", {
+                name: node.name || node.kind,
+              })}
+              node={node}
+              onCommit={(origin) => onSetRotationOrigin(node.id, origin)}
+              viewport={snapshot.state.viewport}
+            />
+          );
+        })()}
       {inlineEditors.autoLayoutSpacing &&
         (() => {
           const request = inlineEditors.autoLayoutSpacing;

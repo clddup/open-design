@@ -10,6 +10,7 @@ import {
   planSetNodeLayoutLimits,
   planSetNodeLayoutPositioning,
   planSetNodeLayoutSizing,
+  planSetNodeRotationOrigin,
   planSetFrameLayoutGuides,
   planSetNodeGridPlacement,
 } from "@opendesign/editor-runtime";
@@ -41,6 +42,14 @@ export function planDesignArrangeTool(
       input.pageId,
       input.nodeId,
       input.constraints,
+      commandPrefix,
+    );
+  if (input.action === "set-rotation-origin")
+    return planSetNodeRotationOrigin(
+      document,
+      input.pageId,
+      input.nodeId,
+      input.origin,
       commandPrefix,
     );
   if (input.action === "reorder-grid-tracks")

@@ -52,6 +52,12 @@ const inputs: DesignArrangeToolInput[] = [
   },
   {
     ...common,
+    action: "set-rotation-origin",
+    nodeId: "content",
+    origin: { x: 0.25, y: 0.75 },
+  },
+  {
+    ...common,
     action: "set-constraints",
     nodeId: "content",
     constraints: { horizontal: "left-right", vertical: "top" },
@@ -221,6 +227,17 @@ describe("Arrange Agent contract", () => {
     ).toEqual(
       expect.arrayContaining([expect.objectContaining({ path: "/nodeIds" })]),
     );
+  });
+
+  it("allows a rotation origin outside layer bounds", () => {
+    expect(
+      DesignArrangeContract.parse({
+        ...common,
+        action: "set-rotation-origin",
+        nodeId: "content",
+        origin: { x: 1.1, y: 0.5 },
+      }),
+    ).toMatchObject({ ok: true });
   });
 
   it("rejects zero Fill weights and invalid Grid spans at exact paths", () => {

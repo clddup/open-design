@@ -88,6 +88,11 @@ export {
   type FlipOperationFailureCode,
   type FlipOperationPlan,
 } from "./flip-operations.js";
+export {
+  planSetNodeRotationOrigin,
+  type RotationOriginOperationFailureCode,
+  type RotationOriginOperationPlan,
+} from "./rotation-origin-operations.js";
 export { MAX_ARRANGEMENT_SPACING } from "@opendesign/geometry-service";
 export {
   planSetFrameAutoLayout,

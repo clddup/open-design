@@ -12,6 +12,7 @@ export function nodeChangedFields(
     "locked",
     "transform",
     "size",
+    "rotationOrigin",
     "opacity",
     "constraints",
     "layoutPositioning",
