@@ -2,7 +2,7 @@ import type {
   DesignDocument,
   DesignNode,
   DesignOperation,
-  FrameNode,
+  FrameLikeNode,
   ImageNode,
   Paint,
   RectangleNode,
@@ -11,6 +11,7 @@ import type {
   VectorNetwork,
 } from "@opendesign/design-contracts";
 import { resolveLineEndpointPoint } from "@opendesign/design-contracts";
+import { projectComponentInstances } from "@opendesign/component-service";
 import {
   createBooleanGeometryResolver,
   type BooleanGeometryResolution,
@@ -73,6 +74,7 @@ type FlattenFailure = {
 };
 
 type FlattenSelection = {
+  document: DesignDocument;
   nodes: readonly FlattenSourceEntry[];
   ordered: readonly string[];
   parentId: string | null;
@@ -83,7 +85,7 @@ type FlattenSelection = {
 type FlattenSourceEntry = {
   clips: readonly FlattenClip[];
   contribution: "all" | "fill" | "stroke";
-  node: FlattenSourceNode | FrameNode | ImageNode | TextNode;
+  node: FlattenSourceNode | FrameLikeNode | ImageNode | TextNode;
   transform: Transform;
 };
 
@@ -123,10 +125,13 @@ export function planFlattenNodes(
   }
   const selection = analyzeFlattenSelection(document, pageId, nodeIds);
   if (!selection.ok) return selection;
-  const resolvedNodes = materializeFlattenSelection(document, selection.nodes);
+  const resolvedNodes = materializeFlattenSelection(
+    selection.document,
+    selection.nodes,
+  );
   if (!resolvedNodes.ok) return resolvedNodes;
   const built = buildFlattenedVectorNetwork(
-    document,
+    selection.document,
     pageId,
     resolvedNodes.nodes,
     provider,
@@ -216,7 +221,7 @@ function materializeFlattenSelection(
       });
       continue;
     }
-    if (projection.node.kind !== "frame") {
+    if (projection.node.kind !== "frame" && projection.node.kind !== "slot") {
       return failure(
         "unsupported-topology",
         `Flatten source ${node.id} changed kind during Style resolution`,
@@ -262,20 +267,49 @@ function analyzeFlattenSelection(
       node.kind !== "group" &&
       node.kind !== "frame" &&
       node.kind !== "image" &&
-      node.kind !== "text",
+      node.kind !== "text" &&
+      node.kind !== "instance",
   );
   if (unsupported) {
     return failure(
       "unsupported-topology",
-      `Flatten currently supports Frame, Group, Boolean, Text, Image, Rectangle, Ellipse, Line, Polygon, Star, Path, and Vector layers; received ${unsupported.kind} ${unsupported.id}`,
+      `Flatten currently supports Frame, Group, Boolean, Component Instance, Text, Image, Rectangle, Ellipse, Line, Polygon, Star, Path, and Vector layers; received ${unsupported.kind} ${unsupported.id}`,
     );
   }
+  const projectionScope = componentProjectionScope(document, nodes);
+  let projected: ReturnType<typeof projectComponentInstances> | null = null;
+  try {
+    projected = projectionScope.required
+      ? projectComponentInstances(document)
+      : null;
+  } catch (error) {
+    return failure(
+      "unsupported-topology",
+      error instanceof Error
+        ? error.message
+        : "The selected Component projection cannot be resolved",
+    );
+  }
+  const projectionIssue = projected?.issues.find((issue) =>
+    projectionScope.instanceIds.has(issue.instanceId),
+  );
+  if (projectionIssue) {
+    return failure("unsupported-topology", projectionIssue.message);
+  }
+  const projectedDocument = projected?.document ?? document;
   const sourceEntries: FlattenSourceEntry[] = [];
   for (const node of nodes) {
+    const projectedNode = projectedDocument.nodesById[node.id];
+    if (!projectedNode) {
+      return failure(
+        "unsupported-topology",
+        `Flatten source ${node.id} is missing from the current Component projection`,
+      );
+    }
     const collected = collectFlattenSources(
-      document,
-      node,
-      node.transform,
+      projectedDocument,
+      projectedNode,
+      projectedNode.transform,
       [],
       sourceEntries,
     );
@@ -289,12 +323,38 @@ function analyzeFlattenSelection(
   }
   return {
     ok: true,
+    document: projectedDocument,
     nodes: sourceEntries,
     ordered: selection.ordered,
     parentId: selection.parentId,
     siblings: selection.siblings,
     sourceNode: nodes[0]!,
   };
+}
+
+function componentProjectionScope(
+  document: DesignDocument,
+  roots: readonly DesignNode[],
+): { required: boolean; instanceIds: ReadonlySet<string> } {
+  const pending = [...roots];
+  const visited = new Set<string>();
+  const instanceIds = new Set<string>();
+  let required = false;
+  while (pending.length > 0) {
+    const node = pending.pop();
+    if (!node || visited.has(node.id)) continue;
+    visited.add(node.id);
+    if (node.kind === "instance" || node.componentPropertyReferences) {
+      required = true;
+    }
+    if (node.kind === "instance") {
+      instanceIds.add(node.id);
+    }
+    node.childIds.forEach((childId) =>
+      pending.push(document.nodesById[childId]!),
+    );
+  }
+  return { required, instanceIds };
 }
 
 function buildFlattenedVectorNetwork(
@@ -760,7 +820,7 @@ function collectFlattenSources(
     entries.push({ clips, contribution: "all", node, transform });
     return { ok: true };
   }
-  if (node.kind === "frame") {
+  if (node.kind === "frame" || node.kind === "slot") {
     entries.push({ clips, contribution: "fill", node, transform });
     const childClips = node.properties.clipsContent
       ? [
@@ -776,7 +836,7 @@ function collectFlattenSources(
       if (!child || child.parentId !== node.id) {
         return failure(
           "unsupported-topology",
-          `Frame ${node.id} contains an invalid child ${childId}`,
+          `${node.kind === "frame" ? "Frame" : "Slot"} ${node.id} contains an invalid child ${childId}`,
         );
       }
       const collected = collectFlattenSources(
@@ -818,7 +878,7 @@ function collectFlattenSources(
 }
 
 function frameContributionNode(
-  frame: FrameNode,
+  frame: FrameLikeNode,
   transform: Transform,
   contribution: "fill" | "stroke",
 ): RectangleNode {
