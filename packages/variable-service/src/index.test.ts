@@ -116,6 +116,11 @@ function fixture(): DesignDocument {
       hangingList: false,
       textCase: "original",
       textDecoration: "none",
+      textDecorationStyle: null,
+      textDecorationOffset: null,
+      textDecorationThickness: null,
+      textDecorationColor: null,
+      textDecorationSkipInk: null,
       textAlignHorizontal: "left",
       textAlignVertical: "top",
       fills: [
