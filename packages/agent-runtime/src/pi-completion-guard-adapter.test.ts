@@ -85,7 +85,7 @@ class RecordingGateway implements ModelGateway {
 }
 
 describe("Pi completion guard adapter", () => {
-  it("keeps a rejected completion provisional and continues with trusted feedback", async () => {
+  it("retains a rejected assistant response and continues with trusted feedback", async () => {
     const gateway = new RecordingGateway(
       new MockModelGateway([
         {
@@ -141,7 +141,14 @@ describe("Pi completion guard adapter", () => {
       (event) => event.type === "message.completed",
     );
     expect(completions).toHaveLength(2);
-    expect(completions[0]).toMatchObject({ blocks: [] });
+    expect(completions[0]).toMatchObject({
+      blocks: [
+        {
+          type: "text",
+          text: "The first draft is finished.",
+        },
+      ],
+    });
     expect(completions[1]).toMatchObject({
       blocks: [
         {
@@ -155,7 +162,7 @@ describe("Pi completion guard adapter", () => {
     ).toHaveLength(1);
     expect(
       result.store.events.filter((event) => event.type === "message.assistant"),
-    ).toHaveLength(1);
+    ).toHaveLength(2);
     expect(result.events.at(-1)).toMatchObject({
       type: "run.completed",
       stopReason: "complete",
@@ -228,7 +235,58 @@ describe("Pi completion guard adapter", () => {
     });
     expect(
       result.store.events.some((event) => event.type === "message.assistant"),
-    ).toBe(false);
+    ).toBe(true);
+    expect(
+      result.events.filter((event) => event.type === "message.completed"),
+    ).toContainEqual(
+      expect.objectContaining({
+        blocks: [
+          expect.objectContaining({
+            type: "text",
+            text: "The unreviewed draft is finished.",
+          }),
+        ],
+      }),
+    );
+  });
+
+  it("retains the assistant response when completion review itself fails", async () => {
+    const gateway = new RecordingGateway(
+      new MockModelGateway("The provider response reached the client."),
+    );
+    const result = await runGuardedAgent({
+      gateway,
+      completionGuard: {
+        review: () => {
+          throw new Error("Review service unavailable");
+        },
+      },
+    });
+
+    const visibleEvents = result.events.filter(
+      (event) =>
+        event.type === "message.completed" || event.type === "agent.error",
+    );
+    expect(visibleEvents).toHaveLength(2);
+    expect(visibleEvents[0]).toEqual(
+      expect.objectContaining({
+        type: "message.completed",
+        blocks: [
+          expect.objectContaining({
+            type: "text",
+            text: "The provider response reached the client.",
+          }),
+        ],
+      }),
+    );
+    const errorEvent = visibleEvents[1];
+    if (errorEvent?.type !== "agent.error") {
+      throw new Error("Completion guard error event is missing");
+    }
+    expect(errorEvent.failure?.code).toBe("completion_guard_failed");
+    expect(
+      result.store.events.filter((event) => event.type === "message.assistant"),
+    ).toHaveLength(1);
   });
 
   it("enforces generated-token budget before asking the completion guard", async () => {

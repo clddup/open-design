@@ -210,7 +210,11 @@ export class PiRunMessageController {
         ...(unresolved ? { unresolvedDesignWriteFailure: unresolved } : {}),
       });
     } catch (error) {
-      await this.#publishProvisionalClear(pending.active.messageId);
+      await this.#finalizeAssistant(
+        pending.active,
+        pending.message,
+        pending.blocks,
+      );
       this.#forcedStopReason = "error";
       this.#forcedError = {
         code: "completion_guard_failed",
@@ -227,7 +231,11 @@ export class PiRunMessageController {
       );
       return;
     }
-    await this.#publishProvisionalClear(pending.active.messageId);
+    await this.#finalizeAssistant(
+      pending.active,
+      pending.message,
+      pending.blocks,
+    );
     this.#guardRejections += 1;
     if (
       this.#guardRejections > this.#options.maxCompletionGuardRejections ||
@@ -259,8 +267,10 @@ export class PiRunMessageController {
       throw new Error("Pi ended a run with an active message");
     }
     if (this.#pendingCompletion) {
-      await this.#publishProvisionalClear(
-        this.#pendingCompletion.active.messageId,
+      await this.#finalizeAssistant(
+        this.#pendingCompletion.active,
+        this.#pendingCompletion.message,
+        this.#pendingCompletion.blocks,
       );
       this.#pendingCompletion = undefined;
       if (!cancellationRequested) {
@@ -374,15 +384,6 @@ export class PiRunMessageController {
       runId: this.#options.request.runId,
       messageId: active.messageId,
       blocks,
-    });
-  }
-
-  #publishProvisionalClear(messageId: string): Promise<void> {
-    return this.#options.publish({
-      type: "message.completed",
-      runId: this.#options.request.runId,
-      messageId,
-      blocks: [],
     });
   }
 }
