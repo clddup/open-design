@@ -1,6 +1,6 @@
 # @opendesign/geometry-service
 
-OpenDesign-owned, versioned geometry provider boundary. Contract v29 contains deterministic arrangement and layer reflection plus isolated vector-path and vector-edit providers:
+OpenDesign-owned, versioned geometry provider boundary. Contract v30 contains deterministic arrangement, layer reflection, shared rounded regular-shape geometry, and isolated vector-path and vector-edit providers:
 
 - align multiple axis-aligned world bounds to a selection edge or center;
 - distribute one-dimensional gaps while preserving distinct outermost anchors;

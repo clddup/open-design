@@ -373,6 +373,7 @@ describe("vector design contracts", () => {
       dashPattern: [],
       pointCount: 6,
       cornerRadius: 8,
+      cornerSmoothing: 0.6,
     };
     const polygon = { ...base, kind: "polygon", properties: shape };
     const star = {
@@ -384,6 +385,12 @@ describe("vector design contracts", () => {
 
     expect(Value.Check(DesignNodeSchema, polygon)).toBe(true);
     expect(Value.Check(DesignNodeSchema, star)).toBe(true);
+    expect(
+      Value.Check(DesignNodeSchema, {
+        ...star,
+        properties: { ...star.properties, cornerSmoothing: 1.01 },
+      }),
+    ).toBe(false);
     expect(
       Value.Check(DesignNodeSchema, {
         ...polygon,

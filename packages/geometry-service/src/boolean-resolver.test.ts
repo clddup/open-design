@@ -59,9 +59,13 @@ describe("non-destructive Boolean geometry resolver", () => {
     ).toBe(2);
   });
 
-  it("resolves sharp Polygon and Star geometry and invalidates semantic parameters", () => {
+  it("resolves rounded Polygon and Star geometry and invalidates semantic parameters", () => {
     const hexagon = polygon("hexagon", "regular", 100, 100, 6);
     const signal = star("signal", "regular", 100, 100, 5, 0.4);
+    hexagon.properties.cornerRadius = 6;
+    hexagon.properties.cornerSmoothing = 0.6;
+    signal.properties.cornerRadius = 5;
+    signal.properties.cornerSmoothing = 1;
     signal.transform = [1, 0, 0, 1, 120, 0];
     const regular = booleanNode("regular", null, "union", [
       hexagon.id,
@@ -92,22 +96,19 @@ describe("non-destructive Boolean geometry resolver", () => {
       regular.id,
     ]);
 
-    const rounded = structuredClone(document);
-    rounded.revision += 1;
-    const roundedPolygon = rounded.nodesById.hexagon;
-    if (!roundedPolygon || roundedPolygon.kind !== "polygon") {
+    const smoothed = structuredClone(document);
+    smoothed.revision += 1;
+    const smoothedPolygon = smoothed.nodesById.hexagon;
+    if (!smoothedPolygon || smoothedPolygon.kind !== "polygon") {
       throw new Error("Missing Polygon operand");
     }
-    roundedPolygon.properties.cornerRadius = 6;
-    const rejected = resolver.resolve(rounded, "page");
-    expect(rejected.resultsByNodeId.has(regular.id)).toBe(false);
-    expect(rejected.issues).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          code: "unsupported-style",
-          nodeId: hexagon.id,
-        }),
-      ]),
+    smoothedPolygon.properties.cornerSmoothing = 0.2;
+    const smoothingChange = resolver.resolve(smoothed, "page");
+    expect(smoothingChange.issues).toEqual([]);
+    expect(smoothingChange.computedNodeIds).toEqual([regular.id]);
+    expect(smoothingChange.resultsByNodeId.has(regular.id)).toBe(true);
+    expect(smoothingChange.resultsByNodeId.get(regular.id)?.path).not.toBe(
+      first.resultsByNodeId.get(regular.id)?.path,
     );
   });
 

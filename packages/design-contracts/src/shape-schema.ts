@@ -106,6 +106,7 @@ export function createShapeSchemas<
       ...ShapeProperties,
       pointCount: Type.Integer({ minimum: 3, maximum: 60 }),
       cornerRadius: Type.Number({ minimum: 0 }),
+      cornerSmoothing: Type.Optional(Type.Number({ minimum: 0, maximum: 1 })),
     },
     { additionalProperties: false },
   );
@@ -115,6 +116,7 @@ export function createShapeSchemas<
       pointCount: Type.Integer({ minimum: 3, maximum: 60 }),
       innerRadius: Type.Number({ minimum: 0, maximum: 1 }),
       cornerRadius: Type.Number({ minimum: 0 }),
+      cornerSmoothing: Type.Optional(Type.Number({ minimum: 0, maximum: 1 })),
     },
     { additionalProperties: false },
   );

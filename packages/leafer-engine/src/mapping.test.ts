@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
+import type { PolygonNode, StarNode } from "@opendesign/design-contracts";
 import { createWelcomeDocument } from "@opendesign/editor-runtime";
 import {
   cutVectorNetworkByLine,
   cutVectorPath,
   setVectorPathClosed,
 } from "@opendesign/geometry-service/vector-edit";
+import { BOOLEAN_GEOMETRY_RESOLVER_VERSION } from "@opendesign/geometry-service/boolean-resolver";
 import {
   booleanResultElementId,
   projectBooleanEditScope,
@@ -277,7 +279,7 @@ describe("Leafer scene projection", () => {
     expect(Object.hasOwn(autoHeightData ?? {}, "height")).toBe(false);
   });
 
-  it("projects semantic Polygon and Star nodes through native Leafer shapes", () => {
+  it("projects rounded Polygon and Star through the shared exact geometry", () => {
     const document = structuredClone(createWelcomeDocument());
     const frame = document.nodesById.frame_welcome;
     if (!frame || frame.kind !== "frame") throw new Error("Missing frame");
@@ -296,6 +298,7 @@ describe("Leafer scene projection", () => {
       properties: {
         pointCount: 6,
         cornerRadius: 10,
+        cornerSmoothing: 0.6,
         fills: [{ type: "solid", color: "#f59e0b", opacity: 1 }],
         strokes: [],
         strokeWidth: 0,
@@ -318,6 +321,7 @@ describe("Leafer scene projection", () => {
         pointCount: 7,
         innerRadius: 0.42,
         cornerRadius: 4,
+        cornerSmoothing: 1,
         fills: [{ type: "solid", color: "#8b5cf6", opacity: 1 }],
         strokes: [],
         strokeWidth: 0,
@@ -328,25 +332,53 @@ describe("Leafer scene projection", () => {
 
     const projection = projectDesignPage(document, "page_welcome");
     expect(projection.elementsById.get("badge_polygon")).toMatchObject({
-      tag: "Polygon",
+      tag: "Path",
       data: {
-        width: 160,
-        height: 120,
-        sides: 6,
-        cornerRadius: 10,
+        windingRule: "nonzero",
       },
     });
     expect(projection.elementsById.get("signal_star")).toMatchObject({
-      tag: "Star",
+      tag: "Path",
       data: {
-        width: 140,
-        height: 140,
-        corners: 7,
-        innerRadius: 0.42,
-        cornerRadius: 4,
+        windingRule: "nonzero",
       },
     });
+    expect(
+      String(projection.elementsById.get("badge_polygon")?.data.path),
+    ).toContain("C ");
+    expect(
+      String(projection.elementsById.get("signal_star")?.data.path),
+    ).toContain("C ");
+    expect(
+      String(projection.elementsById.get("badge_polygon")?.data.path),
+    ).toMatch(/^M0 0M160 120/);
+    expect(
+      String(projection.elementsById.get("signal_star")?.data.path).match(
+        /C /g,
+      ),
+    ).toHaveLength(21);
     expect(projection.warnings).toEqual([]);
+  });
+
+  it("keeps sharp Polygon and Star on native Leafer primitives", () => {
+    const document = structuredClone(createWelcomeDocument());
+    const frame = document.nodesById.frame_welcome;
+    if (!frame || frame.kind !== "frame") throw new Error("Missing frame");
+    const polygon = regularPolygon("sharp_polygon", frame.id, 0);
+    const star = regularStar("sharp_star", frame.id, 0);
+    document.nodesById[polygon.id] = polygon;
+    document.nodesById[star.id] = star;
+    frame.childIds.push(polygon.id, star.id);
+
+    const projection = projectDesignPage(document, "page_welcome");
+    expect(projection.elementsById.get(polygon.id)).toMatchObject({
+      tag: "Polygon",
+      data: { sides: 5, width: 120, height: 80 },
+    });
+    expect(projection.elementsById.get(star.id)).toMatchObject({
+      tag: "Star",
+      data: { corners: 5, innerRadius: 0.4, width: 120, height: 80 },
+    });
   });
 
   it("keeps Boolean operands hidden and projects a stable synthetic result", () => {
@@ -438,7 +470,7 @@ describe("Leafer scene projection", () => {
       computedNodeIds: ["boolean_mark"],
       issues: [],
       pageId: "page_welcome",
-      resolverVersion: 1,
+      resolverVersion: BOOLEAN_GEOMETRY_RESOLVER_VERSION,
       resultsByNodeId: new Map([
         [
           "boolean_mark",
@@ -1316,3 +1348,63 @@ describe("Leafer scene projection", () => {
     });
   });
 });
+
+function regularPolygon(
+  id: string,
+  parentId: string,
+  cornerRadius: number,
+): PolygonNode {
+  return {
+    ...regularShapeBase(id, parentId),
+    kind: "polygon",
+    properties: {
+      ...regularShapeAppearance(),
+      pointCount: 5,
+      cornerRadius,
+    },
+  };
+}
+
+function regularStar(
+  id: string,
+  parentId: string,
+  cornerRadius: number,
+): StarNode {
+  return {
+    ...regularShapeBase(id, parentId),
+    kind: "star",
+    properties: {
+      ...regularShapeAppearance(),
+      pointCount: 5,
+      innerRadius: 0.4,
+      cornerRadius,
+    },
+  };
+}
+
+function regularShapeBase(
+  id: string,
+  parentId: string,
+): Omit<PolygonNode, "kind" | "properties"> {
+  return {
+    id,
+    name: id,
+    parentId,
+    childIds: [],
+    visible: true,
+    locked: false,
+    transform: [1, 0, 0, 1, 0, 0],
+    size: { width: 120, height: 80 },
+    exportSettings: [],
+    opacity: 1,
+    extensions: {},
+  };
+}
+
+function regularShapeAppearance() {
+  return {
+    fills: [{ type: "solid" as const, color: "#111827", opacity: 1 }],
+    strokes: [],
+    strokeWidth: 0,
+  };
+}

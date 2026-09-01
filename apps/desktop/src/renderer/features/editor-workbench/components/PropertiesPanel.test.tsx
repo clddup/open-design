@@ -2379,6 +2379,40 @@ describe("PropertiesPanel regular-shape workflow", () => {
     expect(onUpdate).toHaveBeenCalledWith({
       properties: { cornerRadius: 12 },
     });
+
+    const cornerSmoothing = screen.getByLabelText("Corner smoothing");
+    await user.clear(cornerSmoothing);
+    await user.type(cornerSmoothing, "60");
+    await user.tab();
+    expect(onUpdate).toHaveBeenCalledWith({
+      properties: { cornerSmoothing: 0.6 },
+    });
+  });
+
+  it("edits Polygon corner smoothing as a bounded percentage", async () => {
+    const user = userEvent.setup();
+    const polygon: DesignNode = {
+      ...starNode,
+      id: "polygon_1",
+      kind: "polygon",
+      properties: {
+        fills: starNode.kind === "star" ? starNode.properties.fills : [],
+        strokes: [],
+        strokeWidth: 0,
+        pointCount: 6,
+        cornerRadius: 8,
+        cornerSmoothing: 0.25,
+      },
+    };
+    const { onUpdate } = renderPanel({ node: polygon });
+    const smoothing = screen.getByLabelText("Corner smoothing");
+    expect(smoothing).toHaveValue(25);
+    await user.clear(smoothing);
+    await user.type(smoothing, "120");
+    await user.tab();
+    expect(onUpdate).toHaveBeenCalledWith({
+      properties: { cornerSmoothing: 1 },
+    });
   });
 
   it("rejects fractional point counts and clamps values to the supported range", async () => {

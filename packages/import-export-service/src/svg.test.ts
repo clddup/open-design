@@ -2187,7 +2187,8 @@ describe("versioned SVG interchange", () => {
     if (!first.ok) return;
     expect(first.issues).toEqual([]);
     expect(first.svg.match(/<polygon/g)).toHaveLength(2);
-    expect(first.svg).toContain('data-opendesign-regular-shape-version="1"');
+    expect(first.svg).toContain('data-opendesign-regular-shape-version="2"');
+    expect(first.svg).toContain('data-opendesign-corner-smoothing="0"');
     expect(first.svg).toContain('data-opendesign-inner-radius="0.42"');
 
     const imported = importSvg(
@@ -2204,6 +2205,7 @@ describe("versioned SVG interchange", () => {
       properties: {
         pointCount: 6,
         cornerRadius: 0,
+        cornerSmoothing: 0,
       },
     });
     expect(findImportedSource(imported.nodes, star.id)).toMatchObject({
@@ -2214,11 +2216,31 @@ describe("versioned SVG interchange", () => {
         pointCount: 7,
         innerRadius: 0.42,
         cornerRadius: 0,
+        cornerSmoothing: 0,
       },
     });
     expect(asDocument(imported.nodes, imported.rootNodeId)).toSatisfy(
       isDesignDocument,
     );
+
+    const legacy = importSvg(
+      {
+        idPrefix: "legacy_regular_roundtrip",
+        svg: first.svg
+          .replaceAll(
+            'data-opendesign-regular-shape-version="2"',
+            'data-opendesign-regular-shape-version="1"',
+          )
+          .replaceAll(' data-opendesign-corner-smoothing="0"', ""),
+      },
+      geometry,
+    );
+    expect(legacy.ok).toBe(true);
+    if (!legacy.ok) return;
+    expect(findImportedSource(legacy.nodes, polygon.id)).toMatchObject({
+      kind: "polygon",
+      properties: { cornerRadius: 0, cornerSmoothing: 0 },
+    });
 
     const external = importSvg(
       {
@@ -2232,7 +2254,7 @@ describe("versioned SVG interchange", () => {
     expect(findImportedSource(external.nodes, "ordinary")?.kind).toBe("vector");
   });
 
-  it("rejects tampered or rounded regular-shape interchange instead of losing fidelity", () => {
+  it("round-trips exact rounded regular shapes and rejects tampered controlled geometry", () => {
     const star: DesignNode = {
       id: "controlled_star",
       kind: "star",
@@ -2297,20 +2319,74 @@ describe("versioned SVG interchange", () => {
       }),
     );
 
-    const rounded = structuredClone(document);
-    const roundedStar = rounded.nodesById[star.id];
-    if (!roundedStar || roundedStar.kind !== "star") {
-      throw new Error("Missing controlled star");
-    }
+    const roundedStar = structuredClone(star);
     roundedStar.properties.cornerRadius = 8;
-    const rejected = exportSvg({
-      document: rounded,
-      rootNodeIds: [star.id],
-      viewport: { x: 0, y: 0, width: 120, height: 120 },
+    roundedStar.properties.cornerSmoothing = 1;
+    const roundedPolygon: DesignNode = {
+      ...structuredClone(star),
+      id: "controlled_polygon",
+      kind: "polygon",
+      name: "Controlled polygon",
+      transform: [1, 0, 0, 1, 130, 10],
+      size: { width: 140, height: 90 },
+      properties: {
+        fills: [{ type: "solid", color: "#7c3aed", opacity: 1 }],
+        strokes: [],
+        strokeWidth: 0,
+        pointCount: 6,
+        cornerRadius: 10,
+        cornerSmoothing: 0.6,
+      },
+    };
+    const roundedDocument = documentFromNodes(
+      "rounded_regular_shapes",
+      [roundedStar, roundedPolygon],
+      [roundedStar.id, roundedPolygon.id],
+    );
+    const roundedExport = exportSvg({
+      document: roundedDocument,
+      rootNodeIds: [roundedStar.id, roundedPolygon.id],
+      viewport: { x: 0, y: 0, width: 300, height: 130 },
+      includeLayerIds: true,
     });
-    expect(rejected.ok).toBe(false);
-    if (rejected.ok) return;
-    expect(rejected.issues).toContainEqual(
+    expect(roundedExport.ok).toBe(true);
+    if (!roundedExport.ok) return;
+    expect(roundedExport.issues).toEqual([]);
+    expect(roundedExport.svg.match(/<path/g)).toHaveLength(2);
+    expect(roundedExport.svg).toContain(
+      'data-opendesign-corner-smoothing="0.6"',
+    );
+    expect(roundedExport.svg).toContain('data-opendesign-corner-smoothing="1"');
+
+    const roundedImport = importSvg(
+      { svg: roundedExport.svg, idPrefix: "rounded_regular_roundtrip" },
+      geometry,
+    );
+    expect(roundedImport.ok).toBe(true);
+    if (!roundedImport.ok) return;
+    expect(
+      findImportedSource(roundedImport.nodes, roundedStar.id),
+    ).toMatchObject({
+      kind: "star",
+      properties: { cornerRadius: 8, cornerSmoothing: 1 },
+    });
+    expect(
+      findImportedSource(roundedImport.nodes, roundedPolygon.id),
+    ).toMatchObject({
+      kind: "polygon",
+      properties: { cornerRadius: 10, cornerSmoothing: 0.6 },
+    });
+
+    const tamperedRounded = importSvg(
+      {
+        idPrefix: "tampered_rounded_regular",
+        svg: roundedExport.svg.replace('d="', 'd="M 0 0 '),
+      },
+      geometry,
+    );
+    expect(tamperedRounded.ok).toBe(false);
+    if (tamperedRounded.ok) return;
+    expect(tamperedRounded.issues).toContainEqual(
       expect.objectContaining({
         code: "regular-shape-fidelity-unsupported",
       }),

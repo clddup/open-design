@@ -261,18 +261,10 @@ function exportNode(
       element.setAttribute("y2", formatSvgNumber(end.y));
       applyExportLineEndpoints(context, element, node);
     } else if (node.kind === "polygon" || node.kind === "star") {
-      if (node.properties.cornerRadius > 0) {
-        context.issues.push(
-          createSvgIssue(
-            "regular-shape-fidelity-unsupported",
-            "error",
-            `Rounded ${node.kind} ${node.id} requires an exact outline before SVG export`,
-            { nodeId: node.id },
-          ),
-        );
-        return null;
-      }
-      element = context.document.createElementNS(SVG_NAMESPACE, "polygon");
+      element = context.document.createElementNS(
+        SVG_NAMESPACE,
+        node.properties.cornerRadius > 0 ? "path" : "polygon",
+      );
       writeSvgRegularShape(element, node);
     } else if (node.kind === "path" || node.kind === "vector") {
       const path = resolvePathPropertiesData(node.properties);

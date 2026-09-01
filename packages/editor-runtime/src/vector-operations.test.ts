@@ -8,6 +8,7 @@ import {
   createPathKitGeometryProvider,
   type VectorGeometryProvider,
 } from "@opendesign/geometry-service/vector-path";
+import { serializeVectorNetwork } from "@opendesign/geometry-service/editable-vector";
 import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -883,6 +884,131 @@ describe("vector editing runtime plans", () => {
     expect(runtime.getSnapshot().document.nodesById[line.id]).toBeDefined();
   });
 
+  it("flattens transformed rounded Polygon and Star geometry with exact tight bounds", () => {
+    const document = structuredClone(createWelcomeDocument());
+    const source = document.nodesById.feature_one;
+    const parent = source?.parentId
+      ? document.nodesById[source.parentId]
+      : undefined;
+    if (!parent || source?.kind !== "rectangle") {
+      throw new Error("Missing rounded regular shape fixture");
+    }
+    const polygon = {
+      ...structuredClone(source),
+      id: "rounded_polygon",
+      kind: "polygon" as const,
+      name: "Rounded polygon",
+      size: { width: 160, height: 96 },
+      transform: [
+        0.866025, 0.5, -0.5, 0.866025, 180, 120,
+      ] as DesignDocument["nodesById"][string]["transform"],
+      properties: {
+        ...source.properties,
+        pointCount: 6,
+        cornerRadius: 12,
+        cornerSmoothing: 0.6,
+        strokes: [],
+        strokeWidth: 0,
+      },
+    };
+    const star = {
+      ...structuredClone(source),
+      id: "rounded_star",
+      kind: "star" as const,
+      name: "Rounded star",
+      size: { width: 140, height: 90 },
+      transform: [
+        1, 0, 0, 1, 390, 170,
+      ] as DesignDocument["nodesById"][string]["transform"],
+      properties: {
+        ...source.properties,
+        pointCount: 5,
+        innerRadius: 0.42,
+        cornerRadius: 8,
+        cornerSmoothing: 1,
+        fills: [{ type: "solid" as const, color: "#2563eb", opacity: 1 }],
+        strokes: [{ type: "solid" as const, color: "#f59e0b", opacity: 1 }],
+        strokeWidth: 4,
+        strokeAlign: "center" as const,
+        strokeCap: "round" as const,
+        strokeJoin: "round" as const,
+        dashPattern: [],
+      },
+    };
+    polygon.parentId = parent.id;
+    star.parentId = parent.id;
+    document.nodesById[polygon.id] = polygon;
+    document.nodesById[star.id] = star;
+    parent.childIds.push(polygon.id, star.id);
+
+    const plan = planFlattenNodes(
+      document,
+      "page_welcome",
+      [polygon.id, star.id],
+      "flattened_regular_shapes",
+      "flatten_regular_shapes",
+      geometry,
+    );
+    if (!plan.ok) throw new Error(plan.message);
+    const runtime = new EditorRuntime(document);
+    expect(
+      runtime.apply({
+        transactionId: "flatten_rounded_regular_shapes",
+        documentId: document.documentId,
+        baseRevision: document.revision,
+        actor: { type: "user", id: "local-user" },
+        label: "Flatten rounded regular shapes",
+        commands: [...plan.operations],
+      }),
+    ).toMatchObject({ ok: true, revision: { revision: 1 } });
+
+    const flattened =
+      runtime.getSnapshot().document.nodesById.flattened_regular_shapes;
+    expect(flattened).toMatchObject({
+      kind: "vector",
+      properties: { fills: [], strokes: [], strokeWidth: 0 },
+    });
+    if (
+      !flattened ||
+      flattened.kind !== "vector" ||
+      !("network" in flattened.properties)
+    ) {
+      throw new Error("Missing flattened rounded regular shapes");
+    }
+    const serialized = serializeVectorNetwork(flattened.properties.network);
+    expect(serialized.ok).toBe(true);
+    if (!serialized.ok) return;
+    expect(serialized.bounds).toEqual({
+      x: 0,
+      y: 0,
+      width: flattened.size.width,
+      height: flattened.size.height,
+    });
+    expect(flattened.properties.network.regions).toHaveLength(3);
+    expect(
+      flattened.properties.network.regions.map((region) => region.fills?.[0]),
+    ).toEqual([
+      polygon.properties.fills[0],
+      star.properties.fills[0],
+      star.properties.strokes[0],
+    ]);
+    expect(document.nodesById[polygon.id]).toBeDefined();
+    expect(
+      runtime.getSnapshot().document.nodesById[polygon.id],
+    ).toBeUndefined();
+    expect(runtime.getSnapshot().document.nodesById[star.id]).toBeUndefined();
+    expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
+    expect(runtime.undo()).toMatchObject({ ok: true, mode: "undo" });
+    expect(runtime.getSnapshot().document.nodesById[polygon.id]).toBeDefined();
+    expect(runtime.redo()).toMatchObject({ ok: true, mode: "redo" });
+    const reopened = new EditorRuntime(
+      JSON.parse(JSON.stringify(runtime.getSnapshot().document)) as unknown,
+    );
+    expect(
+      reopened.getSnapshot().document.nodesById.flattened_regular_shapes,
+    ).toMatchObject({ kind: "vector" });
+  });
+
   it("flattens one resolved Boolean and destructively replaces its operands", () => {
     const runtime = new EditorRuntime(createWelcomeDocument());
     const booleanPlan = planCreateBooleanGroup(
@@ -1267,7 +1393,7 @@ describe("vector editing runtime plans", () => {
     expect(runtime.getSnapshot().document.nodesById[image.id]).toBeDefined();
   });
 
-  it("rejects rounded regular shapes and decorated Lines until exact outlines exist", () => {
+  it("rejects decorated Lines until exact endpoint outlines exist", () => {
     const document = structuredClone(createWelcomeDocument());
     const rectangle = document.nodesById.feature_one;
     const parent = rectangle?.parentId
@@ -1276,16 +1402,6 @@ describe("vector editing runtime plans", () => {
     if (!parent || rectangle?.kind !== "rectangle") {
       throw new Error("Missing flatten rejection fixture");
     }
-    const polygon = {
-      ...structuredClone(rectangle),
-      id: "rounded_polygon",
-      kind: "polygon" as const,
-      properties: {
-        ...rectangle.properties,
-        pointCount: 5,
-        cornerRadius: 8,
-      },
-    };
     const line = {
       ...structuredClone(rectangle),
       id: "decorated_line",
@@ -1300,22 +1416,9 @@ describe("vector editing runtime plans", () => {
         endEndpoint: "triangle-arrow" as const,
       },
     };
-    document.nodesById[polygon.id] = polygon;
     document.nodesById[line.id] = line;
-    polygon.parentId = parent.id;
     line.parentId = parent.id;
-    parent.childIds.push(polygon.id, line.id);
-
-    expect(
-      planFlattenNodes(
-        document,
-        "page_welcome",
-        [polygon.id],
-        "rounded_result",
-        "rounded_result",
-        geometry,
-      ),
-    ).toMatchObject({ ok: false, code: "unsupported-topology" });
+    parent.childIds.push(line.id);
     expect(
       planFlattenNodes(
         document,

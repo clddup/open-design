@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   DESIGN_EDIT_TOOL_INPUT_SCHEMA,
   EditDesignContract,
+  INTERNAL_DESIGN_EDIT_TOOL_INPUT_SCHEMA,
 } from "./design-edit-tool";
+import { designAgentToolInputIssues } from "./design-agent-tool-catalog";
+import { DESIGN_EDIT_TOOL_NAME } from "./design-agent-tool-names";
+import { schemaValidationIssues } from "./contract-validation";
 
 describe("Edit Design contract", () => {
   it("compiles omitted deterministic Text defaults from a production edit payload", () => {
@@ -52,6 +56,12 @@ describe("Edit Design contract", () => {
         },
       ],
     };
+    expect(
+      schemaValidationIssues(DESIGN_EDIT_TOOL_INPUT_SCHEMA, input),
+    ).toEqual([]);
+    expect(designAgentToolInputIssues(DESIGN_EDIT_TOOL_NAME, input)).toEqual(
+      [],
+    );
     const result = EditDesignContract.parse(input);
 
     expect(result).toMatchObject({
@@ -86,6 +96,13 @@ describe("Edit Design contract", () => {
         ],
       },
     });
+    if (!result.ok) throw new Error("Expected production edit to compile");
+    expect(
+      schemaValidationIssues(
+        INTERNAL_DESIGN_EDIT_TOOL_INPUT_SCHEMA,
+        result.value,
+      ),
+    ).toEqual([]);
 
     const autoHeightEnding = structuredClone(input);
     const autoHeightProperties =

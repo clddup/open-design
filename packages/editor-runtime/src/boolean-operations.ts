@@ -75,17 +75,6 @@ export function planCreateBooleanGroup(
       `${unsupported.kind} node ${unsupported.id} cannot yet be resolved to Boolean path geometry`,
     );
   }
-  const roundedRegularShape = operands.find(
-    (node) =>
-      (node.kind === "polygon" || node.kind === "star") &&
-      node.properties.cornerRadius > 0,
-  );
-  if (roundedRegularShape) {
-    return failure(
-      "visual-fidelity",
-      `Rounded ${roundedRegularShape.kind} node ${roundedRegularShape.id} cannot enter a Boolean group until its exact rounded outline is available`,
-    );
-  }
   if (
     operands.some(
       (node) => node.maskMode !== undefined && node.maskMode !== "none",

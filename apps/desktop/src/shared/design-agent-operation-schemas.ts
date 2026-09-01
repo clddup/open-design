@@ -487,7 +487,7 @@ const MODEL_NODE_PROPERTY_FIELDS = {
 const MODEL_NODE_PROPERTIES_SCHEMA = {
   type: "object",
   description:
-    "Kind fields: Group/Slice {}; Frame shape+cornerRadius+clipsContent; Rectangle shape+cornerRadius; Ellipse shape; Line shape+start/end/endpoints; Polygon shape+pointCount+cornerRadius; Star shape+pointCount+innerRadius+cornerRadius; Text typography+shape; Image assetId+placement+altText+cornerRadius; Path/Vector shape plus exactly one of path or network; cornerRadius/cornerSmoothing apply only to editable network geometry.",
+    "Kind fields: Group/Slice {}; Frame shape+cornerRadius+clipsContent; Rectangle shape+cornerRadius; Ellipse shape; Line shape+start/end/endpoints; Polygon shape+pointCount+cornerRadius+cornerSmoothing; Star shape+pointCount+innerRadius+cornerRadius+cornerSmoothing; Text typography+shape; Image assetId+placement+altText+cornerRadius; Path/Vector shape plus exactly one of path or network; cornerSmoothing applies to Polygon, Star, and editable network geometry.",
   properties: MODEL_NODE_PROPERTY_FIELDS,
   additionalProperties: false,
 } as const;
@@ -543,6 +543,7 @@ const MODEL_POLYGON_PROPERTY_KEYS = [
   ...MODEL_SHAPE_PROPERTY_KEYS,
   "pointCount",
   "cornerRadius",
+  "cornerSmoothing",
 ] as const;
 const MODEL_POLYGON_PROPERTIES_SCHEMA = requiredPropertiesSchema([
   "pointCount",
@@ -553,6 +554,7 @@ const MODEL_STAR_PROPERTY_KEYS = [
   "pointCount",
   "innerRadius",
   "cornerRadius",
+  "cornerSmoothing",
 ] as const;
 const MODEL_STAR_PROPERTIES_SCHEMA = requiredPropertiesSchema([
   "pointCount",

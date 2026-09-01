@@ -520,8 +520,30 @@ describe("non-destructive Boolean operations", () => {
     );
   });
 
-  it("accepts sharp Polygon and Star operands but rejects rounded outlines", () => {
+  it("accepts rounded Polygon and Star operands through the shared exact geometry", () => {
     const document = structuredClone(booleanDocument());
+    const polygon: DesignNode = {
+      id: "polygon_operand",
+      kind: "polygon",
+      name: "Polygon operand",
+      parentId: null,
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 260, 30],
+      size: { width: 120, height: 80 },
+      exportSettings: [],
+      opacity: 1,
+      properties: {
+        pointCount: 6,
+        cornerRadius: 8,
+        cornerSmoothing: 0.6,
+        fills: [{ type: "solid", color: "#8b5cf6", opacity: 1 }],
+        strokes: [],
+        strokeWidth: 0,
+      },
+      extensions: {},
+    };
     const star: DesignNode = {
       id: "star_operand",
       kind: "star",
@@ -537,20 +559,22 @@ describe("non-destructive Boolean operations", () => {
       properties: {
         pointCount: 5,
         innerRadius: 0.4,
-        cornerRadius: 0,
+        cornerRadius: 8,
+        cornerSmoothing: 1,
         fills: [{ type: "solid", color: "#f59e0b", opacity: 1 }],
         strokes: [],
         strokeWidth: 0,
       },
       extensions: {},
     };
+    document.nodesById[polygon.id] = polygon;
     document.nodesById[star.id] = star;
-    document.pagesById.page_boolean!.rootNodeIds.push(star.id);
-    const sharp = normalizeDesignDocument(document);
+    document.pagesById.page_boolean!.rootNodeIds.push(polygon.id, star.id);
+    const rounded = normalizeDesignDocument(document);
 
     expect(
       planCreateBooleanGroup(
-        sharp,
+        rounded,
         "page_boolean",
         ["path_bottom", star.id],
         "union",
@@ -561,27 +585,18 @@ describe("non-destructive Boolean operations", () => {
         },
       ),
     ).toMatchObject({ ok: true });
-
-    const roundedDraft = structuredClone(sharp);
-    const rounded = roundedDraft.nodesById[star.id];
-    if (!rounded || rounded.kind !== "star") throw new Error("Missing star");
-    rounded.properties.cornerRadius = 8;
-    const roundedPlan = planCreateBooleanGroup(
-      normalizeDesignDocument(roundedDraft),
-      "page_boolean",
-      ["path_bottom", star.id],
-      "union",
-      {
-        booleanId: "boolean_rounded_shape",
-        name: "Rounded shape union",
-        commandPrefix: "rounded_shape",
-      },
-    );
-    expect(roundedPlan).toMatchObject({
-      ok: false,
-      code: "visual-fidelity",
-    });
-    if (roundedPlan.ok) throw new Error("Expected rounded shape rejection");
-    expect(roundedPlan.message).toContain("exact rounded outline");
+    expect(
+      planCreateBooleanGroup(
+        rounded,
+        "page_boolean",
+        [polygon.id, "rect_unrelated"],
+        "subtract",
+        {
+          booleanId: "boolean_rounded_polygon",
+          name: "Rounded polygon subtract",
+          commandPrefix: "rounded_polygon",
+        },
+      ),
+    ).toMatchObject({ ok: true });
   });
 });

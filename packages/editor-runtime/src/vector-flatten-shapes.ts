@@ -1,10 +1,9 @@
 import {
   resolveLineEndpointPoint,
-  resolveRegularPolygonPoints,
-  resolveStarPoints,
   type DesignNode,
 } from "@opendesign/design-contracts";
 import { resolvePathPropertiesData } from "@opendesign/geometry-service/editable-vector";
+import { resolveRegularShapeGeometry } from "@opendesign/geometry-service/regular-shape";
 
 export type FlattenPathSourceNode = Extract<
   DesignNode,
@@ -53,21 +52,10 @@ export function flattenSourcePath(
     };
   }
   if (node.kind === "polygon" || node.kind === "star") {
-    if (node.properties.cornerRadius > 0) {
-      return {
-        ok: false,
-        message: `Rounded ${node.kind} ${node.id} requires an exact outline before Flatten`,
-      };
-    }
-    const points =
-      node.kind === "polygon"
-        ? resolveRegularPolygonPoints(node.size, node.properties.pointCount)
-        : resolveStarPoints(
-            node.size,
-            node.properties.pointCount,
-            node.properties.innerRadius,
-          );
-    return { ok: true, fillRule: "nonzero", path: closedPointPath(points) };
+    const geometry = resolveRegularShapeGeometry(node);
+    return geometry.ok
+      ? { ok: true, fillRule: "nonzero", path: geometry.path }
+      : { ok: false, message: geometry.message };
   }
   if (
     node.properties.startEndpoint !== "none" ||
@@ -89,16 +77,6 @@ export function flattenSourcePath(
 
 export function sourceHasFillGeometry(node: FlattenSourceNode): boolean {
   return node.kind !== "line";
-}
-
-function closedPointPath(points: readonly { x: number; y: number }[]): string {
-  return points
-    .map(
-      (point, index) =>
-        `${index === 0 ? "M" : "L"}${number(point.x)} ${number(point.y)}`,
-    )
-    .concat("Z")
-    .join("");
 }
 
 function rectanglePath(width: number, height: number, radius: number): string {

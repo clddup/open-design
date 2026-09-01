@@ -19,6 +19,7 @@ import {
   resolveImagePlacement,
 } from "@opendesign/image-service";
 import type { BooleanGeometryResolution } from "@opendesign/geometry-service/boolean-resolver";
+import { resolveRegularShapeGeometry } from "@opendesign/geometry-service/regular-shape";
 import {
   resolvePathPropertiesData,
   serializeVectorNetwork,
@@ -485,29 +486,63 @@ function toElementSpec(
       };
       break;
     }
-    case "polygon":
-      tag = "Polygon";
-      data = {
-        ...base,
-        ...mapShapeProperties(document, node.id, node.properties, warnings),
-        width: node.size.width,
-        height: node.size.height,
-        sides: node.properties.pointCount,
-        cornerRadius: node.properties.cornerRadius,
-      };
+    case "polygon": {
+      const shape = mapShapeProperties(
+        document,
+        node.id,
+        node.properties,
+        warnings,
+      );
+      if (node.properties.cornerRadius === 0) {
+        tag = "Polygon";
+        data = {
+          ...base,
+          ...shape,
+          width: node.size.width,
+          height: node.size.height,
+          sides: node.properties.pointCount,
+        };
+      } else {
+        tag = "Path";
+        data = {
+          ...base,
+          ...shape,
+          editConfig: { editSize: "scale" },
+          path: regularShapeLeaferPath(node, warnings),
+          windingRule: "nonzero",
+        };
+      }
       break;
-    case "star":
-      tag = "Star";
-      data = {
-        ...base,
-        ...mapShapeProperties(document, node.id, node.properties, warnings),
-        width: node.size.width,
-        height: node.size.height,
-        corners: node.properties.pointCount,
-        innerRadius: node.properties.innerRadius,
-        cornerRadius: node.properties.cornerRadius,
-      };
+    }
+    case "star": {
+      const shape = mapShapeProperties(
+        document,
+        node.id,
+        node.properties,
+        warnings,
+      );
+      if (node.properties.cornerRadius === 0) {
+        tag = "Star";
+        data = {
+          ...base,
+          ...shape,
+          width: node.size.width,
+          height: node.size.height,
+          corners: node.properties.pointCount,
+          innerRadius: node.properties.innerRadius,
+        };
+      } else {
+        tag = "Path";
+        data = {
+          ...base,
+          ...shape,
+          editConfig: { editSize: "scale" },
+          path: regularShapeLeaferPath(node, warnings),
+          windingRule: "nonzero",
+        };
+      }
       break;
+    }
     case "text":
       tag = "Text";
       data = {
@@ -1403,4 +1438,20 @@ function resolveImageDataUrl(
 function readPath(value: unknown): string | undefined {
   if (typeof value === "string" && value.length > 0) return value;
   return undefined;
+}
+
+function regularShapeLeaferPath(
+  node: Extract<DesignNode, { kind: "polygon" | "star" }>,
+  warnings: LeaferFidelityWarning[],
+): string | null {
+  const geometry = resolveRegularShapeGeometry(node);
+  if (!geometry.ok) {
+    warnings.push({
+      code: "invalid-path",
+      message: geometry.message,
+      nodeId: node.id,
+    });
+    return null;
+  }
+  return `M0 0M${node.size.width} ${node.size.height}${geometry.path}`;
 }

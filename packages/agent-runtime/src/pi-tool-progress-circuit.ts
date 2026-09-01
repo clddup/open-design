@@ -1,6 +1,6 @@
 import type { TrustedToolFailure } from "@opendesign/agent-contracts";
 
-const MAX_CONSECUTIVE_INVALID_INPUTS_PER_TOOL = 2;
+const MAX_REPEATED_INVALID_INPUTS = 2;
 const MAX_REPEATED_RECOVERABLE_FAILURES = 2;
 
 /**
@@ -9,7 +9,7 @@ const MAX_REPEATED_RECOVERABLE_FAILURES = 2;
  * occurred between them; repeating one contract fingerprint is a real loop.
  */
 export class PiToolProgressCircuit {
-  readonly #invalidInputsByTool = new Map<string, number>();
+  readonly #invalidInputsByFingerprint = new Map<string, number>();
   readonly #recoverableFailuresByFingerprint = new Map<string, number>();
 
   recordFailure(
@@ -19,15 +19,18 @@ export class PiToolProgressCircuit {
     if (!failure.recoverable || failure.runTerminal) return failure;
 
     if (failure.code === "invalid_tool_input") {
-      const invalidInputs = (this.#invalidInputsByTool.get(toolName) ?? 0) + 1;
-      this.#invalidInputsByTool.set(toolName, invalidInputs);
-      if (invalidInputs >= MAX_CONSECUTIVE_INVALID_INPUTS_PER_TOOL) {
+      const fingerprint = failureFingerprint(toolName, failure);
+      const invalidInputs =
+        (this.#invalidInputsByFingerprint.get(fingerprint) ?? 0) + 1;
+      this.#invalidInputsByFingerprint.set(fingerprint, invalidInputs);
+      if (invalidInputs >= MAX_REPEATED_INVALID_INPUTS) {
         return terminalFailure(
           "tool_protocol_no_progress",
-          `${toolName} produced ${invalidInputs} consecutive invalid tool calls without a successful document revision. The selected model/provider is not reliably following this tool contract, so the run was stopped instead of continuing an invisible retry loop.`,
+          `${toolName} repeated the same invalid tool input ${invalidInputs} times without a successful document revision. The run was stopped instead of continuing an invisible retry loop.`,
           failure,
         );
       }
+      return failure;
     }
 
     // This is a host sequencing guard, not another occurrence of the
@@ -56,7 +59,7 @@ export class PiToolProgressCircuit {
   recordSuccess(_toolName: string, revisionAdvanced: boolean): void {
     if (!revisionAdvanced) return;
     this.#recoverableFailuresByFingerprint.clear();
-    this.#invalidInputsByTool.clear();
+    this.#invalidInputsByFingerprint.clear();
   }
 }
 

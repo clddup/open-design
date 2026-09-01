@@ -76,7 +76,7 @@ export function AppearanceBasicsSection({
             value={formatNumber(node.properties.cornerRadius ?? 0)}
           />
         )}
-        {isEditableVectorNode(node) && (
+        {supportsCornerSmoothing(node) && (
           <Field
             accessibleLabel={t("properties.cornerSmoothing")}
             label="S"
@@ -145,6 +145,18 @@ function isEditableVectorNode(node: DesignNode): node is Extract<
   return (
     (node.kind === "path" || node.kind === "vector") &&
     "network" in node.properties
+  );
+}
+
+function supportsCornerSmoothing(node: DesignNode): node is
+  | Extract<DesignNode, { kind: "polygon" | "star" }>
+  | (Extract<DesignNode, { kind: "path" | "vector" }> & {
+      properties: VectorNetworkProperties;
+    }) {
+  return (
+    node.kind === "polygon" ||
+    node.kind === "star" ||
+    isEditableVectorNode(node)
   );
 }
 

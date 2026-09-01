@@ -7,6 +7,12 @@ const invalidInput: TrustedToolFailure = {
   message: "Invalid input",
   retryable: false,
   recoverable: true,
+  details: {
+    kind: "tool-validation",
+    fingerprint: "validation_same",
+    issues: [{ path: "/input/name", message: "Expected string" }],
+    recovery: { action: "correct-and-retry", required: false },
+  },
 };
 
 const recoverableFailure: TrustedToolFailure = {
@@ -17,7 +23,7 @@ const recoverableFailure: TrustedToolFailure = {
 };
 
 describe("PiToolProgressCircuit", () => {
-  it("stops two different invalid inputs for one tool without a revision", () => {
+  it("stops one repeated invalid-input fingerprint without a revision", () => {
     const circuit = new PiToolProgressCircuit();
 
     expect(
@@ -30,6 +36,24 @@ describe("PiToolProgressCircuit", () => {
       recoverable: false,
       runTerminal: true,
     });
+  });
+
+  it("does not combine different invalid inputs for one tool into a fake loop", () => {
+    const circuit = new PiToolProgressCircuit();
+
+    expect(
+      circuit.recordFailure("opendesign_edit_design", invalidInput),
+    ).not.toHaveProperty("runTerminal");
+    expect(
+      circuit.recordFailure("opendesign_edit_design", {
+        ...invalidInput,
+        details: {
+          ...invalidInput.details!,
+          fingerprint: "validation_corrected_but_different",
+          issues: [{ path: "/input/size", message: "Expected number" }],
+        },
+      }),
+    ).not.toHaveProperty("runTerminal");
   });
 
   it("does not combine unrelated recovery failures into a fake loop", () => {

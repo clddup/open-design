@@ -867,6 +867,7 @@ function importElement(
               ...properties,
               pointCount: semantic.pointCount,
               cornerRadius: semantic.cornerRadius,
+              cornerSmoothing: semantic.cornerSmoothing,
             },
           }
         : {
@@ -879,6 +880,7 @@ function importElement(
               pointCount: semantic.pointCount,
               innerRadius: semantic.innerRadius,
               cornerRadius: semantic.cornerRadius,
+              cornerSmoothing: semantic.cornerSmoothing,
             },
           };
     context.nodes.push(node);

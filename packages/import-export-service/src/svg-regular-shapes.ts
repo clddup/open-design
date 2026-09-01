@@ -4,55 +4,72 @@ import {
   type DesignNode,
   type Point,
 } from "@opendesign/design-contracts";
+import { resolveRegularShapeGeometry } from "@opendesign/geometry-service/regular-shape";
 
-const REGULAR_SHAPE_VERSION = "1";
+const LEGACY_REGULAR_SHAPE_VERSION = "1";
+const REGULAR_SHAPE_VERSION = "2";
 const VERSION_ATTRIBUTE = "data-opendesign-regular-shape-version";
 const POINT_COUNT_ATTRIBUTE = "data-opendesign-point-count";
 const INNER_RADIUS_ATTRIBUTE = "data-opendesign-inner-radius";
 const CORNER_RADIUS_ATTRIBUTE = "data-opendesign-corner-radius";
+const CORNER_SMOOTHING_ATTRIBUTE = "data-opendesign-corner-smoothing";
 const WIDTH_ATTRIBUTE = "data-opendesign-width";
 const HEIGHT_ATTRIBUTE = "data-opendesign-height";
 
 type RegularShapeNode = Extract<DesignNode, { kind: "polygon" | "star" }>;
+type RegularShapeValue =
+  | {
+      kind: "polygon";
+      width: number;
+      height: number;
+      pointCount: number;
+      cornerRadius: number;
+      cornerSmoothing: number;
+    }
+  | {
+      kind: "star";
+      width: number;
+      height: number;
+      pointCount: number;
+      innerRadius: number;
+      cornerRadius: number;
+      cornerSmoothing: number;
+    };
 
 export type SvgRegularShapeReadResult =
   | { status: "absent" }
   | { status: "invalid"; message: string }
-  | {
-      status: "valid";
-      value:
-        | {
-            kind: "polygon";
-            width: number;
-            height: number;
-            pointCount: number;
-            cornerRadius: 0;
-          }
-        | {
-            kind: "star";
-            width: number;
-            height: number;
-            pointCount: number;
-            innerRadius: number;
-            cornerRadius: 0;
-          };
-    };
+  | { status: "valid"; value: RegularShapeValue };
 
 export function writeSvgRegularShape(
   element: Element,
   node: RegularShapeNode,
 ): void {
-  if (node.properties.cornerRadius !== 0) {
-    throw new RangeError("Rounded regular shapes require an exact SVG outline");
+  const rounded = node.properties.cornerRadius > 0;
+  const expectedTag = rounded ? "path" : "polygon";
+  if (element.localName.toLowerCase() !== expectedTag) {
+    throw new TypeError(`${node.kind} SVG geometry requires <${expectedTag}>`);
   }
-  const points = regularShapePoints(node);
-  element.setAttribute("points", formatPoints(points));
+  if (rounded) {
+    const geometry = resolveRegularShapeGeometry(node);
+    if (!geometry.ok) throw new RangeError(geometry.message);
+    element.setAttribute("d", geometry.path);
+  } else {
+    element.setAttribute("points", formatPoints(regularShapePoints(node)));
+  }
   element.setAttribute(VERSION_ATTRIBUTE, REGULAR_SHAPE_VERSION);
   element.setAttribute(
     POINT_COUNT_ATTRIBUTE,
     String(node.properties.pointCount),
   );
-  element.setAttribute(CORNER_RADIUS_ATTRIBUTE, "0");
+  element.setAttribute(
+    CORNER_RADIUS_ATTRIBUTE,
+    formatNumber(node.properties.cornerRadius),
+  );
+  element.setAttribute(
+    CORNER_SMOOTHING_ATTRIBUTE,
+    formatNumber(node.properties.cornerSmoothing ?? 0),
+  );
   element.setAttribute(WIDTH_ATTRIBUTE, formatNumber(node.size.width));
   element.setAttribute(HEIGHT_ATTRIBUTE, formatNumber(node.size.height));
   if (node.kind === "star") {
@@ -67,14 +84,9 @@ export function readSvgRegularShape(
   element: Element,
 ): SvgRegularShapeReadResult {
   const sourceKind = element.getAttribute("data-opendesign-kind");
-  const hasMetadata = [
-    VERSION_ATTRIBUTE,
-    POINT_COUNT_ATTRIBUTE,
-    INNER_RADIUS_ATTRIBUTE,
-    CORNER_RADIUS_ATTRIBUTE,
-    WIDTH_ATTRIBUTE,
-    HEIGHT_ATTRIBUTE,
-  ].some((name) => element.hasAttribute(name));
+  const hasMetadata = metadataAttributes().some((name) =>
+    element.hasAttribute(name),
+  );
   if (sourceKind !== "polygon" && sourceKind !== "star" && !hasMetadata) {
     return { status: "absent" };
   }
@@ -83,24 +95,43 @@ export function readSvgRegularShape(
       "OpenDesign regular-shape metadata requires a Polygon or Star kind",
     );
   }
-  if (element.localName.toLowerCase() !== "polygon") {
-    return invalid(
-      `OpenDesign ${sourceKind} semantics require an SVG <polygon>`,
-    );
-  }
-  if (element.getAttribute(VERSION_ATTRIBUTE) !== REGULAR_SHAPE_VERSION) {
+  const version = element.getAttribute(VERSION_ATTRIBUTE);
+  if (
+    version !== LEGACY_REGULAR_SHAPE_VERSION &&
+    version !== REGULAR_SHAPE_VERSION
+  ) {
     return invalid(
       "OpenDesign regular-shape metadata version is missing or unsupported",
     );
   }
+  const common = readCommonMetadata(element, version);
+  if (!common.ok) return invalid(common.message);
+  const value = readKindMetadata(element, sourceKind, common.value);
+  if (!value.ok) return invalid(value.message);
+  const geometryIssue = validateRenderedGeometry(element, value.value, version);
+  return geometryIssue
+    ? invalid(geometryIssue)
+    : { status: "valid", value: value.value };
+}
+
+type CommonMetadata = Omit<RegularShapeValue, "kind" | "innerRadius">;
+
+function readCommonMetadata(
+  element: Element,
+  version: string,
+): { ok: true; value: CommonMetadata } | { ok: false; message: string } {
   const width = strictNumber(element.getAttribute(WIDTH_ATTRIBUTE));
   const height = strictNumber(element.getAttribute(HEIGHT_ATTRIBUTE));
   const pointCount = strictNumber(element.getAttribute(POINT_COUNT_ATTRIBUTE));
   const cornerRadius = strictNumber(
     element.getAttribute(CORNER_RADIUS_ATTRIBUTE),
   );
+  const cornerSmoothing =
+    version === LEGACY_REGULAR_SHAPE_VERSION
+      ? 0
+      : strictNumber(element.getAttribute(CORNER_SMOOTHING_ATTRIBUTE));
   if (!isPositive(width) || !isPositive(height)) {
-    return invalid(
+    return failure(
       "OpenDesign regular-shape bounds must be finite and positive",
     );
   }
@@ -110,56 +141,109 @@ export function readSvgRegularShape(
     pointCount < 3 ||
     pointCount > 60
   ) {
-    return invalid(
+    return failure(
       "OpenDesign regular-shape pointCount must be an integer from 3 to 60",
     );
   }
-  if (cornerRadius !== 0) {
-    return invalid(
-      "Rounded OpenDesign regular shapes require an exact SVG outline",
+  if (cornerRadius === null || cornerRadius < 0) {
+    return failure(
+      "OpenDesign regular-shape cornerRadius must be non-negative",
     );
   }
+  if (cornerSmoothing === null || cornerSmoothing < 0 || cornerSmoothing > 1) {
+    return failure(
+      "OpenDesign regular-shape cornerSmoothing must be between 0 and 1",
+    );
+  }
+  if (version === LEGACY_REGULAR_SHAPE_VERSION && cornerRadius !== 0) {
+    return failure(
+      "Legacy regular-shape metadata supports only sharp geometry",
+    );
+  }
+  return {
+    ok: true,
+    value: { width, height, pointCount, cornerRadius, cornerSmoothing },
+  };
+}
 
-  let expected: Point[];
-  let value: Extract<SvgRegularShapeReadResult, { status: "valid" }>["value"];
-  if (sourceKind === "star") {
-    const innerRadius = strictNumber(
-      element.getAttribute(INNER_RADIUS_ATTRIBUTE),
-    );
-    if (innerRadius === null || innerRadius < 0 || innerRadius > 1) {
-      return invalid("OpenDesign Star innerRadius must be between 0 and 1");
-    }
-    expected = resolveStarPoints({ width, height }, pointCount, innerRadius);
-    value = {
-      kind: "star",
-      width,
-      height,
-      pointCount,
-      innerRadius,
-      cornerRadius: 0,
-    };
-  } else {
-    if (element.hasAttribute(INNER_RADIUS_ATTRIBUTE)) {
-      return invalid(
-        "OpenDesign Polygon metadata cannot contain Star innerRadius",
-      );
-    }
-    expected = resolveRegularPolygonPoints({ width, height }, pointCount);
-    value = {
-      kind: "polygon",
-      width,
-      height,
-      pointCount,
-      cornerRadius: 0,
-    };
+function readKindMetadata(
+  element: Element,
+  kind: RegularShapeValue["kind"],
+  common: CommonMetadata,
+): { ok: true; value: RegularShapeValue } | { ok: false; message: string } {
+  if (kind === "polygon") {
+    return element.hasAttribute(INNER_RADIUS_ATTRIBUTE)
+      ? failure("OpenDesign Polygon metadata cannot contain Star innerRadius")
+      : { ok: true, value: { kind, ...common } };
   }
-  const actual = parsePoints(element.getAttribute("points"));
-  if (!actual || !samePoints(actual, expected)) {
-    return invalid(
-      "OpenDesign regular-shape points do not match their semantic parameters",
-    );
+  const innerRadius = strictNumber(
+    element.getAttribute(INNER_RADIUS_ATTRIBUTE),
+  );
+  return innerRadius === null || innerRadius < 0 || innerRadius > 1
+    ? failure("OpenDesign Star innerRadius must be between 0 and 1")
+    : { ok: true, value: { kind, ...common, innerRadius } };
+}
+
+function validateRenderedGeometry(
+  element: Element,
+  value: RegularShapeValue,
+  version: string,
+): string | null {
+  const rounded = value.cornerRadius > 0;
+  const expectedTag = rounded ? "path" : "polygon";
+  if (element.localName.toLowerCase() !== expectedTag) {
+    return `OpenDesign ${value.kind} semantics require an SVG <${expectedTag}>`;
   }
-  return { status: "valid", value };
+  if (version === LEGACY_REGULAR_SHAPE_VERSION || !rounded) {
+    const actual = parsePoints(element.getAttribute("points"));
+    return actual && samePoints(actual, regularShapeValuePoints(value))
+      ? null
+      : "OpenDesign regular-shape points do not match their semantic parameters";
+  }
+  const expected = resolveRegularShapeGeometry(regularShapeValueNode(value));
+  if (!expected.ok) return expected.message;
+  return element.getAttribute("d") === expected.path
+    ? null
+    : "OpenDesign rounded regular-shape path does not match its semantic parameters";
+}
+
+function regularShapeValueNode(value: RegularShapeValue): RegularShapeNode {
+  const base = {
+    id: "svg_regular_shape",
+    name: "SVG regular shape",
+    parentId: null,
+    childIds: [],
+    visible: true,
+    locked: false,
+    transform: [1, 0, 0, 1, 0, 0] as RegularShapeNode["transform"],
+    size: { width: value.width, height: value.height },
+    exportSettings: [],
+    opacity: 1,
+    extensions: {},
+  };
+  const shape = { fills: [], strokes: [], strokeWidth: 0 };
+  return value.kind === "polygon"
+    ? {
+        ...base,
+        kind: "polygon",
+        properties: {
+          ...shape,
+          pointCount: value.pointCount,
+          cornerRadius: value.cornerRadius,
+          cornerSmoothing: value.cornerSmoothing,
+        },
+      }
+    : {
+        ...base,
+        kind: "star",
+        properties: {
+          ...shape,
+          pointCount: value.pointCount,
+          innerRadius: value.innerRadius,
+          cornerRadius: value.cornerRadius,
+          cornerSmoothing: value.cornerSmoothing,
+        },
+      };
 }
 
 function regularShapePoints(node: RegularShapeNode): Point[] {
@@ -170,6 +254,25 @@ function regularShapePoints(node: RegularShapeNode): Point[] {
         node.properties.pointCount,
         node.properties.innerRadius,
       );
+}
+
+function regularShapeValuePoints(value: RegularShapeValue): Point[] {
+  const size = { width: value.width, height: value.height };
+  return value.kind === "polygon"
+    ? resolveRegularPolygonPoints(size, value.pointCount)
+    : resolveStarPoints(size, value.pointCount, value.innerRadius);
+}
+
+function metadataAttributes(): readonly string[] {
+  return [
+    VERSION_ATTRIBUTE,
+    POINT_COUNT_ATTRIBUTE,
+    INNER_RADIUS_ATTRIBUTE,
+    CORNER_RADIUS_ATTRIBUTE,
+    CORNER_SMOOTHING_ATTRIBUTE,
+    WIDTH_ATTRIBUTE,
+    HEIGHT_ATTRIBUTE,
+  ];
 }
 
 function parsePoints(value: string | null): Point[] | null {
@@ -196,11 +299,13 @@ function samePoints(
   actual: readonly Point[],
   expected: readonly Point[],
 ): boolean {
-  if (actual.length !== expected.length) return false;
-  return actual.every((point, index) => {
-    const candidate = expected[index]!;
-    return close(point.x, candidate.x) && close(point.y, candidate.y);
-  });
+  return (
+    actual.length === expected.length &&
+    actual.every((point, index) => {
+      const candidate = expected[index]!;
+      return close(point.x, candidate.x) && close(point.y, candidate.y);
+    })
+  );
 }
 
 function close(left: number, right: number): boolean {
@@ -227,6 +332,10 @@ function strictNumber(value: string | null): number | null {
 
 function isPositive(value: number | null): value is number {
   return value !== null && value > 0;
+}
+
+function failure(message: string): { ok: false; message: string } {
+  return { ok: false, message };
 }
 
 function invalid(message: string): SvgRegularShapeReadResult {

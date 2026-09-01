@@ -4,10 +4,7 @@ import type {
   DesignNode,
   Rect,
 } from "@opendesign/design-contracts";
-import {
-  resolveRegularPolygonPoints,
-  resolveStarPoints,
-} from "@opendesign/design-contracts";
+import { resolveRegularShapeGeometry } from "./regular-shape.js";
 import type {
   VectorBooleanOperation,
   VectorFillRule,
@@ -21,7 +18,7 @@ import {
 } from "./editable-vector.js";
 import { outlineVectorNetworkStroke } from "./vector-materialization.js";
 
-export const BOOLEAN_GEOMETRY_RESOLVER_VERSION = 1 as const;
+export const BOOLEAN_GEOMETRY_RESOLVER_VERSION = 2 as const;
 
 export type BooleanGeometryIssueCode =
   | "budget-exceeded"
@@ -332,37 +329,13 @@ class CachedBooleanGeometryResolver implements BooleanGeometryResolver {
     } else if (node.kind === "ellipse") {
       path = ellipsePath(node.size.width, node.size.height);
     } else if (node.kind === "polygon") {
-      if (node.properties.cornerRadius > 0) {
-        return {
-          ok: false,
-          issue: {
-            code: "unsupported-style",
-            message: `Rounded polygon operand ${node.id} requires an exact outline before Boolean resolution`,
-            nodeId: node.id,
-          },
-        };
-      }
-      path = closedPointPath(
-        resolveRegularPolygonPoints(node.size, node.properties.pointCount),
-      );
+      const geometry = resolveRegularShapeGeometry(node);
+      if (!geometry.ok) return invalidRegularShape(node.id, geometry.message);
+      path = geometry.path;
     } else if (node.kind === "star") {
-      if (node.properties.cornerRadius > 0) {
-        return {
-          ok: false,
-          issue: {
-            code: "unsupported-style",
-            message: `Rounded star operand ${node.id} requires an exact outline before Boolean resolution`,
-            nodeId: node.id,
-          },
-        };
-      }
-      path = closedPointPath(
-        resolveStarPoints(
-          node.size,
-          node.properties.pointCount,
-          node.properties.innerRadius,
-        ),
-      );
+      const geometry = resolveRegularShapeGeometry(node);
+      if (!geometry.ok) return invalidRegularShape(node.id, geometry.message);
+      path = geometry.path;
     } else {
       const resolvedPath = resolvePathPropertiesData(node.properties);
       if (resolvedPath === null) {
@@ -674,6 +647,7 @@ class CachedBooleanGeometryResolver implements BooleanGeometryResolver {
             child.size.height,
             child.properties.pointCount,
             child.properties.cornerRadius,
+            child.properties.cornerSmoothing ?? 0,
           ];
         } else if (child.kind === "star") {
           shape = [
@@ -682,6 +656,7 @@ class CachedBooleanGeometryResolver implements BooleanGeometryResolver {
             child.properties.pointCount,
             child.properties.innerRadius,
             child.properties.cornerRadius,
+            child.properties.cornerSmoothing ?? 0,
           ];
         } else {
           const resolvedPath = resolvePathPropertiesData(child.properties);
@@ -864,19 +839,11 @@ function emptyGeometry(): GeometryValue {
   return { bounds: null, empty: true, fillRule: "nonzero", path: "" };
 }
 
-function closedPointPath(points: readonly { x: number; y: number }[]): string {
-  return points
-    .map(
-      (point, index) =>
-        `${index === 0 ? "M" : "L"}${formatPathNumber(point.x)} ${formatPathNumber(point.y)}`,
-    )
-    .concat("Z")
-    .join(" ");
-}
-
-function formatPathNumber(value: number): string {
-  const normalized = Math.abs(value) < 1e-12 ? 0 : value;
-  return Number(normalized.toFixed(12)).toString();
+function invalidRegularShape(nodeId: string, message: string): GeometryAttempt {
+  return {
+    ok: false,
+    issue: { code: "unsupported-operand", message, nodeId },
+  };
 }
 
 function rectanglePath(width: number, height: number, radius: number): string {

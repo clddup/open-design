@@ -2450,7 +2450,8 @@ describe("design Agent tool contract", () => {
         strokeWidth: 0,
         pointCount: 5,
         innerRadius: 0.382,
-        cornerRadius: 0,
+        cornerRadius: 8,
+        cornerSmoothing: 1,
       },
     };
     const input = {
@@ -2507,6 +2508,7 @@ describe("design Agent tool contract", () => {
         strokeWidth: 0,
         pointCount: 6,
         cornerRadius: 8,
+        cornerSmoothing: 0.6,
       },
     };
     expect(
@@ -2516,6 +2518,45 @@ describe("design Agent tool contract", () => {
           {
             ...input.commands[0],
             node: polygon,
+          },
+        ],
+      }).ok,
+    ).toBe(true);
+
+    const smoothingIssues = DesignApplyContract.issues({
+      ...input,
+      commands: [
+        {
+          ...input.commands[0],
+          node: {
+            ...polygon,
+            properties: { ...polygon.properties, cornerSmoothing: 1.01 },
+          },
+        },
+      ],
+    });
+    const smoothingIssue = smoothingIssues.find(
+      (issue) => issue.code === "design_apply.schema_invalid",
+    );
+    expect(smoothingIssue?.path).toContain(
+      "/commands/0/node/properties/cornerSmoothing",
+    );
+
+    expect(
+      DesignApplyContract.parse({
+        label: "Smooth existing regular shapes",
+        commands: [
+          {
+            commandId: "smooth_polygon",
+            type: "update_properties",
+            nodeId: polygon.id,
+            properties: { cornerRadius: 10, cornerSmoothing: 0.75 },
+          },
+          {
+            commandId: "smooth_star",
+            type: "update_properties",
+            nodeId: node.id,
+            properties: { cornerRadius: 6, cornerSmoothing: 0.4 },
           },
         ],
       }).ok,

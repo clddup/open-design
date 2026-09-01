@@ -1,4 +1,8 @@
-export const GEOMETRY_SERVICE_CONTRACT_VERSION = 29 as const;
+export const GEOMETRY_SERVICE_CONTRACT_VERSION = 30 as const;
+export {
+  resolveRegularShapeGeometry,
+  type RegularShapeGeometryResult,
+} from "./regular-shape.js";
 export {
   localReflectionTransform,
   reflectionTransform,

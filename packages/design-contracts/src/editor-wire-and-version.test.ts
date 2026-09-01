@@ -19,6 +19,7 @@ import {
   IMAGE_PAINT_CROP_DESIGN_SCHEMA_VERSION,
   ADVANCED_TEXT_DECORATION_DESIGN_SCHEMA_VERSION,
   ROTATION_ORIGIN_DESIGN_SCHEMA_VERSION,
+  REGULAR_SHAPE_CORNER_SMOOTHING_DESIGN_SCHEMA_VERSION,
   IMAGE_ASSET_DERIVATIONS_DESIGN_SCHEMA_VERSION,
   IMAGE_BACKGROUND_REPLACEMENT_DESIGN_SCHEMA_VERSION,
   IMAGE_RELIGHTING_DESIGN_SCHEMA_VERSION,
@@ -310,7 +311,19 @@ it("keeps Auto Layout and Layout Guide schema milestones distinct", () => {
   expect(IMAGE_PAINT_CROP_DESIGN_SCHEMA_VERSION).toBe("1.53.0");
   expect(ADVANCED_TEXT_DECORATION_DESIGN_SCHEMA_VERSION).toBe("1.54.0");
   expect(ROTATION_ORIGIN_DESIGN_SCHEMA_VERSION).toBe("1.55.0");
-  expect(DESIGN_SCHEMA_VERSION).toBe(ROTATION_ORIGIN_DESIGN_SCHEMA_VERSION);
+  expect(REGULAR_SHAPE_CORNER_SMOOTHING_DESIGN_SCHEMA_VERSION).toBe("1.56.0");
+  expect(DESIGN_SCHEMA_VERSION).toBe(
+    REGULAR_SHAPE_CORNER_SMOOTHING_DESIGN_SCHEMA_VERSION,
+  );
+});
+
+it("migrates 1.55 regular shapes without inventing corner smoothing", () => {
+  const source = textDocumentFixture();
+  source.schemaVersion =
+    ROTATION_ORIGIN_DESIGN_SCHEMA_VERSION as typeof source.schemaVersion;
+  const migrated = migrateDesignDocument(source);
+  expect(migrated?.schemaVersion).toBe(DESIGN_SCHEMA_VERSION);
+  expect(migrated?.nodesById).toEqual(source.nodesById);
 });
 
 it("validates a normalized layer rotation origin from the shared contract", () => {
