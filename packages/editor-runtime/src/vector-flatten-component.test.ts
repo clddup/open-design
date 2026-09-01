@@ -251,7 +251,44 @@ describe("Component Instance Flatten", () => {
     ).toMatchObject({ ok: true });
   });
 
-  it("fails without operations when projected compositing is not exact", () => {
+  it("preserves the resolved Instance root compositing shell", () => {
+    const document = componentInstanceDocument();
+    const main = document.nodesById.button_main;
+    const instanceNode = document.nodesById.button_instance;
+    if (main?.kind !== "frame" || instanceNode?.kind !== "instance") {
+      throw new Error("Missing Component fixture");
+    }
+    main.opacity = 0.8;
+    main.effects = [{ type: "layer-blur", radius: 4 }];
+    instanceNode.opacity = 0.5;
+    instanceNode.effects = [
+      {
+        type: "outer-glow",
+        color: "#22c55e",
+        opacity: 0.4,
+        radius: 8,
+        spread: 2,
+      },
+    ];
+    instanceNode.blendMode = "screen";
+    instanceNode.maskMode = "alpha";
+
+    const runtime = applyFlatten(document, "shell_flattened");
+    expect(
+      runtime.getSnapshot().document.nodesById.shell_flattened,
+    ).toMatchObject({
+      kind: "vector",
+      opacity: 0.4,
+      blendMode: "screen",
+      maskMode: "alpha",
+      effects: [
+        { type: "layer-blur", radius: 4 },
+        { type: "outer-glow", radius: 8 },
+      ],
+    });
+  });
+
+  it("fails without operations when descendant compositing is not exact", () => {
     const patches = [
       { opacity: 0.5 },
       { effects: [{ type: "layer-blur" as const, radius: 4 }] },
@@ -260,21 +297,22 @@ describe("Component Instance Flatten", () => {
     ];
     for (const patch of patches) {
       const document = componentInstanceDocument();
-      const instanceNode = document.nodesById.button_instance;
-      if (instanceNode?.kind !== "instance")
-        throw new Error("Missing Instance");
-      Object.assign(instanceNode, patch);
+      const descendant = document.nodesById.button_bg;
+      if (descendant?.kind !== "rectangle") {
+        throw new Error("Missing Component descendant");
+      }
+      Object.assign(descendant, patch);
       expect(
         planFlattenNodes(
           document,
           "page_instances",
-          [instanceNode.id],
+          ["button_instance"],
           "compositing_flatten",
           "compositing_flatten",
           geometry,
         ),
       ).toMatchObject({ ok: false, code: "unsupported-topology" });
-      expect(document.nodesById.button_instance).toBe(instanceNode);
+      expect(document.nodesById.button_bg).toBe(descendant);
     }
   });
 });
