@@ -64,9 +64,17 @@ export function collectFlattenSources(
   entries: FlattenSourceEntry[],
   preserveShell = false,
 ): { ok: true } | FlattenFailure {
-  const appearanceIssue = flattenAppearanceIssue(node, preserveShell);
-  if (appearanceIssue) {
-    return flattenFailure("unsupported-topology", appearanceIssue);
+  if (!node.visible) {
+    return flattenFailure(
+      "unsupported-topology",
+      `Hidden ${node.kind} ${node.id} cannot be flattened`,
+    );
+  }
+  if (!preserveShell) {
+    const issue = flattenCompositingIssue(node);
+    if (issue) {
+      return flattenFailure("requires-raster-compositing", issue);
+    }
   }
   if (
     isFlattenSourceNode(node) ||
@@ -156,14 +164,7 @@ function collectChildren(
   return { ok: true };
 }
 
-function flattenAppearanceIssue(
-  node: DesignNode,
-  preserveShell: boolean,
-): string | null {
-  if (!node.visible) {
-    return `Hidden ${node.kind} ${node.id} cannot be flattened`;
-  }
-  if (preserveShell) return null;
+function flattenCompositingIssue(node: DesignNode): string | null {
   if (
     node.opacity !== 1 ||
     (node.effects ?? []).some((effect) => effect.visible !== false)

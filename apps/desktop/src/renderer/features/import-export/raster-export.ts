@@ -5,6 +5,9 @@ import {
   resolveDesignTextRuns,
   type LeaferEngineAdapter,
   type LeaferEngineCallbacks,
+  type LeaferFidelityWarning,
+  type LeaferFlattenRasterRequest,
+  type LeaferFlattenRasterResult,
   type LeaferRasterExportResult,
   type LeaferTextRunProjectionResolution,
   type LeaferTextRunStyle,
@@ -15,6 +18,15 @@ import { composeTextRunLayoutProviders } from "../../services/text/text-run-prov
 const EXPORT_SURFACE_WIDTH = 1_280;
 const EXPORT_SURFACE_HEIGHT = 960;
 
+type RasterAdapterOptions = {
+  createAdapter?: (
+    host: HTMLElement,
+    callbacks: LeaferEngineCallbacks,
+  ) => Promise<LeaferEngineAdapter>;
+  textRunProjection?: LeaferTextRunProjectionResolution;
+  textRunLayoutProvider?: TextRunLayoutProvider<LeaferTextRunStyle>;
+};
+
 /**
  * Renders one frozen document target on an isolated Leafer surface. This is a
  * delivery export, not the bounded JPEG used by Agent visual review.
@@ -23,16 +35,8 @@ export async function exportDesignRaster(
   designDocument: DesignDocument,
   request: RasterExportRequest,
   signal?: AbortSignal,
-  options: {
-    createAdapter?: (
-      host: HTMLElement,
-      callbacks: LeaferEngineCallbacks,
-    ) => Promise<LeaferEngineAdapter>;
-    textRunProjection?: LeaferTextRunProjectionResolution;
-    textRunLayoutProvider?: TextRunLayoutProvider<LeaferTextRunStyle>;
-  } = {},
+  options: RasterAdapterOptions = {},
 ): Promise<LeaferRasterExportResult> {
-  const createAdapter = options.createAdapter ?? createLeaferEngineAdapter;
   throwIfAborted(signal);
   if (!designDocument.pagesById[request.pageId]) {
     throw new Error(`Raster export Page is unavailable: ${request.pageId}`);
@@ -42,6 +46,53 @@ export async function exportDesignRaster(
       `Raster export layer ${request.rootNodeId} is outside Page ${request.pageId}`,
     );
   }
+  return withIsolatedRasterAdapter(
+    designDocument,
+    request.pageId,
+    collectSubtreeNodeIds(designDocument, [request.rootNodeId]),
+    signal,
+    options,
+    (adapter) => adapter.exportRaster(request),
+  );
+}
+
+export async function exportDesignFlattenRaster(
+  designDocument: DesignDocument,
+  request: LeaferFlattenRasterRequest,
+  signal?: AbortSignal,
+  options: RasterAdapterOptions = {},
+): Promise<LeaferFlattenRasterResult> {
+  throwIfAborted(signal);
+  if (!designDocument.pagesById[request.pageId]) {
+    throw new Error(`Flatten raster Page is unavailable: ${request.pageId}`);
+  }
+  if (
+    request.nodeIds.length === 0 ||
+    request.nodeIds.some(
+      (nodeId) => !nodeBelongsToPage(designDocument, request.pageId, nodeId),
+    )
+  ) {
+    throw new Error("Flatten raster selection is outside the target Page");
+  }
+  return withIsolatedRasterAdapter(
+    designDocument,
+    request.pageId,
+    collectSubtreeNodeIds(designDocument, request.nodeIds),
+    signal,
+    options,
+    (adapter) => adapter.exportFlattenRaster(request),
+  );
+}
+
+async function withIsolatedRasterAdapter<T>(
+  designDocument: DesignDocument,
+  pageId: string,
+  targetNodeIds: ReadonlySet<string>,
+  signal: AbortSignal | undefined,
+  options: RasterAdapterOptions,
+  exportTarget: (adapter: LeaferEngineAdapter) => Promise<T>,
+): Promise<T> {
+  const createAdapter = options.createAdapter ?? createLeaferEngineAdapter;
   const host = document.createElement("div");
   host.ariaHidden = "true";
   host.dataset.exportSurface = "raster-delivery";
@@ -57,12 +108,16 @@ export async function exportDesignRaster(
   });
   document.body.append(host);
   let renderError: Error | null = null;
+  let fidelityWarnings: readonly LeaferFidelityWarning[] = [];
   let adapter: LeaferEngineAdapter | null = null;
   try {
     adapter = await abortable(
       createAdapter(
         host,
-        createExportCallbacks((error) => (renderError = error)),
+        createExportCallbacks(
+          (error) => (renderError = error),
+          (warnings) => (fidelityWarnings = warnings),
+        ),
       ),
       signal,
     );
@@ -71,7 +126,7 @@ export async function exportDesignRaster(
       options.textRunProjection ??
       resolveDesignTextRuns(
         designDocument,
-        request.pageId,
+        pageId,
         composeTextRunLayoutProviders(
           adapter.textRunLayoutProvider,
           options.textRunLayoutProvider,
@@ -79,7 +134,7 @@ export async function exportDesignRaster(
       ).projection;
     adapter.sync({
       document: designDocument,
-      pageId: request.pageId,
+      pageId,
       reducedMotion: true,
       selection: { nodeIds: [] },
       textRunProjection,
@@ -95,7 +150,13 @@ export async function exportDesignRaster(
     if (renderError) {
       throw new Error("Raster export rendering failed", { cause: renderError });
     }
-    return await abortable(adapter.exportRaster(request), signal);
+    throwForBlockingExportWarning(fidelityWarnings, targetNodeIds);
+    const result = await abortable(exportTarget(adapter), signal);
+    if (renderError) {
+      throw new Error("Raster export rendering failed", { cause: renderError });
+    }
+    throwForBlockingExportWarning(fidelityWarnings, targetNodeIds);
+    return result;
   } finally {
     adapter?.dispose();
     host.remove();
@@ -141,6 +202,7 @@ function nodeBelongsToPage(
 
 function createExportCallbacks(
   onError: (error: Error) => void,
+  onWarningsChange: (warnings: readonly LeaferFidelityWarning[]) => void,
 ): LeaferEngineCallbacks {
   return {
     onCreate: () => false,
@@ -149,7 +211,53 @@ function createExportCallbacks(
     onOperations: () => false,
     onSelectionChange: () => undefined,
     onViewportChange: () => undefined,
+    onWarningsChange,
   };
+}
+
+const BLOCKING_EXPORT_WARNING_CODES = new Set<LeaferFidelityWarning["code"]>([
+  "boolean-geometry-failed",
+  "boolean-geometry-pending",
+  "boolean-geometry-provider-failed",
+  "boolean-geometry-unsupported",
+  "component-resolution-failed",
+  "invalid-path",
+  "missing-image",
+  "rich-text-layout-failed",
+  "style-resolution-failed",
+  "unsupported-node",
+  "variable-resolution-failed",
+]);
+
+function throwForBlockingExportWarning(
+  warnings: readonly LeaferFidelityWarning[],
+  targetNodeIds: ReadonlySet<string>,
+): void {
+  const blocking = warnings.find(
+    (warning) =>
+      targetNodeIds.has(warning.nodeId) &&
+      BLOCKING_EXPORT_WARNING_CODES.has(warning.code),
+  );
+  if (blocking) {
+    throw new Error(
+      `Raster export projection is incomplete: ${blocking.code} (${blocking.nodeId})`,
+    );
+  }
+}
+
+function collectSubtreeNodeIds(
+  document: DesignDocument,
+  roots: readonly string[],
+): Set<string> {
+  const result = new Set<string>();
+  const pending = [...roots];
+  while (pending.length > 0) {
+    const nodeId = pending.pop();
+    if (!nodeId || result.has(nodeId)) continue;
+    result.add(nodeId);
+    pending.push(...(document.nodesById[nodeId]?.childIds ?? []));
+  }
+  return result;
 }
 
 function throwIfAborted(signal: AbortSignal | undefined): void {

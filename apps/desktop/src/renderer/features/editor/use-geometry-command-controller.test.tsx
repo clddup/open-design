@@ -359,4 +359,66 @@ describe("useGeometryCommandController", () => {
       kind: "vector",
     });
   });
+
+  it("uses the same command for descendant compositing and commits the PNG asset once", async () => {
+    const document = structuredClone(createWelcomeDocument());
+    const group = document.nodesById.feature_group;
+    const child = group?.childIds[0]
+      ? document.nodesById[group.childIds[0]]
+      : undefined;
+    if (group?.kind !== "group" || !child) {
+      throw new Error("Missing Group fixture");
+    }
+    child.opacity = 0.5;
+    const runtime = new EditorRuntime(document);
+    runtime.setSelection([group.id], group.id);
+    const transactionCounter = { current: 0 };
+    const rasterize = vi.fn().mockResolvedValue({
+      bounds: { x: 40, y: 320, width: 992, height: 252 },
+      bytes: new Uint8Array([1, 2, 3]),
+      width: 1_984,
+      height: 504,
+      mimeType: "image/png",
+    });
+    const { result } = renderHook(() => {
+      const editor = useEditorCommandController({
+        runtime,
+        setEditorError: vi.fn(),
+        t,
+        transactionCounter,
+      });
+      const snapshot = runtime.getSnapshot();
+      return useGeometryCommandController({
+        activePageId: "page_welcome",
+        applyCommands: editor.applyCommands,
+        componentTargetActive: false,
+        document: snapshot.document,
+        runtime,
+        selectedNodeIds: snapshot.state.selection.nodeIds,
+        setEditorError: vi.fn(),
+        t,
+        transactionCounter,
+        flattenRasterizer: rasterize,
+        vectorGeometryProvider: () => Promise.resolve(geometryProvider()),
+      });
+    });
+
+    expect(result.current.canFlattenSelection).toBe(true);
+    await act(async () => {
+      expect(await result.current.flattenSelection()).toBe(true);
+    });
+
+    const snapshot = runtime.getSnapshot();
+    const resultId = snapshot.state.selection.nodeIds[0];
+    expect(rasterize).toHaveBeenCalledOnce();
+    expect(snapshot.document.nodesById[resultId ?? "missing"]).toMatchObject({
+      kind: "vector",
+      transform: [1, 0, 0, 1, 40, 320],
+    });
+    expect(snapshot.document.assetsById[`${resultId}_raster`]).toMatchObject({
+      mimeType: "image/png",
+      source: { type: "data", value: "AQID" },
+    });
+    expect(snapshot.state.history.undo).toHaveLength(1);
+  });
 });

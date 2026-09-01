@@ -131,6 +131,175 @@ describe("rich Text projection export target", () => {
     ).toBeNull();
   });
 
+  it("always isolates an ordered selection and can neutralize its root shell", () => {
+    const base = projectDesignPage(createWelcomeDocument(), "page_welcome");
+    const source = base.elementsById.get("frame_welcome");
+    if (!source) throw new Error("Missing Frame projection");
+    const projection = {
+      ...base,
+      elementsById: new Map(base.elementsById),
+    };
+    projection.elementsById.set("frame_welcome", {
+      ...source,
+      data: {
+        ...source.data,
+        blendMode: "multiply",
+        blur: 8,
+        mask: "pixel",
+        opacity: 0.5,
+        shadow: [{ x: 4, y: 8 }],
+      },
+    });
+
+    const target = createProjectionExportTarget(
+      projection,
+      {
+        kind: "selection",
+        nodeIds: ["frame_welcome"],
+        neutralizeRootNodeId: "frame_welcome",
+      },
+      factory,
+    );
+    if (!target) throw new Error("Missing isolated selection target");
+
+    expect(target.element.tag).toBe("Group");
+    expect(target.element.children[0]).toMatchObject({
+      specId: "frame_welcome",
+      data: {
+        blendMode: "pass-through",
+        blur: 0,
+        mask: false,
+        opacity: 1,
+        shadow: null,
+      },
+      transform: source.transform,
+    });
+  });
+
+  it("keeps a selected rich Text root and its detached fragments as one sibling", () => {
+    const projection = richTextProjection();
+    const source = projection.elementsById.get("title_welcome");
+    if (!source) throw new Error("Missing Text source");
+    const target = createProjectionExportTarget(
+      projection,
+      {
+        kind: "selection",
+        nodeIds: ["title_welcome", "shape_accent"],
+      },
+      factory,
+    );
+    if (!target) throw new Error("Missing isolated rich Text selection");
+
+    expect(target.element.children[0]).toMatchObject({
+      tag: "Group",
+      transform: source.transform,
+    });
+    expect(
+      target.element.children[0]?.children.map(({ specId }) => specId),
+    ).toEqual([
+      "title_welcome",
+      textRunFragmentElementId("title_welcome", 0),
+      textRunFragmentElementId("title_welcome", 1),
+    ]);
+    expect(target.element.children[0]?.children[0]?.transform).toEqual([
+      1, 0, 0, 1, 0, 0,
+    ]);
+    expect(target.element.children[1]?.specId).toBe("shape_accent");
+  });
+
+  it("moves rich Text root compositing to its compound sibling", () => {
+    const base = richTextProjection();
+    const source = base.elementsById.get("title_welcome");
+    if (!source) throw new Error("Missing Text source");
+    const projection = {
+      ...base,
+      elementsById: new Map(base.elementsById),
+    };
+    projection.elementsById.set("title_welcome", {
+      ...source,
+      data: {
+        ...source.data,
+        blendMode: "multiply",
+        blur: 6,
+        mask: "pixel",
+        opacity: 0.5,
+        shadow: [{ x: 2, y: 4 }],
+      },
+    });
+
+    const target = createProjectionExportTarget(
+      projection,
+      {
+        kind: "selection",
+        nodeIds: ["title_welcome", "shape_accent"],
+      },
+      factory,
+    );
+    if (!target) throw new Error("Missing rich Text compound target");
+
+    const compound = target.element.children[0];
+    expect(compound?.data).toMatchObject({
+      blendMode: "multiply",
+      blur: 6,
+      mask: "pixel",
+      opacity: 0.5,
+      shadow: [{ x: 2, y: 4 }],
+    });
+    expect(compound?.children).not.toHaveLength(0);
+    for (const child of compound?.children ?? []) {
+      expect(child.data).toMatchObject({
+        blendMode: "pass-through",
+        blur: 0,
+        mask: false,
+        opacity: 1,
+        shadow: null,
+      });
+    }
+  });
+
+  it("neutralizes a synthetic appearance leaf owned by the selected root", () => {
+    const base = projectDesignPage(createWelcomeDocument(), "page_welcome");
+    const source = base.elementsById.get("frame_welcome");
+    if (!source) throw new Error("Missing Frame projection");
+    const syntheticId = "__synthetic_frame_appearance";
+    const projection = {
+      ...base,
+      elementsById: new Map(base.elementsById),
+    };
+    projection.elementsById.set("frame_welcome", {
+      ...source,
+      childIds: [syntheticId],
+    });
+    projection.elementsById.set(syntheticId, {
+      ...source,
+      childIds: [],
+      id: syntheticId,
+      parentId: "frame_welcome",
+      data: {
+        ...source.data,
+        opacity: 0.4,
+        data: {
+          opendesignNodeId: "frame_welcome",
+          opendesignProjectionId: syntheticId,
+          opendesignSynthetic: true,
+        },
+      },
+    });
+
+    const target = createProjectionExportTarget(
+      projection,
+      {
+        kind: "selection",
+        nodeIds: ["frame_welcome"],
+        neutralizeRootNodeId: "frame_welcome",
+      },
+      factory,
+    );
+    if (!target) throw new Error("Missing isolated synthetic target");
+
+    expect(target.element.children[0]?.children[0]?.data.opacity).toBe(1);
+  });
+
   it("rejects a non-invertible Text source transform", () => {
     const document = structuredClone(createWelcomeDocument());
     const title = document.nodesById.title_welcome;

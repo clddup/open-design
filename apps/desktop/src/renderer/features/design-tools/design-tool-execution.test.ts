@@ -5277,6 +5277,69 @@ describe("Renderer semantic hierarchy tool", () => {
     ).toBeUndefined();
   });
 
+  it("raster-composites inspected descendant opacity through the same Agent action", async () => {
+    const document = structuredClone(createWelcomeDocument());
+    const group = document.nodesById.feature_group;
+    const child = group?.childIds[0]
+      ? document.nodesById[group.childIds[0]]
+      : undefined;
+    if (group?.kind !== "group" || !child) {
+      throw new Error("Missing Group fixture");
+    }
+    child.opacity = 0.5;
+    const runtime = new EditorRuntime(document);
+    const rasterize = vi.fn().mockResolvedValue({
+      bounds: { x: 40, y: 320, width: 992, height: 252 },
+      bytes: new Uint8Array([1, 2, 3]),
+      width: 1_984,
+      height: 504,
+      mimeType: "image/png",
+    });
+    const result = await executeDesignToolRequest(
+      {
+        requestId: "composited_flatten",
+        call: {
+          toolCallId: "tool/composited flatten",
+          toolName: DESIGN_VECTOR_TOOL_NAME,
+          input: {
+            action: "flatten",
+            label: "Flatten composited Group",
+            nodeIds: [group.id],
+            pageId: "page_welcome",
+          },
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_welcome",
+      {
+        flattenRasterizer: rasterize,
+        vectorGeometryProvider: () =>
+          Promise.resolve(outlineGeometryProvider()),
+      },
+    );
+    const resultNodeId = "vector_flatten_tool_composited_flatten_0";
+    expect(result).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "flatten",
+          resultNodeIds: [resultNodeId],
+          revision: 1,
+        },
+      },
+    });
+    expect(rasterize).toHaveBeenCalledOnce();
+    expect(runtime.getSnapshot().document.nodesById[group.id]).toBeUndefined();
+    expect(
+      runtime.getSnapshot().document.nodesById[resultNodeId],
+    ).toMatchObject({ kind: "vector", transform: [1, 0, 0, 1, 40, 320] });
+    expect(
+      runtime.getSnapshot().document.assetsById[`${resultNodeId}_raster`],
+    ).toMatchObject({ source: { type: "data", value: "AQID" } });
+    expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
+  });
+
   it("flattens an explicit regular shape without rebuilding it through low-level commands", async () => {
     const runtime = new EditorRuntime(structuredClone(createWelcomeDocument()));
     const result = await executeDesignToolRequest(

@@ -8,8 +8,6 @@ import { normalizeVectorNetwork } from "@opendesign/geometry-service/editable-ve
 import type { VectorGeometryProvider } from "@opendesign/geometry-service/vector-path";
 import type { TextRunLayoutProvider } from "@opendesign/text-service";
 import { planDeleteNodes } from "./deletion-operations.js";
-import { analyzeContainerSelection } from "./layer-operations.js";
-import { projectFlattenAppearance } from "./vector-flatten-appearance.js";
 import {
   flattenFailure,
   type FlattenFailure,
@@ -18,10 +16,11 @@ import {
 import { buildFlattenedVectorNetwork } from "./vector-flatten-network.js";
 import {
   collectFlattenSources,
-  isFlattenSourceNode,
   resolveFlattenSelection,
 } from "./vector-flatten-sources.js";
 import type { FlattenTextRunStyle } from "./vector-flatten-text.js";
+import { analyzeFlattenRootSelection } from "./vector-flatten-selection.js";
+import { prepareRasterFlattenNodes } from "./vector-flatten-raster.js";
 
 type EditableVectorNode = Extract<DesignNode, { kind: "path" | "vector" }>;
 
@@ -40,21 +39,18 @@ export type FlattenOperationPlan =
     }
   | FlattenFailure;
 
-type FlattenSelection = {
-  document: DesignDocument;
-  nodes: readonly FlattenSourceEntry[];
-  ordered: readonly string[];
-  parentId: string | null;
-  siblings: readonly string[];
-  sourceNode: DesignNode;
-};
+type FlattenSelection = Omit<
+  Extract<ReturnType<typeof analyzeFlattenRootSelection>, { ok: true }>,
+  "nodes"
+> & { nodes: readonly FlattenSourceEntry[] };
 
 export function canFlattenNodes(
   document: DesignDocument,
   pageId: string,
   nodeIds: readonly string[],
 ): boolean {
-  return analyzeFlattenSelection(document, pageId, nodeIds).ok;
+  if (analyzeFlattenSelection(document, pageId, nodeIds).ok) return true;
+  return prepareRasterFlattenNodes(document, pageId, nodeIds).kind === "ready";
 }
 
 /** Destructively replaces supported same-parent layers with one editable Vector. */
@@ -132,56 +128,17 @@ function analyzeFlattenSelection(
   pageId: string,
   nodeIds: readonly string[],
 ): ({ ok: true } & FlattenSelection) | FlattenFailure {
-  const selection = analyzeContainerSelection(document, pageId, nodeIds, {
-    action: "Flatten",
-    minimum: 1,
-  });
-  if (!selection.ok) {
-    return flattenFailure("unsupported-topology", selection.message);
-  }
-  if (
-    selection.parentId &&
-    document.nodesById[selection.parentId]?.kind === "boolean"
-  ) {
-    return flattenFailure(
-      "unsupported-topology",
-      "Flattening Boolean operands requires leaving Boolean edit scope",
-    );
-  }
-  const nodes = selection.ordered.map((nodeId) => document.nodesById[nodeId]!);
-  const unsupported = nodes.find(
-    (node) =>
-      !isFlattenSourceNode(node) &&
-      node.kind !== "group" &&
-      node.kind !== "frame" &&
-      node.kind !== "image" &&
-      node.kind !== "text" &&
-      node.kind !== "instance",
-  );
-  if (unsupported) {
-    return flattenFailure(
-      "unsupported-topology",
-      `Flatten currently supports Frame, Group, Boolean, Component Instance, Text, Image, Rectangle, Ellipse, Line, Polygon, Star, Path, and Vector layers; received ${unsupported.kind} ${unsupported.id}`,
-    );
-  }
-  const appearance = projectFlattenAppearance(document, nodes);
-  if (!appearance.ok) return appearance;
+  const selection = analyzeFlattenRootSelection(document, pageId, nodeIds);
+  if (!selection.ok) return selection;
   const sourceEntries: FlattenSourceEntry[] = [];
-  for (const node of nodes) {
-    const projectedNode = appearance.document.nodesById[node.id];
-    if (!projectedNode) {
-      return flattenFailure(
-        "unsupported-topology",
-        `Flatten source ${node.id} is missing from the current Component projection`,
-      );
-    }
+  for (const projectedNode of selection.nodes) {
     const collected = collectFlattenSources(
-      appearance.document,
+      selection.document,
       projectedNode,
       projectedNode.transform,
       [],
       sourceEntries,
-      nodes.length === 1,
+      selection.nodes.length === 1,
     );
     if (!collected.ok) return collected;
   }
@@ -193,12 +150,12 @@ function analyzeFlattenSelection(
   }
   return {
     ok: true,
-    document: appearance.document,
+    document: selection.document,
     nodes: sourceEntries,
     ordered: selection.ordered,
     parentId: selection.parentId,
     siblings: selection.siblings,
-    sourceNode: appearance.document.nodesById[nodes[0]!.id]!,
+    sourceNode: selection.sourceNode,
   };
 }
 

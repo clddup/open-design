@@ -31,7 +31,6 @@ import {
   planRenamePage,
   planReorderPage,
   planSvgImport,
-  planFlattenNodes,
   planVectorLayersEndpointConnect,
   planVectorLayersLineCut,
   planVectorLayersVertexTransform,
@@ -103,6 +102,10 @@ import { createScopedVariableInspection } from "./design-variable-inspection";
 import { createScopedStyleInspection } from "./design-style-inspection";
 import { executeDesignSystemToolRequest } from "./design-system-tool-execution";
 import { projectDesignFailureIssues } from "./design-error-projection";
+import {
+  planFlattenWithRasterFallback,
+  type FlattenRasterizer,
+} from "@/renderer/services/flatten-rasterization";
 
 type ExecuteDesignToolOptions = {
   captureCanvas?: (document: DesignDocument) => Promise<{
@@ -121,6 +124,7 @@ type ExecuteDesignToolOptions = {
   importSvg?: typeof runSvgImportInWorker;
   textRunLayoutProvider?: TextRunLayoutProvider<LeaferTextRunStyle>;
   vectorGeometryProvider?: () => Promise<VectorGeometryProvider>;
+  flattenRasterizer?: FlattenRasterizer;
   signal?: AbortSignal;
   stageDelayMs?: number;
   onProgress?: (
@@ -1140,20 +1144,27 @@ async function executeDesignToolRequestUnsafe(
             )(),
           )
         : input.action === "flatten"
-          ? planFlattenNodes(
+          ? await planFlattenWithRasterFallback({
               document,
-              input.pageId,
-              input.nodeIds,
-              `vector_flatten_${safeToolCallId}_${document.revision}`.slice(
-                0,
-                256,
-              ),
-              `flatten_${safeToolCallId}`.slice(0, 96),
-              await (
+              pageId: input.pageId,
+              nodeIds: input.nodeIds,
+              resultNodeId:
+                `vector_flatten_${safeToolCallId}_${document.revision}`.slice(
+                  0,
+                  256,
+                ),
+              geometryIdPrefix: `flatten_${safeToolCallId}`.slice(0, 96),
+              provider: await (
                 options.vectorGeometryProvider ?? loadVectorGeometryProvider
               )(),
-              options.textRunLayoutProvider,
-            )
+              ...(options.flattenRasterizer
+                ? { rasterize: options.flattenRasterizer }
+                : {}),
+              ...(options.textRunLayoutProvider
+                ? { textRunLayoutProvider: options.textRunLayoutProvider }
+                : {}),
+              ...(options.signal ? { signal: options.signal } : {}),
+            })
           : input.action === "cut-layers-with-line"
             ? planVectorLayersLineCut(
                 document,

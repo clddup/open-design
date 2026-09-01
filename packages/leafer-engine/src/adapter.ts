@@ -39,7 +39,10 @@ import {
   createProjectionExportTarget,
   type ProjectionExportRequest,
 } from "./projection-export-target.js";
-import { exportLeaferRaster } from "./raster-export.js";
+import {
+  exportLeaferFlattenRaster,
+  exportLeaferRaster,
+} from "./raster-export.js";
 import { installLeaferImagePaintAdjustmentFilter } from "./image-paint-adjustment-filter.js";
 import { transformToAffine } from "./affine.js";
 import { EditorOverlayController } from "./editor-overlay-controller.js";
@@ -51,6 +54,8 @@ import type {
   LeaferEngineCallbacks,
   LeaferEngineOptions,
   LeaferEngineSyncInput,
+  LeaferFlattenRasterRequest,
+  LeaferFlattenRasterResult,
   LeaferRasterExportResult,
   LeaferSmartSelectionMarkState,
   LeaferTextStyleUpdate,
@@ -906,6 +911,34 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       return await exportLeaferRaster(leaf, request, sourceNode?.kind);
     } finally {
       derived?.dispose();
+    }
+  }
+
+  async exportFlattenRaster(
+    request: LeaferFlattenRasterRequest,
+  ): Promise<LeaferFlattenRasterResult> {
+    if (this.#disposed)
+      throw new Error("Leafer flatten raster adapter is disposed");
+    const input = this.#input;
+    if (!input || input.pageId !== request.pageId) {
+      throw new Error("Leafer flatten raster target is not the projected Page");
+    }
+    await this.#sceneProjection.settlePendingGeometry();
+    if (this.#disposed || this.#input !== input) {
+      throw new Error("Leafer flatten raster target changed during rendering");
+    }
+    const derived = this.#projectionExportTarget({
+      kind: "selection",
+      nodeIds: request.nodeIds,
+      ...(request.neutralizeRootNodeId
+        ? { neutralizeRootNodeId: request.neutralizeRootNodeId }
+        : {}),
+    });
+    if (!derived) throw new Error("Flatten raster selection is unavailable");
+    try {
+      return await exportLeaferFlattenRaster(derived.element);
+    } finally {
+      derived.dispose();
     }
   }
 

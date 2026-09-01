@@ -9,13 +9,16 @@ import type { TextRunLayoutProvider } from "@opendesign/text-service";
 import {
   canFlattenNodes,
   isEffectivelyLocked,
-  planFlattenNodes,
   planVectorOutlineStroke,
   planVectorSemanticEdit,
   type EditorRuntime,
 } from "@opendesign/editor-runtime";
 import { useCallback, useMemo } from "react";
 import type { MessageKey, MessageParameters } from "@/shared/i18n/messages";
+import {
+  planFlattenWithRasterFallback,
+  type FlattenRasterizer,
+} from "@/renderer/services/flatten-rasterization";
 import type { ApplyEditorCommands } from "./use-editor-command-controller";
 
 type Translate = (key: MessageKey, parameters?: MessageParameters) => string;
@@ -32,6 +35,7 @@ export function useGeometryCommandController({
   transactionCounter,
   textRunLayoutProvider,
   vectorGeometryProvider = loadVectorGeometryProvider,
+  flattenRasterizer,
 }: {
   activePageId: string;
   applyCommands: ApplyEditorCommands;
@@ -44,6 +48,7 @@ export function useGeometryCommandController({
   transactionCounter: { current: number };
   textRunLayoutProvider?: TextRunLayoutProvider<LeaferTextRunStyle>;
   vectorGeometryProvider?: () => Promise<VectorGeometryProvider>;
+  flattenRasterizer?: FlattenRasterizer;
 }) {
   const selectedNodeId =
     !componentTargetActive && selectedNodeIds.length === 1
@@ -99,8 +104,12 @@ export function useGeometryCommandController({
         );
       }
       return applied;
-    } catch {
-      setEditorError(t("editor.vectorGeometryUnavailable"));
+    } catch (error) {
+      setEditorError(
+        error instanceof Error
+          ? error.message
+          : t("editor.vectorGeometryUnavailable"),
+      );
       return false;
     }
   }, [
@@ -120,22 +129,30 @@ export function useGeometryCommandController({
       const provider = await vectorGeometryProvider();
       const current = runtime.getSnapshot();
       const operationId = `flatten_${Date.now()}_${++transactionCounter.current}`;
-      const plan = planFlattenNodes(
-        current.document,
-        activePageId,
-        current.state.selection.nodeIds,
-        `${operationId}_result`,
-        `${operationId}_geometry`,
+      const plan = await planFlattenWithRasterFallback({
+        document: current.document,
+        pageId: activePageId,
+        nodeIds: current.state.selection.nodeIds,
+        resultNodeId: `${operationId}_result`,
+        geometryIdPrefix: `${operationId}_geometry`,
         provider,
-        textRunLayoutProvider,
-      );
+        ...(flattenRasterizer ? { rasterize: flattenRasterizer } : {}),
+        ...(textRunLayoutProvider ? { textRunLayoutProvider } : {}),
+      });
       if (!plan.ok) {
         setEditorError(plan.message);
         return false;
       }
-      const applied = applyCommands(t("history.flattenSelection"), [
-        ...plan.operations,
-      ]);
+      const result = runtime.apply({
+        transactionId: `transaction_renderer_${operationId}`,
+        documentId: current.document.documentId,
+        baseRevision: current.document.revision,
+        actor: { type: "user", id: "local-user" },
+        label: t("history.flattenSelection"),
+        commands: [...plan.operations],
+      });
+      setEditorError(result.ok ? null : result.error.message);
+      const applied = result.ok;
       if (applied && plan.flattenResult) {
         runtime.setSelection(
           [plan.flattenResult.resultNodeId],
@@ -143,14 +160,18 @@ export function useGeometryCommandController({
         );
       }
       return applied;
-    } catch {
-      setEditorError(t("editor.vectorGeometryUnavailable"));
+    } catch (error) {
+      setEditorError(
+        error instanceof Error
+          ? error.message
+          : t("editor.vectorGeometryUnavailable"),
+      );
       return false;
     }
   }, [
     activePageId,
-    applyCommands,
     canFlattenSelection,
+    flattenRasterizer,
     runtime,
     setEditorError,
     t,

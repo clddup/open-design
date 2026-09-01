@@ -9,7 +9,8 @@ import type { FlattenSourceNode } from "./vector-flatten-shapes.js";
 
 export type FlattenFailure = {
   ok: false;
-  code: "invalid-geometry" | "unsupported-topology";
+  code:
+    "invalid-geometry" | "requires-raster-compositing" | "unsupported-topology";
   message: string;
 };
 

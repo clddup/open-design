@@ -159,6 +159,13 @@ export {
   planFlattenNodes,
   type FlattenOperationPlan,
 } from "./vector-flatten.js";
+export {
+  planRasterizedFlattenNodes,
+  prepareRasterFlattenNodes,
+  type RasterFlattenPreparation,
+  type RasterFlattenRequest,
+  type RasterFlattenResult,
+} from "./vector-flatten-raster.js";
 export type { FlattenTextRunStyle } from "./vector-flatten-text.js";
 export {
   planDeleteVectorNode,

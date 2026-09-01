@@ -97,8 +97,8 @@ class FakeElement extends FakeEventTarget {
       data: new Blob([new Uint8Array([1, 2, 3])], {
         type: "image/jpeg",
       }),
-      width: Math.max(1, Math.round(bounds.width * scale)),
-      height: Math.max(1, Math.round(bounds.height * scale)),
+      width: Math.max(1, Math.floor(bounds.width * scale)),
+      height: Math.max(1, Math.floor(bounds.height * scale)),
     });
   });
   syncExport = vi.fn((_format: string, options?: { scale?: number }) => {
@@ -106,8 +106,8 @@ class FakeElement extends FakeEventTarget {
     const bounds = this.getBounds();
     return {
       data: "data:image/jpeg;base64,AQID",
-      width: Math.max(1, Math.round(bounds.width * scale)),
-      height: Math.max(1, Math.round(bounds.height * scale)),
+      width: Math.max(1, Math.floor(bounds.width * scale)),
+      height: Math.max(1, Math.floor(bounds.height * scale)),
     };
   });
   updateLayout = vi.fn();
@@ -3693,6 +3693,32 @@ describe("Leafer engine selection bounds synchronization", () => {
         resampling: "smooth",
       }),
     ).rejects.toThrow("Leafer raster export layer is unavailable");
+    adapter.dispose();
+  });
+
+  it("matches Leafer integer export surfaces for fractional bounds", async () => {
+    const input = createInput();
+    input.document = structuredClone(input.document);
+    const frame = input.document.nodesById.frame_welcome;
+    if (frame?.kind !== "frame") throw new Error("Missing welcome Frame");
+    frame.size = { width: 100.4, height: 80.9 };
+    const adapter = await createLeaferEngineAdapter(
+      createHost(),
+      createCallbacks(),
+    );
+    adapter.sync(input);
+
+    await expect(
+      adapter.exportRaster({
+        version: 1,
+        pageId: "page_welcome",
+        rootNodeId: "frame_welcome",
+        format: "png",
+        size: { mode: "scale", value: 2 },
+        background: { mode: "transparent" },
+        resampling: "smooth",
+      }),
+    ).resolves.toMatchObject({ width: 200, height: 161 });
     adapter.dispose();
   });
 

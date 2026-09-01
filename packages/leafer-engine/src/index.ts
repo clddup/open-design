@@ -17,6 +17,8 @@ export type {
   LeaferEngineOptions,
   LeaferEngineSyncInput,
   LeaferFidelityWarning,
+  LeaferFlattenRasterRequest,
+  LeaferFlattenRasterResult,
   LeaferGenerationActivity,
   LeaferGenerationActivityPhase,
   LeaferGenerationReveal,

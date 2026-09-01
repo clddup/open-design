@@ -105,7 +105,7 @@ describe("Flatten appearance projection", () => {
         "invalid_multi",
         geometry,
       ),
-    ).toMatchObject({ ok: false, code: "unsupported-topology" });
+    ).toMatchObject({ ok: false, code: "requires-raster-compositing" });
   });
 
   it("ignores an unrelated Variable failure but fails the selected one", () => {

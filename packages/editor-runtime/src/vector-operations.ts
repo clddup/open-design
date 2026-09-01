@@ -55,6 +55,7 @@ export type VectorOperationFailureCode =
   | "non-invertible"
   | "no-op"
   | "not-found"
+  | "requires-raster-compositing"
   | "unsupported-topology";
 
 export type VectorSemanticEdit =

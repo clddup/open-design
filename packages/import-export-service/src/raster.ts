@@ -145,8 +145,11 @@ export function planRasterExportDimensions(
   if (!finitePositive(scale)) {
     return failure("invalid-size", "Raster export scale is invalid");
   }
-  const width = Math.max(1, Math.round(source.width * scale));
-  const height = Math.max(1, Math.round(source.height * scale));
+  // Leafer 2.2.9 allocates the export surface with integer truncation. Keep
+  // planning aligned with the pinned renderer so fractional render bounds do
+  // not pass preflight and then fail the exact-dimension check.
+  const width = Math.max(1, Math.floor(source.width * scale));
+  const height = Math.max(1, Math.floor(source.height * scale));
   if (
     width > RASTER_EXPORT_MAX_DIMENSION ||
     height > RASTER_EXPORT_MAX_DIMENSION ||

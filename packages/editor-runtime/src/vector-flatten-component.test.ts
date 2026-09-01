@@ -311,7 +311,10 @@ describe("Component Instance Flatten", () => {
           "compositing_flatten",
           geometry,
         ),
-      ).toMatchObject({ ok: false, code: "unsupported-topology" });
+      ).toMatchObject({
+        ok: false,
+        code: "requires-raster-compositing",
+      });
       expect(document.nodesById.button_bg).toBe(descendant);
     }
   });

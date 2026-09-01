@@ -36,6 +36,15 @@ describe("Raster Export v1", () => {
       ok: true,
       dimensions: { width: 400, height: 300, scale: 0.5 },
     });
+    expect(
+      planRasterExportDimensions(
+        { width: 100.4, height: 80.9 },
+        { mode: "scale", value: 2 },
+      ),
+    ).toEqual({
+      ok: true,
+      dimensions: { width: 200, height: 161, scale: 2 },
+    });
   });
 
   it("rejects invalid and excessive output before allocating a surface", () => {

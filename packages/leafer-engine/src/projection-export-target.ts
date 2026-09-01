@@ -35,13 +35,19 @@ export interface ProjectionExportTarget<Element> {
 }
 
 export type ProjectionExportRequest =
-  { kind: "page" } | { kind: "node"; nodeId: string };
+  | { kind: "page" }
+  | { kind: "node"; nodeId: string }
+  | {
+      kind: "selection";
+      nodeIds: readonly string[];
+      neutralizeRootNodeId?: string;
+    };
 
 /**
- * Rebuilds only targets that contain disposable rich-text fragments. The
- * clone reads exact projection specs rather than mutable Leafer elements, so
- * TextEditor, selection chrome, reveal and tween presentation cannot alter
- * capture or delivery pixels.
+ * Builds an isolated export tree when a selection must be detached or when a
+ * target contains disposable rich-text fragments. The clone reads exact
+ * projection specs rather than mutable Leafer elements, so TextEditor,
+ * selection chrome, reveal and tween presentation cannot alter export pixels.
  */
 export function createProjectionExportTarget<
   Element extends ProjectionExportElement,
@@ -52,7 +58,12 @@ export function createProjectionExportTarget<
 ): ProjectionExportTarget<Element> | null {
   const roots = exportRootIds(projection, request);
   const included = collectSubtreeIds(projection, roots);
-  if (!containsTextRunFragment(projection, included)) return null;
+  if (
+    request.kind !== "selection" &&
+    !containsTextRunFragment(projection, included)
+  ) {
+    return null;
+  }
 
   const root =
     request.kind === "node" && roots.length === 1
@@ -83,7 +94,10 @@ function cloneWrapper<Element extends ProjectionExportElement>(
       ? projection.elementsById.get(request.nodeId)
       : undefined;
   roots.forEach((rootId, index) => {
-    const root = cloneSubtree(projection, rootId, included, factory, false);
+    const root =
+      request.kind === "selection"
+        ? cloneSelectionRoot(projection, rootId, included, factory, request)
+        : cloneSubtree(projection, rootId, included, factory, false);
     const spec = projection.elementsById.get(rootId)!;
     const transform = textSource
       ? relativeTextRootTransform(textSource, spec)
@@ -94,18 +108,70 @@ function cloneWrapper<Element extends ProjectionExportElement>(
   return wrapper;
 }
 
+function cloneSelectionRoot<Element extends ProjectionExportElement>(
+  projection: LeaferSceneProjection,
+  rootId: string,
+  included: ReadonlySet<string>,
+  factory: ProjectionExportFactory<Element>,
+  request: Extract<ProjectionExportRequest, { kind: "selection" }>,
+): Element {
+  const fragments = textRunFragmentElementIds(projection, rootId);
+  if (fragments.length === 0) {
+    return cloneSubtree(
+      projection,
+      rootId,
+      included,
+      factory,
+      false,
+      request.neutralizeRootNodeId,
+    );
+  }
+  const source = projection.elementsById.get(rootId);
+  if (!source) {
+    throw new Error(`Projection export layer is unavailable: ${rootId}`);
+  }
+  const wrapper = factory.createWrapper();
+  factory.applyData(
+    wrapper,
+    richTextCompoundSpec(source, request.neutralizeRootNodeId === rootId),
+  );
+  [rootId, ...fragments].forEach((nodeId, index) => {
+    const spec = projection.elementsById.get(nodeId);
+    if (!spec) {
+      throw new Error(`Projection export layer is unavailable: ${nodeId}`);
+    }
+    const child = cloneSubtree(
+      projection,
+      nodeId,
+      new Set([nodeId]),
+      factory,
+      false,
+      rootId,
+    );
+    factory.setTransform(child, relativeTextRootTransform(source, spec));
+    factory.addAt(wrapper, child, index);
+  });
+  return wrapper;
+}
+
 function cloneSubtree<Element extends ProjectionExportElement>(
   projection: LeaferSceneProjection,
   nodeId: string,
   included: ReadonlySet<string>,
   factory: ProjectionExportFactory<Element>,
   normalizeRoot: boolean,
+  neutralizeRootNodeId?: string,
 ): Element {
   const spec = projection.elementsById.get(nodeId);
   if (!spec)
     throw new Error(`Projection export layer is unavailable: ${nodeId}`);
   const element = factory.create(spec.tag);
-  factory.applyData(element, spec);
+  factory.applyData(
+    element,
+    shouldNeutralizeAppearance(spec, neutralizeRootNodeId)
+      ? neutralizedAppearanceSpec(spec)
+      : spec,
+  );
   factory.setTransform(
     element,
     normalizeRoot ? IDENTITY_TRANSFORM : spec.transform,
@@ -115,7 +181,14 @@ function cloneSubtree<Element extends ProjectionExportElement>(
     .forEach((childId, index) => {
       factory.addAt(
         element,
-        cloneSubtree(projection, childId, included, factory, false),
+        cloneSubtree(
+          projection,
+          childId,
+          included,
+          factory,
+          false,
+          neutralizeRootNodeId,
+        ),
         index,
       );
     });
@@ -127,6 +200,17 @@ function exportRootIds(
   request: ProjectionExportRequest,
 ): string[] {
   if (request.kind === "page") return [...projection.rootIds];
+  if (request.kind === "selection") {
+    if (request.nodeIds.length === 0) {
+      throw new Error("Projection export selection cannot be empty");
+    }
+    for (const nodeId of request.nodeIds) {
+      if (!projection.elementsById.has(nodeId)) {
+        throw new Error(`Projection export layer is unavailable: ${nodeId}`);
+      }
+    }
+    return [...request.nodeIds];
+  }
   const source = projection.elementsById.get(request.nodeId);
   if (!source) {
     throw new Error(
@@ -137,6 +221,76 @@ function exportRootIds(
   return fragments.length > 0
     ? [request.nodeId, ...fragments]
     : [request.nodeId];
+}
+
+function shouldNeutralizeAppearance(
+  spec: LeaferElementSpec,
+  rootNodeId: string | undefined,
+): boolean {
+  if (!rootNodeId) return false;
+  if (spec.id === rootNodeId) return true;
+  const metadata = spec.data.data;
+  return (
+    typeof metadata === "object" &&
+    metadata !== null &&
+    (metadata as Record<string, unknown>).opendesignSynthetic === true &&
+    (metadata as Record<string, unknown>).opendesignNodeId === rootNodeId
+  );
+}
+
+function richTextCompoundSpec(
+  source: LeaferElementSpec,
+  neutralize: boolean,
+): LeaferElementSpec {
+  const id = `__opendesign_export_text_compound__:${source.id}`;
+  const sourceName =
+    typeof source.data.name === "string" ? source.data.name : source.id;
+  const spec: LeaferElementSpec = {
+    childIds: [],
+    data: {
+      backgroundBlur: source.data.backgroundBlur,
+      blendMode: source.data.blendMode,
+      blur: source.data.blur,
+      data: {
+        opendesignNodeId: source.id,
+        opendesignProjectionId: id,
+        opendesignSynthetic: true,
+      },
+      editable: false,
+      grayscale: source.data.grayscale,
+      hittable: false,
+      id,
+      innerShadow: source.data.innerShadow,
+      mask: source.data.mask,
+      name: `${sourceName} export compound`,
+      opacity: source.data.opacity,
+      shadow: source.data.shadow,
+      visible: source.data.visible,
+    },
+    id,
+    kind: "group",
+    parentId: source.parentId,
+    tag: "Group",
+    transform: IDENTITY_TRANSFORM,
+  };
+  return neutralize ? neutralizedAppearanceSpec(spec) : spec;
+}
+
+function neutralizedAppearanceSpec(spec: LeaferElementSpec): LeaferElementSpec {
+  return {
+    ...spec,
+    data: {
+      ...spec.data,
+      backgroundBlur: 0,
+      blendMode: "pass-through",
+      blur: 0,
+      grayscale: 0,
+      innerShadow: null,
+      mask: false,
+      opacity: 1,
+      shadow: null,
+    },
+  };
 }
 
 function collectSubtreeIds(

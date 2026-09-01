@@ -408,6 +408,17 @@ export interface LeaferRasterExportResult {
   width: number;
 }
 
+export interface LeaferFlattenRasterRequest {
+  neutralizeRootNodeId?: string;
+  nodeIds: readonly string[];
+  pageId: string;
+}
+
+export interface LeaferFlattenRasterResult extends LeaferRasterExportResult {
+  bounds: { x: number; y: number; width: number; height: number };
+  mimeType: "image/png";
+}
+
 export type LeaferGenerationSkeletonRole =
   | "structure"
   | "content"
@@ -488,6 +499,9 @@ export interface LeaferEngineAdapter {
   capture(target: LeaferCaptureTarget): Promise<LeaferCaptureResult>;
   dispose(): void;
   exportRaster(request: RasterExportRequest): Promise<LeaferRasterExportResult>;
+  exportFlattenRaster(
+    request: LeaferFlattenRasterRequest,
+  ): Promise<LeaferFlattenRasterResult>;
   finishGenerationPresentation(): void;
   finishImageCrop(): boolean;
   resetImageCrop(): boolean;
