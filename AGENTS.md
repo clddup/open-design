@@ -27,6 +27,7 @@ OpenDesign 是跨平台桌面产品。macOS 与 Windows 是同级一级支持平
 - 内置垂直设计 Agent 是主产品路径。Agent Runtime 使用 TypeScript，运行在 Electron `utilityProcess` 中，并通过可替换 provider adapter 直接接入多种大模型。Agent 崩溃、取消或模型提供商异常不得带崩主进程或破坏画布状态。
 - 目标资源层级固定为 `Workspace → Project → Design File → Page → Frame/Artboard → Layers`。Conversation 是 Workspace 一级实体；`originProjectId` 只记录不可变创建来源，`filedProjectId` 只提供可空、可移动的组织关系，Project 不是文件系统 sandbox，也不隐式授予项目目录权限。
 - Conversation 是持续 Agent 上下文，Run 只是单条用户消息触发的一次执行。失败、取消、超时或 Provider 异常只能终结当前 Run；下一条消息必须能继续读取同一 Conversation 的历史、历史用户附件、当前 Design File 与已提交 revision。Main 可以为新 Run 重新签发最小能力，但不得要求用户重新上传同一 Conversation 的附件，也不得让失败 Run 的 response identity、半截 tool call、active lease 或错误状态污染后续 Run。
+- Provider 已返回的 Assistant text 与 reasoning summary 是按原始顺序追加的 Conversation 事实。Plan、tool、状态卡、完成门禁、重试、失败和取消只能追加各自事件，不得清空、替换、重排或冒充模型消息；UI 可以默认折叠 reasoning 与工具过程，但不得隐藏真实 Assistant text。
 - Working Set、Mutation Targets 与 Capabilities 必须分别建模。上下文中可读不等于可写，被列为写目标也不等于已经授权；三者不得从 Conversation 的组织字段、当前选区或彼此隐式推导。Run `targetSet` 才是实际 Project/Design File/Page 的权威来源。
 - 项目可保存经批准的 attached roots；一次 run 也可持有不改变项目归属的 per-run references。跨目录、跨项目和多目标操作必须使用稳定资源 ID 或 Main 签发的句柄，并对每个目标单独解析能力、审批与 revision。
 - 权限控制分为 Trust、Capability、Approval 与 Sandbox 四层。四层职责不得合并：可信度不授予能力，能力不替代高风险动作审批，审批不扩大请求范围，sandbox 不充当授权策略。
@@ -77,6 +78,7 @@ OpenDesign 是跨平台桌面产品。macOS 与 Windows 是同级一级支持平
 - Renderer 新建或实质修改的业务组件样式使用 `Component.module.scss`：CSS Modules 负责作用域，固定 Dart Sass 只做编译期预处理。全局样式仅保留 reset、语义 design tokens、应用 shell 和确实跨组件的布局/状态契约；不得继续向巨型全局 `styles.css` 追加组件私有规则，也不得拆成多份仍相互覆盖的全局 SCSS 冒充模块化。动态画布几何优先通过 CSS custom properties 传入 module，不引入第二套运行时 CSS-in-JS。
 - 选中、悬停、焦点、禁用、加载、错误和离线状态必须可辨识。不要只依赖颜色表达状态。
 - AI 操作必须展示作用域、预期变更和执行状态，并支持取消；高影响变更应可预览、撤销或回滚。
+- 内置设计 skill 必须位于实际生成/审核上下文的高显著位置，不能只作为被长工作流提示淹没的被动文本。独立视觉审核以用户 brief 与 exact-revision capture 为主要证据，不得用作者自述的 thesis、motif 或 visualSystem 为像素缺陷辩护；任一非补偿标准仍要求实质 refinement 时不得同时判定交付完成。
 - 画布坐标、缩放、选区、撤销栈和文档保存是高风险路径。修改时应补充针对边界条件、序列化和失败恢复的测试。
 - 项目级 UI 工作应遵循 `.agents/skills/ui-design/SKILL.md`。
 
