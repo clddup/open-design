@@ -1,6 +1,7 @@
 import type { ValidationIssue } from "@opendesign/contract-runtime";
 import { isValidLayoutLimits } from "./layout.js";
 import type { DesignDocument, TextNode } from "./public-types.js";
+import { advancedTextDecorationIssue } from "./text-decoration.js";
 
 export function designDocumentDomainIssues(
   document: DesignDocument,
@@ -40,10 +41,32 @@ export function designDocumentDomainIssues(
       }
     }
     if (node.kind !== "text") continue;
+    const decorationIssue = advancedTextDecorationIssue(node.properties);
+    if (decorationIssue) {
+      issues.push(
+        issue(
+          "design.document_text_decoration_invalid",
+          `${nodePath}/properties/${decorationIssue.field}`,
+          decorationIssue.message,
+        ),
+      );
+    }
     const textRunIssue = validateTextRuns(document, node, nodePath);
     if (textRunIssue) issues.push(textRunIssue);
     const paragraphRunIssue = validateParagraphRuns(node, nodePath);
     if (paragraphRunIssue) issues.push(paragraphRunIssue);
+  }
+  for (const [styleId, style] of Object.entries(document.stylesById)) {
+    if (style.styleType !== "TEXT") continue;
+    const decorationIssue = advancedTextDecorationIssue(style.textStyle);
+    if (!decorationIssue) continue;
+    issues.push(
+      issue(
+        "design.document_text_style_decoration_invalid",
+        `/stylesById/${escapeJsonPointer(styleId)}/textStyle/${decorationIssue.field}`,
+        decorationIssue.message,
+      ),
+    );
   }
   return issues;
 }
@@ -79,6 +102,14 @@ function validateTextRuns(
   for (const [index, run] of runs.entries()) {
     const runPath = `${path}/${index}`;
     const style = JSON.stringify(run.style);
+    const decorationIssue = advancedTextDecorationIssue(run.style);
+    if (decorationIssue) {
+      return issue(
+        "design.document_text_run_decoration_invalid",
+        `${runPath}/style/${decorationIssue.field}`,
+        decorationIssue.message,
+      );
+    }
     if (run.start !== expectedStart) {
       return issue(
         "design.document_text_runs_not_contiguous",

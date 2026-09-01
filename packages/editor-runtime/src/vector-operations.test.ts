@@ -64,8 +64,14 @@ function glyphOutlineProvider(): TextRunLayoutProvider<FlattenTextRunStyle> {
               : {
                   decorations: [
                     {
+                      color:
+                        style.textDecorationColor?.value === "auto" ||
+                        style.textDecorationColor === null
+                          ? "auto"
+                          : structuredClone(style.textDecorationColor.value),
                       kind: style.textDecoration,
                       path: "M0 -2L12 -2L12 -1L0 -1Z",
+                      style: style.textDecorationStyle ?? "solid",
                     },
                   ],
                 }),
@@ -1400,6 +1406,11 @@ describe("vector editing runtime plans", () => {
             letterSpacing: 0,
             textCase: "original",
             textDecoration: "none",
+            textDecorationStyle: null,
+            textDecorationOffset: null,
+            textDecorationThickness: null,
+            textDecorationColor: null,
+            textDecorationSkipInk: null,
             fills: [{ type: "solid", color: "#111111", opacity: 1 }],
             textStyleId: "flatten_text_style",
             fillStyleId: "flatten_paint_style",
@@ -1428,6 +1439,11 @@ describe("vector editing runtime plans", () => {
         hangingList: false,
         textCase: "original",
         textDecoration: "none",
+        textDecorationStyle: null,
+        textDecorationOffset: null,
+        textDecorationThickness: null,
+        textDecorationColor: null,
+        textDecorationSkipInk: null,
       },
       extensions: {},
     };
@@ -1495,6 +1511,13 @@ describe("vector editing runtime plans", () => {
       content: "A",
       maxLines: null,
       textDecoration: "underline",
+      textDecorationStyle: "solid",
+      textDecorationOffset: { unit: "auto" },
+      textDecorationThickness: { unit: "auto" },
+      textDecorationColor: {
+        value: { type: "solid", color: "#2563eb", opacity: 0.75 },
+      },
+      textDecorationSkipInk: false,
       textOverflow: "visible",
       textResize: "auto-width",
       textTruncation: "disabled",
@@ -1526,7 +1549,7 @@ describe("vector editing runtime plans", () => {
     expect(network.regions).toHaveLength(2);
     expect(network.regions.map((region) => region.fills)).toEqual([
       text.properties.fills,
-      text.properties.fills,
+      [{ type: "solid", color: "#2563eb", opacity: 0.75 }],
     ]);
   });
 

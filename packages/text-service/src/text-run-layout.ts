@@ -27,7 +27,7 @@ export type {
   TextRunLayoutDecorationKind,
 } from "./text-run-layout-decoration.js";
 
-export const TEXT_RUN_LAYOUT_SERVICE_CONTRACT_VERSION = 6 as const;
+export const TEXT_RUN_LAYOUT_SERVICE_CONTRACT_VERSION = 7 as const;
 export const MAX_TEXT_RUN_LAYOUT_CHARACTERS = 100_000;
 export const MAX_TEXT_RUN_LAYOUT_RUNS = 16_384;
 export const MAX_TEXT_RUN_LAYOUT_FRAGMENTS = 100_000;
@@ -40,12 +40,30 @@ export const MAX_TEXT_RUN_LAYOUT_TOTAL_PATH_CHARACTERS = 16_000_000;
 export type TextRunLayoutHorizontalAlign = "left" | "center" | "right";
 export type TextRunLayoutVerticalAlign = "top" | "center" | "bottom";
 
+export type TextRunLayoutDecorationMetric =
+  { unit: "auto" } | { unit: "pixels" | "percent"; value: number };
+
+export type TextRunLayoutDecorationColor =
+  | { value: "auto" }
+  | {
+      value: {
+        color: string;
+        opacity: number;
+        type: "solid";
+      };
+    };
+
 export interface TextRunLayoutStyle extends TextFontDescriptor {
   fontSize: number;
   letterSpacing: number;
   lineHeight: number;
   textCase: TextLayoutCase;
   textDecoration: TextLayoutDecoration;
+  textDecorationStyle: "dotted" | "solid" | "wavy" | null;
+  textDecorationOffset: TextRunLayoutDecorationMetric | null;
+  textDecorationThickness: TextRunLayoutDecorationMetric | null;
+  textDecorationColor: TextRunLayoutDecorationColor | null;
+  textDecorationSkipInk: boolean | null;
 }
 
 export interface TextRunLayoutRequest<
@@ -233,7 +251,66 @@ export function validateTextRunLayoutStyle(
   if (!["none", "underline", "strikethrough"].includes(style.textDecoration)) {
     return "Text run layout decoration is unsupported";
   }
+  const decorationIssue = validateAdvancedDecoration(style);
+  if (decorationIssue) return decorationIssue;
   return null;
+}
+
+function validateAdvancedDecoration(style: TextRunLayoutStyle): string | null {
+  const advanced = [
+    style.textDecorationStyle,
+    style.textDecorationOffset,
+    style.textDecorationThickness,
+    style.textDecorationColor,
+    style.textDecorationSkipInk,
+  ];
+  if (style.textDecoration !== "underline") {
+    return advanced.every((value) => value === null)
+      ? null
+      : "Advanced text decoration fields require underline";
+  }
+  if (!["solid", "wavy", "dotted"].includes(style.textDecorationStyle ?? "")) {
+    return "Underline requires a supported decoration style";
+  }
+  if (!validDecorationMetric(style.textDecorationOffset, false)) {
+    return "Underline offset is outside supported finite limits";
+  }
+  if (!validDecorationMetric(style.textDecorationThickness, true)) {
+    return "Underline thickness must be finite and positive";
+  }
+  if (!validDecorationColor(style.textDecorationColor)) {
+    return "Underline color must be auto or a valid solid paint";
+  }
+  return typeof style.textDecorationSkipInk === "boolean"
+    ? null
+    : "Underline skip-ink mode must be boolean";
+}
+
+function validDecorationMetric(
+  value: TextRunLayoutDecorationMetric | null,
+  positive: boolean,
+): boolean {
+  if (!value || value.unit === "auto") return value?.unit === "auto";
+  return (
+    (value.unit === "pixels" || value.unit === "percent") &&
+    Number.isFinite(value.value) &&
+    Math.abs(value.value) <= 1_000_000 &&
+    (!positive || value.value > 0)
+  );
+}
+
+function validDecorationColor(
+  color: TextRunLayoutDecorationColor | null,
+): boolean {
+  if (!color) return false;
+  if (color.value === "auto") return true;
+  return (
+    color.value.type === "solid" &&
+    /^#[0-9a-f]{6}$/i.test(color.value.color) &&
+    Number.isFinite(color.value.opacity) &&
+    color.value.opacity >= 0 &&
+    color.value.opacity <= 1
+  );
 }
 
 export function validateTextRunLayoutRequest<Style extends TextRunLayoutStyle>(

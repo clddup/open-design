@@ -1,6 +1,7 @@
 import {
   TextPropertiesSchema,
   Type,
+  migrateAdvancedTextDecoration,
   type DesignNode,
   type Paint,
   type Static,
@@ -14,7 +15,8 @@ import {
   textParagraphRanges,
 } from "@opendesign/text-service";
 
-const TEXT_METADATA_VERSION = "8";
+const TEXT_METADATA_VERSION = "9";
+const ENDING_TRUNCATION_TEXT_METADATA_VERSION = "8";
 const PARAGRAPH_RUNS_TEXT_METADATA_VERSION = "7";
 const RICH_TEXT_TEXT_METADATA_VERSION = "6";
 const FONT_FACE_TEXT_METADATA_VERSION = "5";
@@ -92,6 +94,7 @@ export function writeSvgText(
   element.setAttribute("font-weight", String(properties.fontWeight));
   element.setAttribute("font-style", properties.fontSlant);
   element.setAttribute("text-decoration", svgTextDecoration(properties));
+  writeAdvancedDecorationAttributes(element, properties);
   element.setAttribute("text-transform", svgTextTransform(properties));
   element.setAttribute(
     "font-variant",
@@ -150,6 +153,7 @@ export function readSvgText(element: Element): SvgTextReadResult {
   const metadataVersion = element.getAttribute(VERSION_ATTRIBUTE);
   if (
     metadataVersion !== TEXT_METADATA_VERSION &&
+    metadataVersion !== ENDING_TRUNCATION_TEXT_METADATA_VERSION &&
     metadataVersion !== PARAGRAPH_RUNS_TEXT_METADATA_VERSION &&
     metadataVersion !== RICH_TEXT_TEXT_METADATA_VERSION &&
     metadataVersion !== FONT_FACE_TEXT_METADATA_VERSION &&
@@ -231,6 +235,7 @@ function migrateTextProperties(version: string, value: unknown): unknown {
   }
   if (
     version !== TEXT_METADATA_VERSION &&
+    version !== ENDING_TRUNCATION_TEXT_METADATA_VERSION &&
     version !== PARAGRAPH_RUNS_TEXT_METADATA_VERSION &&
     version !== RICH_TEXT_TEXT_METADATA_VERSION &&
     version !== FONT_FACE_TEXT_METADATA_VERSION
@@ -240,6 +245,7 @@ function migrateTextProperties(version: string, value: unknown): unknown {
   }
   if (
     version !== TEXT_METADATA_VERSION &&
+    version !== ENDING_TRUNCATION_TEXT_METADATA_VERSION &&
     version !== PARAGRAPH_RUNS_TEXT_METADATA_VERSION &&
     version !== RICH_TEXT_TEXT_METADATA_VERSION
   ) {
@@ -247,6 +253,7 @@ function migrateTextProperties(version: string, value: unknown): unknown {
   }
   if (
     version !== TEXT_METADATA_VERSION &&
+    version !== ENDING_TRUNCATION_TEXT_METADATA_VERSION &&
     version !== PARAGRAPH_RUNS_TEXT_METADATA_VERSION
   ) {
     migrated.paragraphRuns = [];
@@ -273,6 +280,7 @@ function migrateTextProperties(version: string, value: unknown): unknown {
   }
   if (
     version !== TEXT_METADATA_VERSION &&
+    version !== ENDING_TRUNCATION_TEXT_METADATA_VERSION &&
     version !== RICH_TEXT_TEXT_METADATA_VERSION &&
     version !== TYPOGRAPHY_V2_TEXT_METADATA_VERSION
   ) {
@@ -287,6 +295,17 @@ function migrateTextProperties(version: string, value: unknown): unknown {
     migrated.paragraphSpacing = 0;
     migrated.textCase = "original";
     migrated.textDecoration = "none";
+  }
+  migrateAdvancedTextDecoration(migrated, version !== TEXT_METADATA_VERSION);
+  if (Array.isArray(migrated.runs)) {
+    for (const run of migrated.runs) {
+      if (isRecord(run) && isRecord(run.style)) {
+        migrateAdvancedTextDecoration(
+          run.style,
+          version !== TEXT_METADATA_VERSION,
+        );
+      }
+    }
   }
   return migrated;
 }
@@ -605,6 +624,7 @@ function writeRunStyleAttributes(element: Element, style: TextRunStyle): void {
         ? "line-through"
         : "none",
   );
+  writeAdvancedDecorationAttributes(element, style);
   element.setAttribute(
     "text-transform",
     style.textCase === "uppercase"
@@ -635,6 +655,7 @@ function renderedRichTextMismatch(
   height: number,
   validateParagraphs: boolean,
   validateLists: boolean,
+  validateAdvancedDecoration: boolean,
 ): string | null {
   const runs = resolvedTextSegments(properties);
   const children = elementChildren(element);
@@ -734,6 +755,8 @@ function renderedRichTextMismatch(
       child.getAttribute("font-weight") !== String(run.style.fontWeight) ||
       !sameAttributeNumber(child, "font-size", run.style.fontSize) ||
       !sameAttributeNumber(child, "letter-spacing", run.style.letterSpacing) ||
+      (validateAdvancedDecoration &&
+        !advancedDecorationAttributesMatch(child, run.style)) ||
       (validateParagraphs &&
         (!sameAttributeNumber(
           child,
@@ -830,6 +853,7 @@ function renderedTextMismatch(
   }
   if (
     (metadataVersion === TEXT_METADATA_VERSION ||
+      metadataVersion === ENDING_TRUNCATION_TEXT_METADATA_VERSION ||
       metadataVersion === PARAGRAPH_RUNS_TEXT_METADATA_VERSION ||
       metadataVersion === FONT_FACE_TEXT_METADATA_VERSION) &&
     element.getAttribute("font-style") !== properties.fontSlant
@@ -845,6 +869,12 @@ function renderedTextMismatch(
     return "OpenDesign text metadata does not match the rendered case or decoration";
   }
   if (
+    metadataVersion === TEXT_METADATA_VERSION &&
+    !advancedDecorationAttributesMatch(element, properties)
+  ) {
+    return "OpenDesign text metadata does not match the rendered decoration properties";
+  }
+  if (
     element.getAttribute("dominant-baseline") !== "text-before-edge" ||
     element.getAttribute("text-anchor") !== textAnchor(properties) ||
     element.getAttributeNS(XML_NAMESPACE, "space") !== "preserve"
@@ -854,6 +884,7 @@ function renderedTextMismatch(
 
   if (
     ((metadataVersion === TEXT_METADATA_VERSION ||
+      metadataVersion === ENDING_TRUNCATION_TEXT_METADATA_VERSION ||
       metadataVersion === PARAGRAPH_RUNS_TEXT_METADATA_VERSION) &&
       ((properties.runs?.length ?? 0) > 0 ||
         (properties.paragraphRuns?.length ?? 0) > 0)) ||
@@ -866,7 +897,10 @@ function renderedTextMismatch(
       value.width,
       value.height,
       metadataVersion === TEXT_METADATA_VERSION ||
+        metadataVersion === ENDING_TRUNCATION_TEXT_METADATA_VERSION ||
         metadataVersion === PARAGRAPH_RUNS_TEXT_METADATA_VERSION,
+      metadataVersion === TEXT_METADATA_VERSION ||
+        metadataVersion === ENDING_TRUNCATION_TEXT_METADATA_VERSION,
       metadataVersion === TEXT_METADATA_VERSION,
     );
   }
@@ -918,6 +952,13 @@ function resolvedTextSegments(properties: TextProperties): Array<{
     lineHeight: properties.lineHeight,
     textCase: properties.textCase,
     textDecoration: properties.textDecoration,
+    textDecorationStyle: properties.textDecorationStyle,
+    textDecorationOffset: structuredClone(properties.textDecorationOffset),
+    textDecorationThickness: structuredClone(
+      properties.textDecorationThickness,
+    ),
+    textDecorationColor: structuredClone(properties.textDecorationColor),
+    textDecorationSkipInk: properties.textDecorationSkipInk,
     fills: properties.fills,
   };
   const runs =
@@ -1039,6 +1080,87 @@ function svgTextDecoration(properties: TextProperties): string {
   if (properties.textDecoration === "underline") return "underline";
   if (properties.textDecoration === "strikethrough") return "line-through";
   return "none";
+}
+
+function writeAdvancedDecorationAttributes(
+  element: Element,
+  style: Pick<
+    TextRunStyle,
+    | "textDecoration"
+    | "textDecorationStyle"
+    | "textDecorationOffset"
+    | "textDecorationThickness"
+    | "textDecorationColor"
+    | "textDecorationSkipInk"
+  >,
+): void {
+  if (style.textDecoration !== "underline") return;
+  element.setAttribute(
+    "text-decoration-style",
+    style.textDecorationStyle ?? "solid",
+  );
+  element.setAttribute(
+    "text-underline-offset",
+    svgDecorationMetric(style.textDecorationOffset),
+  );
+  element.setAttribute(
+    "text-decoration-thickness",
+    svgDecorationMetric(style.textDecorationThickness),
+  );
+  element.setAttribute(
+    "text-decoration-color",
+    svgDecorationColor(style.textDecorationColor),
+  );
+  element.setAttribute(
+    "text-decoration-skip-ink",
+    style.textDecorationSkipInk ? "auto" : "none",
+  );
+}
+
+function advancedDecorationAttributesMatch(
+  element: Element,
+  style: Parameters<typeof writeAdvancedDecorationAttributes>[1],
+): boolean {
+  if (style.textDecoration !== "underline") {
+    return (
+      !element.hasAttribute("text-decoration-style") &&
+      !element.hasAttribute("text-underline-offset") &&
+      !element.hasAttribute("text-decoration-thickness") &&
+      !element.hasAttribute("text-decoration-color") &&
+      !element.hasAttribute("text-decoration-skip-ink")
+    );
+  }
+  return (
+    element.getAttribute("text-decoration-style") ===
+      (style.textDecorationStyle ?? "solid") &&
+    element.getAttribute("text-underline-offset") ===
+      svgDecorationMetric(style.textDecorationOffset) &&
+    element.getAttribute("text-decoration-thickness") ===
+      svgDecorationMetric(style.textDecorationThickness) &&
+    element.getAttribute("text-decoration-color") ===
+      svgDecorationColor(style.textDecorationColor) &&
+    element.getAttribute("text-decoration-skip-ink") ===
+      (style.textDecorationSkipInk ? "auto" : "none")
+  );
+}
+
+function svgDecorationMetric(
+  value: TextRunStyle["textDecorationOffset"],
+): string {
+  if (!value || value.unit === "auto") return "auto";
+  return `${formatNumber(value.value)}${value.unit === "pixels" ? "px" : "%"}`;
+}
+
+function svgDecorationColor(
+  value: TextRunStyle["textDecorationColor"],
+): string {
+  if (!value || value.value === "auto") return "currentColor";
+  const { color, opacity } = value.value;
+  const match = /^#([0-9a-f]{6})$/i.exec(color);
+  if (!match || opacity >= 1) return color;
+  return `#${match[1]}${Math.round(Math.max(0, opacity) * 255)
+    .toString(16)
+    .padStart(2, "0")}`;
 }
 
 function svgTextTransform(properties: TextProperties): string {

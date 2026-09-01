@@ -121,6 +121,14 @@ export function toFigmaSharedStylePayload(
         ],
       };
     }
+    if (!figmaTextStyleCanRepresentDecoration(value)) {
+      return {
+        ok: false,
+        issues: [
+          `Text Style ${style.id} uses advanced underline properties that Figma Text Styles cannot encode`,
+        ],
+      };
+    }
     return {
       ok: true,
       payload: {
@@ -213,4 +221,17 @@ export function toFigmaSharedStylePayload(
     } as LayoutGrid;
   });
   return { ok: true, payload: { type: "GRID", layoutGrids } };
+}
+
+function figmaTextStyleCanRepresentDecoration(
+  value: Extract<SharedStyleDefinition, { styleType: "TEXT" }>["textStyle"],
+): boolean {
+  if (value.textDecoration !== "underline") return true;
+  return (
+    value.textDecorationStyle === "solid" &&
+    value.textDecorationOffset?.unit === "auto" &&
+    value.textDecorationThickness?.unit === "auto" &&
+    value.textDecorationColor?.value === "auto" &&
+    value.textDecorationSkipInk === false
+  );
 }

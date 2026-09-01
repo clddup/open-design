@@ -23,6 +23,16 @@ export type SharedStyleType = Static<typeof schema.SharedStyleTypeSchema>;
 export type TextStyleProperties = Static<
   typeof schema.TextStylePropertiesSchema
 >;
+export type TextDecoration = Static<typeof schema.TextDecorationSchema>;
+export type TextDecorationStyle = Static<
+  typeof schema.TextDecorationStyleSchema
+>;
+export type TextDecorationMetric = Static<
+  typeof schema.TextDecorationMetricSchema
+>;
+export type TextDecorationColor = Static<
+  typeof schema.TextDecorationColorSchema
+>;
 export type PaintStyleDefinition = Static<
   typeof schema.PaintStyleDefinitionSchema
 >;

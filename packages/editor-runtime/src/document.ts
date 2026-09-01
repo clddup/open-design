@@ -11,6 +11,7 @@ import {
   type ImageNode,
   type RectangleNode,
   type TextNode,
+  defaultAdvancedTextDecoration,
   migrateDesignDocument,
   schemaValidationIssues,
 } from "@opendesign/design-contracts";
@@ -331,6 +332,7 @@ function textNode(
       paragraphRuns: [],
       textCase: "original",
       textDecoration: "none",
+      ...defaultAdvancedTextDecoration("none"),
       textAlignHorizontal: "left",
       textAlignVertical: "top",
       textResize: "fixed",

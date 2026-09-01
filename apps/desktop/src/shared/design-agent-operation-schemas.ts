@@ -3,6 +3,10 @@ import {
   executableJsonSchema,
 } from "@opendesign/design-contracts";
 import { DESIGN_IMAGE_PLACEMENT_SCHEMA } from "./design-agent-image-tools";
+import {
+  DESIGN_MODEL_TEXT_DECORATION_KEYS,
+  DESIGN_MODEL_TEXT_DECORATION_PROPERTIES,
+} from "./design-agent-text-decoration-schema";
 
 const MODEL_BLEND_MODES = [
   "pass-through",
@@ -417,7 +421,7 @@ const MODEL_TEXT_PROPERTIES = {
   textCase: {
     enum: ["original", "uppercase", "lowercase", "title-case", "small-caps"],
   },
-  textDecoration: { enum: ["none", "underline", "strikethrough"] },
+  ...DESIGN_MODEL_TEXT_DECORATION_PROPERTIES,
   textAlignHorizontal: { enum: ["left", "center", "right", "justify"] },
   textAlignVertical: { enum: ["top", "center", "bottom"] },
   textResize: { enum: ["auto-width", "auto-height", "fixed"] },
@@ -457,6 +461,11 @@ const MODEL_NODE_PROPERTY_FIELDS = {
   hangingList: MODEL_TEXT_PROPERTIES.hangingList,
   textCase: MODEL_TEXT_PROPERTIES.textCase,
   textDecoration: MODEL_TEXT_PROPERTIES.textDecoration,
+  textDecorationStyle: MODEL_TEXT_PROPERTIES.textDecorationStyle,
+  textDecorationOffset: MODEL_TEXT_PROPERTIES.textDecorationOffset,
+  textDecorationThickness: MODEL_TEXT_PROPERTIES.textDecorationThickness,
+  textDecorationColor: MODEL_TEXT_PROPERTIES.textDecorationColor,
+  textDecorationSkipInk: MODEL_TEXT_PROPERTIES.textDecorationSkipInk,
   textAlignHorizontal: MODEL_TEXT_PROPERTIES.textAlignHorizontal,
   textAlignVertical: MODEL_TEXT_PROPERTIES.textAlignVertical,
   textResize: MODEL_TEXT_PROPERTIES.textResize,
@@ -567,7 +576,7 @@ const MODEL_TEXT_CORE_REQUIRED = [
   "listSpacing",
   "hangingList",
   "textCase",
-  "textDecoration",
+  ...DESIGN_MODEL_TEXT_DECORATION_KEYS,
   "textAlignHorizontal",
   "textAlignVertical",
   "textResize",

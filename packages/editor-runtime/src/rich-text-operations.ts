@@ -6,6 +6,7 @@ import type {
   TextRun,
   TextRunStyle,
 } from "@opendesign/design-contracts";
+import { defaultAdvancedTextDecoration } from "@opendesign/design-contracts";
 import {
   applyTextParagraphRangeStyle,
   applyTextRangeStyle,
@@ -34,7 +35,20 @@ const RUN_STYLE_FIELDS = [
   "lineHeight",
   "textCase",
   "textDecoration",
+  "textDecorationStyle",
+  "textDecorationOffset",
+  "textDecorationThickness",
+  "textDecorationColor",
+  "textDecorationSkipInk",
   "fills",
+] as const;
+
+const ADVANCED_DECORATION_FIELDS = [
+  "textDecorationStyle",
+  "textDecorationOffset",
+  "textDecorationThickness",
+  "textDecorationColor",
+  "textDecorationSkipInk",
 ] as const;
 
 const PARAGRAPH_STYLE_FIELDS = [
@@ -70,6 +84,7 @@ export function prepareTextPropertiesUpdate(
 ): void {
   normalizeTextNodeRuns(node, commandId);
   if (!properties) return;
+  prepareBaseDecorationUpdate(node, properties);
   const previousContent = node.properties.content;
   const nextContent =
     typeof properties.content === "string"
@@ -323,6 +338,13 @@ export function textRunBaseStyle(node: TextNode): TextRunStyle {
     lineHeight: node.properties.lineHeight,
     textCase: node.properties.textCase,
     textDecoration: node.properties.textDecoration,
+    textDecorationStyle: node.properties.textDecorationStyle,
+    textDecorationOffset: structuredClone(node.properties.textDecorationOffset),
+    textDecorationThickness: structuredClone(
+      node.properties.textDecorationThickness,
+    ),
+    textDecorationColor: structuredClone(node.properties.textDecorationColor),
+    textDecorationSkipInk: node.properties.textDecorationSkipInk,
     fills: structuredClone(node.properties.fills),
     ...(node.textStyleId ? { textStyleId: node.textStyleId } : {}),
     ...(node.fillStyleId ? { fillStyleId: node.fillStyleId } : {}),
@@ -367,6 +389,7 @@ function patchRunStyle(
   patch: Readonly<Record<string, unknown>>,
 ): TextRunStyle {
   const next = structuredClone(style) as Record<string, unknown>;
+  prepareRunDecorationUpdate(next, patch);
   if (
     !Object.hasOwn(patch, "textStyleId") &&
     [
@@ -379,6 +402,7 @@ function patchRunStyle(
       "lineHeight",
       "textCase",
       "textDecoration",
+      ...ADVANCED_DECORATION_FIELDS,
     ].some((field) => Object.hasOwn(patch, field))
   ) {
     delete next.textStyleId;
@@ -397,6 +421,56 @@ function patchRunStyle(
     }
   }
   return next as TextRunStyle;
+}
+
+function prepareBaseDecorationUpdate(
+  node: TextNode,
+  patch: Readonly<Record<string, unknown>>,
+): void {
+  if (!Object.hasOwn(patch, "textDecoration")) return;
+  const decoration = patch.textDecoration;
+  if (
+    decoration !== "none" &&
+    decoration !== "underline" &&
+    decoration !== "strikethrough"
+  ) {
+    return;
+  }
+  if (
+    decoration === "underline" &&
+    ADVANCED_DECORATION_FIELDS.some((field) => Object.hasOwn(patch, field))
+  ) {
+    return;
+  }
+  Object.assign(
+    node.properties,
+    structuredClone(defaultAdvancedTextDecoration(decoration)),
+  );
+}
+
+function prepareRunDecorationUpdate(
+  style: Record<string, unknown>,
+  patch: Readonly<Record<string, unknown>>,
+): void {
+  if (!Object.hasOwn(patch, "textDecoration")) return;
+  const decoration = patch.textDecoration;
+  if (
+    decoration !== "none" &&
+    decoration !== "underline" &&
+    decoration !== "strikethrough"
+  ) {
+    return;
+  }
+  if (
+    decoration === "underline" &&
+    ADVANCED_DECORATION_FIELDS.some((field) => Object.hasOwn(patch, field))
+  ) {
+    return;
+  }
+  Object.assign(
+    style,
+    structuredClone(defaultAdvancedTextDecoration(decoration)),
+  );
 }
 
 function compactRuns(

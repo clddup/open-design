@@ -1,4 +1,10 @@
 import { Type, type TProperties, type TSchema } from "@sinclair/typebox";
+import {
+  TextDecorationColorSchema,
+  TextDecorationMetricSchema,
+  TextDecorationSchema,
+  TextDecorationStyleSchema,
+} from "./text-decoration.js";
 
 interface NodeOperationSchemaDependencies {
   designNodeSchema: TSchema;
@@ -170,7 +176,14 @@ export function createNodeOperationSchemas<
           letterSpacing: Type.Optional(Type.Number()),
           lineHeight: Type.Optional(Type.Number({ exclusiveMinimum: 0 })),
           textCase: Type.Optional(textCaseSchema()),
-          textDecoration: Type.Optional(textDecorationSchema()),
+          textDecoration: Type.Optional(TextDecorationSchema),
+          textDecorationStyle: optionalNullable(TextDecorationStyleSchema),
+          textDecorationOffset: optionalNullable(TextDecorationMetricSchema),
+          textDecorationThickness: optionalNullable(TextDecorationMetricSchema),
+          textDecorationColor: optionalNullable(TextDecorationColorSchema),
+          textDecorationSkipInk: Type.Optional(
+            Type.Union([Type.Boolean(), Type.Null()]),
+          ),
           paragraphIndent: Type.Optional(Type.Number({ minimum: 0 })),
           paragraphSpacing: Type.Optional(Type.Number({ minimum: 0 })),
           listOptions: Type.Optional(listOptionsSchema()),
@@ -271,14 +284,6 @@ function textCaseSchema() {
     Type.Literal("lowercase"),
     Type.Literal("title-case"),
     Type.Literal("small-caps"),
-  ]);
-}
-
-function textDecorationSchema() {
-  return Type.Union([
-    Type.Literal("none"),
-    Type.Literal("underline"),
-    Type.Literal("strikethrough"),
   ]);
 }
 

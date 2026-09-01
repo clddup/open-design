@@ -576,6 +576,13 @@ function textRunBaseStyle(node: TextNode): TextRunStyle {
     lineHeight: node.properties.lineHeight,
     textCase: node.properties.textCase,
     textDecoration: node.properties.textDecoration,
+    textDecorationStyle: node.properties.textDecorationStyle,
+    textDecorationOffset: structuredClone(node.properties.textDecorationOffset),
+    textDecorationThickness: structuredClone(
+      node.properties.textDecorationThickness,
+    ),
+    textDecorationColor: structuredClone(node.properties.textDecorationColor),
+    textDecorationSkipInk: node.properties.textDecorationSkipInk,
     fills: structuredClone(node.properties.fills),
     ...(node.textStyleId ? { textStyleId: node.textStyleId } : {}),
     ...(node.fillStyleId ? { fillStyleId: node.fillStyleId } : {}),

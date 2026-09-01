@@ -6,6 +6,7 @@ import type {
 } from "@opendesign/design-contracts";
 import {
   validateTextRunLayoutResult,
+  type TextRunLayoutDecoration,
   type TextRunLayoutProvider,
   type TextRunLayoutRequest,
   type TextRunLayoutStyle,
@@ -172,6 +173,11 @@ function providerStyle(style: TextRunStyle): FlattenTextRunStyle {
     lineHeight: style.lineHeight,
     textCase: style.textCase,
     textDecoration: style.textDecoration,
+    textDecorationStyle: style.textDecorationStyle,
+    textDecorationOffset: structuredClone(style.textDecorationOffset),
+    textDecorationThickness: structuredClone(style.textDecorationThickness),
+    textDecorationColor: structuredClone(style.textDecorationColor),
+    textDecorationSkipInk: style.textDecorationSkipInk,
     fill: null,
   };
 }
@@ -207,7 +213,7 @@ function appendGlyphs(
 
 function appendDecorationPaths(
   output: FlattenTextGlyph[],
-  decorations: readonly { path: string }[],
+  decorations: readonly TextRunLayoutDecoration[],
   nodeTransform: Transform,
   offsetX: number,
   baselineY: number,
@@ -215,7 +221,10 @@ function appendDecorationPaths(
 ): void {
   for (const decoration of decorations) {
     output.push({
-      fills,
+      fills:
+        decoration.color === "auto"
+          ? fills
+          : [structuredClone(decoration.color)],
       path: decoration.path,
       transform: multiplyTransforms(nodeTransform, [
         1,

@@ -1,0 +1,52 @@
+.advanced {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+  padding: 6px;
+  border: 1px solid var(--ui-border);
+  border-radius: 4px;
+  background: var(--ui-bg-subtle);
+}
+
+.field {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(42px, max-content) minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  color: var(--ui-text-muted);
+  font-size: 9px;
+
+  select,
+  input[type="number"] {
+    min-width: 0;
+  }
+}
+
+.metric {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 4px;
+}
+
+.color {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 24px;
+  gap: 4px;
+}
+
+.toggle {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  gap: 6px;
+  color: var(--ui-text-muted);
+  font-size: 9px;
+}
+
+@media (max-width: 250px) {
+  .advanced {
+    grid-template-columns: 1fr;
+  }
+}

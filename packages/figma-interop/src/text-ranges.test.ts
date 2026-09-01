@@ -147,6 +147,61 @@ describe("Figma rich text range compatibility", () => {
       true,
     );
   });
+
+  it("round-trips complete advanced underline properties", () => {
+    const node = richTextNode();
+    Object.assign(node.properties, {
+      textDecoration: "underline" as const,
+      textDecorationStyle: "wavy" as const,
+      textDecorationOffset: { unit: "pixels" as const, value: 3 },
+      textDecorationThickness: { unit: "percent" as const, value: 12 },
+      textDecorationColor: {
+        value: { type: "solid" as const, color: "#2563eb", opacity: 0.75 },
+      },
+      textDecorationSkipInk: true,
+      runs: [],
+    });
+    const exported = toFigmaTextRangeSegments(node);
+    expect(exported).toMatchObject({
+      ok: true,
+      segments: [
+        expect.objectContaining({
+          textDecoration: "UNDERLINE",
+          textDecorationStyle: "WAVY",
+          textDecorationOffset: { unit: "PIXELS", value: 3 },
+          textDecorationThickness: { unit: "PERCENT", value: 12 },
+          textDecorationColor: {
+            value: {
+              type: "SOLID",
+              color: { r: 37 / 255, g: 99 / 255, b: 235 / 255 },
+              opacity: 0.75,
+            },
+          },
+          textDecorationSkipInk: true,
+        }),
+      ],
+    });
+    if (!exported.ok) throw new Error(exported.issues.join("; "));
+    expect(
+      fromFigmaTextRangeSegments(node.properties.content, exported.segments),
+    ).toMatchObject({
+      ok: true,
+      runs: [
+        {
+          style: {
+            textDecoration: "underline",
+            textDecorationStyle: "wavy",
+            textDecorationOffset: { unit: "pixels", value: 3 },
+            textDecorationThickness: { unit: "percent", value: 12 },
+            textDecorationColor: {
+              value: { type: "solid", color: "#2563eb", opacity: 0.75 },
+            },
+            textDecorationSkipInk: true,
+          },
+        },
+      ],
+    });
+  });
 });
 
 function richTextNode(): Extract<DesignNode, { kind: "text" }> {
@@ -160,6 +215,11 @@ function richTextNode(): Extract<DesignNode, { kind: "text" }> {
     letterSpacing: 0,
     textCase: "original" as const,
     textDecoration: "none" as const,
+    textDecorationStyle: null,
+    textDecorationOffset: null,
+    textDecorationThickness: null,
+    textDecorationColor: null,
+    textDecorationSkipInk: null,
     fills: [{ type: "solid" as const, color: "#111111", opacity: 1 }],
   };
   return {

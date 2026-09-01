@@ -51,6 +51,11 @@ export function resolveDesignTextRuns(
               lineHeight: node.properties.lineHeight,
               textCase: node.properties.textCase,
               textDecoration: node.properties.textDecoration,
+              textDecorationStyle: node.properties.textDecorationStyle,
+              textDecorationOffset: node.properties.textDecorationOffset,
+              textDecorationThickness: node.properties.textDecorationThickness,
+              textDecorationColor: node.properties.textDecorationColor,
+              textDecorationSkipInk: node.properties.textDecorationSkipInk,
               fills: node.properties.fills,
             },
             warnings,
@@ -124,6 +129,11 @@ function leaferStyle(
     lineHeight: style.lineHeight,
     textCase: style.textCase,
     textDecoration: style.textDecoration,
+    textDecorationStyle: style.textDecorationStyle,
+    textDecorationOffset: structuredClone(style.textDecorationOffset),
+    textDecorationThickness: structuredClone(style.textDecorationThickness),
+    textDecorationColor: structuredClone(style.textDecorationColor),
+    textDecorationSkipInk: style.textDecorationSkipInk,
     fill: mapTextRunPaints(document, nodeId, style.fills, warnings),
   };
 }

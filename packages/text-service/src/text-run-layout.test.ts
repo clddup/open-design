@@ -17,6 +17,11 @@ const regular: TextRunLayoutStyle = {
   lineHeight: 24,
   textCase: "original",
   textDecoration: "none",
+  textDecorationStyle: null,
+  textDecorationOffset: null,
+  textDecorationThickness: null,
+  textDecorationColor: null,
+  textDecorationSkipInk: null,
 };
 
 function request(
@@ -203,7 +208,15 @@ describe("text run layout contract", () => {
   });
 
   it("requires exact decoration outlines for decorated fragments", () => {
-    const decorated = { ...regular, textDecoration: "underline" as const };
+    const decorated = {
+      ...regular,
+      textDecoration: "underline" as const,
+      textDecorationStyle: "solid" as const,
+      textDecorationOffset: { unit: "auto" as const },
+      textDecorationThickness: { unit: "auto" as const },
+      textDecorationColor: { value: "auto" as const },
+      textDecorationSkipInk: false,
+    };
     const input = request({ baseStyle: decorated, content: "A", runs: [] });
     const result: TextRunLayoutResult = {
       contentBounds: { x: 0, y: 0, width: 12, height: 24 },
@@ -211,7 +224,14 @@ describe("text run layout contract", () => {
       fragments: [
         {
           baseline: 18,
-          decorations: [{ kind: "underline", path: "M0 -2L12 -2L12 -1L0 -1Z" }],
+          decorations: [
+            {
+              color: "auto",
+              kind: "underline",
+              path: "M0 -2L12 -2L12 -1L0 -1Z",
+              style: "solid",
+            },
+          ],
           end: 1,
           height: 24,
           lineIndex: 0,

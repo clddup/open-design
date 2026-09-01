@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 81,
+  "schemaVersion": 82,
   "recordedAt": "2026-09-01",
   "policy": {
     "allowFloatingRefs": false,
@@ -7,7 +7,7 @@
   },
   "contracts": {
     "documentFormat": "dev.opendesign.document",
-    "documentSchemaVersion": "1.53.0",
+    "documentSchemaVersion": "1.54.0",
     "runtimeProtocolVersion": "0.1.0",
     "agentProtocolVersion": "3.13.0",
     "geometryServiceContractVersion": 26,
@@ -16,7 +16,7 @@
     "textParagraphServiceContractVersion": 2,
     "textListServiceContractVersion": 1,
     "textEditingSessionServiceContractVersion": 2,
-    "textRunLayoutServiceContractVersion": 6,
+    "textRunLayoutServiceContractVersion": 7,
     "layoutServiceContractVersion": 11,
     "imageServiceContractVersion": 8
   },
@@ -138,7 +138,7 @@
     "textRunLayout": {
       "role": "authoritative-rich-text-run-and-complex-script-layout-provider",
       "contractPackage": "@opendesign/text-service",
-      "contractVersion": 6,
+      "contractVersion": 7,
       "adapterPackage": "@opendesign/leafer-engine",
       "provider": "harfbuzzjs",
       "version": "1.4.0",
@@ -148,7 +148,7 @@
       "simpleRunProvider": "leafer-editor 2.2.9",
       "fontBinaryFormats": ["ttf", "otf", "ttc"],
       "fontBinaryLimitBytes": 33554432,
-      "productionStatus": "document-character-paragraph-and-list-range-schema-runtime-inspector-agent-figma-svg-exact-revision-native-harfbuzz-projection-and-exact-ending-truncation-available-caret-auto-list-custom-markers-opentype-axes-font-packaging-newer-bidi-and-native-gate-pending"
+      "productionStatus": "document-character-paragraph-and-list-range-schema-runtime-inspector-agent-figma-svg-exact-revision-native-harfbuzz-projection-exact-ending-truncation-and-advanced-decoration-available-exact-skip-ink-caret-auto-list-custom-markers-opentype-axes-font-packaging-newer-bidi-and-native-gate-pending"
     },
     "layout": {
       "role": "versioned-frame-constraints-and-auto-layout-provider",

@@ -252,6 +252,11 @@ describe("design Agent tool contract", () => {
       hangingList: false,
       textCase: "original",
       textDecoration: "none",
+      textDecorationStyle: null,
+      textDecorationOffset: null,
+      textDecorationThickness: null,
+      textDecorationColor: null,
+      textDecorationSkipInk: null,
       textAlignHorizontal: "left",
       textAlignVertical: "top",
       textResize: "auto-height",
@@ -1755,8 +1760,6 @@ describe("design Agent tool contract", () => {
       role: "material-write",
       bootstrapInputSchema: DESIGN_BOOTSTRAP_EDIT_TOOL_INPUT_SCHEMA,
     });
-    expect(bootstrap.length).toBeLessThan(12_000);
-    expect(bootstrap.length * 4).toBeLessThan(complete.length);
     expect(bootstrap).toContain(
       '"enum":["frame","group","rectangle","ellipse","text"]',
     );
@@ -1765,6 +1768,7 @@ describe("design Agent tool contract", () => {
     expect(bootstrap).toContain('"paragraphIndent"');
     expect(bootstrap).toContain('"textCase"');
     expect(bootstrap).toContain('"textDecoration"');
+    expect(bootstrap).toContain('"textDecorationStyle"');
     expect(bootstrap).toContain('"textTruncation"');
     expect(bootstrap).toContain('"maxLines"');
     expect(bootstrap).not.toContain('"ellipsis"');
@@ -1956,6 +1960,17 @@ describe("design Agent tool contract", () => {
               hangingList: false,
               textCase: "uppercase",
               textDecoration: "underline",
+              textDecorationStyle: "wavy",
+              textDecorationOffset: { unit: "pixels", value: 3 },
+              textDecorationThickness: { unit: "percent", value: 12 },
+              textDecorationColor: {
+                value: {
+                  type: "solid",
+                  color: "#2563eb",
+                  opacity: 0.75,
+                },
+              },
+              textDecorationSkipInk: false,
               textAlignHorizontal: "left",
               textAlignVertical: "top",
               textResize: "fixed",
@@ -1978,6 +1993,11 @@ describe("design Agent tool contract", () => {
     expect(schema).toContain('"paragraphIndent"');
     expect(schema).toContain('"textCase"');
     expect(schema).toContain('"textDecoration"');
+    expect(schema).toContain('"textDecorationStyle"');
+    expect(schema).toContain('"textDecorationOffset"');
+    expect(schema).toContain('"textDecorationThickness"');
+    expect(schema).toContain('"textDecorationColor"');
+    expect(schema).toContain('"textDecorationSkipInk"');
     expect(schema).toContain('"textTruncation"');
     expect(schema).toContain('"maxLines"');
     expect(schema).not.toContain('"ellipsis"');

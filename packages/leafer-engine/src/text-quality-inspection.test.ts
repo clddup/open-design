@@ -189,6 +189,17 @@ describe("design text layout quality inspection", () => {
           lineHeight: title.properties.lineHeight,
           textCase: title.properties.textCase,
           textDecoration: title.properties.textDecoration,
+          textDecorationStyle: title.properties.textDecorationStyle,
+          textDecorationOffset: structuredClone(
+            title.properties.textDecorationOffset,
+          ),
+          textDecorationThickness: structuredClone(
+            title.properties.textDecorationThickness,
+          ),
+          textDecorationColor: structuredClone(
+            title.properties.textDecorationColor,
+          ),
+          textDecorationSkipInk: title.properties.textDecorationSkipInk,
           fills: title.properties.fills,
         },
       },

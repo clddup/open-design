@@ -126,6 +126,11 @@ describe("Figma Shared Style compatibility", () => {
         hangingList: false,
         textCase: "small-caps",
         textDecoration: "underline",
+        textDecorationStyle: "solid",
+        textDecorationOffset: { unit: "auto" },
+        textDecorationThickness: { unit: "auto" },
+        textDecorationColor: { value: "auto" },
+        textDecorationSkipInk: false,
       },
       extensions: {},
     } satisfies DesignDocument["stylesById"][string];
@@ -159,6 +164,18 @@ describe("Figma Shared Style compatibility", () => {
     ).toEqual({
       ok: false,
       issues: [expect.stringContaining("unresolved font face style name")],
+    });
+    expect(
+      toFigmaSharedStylePayload({
+        ...style,
+        textStyle: {
+          ...style.textStyle,
+          textDecorationStyle: "wavy",
+        },
+      }),
+    ).toMatchObject({
+      ok: false,
+      issues: [expect.stringContaining("cannot encode")],
     });
   });
 });

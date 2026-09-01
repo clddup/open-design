@@ -49,6 +49,11 @@ function style(face: Awaited<ReturnType<typeof register>>): TextRunLayoutStyle {
     lineHeight: 44,
     textCase: "original",
     textDecoration: "none",
+    textDecorationStyle: null,
+    textDecorationOffset: null,
+    textDecorationThickness: null,
+    textDecorationColor: null,
+    textDecorationSkipInk: null,
   };
 }
 
@@ -97,7 +102,15 @@ describe("HarfBuzz text run layout", () => {
       retryable: true,
     });
     const underlined = runtime.provider.layout(
-      request("سلام", { ...style(face), textDecoration: "underline" }),
+      request("سلام", {
+        ...style(face),
+        textDecoration: "underline",
+        textDecorationStyle: "solid",
+        textDecorationOffset: { unit: "auto" },
+        textDecorationThickness: { unit: "auto" },
+        textDecorationColor: { value: "auto" },
+        textDecorationSkipInk: false,
+      }),
     );
     expect(underlined.ok).toBe(true);
     if (!underlined.ok) return;
@@ -116,6 +129,11 @@ describe("HarfBuzz text run layout", () => {
       request("سلام", {
         ...style(face),
         textDecoration: "strikethrough",
+        textDecorationStyle: null,
+        textDecorationOffset: null,
+        textDecorationThickness: null,
+        textDecorationColor: null,
+        textDecorationSkipInk: null,
       }),
     );
     expect(struck.ok && struck.fragments[0]?.decorations?.[0]?.kind).toBe(
@@ -151,6 +169,51 @@ describe("HarfBuzz text run layout", () => {
         .flatMap((fragment) => fragment.glyphs ?? [])
         .every((glyph) => glyph.path.length > 0),
     ).toBe(true);
+  });
+
+  it("creates deterministic advanced underline outlines and fails closed for skip ink", async () => {
+    const runtime = await createHarfBuzzTextRunLayoutRuntime();
+    const face = await register(runtime, fontUrls.latin);
+    const advanced = {
+      ...style(face),
+      textDecoration: "underline" as const,
+      textDecorationStyle: "dotted" as const,
+      textDecorationOffset: { unit: "pixels" as const, value: 3 },
+      textDecorationThickness: { unit: "percent" as const, value: 10 },
+      textDecorationColor: {
+        value: {
+          type: "solid" as const,
+          color: "#2563eb",
+          opacity: 0.75,
+        },
+      },
+      textDecorationSkipInk: false,
+    };
+    const dotted = runtime.provider.layout(request("Open", advanced));
+    expect(dotted).toMatchObject({ ok: true });
+    if (!dotted.ok) return;
+    expect(dotted.fragments[0]?.decorations?.[0]).toMatchObject({
+      color: { type: "solid", color: "#2563eb", opacity: 0.75 },
+      kind: "underline",
+      style: "dotted",
+    });
+    expect(dotted.fragments[0]?.decorations?.[0]?.path).toContain("C");
+
+    const wavy = runtime.provider.layout(
+      request("Open", { ...advanced, textDecorationStyle: "wavy" }),
+    );
+    expect(wavy).toMatchObject({ ok: true });
+    if (wavy.ok) {
+      expect(wavy.fragments[0]?.decorations?.[0]).toMatchObject({
+        style: "wavy",
+      });
+    }
+
+    expect(
+      runtime.provider.layout(
+        request("Open", { ...advanced, textDecorationSkipInk: true }),
+      ),
+    ).toMatchObject({ code: "unsupported", ok: false, retryable: false });
   });
 
   it("reshapes an exact ending-truncation display string without mutating source content", async () => {

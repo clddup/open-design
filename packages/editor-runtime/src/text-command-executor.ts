@@ -299,6 +299,17 @@ function applyTextRangeStyleOperation(
       lineHeight: reference.textStyle.lineHeight,
       textCase: reference.textStyle.textCase,
       textDecoration: reference.textStyle.textDecoration,
+      textDecorationStyle: reference.textStyle.textDecorationStyle,
+      textDecorationOffset: structuredClone(
+        reference.textStyle.textDecorationOffset,
+      ),
+      textDecorationThickness: structuredClone(
+        reference.textStyle.textDecorationThickness,
+      ),
+      textDecorationColor: structuredClone(
+        reference.textStyle.textDecorationColor,
+      ),
+      textDecorationSkipInk: reference.textStyle.textDecorationSkipInk,
       paragraphIndent: reference.textStyle.paragraphIndent,
       paragraphSpacing: reference.textStyle.paragraphSpacing,
       listSpacing: reference.textStyle.listSpacing,

@@ -116,5 +116,10 @@ function style(): TextRunLayoutStyle {
     lineHeight: 10,
     textCase: "original",
     textDecoration: "none",
+    textDecorationStyle: null,
+    textDecorationOffset: null,
+    textDecorationThickness: null,
+    textDecorationColor: null,
+    textDecorationSkipInk: null,
   };
 }

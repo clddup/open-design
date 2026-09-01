@@ -5,8 +5,10 @@ export type TextRunLayoutDecorationKind = "strikethrough" | "underline";
  * Positive Y points upward, matching glyph outlines returned by the provider.
  */
 export interface TextRunLayoutDecoration {
+  color: "auto" | { color: string; opacity: number; type: "solid" };
   kind: TextRunLayoutDecorationKind;
   path: string;
+  style: "dotted" | "solid" | "wavy";
 }
 
 export interface TextRunLayoutDecorationValidation {
@@ -33,6 +35,8 @@ export function validateTextRunLayoutDecorations(
   if (
     !isRecord(decoration) ||
     decoration.kind !== expected ||
+    !validStyle(decoration.style) ||
+    !validColor(decoration.color) ||
     typeof decoration.path !== "string" ||
     decoration.path.length === 0 ||
     decoration.path.length > MAX_DECORATION_PATH_CHARACTERS
@@ -40,6 +44,24 @@ export function validateTextRunLayoutDecorations(
     return invalid();
   }
   return valid(decoration.path.length);
+}
+
+function validStyle(value: unknown): boolean {
+  return value === "solid" || value === "wavy" || value === "dotted";
+}
+
+function validColor(value: unknown): boolean {
+  if (value === "auto") return true;
+  return (
+    isRecord(value) &&
+    value.type === "solid" &&
+    typeof value.color === "string" &&
+    /^#[0-9a-f]{6}$/i.test(value.color) &&
+    typeof value.opacity === "number" &&
+    Number.isFinite(value.opacity) &&
+    value.opacity >= 0 &&
+    value.opacity <= 1
+  );
 }
 
 function valid(pathCharacters: number): TextRunLayoutDecorationValidation {

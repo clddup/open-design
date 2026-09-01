@@ -1,3 +1,5 @@
+import { DESIGN_MODEL_TEXT_DECORATION_PROPERTIES } from "./design-agent-text-decoration-schema";
+
 const BOOTSTRAP_TRANSFORM_SCHEMA = {
   type: "array",
   minItems: 6,
@@ -74,7 +76,7 @@ const BOOTSTRAP_NODE_PROPERTIES_SCHEMA = {
     textCase: {
       enum: ["original", "uppercase", "lowercase", "title-case", "small-caps"],
     },
-    textDecoration: { enum: ["none", "underline", "strikethrough"] },
+    ...DESIGN_MODEL_TEXT_DECORATION_PROPERTIES,
     textAlignHorizontal: { enum: ["left", "center", "right", "justify"] },
     textAlignVertical: { enum: ["top", "center", "bottom"] },
     textResize: { enum: ["auto-width", "auto-height", "fixed"] },

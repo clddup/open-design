@@ -293,6 +293,11 @@ describe("versioned SVG interchange", () => {
         hangingList: false,
         textCase: "uppercase",
         textDecoration: "underline",
+        textDecorationStyle: "solid",
+        textDecorationOffset: { unit: "auto" },
+        textDecorationThickness: { unit: "auto" },
+        textDecorationColor: { value: "auto" },
+        textDecorationSkipInk: false,
         textAlignHorizontal: "center",
         textAlignVertical: "center",
         textResize: "fixed",
@@ -335,7 +340,7 @@ describe("versioned SVG interchange", () => {
       { code: "text-layout-fidelity", severity: "warning" },
     ]);
     expect(first.svg).toContain("<text");
-    expect(first.svg).toContain('data-opendesign-text-version="8"');
+    expect(first.svg).toContain('data-opendesign-text-version="9"');
     expect(first.svg).toContain('font-family="Inter"');
     expect(first.svg).toContain('font-size="24"');
     expect(first.svg).toContain('font-weight="650"');
@@ -373,7 +378,7 @@ describe("versioned SVG interchange", () => {
 
     const typographyV2Svg = first.svg
       .replace(
-        'data-opendesign-text-version="8"',
+        'data-opendesign-text-version="9"',
         'data-opendesign-text-version="4"',
       )
       .replace("&quot;fontStyleName&quot;:&quot;Semi Bold Italic&quot;,", "")
@@ -395,7 +400,7 @@ describe("versioned SVG interchange", () => {
 
     const legacySvg = first.svg
       .replace(
-        'data-opendesign-text-version="8"',
+        'data-opendesign-text-version="9"',
         'data-opendesign-text-version="1"',
       )
       .replace("&quot;textResize&quot;:&quot;fixed&quot;,", "")
@@ -428,7 +433,7 @@ describe("versioned SVG interchange", () => {
     }
     const typographyV1Svg = first.svg
       .replace(
-        'data-opendesign-text-version="8"',
+        'data-opendesign-text-version="9"',
         'data-opendesign-text-version="3"',
       )
       .replace("&quot;textTruncation&quot;:&quot;ending&quot;,", "")
@@ -459,6 +464,11 @@ describe("versioned SVG interchange", () => {
           hangingList: false,
           textCase: "original",
           textDecoration: "none",
+          textDecorationStyle: null,
+          textDecorationOffset: null,
+          textDecorationThickness: null,
+          textDecorationColor: null,
+          textDecorationSkipInk: null,
           textOverflow: "clip",
           textTruncation: "disabled",
         },
@@ -466,7 +476,7 @@ describe("versioned SVG interchange", () => {
     }
     const fixedLayoutSvg = first.svg
       .replace(
-        'data-opendesign-text-version="8"',
+        'data-opendesign-text-version="9"',
         'data-opendesign-text-version="2"',
       )
       .replace("&quot;textResize&quot;:&quot;fixed&quot;,", "")
@@ -496,7 +506,7 @@ describe("versioned SVG interchange", () => {
     const ambiguousLegacy = importSvg(
       {
         svg: first.svg.replace(
-          'data-opendesign-text-version="8"',
+          'data-opendesign-text-version="9"',
           'data-opendesign-text-version="1"',
         ),
         idPrefix: "text_ambiguous_legacy_metadata",
@@ -565,7 +575,7 @@ describe("versioned SVG interchange", () => {
     }
   });
 
-  it("round-trips authored rich text runs as standard styled tspans and metadata v8", () => {
+  it("round-trips authored rich text runs as standard styled tspans and metadata v9", () => {
     const baseStyle = {
       fontFamily: "Inter",
       fontStyleName: "Regular",
@@ -576,6 +586,11 @@ describe("versioned SVG interchange", () => {
       letterSpacing: 0,
       textCase: "original" as const,
       textDecoration: "none" as const,
+      textDecorationStyle: null,
+      textDecorationOffset: null,
+      textDecorationThickness: null,
+      textDecorationColor: null,
+      textDecorationSkipInk: null,
       fills: [{ type: "solid" as const, color: "#111111", opacity: 1 }],
     };
     const text: DesignNode = {
@@ -633,7 +648,7 @@ describe("versioned SVG interchange", () => {
     });
     expect(exported.ok).toBe(true);
     if (!exported.ok) return;
-    expect(exported.svg).toContain('data-opendesign-text-version="8"');
+    expect(exported.svg).toContain('data-opendesign-text-version="9"');
     expect(exported.svg).toContain('data-opendesign-range-start="4"');
     expect(exported.svg).toContain('font-family="IBM Plex Sans"');
     expect(exported.svg).toContain('fill="#ff3366"');
@@ -651,7 +666,7 @@ describe("versioned SVG interchange", () => {
     const legacyV7 = importSvg(
       {
         svg: exported.svg.replace(
-          'data-opendesign-text-version="8"',
+          'data-opendesign-text-version="9"',
           'data-opendesign-text-version="7"',
         ),
         idPrefix: "rich_text_v7",
@@ -667,7 +682,7 @@ describe("versioned SVG interchange", () => {
     const legacyV6 = importSvg(
       {
         svg: exported.svg.replace(
-          'data-opendesign-text-version="8"',
+          'data-opendesign-text-version="9"',
           'data-opendesign-text-version="6"',
         ),
         idPrefix: "rich_text_v6",
@@ -679,6 +694,59 @@ describe("versioned SVG interchange", () => {
     expect(findImportedSource(legacyV6.nodes, text.id)).toMatchObject({
       kind: "text",
       properties: { paragraphRuns: [], runs: text.properties.runs },
+    });
+  });
+
+  it("round-trips advanced underline metadata and standard SVG decoration attributes", () => {
+    const text = textFixture("advanced_underline", "OpenDesign");
+    Object.assign(text.properties, {
+      textDecoration: "underline" as const,
+      textDecorationStyle: "wavy" as const,
+      textDecorationOffset: { unit: "pixels" as const, value: 3 },
+      textDecorationThickness: { unit: "percent" as const, value: 12.5 },
+      textDecorationColor: {
+        value: { type: "solid" as const, color: "#2563eb", opacity: 0.5 },
+      },
+      textDecorationSkipInk: true,
+    });
+    const document = documentFromNodes(
+      "svg_advanced_underline",
+      [text],
+      [text.id],
+    );
+    const exported = exportSvg({
+      document,
+      rootNodeIds: [text.id],
+      viewport: { x: 0, y: 0, width: 280, height: 80 },
+      includeLayerIds: true,
+    });
+    expect(exported.ok).toBe(true);
+    if (!exported.ok) return;
+    expect(exported.svg).toContain('data-opendesign-text-version="9"');
+    expect(exported.svg).toContain('text-decoration-style="wavy"');
+    expect(exported.svg).toContain('text-underline-offset="3px"');
+    expect(exported.svg).toContain('text-decoration-thickness="12.5%"');
+    expect(exported.svg).toContain('text-decoration-color="#2563eb80"');
+    expect(exported.svg).toContain('text-decoration-skip-ink="auto"');
+
+    const imported = importSvg(
+      { svg: exported.svg, idPrefix: "advanced_underline_roundtrip" },
+      geometry,
+    );
+    expect(imported.ok).toBe(true);
+    if (!imported.ok) return;
+    expect(findImportedSource(imported.nodes, text.id)).toMatchObject({
+      kind: "text",
+      properties: {
+        textDecoration: "underline",
+        textDecorationStyle: "wavy",
+        textDecorationOffset: { unit: "pixels", value: 3 },
+        textDecorationThickness: { unit: "percent", value: 12.5 },
+        textDecorationColor: {
+          value: { type: "solid", color: "#2563eb", opacity: 0.5 },
+        },
+        textDecorationSkipInk: true,
+      },
     });
   });
 
@@ -707,7 +775,7 @@ describe("versioned SVG interchange", () => {
     });
     expect(exported.ok).toBe(true);
     if (!exported.ok) return;
-    expect(exported.svg).toContain('data-opendesign-text-version="8"');
+    expect(exported.svg).toContain('data-opendesign-text-version="9"');
     expect(exported.svg).toContain('data-opendesign-list-marker="1."');
     expect(exported.svg).toContain('data-opendesign-list-marker="2."');
     expect(exported.svg).toContain('data-opendesign-list-type="ordered"');
@@ -796,6 +864,11 @@ describe("versioned SVG interchange", () => {
         runs: [],
         textCase: "original",
         textDecoration: "none",
+        textDecorationStyle: null,
+        textDecorationOffset: null,
+        textDecorationThickness: null,
+        textDecorationColor: null,
+        textDecorationSkipInk: null,
         textAlignHorizontal: "left",
         textAlignVertical: "top",
         textResize: "fixed",
@@ -818,7 +891,7 @@ describe("versioned SVG interchange", () => {
     });
     expect(exported.ok).toBe(true);
     if (!exported.ok) return;
-    expect(exported.svg).toContain('data-opendesign-text-version="8"');
+    expect(exported.svg).toContain('data-opendesign-text-version="9"');
     expect(exported.svg).toContain('data-opendesign-paragraph-indent="24"');
     expect(exported.svg).toContain('data-opendesign-paragraph-spacing="14"');
     const imported = importSvg(
@@ -900,6 +973,11 @@ describe("versioned SVG interchange", () => {
         hangingList: false,
         textCase: "original",
         textDecoration: "none",
+        textDecorationStyle: null,
+        textDecorationOffset: null,
+        textDecorationThickness: null,
+        textDecorationColor: null,
+        textDecorationSkipInk: null,
         textAlignHorizontal: "left",
         textAlignVertical: "top",
         textResize: "auto-width",
@@ -944,7 +1022,7 @@ describe("versioned SVG interchange", () => {
     expect(exported.ok).toBe(true);
     if (!exported.ok) return;
     expect(
-      exported.svg.match(/data-opendesign-text-version="8"/g),
+      exported.svg.match(/data-opendesign-text-version="9"/g),
     ).toHaveLength(2);
 
     const imported = importSvg(
@@ -999,6 +1077,11 @@ describe("versioned SVG interchange", () => {
         hangingList: false,
         textCase: "original",
         textDecoration: "none",
+        textDecorationStyle: null,
+        textDecorationOffset: null,
+        textDecorationThickness: null,
+        textDecorationColor: null,
+        textDecorationSkipInk: null,
         textAlignHorizontal: "left",
         textAlignVertical: "top",
         textResize: "fixed",
@@ -3037,6 +3120,11 @@ function textFixture(
       runs: [],
       textCase: "original",
       textDecoration: "none",
+      textDecorationStyle: null,
+      textDecorationOffset: null,
+      textDecorationThickness: null,
+      textDecorationColor: null,
+      textDecorationSkipInk: null,
       textAlignHorizontal: "left",
       textAlignVertical: "top",
       textResize: "fixed",

@@ -15,6 +15,12 @@ export * from "./styles.js";
 export * from "./appearance.js";
 export * from "./export-settings.js";
 export * from "./image-filters.js";
+export {
+  TextDecorationAdvancedProperties,
+  advancedTextDecorationIssue,
+  defaultAdvancedTextDecoration,
+  migrateAdvancedTextDecoration,
+} from "./text-decoration.js";
 export * from "./layout.js";
 export * from "./limits.js";
 export * from "./node-paints.js";

@@ -225,6 +225,17 @@ describe("EditorRuntime rich text ranges", () => {
         hangingList: false,
         textCase: title.properties.textCase,
         textDecoration: title.properties.textDecoration,
+        textDecorationStyle: title.properties.textDecorationStyle,
+        textDecorationOffset: structuredClone(
+          title.properties.textDecorationOffset,
+        ),
+        textDecorationThickness: structuredClone(
+          title.properties.textDecorationThickness,
+        ),
+        textDecorationColor: structuredClone(
+          title.properties.textDecorationColor,
+        ),
+        textDecorationSkipInk: title.properties.textDecorationSkipInk,
       },
       extensions: {},
     };
@@ -590,6 +601,13 @@ function textRunStyle(node: ReturnType<typeof text>): TextRunStyle {
     letterSpacing: node.properties.letterSpacing,
     textCase: node.properties.textCase,
     textDecoration: node.properties.textDecoration,
+    textDecorationStyle: node.properties.textDecorationStyle,
+    textDecorationOffset: structuredClone(node.properties.textDecorationOffset),
+    textDecorationThickness: structuredClone(
+      node.properties.textDecorationThickness,
+    ),
+    textDecorationColor: structuredClone(node.properties.textDecorationColor),
+    textDecorationSkipInk: node.properties.textDecorationSkipInk,
     fills: structuredClone(node.properties.fills),
   };
 }

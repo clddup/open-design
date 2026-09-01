@@ -4,6 +4,7 @@ import type {
   TextParagraphStyle,
   TextRunStyle,
 } from "@opendesign/design-contracts";
+import { defaultAdvancedTextDecoration } from "@opendesign/design-contracts";
 import type {
   TextFontAvailabilityResult,
   TextFontDescriptor,
@@ -22,6 +23,7 @@ import {
   cx,
   formatNumber,
 } from "./controls";
+import { TextDecorationControls } from "./TextDecorationControls";
 
 type TextNode = Extract<DesignNode, { kind: "text" }>;
 type TextSelectionStyle = TextRunStyle & TextParagraphStyle;
@@ -599,12 +601,14 @@ export function TypographySection({
             <span>{t("properties.textDecoration")}</span>
             <select
               aria-label={t("properties.textDecoration")}
-              onChange={(event) =>
+              onChange={(event) => {
+                const textDecoration = event.target
+                  .value as TextNode["properties"]["textDecoration"];
                 updateTextStyle({
-                  textDecoration: event.target
-                    .value as TextNode["properties"]["textDecoration"],
-                })
-              }
+                  textDecoration,
+                  ...defaultAdvancedTextDecoration(textDecoration),
+                });
+              }}
               value={
                 isMixed("textDecoration") ? "" : activeStyle.textDecoration
               }
@@ -621,6 +625,13 @@ export function TypographySection({
               </option>
             </select>
           </label>
+          {!isMixed("textDecoration") && (
+            <TextDecorationControls
+              isMixed={isMixed}
+              onUpdate={updateTextStyle}
+              style={activeStyle}
+            />
+          )}
           <label className={styles.select}>
             <span>{t("properties.textAlign")}</span>
             <select

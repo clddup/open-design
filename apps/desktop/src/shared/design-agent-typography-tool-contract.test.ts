@@ -120,4 +120,34 @@ describe("design typography tool contracts", () => {
       ],
     });
   });
+
+  it("projects advanced underline fields from the authoritative range schema", () => {
+    const input = {
+      label: "Style underline",
+      pageId: "page_1",
+      nodeId: "body_copy",
+      start: 0,
+      end: 4,
+      style: {
+        textDecoration: "underline",
+        textDecorationStyle: "dotted",
+        textDecorationOffset: { unit: "pixels", value: 2 },
+        textDecorationThickness: { unit: "percent", value: 10 },
+        textDecorationColor: {
+          value: { type: "solid", color: "#2563eb", opacity: 1 },
+        },
+        textDecorationSkipInk: false,
+      },
+    } as const;
+    expect(DesignTextRangeContract.parse(input)).toMatchObject({ ok: true });
+    expect(
+      DesignTextRangeContract.parse({
+        ...input,
+        style: { ...input.style, textDecorationStyle: "double" },
+      }),
+    ).toMatchObject({
+      ok: false,
+      issues: [expect.objectContaining({ path: "/style/textDecorationStyle" })],
+    });
+  });
 });

@@ -1,4 +1,5 @@
 import { checkSchema } from "./schema-check.js";
+import type { Contract } from "@opendesign/contract-runtime";
 import { createDesignDocumentContract } from "./document-contract.js";
 import { migrateDesignDocumentValue } from "./document-migration.js";
 import {
@@ -184,7 +185,7 @@ export function isDesignTransactionResult(
   return DesignTransactionResultContract.parse(value).ok;
 }
 
-export const DesignTransactionResultContract =
+export const DesignTransactionResultContract: Contract<DesignTransactionResult> =
   createDesignTransactionResultContract(schema.DesignTransactionResultSchema);
 
 export function isEditorEvent(value: unknown): value is EditorEvent {

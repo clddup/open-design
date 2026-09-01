@@ -319,6 +319,17 @@ export function planCreateStyleFromNode(
         hangingList: resolved.properties.hangingList,
         textCase: resolved.properties.textCase,
         textDecoration: resolved.properties.textDecoration,
+        textDecorationStyle: resolved.properties.textDecorationStyle,
+        textDecorationOffset: structuredClone(
+          resolved.properties.textDecorationOffset,
+        ),
+        textDecorationThickness: structuredClone(
+          resolved.properties.textDecorationThickness,
+        ),
+        textDecorationColor: structuredClone(
+          resolved.properties.textDecorationColor,
+        ),
+        textDecorationSkipInk: resolved.properties.textDecorationSkipInk,
       },
     };
   } else if (styleType === "GRID" && resolved.kind === "frame") {

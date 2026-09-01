@@ -429,6 +429,11 @@ const textNode: TextNode = {
     hangingList: false,
     textCase: "original",
     textDecoration: "none",
+    textDecorationStyle: null,
+    textDecorationOffset: null,
+    textDecorationThickness: null,
+    textDecorationColor: null,
+    textDecorationSkipInk: null,
     textAlignHorizontal: "left",
     textAlignVertical: "top",
     textResize: "fixed",
@@ -2538,7 +2543,14 @@ describe("PropertiesPanel text layout workflow", () => {
 
     await user.selectOptions(screen.getByLabelText("Decoration"), "underline");
     expect(onUpdate).toHaveBeenCalledWith({
-      properties: { textDecoration: "underline" },
+      properties: {
+        textDecoration: "underline",
+        textDecorationStyle: "solid",
+        textDecorationOffset: { unit: "auto" },
+        textDecorationThickness: { unit: "auto" },
+        textDecorationColor: { value: "auto" },
+        textDecorationSkipInk: false,
+      },
     });
 
     await user.selectOptions(
@@ -2575,6 +2587,50 @@ describe("PropertiesPanel text layout workflow", () => {
       },
     });
     expect(textNode.size).toEqual({ width: 320, height: 96 });
+  });
+
+  it("edits advanced underline style, metrics, color mode, and skip ink", async () => {
+    const user = userEvent.setup();
+    const node = structuredClone(textNode);
+    Object.assign(node.properties, {
+      textDecoration: "underline" as const,
+      textDecorationStyle: "solid" as const,
+      textDecorationOffset: { unit: "auto" as const },
+      textDecorationThickness: { unit: "auto" as const },
+      textDecorationColor: { value: "auto" as const },
+      textDecorationSkipInk: false,
+    });
+    const { onUpdate } = renderPanel({ node, selectionCount: 1 });
+
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Style" }),
+      "wavy",
+    );
+    expect(onUpdate).toHaveBeenCalledWith({
+      properties: { textDecorationStyle: "wavy" },
+    });
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Offset" }),
+      "pixels",
+    );
+    expect(onUpdate).toHaveBeenCalledWith({
+      properties: { textDecorationOffset: { unit: "pixels", value: 1 } },
+    });
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Color" }),
+      "solid",
+    );
+    expect(onUpdate).toHaveBeenCalledWith({
+      properties: {
+        textDecorationColor: {
+          value: { type: "solid", color: "#000000", opacity: 1 },
+        },
+      },
+    });
+    await user.click(screen.getByLabelText("Skip ink"));
+    expect(onUpdate).toHaveBeenCalledWith({
+      properties: { textDecorationSkipInk: true },
+    });
   });
 
   it("enforces Auto Size wrapping, overflow, and ending-truncation defaults", async () => {
@@ -2700,6 +2756,12 @@ describe("PropertiesPanel text layout workflow", () => {
             listSpacing: 0,
             textCase: textNode.properties.textCase,
             textDecoration: textNode.properties.textDecoration,
+            textDecorationStyle: textNode.properties.textDecorationStyle,
+            textDecorationOffset: textNode.properties.textDecorationOffset,
+            textDecorationThickness:
+              textNode.properties.textDecorationThickness,
+            textDecorationColor: textNode.properties.textDecorationColor,
+            textDecorationSkipInk: textNode.properties.textDecorationSkipInk,
             fills: textNode.properties.fills,
           },
           mixedFields: [],
@@ -2794,6 +2856,12 @@ describe("PropertiesPanel text layout workflow", () => {
             listSpacing: 0,
             textCase: textNode.properties.textCase,
             textDecoration: textNode.properties.textDecoration,
+            textDecorationStyle: textNode.properties.textDecorationStyle,
+            textDecorationOffset: textNode.properties.textDecorationOffset,
+            textDecorationThickness:
+              textNode.properties.textDecorationThickness,
+            textDecorationColor: textNode.properties.textDecorationColor,
+            textDecorationSkipInk: textNode.properties.textDecorationSkipInk,
             fills: textNode.properties.fills,
           },
           mixedFields: [],

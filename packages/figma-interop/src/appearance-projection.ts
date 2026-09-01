@@ -1,6 +1,9 @@
 import type {
   Paint as OpenDesignPaint,
   SharedStyleDefinition,
+  TextDecorationColor as OpenDesignTextDecorationColor,
+  TextDecorationMetric as OpenDesignTextDecorationMetric,
+  TextDecorationStyle as OpenDesignTextDecorationStyle,
 } from "@opendesign/design-contracts";
 
 export function toFigmaFontName(value: {
@@ -23,6 +26,66 @@ export function figmaTextDecoration(
   if (value === "underline") return "UNDERLINE";
   if (value === "strikethrough") return "STRIKETHROUGH";
   return "NONE";
+}
+
+export function figmaTextDecorationStyle(
+  value: OpenDesignTextDecorationStyle | null,
+): TextDecorationStyle {
+  return value === "wavy" ? "WAVY" : value === "dotted" ? "DOTTED" : "SOLID";
+}
+
+export function figmaTextDecorationMetric(
+  value: OpenDesignTextDecorationMetric | null,
+): TextDecorationOffset {
+  if (!value || value.unit === "auto") return { unit: "AUTO" };
+  return {
+    unit: value.unit === "pixels" ? "PIXELS" : "PERCENT",
+    value: value.value,
+  };
+}
+
+export function figmaTextDecorationColor(
+  value: OpenDesignTextDecorationColor | null,
+): TextDecorationColor | null {
+  if (!value || value.value === "auto") return { value: "AUTO" };
+  const color = parseColor(value.value.color);
+  if (!color) return null;
+  return {
+    value: {
+      type: "SOLID",
+      color: { r: color.r, g: color.g, b: color.b },
+      opacity: value.value.opacity * color.a,
+    },
+  };
+}
+
+export function openDesignTextDecorationStyle(
+  value: TextDecorationStyle,
+): OpenDesignTextDecorationStyle {
+  return value === "WAVY" ? "wavy" : value === "DOTTED" ? "dotted" : "solid";
+}
+
+export function openDesignTextDecorationMetric(
+  value: TextDecorationOffset,
+): OpenDesignTextDecorationMetric {
+  if (value.unit === "AUTO") return { unit: "auto" };
+  return {
+    unit: value.unit === "PIXELS" ? "pixels" : "percent",
+    value: value.value,
+  };
+}
+
+export function openDesignTextDecorationColor(
+  value: TextDecorationColor,
+): OpenDesignTextDecorationColor {
+  if (value.value === "AUTO") return { value: "auto" };
+  return {
+    value: {
+      type: "solid",
+      color: rgbHex(value.value.color),
+      opacity: value.value.opacity ?? 1,
+    },
+  };
 }
 
 export function figmaTextCase(

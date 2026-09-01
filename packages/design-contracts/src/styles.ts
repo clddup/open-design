@@ -1,5 +1,10 @@
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
 import { JsonObjectSchema } from "./primitives.js";
+import {
+  migrateAdvancedTextDecoration,
+  TextDecorationAdvancedProperties,
+  TextDecorationSchema,
+} from "./text-decoration.js";
 
 export const SharedStyleTypeSchema = Type.Union([
   Type.Literal("PAINT"),
@@ -47,11 +52,8 @@ export const TextStylePropertiesSchema = Type.Object(
       Type.Literal("title-case"),
       Type.Literal("small-caps"),
     ]),
-    textDecoration: Type.Union([
-      Type.Literal("none"),
-      Type.Literal("underline"),
-      Type.Literal("strikethrough"),
-    ]),
+    textDecoration: TextDecorationSchema,
+    ...TextDecorationAdvancedProperties,
   },
   { additionalProperties: false },
 );
@@ -269,5 +271,6 @@ export function migrateSharedStyles(document: Record<string, unknown>): void {
     properties.hangingList ??= false;
     properties.textCase ??= "original";
     properties.textDecoration ??= "none";
+    migrateAdvancedTextDecoration(properties, true);
   }
 }

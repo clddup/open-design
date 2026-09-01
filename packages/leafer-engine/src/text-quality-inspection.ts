@@ -260,6 +260,11 @@ function leaferTextRunStyle(style: TextRunStyle): LeaferTextRunStyle {
     lineHeight: style.lineHeight,
     textCase: style.textCase,
     textDecoration: style.textDecoration,
+    textDecorationStyle: style.textDecorationStyle,
+    textDecorationOffset: structuredClone(style.textDecorationOffset),
+    textDecorationThickness: structuredClone(style.textDecorationThickness),
+    textDecorationColor: structuredClone(style.textDecorationColor),
+    textDecorationSkipInk: style.textDecorationSkipInk,
     fill: structuredClone(style.fills),
   };
 }

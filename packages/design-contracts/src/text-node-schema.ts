@@ -1,4 +1,8 @@
 import { Type, type TProperties, type TSchema } from "@sinclair/typebox";
+import {
+  TextDecorationAdvancedProperties,
+  TextDecorationSchema,
+} from "./text-decoration.js";
 
 interface TextNodeSchemaDependencies {
   fontFaceIdentityProperties: TProperties;
@@ -34,7 +38,8 @@ export function createTextNodeSchemas<
               letterSpacing: Type.Number(),
               lineHeight: Type.Number({ exclusiveMinimum: 0 }),
               textCase: textCaseSchema(),
-              textDecoration: textDecorationSchema(),
+              textDecoration: TextDecorationSchema,
+              ...TextDecorationAdvancedProperties,
               fills: Type.Array(paintSchema, { maxItems: 64 }),
               textStyleId: Type.Optional(
                 Type.String({ minLength: 1, maxLength: 512 }),
@@ -66,7 +71,8 @@ export function createTextNodeSchemas<
     listSpacing: Type.Number({ minimum: 0 }),
     hangingList: Type.Boolean(),
     textCase: textCaseSchema(),
-    textDecoration: textDecorationSchema(),
+    textDecoration: TextDecorationSchema,
+    ...TextDecorationAdvancedProperties,
     textAlignHorizontal: Type.Union([
       Type.Literal("left"),
       Type.Literal("center"),
@@ -208,14 +214,6 @@ function textCaseSchema() {
     Type.Literal("lowercase"),
     Type.Literal("title-case"),
     Type.Literal("small-caps"),
-  ]);
-}
-
-function textDecorationSchema() {
-  return Type.Union([
-    Type.Literal("none"),
-    Type.Literal("underline"),
-    Type.Literal("strikethrough"),
   ]);
 }
 

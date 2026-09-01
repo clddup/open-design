@@ -11,7 +11,13 @@ import {
   figmaBlendMode,
   figmaTextCase,
   figmaTextDecoration,
+  figmaTextDecorationColor,
+  figmaTextDecorationMetric,
+  figmaTextDecorationStyle,
   openDesignBlendMode,
+  openDesignTextDecorationColor,
+  openDesignTextDecorationMetric,
+  openDesignTextDecorationStyle,
   parseColor,
   rgbHex,
   toFigmaFontName,
@@ -35,6 +41,11 @@ export interface FigmaTextRangeSegment {
   start: number;
   textCase: TextCase;
   textDecoration: TextDecoration;
+  textDecorationStyle: TextDecorationStyle | null;
+  textDecorationOffset: TextDecorationOffset | null;
+  textDecorationThickness: TextDecorationThickness | null;
+  textDecorationColor: TextDecorationColor | null;
+  textDecorationSkipInk: boolean | null;
   textStyleId?: string;
 }
 
@@ -106,6 +117,14 @@ export function toFigmaTextRangeSegments(
       }
       const fills = toFigmaRangePaints(style.fills, index, issues);
       if (!fills) return [];
+      const decorationColor =
+        style.textDecoration === "underline"
+          ? figmaTextDecorationColor(style.textDecorationColor)
+          : null;
+      if (style.textDecoration === "underline" && !decorationColor) {
+        issues.push(`Text range ${index} has an unsupported decoration color`);
+        return [];
+      }
       return [
         {
           start,
@@ -122,6 +141,23 @@ export function toFigmaTextRangeSegments(
           paragraphSpacing: paragraphStyle.paragraphSpacing,
           textCase: figmaTextCase(style.textCase),
           textDecoration: figmaTextDecoration(style.textDecoration),
+          textDecorationStyle:
+            style.textDecoration === "underline"
+              ? figmaTextDecorationStyle(style.textDecorationStyle)
+              : null,
+          textDecorationOffset:
+            style.textDecoration === "underline"
+              ? figmaTextDecorationMetric(style.textDecorationOffset)
+              : null,
+          textDecorationThickness:
+            style.textDecoration === "underline"
+              ? figmaTextDecorationMetric(style.textDecorationThickness)
+              : null,
+          textDecorationColor: decorationColor,
+          textDecorationSkipInk:
+            style.textDecoration === "underline"
+              ? (style.textDecorationSkipInk ?? false)
+              : null,
           fills,
           ...(style.textStyleId ? { textStyleId: style.textStyleId } : {}),
           ...(style.fillStyleId ? { fillStyleId: style.fillStyleId } : {}),
@@ -187,6 +223,49 @@ export function fromFigmaTextRangeSegments(
     }
     const fills = fromFigmaRangePaints(segment.fills, index, issues);
     if (!fills) return [];
+    const textDecoration = openDesignTextDecoration(segment.textDecoration);
+    if (
+      textDecoration === "underline" &&
+      (!segment.textDecorationStyle ||
+        !segment.textDecorationOffset ||
+        !segment.textDecorationThickness ||
+        !segment.textDecorationColor ||
+        segment.textDecorationSkipInk === null)
+    ) {
+      issues.push(
+        `Figma text segment ${index} has incomplete underline properties`,
+      );
+      return [];
+    }
+    const advanced =
+      textDecoration === "underline" &&
+      segment.textDecorationStyle &&
+      segment.textDecorationOffset &&
+      segment.textDecorationThickness &&
+      segment.textDecorationColor &&
+      segment.textDecorationSkipInk !== null
+        ? {
+            textDecorationStyle: openDesignTextDecorationStyle(
+              segment.textDecorationStyle,
+            ),
+            textDecorationOffset: openDesignTextDecorationMetric(
+              segment.textDecorationOffset,
+            ),
+            textDecorationThickness: openDesignTextDecorationMetric(
+              segment.textDecorationThickness,
+            ),
+            textDecorationColor: openDesignTextDecorationColor(
+              segment.textDecorationColor,
+            ),
+            textDecorationSkipInk: segment.textDecorationSkipInk,
+          }
+        : {
+            textDecorationStyle: null,
+            textDecorationOffset: null,
+            textDecorationThickness: null,
+            textDecorationColor: null,
+            textDecorationSkipInk: null,
+          };
     return [
       {
         start: segment.start,
@@ -202,7 +281,8 @@ export function fromFigmaTextRangeSegments(
           letterSpacing: segment.letterSpacing.value,
           lineHeight: segment.lineHeight.value,
           textCase: openDesignTextCase(segment.textCase),
-          textDecoration: openDesignTextDecoration(segment.textDecoration),
+          textDecoration,
+          ...advanced,
           fills,
           ...(segment.textStyleId ? { textStyleId: segment.textStyleId } : {}),
           ...(segment.fillStyleId ? { fillStyleId: segment.fillStyleId } : {}),
@@ -275,6 +355,13 @@ function textNodeBaseStyle(
     lineHeight: node.properties.lineHeight,
     textCase: node.properties.textCase,
     textDecoration: node.properties.textDecoration,
+    textDecorationStyle: node.properties.textDecorationStyle,
+    textDecorationOffset: structuredClone(node.properties.textDecorationOffset),
+    textDecorationThickness: structuredClone(
+      node.properties.textDecorationThickness,
+    ),
+    textDecorationColor: structuredClone(node.properties.textDecorationColor),
+    textDecorationSkipInk: node.properties.textDecorationSkipInk,
     fills: node.properties.fills,
     ...(node.textStyleId ? { textStyleId: node.textStyleId } : {}),
     ...(node.fillStyleId ? { fillStyleId: node.fillStyleId } : {}),

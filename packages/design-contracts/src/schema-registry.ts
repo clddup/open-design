@@ -12,4 +12,10 @@ export {
   AngularGradientPaintSchema,
 } from "./appearance.js";
 export { SharedStyleTypeSchema, TextStylePropertiesSchema } from "./styles.js";
+export {
+  TextDecorationSchema,
+  TextDecorationStyleSchema,
+  TextDecorationMetricSchema,
+  TextDecorationColorSchema,
+} from "./text-decoration.js";
 export { ImageFiltersSchema } from "./image-filters.js";

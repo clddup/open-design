@@ -5,6 +5,7 @@ import * as exportSettings from "./export-settings.js";
 import { PathDataSchema } from "./path-schema.js";
 import { checkSchema } from "./schema-check.js";
 import * as styles from "./styles.js";
+import { migrateAdvancedTextDecoration } from "./text-decoration.js";
 import * as variables from "./variables.js";
 import { migrateVariantSets } from "./variant-sets.js";
 import * as versions from "./versions.js";
@@ -116,12 +117,16 @@ function migrateTextNodes(document: Record<string, unknown>): void {
     textProperties.hangingList ??= false;
     textProperties.textCase ??= "original";
     textProperties.textDecoration ??= "none";
+    migrateAdvancedTextDecoration(textProperties, true);
     textProperties.runs ??= [];
     textProperties.paragraphRuns ??= [];
     if (Array.isArray(textProperties.runs)) {
       const merged: unknown[] = [];
       for (const value of textProperties.runs) {
         const run = isRecordValue(value) ? value : null;
+        if (run && isRecordValue(run.style)) {
+          migrateAdvancedTextDecoration(run.style, true);
+        }
         const previous = merged.at(-1);
         if (
           run &&

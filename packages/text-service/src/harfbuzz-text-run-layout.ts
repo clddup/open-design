@@ -896,6 +896,11 @@ function decorationOutlines(
       `Imported font face has no exact ${style.textDecoration} metrics`,
     );
   }
+  if (style.textDecoration === "underline" && style.textDecorationSkipInk) {
+    throw new UnsupportedShapingError(
+      "Exact underline skip-ink clipping is unavailable for this provider",
+    );
+  }
   const scale = style.fontSize / face.descriptor.unitsPerEm;
   const position =
     style.textDecoration === "underline"
@@ -905,16 +910,104 @@ function decorationOutlines(
     style.textDecoration === "underline"
       ? face.decorationMetrics.underlineThickness
       : face.decorationMetrics.strikethroughThickness;
-  const center = normalize(position * scale);
-  const height = normalize(thickness * scale);
-  const top = normalize(center + height / 2);
-  const bottom = normalize(center - height / 2);
+  const center = resolveDecorationOffset(style, position * scale);
+  const height = resolveDecorationThickness(style, thickness * scale);
   return [
     {
+      color:
+        style.textDecorationColor?.value === "auto" ||
+        style.textDecorationColor === null
+          ? "auto"
+          : structuredClone(style.textDecorationColor.value),
       kind: style.textDecoration,
-      path: `M0 ${bottom}L${width} ${bottom}L${width} ${top}L0 ${top}Z`,
+      path: decorationPath(
+        style.textDecorationStyle ?? "solid",
+        width,
+        center,
+        height,
+      ),
+      style: style.textDecorationStyle ?? "solid",
     },
   ];
+}
+
+function resolveDecorationOffset(
+  style: TextRunLayoutStyle,
+  autoPosition: number,
+): number {
+  const metric = style.textDecorationOffset;
+  if (!metric || metric.unit === "auto") return normalize(autoPosition);
+  const distance =
+    metric.unit === "pixels"
+      ? metric.value
+      : (metric.value / 100) * style.fontSize;
+  return normalize(-distance);
+}
+
+function resolveDecorationThickness(
+  style: TextRunLayoutStyle,
+  autoThickness: number,
+): number {
+  const metric = style.textDecorationThickness;
+  if (!metric || metric.unit === "auto") return normalize(autoThickness);
+  return normalize(
+    metric.unit === "pixels"
+      ? metric.value
+      : (metric.value / 100) * style.fontSize,
+  );
+}
+
+function decorationPath(
+  style: "dotted" | "solid" | "wavy",
+  width: number,
+  center: number,
+  thickness: number,
+): string {
+  if (style === "dotted") return dottedDecorationPath(width, center, thickness);
+  if (style === "wavy") return wavyDecorationPath(width, center, thickness);
+  const top = normalize(center + thickness / 2);
+  const bottom = normalize(center - thickness / 2);
+  return `M0 ${bottom}L${width} ${bottom}L${width} ${top}L0 ${top}Z`;
+}
+
+function dottedDecorationPath(
+  width: number,
+  center: number,
+  thickness: number,
+): string {
+  const radius = thickness / 2;
+  const idealStep = Math.max(thickness * 2, 1);
+  const count = Math.max(1, Math.min(4_096, Math.ceil(width / idealStep)));
+  const step = width / count;
+  const kappa = radius * 0.5522847498;
+  return Array.from({ length: count }, (_, index) => {
+    const x = normalize(Math.min(width - radius, index * step + step / 2));
+    const left = normalize(x - radius);
+    const right = normalize(x + radius);
+    const top = normalize(center + radius);
+    const bottom = normalize(center - radius);
+    return `M${left} ${center}C${left} ${normalize(center + kappa)} ${normalize(x - kappa)} ${top} ${x} ${top}C${normalize(x + kappa)} ${top} ${right} ${normalize(center + kappa)} ${right} ${center}C${right} ${normalize(center - kappa)} ${normalize(x + kappa)} ${bottom} ${x} ${bottom}C${normalize(x - kappa)} ${bottom} ${left} ${normalize(center - kappa)} ${left} ${center}Z`;
+  }).join("");
+}
+
+function wavyDecorationPath(
+  width: number,
+  center: number,
+  thickness: number,
+): string {
+  const idealStep = Math.max(thickness * 2, 2);
+  const segments = Math.max(2, Math.min(4_096, Math.ceil(width / idealStep)));
+  const step = width / segments;
+  const amplitude = Math.max(thickness, 1);
+  const upper: string[] = [];
+  const lower: string[] = [];
+  for (let index = 0; index <= segments; index += 1) {
+    const x = normalize(index * step);
+    const wave = Math.sin((index * Math.PI) / 2) * amplitude;
+    upper.push(`${x} ${normalize(center + wave + thickness / 2)}`);
+    lower.unshift(`${x} ${normalize(center + wave - thickness / 2)}`);
+  }
+  return `M${upper.join("L")}L${lower.join("L")}Z`;
 }
 
 function fontMetrics<Style extends TextRunLayoutStyle>(
@@ -941,7 +1034,15 @@ function sameMetrics(
     left.letterSpacing === right.letterSpacing &&
     left.lineHeight === right.lineHeight &&
     left.textCase === right.textCase &&
-    left.textDecoration === right.textDecoration
+    left.textDecoration === right.textDecoration &&
+    left.textDecorationStyle === right.textDecorationStyle &&
+    JSON.stringify(left.textDecorationOffset) ===
+      JSON.stringify(right.textDecorationOffset) &&
+    JSON.stringify(left.textDecorationThickness) ===
+      JSON.stringify(right.textDecorationThickness) &&
+    JSON.stringify(left.textDecorationColor) ===
+      JSON.stringify(right.textDecorationColor) &&
+    left.textDecorationSkipInk === right.textDecorationSkipInk
   );
 }
 
