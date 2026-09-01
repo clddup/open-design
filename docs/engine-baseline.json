@@ -141,14 +141,14 @@
       "contractVersion": 7,
       "adapterPackage": "@opendesign/leafer-engine",
       "provider": "harfbuzzjs",
-      "version": "1.4.0",
+      "version": "1.7.0",
       "bidiProvider": "bidi-js",
       "bidiVersion": "1.0.3",
       "bidiUnicodeVersion": "13.0.0",
       "simpleRunProvider": "leafer-editor 2.2.9",
       "fontBinaryFormats": ["ttf", "otf", "ttc"],
       "fontBinaryLimitBytes": 33554432,
-      "productionStatus": "document-character-paragraph-and-list-range-schema-runtime-inspector-agent-figma-svg-exact-revision-native-harfbuzz-projection-exact-ending-truncation-and-advanced-decoration-available-exact-skip-ink-caret-auto-list-custom-markers-opentype-axes-font-packaging-newer-bidi-and-native-gate-pending"
+      "productionStatus": "document-character-paragraph-and-list-range-schema-runtime-inspector-agent-figma-svg-exact-revision-native-harfbuzz-projection-exact-ending-truncation-and-advanced-decoration-and-imported-font-exact-skip-ink-available-caret-auto-list-custom-markers-opentype-axes-font-packaging-newer-bidi-and-native-gate-pending"
     },
     "layout": {
       "role": "versioned-frame-constraints-and-auto-layout-provider",

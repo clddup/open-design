@@ -143,6 +143,9 @@ export function leaferTextRunLayoutToProjection(
     truncated: result.truncated,
     fragments: result.fragments.map((fragment): LeaferTextRunFragment => ({
       data: leaferTextRunData(fragment.style),
+      ...(fragment.decorations === undefined
+        ? {}
+        : { decorations: structuredClone(fragment.decorations) }),
       end: fragment.end,
       ...(fragment.glyphs === undefined ? {} : { glyphs: fragment.glyphs }),
       baseline: fragment.baseline,
@@ -156,6 +159,9 @@ export function leaferTextRunLayoutToProjection(
     markers: result.markers.map((marker) => ({
       baseline: marker.baseline,
       data: leaferTextRunData(marker.style),
+      ...(marker.decorations === undefined
+        ? {}
+        : { decorations: structuredClone(marker.decorations) }),
       direction: marker.direction,
       ...(marker.glyphs === undefined ? {} : { glyphs: marker.glyphs }),
       height: marker.height,

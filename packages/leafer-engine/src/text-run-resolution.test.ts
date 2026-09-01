@@ -155,6 +155,84 @@ describe("design rich-text projection resolution", () => {
     );
     expect(result.projection.resultsByNodeId.has(node.id)).toBe(true);
   });
+
+  it("uses exact projection for a decorated single-style Text", () => {
+    const document = structuredClone(createWelcomeDocument());
+    const node = document.nodesById.title_welcome;
+    if (!node || node.kind !== "text") throw new Error("Missing title");
+    node.properties.runs = [];
+    node.properties.paragraphRuns = [];
+    node.properties.textDecoration = "underline";
+    node.properties.textDecorationStyle = "solid";
+    node.properties.textDecorationOffset = { unit: "auto" };
+    node.properties.textDecorationThickness = { unit: "auto" };
+    node.properties.textDecorationColor = { value: "auto" };
+    node.properties.textDecorationSkipInk = true;
+    const layout = vi.fn<TextRunLayoutProvider<LeaferTextRunStyle>["layout"]>(
+      (request) => ({
+        ok: true,
+        provider: "test-decoration",
+        providerVersion: "1",
+        size: { width: 120, height: 40 },
+        contentBounds: { x: 0, y: 0, width: 120, height: 40 },
+        displayContent: request.content,
+        lines: [
+          {
+            start: 0,
+            end: request.content.length,
+            x: 0,
+            y: 0,
+            width: 120,
+            height: 40,
+            baseline: 30,
+          },
+        ],
+        fragments: [
+          {
+            start: 0,
+            end: request.content.length,
+            text: request.content,
+            style: request.baseStyle,
+            decorations: [
+              {
+                color: "auto",
+                kind: "underline",
+                path: "M0 -3H120V-1H0Z",
+                style: "solid",
+              },
+            ],
+            x: 0,
+            y: 0,
+            width: 120,
+            height: 40,
+            baseline: 30,
+            lineIndex: 0,
+          },
+        ],
+        fullContentBounds: { x: 0, y: 0, width: 120, height: 40 },
+        markers: [],
+        sourceContentEnd: request.content.length,
+        truncated: false,
+        warnings: [],
+      }),
+    );
+
+    const result = resolveDesignTextRuns(document, "page_welcome", {
+      id: "test-decoration",
+      version: "1",
+      layout,
+    });
+
+    expect(result.warnings).toEqual([]);
+    expect(layout).toHaveBeenCalledTimes(1);
+    expect(layout.mock.calls[0]?.[0].baseStyle).toMatchObject({
+      textDecoration: "underline",
+      textDecorationSkipInk: true,
+    });
+    expect(
+      result.projection.resultsByNodeId.get(node.id)?.fragments[0]?.decorations,
+    ).toHaveLength(1);
+  });
 });
 
 function richDocument() {

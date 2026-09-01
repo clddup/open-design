@@ -167,6 +167,7 @@ describe("native rich-text projection boundary", () => {
     if (!source) throw new Error("Missing title projection");
     const content = String(source.data.text);
     const glyphId = textRunFragmentElementId(source.id, 0);
+    const decorationId = textRunFragmentElementId(source.id, 1);
     const projection = projectResolvedTextRuns(base, {
       documentId: base.documentId,
       pageId: base.pageId,
@@ -180,6 +181,18 @@ describe("native rich-text projection boundary", () => {
               {
                 baseline: 30,
                 data: { fill: "#7c3aed" },
+                decorations: [
+                  {
+                    color: {
+                      type: "solid",
+                      color: "#2563eb",
+                      opacity: 0.75,
+                    },
+                    kind: "underline",
+                    path: "M0 -3H22V-1H0Z",
+                    style: "solid",
+                  },
+                ],
                 end: content.length,
                 glyphs: [
                   {
@@ -222,8 +235,52 @@ describe("native rich-text projection boundary", () => {
         },
       },
     });
+    expect(projection.elementsById.get(decorationId)).toMatchObject({
+      id: decorationId,
+      kind: "path",
+      parentId: source.parentId,
+      tag: "Path",
+      transform: [
+        source.transform[0],
+        source.transform[1],
+        source.transform[2] === 0 ? 0 : -source.transform[2],
+        -source.transform[3],
+        source.transform[4] +
+          source.transform[0] * 10 +
+          source.transform[2] * 36,
+        source.transform[5] +
+          source.transform[1] * 10 +
+          source.transform[3] * 36,
+      ],
+      data: {
+        editable: false,
+        fill: [
+          {
+            color: "#2563eb",
+            opacity: 0.75,
+            type: "solid",
+            visible: true,
+          },
+        ],
+        hittable: false,
+        path: "M0 -3H22V-1H0Z",
+        data: {
+          opendesignNodeId: source.id,
+          opendesignSynthetic: true,
+          opendesignTextDecoration: {
+            kind: "underline",
+            style: "solid",
+          },
+          opendesignTextRun: { start: 0, end: content.length },
+        },
+      },
+    });
     expect(textRunEditProxyElementId(projection, glyphId)).toBe(source.id);
-    expect(textRunFragmentElementIds(projection, source.id)).toEqual([glyphId]);
+    expect(textRunEditProxyElementId(projection, decorationId)).toBe(source.id);
+    expect(textRunFragmentElementIds(projection, source.id)).toEqual([
+      glyphId,
+      decorationId,
+    ]);
   });
 
   it("rejects stale document and revision identities", () => {

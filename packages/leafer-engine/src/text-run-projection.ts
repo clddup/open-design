@@ -1,4 +1,8 @@
 import type { Transform } from "@opendesign/design-contracts";
+import {
+  validateTextRunLayoutDecorations,
+  type TextRunLayoutDecoration,
+} from "@opendesign/text-service";
 import type {
   LeaferElementSpec,
   LeaferSceneProjection,
@@ -7,6 +11,7 @@ import type {
 export interface LeaferTextRunFragment {
   baseline?: number;
   data: Record<string, unknown>;
+  decorations?: readonly TextRunLayoutDecoration[];
   end: number;
   glyphs?: readonly LeaferTextRunGlyph[];
   height: number;
@@ -31,6 +36,7 @@ export interface LeaferTextRunGlyph {
 export interface LeaferTextRunMarker {
   baseline: number;
   data: Record<string, unknown>;
+  decorations?: readonly TextRunLayoutDecoration[];
   direction: "ltr" | "rtl";
   glyphs?: readonly LeaferTextRunGlyph[];
   height: number;
@@ -129,9 +135,64 @@ export function projectResolvedTextRuns(
 
     const fragmentIds: string[] = [];
     let projectionIndex = 0;
+    const sourceName =
+      typeof source.data.name === "string" ? source.data.name : nodeId;
+    const appendDecorations = (
+      decorations: readonly TextRunLayoutDecoration[] | undefined,
+      fill: unknown,
+      x: number,
+      baselineY: number,
+      identity: Record<string, unknown>,
+      label: string,
+    ) => {
+      decorations?.forEach((decoration, decorationIndex) => {
+        if (decoration.path.length === 0) return;
+        const id = textRunFragmentElementId(nodeId, projectionIndex++);
+        const spec: LeaferElementSpec = {
+          childIds: [],
+          data: {
+            editable: false,
+            fill:
+              decoration.color === "auto"
+                ? fill
+                : decorationFill(decoration.color),
+            hittable: false,
+            id,
+            name: `${sourceName} ${label} decoration ${decorationIndex + 1}`,
+            opacity: source.data.opacity,
+            path: decoration.path,
+            visible: source.data.visible,
+            data: {
+              ...identity,
+              opendesignNodeId: nodeId,
+              opendesignNodeKind: "text",
+              opendesignProjectionId: id,
+              opendesignSynthetic: true,
+              opendesignTextDecoration: {
+                kind: decoration.kind,
+                style: decoration.style,
+              },
+            },
+          },
+          id,
+          kind: "path",
+          parentId: source.parentId,
+          tag: "Path",
+          transform: composeTransform(source.transform, [
+            1,
+            0,
+            0,
+            -1,
+            x,
+            baselineY,
+          ]),
+        };
+        elementsById.set(id, spec);
+        affectedNodeIds?.add(id);
+        fragmentIds.push(id);
+      });
+    };
     result.fragments.forEach((fragment, fragmentIndex) => {
-      const sourceName =
-        typeof source.data.name === "string" ? source.data.name : nodeId;
       if (fragment.glyphs !== undefined) {
         fragment.glyphs.forEach((glyph, glyphIndex) => {
           const id = textRunFragmentElementId(nodeId, projectionIndex++);
@@ -176,6 +237,19 @@ export function projectResolvedTextRuns(
           affectedNodeIds?.add(id);
           fragmentIds.push(id);
         });
+        appendDecorations(
+          fragment.decorations,
+          fragment.data.fill,
+          fragment.x,
+          fragment.y + (fragment.baseline ?? 0),
+          {
+            opendesignTextRun: {
+              start: Math.min(fragment.start, sourceContentEnd),
+              end: Math.min(fragment.end, sourceContentEnd),
+            },
+          },
+          `segment ${fragmentIndex + 1}`,
+        );
         return;
       }
       const id = textRunFragmentElementId(nodeId, projectionIndex++);
@@ -217,10 +291,21 @@ export function projectResolvedTextRuns(
       elementsById.set(id, spec);
       affectedNodeIds?.add(id);
       fragmentIds.push(id);
+      appendDecorations(
+        fragment.decorations,
+        fragment.data.fill,
+        fragment.x,
+        fragment.y + (fragment.baseline ?? 0),
+        {
+          opendesignTextRun: {
+            start: Math.min(fragment.start, sourceContentEnd),
+            end: Math.min(fragment.end, sourceContentEnd),
+          },
+        },
+        `segment ${fragmentIndex + 1}`,
+      );
     });
     (result.markers ?? []).forEach((marker, markerIndex) => {
-      const sourceName =
-        typeof source.data.name === "string" ? source.data.name : nodeId;
       if (marker.glyphs !== undefined) {
         marker.glyphs.forEach((glyph, glyphIndex) => {
           const id = textRunFragmentElementId(nodeId, projectionIndex++);
@@ -264,6 +349,19 @@ export function projectResolvedTextRuns(
           affectedNodeIds?.add(id);
           fragmentIds.push(id);
         });
+        appendDecorations(
+          marker.decorations,
+          marker.data.fill,
+          marker.x,
+          marker.y + marker.baseline,
+          {
+            opendesignTextMarker: {
+              paragraphStart: marker.paragraphStart,
+              text: marker.text,
+            },
+          },
+          `marker ${markerIndex + 1}`,
+        );
         return;
       }
       const id = textRunFragmentElementId(nodeId, projectionIndex++);
@@ -300,6 +398,19 @@ export function projectResolvedTextRuns(
       elementsById.set(id, spec);
       affectedNodeIds?.add(id);
       fragmentIds.push(id);
+      appendDecorations(
+        marker.decorations,
+        marker.data.fill,
+        marker.x,
+        marker.y + marker.baseline,
+        {
+          opendesignTextMarker: {
+            paragraphStart: marker.paragraphStart,
+            text: marker.text,
+          },
+        },
+        `marker ${markerIndex + 1}`,
+      );
     });
 
     if (source.parentId === null) {
@@ -450,6 +561,11 @@ function validateMarkers(
     ) {
       throw new Error(`Text run projection markers are invalid: ${source.id}`);
     }
+    if (!validProjectionDecorations(marker.decorations, marker.width)) {
+      throw new Error(
+        `Text run projection marker decorations are invalid: ${source.id}`,
+      );
+    }
     if (marker.glyphs !== undefined) {
       validateMarkerGlyphs(source.id, marker);
     }
@@ -553,6 +669,11 @@ function validateFragments(
         `Text run projection fragments are invalid: ${source.id}`,
       );
     }
+    if (!validProjectionDecorations(fragment.decorations, fragment.width)) {
+      throw new Error(
+        `Text run projection decorations are invalid: ${source.id}`,
+      );
+    }
     if (fragment.glyphs !== undefined) {
       if (!Array.isArray(fragment.glyphs)) {
         throw new Error(`Text run projection glyphs are invalid: ${source.id}`);
@@ -618,6 +739,41 @@ function validateFragments(
       `Text run projection does not cover display text: ${source.id}`,
     );
   }
+}
+
+function validProjectionDecorations(
+  decorations: readonly TextRunLayoutDecoration[] | undefined,
+  width: number,
+): boolean {
+  if (decorations === undefined) return true;
+  if (!Array.isArray(decorations) || decorations.length > 1) return false;
+  if (decorations.length === 0) return true;
+  const decoration: unknown = decorations[0];
+  if (
+    typeof decoration !== "object" ||
+    decoration === null ||
+    !("kind" in decoration) ||
+    (decoration.kind !== "underline" && decoration.kind !== "strikethrough")
+  ) {
+    return false;
+  }
+  return (
+    validateTextRunLayoutDecorations(decorations, decoration.kind, width)
+      .issue === null
+  );
+}
+
+function decorationFill(
+  color: Exclude<TextRunLayoutDecoration["color"], "auto">,
+): unknown {
+  return [
+    {
+      color: color.color,
+      opacity: color.opacity,
+      type: "solid",
+      visible: true,
+    },
+  ];
 }
 
 function translateTransform(

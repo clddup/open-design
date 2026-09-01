@@ -5,6 +5,8 @@ export * from "./text-editing-session.js";
 export * from "./text-list-layout.js";
 export * from "./text-quality-evidence.js";
 export * from "./text-run-layout.js";
+export * from "./text-run-layout-decoration.js";
+export * from "./text-decoration-geometry.js";
 export * from "./text-run-truncation.js";
 export * from "./text-types.js";
 

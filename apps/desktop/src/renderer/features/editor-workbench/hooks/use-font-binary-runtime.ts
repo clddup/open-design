@@ -3,6 +3,7 @@ import {
   type HarfBuzzFontFaceDescriptor,
   type HarfBuzzTextRunLayoutRuntime,
 } from "@opendesign/text-service/harfbuzz";
+import { loadBrowserVectorGeometryProvider } from "@opendesign/geometry-service/browser-vector-path";
 import {
   type TextRunLayoutProvider,
   type TextRunLayoutStyle,
@@ -33,12 +34,12 @@ export function useFontBinaryRuntime() {
 
   const requireRuntime = useCallback(() => {
     runtime.current ??=
-      createHarfBuzzTextRunLayoutRuntime<RendererTextRunStyle>().then(
-        (value) => {
-          setProvider(() => value.provider);
-          return value;
-        },
-      );
+      createHarfBuzzTextRunLayoutRuntime<RendererTextRunStyle>({
+        decorationGeometryProvider: loadBrowserVectorGeometryProvider(),
+      }).then((value) => {
+        setProvider(() => value.provider);
+        return value;
+      });
     return runtime.current;
   }, []);
 

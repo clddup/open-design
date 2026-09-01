@@ -32,6 +32,10 @@ import {
   layoutTextRunWithEndingTruncation,
   type RawTextRunLayoutResult,
 } from "./text-run-truncation.js";
+import {
+  subtractTextDecorationInk,
+  type TextDecorationGeometryProvider,
+} from "./text-decoration-geometry.js";
 /*
  * Keep HarfBuzz behind this async factory. Importing the ordinary text
  * service must not initialize WASM or block desktop startup.
@@ -40,7 +44,7 @@ import {
 export const HARFBUZZ_TEXT_RUN_LAYOUT_PROVIDER_ID =
   "harfbuzz-wasm-text-runs" as const;
 export const HARFBUZZ_TEXT_RUN_LAYOUT_PROVIDER_VERSION =
-  "1.6.0+bidi-13+lists-v1+decoration+ending" as const;
+  "1.7.0+bidi-13+lists-v1+decoration-skip-ink+ending" as const;
 export const HARFBUZZ_BIDI_UNICODE_VERSION = "13.0.0" as const;
 const HARFBUZZ_COORDINATE_SCALE = 64;
 
@@ -75,10 +79,22 @@ export interface HarfBuzzTextRunLayoutRuntime<
   unregisterFont(fontId: string): void;
 }
 
+export interface CreateHarfBuzzTextRunLayoutRuntimeOptions {
+  decorationGeometryProvider?:
+    | PromiseLike<TextDecorationGeometryProvider>
+    | TextDecorationGeometryProvider;
+}
+
 export async function createHarfBuzzTextRunLayoutRuntime<
   Style extends TextRunLayoutStyle = TextRunLayoutStyle,
->(): Promise<HarfBuzzTextRunLayoutRuntime<Style>> {
-  const [hb, bidi] = await Promise.all([import("harfbuzzjs"), loadBidi()]);
+>(
+  options: CreateHarfBuzzTextRunLayoutRuntimeOptions = {},
+): Promise<HarfBuzzTextRunLayoutRuntime<Style>> {
+  const [hb, bidi, decorationGeometryProvider] = await Promise.all([
+    import("harfbuzzjs"),
+    loadBidi(),
+    options.decorationGeometryProvider,
+  ]);
   const registry = createHarfBuzzFontRegistry(hb);
 
   const provider: TextRunLayoutProvider<Style> = {
@@ -135,6 +151,7 @@ export async function createHarfBuzzTextRunLayoutRuntime<
                 equalStyle,
               ),
               resolved,
+              decorationGeometryProvider,
             ),
         );
         const resultIssue = validateTextRunLayoutResult(result, request);
@@ -221,6 +238,7 @@ function layoutWithHarfBuzz<Style extends TextRunLayoutStyle>(
   request: TextRunLayoutRequest<Style>,
   runs: readonly TextStyleRun<Style>[],
   resolved: ReadonlyMap<string, RegisteredHarfBuzzFace>,
+  decorationGeometryProvider: TextDecorationGeometryProvider | undefined,
 ): RawTextRunLayoutResult<Style> {
   const paragraphRuns = canonicalizeTextParagraphRuns(
     request.content,
@@ -270,7 +288,14 @@ function layoutWithHarfBuzz<Style extends TextRunLayoutStyle>(
         ?.style ?? request.baseStyle;
     const registered = resolved.get(harfBuzzStyleKey(style));
     if (!registered) throw new Error("Resolved marker font face disappeared");
-    const shaped = shapeListMarker(hb, bidi, marker.text, style, registered);
+    const shaped = shapeListMarker(
+      hb,
+      bidi,
+      marker.text,
+      style,
+      registered,
+      decorationGeometryProvider,
+    );
     return {
       ...marker,
       ...shaped,
@@ -394,6 +419,7 @@ function layoutWithHarfBuzz<Style extends TextRunLayoutStyle>(
         lineY,
         metrics,
         resolved,
+        decorationGeometryProvider,
       ),
     );
     lineY += metrics.height;
@@ -587,6 +613,7 @@ function shapeListMarker<Style extends TextRunLayoutStyle>(
   text: string,
   style: Style,
   registered: RegisteredHarfBuzzFace,
+  decorationGeometryProvider: TextDecorationGeometryProvider | undefined,
 ): {
   baseline: number;
   decorations: readonly TextRunLayoutDecoration[];
@@ -620,6 +647,7 @@ function shapeListMarker<Style extends TextRunLayoutStyle>(
     0,
     metrics,
     new Map([[harfBuzzStyleKey(style), registered]]),
+    decorationGeometryProvider,
   );
   return {
     baseline: metrics.ascent,
@@ -772,6 +800,7 @@ function positionLine<Style extends TextRunLayoutStyle>(
   lineY: number,
   metrics: { ascent: number; height: number; width: number },
   resolved: ReadonlyMap<string, RegisteredHarfBuzzFace>,
+  decorationGeometryProvider: TextDecorationGeometryProvider | undefined,
 ): TextRunLayoutFragment<Style>[] {
   const visual = [...line.clusters];
   if (line.start < line.end) {
@@ -861,15 +890,22 @@ function positionLine<Style extends TextRunLayoutStyle>(
       fragmentX,
     );
     const width = normalize(fragmentRight - fragmentX);
-    const decorations = decorationOutlines(run.style, width, resolved);
+    const fragmentGlyphs = absoluteGlyphs.map((glyph) => ({
+      ...glyph,
+      x: normalize(glyph.x - fragmentX),
+    }));
+    const decorations = decorationOutlines(
+      run.style,
+      width,
+      fragmentGlyphs,
+      resolved,
+      decorationGeometryProvider,
+    );
     fragments.push({
       baseline: normalize(metrics.ascent),
       ...(decorations.length === 0 ? {} : { decorations }),
       end,
-      glyphs: absoluteGlyphs.map((glyph) => ({
-        ...glyph,
-        x: normalize(glyph.x - fragmentX),
-      })),
+      glyphs: fragmentGlyphs,
       height: normalize(metrics.height),
       lineIndex,
       start,
@@ -887,7 +923,9 @@ function positionLine<Style extends TextRunLayoutStyle>(
 function decorationOutlines(
   style: TextRunLayoutStyle,
   width: number,
+  glyphs: readonly TextRunLayoutGlyph[],
   resolved: ReadonlyMap<string, RegisteredHarfBuzzFace>,
+  decorationGeometryProvider: TextDecorationGeometryProvider | undefined,
 ): TextRunLayoutDecoration[] {
   if (style.textDecoration === "none" || width === 0) return [];
   const face = resolved.get(harfBuzzStyleKey(style));
@@ -896,7 +934,11 @@ function decorationOutlines(
       `Imported font face has no exact ${style.textDecoration} metrics`,
     );
   }
-  if (style.textDecoration === "underline" && style.textDecorationSkipInk) {
+  if (
+    style.textDecoration === "underline" &&
+    style.textDecorationSkipInk &&
+    !decorationGeometryProvider
+  ) {
     throw new UnsupportedShapingError(
       "Exact underline skip-ink clipping is unavailable for this provider",
     );
@@ -912,6 +954,18 @@ function decorationOutlines(
       : face.decorationMetrics.strikethroughThickness;
   const center = resolveDecorationOffset(style, position * scale);
   const height = resolveDecorationThickness(style, thickness * scale);
+  const path = decorationPath(
+    style.textDecorationStyle ?? "solid",
+    width,
+    center,
+    height,
+  );
+  const clipped =
+    style.textDecoration === "underline" && style.textDecorationSkipInk
+      ? subtractTextDecorationInk(path, glyphs, decorationGeometryProvider!)
+      : { empty: false, ok: true as const, path };
+  if (!clipped.ok) throw new UnsupportedShapingError(clipped.message);
+  if (clipped.empty) return [];
   return [
     {
       color:
@@ -920,12 +974,7 @@ function decorationOutlines(
           ? "auto"
           : structuredClone(style.textDecorationColor.value),
       kind: style.textDecoration,
-      path: decorationPath(
-        style.textDecorationStyle ?? "solid",
-        width,
-        center,
-        height,
-      ),
+      path: clipped.path,
       style: style.textDecorationStyle ?? "solid",
     },
   ];

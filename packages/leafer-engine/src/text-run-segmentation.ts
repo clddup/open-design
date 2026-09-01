@@ -145,6 +145,12 @@ export function unsupportedTextRunLayoutReason<
   ) {
     return "Leafer text run layout requires a contextual shaping provider for this script";
   }
+  if (
+    request.baseStyle.textDecoration !== "none" ||
+    request.runs.some((run) => run.style.textDecoration !== "none")
+  ) {
+    return "Leafer text run layout requires an exact decoration outline provider";
+  }
   if (request.runs.length === 0) return null;
   const boundaries = request.runs.flatMap((run) => [run.start, run.end]);
   let boundaryIndex = 0;

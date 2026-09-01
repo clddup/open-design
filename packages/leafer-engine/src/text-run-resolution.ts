@@ -31,7 +31,8 @@ export function resolveDesignTextRuns(
     if (
       node.kind === "text" &&
       ((node.properties.runs?.length ?? 0) > 0 ||
-        (node.properties.paragraphRuns?.length ?? 0) > 0)
+        (node.properties.paragraphRuns?.length ?? 0) > 0 ||
+        node.properties.textDecoration !== "none")
     ) {
       try {
         if (node.properties.textAlignHorizontal === "justify") {

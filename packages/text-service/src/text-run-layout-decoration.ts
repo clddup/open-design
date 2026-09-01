@@ -22,14 +22,18 @@ export function validateTextRunLayoutDecorations(
   value: unknown,
   expected: "none" | TextRunLayoutDecorationKind,
   visibleWidth: number,
+  allowFullyClipped = false,
 ): TextRunLayoutDecorationValidation {
   if (value === undefined) {
-    return expected === "none" || visibleWidth === 0 ? valid(0) : invalid();
+    return expected === "none" || visibleWidth === 0 || allowFullyClipped
+      ? valid(0)
+      : invalid();
   }
   if (!Array.isArray(value)) return invalid();
   if (expected === "none" || visibleWidth === 0) {
     return value.length === 0 ? valid(0) : invalid();
   }
+  if (allowFullyClipped && value.length === 0) return valid(0);
   if (value.length !== 1) return invalid();
   const decoration: unknown = value[0];
   if (

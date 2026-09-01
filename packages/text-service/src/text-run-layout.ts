@@ -607,6 +607,7 @@ export function validateTextRunLayoutResult<Style extends TextRunLayoutStyle>(
       fragment.decorations,
       fragment.style.textDecoration,
       fragment.width,
+      fragment.style.textDecorationSkipInk === true,
     );
     if (decoration.issue) return decoration.issue;
     totalPathCharacters += decoration.pathCharacters;
@@ -664,6 +665,7 @@ export function validateTextRunLayoutResult<Style extends TextRunLayoutStyle>(
       marker.decorations,
       marker.style.textDecoration,
       marker.width,
+      marker.style.textDecorationSkipInk === true,
     );
     if (decoration.issue) return decoration.issue;
     glyphCount += marker.glyphs?.length ?? 0;

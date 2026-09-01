@@ -39,6 +39,33 @@ describe("text run provider fallback", () => {
     });
     expect(fallback.layout).not.toHaveBeenCalled();
   });
+
+  it("falls back for decorated text that requires exact outlines", () => {
+    const native = provider("native", {
+      ok: false,
+      code: "unsupported",
+      message: "Exact decoration outline required",
+      retryable: false,
+    });
+    const harfBuzz = provider("harfbuzz", success("harfbuzz"));
+    const result = composeTextRunLayoutProviders(native, harfBuzz).layout({
+      ...request(),
+      baseStyle: {
+        ...style(),
+        textDecoration: "underline",
+        textDecorationStyle: "solid",
+        textDecorationOffset: { unit: "auto" },
+        textDecorationThickness: { unit: "auto" },
+        textDecorationColor: { value: "auto" },
+        textDecorationSkipInk: true,
+      },
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      provider: "native+harfbuzz",
+    });
+    expect(harfBuzz.layout).toHaveBeenCalledTimes(1);
+  });
 });
 
 function provider(

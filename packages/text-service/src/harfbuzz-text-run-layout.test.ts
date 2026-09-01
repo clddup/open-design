@@ -1,6 +1,11 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { describe, expect, it } from "vitest";
+import { createRequire } from "node:module";
+import {
+  createPathKitGeometryProvider,
+  type VectorGeometryProvider,
+} from "@opendesign/geometry-service/vector-path";
+import { beforeAll, describe, expect, it } from "vitest";
 import {
   HARFBUZZ_BIDI_UNICODE_VERSION,
   createHarfBuzzTextRunLayoutRuntime,
@@ -28,6 +33,19 @@ const fontUrls = {
     import.meta.url,
   ),
 } as const;
+
+const geometryRequire = createRequire(
+  new URL("../../geometry-service/package.json", import.meta.url),
+);
+let geometry: VectorGeometryProvider;
+
+beforeAll(async () => {
+  geometry = await createPathKitGeometryProvider({
+    wasmBinary: await readFile(
+      geometryRequire.resolve("pathkit-wasm/bin/pathkit.wasm"),
+    ),
+  });
+});
 
 async function register(
   runtime: Awaited<ReturnType<typeof createHarfBuzzTextRunLayoutRuntime>>,
@@ -171,8 +189,10 @@ describe("HarfBuzz text run layout", () => {
     ).toBe(true);
   });
 
-  it("creates deterministic advanced underline outlines and fails closed for skip ink", async () => {
-    const runtime = await createHarfBuzzTextRunLayoutRuntime();
+  it("creates deterministic advanced underline outlines and clips skip ink against exact glyphs", async () => {
+    const runtime = await createHarfBuzzTextRunLayoutRuntime({
+      decorationGeometryProvider: geometry,
+    });
     const face = await register(runtime, fontUrls.latin);
     const advanced = {
       ...style(face),
@@ -189,7 +209,8 @@ describe("HarfBuzz text run layout", () => {
       },
       textDecorationSkipInk: false,
     };
-    const dotted = runtime.provider.layout(request("Open", advanced));
+    const content = "gyp";
+    const dotted = runtime.provider.layout(request(content, advanced));
     expect(dotted).toMatchObject({ ok: true });
     if (!dotted.ok) return;
     expect(dotted.fragments[0]?.decorations?.[0]).toMatchObject({
@@ -200,7 +221,7 @@ describe("HarfBuzz text run layout", () => {
     expect(dotted.fragments[0]?.decorations?.[0]?.path).toContain("C");
 
     const wavy = runtime.provider.layout(
-      request("Open", { ...advanced, textDecorationStyle: "wavy" }),
+      request(content, { ...advanced, textDecorationStyle: "wavy" }),
     );
     expect(wavy).toMatchObject({ ok: true });
     if (wavy.ok) {
@@ -209,9 +230,68 @@ describe("HarfBuzz text run layout", () => {
       });
     }
 
+    const solidStyle = {
+      ...advanced,
+      textDecorationStyle: "solid" as const,
+    };
+    const solid = runtime.provider.layout(request(content, solidStyle));
+    const skipped = runtime.provider.layout(
+      request(content, { ...solidStyle, textDecorationSkipInk: true }),
+    );
+    expect(solid).toMatchObject({ ok: true });
+    expect(skipped).toMatchObject({ ok: true });
+    if (!solid.ok || !skipped.ok) return;
+    const solidFragment = solid.fragments[0]!;
+    const skippedFragment = skipped.fragments[0]!;
+    const solidPath = solidFragment.decorations?.[0]?.path;
+    const skippedPath = skippedFragment.decorations?.[0]?.path;
+    expect(solidPath).toBeTruthy();
+    expect(skippedPath).toBeTruthy();
+    expect(skippedPath).not.toBe(solidPath);
+
+    const glyphPaths = skippedFragment.glyphs!.map((glyph) => {
+      const positioned = geometry.transform(
+        { path: glyph.path, fillRule: "nonzero" },
+        [1, 0, 0, 1, glyph.x, glyph.y],
+      );
+      expect(positioned.ok).toBe(true);
+      if (!positioned.ok) throw new Error(positioned.message);
+      return { path: positioned.path, fillRule: positioned.fillRule };
+    });
+    const glyphUnion = geometry.combine(glyphPaths, "union");
+    expect(glyphUnion.ok).toBe(true);
+    if (!glyphUnion.ok || !solidPath || !skippedPath) return;
+    const unclippedInk = geometry.combine(
+      [{ path: solidPath }, { path: glyphUnion.path }],
+      "intersect",
+    );
+    const clippedInk = geometry.combine(
+      [{ path: skippedPath }, { path: glyphUnion.path }],
+      "intersect",
+    );
+    expect(unclippedInk.ok && unclippedInk.empty).toBe(false);
+    expect(clippedInk.ok).toBe(true);
+    if (!unclippedInk.ok || !clippedInk.ok) return;
+    const unclippedArea =
+      (unclippedInk.bounds?.width ?? 0) * (unclippedInk.bounds?.height ?? 0);
+    const clippedArea =
+      (clippedInk.bounds?.width ?? 0) * (clippedInk.bounds?.height ?? 0);
+    expect(clippedArea).toBeLessThan(unclippedArea * 0.001);
+
+    const runtimeWithoutGeometry = await createHarfBuzzTextRunLayoutRuntime();
+    const fallbackFace = await register(runtimeWithoutGeometry, fontUrls.latin);
     expect(
-      runtime.provider.layout(
-        request("Open", { ...advanced, textDecorationSkipInk: true }),
+      runtimeWithoutGeometry.provider.layout(
+        request(content, {
+          ...solidStyle,
+          ...style(fallbackFace),
+          textDecoration: "underline",
+          textDecorationStyle: "solid",
+          textDecorationOffset: solidStyle.textDecorationOffset,
+          textDecorationThickness: solidStyle.textDecorationThickness,
+          textDecorationColor: solidStyle.textDecorationColor,
+          textDecorationSkipInk: true,
+        }),
       ),
     ).toMatchObject({ code: "unsupported", ok: false, retryable: false });
   });

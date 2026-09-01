@@ -1553,6 +1553,77 @@ describe("vector editing runtime plans", () => {
     ]);
   });
 
+  it("flattens an exact skip-ink underline without adding another mutation path", () => {
+    const document = structuredClone(createWelcomeDocument());
+    const text = document.nodesById.title_welcome;
+    if (!text || text.kind !== "text") throw new Error("Missing Text fixture");
+    text.properties = {
+      ...text.properties,
+      content: "g",
+      maxLines: null,
+      textDecoration: "underline",
+      textDecorationStyle: "solid",
+      textDecorationOffset: { unit: "auto" },
+      textDecorationThickness: { unit: "auto" },
+      textDecorationColor: { value: "auto" },
+      textDecorationSkipInk: true,
+      textOverflow: "visible",
+      textResize: "auto-width",
+      textTruncation: "disabled",
+      textWrap: "none",
+    };
+    const clippedPath = "M0 -2H4V-1H0ZM8 -2H12V-1H8Z";
+    const provider = glyphOutlineProvider();
+    const layout = provider.layout.bind(provider);
+    provider.layout = (request) => {
+      const result = layout(request);
+      if (!result.ok) return result;
+      return {
+        ...result,
+        fragments: result.fragments.map((fragment) => ({
+          ...fragment,
+          decorations: [
+            {
+              color: "auto",
+              kind: "underline" as const,
+              path: clippedPath,
+              style: "solid" as const,
+            },
+          ],
+        })),
+      };
+    };
+    const runtime = new EditorRuntime(document);
+    const plan = planFlattenNodes(
+      document,
+      "page_welcome",
+      [text.id],
+      "skip_ink_flattened_text",
+      "skip_ink_flatten_text",
+      geometry,
+      provider,
+    );
+    expect(plan).toMatchObject({ ok: true });
+    if (!plan.ok) return;
+    expect(plan.operations).toHaveLength(2);
+    expect(
+      runtime.apply({
+        transactionId: "flatten_skip_ink_text",
+        documentId: document.documentId,
+        baseRevision: document.revision,
+        actor: { type: "user", id: "local-user" },
+        label: "Flatten Skip Ink Text",
+        commands: [...plan.operations],
+      }),
+    ).toMatchObject({ ok: true });
+    expect(runtime.getSnapshot().document.revision).toBe(document.revision + 1);
+    const network = vectorNetworkFrom(runtime, "skip_ink_flattened_text");
+    expect(network.regions).toHaveLength(2);
+    expect(network.regions[1]?.loops).toHaveLength(2);
+    expect(runtime.undo()).toMatchObject({ ok: true });
+    expect(runtime.getSnapshot().document.nodesById[text.id]).toBeDefined();
+  });
+
   it("flattens only the exact ending-truncation display glyphs", () => {
     const document = structuredClone(createWelcomeDocument());
     const text = document.nodesById.title_welcome;

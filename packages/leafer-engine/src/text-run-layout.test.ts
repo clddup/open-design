@@ -92,6 +92,36 @@ function style(
 }
 
 describe("Leafer native text run layout provider", () => {
+  it("delegates decorated text to an exact outline provider", () => {
+    const provider = createLeaferTextRunLayoutProvider(leafer, {
+      fontAvailable: () => true,
+    });
+    expect(
+      provider.layout({
+        baseStyle: style({
+          textDecoration: "underline",
+          textDecorationStyle: "solid",
+          textDecorationOffset: { unit: "auto" },
+          textDecorationThickness: { unit: "auto" },
+          textDecorationColor: { value: "auto" },
+          textDecorationSkipInk: true,
+        }),
+        content: "gyp",
+        mode: "auto-width",
+        hangingList: false,
+        listSpacing: 0,
+        paragraphIndent: 0,
+        paragraphSpacing: 0,
+        runs: [],
+        maxLines: null,
+        textAlignHorizontal: "left",
+        textAlignVertical: "top",
+        textTruncation: "disabled",
+        textWrap: "none",
+      }),
+    ).toMatchObject({ code: "unsupported", ok: false, retryable: false });
+  });
+
   it("materializes one bounded ending-truncation display line", () => {
     const provider = createLeaferTextRunLayoutProvider(leafer, {
       fontAvailable: () => true,

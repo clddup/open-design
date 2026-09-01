@@ -23,7 +23,7 @@
 - 单样式与 rich-text range 可编辑、保存、恢复、投影和 Flatten solid/wavy/dotted underline，并保持显式 offset、thickness 与 color。
 - Provider 可见 Agent schema 从 Design Contract 投影，不再手写第二份枚举或结构。
 - Figma range 与 Figma Shared Text Style 的能力差异保持显式，不以兼容名义丢失设计事实。
-- 精确 skip-ink、系统字体 outline、OpenType/variable axes 与双平台像素验收仍是后续工作。
+- 精确 skip-ink 已由 ADR-0264 在导入字体 HarfBuzz 路径完成；系统字体 outline、OpenType/variable axes 与双平台像素验收仍是后续工作。
 
 ## 验证
 
