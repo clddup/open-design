@@ -137,6 +137,45 @@ describe("raster-composited Flatten", () => {
     ).toMatchObject({ kind: "failed" });
   });
 
+  it("bakes backdrop blend only when the selected subtree contains its backdrop", () => {
+    const isolated = nestedOpacityDocument();
+    const child = isolated.nodesById.child;
+    if (!child) throw new Error("Missing child");
+    child.blendMode = "multiply";
+    expect(prepareRasterFlattenNodes(isolated, "page", ["root"])).toMatchObject(
+      { kind: "ready" },
+    );
+
+    isolated.nodesById.root!.blendMode = "pass-through";
+    expect(prepareRasterFlattenNodes(isolated, "page", ["root"])).toMatchObject(
+      { kind: "failed" },
+    );
+
+    const completeRoots = multiRootBlendDocument();
+    expect(
+      prepareRasterFlattenNodes(completeRoots, "page", ["backdrop", "blend"]),
+    ).toMatchObject({ kind: "ready" });
+
+    completeRoots.nodesById.unselected = rectangle("unselected", null, -70);
+    completeRoots.pagesById.page!.rootNodeIds.unshift("unselected");
+    expect(
+      prepareRasterFlattenNodes(completeRoots, "page", ["backdrop", "blend"]),
+    ).toMatchObject({ kind: "failed" });
+
+    const interrupted = multiRootBlendDocument();
+    interrupted.nodesById.front = rectangle("front", null, 40);
+    interrupted.nodesById.front.blendMode = "screen";
+    interrupted.nodesById.gap = rectangle("gap", null, 30);
+    interrupted.pagesById.page!.rootNodeIds.push("gap", "front");
+    expect(
+      prepareRasterFlattenNodes(interrupted, "page", [
+        "backdrop",
+        "blend",
+        "front",
+      ]),
+    ).toMatchObject({ kind: "failed" });
+  });
+
   it("does not rasterize ordinary exact geometry and rejects a stale result", () => {
     const document = nestedOpacityDocument();
     const child = document.nodesById.child;
@@ -201,6 +240,17 @@ function multiRootDocument(): DesignDocument {
   document.nodesById.mask = mask;
   document.nodesById.content = content;
   document.pagesById.page!.rootNodeIds = [mask.id, content.id];
+  return document;
+}
+
+function multiRootBlendDocument(): DesignDocument {
+  const document = structuredClone(createEmptyDesignDocument("blend", "page"));
+  const backdrop = rectangle("backdrop", null, 0);
+  const blend = rectangle("blend", null, 20);
+  blend.blendMode = "multiply";
+  document.nodesById.backdrop = backdrop;
+  document.nodesById.blend = blend;
+  document.pagesById.page!.rootNodeIds = [backdrop.id, blend.id];
   return document;
 }
 

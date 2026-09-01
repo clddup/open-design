@@ -83,7 +83,7 @@ describe("Flatten appearance projection", () => {
     });
   });
 
-  it("rejects per-root compositing when multiple roots become one Vector", () => {
+  it("routes per-root compositing through the raster Flatten path", () => {
     const document = appearanceDocument();
     const source = document.nodesById.source;
     if (source?.kind !== "rectangle") throw new Error("Missing source");
@@ -94,7 +94,7 @@ describe("Flatten appearance projection", () => {
     document.pagesById.page!.rootNodeIds.push(sibling.id);
 
     expect(canFlattenNodes(document, "page", [source.id, sibling.id])).toBe(
-      false,
+      true,
     );
     expect(
       planFlattenNodes(

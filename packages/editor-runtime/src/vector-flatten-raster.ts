@@ -171,9 +171,17 @@ function rasterIsolationIssue(
       ? `Flatten root ${roots[0]!.id} uses a geometry mask that cannot be preserved by a raster rectangle`
       : null;
   }
-  const rootBlend = roots.find(hasExternalBackdropCompositing);
+  const rootBackgroundBlur = roots.find(hasBackgroundBlur);
+  if (rootBackgroundBlur) {
+    return `Flatten layer ${rootBackgroundBlur.id} uses background blur, which the current pixel compositor cannot preserve`;
+  }
+  const rootBlend = roots.find(
+    (root) =>
+      hasBackdropBlend(root) &&
+      !selectionContainsBackdrop(root.id, ordered, siblings),
+  );
   if (rootBlend) {
-    return `Flatten layer ${rootBlend.id} blends with content outside the selected roots`;
+    return `Flatten layer ${rootBlend.id} blends with unselected backdrop content`;
   }
   const maskIndex = ordered.findIndex((nodeId) =>
     isActiveMask(document.nodesById[nodeId]),
@@ -196,16 +204,11 @@ function subtreeIsolationIssue(
     const nodeId = pending.pop();
     const node = nodeId ? document.nodesById[nodeId] : undefined;
     if (!node) return `Flatten subtree ${rootId} contains an invalid child`;
-    if (
-      (node.effects ?? []).some(
-        (effect) =>
-          effect.visible !== false && effect.type === "background-blur",
-      )
-    ) {
-      return `Flatten descendant ${node.id} uses background blur outside an isolated selection`;
+    if (hasBackgroundBlur(node)) {
+      return `Flatten descendant ${node.id} uses background blur, which the current pixel compositor cannot preserve`;
     }
     if (
-      hasExternalBackdropCompositing(node) &&
+      hasBackdropBlend(node) &&
       !hasIsolatingAncestor(document, node, rootId)
     ) {
       return `Flatten descendant ${node.id} blends with content outside an isolated ancestor`;
@@ -221,25 +224,40 @@ function hasIsolatingAncestor(
   rootId: string,
 ): boolean {
   let parentId = node.parentId;
-  while (parentId && parentId !== rootId) {
+  while (parentId) {
     const parent = document.nodesById[parentId];
     if (!parent) return false;
     if (parent.blendMode === "normal") return true;
+    if (parentId === rootId) return false;
     parentId = parent.parentId;
   }
   return false;
+}
+
+function selectionContainsBackdrop(
+  nodeId: string,
+  ordered: readonly string[],
+  siblings: readonly string[],
+): boolean {
+  const nodeIndex = siblings.indexOf(nodeId);
+  if (nodeIndex < 0) return false;
+  const selected = new Set(ordered);
+  return siblings
+    .slice(0, nodeIndex)
+    .every((siblingId) => selected.has(siblingId));
 }
 
 function hasCompositing(node: DesignNode): boolean {
   return (
     node.opacity !== 1 ||
     (node.effects ?? []).some((effect) => effect.visible !== false) ||
-    hasExternalBackdropCompositing(node) ||
+    hasBackdropBlend(node) ||
+    hasBackgroundBlur(node) ||
     isActiveMask(node)
   );
 }
 
-function hasExternalBackdropCompositing(node: DesignNode): boolean {
+function hasBackdropBlend(node: DesignNode): boolean {
   if (
     node.blendMode !== undefined &&
     node.blendMode !== "normal" &&
@@ -250,10 +268,15 @@ function hasExternalBackdropCompositing(node: DesignNode): boolean {
   return (node.effects ?? []).some(
     (effect) =>
       effect.visible !== false &&
-      (effect.type === "background-blur" ||
-        ("blendMode" in effect &&
-          effect.blendMode !== undefined &&
-          effect.blendMode !== "normal")),
+      "blendMode" in effect &&
+      effect.blendMode !== undefined &&
+      effect.blendMode !== "normal",
+  );
+}
+
+function hasBackgroundBlur(node: DesignNode): boolean {
+  return (node.effects ?? []).some(
+    (effect) => effect.visible !== false && effect.type === "background-blur",
   );
 }
 
