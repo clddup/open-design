@@ -75,6 +75,8 @@ describe("built-in design skills", () => {
     expect(uiPlanning).toContain("designIntent.calibration.surfaceMode");
     expect(uiPlanning).toContain("expressiveness");
     expect(uiPlanning).toContain("density");
+    expect(uiPlanning).toContain("three different visual mechanisms");
+    expect(uiPlanning).toContain("primitive-plus-story templates");
     expect(uiPlanning).not.toContain('id="graphic-visual-direction"');
 
     const logoReview =

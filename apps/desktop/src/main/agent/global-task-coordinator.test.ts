@@ -6,7 +6,7 @@ import {
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { DesignDocument } from "@opendesign/design-contracts";
 import {
   diagnoseDesignTargetLayout,
@@ -932,31 +932,43 @@ describe("GlobalTaskCoordinator", () => {
     });
   });
 
-  it("lets a later Run edit an existing design while feedback screenshots default to ignored", async () => {
+  it("lets a later Run reuse same-Conversation attachments while feedback screenshots default to ignored", async () => {
     const { store, host, file, opened, pageId } = await setup();
     const document = withExistingArtboard(opened.document, pageId);
     document.revision = 2;
-    const coordinator = new GlobalTaskCoordinator(host, store);
     const previousAttachmentId = `image_${"a".repeat(64)}`;
-    await coordinator.registerRun({
-      type: "run.start",
-      runId: "run_previous_design",
-      sessionId: "conversation_mobile",
-      prompt: "Create the initial design",
-      attachments: [
+    const previousAttachment = {
+      attachmentId: previousAttachmentId,
+      name: "previous-reference.png",
+      mimeType: "image/png" as const,
+      byteSize: 4_000,
+    };
+    const sessionStore = {
+      readTimeline: vi.fn().mockResolvedValue([
         {
-          attachmentId: previousAttachmentId,
-          name: "previous-reference.png",
-          mimeType: "image/png",
-          byteSize: 4_000,
+          itemId: "message:previous_user_message",
+          sessionId: "conversation_mobile",
+          runId: "run_previous_design",
+          sequence: 1,
+          createdAt: "2026-08-01T00:00:00.000Z",
+          updatedAt: "2026-08-01T00:00:00.000Z",
+          type: "user.message",
+          messageId: "previous_user_message",
+          content: "Create the initial design from this reference",
+          attachments: [previousAttachment],
+          documentId: file.documentId,
+          revision: 1,
+          scope: { kind: "page", pageId, selectedNodeIds: [] },
+          mutationTarget: { kind: "page", pageId },
         },
-      ],
-      documentId: file.documentId,
-      revision: 1,
-      modelSelection,
-      scope: { kind: "page", pageId, selectedNodeIds: [] },
-      mutationTarget: { kind: "page", pageId },
-    });
+      ]),
+    };
+    const coordinator = new GlobalTaskCoordinator(
+      host,
+      store,
+      () => new Date("2026-08-08T00:00:00.000Z"),
+      sessionStore,
+    );
     const runId = "run_continue_design";
     const feedbackScreenshotId = `image_${"b".repeat(64)}`;
     await coordinator.registerRun({
@@ -995,7 +1007,8 @@ describe("GlobalTaskCoordinator", () => {
       coordinator.registerDesignPlan(context, {
         ...plan,
         referenceStrategy: {
-          synthesis: "Do not reuse a temporary reference from an earlier Run.",
+          synthesis:
+            "Reuse the selected Conversation reference without literal copying.",
           references: [
             {
               attachmentId: previousAttachmentId,
@@ -1008,8 +1021,11 @@ describe("GlobalTaskCoordinator", () => {
           ],
         },
       }),
-    ).toThrow("design_workflow.reference_strategy_invalid");
-    expect(() => coordinator.registerDesignPlan(context, plan)).not.toThrow();
+    ).not.toThrow();
+    expect(coordinator.referenceAttachmentsForRun(runId)).toEqual([
+      previousAttachment,
+      expect.objectContaining({ attachmentId: feedbackScreenshotId }),
+    ]);
     const update = insertExistingChild(
       pageId,
       "existing_nested_frame",
@@ -4699,7 +4715,7 @@ describe("GlobalTaskCoordinator", () => {
     store.close();
   });
 
-  it("keeps a structured provider failure recoverable until Run continuation", async () => {
+  it("ends the current task on a structured provider failure", async () => {
     const { store, host, file, opened, pageId } = await setup();
     const coordinator = new GlobalTaskCoordinator(host, store);
     await coordinator.registerRun({
@@ -4725,18 +4741,23 @@ describe("GlobalTaskCoordinator", () => {
       },
     });
     expect(store.listGlobalTasks()[0]?.lifecycle).toBe("failed");
-
+    expect(() =>
+      coordinator.assertDesignToolContext({
+        runId: "run_retryable",
+        sessionId: "conversation_mobile",
+        documentId: file.documentId,
+        revision: opened.document.revision,
+        scope: { kind: "page", pageId, selectedNodeIds: [] },
+        mutationTarget: { kind: "page", pageId },
+      }),
+    ).toThrow("requires an active registered Run");
     coordinator.handleAgentEvent({
-      type: "run.continuation",
+      type: "run.completed",
       runId: "run_retryable",
-      status: "scheduled",
-      attempt: 1,
-      maxAttempts: 3,
-      reason: "retryable-error",
-      nextRunId: "run_retryable_next",
+      finishedAt: "2026-08-07T12:02:00.000Z",
+      stopReason: "error",
     });
-
-    expect(store.listGlobalTasks()[0]?.lifecycle).toBe("interrupted");
+    expect(store.listGlobalTasks()[0]?.lifecycle).toBe("failed");
     store.close();
   });
 

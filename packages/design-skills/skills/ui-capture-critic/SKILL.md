@@ -29,4 +29,6 @@ When the host supplies visual references, also judge the declared transferable d
 
 Treat dark backdrops with cyan lines, concentric scanner rings, HUD microcopy, generic security language, and a conventional form card as template symptoms unless the actual product context requires them and at least two independent visual decisions remain distinctive without those devices. Do not confuse the presence of a planned motif with the motif being original, strong, or well crafted.
 
+Apply a primitive-substitution test: if replacing circles with rectangles, or one gradient with another, leaves the same claimed concept because captions and naming do all the work, fail `signature-motif`, `subject-specificity`, and `template-avoidance`. A primitive family may dominate only when its contour, spacing, crop, material, typography relationship, or information behavior is visibly authored rather than repeated at default settings.
+
 Judge the first captured draft honestly. Pass it when every required criterion is visibly delivery-ready; do not invent mandatory defects or force a ceremonial refinement. When it fails, choose the most consequential real shortcomings rather than minor geometry details. A deterministic layout warning may support a failure, but it cannot be the entire critique when the design is generic, weak at thumbnail scale, or under-crafted.

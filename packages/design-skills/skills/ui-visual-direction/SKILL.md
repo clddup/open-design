@@ -5,7 +5,7 @@ description: Establish a distinctive, context-specific visual thesis before crea
 
 # UI visual direction
 
-Use this skill only for `deliverable=ui`. It changes design judgment, never tool authority.
+Use this skill only for `deliverable=ui`.
 
 Before drawing, name the subject, audience, primary job, and one visual thesis. The thesis must connect the product's subject to a memorable visual idea; style labels such as “modern”, “premium”, “dark”, or “cool” are not a thesis.
 

@@ -52,6 +52,9 @@ describe("OpenDesign Agent system prompt", () => {
       "surfaceMode/expressiveness/density",
     );
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
+      "three different visual mechanisms",
+    );
+    expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
       "logoExploration is mandatory in this call",
     );
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
@@ -353,7 +356,7 @@ describe("OpenDesign Agent system prompt", () => {
       "use opendesign_edit_vector with explicit stable Page, node, path, vertex, and segment IDs",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
-      "connect-endpoints joins exactly two open endpoints",
+      "connect-endpoints joins two inspected unique open endpoints, including inside an existing branch network",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
       "transform-vertices applies one finite node-local affine matrix inside one Vector",

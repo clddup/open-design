@@ -24,7 +24,9 @@ const context = {
 describe("handleDesignFirstSliceTool", () => {
   it("commits allocation and the first real slice through one semantic history group", async () => {
     const input = firstSliceInput();
-    const compiled = compileDesignFirstSliceToolInput(input);
+    let boundInput: DesignFirstSliceToolInput | undefined;
+    let registeredPlan:
+      ReturnType<typeof compileDesignFirstSliceToolInput>["plan"] | undefined;
     const delivery = {
       version: 2 as const,
       targets: [
@@ -44,13 +46,26 @@ describe("handleDesignFirstSliceTool", () => {
       authoritativeDesignPrompt: vi
         .fn()
         .mockReturnValue("Create a focused home screen"),
-      bindFirstSliceToDeliveryScope: vi.fn(passthroughFirstSlice),
-      registerDesignPlan: vi.fn().mockReturnValue({
-        status: "accepted",
-        planRevision: 1,
-        changedTargetIds: ["home"],
-        plan: compiled.plan,
-      }),
+      bindFirstSliceToDeliveryScope: vi.fn(
+        (_context: unknown, value: DesignFirstSliceToolInput) => {
+          boundInput = value;
+          return value;
+        },
+      ),
+      registerDesignPlan: vi.fn(
+        (
+          _context: unknown,
+          plan: ReturnType<typeof compileDesignFirstSliceToolInput>["plan"],
+        ) => {
+          registeredPlan = plan;
+          return {
+            status: "accepted",
+            planRevision: 1,
+            changedTargetIds: ["home"],
+            plan,
+          };
+        },
+      ),
       createDesignPlanAllocation: vi.fn().mockReturnValue({
         targetIds: ["home"],
         input: {
@@ -68,11 +83,12 @@ describe("handleDesignFirstSliceTool", () => {
         },
       }),
       assertVisualReviewBeforeWrite: vi.fn(),
-      assertDesignPlanForAllocatedApply: vi.fn().mockReturnValue({
-        input: compiled.apply,
-        plan: compiled.plan,
-        targetIds: ["home"],
-      }),
+      assertDesignPlanForAllocatedApply: vi.fn(
+        (
+          _context: unknown,
+          apply: ReturnType<typeof compileDesignFirstSliceToolInput>["apply"],
+        ) => ({ input: apply, plan: registeredPlan, targetIds: ["home"] }),
+      ),
       assertDesignApplyResult: vi.fn(),
       recordDesignPlanAllocated: vi.fn(),
       recordDesignApplyCompleted: vi.fn(),
@@ -143,9 +159,24 @@ describe("handleDesignFirstSliceTool", () => {
       ["home"],
       4,
     );
+    if (!boundInput) throw new Error("Expected host-bound First Slice input");
+    const stableCompiled = compileDesignFirstSliceToolInput(boundInput);
+    expect(boundInput.targets[0]).toMatchObject({
+      frame: { frameId: "odr_run_slice_frame_home" },
+      regions: [
+        {
+          nodeId: "odr_run_slice_home_hero",
+          parentId: "odr_run_slice_frame_home",
+        },
+      ],
+    });
+    expect(boundInput.firstSlice.stages[0].elements[0]).toMatchObject({
+      id: "odr_run_slice_hero_title",
+      parentId: "odr_run_slice_home_hero",
+    });
     expect(coordinator.recordDesignApplyCompleted).toHaveBeenCalledWith(
       "run_slice",
-      compiled.apply,
+      stableCompiled.apply,
       expect.objectContaining({ targetIds: ["home"] }),
       5,
     );

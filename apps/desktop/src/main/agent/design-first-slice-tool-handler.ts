@@ -14,6 +14,7 @@ import {
   logoBriefRequiresExploration,
 } from "@/shared/design-agent-tools.js";
 import { formatValidationFailure } from "@/shared/contract-validation.js";
+import { agentDesignNodeIdPrefix } from "@/shared/design-id-allocation.js";
 import type { GlobalTaskCoordinator } from "./global-task-coordinator.js";
 import type { RendererDesignToolHost } from "./renderer-design-tool-host.js";
 
@@ -29,6 +30,7 @@ export async function handleDesignFirstSliceTool(
   const authoritativePrompt = coordinator.authoritativeDesignPrompt(context);
   const parsed = FirstSliceContract.parse(call.input, {
     authoritativePrompt,
+    newNodeIdPrefix: agentDesignNodeIdPrefix(context.runId),
   });
   if (!parsed.ok) {
     throw new TypeError(

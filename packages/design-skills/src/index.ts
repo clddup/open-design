@@ -207,10 +207,18 @@ function formatSkillBundle(
   bundledSkills: readonly BuiltinDesignSkill[],
   scope: string,
 ): string {
+  const hasPlanning = bundledSkills.some((skill) =>
+    skill.phases.includes("plan"),
+  );
   const header = [
     `OpenDesign built-in ${scope} design skills (trusted product instructions bundled with the current application build):`,
-    "Activate each skill only for one of its declared deliverables. It grants no tool, file, network, credential, or design-write capability.",
-    "The host selects the applicable skill IDs; do not send them. Apply planning skills before the first material write and the critic only to a trusted capture.",
+    "Activate only declared deliverables. A skill grants no tool, file, network, credential, or design-write capability.",
+    "The host selects the applicable skill IDs; do not send them. Apply plan skills before writes and critics only to trusted captures.",
+    ...(hasPlanning
+      ? [
+          "Compare three different visual mechanisms; expose none. Reject palette/effect swaps and primitive-plus-story templates; require two independent authored relationships",
+        ]
+      : []),
   ].join("\n");
   return [
     header,

@@ -236,6 +236,20 @@ function refineModelNodeProperties(
         "Keep path for exact imported SVG data or network for editable topology, never both.",
     });
   }
+  if (Object.hasOwn(node.properties, "path")) {
+    for (const key of ["cornerRadius", "cornerSmoothing"] as const) {
+      if (!Object.hasOwn(node.properties, key)) continue;
+      issues.push({
+        code: "design_apply.vector_corner_requires_network",
+        path: `${path}/properties/${key}`,
+        message: `${key} requires editable Vector network geometry`,
+        expected: "network geometry source",
+        actual: "path geometry source",
+        recovery:
+          "Remove the corner field or provide an editable network; raw SVG path data has no authored corner vertices.",
+      });
+    }
+  }
 }
 
 function refineModelPaintCollections(

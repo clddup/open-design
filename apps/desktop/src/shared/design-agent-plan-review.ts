@@ -35,6 +35,10 @@ import {
   logoColorDomainIssues,
   type DesignLogoColorStrategy,
 } from "./design-logo-color";
+import {
+  DESIGN_INTENT_SCHEMA,
+  type DesignIntent,
+} from "./design-intent-contract";
 
 export type DesignDeliverable =
   | "ui"
@@ -114,22 +118,7 @@ export type DesignPlanVisualSystem = {
   effects: string[];
 };
 
-export type DesignIntent = {
-  subject: string;
-  audience: string;
-  primaryJob: string;
-  calibration: {
-    surfaceMode: "persuade" | "operate" | "read" | "experience" | "graphic";
-    expressiveness: "restrained" | "balanced" | "expressive";
-    density: "airy" | "balanced" | "dense";
-  };
-  visualThesis: string;
-  signatureMotif: string;
-  typographyLanguage: string;
-  colorMaterialLanguage: string;
-  compositionTension: string;
-  antiPatterns: string[];
-};
+export type { DesignIntent } from "./design-intent-contract";
 
 export const LOGO_CONCEPT_PRINCIPLES = [
   "negative-space",
@@ -424,99 +413,6 @@ const DESIGN_PLAN_TARGET_SCHEMA = {
     qualityProfile: DESIGN_TARGET_QUALITY_PROFILE_SCHEMA,
   },
   required: [...DESIGN_PLAN_TARGET_BASE_SCHEMA.required, "qualityProfile"],
-} as const;
-
-const DESIGN_INTENT_SCHEMA = {
-  type: "object",
-  properties: {
-    subject: {
-      type: "string",
-      minLength: 8,
-      maxLength: 500,
-      pattern: "\\S",
-    },
-    audience: {
-      type: "string",
-      minLength: 8,
-      maxLength: 500,
-      pattern: "\\S",
-    },
-    primaryJob: {
-      type: "string",
-      minLength: 8,
-      maxLength: 500,
-      pattern: "\\S",
-    },
-    calibration: {
-      type: "object",
-      properties: {
-        surfaceMode: {
-          enum: ["persuade", "operate", "read", "experience", "graphic"],
-        },
-        expressiveness: {
-          enum: ["restrained", "balanced", "expressive"],
-        },
-        density: { enum: ["airy", "balanced", "dense"] },
-      },
-      required: ["surfaceMode", "expressiveness", "density"],
-      additionalProperties: false,
-    },
-    visualThesis: {
-      type: "string",
-      minLength: 16,
-      maxLength: 1_000,
-      pattern: "\\S",
-    },
-    signatureMotif: {
-      type: "string",
-      minLength: 16,
-      maxLength: 1_000,
-      pattern: "\\S",
-    },
-    typographyLanguage: {
-      type: "string",
-      minLength: 12,
-      maxLength: 1_000,
-      pattern: "\\S",
-    },
-    colorMaterialLanguage: {
-      type: "string",
-      minLength: 12,
-      maxLength: 1_000,
-      pattern: "\\S",
-    },
-    compositionTension: {
-      type: "string",
-      minLength: 12,
-      maxLength: 1_000,
-      pattern: "\\S",
-    },
-    antiPatterns: {
-      type: "array",
-      minItems: 3,
-      maxItems: 12,
-      uniqueItems: true,
-      items: {
-        type: "string",
-        minLength: 8,
-        maxLength: 256,
-        pattern: "\\S",
-      },
-    },
-  },
-  required: [
-    "subject",
-    "audience",
-    "primaryJob",
-    "calibration",
-    "visualThesis",
-    "signatureMotif",
-    "typographyLanguage",
-    "colorMaterialLanguage",
-    "compositionTension",
-    "antiPatterns",
-  ],
-  additionalProperties: false,
 } as const;
 
 export const DESIGN_LOGO_EXPLORATION_SCHEMA = {

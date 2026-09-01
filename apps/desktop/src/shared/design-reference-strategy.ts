@@ -25,7 +25,7 @@ export const MAX_ACTIVE_VISUAL_REFERENCES = 2;
 export const DESIGN_REFERENCE_STRATEGY_SCHEMA = {
   type: "object",
   description:
-    "Declare only current-Run images intentionally used as references or content; undeclared images are ignored and at most two style/composition/brand references may be active.",
+    "Declare only images from this Conversation that are intentionally used as references or content; undeclared images are ignored and at most two style/composition/brand references may be active.",
   properties: {
     synthesis: {
       type: "string",

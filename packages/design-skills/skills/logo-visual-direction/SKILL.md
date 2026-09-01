@@ -5,7 +5,7 @@ description: Build a distinctive, reproducible logo identity through genuinely d
 
 # Logo visual direction
 
-Use for a logo, symbol, wordmark, identity system, or app icon. It changes judgment, never authority.
+Use for a logo, symbol, wordmark, identity system, or app icon.
 
 - Compress the brief into brand difference, audience, territory, contexts, and exclusions.
 - Use `surfaceMode=graphic`; infer expressiveness and density from brand posture and requested outputs. Apply them to silhouette energy, counterform, spacing, specimens, and wordmark—not arbitrary primitives.
@@ -15,5 +15,5 @@ Use for a logo, symbol, wordmark, identity system, or app icon. It changes judgm
 - Generate construction logic from one defensible method or at most two fused methods: reduce the product's primary action into a contour, fuse two brief-specific metaphors, reveal meaning through negative space, or transform an initial only when letter and meaning become inseparable. Name the visible cut, junction, aperture, rhythm, or mass that carries the idea. Do not choose a symbol first and retrofit a story.
 - For one Logo/Icon, make one color mark, then test monochrome and 16/24/32 px. When three directions are requested, each needs a thesis-specific color system, not a hue swap.
 - Reject generic letter containers, alphabet variants, circles, nodes, sparkles, gradients, arbitrary blobs, and caption-dependent marks. A letter passes only with an ownable silhouette or counterform. Meaning must be visible through construction rather than added afterward as naming prose.
-- Select by fit, distinction, scalability, color ownership, and system potential; refine contour, balance, variants, and wordmark spacing.
+- Select by fit, distinction, scalability, color ownership, and system potential; refine contour, balance, and spacing.
 - Redraw the app icon for desktop distinction; avoid favicons and generic tiles. Use Components and Instances.

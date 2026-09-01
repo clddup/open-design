@@ -17,6 +17,7 @@ import type {
 } from "@opendesign/design-contracts";
 import type { ModelSelection } from "@opendesign/model-gateway";
 import type { DesignLayoutQualityReport } from "@opendesign/editor-runtime";
+import type { SessionStore } from "@opendesign/session-store";
 import {
   DESIGN_DELIVERY_LEDGER_VERSION,
   WORKSPACE_CONTRACT_VERSION,
@@ -139,6 +140,7 @@ export class GlobalTaskCoordinator {
       prompt: string;
       generationMode: DesignGenerationMode;
       modelSelection: ModelSelection;
+      attachments: AgentAttachment[];
       imageAttachments: AgentImageAttachment[];
       deliveryScopeReview: "direct" | "required";
     }
@@ -176,6 +178,7 @@ export class GlobalTaskCoordinator {
     private readonly projectHost: ProjectHost,
     private readonly workspaceStore: WorkspaceStore,
     private readonly now: () => Date = () => new Date(),
+    private readonly sessionStore?: Pick<SessionStore, "readTimeline">,
   ) {}
 
   reconcileInterruptedTasks(): void {
@@ -287,6 +290,7 @@ export class GlobalTaskCoordinator {
     });
     this.workspaceStore.saveGlobalTask(task);
     this.#tasksByRunId.set(request.runId, task);
+    const attachments = await this.#conversationAttachments(request);
     this.#toolBindingsByRunId.set(request.runId, {
       conversationId: request.sessionId,
       documentId: request.documentId,
@@ -297,11 +301,37 @@ export class GlobalTaskCoordinator {
       deliveryScopeReview: request.deliveryScopeReview ?? "direct",
       prompt: request.prompt,
       modelSelection: structuredClone(request.modelSelection),
-      imageAttachments: (request.attachments ?? [])
+      attachments,
+      imageAttachments: attachments
         .filter(isImageAttachmentMetadata)
         .map((attachment) => structuredClone(attachment)),
     });
     return task;
+  }
+
+  referenceAttachmentsForRun(runId: string): AgentAttachment[] {
+    return structuredClone(
+      this.#toolBindingsByRunId.get(runId)?.attachments ?? [],
+    );
+  }
+
+  async #conversationAttachments(
+    request: RunStartRequest,
+  ): Promise<AgentAttachment[]> {
+    const byId = new Map<string, AgentAttachment>();
+    if (this.sessionStore) {
+      const timeline = await this.sessionStore.readTimeline(request.sessionId);
+      for (const item of timeline) {
+        if (item.type !== "user.message") continue;
+        for (const attachment of item.attachments ?? []) {
+          byId.set(attachment.attachmentId, structuredClone(attachment));
+        }
+      }
+    }
+    for (const attachment of request.attachments ?? []) {
+      byId.set(attachment.attachmentId, structuredClone(attachment));
+    }
+    return [...byId.values()];
   }
 
   async assertRunRevisionCurrent(runId: string): Promise<void> {
@@ -2021,9 +2051,7 @@ export class GlobalTaskCoordinator {
       updatedAt: this.now().toISOString(),
     };
     this.workspaceStore.saveGlobalTask(updated);
-    const awaitsRunTerminal =
-      event.type === "agent.error" && event.failure !== undefined;
-    if (activeLifecycles.has(lifecycle) || awaitsRunTerminal) {
+    if (activeLifecycles.has(lifecycle)) {
       this.#tasksByRunId.set(runId, updated);
     } else {
       this.#tasksByRunId.delete(runId);
@@ -2031,7 +2059,7 @@ export class GlobalTaskCoordinator {
     if (
       event.type === "run.completed" ||
       event.type === "run.continuation" ||
-      (event.type === "agent.error" && !awaitsRunTerminal)
+      event.type === "agent.error"
     ) {
       this.#toolBindingsByRunId.delete(runId);
       this.#designPlansByRunId.delete(runId);
@@ -3109,7 +3137,7 @@ function assertDeclaredReferencesAuthorizedForRun(
   if (invalid) {
     throw designWorkflowError(
       "reference_strategy_invalid",
-      "Every image explicitly declared in referenceStrategy must be authorized for the current Run and may be declared at most once",
+      "Every image explicitly declared in referenceStrategy must belong to the current Conversation and may be declared at most once",
     );
   }
 }

@@ -24,9 +24,15 @@ import {
   LOGO_CONCEPT_PRINCIPLES,
 } from "./design-agent-plan-review";
 import { DESIGN_LOGO_COLOR_MODES } from "./design-logo-color";
+import {
+  COMPACT_DESIGN_INTENT_LIMITS,
+  createDesignIntentSchema,
+  DESIGN_INTENT_SCHEMA,
+} from "./design-intent-contract";
 
 const CLOSED = { additionalProperties: false } as const;
 const ID_PATTERN = "^[^\\u0000-\\u001F\\u007F]+$";
+const LOCAL_ID_PATTERN = "^(?!odr_)[A-Za-z][A-Za-z0-9_-]{0,63}$";
 const NON_WHITESPACE_PATTERN = "\\S";
 
 function idSchema(maxLength = 256) {
@@ -34,6 +40,16 @@ function idSchema(maxLength = 256) {
     minLength: 1,
     maxLength,
     pattern: ID_PATTERN,
+  });
+}
+
+function localIdSchema() {
+  return Type.String({
+    minLength: 1,
+    maxLength: 64,
+    pattern: LOCAL_ID_PATTERN,
+    description:
+      "Short call-local identity. Main binds it to a globally stable document ID; never include the Run prefix.",
   });
 }
 
@@ -58,6 +74,9 @@ const DIMENSION_SCHEMA = Type.Number({
   maximum: 100_000,
 });
 const UNIT_SCHEMA = Type.Number({ minimum: 0, maximum: 1 });
+const COMPACT_DESIGN_INTENT_SCHEMA = createDesignIntentSchema(
+  COMPACT_DESIGN_INTENT_LIMITS,
+);
 
 const DELIVERABLE_SCHEMA = Type.Union([
   Type.Literal("ui"),
@@ -104,6 +123,12 @@ const ELEMENT_BASE_PROPERTIES = {
     Type.Array(FIRST_SLICE_EFFECT_SCHEMA, { maxItems: 4 }),
   ),
   ...SHAPE_APPEARANCE_PROPERTIES,
+};
+
+const MODEL_ELEMENT_BASE_PROPERTIES = {
+  ...ELEMENT_BASE_PROPERTIES,
+  id: localIdSchema(),
+  parentId: localIdSchema(),
 };
 
 const GROUP_ELEMENT_SCHEMA = Type.Object(
@@ -193,50 +218,63 @@ const ELEMENT_KIND_SCHEMA = Type.Union([
   Type.Literal("text"),
 ]);
 
-export const DESIGN_FIRST_SLICE_ELEMENT_SCHEMA = executableJsonSchema({
-  type: "object",
-  description:
-    "One editable document node. Every node uses canonical Figma-shaped fills, strokes, opacity, blendMode and effects at node level. Group appearance must be empty; Path additionally requires path; Text additionally requires text.",
-  properties: {
-    ...ELEMENT_BASE_PROPERTIES,
-    kind: ELEMENT_KIND_SCHEMA,
-    cornerRadius: Type.Optional(Type.Number({ minimum: 0, maximum: 100_000 })),
-    clipsContent: Type.Optional(Type.Boolean()),
-    path: Type.Optional(Type.String({ minLength: 1, maxLength: 20_000 })),
-    text: Type.Optional(TEXT_ELEMENT_SCHEMA.properties.text),
-  },
-  required: [
-    "id",
-    "name",
-    "parentId",
-    "x",
-    "y",
-    "width",
-    "height",
-    "fills",
-    "strokes",
-    "strokeWidth",
-    "kind",
-  ],
-  additionalProperties: false,
-  anyOf: [
-    elementKindBranch(GROUP_ELEMENT_SCHEMA),
-    elementKindBranch(FRAME_ELEMENT_SCHEMA),
-    elementKindBranch(RECTANGLE_ELEMENT_SCHEMA),
-    elementKindBranch(ELLIPSE_ELEMENT_SCHEMA),
-    elementKindBranch(PATH_ELEMENT_SCHEMA, ["path"]),
-    elementKindBranch(TEXT_ELEMENT_SCHEMA, ["text"]),
-  ],
-}) as unknown as TUnion<
-  [
-    typeof GROUP_ELEMENT_SCHEMA,
-    typeof FRAME_ELEMENT_SCHEMA,
-    typeof RECTANGLE_ELEMENT_SCHEMA,
-    typeof ELLIPSE_ELEMENT_SCHEMA,
-    typeof PATH_ELEMENT_SCHEMA,
-    typeof TEXT_ELEMENT_SCHEMA,
-  ]
->;
+function executableElementSchema(
+  baseProperties: typeof ELEMENT_BASE_PROPERTIES,
+) {
+  return executableJsonSchema({
+    type: "object",
+    description:
+      "One editable document node. Every node uses canonical Figma-shaped fills, strokes, opacity, blendMode and effects at node level. Group appearance must be empty; Path additionally requires path; Text additionally requires text.",
+    properties: {
+      ...baseProperties,
+      kind: ELEMENT_KIND_SCHEMA,
+      cornerRadius: Type.Optional(
+        Type.Number({ minimum: 0, maximum: 100_000 }),
+      ),
+      clipsContent: Type.Optional(Type.Boolean()),
+      path: Type.Optional(Type.String({ minLength: 1, maxLength: 20_000 })),
+      text: Type.Optional(TEXT_ELEMENT_SCHEMA.properties.text),
+    },
+    required: [
+      "id",
+      "name",
+      "parentId",
+      "x",
+      "y",
+      "width",
+      "height",
+      "fills",
+      "strokes",
+      "strokeWidth",
+      "kind",
+    ],
+    additionalProperties: false,
+    anyOf: [
+      elementKindBranch(GROUP_ELEMENT_SCHEMA),
+      elementKindBranch(FRAME_ELEMENT_SCHEMA),
+      elementKindBranch(RECTANGLE_ELEMENT_SCHEMA),
+      elementKindBranch(ELLIPSE_ELEMENT_SCHEMA),
+      elementKindBranch(PATH_ELEMENT_SCHEMA, ["path"]),
+      elementKindBranch(TEXT_ELEMENT_SCHEMA, ["text"]),
+    ],
+  }) as unknown as TUnion<
+    [
+      typeof GROUP_ELEMENT_SCHEMA,
+      typeof FRAME_ELEMENT_SCHEMA,
+      typeof RECTANGLE_ELEMENT_SCHEMA,
+      typeof ELLIPSE_ELEMENT_SCHEMA,
+      typeof PATH_ELEMENT_SCHEMA,
+      typeof TEXT_ELEMENT_SCHEMA,
+    ]
+  >;
+}
+
+export const DESIGN_FIRST_SLICE_ELEMENT_SCHEMA = executableElementSchema(
+  MODEL_ELEMENT_BASE_PROPERTIES,
+);
+const DESIGN_FIRST_SLICE_CANONICAL_ELEMENT_SCHEMA = executableElementSchema(
+  ELEMENT_BASE_PROPERTIES,
+);
 
 function elementKindBranch<TProperties extends { kind: TSchema }>(
   schema: TObject<TProperties>,
@@ -276,6 +314,19 @@ const REGION_SCHEMA = Type.Object(
   },
 );
 
+const REGION_MODEL_SCHEMA = Type.Object(
+  {
+    ...REGION_SCHEMA.properties,
+    nodeId: localIdSchema(),
+    parentId: localIdSchema(),
+  },
+  {
+    ...CLOSED,
+    description:
+      "Parent-first planned region with call-local IDs and bounds local to parentId. Main creates the real stable Frame.",
+  },
+);
+
 const FRAME_SCHEMA = Type.Object(
   {
     frameId: idSchema(),
@@ -287,16 +338,21 @@ const FRAME_SCHEMA = Type.Object(
   CLOSED,
 );
 
+const FRAME_MODEL_SCHEMA = Type.Object(
+  { ...FRAME_SCHEMA.properties, frameId: localIdSchema() },
+  CLOSED,
+);
+
 const TARGET_MODEL_SCHEMA = Type.Object(
   {
     targetId: idSchema(128),
     label: idSchema(),
     pageId: idSchema(),
     objective: textSchema(500),
-    frame: FRAME_SCHEMA,
+    frame: FRAME_MODEL_SCHEMA,
     layout: textSchema(320),
     spacing: textSchema(160),
-    regions: Type.Array(REGION_SCHEMA, { minItems: 1, maxItems: 12 }),
+    regions: Type.Array(REGION_MODEL_SCHEMA, { minItems: 1, maxItems: 12 }),
   },
   {
     ...CLOSED,
@@ -364,34 +420,45 @@ const TARGET_CANONICAL_SCHEMA = Type.Object(
   CLOSED,
 );
 
-const FIRST_SLICE_SCHEMA = Type.Object(
-  {
-    targetId: idSchema(128),
-    label: idSchema(),
-    stages: Type.Array(
-      Type.Object(
+function firstSlicePayloadSchema<TElement extends TSchema>(
+  elementSchema: TElement,
+) {
+  return Type.Object(
+    {
+      targetId: idSchema(128),
+      label: idSchema(),
+      stages: Type.Array(
+        Type.Object(
+          {
+            stageId: idSchema(128),
+            label: idSchema(),
+            elements: Type.Array(elementSchema, {
+              minItems: 1,
+              maxItems: DESIGN_FIRST_SLICE_MAX_ELEMENTS,
+            }),
+          },
+          CLOSED,
+        ),
         {
-          stageId: idSchema(128),
-          label: idSchema(),
-          elements: Type.Array(DESIGN_FIRST_SLICE_ELEMENT_SCHEMA, {
-            minItems: 1,
-            maxItems: DESIGN_FIRST_SLICE_MAX_ELEMENTS,
-          }),
+          minItems: 1,
+          maxItems: DESIGN_FIRST_SLICE_MAX_STAGES,
+          description: `At most ${DESIGN_FIRST_SLICE_MAX_ELEMENTS} model-authored elements total across all stages.`,
         },
-        CLOSED,
       ),
-      {
-        minItems: 1,
-        maxItems: DESIGN_FIRST_SLICE_MAX_STAGES,
-        description: `At most ${DESIGN_FIRST_SLICE_MAX_ELEMENTS} model-authored elements total across all stages.`,
-      },
-    ),
-  },
-  {
-    ...CLOSED,
-    description:
-      "Materialize targets[0]. targetId must equal targets[0].targetId. Element parentId must name a declared targets[0] region or an earlier element in this call.",
-  },
+    },
+    {
+      ...CLOSED,
+      description:
+        "Materialize targets[0]. targetId must equal targets[0].targetId. Element parentId must name a declared targets[0] region or an earlier element in this call.",
+    },
+  );
+}
+
+const FIRST_SLICE_MODEL_SCHEMA = firstSlicePayloadSchema(
+  DESIGN_FIRST_SLICE_ELEMENT_SCHEMA,
+);
+const FIRST_SLICE_CANONICAL_SCHEMA = firstSlicePayloadSchema(
+  DESIGN_FIRST_SLICE_CANONICAL_ELEMENT_SCHEMA,
 );
 
 const LOGO_OUTPUTS_SCHEMA = Type.Array(
@@ -434,91 +501,50 @@ const LOGO_DIRECTION_COLOR_SYSTEM_SCHEMA = Type.Object(
   CLOSED,
 );
 
-const LOGO_EXPLORATION_SCHEMA = Type.Object(
-  {
-    targetId: idSchema(128),
-    directions: Type.Array(
-      Type.Object(
-        {
-          conceptId: idSchema(128),
-          principle: Type.Union(
-            LOGO_CONCEPT_PRINCIPLES.map((principle) =>
-              Type.Literal(principle),
-            ) as [
-              ReturnType<typeof Type.Literal>,
-              ...ReturnType<typeof Type.Literal>[],
-            ],
-          ),
-          thesis: textSchema(1_000),
-          constructionLogic: textSchema(1_000),
-          colorSystem: LOGO_DIRECTION_COLOR_SYSTEM_SCHEMA,
-          rootNodeId: Type.String({
-            minLength: 1,
-            maxLength: 256,
-            pattern: ID_PATTERN,
-            description:
-              "ID of this direction's actual Frame/Group element in firstSlice, not a planned region ID.",
-          }),
-          evidenceNodeIds: Type.Array(idSchema(), {
-            minItems: 4,
-            maxItems: 4,
-            uniqueItems: true,
-            description:
-              "Four distinct firstSlice descendant node IDs under rootNodeId, ordered as monochrome, 32 px, 24 px, and 16 px evidence. Do not repeat rootNodeId.",
-          }),
-        },
-        CLOSED,
+function logoExplorationSchema<TDocumentId extends TSchema>(
+  documentIdSchema: TDocumentId,
+) {
+  return Type.Object(
+    {
+      targetId: idSchema(128),
+      directions: Type.Array(
+        Type.Object(
+          {
+            conceptId: idSchema(128),
+            principle: Type.Union(
+              LOGO_CONCEPT_PRINCIPLES.map((principle) =>
+                Type.Literal(principle),
+              ) as [
+                ReturnType<typeof Type.Literal>,
+                ...ReturnType<typeof Type.Literal>[],
+              ],
+            ),
+            thesis: textSchema(1_000),
+            constructionLogic: textSchema(1_000),
+            colorSystem: LOGO_DIRECTION_COLOR_SYSTEM_SCHEMA,
+            rootNodeId: Type.Intersect([documentIdSchema], {
+              description:
+                "ID of this direction's actual Frame/Group element in firstSlice, not a planned region ID.",
+            }),
+            evidenceNodeIds: Type.Array(documentIdSchema, {
+              minItems: 4,
+              maxItems: 4,
+              uniqueItems: true,
+              description:
+                "Four distinct firstSlice descendant node IDs under rootNodeId, ordered as monochrome, 32 px, 24 px, and 16 px evidence. Do not repeat rootNodeId.",
+            }),
+          },
+          CLOSED,
+        ),
+        { minItems: 3, maxItems: 3 },
       ),
-      { minItems: 3, maxItems: 3 },
-    ),
-  },
-  CLOSED,
-);
+    },
+    CLOSED,
+  );
+}
 
-const DESIGN_INTENT_SCHEMA = Type.Object(
-  {
-    subject: textSchema(200),
-    audience: textSchema(200),
-    primaryJob: textSchema(240),
-    calibration: Type.Object(
-      {
-        surfaceMode: Type.Union([
-          Type.Literal("persuade"),
-          Type.Literal("operate"),
-          Type.Literal("read"),
-          Type.Literal("experience"),
-          Type.Literal("graphic"),
-        ]),
-        expressiveness: Type.Union([
-          Type.Literal("restrained"),
-          Type.Literal("balanced"),
-          Type.Literal("expressive"),
-        ]),
-        density: Type.Union([
-          Type.Literal("airy"),
-          Type.Literal("balanced"),
-          Type.Literal("dense"),
-        ]),
-      },
-      CLOSED,
-    ),
-    visualThesis: textSchema(320),
-    signatureMotif: textSchema(320),
-    typographyLanguage: textSchema(240),
-    colorMaterialLanguage: textSchema(240),
-    compositionTension: textSchema(240),
-    antiPatterns: Type.Array(textSchema(160), {
-      minItems: 3,
-      maxItems: 5,
-      uniqueItems: true,
-    }),
-  },
-  {
-    ...CLOSED,
-    description:
-      "One concise brief-specific visual direction for the delivery, not a per-element rationale or user-facing design essay.",
-  },
-);
+const LOGO_EXPLORATION_MODEL_SCHEMA = logoExplorationSchema(localIdSchema());
+const LOGO_EXPLORATION_CANONICAL_SCHEMA = logoExplorationSchema(idSchema());
 
 const FIDELITY_ITEM_SCHEMA = textSchema(500);
 const BRIEF_FIDELITY_SCHEMA = Type.Object(
@@ -612,14 +638,14 @@ const FIRST_SLICE_MODEL_PROPERTIES = {
   version: Type.Literal(1),
   deliverable: DELIVERABLE_SCHEMA,
   objective: textSchema(2_000),
-  designIntent: DESIGN_INTENT_SCHEMA,
+  designIntent: COMPACT_DESIGN_INTENT_SCHEMA,
   targets: Type.Array(TARGET_MODEL_SCHEMA, { minItems: 1, maxItems: 32 }),
   visualSystem: VISUAL_SYSTEM_SCHEMA,
   rasterAssetRoles: RASTER_ASSET_ROLES_SCHEMA,
   logoOutputs: Type.Optional(LOGO_OUTPUTS_SCHEMA),
-  logoExploration: Type.Optional(LOGO_EXPLORATION_SCHEMA),
+  logoExploration: Type.Optional(LOGO_EXPLORATION_MODEL_SCHEMA),
   logoColorStrategy: Type.Optional(LOGO_COLOR_STRATEGY_SCHEMA),
-  firstSlice: FIRST_SLICE_SCHEMA,
+  firstSlice: FIRST_SLICE_MODEL_SCHEMA,
 };
 
 const FIRST_SLICE_CANONICAL_PROPERTIES = {
@@ -637,9 +663,9 @@ const FIRST_SLICE_CANONICAL_PROPERTIES = {
   rasterAssetRoles: RASTER_ASSET_ROLES_SCHEMA,
   referenceStrategy: Type.Optional(REFERENCE_STRATEGY_SCHEMA),
   logoOutputs: Type.Optional(LOGO_OUTPUTS_SCHEMA),
-  logoExploration: Type.Optional(LOGO_EXPLORATION_SCHEMA),
+  logoExploration: Type.Optional(LOGO_EXPLORATION_CANONICAL_SCHEMA),
   logoColorStrategy: Type.Optional(LOGO_COLOR_STRATEGY_SCHEMA),
-  firstSlice: FIRST_SLICE_SCHEMA,
+  firstSlice: FIRST_SLICE_CANONICAL_SCHEMA,
 };
 
 const FIRST_SLICE_MODEL_PROPERTIES_SCHEMA = Type.Object(

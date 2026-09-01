@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { DesignDeliveryScope } from "@/shared/design-agent-tools.js";
 import type { InspectedHierarchy } from "./design-plan-registration.js";
-import { createScopeArtboardAllocation } from "./delivery-scope-artboard-allocation.js";
+import {
+  bindFirstSliceToScopeAllocation,
+  createScopeArtboardAllocation,
+} from "./delivery-scope-artboard-allocation.js";
+import { firstSliceInput } from "./design-first-slice-tool-handler.fixture.js";
 
 describe("delivery scope artboard allocation", () => {
   it("creates twelve real prefixed Frames in one non-overlapping transaction", () => {
@@ -31,6 +35,55 @@ describe("delivery scope artboard allocation", () => {
           command.type === "insert_element" && command.parentId === null,
       ),
     ).toBe(true);
+  });
+
+  it("rebinds the submitted root and only its direct planned regions to the allocated Frame", () => {
+    const input = firstSliceInput();
+    input.targets[0].targetId = "target_1";
+    input.firstSlice.targetId = "target_1";
+    input.targets[0].regions.push({
+      nodeId: "home_form",
+      name: "Form",
+      role: "interaction",
+      parentId: "home_hero",
+      x: 24,
+      y: 120,
+      width: 294,
+      height: 96,
+    });
+    const allocation = {
+      targetId: "target_1",
+      label: "Screen 1",
+      pageId: "page_current",
+      frameId: "run_scope_scope_1",
+      x: 1760,
+      y: 80,
+      width: 1440,
+      height: 960,
+    };
+
+    const bound = bindFirstSliceToScopeAllocation(
+      scope(1),
+      new Map([["target_1", allocation]]),
+      input,
+    );
+
+    expect(bound.targets[0]).toMatchObject({
+      pageId: "page_current",
+      frame: {
+        frameId: "run_scope_scope_1",
+        x: 1760,
+        y: 80,
+        width: 1440,
+        height: 960,
+      },
+      regions: [
+        { nodeId: "home_hero", parentId: "run_scope_scope_1" },
+        { nodeId: "home_form", parentId: "home_hero" },
+      ],
+    });
+    expect(bound.firstSlice.stages[0].elements[0].parentId).toBe("home_hero");
+    expect(input.targets[0].frame.frameId).toBe("frame_home");
   });
 });
 

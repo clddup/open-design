@@ -180,6 +180,63 @@ describe("compact first-slice tool", () => {
     ).toBe(true);
   });
 
+  it("binds call-local document identities once while preserving target and stage identities", () => {
+    const modelInput = providerInput(fixture());
+    const result = FirstSliceContract.parse(modelInput, {
+      authoritativePrompt: "Create Home and Profile screens",
+      newNodeIdPrefix: "odr_run_slice_",
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("Expected host-bound First Slice");
+    expect(result.value.targets[0]).toMatchObject({
+      targetId: "home",
+      pageId: "page_1",
+      frame: { frameId: "odr_run_slice_frame_home" },
+      regions: [
+        {
+          nodeId: "odr_run_slice_home_hero",
+          parentId: "odr_run_slice_frame_home",
+        },
+      ],
+      qualityProfile: { safeNodeIds: ["odr_run_slice_home_hero"] },
+    });
+    expect(result.value.firstSlice).toMatchObject({
+      targetId: "home",
+      stages: [
+        {
+          stageId: "hero_stage",
+          elements: [
+            {
+              id: "odr_run_slice_hero_panel",
+              parentId: "odr_run_slice_home_hero",
+            },
+            {
+              id: "odr_run_slice_hero_title",
+              parentId: "odr_run_slice_home_hero",
+            },
+          ],
+        },
+      ],
+    });
+  });
+
+  it("rejects stable or oversized document IDs from the compact Provider input", () => {
+    const stable = providerInput(fixture());
+    const targets = stable.targets as Array<{
+      frame: { frameId: string };
+    }>;
+    targets[0].frame.frameId = "odr_run_slice_frame_home";
+    expect(FirstSliceContract.parse(stable)).toMatchObject({ ok: false });
+
+    const oversized = providerInput(fixture());
+    const oversizedTargets = oversized.targets as Array<{
+      frame: { frameId: string };
+    }>;
+    oversizedTargets[0].frame.frameId = `f${"x".repeat(64)}`;
+    expect(FirstSliceContract.parse(oversized)).toMatchObject({ ok: false });
+  });
+
   it("rejects drawing without a prior concrete visual direction", () => {
     const modelInput = providerInput(fixture());
     Reflect.deleteProperty(modelInput, "designIntent");
@@ -681,6 +738,19 @@ describe("compact first-slice tool", () => {
         },
       },
     });
+    const hostBound = parsedFirstSlice(modelInput, {
+      newNodeIdPrefix: "odr_run_logo_",
+    });
+    expect(hostBound?.logoExploration?.directions[0]).toMatchObject({
+      conceptId: "concept_negative",
+      rootNodeId: "odr_run_logo_negative_root",
+      evidenceNodeIds: [
+        "odr_run_logo_negative_mono",
+        "odr_run_logo_negative_32",
+        "odr_run_logo_negative_24",
+        "odr_run_logo_negative_16",
+      ],
+    });
 
     if (!normalized) throw new Error("Expected parsed Logo input");
     const aliasedPlan = compileDesignFirstSliceToolInput(normalized).plan;
@@ -1106,7 +1176,10 @@ function providerInput(
 
 function parsedFirstSlice(
   input: unknown,
-  context: { authoritativePrompt?: string } = {},
+  context: {
+    authoritativePrompt?: string;
+    newNodeIdPrefix?: string;
+  } = {},
 ): DesignFirstSliceToolInput | undefined {
   const result = FirstSliceContract.parse(input, context);
   return result.ok ? result.value : undefined;

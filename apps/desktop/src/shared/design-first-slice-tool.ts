@@ -63,6 +63,7 @@ export type DesignFirstSliceToolInput = Omit<
 
 export type FirstSliceContractContext = {
   authoritativePrompt?: string;
+  newNodeIdPrefix?: string;
 };
 
 export const FirstSliceContract = defineContract<
@@ -102,18 +103,68 @@ function bindFirstSliceHostContext(
   input: DesignFirstSliceModelInput,
   context: FirstSliceContractContext,
 ): DesignFirstSliceToolInput {
-  const objective = input.objective.trim();
+  const boundInput = context.newNodeIdPrefix
+    ? bindFirstSliceLocalDocumentIds(input, context.newNodeIdPrefix)
+    : input;
+  const objective = boundInput.objective.trim();
   return {
-    ...input,
-    skillRefs: builtinDesignSkillRefsForDeliverable(input.deliverable),
+    ...boundInput,
+    skillRefs: builtinDesignSkillRefsForDeliverable(boundInput.deliverable),
     briefFidelity: defaultBriefFidelity(
       context.authoritativePrompt ?? objective,
     ),
-    targets: input.targets.map((target) =>
-      bindFirstSliceTarget(target, input.deliverable),
+    targets: boundInput.targets.map((target) =>
+      bindFirstSliceTarget(target, boundInput.deliverable),
     ),
-    rasterAssetRoles: [...input.rasterAssetRoles],
+    rasterAssetRoles: [...boundInput.rasterAssetRoles],
   } as DesignFirstSliceToolInput;
+}
+
+function bindFirstSliceLocalDocumentIds(
+  input: DesignFirstSliceModelInput,
+  prefix: string,
+): DesignFirstSliceModelInput {
+  const stableId = (localId: string) => `${prefix}${localId}`;
+  return {
+    ...input,
+    targets: input.targets.map((target) => ({
+      ...target,
+      frame: { ...target.frame, frameId: stableId(target.frame.frameId) },
+      regions: target.regions.map((region) => ({
+        ...region,
+        nodeId: stableId(region.nodeId),
+        parentId: stableId(region.parentId),
+      })),
+    })),
+    firstSlice: {
+      ...input.firstSlice,
+      stages: input.firstSlice.stages.map((stage) => ({
+        ...stage,
+        elements: stage.elements.map((element) => ({
+          ...element,
+          id: stableId(element.id),
+          parentId: stableId(element.parentId),
+        })),
+      })),
+    },
+    ...(input.logoExploration === undefined
+      ? {}
+      : {
+          logoExploration: {
+            ...input.logoExploration,
+            directions: input.logoExploration.directions.map((direction) => ({
+              ...direction,
+              rootNodeId: stableId(direction.rootNodeId),
+              evidenceNodeIds: direction.evidenceNodeIds.map(stableId) as [
+                string,
+                string,
+                string,
+                string,
+              ],
+            })),
+          },
+        }),
+  };
 }
 
 function bindFirstSliceTarget(

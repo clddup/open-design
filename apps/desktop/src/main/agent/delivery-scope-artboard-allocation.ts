@@ -88,6 +88,7 @@ export function bindFirstSliceToScopeAllocation(
   const bound = structuredClone(input);
   const boundTarget = bound.targets[0];
   if (!boundTarget) return input;
+  const submittedFrameId = boundTarget.frame.frameId;
   boundTarget.pageId = allocation.pageId;
   boundTarget.frame = {
     frameId: allocation.frameId,
@@ -96,6 +97,11 @@ export function bindFirstSliceToScopeAllocation(
     width: allocation.width,
     height: allocation.height,
   };
+  for (const region of boundTarget.regions) {
+    if (region.parentId === submittedFrameId) {
+      region.parentId = allocation.frameId;
+    }
+  }
   return bound;
 }
 
