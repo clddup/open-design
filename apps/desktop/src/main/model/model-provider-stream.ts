@@ -112,6 +112,14 @@ export async function* streamModelProvider(
       let attemptStarted:
         Extract<CanonicalStreamEvent, { type: "attempt.started" }> | undefined;
       let attemptPublished = false;
+      const pendingBlockStarts = new Map<
+        string,
+        Extract<CanonicalStreamEvent, { type: "block.started" }>
+      >();
+      const pendingBlockDeltas = new Map<
+        string,
+        Extract<CanonicalStreamEvent, { type: "block.delta" }>[]
+      >();
       const blockKinds = new Map<
         string,
         Extract<CanonicalStreamEvent, { type: "block.started" }>["kind"]
@@ -159,7 +167,9 @@ export async function* streamModelProvider(
           if (event.type !== "attempt.started") {
             firstProviderEventAt ??= Date.now();
             waitingForFirstResponse = false;
-            if (isModelContentEvent(event)) firstContentEventAt ??= Date.now();
+            if (isSemanticModelContentEvent(event)) {
+              firstContentEventAt ??= Date.now();
+            }
             if (event.type === "block.started") {
               blockKinds.set(event.blockId, event.kind);
               if (event.kind === "tool_call") {
@@ -212,9 +222,36 @@ export async function* streamModelProvider(
             yield event;
             return;
           }
+          if (event.type === "block.started") {
+            pendingBlockStarts.set(event.blockId, event);
+            continue;
+          }
+          if (event.type === "block.delta") {
+            if (event.delta.length === 0) continue;
+            if (blockKinds.get(event.blockId) !== "text") {
+              const pending = pendingBlockDeltas.get(event.blockId) ?? [];
+              pending.push(event);
+              pendingBlockDeltas.set(event.blockId, pending);
+              continue;
+            }
+          }
+          const semanticBlockId = modelContentBlockId(event);
           if (!attemptPublished && attemptStarted) {
             latestAttemptPublished = true;
             yield attemptStarted;
+          }
+          if (semanticBlockId !== undefined) {
+            const pendingStart = pendingBlockStarts.get(semanticBlockId);
+            if (pendingStart !== undefined) {
+              pendingBlockStarts.delete(semanticBlockId);
+              yield pendingStart;
+            }
+            for (const pendingDelta of pendingBlockDeltas.get(
+              semanticBlockId,
+            ) ?? []) {
+              yield pendingDelta;
+            }
+            pendingBlockDeltas.delete(semanticBlockId);
           }
           attemptPublished = true;
           yield event;
@@ -433,12 +470,17 @@ function modelTimeout(
   return new ModelStreamTimeoutError(phase, thresholdMs, message);
 }
 
-function isModelContentEvent(event: CanonicalStreamEvent): boolean {
+function isSemanticModelContentEvent(event: CanonicalStreamEvent): boolean {
   return (
-    event.type === "block.started" ||
-    event.type === "block.delta" ||
+    (event.type === "block.delta" && event.delta.length > 0) ||
     event.type === "block.completed"
   );
+}
+
+function modelContentBlockId(event: CanonicalStreamEvent): string | undefined {
+  if (event.type === "block.delta") return event.blockId;
+  if (event.type === "block.completed") return event.block.id;
+  return undefined;
 }
 
 function roundedDuration(value: number): number {

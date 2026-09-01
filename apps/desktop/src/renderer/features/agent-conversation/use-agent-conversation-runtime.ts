@@ -320,6 +320,9 @@ export function useAgentConversationRuntime({
       setGenerationPlanPresentation((current) =>
         projectGenerationPlanPresentationEvent(current, event),
       );
+      if (event.type === "agent.error") {
+        void refreshGlobalTasks().catch(() => undefined);
+      }
 
       const runId = projectAgentRunFileBinding(
         event,

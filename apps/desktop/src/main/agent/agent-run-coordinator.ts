@@ -96,11 +96,17 @@ export class AgentRunCoordinator {
         : null,
     });
 
-    if (event.type === "run.completed") {
-      services.referenceHost?.releaseRun(event.runId);
-      this.#options.forgetRun(event.runId);
-      this.#conversationIdByRunId.delete(event.runId);
-      this.#initialInspectionControllers.delete(event.runId);
+    const terminalRunId =
+      event.type === "run.completed"
+        ? event.runId
+        : event.type === "agent.error"
+          ? event.runId
+          : undefined;
+    if (terminalRunId) {
+      services.referenceHost?.releaseRun(terminalRunId);
+      this.#options.forgetRun(terminalRunId);
+      this.#conversationIdByRunId.delete(terminalRunId);
+      this.#initialInspectionControllers.delete(terminalRunId);
     } else if (event.type === "agent.error" && event.runId === undefined) {
       this.#releaseAllRunLeases(services.referenceHost);
     }

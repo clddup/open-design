@@ -26,6 +26,7 @@ OpenDesign 是跨平台桌面产品。macOS 与 Windows 是同级一级支持平
 - Preload 只暴露小型、类型化、可验证的能力接口。主进程必须校验 IPC 的发送方、参数、权限和生命周期。
 - 内置垂直设计 Agent 是主产品路径。Agent Runtime 使用 TypeScript，运行在 Electron `utilityProcess` 中，并通过可替换 provider adapter 直接接入多种大模型。Agent 崩溃、取消或模型提供商异常不得带崩主进程或破坏画布状态。
 - 目标资源层级固定为 `Workspace → Project → Design File → Page → Frame/Artboard → Layers`。Conversation 是 Workspace 一级实体；`originProjectId` 只记录不可变创建来源，`filedProjectId` 只提供可空、可移动的组织关系，Project 不是文件系统 sandbox，也不隐式授予项目目录权限。
+- Conversation 是持续 Agent 上下文，Run 只是单条用户消息触发的一次执行。失败、取消、超时或 Provider 异常只能终结当前 Run；下一条消息必须能继续读取同一 Conversation 的历史、历史用户附件、当前 Design File 与已提交 revision。Main 可以为新 Run 重新签发最小能力，但不得要求用户重新上传同一 Conversation 的附件，也不得让失败 Run 的 response identity、半截 tool call、active lease 或错误状态污染后续 Run。
 - Working Set、Mutation Targets 与 Capabilities 必须分别建模。上下文中可读不等于可写，被列为写目标也不等于已经授权；三者不得从 Conversation 的组织字段、当前选区或彼此隐式推导。Run `targetSet` 才是实际 Project/Design File/Page 的权威来源。
 - 项目可保存经批准的 attached roots；一次 run 也可持有不改变项目归属的 per-run references。跨目录、跨项目和多目标操作必须使用稳定资源 ID 或 Main 签发的句柄，并对每个目标单独解析能力、审批与 revision。
 - 权限控制分为 Trust、Capability、Approval 与 Sandbox 四层。四层职责不得合并：可信度不授予能力，能力不替代高风险动作审批，审批不扩大请求范围，sandbox 不充当授权策略。

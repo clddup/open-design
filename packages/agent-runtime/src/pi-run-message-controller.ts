@@ -303,6 +303,12 @@ export class PiRunMessageController {
     );
     this.#generatedTokens += generatedTokens(message);
     if (message.stopReason === "error" || message.stopReason === "aborted") {
+      const blocks = visibleTimelineBlocks(
+        toTimelineBlocks(message, active.messageId),
+      );
+      if (blocks.length > 0) {
+        await this.#finalizeAssistant(active, message, blocks, false);
+      }
       return;
     }
     const blocks = toTimelineBlocks(message, active.messageId);
@@ -354,11 +360,14 @@ export class PiRunMessageController {
     active: ActiveAssistantMessage,
     message: AssistantMessage,
     blocks: AssistantTimelineBlock[],
+    includeSource = true,
   ): Promise<void> {
     await this.#options.append("message.assistant", {
       messageId: active.messageId,
       blocks,
-      source: toResolvedIdentity(message, this.#options.request),
+      ...(includeSource
+        ? { source: toResolvedIdentity(message, this.#options.request) }
+        : {}),
     });
     await this.#options.publish({
       type: "message.completed",
@@ -376,6 +385,16 @@ export class PiRunMessageController {
       blocks: [],
     });
   }
+}
+
+function visibleTimelineBlocks(
+  blocks: readonly AssistantTimelineBlock[],
+): AssistantTimelineBlock[] {
+  return blocks.filter((block) =>
+    block.type === "text"
+      ? block.text.length > 0
+      : block.status === "completed" && Boolean(block.summary),
+  );
 }
 
 function projectedInitialUserText(request: Readonly<AgentRunRequest>): string {

@@ -764,18 +764,22 @@ function projectLiveEvents(
       hideGenericRunStatus(event.runId);
       const detail = assistantText(event.blocks);
       const reasoning = assistantReasoningSummary(event.blocks);
-      const reasoningOnly = detail.length === 0 && reasoning.length > 0;
+      const existing = items.get(`message:${event.messageId}`);
+      const projectedDetail = detail || existing?.detail;
+      const projectedReasoning = reasoning || existing?.reasoning;
+      const reasoningOnly = !projectedDetail && Boolean(projectedReasoning);
       updateEvent(`message:${event.messageId}`, {
-        routine: detail.length === 0 && reasoning.length === 0,
+        routine: !projectedDetail && !projectedReasoning,
         state: "done",
         kind: reasoningOnly ? "reasoning" : "assistant",
         time: t("common.now"),
         title: reasoningOnly
           ? t("agent.modelThinkingSummary")
           : t("agent.response"),
-        detail: detail || undefined,
-        reasoning: reasoning || undefined,
-        reasoningCount: reasoning ? 1 : undefined,
+        ...(projectedDetail ? { detail: projectedDetail } : {}),
+        ...(projectedReasoning
+          ? { reasoning: projectedReasoning, reasoningCount: 1 }
+          : {}),
       });
     }
     if (event.type === "tool.requested") {

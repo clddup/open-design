@@ -125,7 +125,10 @@ export async function startAgentRun(
       return false;
     }
     await globalTaskCoordinator.assertRunRevisionCurrent(request.runId);
-    referenceHost.registerRun(trustedRequest);
+    referenceHost.registerRun(
+      trustedRequest,
+      globalTaskCoordinator.referenceAttachmentsForRun(request.runId),
+    );
     conversationIdByRunId.set(request.runId, request.sessionId);
     agentHost.send({
       ...trustedRequest,

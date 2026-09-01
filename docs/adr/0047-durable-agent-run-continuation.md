@@ -1,5 +1,7 @@
 # ADR-0047：持久交付账本驱动的有界 Run 自动续跑
 
+> 2026-09-01 修订：错误终态的自动续跑已由 ADR-0238 取代。Provider、模型或工具错误只结束当前 Run，保留已提交 revision 与 Conversation 历史，并立即允许下一条用户消息创建干净 Run；自动 continuation 仅保留给正常完成但交付未完成或单 Run budget 用尽的情况。
+
 - 状态：Accepted
 - 日期：2026-08-13
 - 文档协议：不变（`DesignDocument 1.11.0`）
@@ -18,12 +20,12 @@
 
 Main 记录每个 `run.start` 的稳定请求身份、最近一次可信 `delivery/unfinishedDelivery` 和结构化失败。Run terminal 到达时，只要账本仍有未 verified target：
 
-- `budget`、可重试 `error`，以及 stop reason 为 `complete` 但账本未完成，都会自动创建下一 Run；
+- `budget`，以及 stop reason 为 `complete` 但账本未完成，都会自动创建下一 Run；错误终态不自动创建下一 Run；
 - 新 Run 读取 ProjectHost 当前权威 document revision，不复用旧 revision 或 Renderer 选区；
 - mutation target、Conversation、模型选择和稳定 target/Page/Frame 身份保持不变；
 - 自动 prompt 只要求 inspect 当前文档与恢复首个未完成 target，不要求用户发送“继续”。
 
-每条 continuation 记录 `parentRunId`、`rootRunId`、`attempt`、固定 `maxAttempts=3` 和原因。用户取消不续跑；不可重试错误或三次自动续跑耗尽进入 `needs_attention`。这是一条有界恢复链，不是无限 Agent 循环。
+每条 continuation 记录 `parentRunId`、`rootRunId`、`attempt`、固定 `maxAttempts=3` 和原因。用户取消或错误终态不续跑；三次自动续跑耗尽进入 `needs_attention`。这是一条有界交付链，不是无限 Agent 循环。
 
 同一 Main 生命周期内，`scheduled` 事件必须在清理父 Run 前把已经接受的完整 Plan state、delivery ledger 和已生成 raster role 绑定转移到 `nextRunId`。下一 Run 创建 Global Task 时直接持有同一 ledger，首次权威 inspection 只负责按当前 revision 对账；模型可以从首个未完成 target 继续 material transaction，不需要重新生成整份 Plan，也不能因为新 Run namespace 而丢弃 ledger 中明确保留的 stable/reserved ID。若应用进程已经重启，内存 Plan 不再存在，则仍以持久 ledger + 当前 inspection 走显式 Plan 恢复，不伪造旧内存状态。
 
@@ -45,9 +47,9 @@ completion guard 同时读取当前 Run 的 `delivery` 与恢复 inspection 的 
 
 - incomplete + budget 自动创建下一 Run，保留 root provenance；
 - stop reason 为 complete 但 target 未 verified 仍自动续跑；
-- retryable provider error 保留文件引用直到 terminal 和下一 Run；
+- Provider error 保留文件引用直到当前 Run terminal，随后释放运行 lease；下一条用户消息可在同一 Conversation 创建新 Run；
 - cancellation、fully verified ledger 不续跑；
-- non-retryable failure 和第四次请求进入 `needs_attention`；
+- 错误终态不自动发起新 Run，第四次正常交付续跑请求进入 `needs_attention`；
 - continuation prompt 在 durable timeline 中是 system work，不冒充用户输入；
 - 只有 inspect + plan、没有成功 material write 时 completion guard 拒绝完成；
 - Agent 协议严格要求 scheduled continuation 带 `nextRunId`。

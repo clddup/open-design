@@ -416,6 +416,49 @@ describe("OpenDesign Pi production runtime", () => {
     expect(secondStart).toBeGreaterThan(firstTerminal);
   });
 
+  it("starts a clean next Run in the same Conversation after a Provider failure", async () => {
+    const store = new MemorySessionStore();
+    const gateway = new FailThenSucceedGateway();
+    const runtime = new OpenDesignPiRuntime({
+      modelGateway: gateway,
+      sessionStore: store,
+    });
+
+    const failed = await collect(runtime, {
+      ...request,
+      runId: "run_failed_turn",
+      prompt: "先检查设计",
+    });
+    const resumed = await collect(runtime, {
+      ...request,
+      runId: "run_next_turn",
+      prompt: "继续完成设计",
+    });
+
+    expect(failed.at(-1)).toMatchObject({
+      type: "run.completed",
+      stopReason: "error",
+    });
+    expect(resumed.at(-1)).toMatchObject({
+      type: "run.completed",
+      stopReason: "complete",
+    });
+    expect(gateway.requests).toHaveLength(2);
+    expect(gateway.requests[1]?.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ role: "user", content: "先检查设计" }),
+        expect.objectContaining({
+          role: "assistant",
+          blocks: [expect.objectContaining({ text: "已开始检查" })],
+        }),
+        expect.objectContaining({ role: "user", content: "继续完成设计" }),
+      ]),
+    );
+    expect(JSON.stringify(gateway.requests[1]?.messages)).not.toContain(
+      "failed_response_identity",
+    );
+  });
+
   it("never re-executes a tool-call ID recovered from the durable journal", async () => {
     const store = new MemorySessionStore();
     store.events.push(
@@ -967,6 +1010,56 @@ class OrderedGateway implements ModelGateway {
       type: "block.completed",
       attemptId: modelRequest.attemptId,
       block: { id: `${runId}_text`, type: "text", text: "Complete" },
+    };
+    yield {
+      type: "attempt.completed",
+      attemptId: modelRequest.attemptId,
+      stopReason: "complete",
+      usage: emptyUsage(),
+    };
+  }
+}
+
+class FailThenSucceedGateway implements ModelGateway {
+  readonly requests: ModelRequest[] = [];
+
+  async *stream(
+    modelRequest: ModelRequest,
+  ): AsyncIterable<CanonicalStreamEvent> {
+    await Promise.resolve();
+    this.requests.push(modelRequest);
+    yield attemptStarted(modelRequest);
+    const firstRequest = this.requests.length === 1;
+    const blockId = firstRequest ? "partial_text" : "completed_text";
+    yield {
+      type: "block.started",
+      attemptId: modelRequest.attemptId,
+      blockId,
+      kind: "text",
+    };
+    if (firstRequest) {
+      yield {
+        type: "block.delta",
+        attemptId: modelRequest.attemptId,
+        blockId,
+        delta: "已开始检查",
+      };
+      yield {
+        type: "attempt.failed",
+        attemptId: modelRequest.attemptId,
+        error: {
+          code: "upstream_error",
+          message: "Provider terminated",
+          retryable: true,
+          providerRequestId: "failed_response_identity",
+        },
+      };
+      return;
+    }
+    yield {
+      type: "block.completed",
+      attemptId: modelRequest.attemptId,
+      block: { id: blockId, type: "text", text: "设计已继续完成" },
     };
     yield {
       type: "attempt.completed",

@@ -31,14 +31,21 @@ export class AgentReferenceHost {
     private readonly fetchTimeoutMs = FETCH_TIMEOUT_MS,
   ) {}
 
-  registerRun(request: RunStartRequest): void {
+  registerRun(
+    request: RunStartRequest,
+    conversationAttachments: readonly AgentAttachment[] = [],
+  ): void {
+    const authorized = new Map(
+      conversationAttachments.map((attachment) => [
+        attachment.attachmentId,
+        structuredClone(attachment),
+      ]),
+    );
+    for (const attachment of request.attachments ?? []) {
+      authorized.set(attachment.attachmentId, structuredClone(attachment));
+    }
     this.#runs.set(request.runId, {
-      attachments: new Map(
-        (request.attachments ?? []).map((attachment) => [
-          attachment.attachmentId,
-          attachment,
-        ]),
-      ),
+      attachments: authorized,
       prompt: request.prompt,
     });
   }

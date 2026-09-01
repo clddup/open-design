@@ -70,7 +70,7 @@ describe("AgentContinuationScheduler", () => {
       rootRunId: "run_initial",
       attempt: 1,
       maxAttempts: 3,
-      reason: "retryable-error",
+      reason: "budget",
     });
     scheduler.registerRun(automatic);
 
@@ -130,7 +130,7 @@ describe("AgentContinuationScheduler", () => {
     });
   });
 
-  it("continues retryable failures but stops at non-retryable failures", () => {
+  it("ends failed Runs so the next explicit Conversation message starts cleanly", () => {
     const retryable = new AgentContinuationScheduler(() => 3000);
     const retryableRequest = request();
     retryable.registerRun(retryableRequest);
@@ -146,12 +146,11 @@ describe("AgentContinuationScheduler", () => {
         retryable: true,
       },
     });
+    expect(retryable.activeRunIds()).toEqual([]);
     expect(
       retryable.record(completed(retryableRequest.runId, "error")),
-    ).toMatchObject({
-      kind: "schedule",
-      continuation: { reason: "retryable-error", attempt: 1 },
-    });
+    ).toBeNull();
+    expect(retryable.activeRunIds()).toEqual([]);
 
     const fatal = new AgentContinuationScheduler();
     const fatalRequest = request();
@@ -168,12 +167,8 @@ describe("AgentContinuationScheduler", () => {
         retryable: false,
       },
     });
-    expect(fatal.record(completed(fatalRequest.runId, "error"))).toEqual({
-      kind: "needs-attention",
-      attempt: 1,
-      maxAttempts: 3,
-      reason: "non-retryable-error",
-    });
+    expect(fatal.record(completed(fatalRequest.runId, "error"))).toBeNull();
+    expect(fatal.activeRunIds()).toEqual([]);
   });
 
   it("does not auto-continue an incomplete delivery after the Renderer circuit opens", () => {
@@ -193,12 +188,8 @@ describe("AgentContinuationScheduler", () => {
       },
     });
 
-    expect(scheduler.record(completed(active.runId, "error"))).toEqual({
-      kind: "needs-attention",
-      attempt: 1,
-      maxAttempts: 3,
-      reason: "non-retryable-error",
-    });
+    expect(scheduler.record(completed(active.runId, "error"))).toBeNull();
+    expect(scheduler.activeRunIds()).toEqual([]);
   });
 
   it("does not continue cancellation or a fully verified delivery", () => {

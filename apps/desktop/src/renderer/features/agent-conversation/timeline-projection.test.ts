@@ -492,6 +492,40 @@ describe("Agent continuation timeline projection", () => {
     });
   });
 
+  it("finalizes streamed text in place when completion has no replacement blocks", () => {
+    const runId = "run_empty_completion";
+    const items = projectAgentTimeline({
+      activeRunId: null,
+      events: [
+        {
+          type: "message.delta",
+          runId,
+          messageId: "assistant_partial",
+          blockId: "text_1",
+          delta: "中断前已经展示的内容",
+        },
+        {
+          type: "message.completed",
+          runId,
+          messageId: "assistant_partial",
+          blocks: [],
+        },
+      ],
+      locale: "zh-CN",
+      stoppingRunId: null,
+      timeline: [],
+      t: (key, parameters) => translate("zh-CN", key, parameters),
+    });
+
+    expect(items).toContainEqual(
+      expect.objectContaining({
+        id: "message:assistant_partial",
+        detail: "中断前已经展示的内容",
+        state: "done",
+      }),
+    );
+  });
+
   it("shows only the stopped Run outcome for cancellation cleanup failures", () => {
     const runId = "run_user_stopped";
     const items = projectAgentTimeline({

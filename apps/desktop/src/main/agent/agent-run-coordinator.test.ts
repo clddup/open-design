@@ -52,6 +52,7 @@ describe("AgentRunCoordinator", () => {
     );
     expect(fixture.referenceHost.registerRun).toHaveBeenCalledWith(
       trustedSource,
+      [],
     );
     expect(fixture.send).toHaveBeenCalledWith({
       ...trustedSource,
@@ -117,6 +118,52 @@ describe("AgentRunCoordinator", () => {
     await fixture.coordinator.handleRequest(second);
     expect(fixture.send).toHaveBeenCalledWith(
       expect.objectContaining({ type: "run.start", runId: second.runId }),
+    );
+  });
+
+  it("accepts the next explicit message as soon as the current Run fails", async () => {
+    const fixture = setup();
+    await fixture.coordinator.handleRequest(source);
+    fixture.coordinator.handleEvent({
+      type: "agent.error",
+      runId: source.runId,
+      code: "provider_timeout",
+      message: "Provider timed out",
+      failure: {
+        code: "provider_timeout",
+        message: "Provider timed out",
+        retryable: true,
+      },
+    });
+
+    expect(fixture.coordinator.hasActiveConversationRun(source.sessionId)).toBe(
+      false,
+    );
+    expect(fixture.publish).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "run.continuation" }),
+    );
+
+    await fixture.coordinator.handleRequest({
+      ...source,
+      runId: "run_after_failure",
+      prompt: "继续完成当前设计",
+    });
+    expect(fixture.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "run.start",
+        runId: "run_after_failure",
+        sessionId: source.sessionId,
+      }),
+    );
+
+    fixture.coordinator.handleEvent({
+      type: "run.completed",
+      runId: source.runId,
+      finishedAt: "2026-08-23T01:00:00.000Z",
+      stopReason: "error",
+    });
+    expect(fixture.coordinator.hasActiveConversationRun(source.sessionId)).toBe(
+      true,
     );
   });
 
@@ -301,6 +348,7 @@ function setup() {
     handleAgentEvent: vi.fn(),
     registerRun: vi.fn(() => Promise.resolve({})),
     assertRunRevisionCurrent: vi.fn(() => Promise.resolve()),
+    referenceAttachmentsForRun: vi.fn(() => []),
   };
   const modelProviderHost = {
     resolveModelContext: vi.fn(() => ({

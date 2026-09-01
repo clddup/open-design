@@ -23,6 +23,7 @@ import {
 } from "./pi-model-gateway-adapter.js";
 import { PiRunEventAdapter } from "./pi-run-event-adapter.js";
 import { OpenDesignPiRuntime } from "./pi-runtime.js";
+import { restoreModelMessages } from "./model-message-projection.js";
 
 const request: AgentRunRequest = {
   runId: "run_pi_parity",
@@ -167,6 +168,7 @@ describe("Pi run event adapter", () => {
         message: "Provider failed",
         retryable: true,
         provider: "configured-provider",
+        providerRequestId: "failed_provider_response",
       },
     });
     expect(pi.events.at(-1)).toMatchObject({
@@ -179,6 +181,39 @@ describe("Pi run event adapter", () => {
       status: "error",
       failure: { code: "upstream_error" },
     });
+    expect(
+      pi.store.events.some((event) => event.type === "message.assistant"),
+    ).toBe(false);
+  });
+
+  it("persists visible partial text without carrying a failed response identity into the next Run", async () => {
+    const result = await runPi(createPartiallyFailingGateway());
+    const assistantEvent = result.store.events.find(
+      (event) => event.type === "message.assistant",
+    );
+
+    expect(result.events).toContainEqual(
+      expect.objectContaining({
+        type: "message.completed",
+        blocks: [expect.objectContaining({ text: "正在分析当前设计" })],
+      }),
+    );
+    expect(assistantEvent).toMatchObject({
+      type: "message.assistant",
+      payload: {
+        blocks: [expect.objectContaining({ text: "正在分析当前设计" })],
+      },
+    });
+    expect(
+      (assistantEvent?.payload as { source?: unknown } | undefined)?.source,
+    ).toBeUndefined();
+
+    const restored = restoreModelMessages(result.store.events);
+    expect(restored).toContainEqual({
+      role: "assistant",
+      blocks: [expect.objectContaining({ text: "正在分析当前设计" })],
+    });
+    expect(JSON.stringify(restored)).not.toContain("failed_partial_response");
   });
 
   it("surfaces a tool-use stop without a tool call through the production composition", async () => {
@@ -395,6 +430,49 @@ function createFailingGateway(): ModelGateway {
           message: "Provider failed",
           retryable: true,
           provider: modelRequest.modelSelection.providerId,
+          providerRequestId: "failed_provider_response",
+        },
+      };
+    },
+  };
+}
+
+function createPartiallyFailingGateway(): ModelGateway {
+  return {
+    async *stream(
+      modelRequest: ModelRequest,
+    ): AsyncIterable<CanonicalStreamEvent> {
+      await Promise.resolve();
+      yield {
+        type: "attempt.started",
+        attemptId: modelRequest.attemptId,
+        model: modelRequest.modelSelection.modelId,
+        identity: {
+          ...modelRequest.modelSelection,
+          apiFormat: "openai-responses",
+        },
+      };
+      yield {
+        type: "block.started",
+        attemptId: modelRequest.attemptId,
+        blockId: "partial_text",
+        kind: "text",
+      };
+      yield {
+        type: "block.delta",
+        attemptId: modelRequest.attemptId,
+        blockId: "partial_text",
+        delta: "正在分析当前设计",
+      };
+      yield {
+        type: "attempt.failed",
+        attemptId: modelRequest.attemptId,
+        error: {
+          code: "upstream_error",
+          message: "Provider terminated",
+          retryable: true,
+          provider: modelRequest.modelSelection.providerId,
+          providerRequestId: "failed_partial_response",
         },
       };
     },

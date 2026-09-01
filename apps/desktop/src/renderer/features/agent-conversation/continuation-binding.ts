@@ -31,8 +31,7 @@ export function projectAgentRunFileBinding(
   const runId = "runId" in event ? event.runId : undefined;
   if (
     runId &&
-    (event.type === "run.completed" ||
-      (event.type === "agent.error" && event.failure === undefined))
+    (event.type === "run.completed" || event.type === "agent.error")
   ) {
     const target = designFileByRunId.get(runId);
     if (target) {

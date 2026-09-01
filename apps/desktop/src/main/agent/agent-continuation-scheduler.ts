@@ -31,10 +31,6 @@ export class AgentContinuationScheduler {
   readonly #cancellationRequestedRunIds = new Set<string>();
   readonly #deliveryByRunId = new Map<string, DesignDeliveryLedger>();
   readonly #remainingScopeByRunId = new Map<string, boolean>();
-  readonly #failureByRunId = new Map<
-    string,
-    Extract<AgentEvent, { type: "agent.error" }>["failure"]
-  >();
   readonly #requestsByRunId = new Map<string, RunStartRequest>();
   readonly #nextRunIdByParentRunId = new Map<string, string>();
   readonly #pendingConversationIdByRunId = new Map<string, string>();
@@ -119,7 +115,6 @@ export class AgentContinuationScheduler {
     this.#requestsByRunId.delete(runId);
     this.#deliveryByRunId.delete(runId);
     this.#remainingScopeByRunId.delete(runId);
-    this.#failureByRunId.delete(runId);
     this.#nextRunIdByParentRunId.delete(runId);
     this.#pendingConversationIdByRunId.delete(runId);
     for (const [parentRunId, nextRunId] of this.#nextRunIdByParentRunId) {
@@ -144,7 +139,7 @@ export class AgentContinuationScheduler {
       }
     }
     if (event.type === "agent.error") {
-      this.#failureByRunId.set(runId, event.failure);
+      this.forgetRun(runId);
       return null;
     }
     if (event.type !== "run.completed") return null;
@@ -152,13 +147,11 @@ export class AgentContinuationScheduler {
     const source = this.#requestsByRunId.get(runId);
     const currentDelivery = this.#deliveryByRunId.get(runId);
     const hasRemainingScope = this.#remainingScopeByRunId.get(runId) === true;
-    const failure = this.#failureByRunId.get(runId);
     const cancellationRequested =
       this.#cancellationRequestedRunIds.delete(runId);
     this.#requestsByRunId.delete(runId);
     this.#deliveryByRunId.delete(runId);
     this.#remainingScopeByRunId.delete(runId);
-    this.#failureByRunId.delete(runId);
     if (
       cancellationRequested ||
       !source ||
@@ -166,21 +159,20 @@ export class AgentContinuationScheduler {
       (!hasIncompleteTarget(currentDelivery) && !hasRemainingScope)
     )
       return null;
-    if (event.stopReason === "cancelled") return null;
+    if (event.stopReason === "cancelled" || event.stopReason === "error") {
+      return null;
+    }
 
     const reason = continuationReason(event.stopReason);
     if (!reason) return null;
     const previousAttempt = source.continuation?.attempt ?? 0;
     const nextAttempt = previousAttempt + 1;
-    if (
-      nextAttempt > MAX_CONTINUATION_ATTEMPTS ||
-      failure?.retryable === false
-    ) {
+    if (nextAttempt > MAX_CONTINUATION_ATTEMPTS) {
       return {
         kind: "needs-attention",
         attempt: clampAttempt(Math.max(previousAttempt, 1)),
         maxAttempts: MAX_CONTINUATION_ATTEMPTS,
-        reason: failure?.retryable === false ? "non-retryable-error" : reason,
+        reason,
       };
     }
     const nextRunId = `run_${this.now()}_auto_${++this.#sequence}`;
@@ -248,7 +240,6 @@ function continuationReason(
 ): AgentContinuationReason | null {
   if (stopReason === "complete") return "incomplete";
   if (stopReason === "budget") return "budget";
-  if (stopReason === "error") return "retryable-error";
   return null;
 }
 

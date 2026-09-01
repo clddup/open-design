@@ -48,7 +48,7 @@ describe("Agent continuation renderer binding", () => {
     );
   });
 
-  it("does not release a Run on a structured retryable provider error", () => {
+  it("releases a Run on a structured retryable provider error", () => {
     const files = new Map([["run_old", target]]);
     const workspace = {
       releaseFileForRun: vi.fn(),
@@ -68,8 +68,12 @@ describe("Agent continuation renderer binding", () => {
 
     projectAgentRunFileBinding(event, new Map(), files, workspace);
 
-    expect(files.get("run_old")).toEqual(target);
-    expect(workspace.releaseFileForRun).not.toHaveBeenCalled();
+    expect(files.has("run_old")).toBe(false);
+    expect(workspace.releaseFileForRun).toHaveBeenCalledWith(
+      "project_1",
+      "file_1",
+      "run_old",
+    );
     expect(projectAgentActiveRunId("run_old", event, "run_old")).toBeNull();
   });
 

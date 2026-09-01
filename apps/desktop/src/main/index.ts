@@ -1054,6 +1054,8 @@ async function startDesktopApplication(
   globalTaskCoordinator = new GlobalTaskCoordinator(
     projectHost,
     workspaceStore,
+    () => new Date(),
+    agentSessionStore,
   );
   projectIpc = new ProjectIpcService(
     projectHost,

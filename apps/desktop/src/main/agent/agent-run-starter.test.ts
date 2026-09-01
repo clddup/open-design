@@ -58,6 +58,7 @@ describe("Agent Run starter", () => {
       globalTaskCoordinator: {
         registerRun: vi.fn().mockResolvedValue({}),
         assertRunRevisionCurrent: vi.fn().mockResolvedValue(undefined),
+        referenceAttachmentsForRun: vi.fn().mockReturnValue([]),
       } as never,
       modelProviderHost: {
         resolveModelContext: vi.fn().mockReturnValue({
@@ -103,6 +104,7 @@ describe("Agent Run starter", () => {
           registerRun: vi.fn().mockResolvedValue({}),
           assertRunRevisionCurrent,
           handleAgentEvent,
+          referenceAttachmentsForRun: vi.fn().mockReturnValue([]),
         } as never,
         modelProviderHost: { resolveModelContext: vi.fn() } as never,
         prepareInitialDesignInspection: vi.fn().mockResolvedValue(undefined),
@@ -192,6 +194,7 @@ describe("Agent Run starter", () => {
         globalTaskCoordinator: {
           registerRun: vi.fn().mockResolvedValue({}),
           assertRunRevisionCurrent: vi.fn().mockResolvedValue(undefined),
+          referenceAttachmentsForRun: vi.fn().mockReturnValue([]),
         } as never,
         modelProviderHost: {
           resolveModelContext: vi.fn().mockReturnValue({
@@ -240,6 +243,7 @@ describe("Agent Run starter", () => {
         registerRun: vi.fn().mockResolvedValue({}),
         assertRunRevisionCurrent: vi.fn().mockResolvedValue(undefined),
         handleAgentEvent: vi.fn(),
+        referenceAttachmentsForRun: vi.fn().mockReturnValue([]),
       } as never,
       modelProviderHost: { resolveModelContext: vi.fn() } as never,
       prepareInitialDesignInspection,
@@ -302,6 +306,7 @@ describe("Agent Run starter", () => {
           registerRun: vi.fn().mockResolvedValue({}),
           assertRunRevisionCurrent: vi.fn().mockResolvedValue(undefined),
           handleAgentEvent: (event: AgentEvent) => terminalEvents.push(event),
+          referenceAttachmentsForRun: vi.fn().mockReturnValue([]),
         } as never,
         modelProviderHost: { resolveModelContext: vi.fn() } as never,
         referenceHost: {

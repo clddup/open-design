@@ -103,6 +103,7 @@ export function appendLiveAgentEvent(
     ];
   }
   if (event.type === "message.completed") {
+    if (!hasVisibleAssistantContent(event)) return [...events, event];
     return [
       ...events.filter(
         (candidate) =>
@@ -176,7 +177,6 @@ export function pruneLiveEventsCoveredByTimeline(
     ),
   );
   return events.filter((event) => {
-    if ("runId" in event && event.runId !== activeRunId) return false;
     if (
       (event.type === "message.delta" || event.type === "message.completed") &&
       durableMessages.has(event.messageId)
@@ -203,8 +203,31 @@ export function pruneLiveEventsCoveredByTimeline(
       const status = durableRuns.get(event.runId);
       return status === undefined || status === "started";
     }
+    if (
+      "runId" in event &&
+      event.runId !== activeRunId &&
+      (event.type === "model.retrying" ||
+        event.type === "model.recovered" ||
+        event.type === "run.continuation")
+    ) {
+      return false;
+    }
+    if (event.type === "agent.error" && event.runId) {
+      const status = durableRuns.get(event.runId);
+      return status === undefined || status === "started";
+    }
     return true;
   });
+}
+
+function hasVisibleAssistantContent(
+  event: Extract<AgentEvent, { type: "message.completed" }>,
+): boolean {
+  return event.blocks.some((block) =>
+    block.type === "text"
+      ? block.text.length > 0
+      : block.status === "completed" && Boolean(block.summary),
+  );
 }
 
 export function isDurableAgentCheckpoint(event: AgentEvent): boolean {

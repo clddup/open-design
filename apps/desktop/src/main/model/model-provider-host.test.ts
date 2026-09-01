@@ -385,7 +385,8 @@ describe("ModelProviderHost", () => {
     }
   });
 
-  it("publishes started semantic output immediately and does not replay it through retries", async () => {
+  it("retries when a Provider terminates after opening an empty block", async () => {
+    vi.useFakeTimers();
     const store = new WorkspaceStore(":memory:");
     let callCount = 0;
     const host = new ModelProviderHost(
@@ -402,8 +403,169 @@ describe("ModelProviderHost", () => {
           yield {
             type: "block.started",
             attemptId: request.attemptId,
-            blockId: "partial_tool",
+            blockId: "empty_reasoning",
+            kind: "reasoning_summary",
+          };
+          if (callCount === 1) {
+            yield {
+              type: "attempt.failed",
+              attemptId: request.attemptId,
+              error: {
+                code: "provider_error",
+                message: "terminated",
+                retryable: true,
+                provider: "provider_1",
+              },
+            };
+            return;
+          }
+          yield {
+            type: "block.completed",
+            attemptId: request.attemptId,
+            block: {
+              id: "empty_reasoning",
+              type: "reasoning_summary",
+              status: "omitted",
+            },
+          };
+          yield completedEvent(request.attemptId, "resp_recovered");
+        },
+      }),
+    );
+    host.saveProfile({ ...profile, apiKey: "provider-secret" });
+
+    try {
+      const pending = host.complete(
+        baseRequest("attempt_empty_block_retry"),
+        new AbortController().signal,
+      );
+      await vi.advanceTimersByTimeAsync(401);
+      const events = await pending;
+
+      expect(callCount).toBe(2);
+      expect(
+        events.filter((event) => event.type === "block.started"),
+      ).toHaveLength(1);
+      expect(events).toContainEqual(
+        expect.objectContaining({ type: "attempt.retrying", retry: 1 }),
+      );
+      expect(events.at(-1)).toMatchObject({
+        type: "attempt.completed",
+        providerRequestId: "resp_recovered",
+      });
+    } finally {
+      store.close();
+      vi.useRealTimers();
+    }
+  });
+
+  it("retries an interrupted partial tool call before it reaches the Agent", async () => {
+    vi.useFakeTimers();
+    const store = new WorkspaceStore(":memory:");
+    let callCount = 0;
+    const host = new ModelProviderHost(
+      store,
+      cipher,
+      globalThis.fetch,
+      undefined,
+      undefined,
+      () => ({
+        async *stream(request): AsyncIterable<CanonicalStreamEvent> {
+          await Promise.resolve();
+          callCount += 1;
+          yield startedEvent(request.attemptId);
+          yield {
+            type: "block.started",
+            attemptId: request.attemptId,
+            blockId: "tool",
             kind: "tool_call",
+          };
+          yield {
+            type: "block.delta",
+            attemptId: request.attemptId,
+            blockId: "tool",
+            delta: '{"targetId":',
+          };
+          if (callCount === 1) {
+            yield {
+              type: "attempt.failed",
+              attemptId: request.attemptId,
+              error: {
+                code: "provider_error",
+                message: "terminated",
+                retryable: true,
+                provider: "provider_1",
+              },
+            };
+            return;
+          }
+          yield {
+            type: "block.completed",
+            attemptId: request.attemptId,
+            block: {
+              id: "tool",
+              type: "tool_call",
+              toolCallId: "call_recovered",
+              name: "opendesign_inspect_document",
+              input: {},
+            },
+          };
+          yield completedEvent(request.attemptId, "resp_recovered");
+        },
+      }),
+    );
+    host.saveProfile({ ...profile, apiKey: "provider-secret" });
+
+    try {
+      const pending = host.complete(
+        baseRequest("attempt_partial_tool_retry"),
+        new AbortController().signal,
+      );
+      await vi.advanceTimersByTimeAsync(401);
+      const events = await pending;
+
+      expect(callCount).toBe(2);
+      expect(
+        events.filter((event) => event.type === "block.started"),
+      ).toHaveLength(1);
+      expect(
+        events.filter((event) => event.type === "block.delta"),
+      ).toHaveLength(1);
+      expect(events).not.toContainEqual(
+        expect.objectContaining({ type: "attempt.failed" }),
+      );
+      expect(events.at(-1)).toMatchObject({ type: "attempt.completed" });
+    } finally {
+      store.close();
+      vi.useRealTimers();
+    }
+  });
+
+  it("publishes visible partial text immediately and does not replay it through retries", async () => {
+    const store = new WorkspaceStore(":memory:");
+    let callCount = 0;
+    const host = new ModelProviderHost(
+      store,
+      cipher,
+      globalThis.fetch,
+      undefined,
+      undefined,
+      () => ({
+        async *stream(request): AsyncIterable<CanonicalStreamEvent> {
+          await Promise.resolve();
+          callCount += 1;
+          yield startedEvent(request.attemptId);
+          yield {
+            type: "block.started",
+            attemptId: request.attemptId,
+            blockId: "partial_text",
+            kind: "text",
+          };
+          yield {
+            type: "block.delta",
+            attemptId: request.attemptId,
+            blockId: "partial_text",
+            delta: "Starting",
           };
           yield {
             type: "attempt.failed",

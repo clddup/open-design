@@ -43,6 +43,27 @@ describe("conversation runtime state", () => {
     expect(projected[1]).toMatchObject({ type: "tool.requested" });
   });
 
+  it("does not erase streamed text when an empty completion marker arrives", () => {
+    const delta: AgentEvent = {
+      type: "message.delta",
+      runId: "run_1",
+      messageId: "assistant_1",
+      blockId: "text_1",
+      delta: "已经显示的回复",
+    };
+    const completed: AgentEvent = {
+      type: "message.completed",
+      runId: "run_1",
+      messageId: "assistant_1",
+      blocks: [],
+    };
+
+    expect(appendLiveAgentEvent([delta], completed)).toEqual([
+      delta,
+      completed,
+    ]);
+  });
+
   it("removes live duplicates only after the same durable message or tool exists", () => {
     const runId = "run_1";
     const events: AgentEvent[] = [
@@ -96,6 +117,19 @@ describe("conversation runtime state", () => {
 
     expect(pruneLiveEventsCoveredByTimeline(events, timeline, runId)).toEqual([
       expect.objectContaining({ messageId: "assistant_later" }),
+    ]);
+  });
+
+  it("retains an inactive Run message until its durable journal item arrives", () => {
+    const event: AgentEvent = {
+      type: "message.completed",
+      runId: "run_finished",
+      messageId: "assistant_partial",
+      blocks: [{ blockId: "text_1", type: "text", text: "中断前的真实回复" }],
+    };
+
+    expect(pruneLiveEventsCoveredByTimeline([event], [], null)).toEqual([
+      event,
     ]);
   });
 

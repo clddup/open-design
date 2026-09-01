@@ -38,6 +38,26 @@ function request(
 }
 
 describe("AgentReferenceHost", () => {
+  it("reauthorizes a durable attachment for a later Run in the same Conversation", async () => {
+    const root = await mkdtemp(join(tmpdir(), "opendesign-reference-history-"));
+    const attachments = new AgentAttachmentHost(join(root, "attachments"));
+    const imported = await attachments.importImageBytes("reference.png", png);
+    const metadata = {
+      attachmentId: imported.attachmentId,
+      name: imported.name,
+      mimeType: imported.mimeType,
+      byteSize: imported.byteSize,
+    };
+    const host = new AgentReferenceHost(attachments);
+    host.registerRun(request("Continue using the earlier reference"), [
+      metadata,
+    ]);
+
+    await expect(
+      host.materializeImage(metadata.attachmentId, context),
+    ).resolves.toMatchObject({ attachment: metadata });
+  });
+
   it("authorizes a generated image only for its active run", async () => {
     const root = await mkdtemp(join(tmpdir(), "opendesign-reference-"));
     const attachments = new AgentAttachmentHost(join(root, "attachments"));

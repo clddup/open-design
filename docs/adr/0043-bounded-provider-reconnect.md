@@ -5,6 +5,7 @@
 - 文档协议：不变（`DesignDocument 1.10.0`）
 - Agent 协议：`3.8.0`
 - 关联：ADR-0007、ADR-0008、ADR-0016、ADR-0030
+- 部分取代：完整 attempt 缓冲决策已由 ADR-0238 的流式语义提交边界取代；watchdog、有界重连、取消与 retry lifecycle 继续有效
 
 ## 背景
 
