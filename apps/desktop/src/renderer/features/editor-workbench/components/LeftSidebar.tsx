@@ -20,6 +20,7 @@ import {
   type CSSProperties,
   type DragEvent as ReactDragEvent,
   type MouseEvent as ReactMouseEvent,
+  type ReactElement,
 } from "react";
 import type {
   AssetActionResult,
@@ -392,6 +393,7 @@ export function LeftSidebar({
   onPlaceComponent,
   onReplaceAsset,
   onLayerHoverChange,
+  renderSelectionContextMenu,
   onSelect,
   onReparent,
   onRenameLayer,
@@ -425,6 +427,11 @@ export function LeftSidebar({
   onPlaceComponent: (componentId: string) => AssetActionResult;
   onReplaceAsset: (assetId: string) => Promise<AssetActionResult>;
   onLayerHoverChange?: (target: LayerHoverTarget | null) => void;
+  renderSelectionContextMenu?: (
+    trigger: ReactElement,
+    onOpen: () => void,
+    key: string,
+  ) => ReactElement;
   onSelect: (
     nodeIds: readonly string[],
     anchorNodeId?: string,
@@ -1074,7 +1081,7 @@ export function LeftSidebar({
                 ? sameComponentTarget(componentTarget, selectionComponentTarget)
                 : !selectionComponentTarget && selectedIds.has(selectionNodeId);
               const collapsed = collapsedNodeIds.has(key);
-              return (
+              const row = (
                 <div
                   aria-expanded={hasChildren ? !collapsed : undefined}
                   aria-level={depth + 1}
@@ -1326,6 +1333,23 @@ export function LeftSidebar({
                   </span>
                 </div>
               );
+              return renderSelectionContextMenu && !virtual
+                ? renderSelectionContextMenu(
+                    row,
+                    () => {
+                      if (componentTarget) {
+                        onSelect(
+                          [selectionNodeId],
+                          selectionNodeId,
+                          componentTarget,
+                        );
+                      } else if (!selectedIds.has(selectionNodeId)) {
+                        onSelect([selectionNodeId], selectionNodeId);
+                      }
+                    },
+                    key,
+                  )
+                : row;
             })}
             <span className={styles.dragStatus} role="status">
               {dragStatus}

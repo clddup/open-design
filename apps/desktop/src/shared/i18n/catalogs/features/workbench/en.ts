@@ -20,6 +20,8 @@ export const workbenchMessages = {
   "toolbar.removeMask": "Remove mask",
   "toolbar.booleanOperations": "Boolean operations",
   "toolbar.layerOrder": "Layer order",
+  "toolbar.flipHorizontal": "Flip horizontal",
+  "toolbar.flipVertical": "Flip vertical",
   "toolbar.bringForward": "Bring forward",
   "toolbar.bringToFront": "Bring to front",
   "toolbar.sendBackward": "Send backward",

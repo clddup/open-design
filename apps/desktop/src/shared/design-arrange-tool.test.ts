@@ -33,6 +33,11 @@ const inputs: DesignArrangeToolInput[] = [
       nodeIds: ["layer_a", "layer_b", "layer_c"],
     }),
   ),
+  ...(["flip-horizontal", "flip-vertical"] as const).map((action) => ({
+    ...common,
+    action,
+    nodeIds: ["layer_a"],
+  })),
   {
     ...common,
     action: "set-horizontal-spacing",
@@ -141,10 +146,9 @@ const inputs: DesignArrangeToolInput[] = [
 ];
 
 describe("Arrange Agent contract", () => {
-  it("uses one disclosed executable schema for all 21 action branches", () => {
+  it("uses one disclosed executable schema for every action branch", () => {
     expect(DesignArrangeContract.schema).toBe(DESIGN_ARRANGE_TOOL_INPUT_SCHEMA);
-    expect(DESIGN_ARRANGE_ACTIONS).toHaveLength(21);
-    expect(inputs).toHaveLength(21);
+    expect(inputs).toHaveLength(DESIGN_ARRANGE_ACTIONS.length);
     for (const input of inputs) {
       expect(
         schemaValidationIssues(DesignArrangeContract.schema, input),

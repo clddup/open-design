@@ -1,5 +1,5 @@
 import type { BooleanOperation } from "@opendesign/design-contracts";
-import type { LayerOrderAction } from "@opendesign/editor-runtime";
+import type { FlipAxis, LayerOrderAction } from "@opendesign/editor-runtime";
 import {
   Divider,
   DropdownMenu,
@@ -79,11 +79,13 @@ export function Toolbar({
   canReorder,
   canDelete,
   canDuplicate,
+  canFlip,
   canUndo,
   canRedo,
   onDelete,
   onBooleanOperation,
   onDuplicate,
+  onFlip,
   onGroup,
   onToggleMask,
   onReorder,
@@ -102,11 +104,13 @@ export function Toolbar({
   canReorder: Readonly<Record<LayerOrderAction, boolean>>;
   canDelete: boolean;
   canDuplicate: boolean;
+  canFlip: boolean;
   canUndo: boolean;
   canRedo: boolean;
   onDelete: () => void;
   onBooleanOperation: (operation: BooleanOperation) => void;
   onDuplicate: () => void;
+  onFlip: (axis: FlipAxis) => void;
   onGroup: () => void;
   onToggleMask: () => void;
   onReorder: (action: LayerOrderAction) => void;
@@ -131,6 +135,8 @@ export function Toolbar({
           intersect: "⌥⇧I",
           exclude: "⌥⇧E",
           mask: "⌃⌘M",
+          flipHorizontal: "⇧H",
+          flipVertical: "⇧V",
         }
       : {
           duplicate: "Ctrl+D",
@@ -145,6 +151,8 @@ export function Toolbar({
           intersect: "Alt+Shift+I",
           exclude: "Alt+Shift+E",
           mask: "Ctrl+Alt+M",
+          flipHorizontal: "Shift+H",
+          flipVertical: "Shift+V",
         };
   const orderItems: ReadonlyArray<{
     action: LayerOrderAction;
@@ -240,6 +248,21 @@ export function Toolbar({
               {t(label)}
             </DropdownMenuItem>
           ))}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            disabled={!canFlip}
+            onSelect={() => onFlip("horizontal")}
+            shortcut={shortcuts.flipHorizontal}
+          >
+            {t("toolbar.flipHorizontal")}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={!canFlip}
+            onSelect={() => onFlip("vertical")}
+            shortcut={shortcuts.flipVertical}
+          >
+            {t("toolbar.flipVertical")}
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem
             disabled={maskAction === null}

@@ -1,4 +1,9 @@
-export const GEOMETRY_SERVICE_CONTRACT_VERSION = 28 as const;
+export const GEOMETRY_SERVICE_CONTRACT_VERSION = 29 as const;
+export {
+  localReflectionTransform,
+  reflectionTransform,
+  type ReflectionAxis,
+} from "./reflection.js";
 
 export {
   projectVectorNetworkCornerRadii,

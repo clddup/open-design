@@ -9,6 +9,8 @@ export const editorMessages = {
   "history.alignLayers": "Align layers",
   "history.distributeLayers": "Distribute layers",
   "history.setLayerSpacing": "Set layer spacing",
+  "history.flipHorizontal": "Flip horizontally",
+  "history.flipVertical": "Flip vertically",
   "history.groupLayers": "Group layers",
   "history.ungroupLayers": "Ungroup layers",
   "history.createMask": "Use layers as mask",

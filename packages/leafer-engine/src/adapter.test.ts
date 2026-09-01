@@ -2359,6 +2359,43 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
+  it("selects an unselected persistent layer before opening its context menu", async () => {
+    const onContextMenuSelection =
+      vi.fn<NonNullable<LeaferEngineCallbacks["onContextMenuSelection"]>>();
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onContextMenuSelection,
+    });
+    const input = createInput();
+    input.selection = { nodeIds: ["title_welcome"] };
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    const feature = app && findElement(app.tree, "feature_one");
+    if (!app || !feature) throw new Error("Missing context-menu target");
+
+    app.emit("pointer.down", {
+      ...pointerEvent(20, 20, feature),
+      right: true,
+    });
+    expect(onContextMenuSelection).toHaveBeenCalledWith(
+      ["feature_one"],
+      "feature_one",
+      undefined,
+    );
+
+    onContextMenuSelection.mockClear();
+    adapter.sync({
+      ...input,
+      selection: { nodeIds: ["feature_one"], anchorNodeId: "feature_one" },
+    });
+    app.emit("pointer.down", {
+      ...pointerEvent(20, 20, feature),
+      right: true,
+    });
+    expect(onContextMenuSelection).not.toHaveBeenCalled();
+    adapter.dispose();
+  });
+
   it("captures and exports the exact mixed Text projection during direct editing", async () => {
     const adapter = await createLeaferEngineAdapter(
       createHost(),
@@ -5885,6 +5922,44 @@ describe("Leafer engine selection bounds synchronization", () => {
           type: "update_properties",
           nodeId: text.id,
           size: { width: 420, height: 96 },
+        }),
+      ],
+    });
+    adapter.dispose();
+  });
+
+  it("keeps a flipped layer editable through the ordinary transform controller", async () => {
+    const onOperations = vi.fn(() => true);
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onOperations,
+    });
+    const input = createInput();
+    input.document = structuredClone(input.document);
+    input.document.nodesById.feature_one!.transform = [-1, 0, 0, 1, 304, 0];
+    adapter.sync(input);
+    flushAnimationFrames();
+    const app = leaferHarness.app;
+    const element = app && findElement(app.tree, "feature_one");
+    if (!app || !element) throw new Error("Missing flipped layer");
+    expect(element.localTransform).toMatchObject({ a: -1, d: 1, e: 304 });
+
+    app.editor.moving = true;
+    app.editor.editBox.dragging = true;
+    app.editor.emit("editor.before-move");
+    element.localTransform.e += 20;
+    app.editor.emit("editor.move");
+    app.editor.editBox.dragging = false;
+    app.editor.editBox.emit("drag.end");
+
+    expect(onOperations).toHaveBeenCalledWith({
+      kind: "move",
+      selectionNodeIds: ["feature_one"],
+      operations: [
+        expect.objectContaining({
+          type: "update_properties",
+          nodeId: "feature_one",
+          transform: [-1, 0, 0, 1, 324, 0],
         }),
       ],
     });

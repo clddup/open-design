@@ -277,6 +277,11 @@ export interface LeaferEngineCallbacks {
   onImageCropCommit?(request: LeaferImageCropCommitRequest): boolean;
   onImageCropStateChange?(state: LeaferImageCropState | null): void;
   onOperations(request: LeaferOperationRequest): boolean;
+  onContextMenuSelection?(
+    nodeIds: string[],
+    anchorNodeId?: string,
+    componentTarget?: ComponentSelectionTarget,
+  ): void;
   onSelectionChange(
     nodeIds: string[],
     anchorNodeId?: string,

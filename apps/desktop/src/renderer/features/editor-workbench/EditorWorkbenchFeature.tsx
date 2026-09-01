@@ -25,6 +25,10 @@ import { DesignFileTabs } from "./components/DesignFileTabs";
 import { LeftSidebar } from "./components/LeftSidebar";
 import { PropertiesPanel } from "./components/PropertiesPanel";
 import { RenameLayersDialog } from "./components/RenameLayersDialog";
+import {
+  SelectionContextMenu,
+  type SelectionContextMenuActions,
+} from "./components/SelectionContextMenu";
 import { Statusbar } from "./components/Statusbar";
 import { Titlebar } from "./components/Titlebar";
 import { Toolbar } from "./components/Toolbar";
@@ -225,6 +229,7 @@ export function EditorWorkbenchFeature({
     canChangeSelectedBoolean,
     canCreateBooleanSelection,
     canDeleteSelection,
+    canFlipSelection,
     canGroupSelection,
     canToggleMaskSelection,
     canRenameSelection,
@@ -232,6 +237,7 @@ export function EditorWorkbenchFeature({
     canUngroupSelection,
     deleteNodes,
     duplicateSelection,
+    flipSelection,
     groupSelection,
     layerOrderAvailability,
     maskSelectionAction,
@@ -429,6 +435,7 @@ export function EditorWorkbenchFeature({
     applyBooleanOperation,
     canDeleteSelection,
     canFlattenSelection,
+    canFlipSelection,
     canRenameSelection,
     canToggleMaskSelection,
     deleteNodes,
@@ -437,6 +444,7 @@ export function EditorWorkbenchFeature({
       nodeIds ? duplicateSelection(nodeIds) : duplicateSelectionAction(),
     editorActive: true,
     flattenSelection: () => void flattenSelection(),
+    flipSelection,
     groupSelection,
     openRenameLayers,
     platform,
@@ -468,6 +476,21 @@ export function EditorWorkbenchFeature({
     activeMarkState
       ? duplicateSelection(activeMarkState.markedNodeIds)
       : duplicateSelectionAction();
+  const selectionContextMenuActions: SelectionContextMenuActions = {
+    canDelete: canDeleteSelection,
+    canDuplicate: state.selection.nodeIds.length > 0 && !componentTargetActive,
+    canFlip: canFlipSelection,
+    canGroup: canGroupSelection,
+    canReorder: layerOrderAvailability,
+    canUngroup: canUngroupBooleanSelection || canUngroupSelection,
+    onDelete: () => deleteNodes(activeLayerMutationIds),
+    onDuplicate: duplicateActiveSelection,
+    onFlip: flipSelection,
+    onGroup: groupSelection,
+    onReorder: reorderSelection,
+    onUngroup: ungroupSelection,
+    platform,
+  };
 
   const fontInspectorContext = useFontInspectorContext({
     applyCommands,
@@ -566,6 +589,7 @@ export function EditorWorkbenchFeature({
           canDuplicate={
             state.selection.nodeIds.length > 0 && !componentTargetActive
           }
+          canFlip={canFlipSelection}
           canRedo={state.history.canRedo}
           canUndo={state.history.canUndo}
           hierarchyAction={
@@ -576,6 +600,7 @@ export function EditorWorkbenchFeature({
           onBooleanOperation={applyBooleanOperation}
           onDelete={() => deleteNodes(activeLayerMutationIds)}
           onDuplicate={duplicateActiveSelection}
+          onFlip={flipSelection}
           onGroup={groupSelection}
           onToggleMask={toggleMaskSelection}
           onReorder={reorderSelection}
@@ -611,6 +636,14 @@ export function EditorWorkbenchFeature({
             onReplaceAsset={replaceImageAsset}
             onLayerHoverChange={setLayerHoverTarget}
             onReparent={reparentLayers}
+            renderSelectionContextMenu={(trigger, onOpen, key) => (
+              <SelectionContextMenu
+                actions={selectionContextMenuActions}
+                key={key}
+                onOpen={onOpen}
+                trigger={trigger}
+              />
+            )}
             onRenameLayer={renameLayerTarget}
             onSelect={(nodeIds, anchorNodeId, componentTarget) =>
               runtime.setSelection(nodeIds, anchorNodeId, componentTarget)
@@ -722,6 +755,12 @@ export function EditorWorkbenchFeature({
               onReorderGridTracks={editorCommands.reorderGridTracks}
               onSetGridTracks={editorCommands.setGridTracks}
               runtime={runtime}
+              renderSelectionContextMenu={(trigger) => (
+                <SelectionContextMenu
+                  actions={selectionContextMenuActions}
+                  trigger={trigger}
+                />
+              )}
               smartSelectionMarkState={smartSelectionMarkState}
               showAgentRunStatus={
                 !utilityPanelVisible || utilityTab !== "agent"

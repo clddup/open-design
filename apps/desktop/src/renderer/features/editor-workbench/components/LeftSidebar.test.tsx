@@ -42,6 +42,41 @@ function pageActionProps() {
 }
 
 describe("LeftSidebar layer tree", () => {
+  it("selects an unselected layer before opening its shared context menu", () => {
+    const onSelect = vi.fn();
+    render(
+      <I18nProvider initialLocale="en">
+        <LeftSidebar
+          {...pageActionProps()}
+          activePageId="page_welcome"
+          document={createWelcomeDocument()}
+          onPageChange={vi.fn()}
+          onReparent={vi.fn(() => ({ ok: true }) as const)}
+          onSelect={onSelect}
+          onTabChange={vi.fn()}
+          onToggleLock={vi.fn()}
+          onToggleVisibility={vi.fn()}
+          renderSelectionContextMenu={(trigger, onOpen, key) => (
+            <div key={key} onContextMenu={onOpen}>
+              {trigger}
+            </div>
+          )}
+          selectedNodeIds={["title_welcome"]}
+          tab="layers"
+        />
+      </I18nProvider>,
+    );
+
+    fireEvent.contextMenu(
+      screen.getByRole("button", { name: "Atomic changes" }),
+    );
+    expect(onSelect).toHaveBeenCalledWith(["feature_two"], "feature_two");
+
+    onSelect.mockClear();
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Title" }));
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
   it("marks active mask sources distinctly in the layer tree", () => {
     const document = structuredClone(createWelcomeDocument());
     document.nodesById.title_welcome.maskMode = "alpha";

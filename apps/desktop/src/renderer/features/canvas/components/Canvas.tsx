@@ -87,6 +87,7 @@ import {
   type DragEvent,
   type KeyboardEvent,
   type MouseEvent,
+  type ReactElement,
   type ReactNode,
 } from "react";
 import type { MessageKey, MessageParameters } from "@/shared/i18n/messages";
@@ -143,6 +144,7 @@ export function Canvas({
   onSetGridTracks,
   onResizeFrame,
   selectionActions,
+  renderSelectionContextMenu,
   showAgentRunStatus,
   smartSelectionMarkState,
 }: {
@@ -240,6 +242,7 @@ export function Canvas({
   ) => boolean;
   onResizeFrame: ResizeFrameHandler;
   selectionActions?: ReactNode;
+  renderSelectionContextMenu?: (trigger: ReactElement) => ReactElement;
   showAgentRunStatus: boolean;
   smartSelectionMarkState: LeaferSmartSelectionMarkState | null;
 }) {
@@ -1282,6 +1285,9 @@ export function Canvas({
           value,
         }),
       onOperations: applyOperations,
+      onContextMenuSelection: (nodeIds, anchorNodeId, componentTarget) => {
+        runtime.setSelection(nodeIds, anchorNodeId, componentTarget);
+      },
       onSelectionChange: (nodeIds, anchorNodeId, componentTarget) => {
         runtime.setSelection(nodeIds, anchorNodeId, componentTarget);
       },
@@ -1515,7 +1521,7 @@ export function Canvas({
         )?.closed
       : undefined;
 
-  return (
+  const canvas = (
     <main
       aria-label={t("canvas.label")}
       className={`${styles.root} ${styles.leafer}${
@@ -2128,6 +2134,9 @@ export function Canvas({
       )}
     </main>
   );
+  return renderSelectionContextMenu
+    ? renderSelectionContextMenu(canvas)
+    : canvas;
 }
 
 function useReducedMotion(): boolean {

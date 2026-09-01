@@ -1,6 +1,6 @@
 # @opendesign/geometry-service
 
-OpenDesign-owned, versioned geometry provider boundary. Contract v7 contains deterministic arrangement plus isolated vector-path and vector-edit providers:
+OpenDesign-owned, versioned geometry provider boundary. Contract v29 contains deterministic arrangement and layer reflection plus isolated vector-path and vector-edit providers:
 
 - align multiple axis-aligned world bounds to a selection edge or center;
 - distribute one-dimensional gaps while preserving distinct outermost anchors;
@@ -9,9 +9,11 @@ OpenDesign-owned, versioned geometry provider boundary. Contract v7 contains det
 - analyze a Figma-compatible one- or two-dimensional Smart Selection and change one uniform spacing axis without flattening the other axis;
 - reorder a marked proper subset of a one-dimensional Smart Selection while preserving spatial spacing and hierarchy;
 - rearrange or swap one layer across stable occupied cells in a two-dimensional Smart Selection, recomputing unequal row and column extents;
+- reflow one- and two-dimensional Smart Selection after duplicate, delete, or resize without changing hierarchy;
+- create horizontal or vertical reflection matrices around explicit document or node-local bounds;
 - measure uniform spacing or a repeated gap without mutating design state.
 
-Tidy up and Smart Selection reject selections whose overlap graph cannot prove stable rows and columns, including diagonal-only placement, one object bridging multiple rows/columns, or multiple objects occupying one inferred grid cell. One-dimensional operations change only the inferred axis. Gap modes use deterministic spatial order to break equal-frequency ties (topmost row for horizontal gaps, then leftmost column for vertical gaps); no pixel-grid tolerance is implied. Smart Selection spacing supports negative gaps for a one-dimensional selection. Reorder accepts stable marked IDs plus an insertion index in the remaining spatial order; it changes placement only, never layer hierarchy. The current surface does not claim two-dimensional rearrange/swap, structural reflow after duplicate/delete/resize, snapping, or Auto Layout.
+Tidy up and Smart Selection reject selections whose overlap graph cannot prove stable rows and columns, including diagonal-only placement, one object bridging multiple rows/columns, or multiple objects occupying one inferred grid cell. One-dimensional operations change only the inferred axis. Gap modes use deterministic spatial order to break equal-frequency ties (topmost row for horizontal gaps, then leftmost column for vertical gaps); no pixel-grid tolerance is implied. Smart Selection spacing supports negative gaps for a one-dimensional selection. Reorder accepts stable marked IDs plus an insertion index in the remaining spatial order; it changes placement only, never layer hierarchy. Reflection is pure matrix geometry; EditorRuntime owns selection scope, parent transforms, Auto Layout policy, transactions and history. Snapping and transform-origin policy are not part of this service.
 
 The root entry accepts plain IDs and bounds and returns pure placement deltas. It does not read or save `DesignDocument`, modify Leafer objects, infer the live selection, or own history. `EditorRuntime` resolves world/parent transforms, maintains dynamic Group bounds, validates the resulting `DesignOperation[]`, and applies one transaction.
 

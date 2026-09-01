@@ -7,6 +7,7 @@ import {
   canAlignNodeToParent,
   canCreateBooleanGroup,
   canDeleteNodes,
+  canFlipNodes,
   canGroupNodes,
   canReorderNodes,
   canToggleMaskNodes,
@@ -20,6 +21,7 @@ import {
   planCreateBooleanGroup,
   planGroupNodes,
   planDeleteNodes,
+  planFlipNodes,
   planRenameLayers,
   planReparentNodes,
   planReorderNodes,
@@ -35,6 +37,7 @@ import {
   planUngroupNode,
   type ArrangeOperation,
   type EditorRuntime,
+  type FlipAxis,
   type LayerOrderAction,
   type LayerRenameInput,
 } from "@opendesign/editor-runtime";
@@ -142,6 +145,9 @@ export function useLayerCommandController({
         canCreateBooleanGroup(document, activePageId, selectedNodeIds),
       canDeleteSelection:
         !componentTargetActive && canDeleteNodes(document, selectedNodeIds),
+      canFlipSelection:
+        !componentTargetActive &&
+        canFlipNodes(document, activePageId, selectedNodeIds),
       canGroupSelection:
         !componentTargetActive &&
         canGroupNodes(document, activePageId, selectedNodeIds),
@@ -608,6 +614,41 @@ export function useLayerCommandController({
     ],
   );
 
+  const flipSelection = useCallback(
+    (axis: FlipAxis) => {
+      const current = runtime.getSnapshot();
+      if (current.state.selection.componentTarget) return;
+      const operationId = `flip_${axis}_${Date.now()}_${++transactionCounter.current}`;
+      const plan = planFlipNodes(
+        current.document,
+        activePageId,
+        current.state.selection.nodeIds,
+        axis,
+        operationId,
+      );
+      if (!plan.ok) {
+        setEditorError(plan.message);
+        return;
+      }
+      applyCommands(
+        t(
+          axis === "horizontal"
+            ? "history.flipHorizontal"
+            : "history.flipVertical",
+        ),
+        plan.commands,
+      );
+    },
+    [
+      activePageId,
+      applyCommands,
+      runtime,
+      setEditorError,
+      t,
+      transactionCounter,
+    ],
+  );
+
   const adjustSmartSelectionSpacing = useCallback(
     (request: LeaferSmartSelectionSpacingRequest): boolean => {
       const current = runtime.getSnapshot();
@@ -755,6 +796,7 @@ export function useLayerCommandController({
     arrangeSelection,
     deleteNodes,
     duplicateSelection,
+    flipSelection,
     groupSelection,
     renameLayers,
     resizeSmartSelection,

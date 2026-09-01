@@ -581,7 +581,9 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
           this.#boxDrawController.finish(event);
         },
         onPointerDown: (event) => {
-          if (this.#editorOverlays.pointerDown(asLeaferEvent(event))) return;
+          const pointer = asLeaferEvent(event);
+          if (pointer.right) this.#selectContextTarget(pointer.target);
+          if (this.#editorOverlays.pointerDown(pointer)) return;
           this.#imageCropController.pointerDown(event);
           this.#penToolController.pointerDown(event);
           this.#vectorEditController.pointerDown(event);
@@ -1310,6 +1312,42 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       : projectionId;
   }
 
+  #selectContextTarget(target: unknown): void {
+    if (!this.#input || !target || !this.#callbacks.onContextMenuSelection)
+      return;
+    const element = target as LeaferElement;
+    const nodeId = this.#nodeId(element);
+    if (!nodeId) return;
+    const componentTarget = this.#componentTargetForElement(element);
+    const selection = this.#input.selection;
+    if (
+      selection.nodeIds.includes(nodeId) &&
+      sameComponentSelectionTarget(selection.componentTarget, componentTarget)
+    ) {
+      return;
+    }
+    this.#callbacks.onContextMenuSelection([nodeId], nodeId, componentTarget);
+  }
+
+  #componentTargetForElement(
+    element: LeaferElement,
+  ): ComponentSelectionTarget | undefined {
+    if (!this.#scene.projection) return undefined;
+    const projectionId = this.#scene.projectionId(element);
+    const metadata = projectionId
+      ? this.#scene.projection.elementsById.get(projectionId)?.data.data
+      : undefined;
+    if (!metadata || typeof metadata !== "object") return undefined;
+    const value = (metadata as Record<string, unknown>)
+      .opendesignComponentTarget;
+    if (!value || typeof value !== "object") return undefined;
+    const instanceId = (value as Record<string, unknown>).instanceId;
+    const sourcePath = (value as Record<string, unknown>).sourcePath;
+    return typeof instanceId === "string" && isStringArray(sourcePath)
+      ? { instanceId, sourcePath }
+      : undefined;
+  }
+
   #onWindowKeyDown = (event: KeyboardEvent) => {
     if (this.#textEditDomController.handleKeyDown(event)) return;
     if (
@@ -1380,6 +1418,16 @@ function sameBooleanEditScope(
       left?.selectedOperandIds ?? [],
       right?.selectedOperandIds ?? [],
     )
+  );
+}
+
+function sameComponentSelectionTarget(
+  left: ComponentSelectionTarget | undefined,
+  right: ComponentSelectionTarget | undefined,
+): boolean {
+  return (
+    left?.instanceId === right?.instanceId &&
+    sameStringList(left?.sourcePath ?? [], right?.sourcePath ?? [])
   );
 }
 

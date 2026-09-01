@@ -81,6 +81,13 @@ export {
   type ArrangeOperationPlan,
   type ArrangementSelectionMetrics,
 } from "./arrange-operations.js";
+export {
+  canFlipNodes,
+  planFlipNodes,
+  type FlipAxis,
+  type FlipOperationFailureCode,
+  type FlipOperationPlan,
+} from "./flip-operations.js";
 export { MAX_ARRANGEMENT_SPACING } from "@opendesign/geometry-service";
 export {
   planSetFrameAutoLayout,

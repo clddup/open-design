@@ -18,6 +18,8 @@ export const DESIGN_ARRANGE_ACTIONS = [
   "distribute-horizontal",
   "distribute-vertical",
   "tidy-up",
+  "flip-horizontal",
+  "flip-vertical",
   "set-horizontal-spacing",
   "set-vertical-spacing",
   "set-constraints",
@@ -51,6 +53,8 @@ const SPACING_ACTIONS = [
   "set-horizontal-spacing",
   "set-vertical-spacing",
 ] as const;
+
+const FLIP_ACTIONS = ["flip-horizontal", "flip-vertical"] as const;
 
 const ID_SCHEMA = {
   type: "string",
@@ -132,6 +136,9 @@ const ARRANGE_ACTION_BRANCHES = [
   ...DISTRIBUTION_ACTIONS.map((action) =>
     arrangeBranch(action, { nodeIds: nodeIdsSchema(3) }, ["nodeIds"]),
   ),
+  ...FLIP_ACTIONS.map((action) =>
+    arrangeBranch(action, { nodeIds: nodeIdsSchema(1) }, ["nodeIds"]),
+  ),
   ...SPACING_ACTIONS.map((action) =>
     arrangeBranch(
       action,
@@ -212,6 +219,7 @@ const CONTINUATION_ARRANGE_ACTIONS = [
   ...ALIGN_ACTIONS,
   ...DISTRIBUTION_ACTIONS,
   ...SPACING_ACTIONS,
+  ...FLIP_ACTIONS,
   "repair-overflow",
   "resize-frame",
 ] as const;
@@ -260,7 +268,7 @@ const ARRANGE_CONTINUATION_TOOL_PROPERTIES = {
 export const DESIGN_ARRANGE_TOOL_INPUT_SCHEMA = executableJsonSchema({
   type: "object",
   description:
-    "Arrange explicit inspected layers with one of 21 closed action shapes. Align accepts one or more unique layer IDs: one direct child aligns to its explicit Frame or Slot parent, while multiple layers align to their selection bounds. Distribute and tidy-up need at least three. Spacing may be negative, zero, or positive. Constraints, Frame resize, linear/wrapped Auto Layout, Auto Layout Grid, child sizing/positioning/limits, Grid placement/track reorder, Layout Guides, and bounded overflow repair use the same Figma-shaped document fields as the Runtime. Grid autoTracks is valid only for row-auto-flow. Layout Guide IDs must be unique. The host owns current Page/revision checks, geometry, preview, transaction, and undo.",
+    "Arrange or transform explicit inspected layers with one closed action shape. Align accepts one or more unique layer IDs: one direct child aligns to its explicit Frame or Slot parent, while multiple layers align to their selection bounds. Flip mirrors persistent layers with the same matrix semantics as the editor, without changing hierarchy or component links. Distribute and tidy-up need at least three. Spacing may be negative, zero, or positive. Constraints, Frame resize, linear/wrapped Auto Layout, Auto Layout Grid, child sizing/positioning/limits, Grid placement/track reorder, Layout Guides, and bounded overflow repair use the same Figma-shaped document fields as the Runtime. Grid autoTracks is valid only for row-auto-flow. Layout Guide IDs must be unique. The host owns current Page/revision checks, geometry, preview, transaction, and undo.",
   properties: ARRANGE_TOOL_PROPERTIES,
   required: ["action", "label", "pageId"],
   anyOf: ARRANGE_ACTION_BRANCHES,

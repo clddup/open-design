@@ -243,6 +243,8 @@ describe("design Agent tool aggregation", () => {
       expect.arrayContaining([
         "align-left",
         "tidy-up",
+        "flip-horizontal",
+        "flip-vertical",
         "set-horizontal-spacing",
         "repair-overflow",
         "resize-frame",

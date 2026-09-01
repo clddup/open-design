@@ -40,6 +40,29 @@ describe("SVG node family owners", () => {
     expect(serialized.svg).toContain('transform="matrix(1 0 0 1 20 30)"');
   });
 
+  it("preserves reflected transforms instead of flattening their determinant", () => {
+    const node = rectangle("reflected", null, [-1, 0, 0, 1, 100, 30]);
+    const source = documentFromNodes([node], [node.id]);
+    const value = createSvgExportDocument({
+      version: 1,
+      viewport: { x: 0, y: 0, width: 200, height: 120 },
+    });
+    const issues: Parameters<typeof exportSvgNodeRoots>[0]["issues"] = [];
+
+    exportSvgNodeRoots({
+      ...value,
+      issues,
+      request: { document: source, includeLayerIds: true },
+      rootNodeIds: [node.id],
+    });
+    const serialized = serializeSvgExportDocument(value);
+
+    expect(issues).toEqual([]);
+    expect(serialized.ok).toBe(true);
+    if (!serialized.ok) return;
+    expect(serialized.svg).toContain('transform="matrix(-1 0 0 1 100 30)"');
+  });
+
   it("imports parsed roots and owns stable node/container assembly", () => {
     const parsed = parseSvgImportSource({
       idPrefix: "landing",

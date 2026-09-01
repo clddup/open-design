@@ -11,6 +11,8 @@ export const editorMessages = {
   "history.alignLayers": "对齐图层",
   "history.distributeLayers": "分布图层",
   "history.setLayerSpacing": "设置图层间距",
+  "history.flipHorizontal": "水平翻转",
+  "history.flipVertical": "垂直翻转",
   "history.groupLayers": "编组图层",
   "history.ungroupLayers": "解组图层",
   "history.createMask": "将图层用作蒙版",

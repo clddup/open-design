@@ -41,7 +41,9 @@ export type DesignArrangeToolInput =
         | "align-bottom"
         | "distribute-horizontal"
         | "distribute-vertical"
-        | "tidy-up";
+        | "tidy-up"
+        | "flip-horizontal"
+        | "flip-vertical";
       label: string;
       pageId: string;
       nodeIds: string[];

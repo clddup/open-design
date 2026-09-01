@@ -1,6 +1,7 @@
 import type { DesignDocument } from "@opendesign/design-contracts";
 import {
   planArrangeNodes,
+  planFlipNodes,
   planReorderGridTracks,
   planRepairDeliveryOverflow,
   planResizeFrameWithConstraints,
@@ -19,6 +20,14 @@ export function planDesignArrangeTool(
   input: DesignArrangeToolInput,
   commandPrefix: string,
 ) {
+  if (input.action === "flip-horizontal" || input.action === "flip-vertical")
+    return planFlipNodes(
+      document,
+      input.pageId,
+      input.nodeIds,
+      input.action === "flip-horizontal" ? "horizontal" : "vertical",
+      commandPrefix,
+    );
   if (input.action === "repair-overflow")
     return planRepairDeliveryOverflow(
       document,

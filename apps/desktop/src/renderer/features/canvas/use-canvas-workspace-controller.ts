@@ -7,6 +7,7 @@ import {
   getSelectionBounds,
   screenToDocument,
   type EditorRuntime,
+  type FlipAxis,
   type LayerOrderAction,
 } from "@opendesign/editor-runtime";
 import type {
@@ -30,6 +31,7 @@ interface CanvasShortcutContext {
   applyBooleanOperation: (operation: BooleanOperation) => void;
   canDeleteSelection: boolean;
   canFlattenSelection: boolean;
+  canFlipSelection: boolean;
   canRenameSelection: boolean;
   canToggleMaskSelection: boolean;
   changeZoom: (zoom: number) => void;
@@ -38,6 +40,7 @@ interface CanvasShortcutContext {
   editorActive: boolean;
   fitCanvas: (target: CanvasFitTarget) => void;
   flattenSelection: () => void;
+  flipSelection: (axis: FlipAxis) => void;
   groupSelection: () => void;
   openRenameLayers: () => void;
   platform: NodeJS.Platform;
@@ -55,6 +58,7 @@ export function useCanvasWorkspaceController({
   applyBooleanOperation,
   canDeleteSelection,
   canFlattenSelection,
+  canFlipSelection,
   canRenameSelection,
   canToggleMaskSelection,
   deleteNodes,
@@ -62,6 +66,7 @@ export function useCanvasWorkspaceController({
   duplicateSelection,
   editorActive,
   flattenSelection,
+  flipSelection,
   groupSelection,
   openRenameLayers,
   platform,
@@ -80,6 +85,7 @@ export function useCanvasWorkspaceController({
   applyBooleanOperation: (operation: BooleanOperation) => void;
   canDeleteSelection: boolean;
   canFlattenSelection: boolean;
+  canFlipSelection: boolean;
   canRenameSelection: boolean;
   canToggleMaskSelection: boolean;
   deleteNodes: (nodeIds: readonly string[]) => void;
@@ -87,6 +93,7 @@ export function useCanvasWorkspaceController({
   duplicateSelection: (nodeIds?: readonly string[]) => void;
   editorActive: boolean;
   flattenSelection: () => void;
+  flipSelection: (axis: FlipAxis) => void;
   groupSelection: () => void;
   openRenameLayers: () => void;
   platform: NodeJS.Platform;
@@ -174,6 +181,7 @@ export function useCanvasWorkspaceController({
     applyBooleanOperation,
     canDeleteSelection,
     canFlattenSelection,
+    canFlipSelection,
     canRenameSelection,
     canToggleMaskSelection,
     changeZoom,
@@ -182,6 +190,7 @@ export function useCanvasWorkspaceController({
     editorActive,
     fitCanvas,
     flattenSelection,
+    flipSelection,
     groupSelection,
     openRenameLayers,
     platform,
@@ -198,6 +207,7 @@ export function useCanvasWorkspaceController({
     applyBooleanOperation,
     canDeleteSelection,
     canFlattenSelection,
+    canFlipSelection,
     canRenameSelection,
     canToggleMaskSelection,
     changeZoom,
@@ -206,6 +216,7 @@ export function useCanvasWorkspaceController({
     editorActive,
     fitCanvas,
     flattenSelection,
+    flipSelection,
     groupSelection,
     openRenameLayers,
     platform,
@@ -393,6 +404,19 @@ function handleCanvasShortcut(
     context.toggleSelectedLayerState(
       event.code === "KeyL" ? "locked" : "visible",
     );
+    return;
+  }
+  if (
+    event.shiftKey &&
+    !event.metaKey &&
+    !event.ctrlKey &&
+    !event.altKey &&
+    (event.code === "KeyH" || event.code === "KeyV")
+  ) {
+    if (context.canFlipSelection) {
+      event.preventDefault();
+      context.flipSelection(event.code === "KeyH" ? "horizontal" : "vertical");
+    }
     return;
   }
   const booleanShortcut = booleanOperationForShortcut(event);

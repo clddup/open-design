@@ -198,6 +198,32 @@ describe("useCanvasWorkspaceController", () => {
     disabled.unmount();
   });
 
+  it("routes Figma-compatible Flip shortcuts without stealing text input", () => {
+    const workspace = createWorkspace();
+    const flipSelection = vi.fn();
+    const { unmount } = renderHook(() =>
+      useCanvasWorkspaceController(
+        controllerArgs(workspace, {
+          canFlipSelection: true,
+          flipSelection,
+          platform: "win32",
+        }),
+      ),
+    );
+
+    fireEvent.keyDown(window, { code: "KeyH", key: "H", shiftKey: true });
+    fireEvent.keyDown(window, { code: "KeyV", key: "V", shiftKey: true });
+    expect(flipSelection).toHaveBeenNthCalledWith(1, "horizontal");
+    expect(flipSelection).toHaveBeenNthCalledWith(2, "vertical");
+
+    const input = document.createElement("input");
+    document.body.append(input);
+    fireEvent.keyDown(input, { code: "KeyH", key: "H", shiftKey: true });
+    input.remove();
+    expect(flipSelection).toHaveBeenCalledTimes(2);
+    unmount();
+  });
+
   it("routes duplicate and delete shortcuts to the marked Smart Selection subset", () => {
     const workspace = createWorkspace();
     const runtime = workspace.getActiveRuntime();
@@ -290,6 +316,7 @@ function controllerArgs(
     applyBooleanOperation: vi.fn(),
     canDeleteSelection: true,
     canFlattenSelection: false,
+    canFlipSelection: false,
     canRenameSelection: true,
     canToggleMaskSelection: true,
     deleteNodes: vi.fn(),
@@ -297,6 +324,7 @@ function controllerArgs(
     duplicateSelection: vi.fn(),
     editorActive: true,
     flattenSelection: vi.fn(),
+    flipSelection: vi.fn(),
     groupSelection: vi.fn(),
     openRenameLayers: vi.fn(),
     platform: "darwin",

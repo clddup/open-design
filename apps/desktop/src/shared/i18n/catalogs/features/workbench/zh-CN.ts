@@ -22,6 +22,8 @@ export const workbenchMessages = {
   "toolbar.removeMask": "移除蒙版",
   "toolbar.booleanOperations": "布尔运算",
   "toolbar.layerOrder": "图层顺序",
+  "toolbar.flipHorizontal": "水平翻转",
+  "toolbar.flipVertical": "垂直翻转",
   "toolbar.bringForward": "前移一层",
   "toolbar.bringToFront": "置于顶层",
   "toolbar.sendBackward": "后移一层",

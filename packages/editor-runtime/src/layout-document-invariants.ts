@@ -143,15 +143,15 @@ export function validateNodeLayoutInvariants(
   }
   if (
     absoluteInFlow &&
-    (node.transform[0] !== 1 ||
+    (Math.abs(Math.abs(node.transform[0]) - 1) >= Number.EPSILON ||
       node.transform[1] !== 0 ||
       node.transform[2] !== 0 ||
-      node.transform[3] !== 1)
+      Math.abs(Math.abs(node.transform[3]) - 1) >= Number.EPSILON)
   ) {
     issues.push({
       path: `/nodesById/${nodeId}/layoutPositioning`,
       message:
-        "absolute child v1 requires translation-only geometry without rotation, skew, or local scale",
+        "absolute child requires axis-aligned geometry without rotation, skew, or unsupported local scale",
     });
   }
   if (node.constraints !== undefined) {

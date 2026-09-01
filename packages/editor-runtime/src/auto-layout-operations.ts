@@ -8,6 +8,7 @@ import type {
   DesignOperation,
   LayoutSizing,
   LayoutLimits,
+  Transform,
 } from "@opendesign/design-contracts";
 import {
   DEFAULT_AUTO_LAYOUT_FRAME_SIZING,
@@ -141,10 +142,10 @@ export function planSetFrameAutoLayout(
       const child = document.nodesById[childId];
       if (!child)
         return failure("not-found", `Layer ${childId} does not exist`);
-      if (!isTranslationOnly(child)) {
+      if (!isAutoLayoutCompatibleTransform(child)) {
         return failure(
           "visual-fidelity",
-          `Layer ${childId} has rotation, skew, or local scale; linear Auto Layout v1 only positions translation-only direct children`,
+          `Layer ${childId} has rotation, skew, or unsupported local scale; Auto Layout only positions axis-aligned direct children`,
         );
       }
       if (child.layoutPositioning === "absolute") continue;
@@ -359,11 +360,11 @@ export function resolveAutoLayoutInPlace(
         });
         continue;
       }
-      if (!isTranslationOnly(child)) {
+      if (!isAutoLayoutCompatibleTransform(child)) {
         return resolutionFailure(
           "visual-fidelity",
           frameId,
-          `Flow child ${childId} has rotation, skew, or local scale; linear Auto Layout v1 only positions translation-only children`,
+          `Flow child ${childId} has rotation, skew, or unsupported local scale; Auto Layout only positions axis-aligned children`,
         );
       }
       if (child.visible) {
@@ -438,12 +439,7 @@ export function resolveAutoLayoutInPlace(
         const constrained = solveConstraints({
           version: LAYOUT_SERVICE_CONTRACT_VERSION,
           constraints: child.constraints ?? DEFAULT_LAYOUT_CONSTRAINTS,
-          child: {
-            x: child.transform[4],
-            y: child.transform[5],
-            width: child.size.width,
-            height: child.size.height,
-          },
+          child: autoLayoutChildRect(child),
           previousParent: previousFrameSize,
           nextParent: result.frame,
         });
@@ -454,11 +450,11 @@ export function resolveAutoLayoutInPlace(
             `Absolute child ${childId} constraints could not be resolved: ${constrained.message}`,
           );
         }
-        child.transform = [1, 0, 0, 1, constrained.rect.x, constrained.rect.y];
         child.size = {
           width: constrained.rect.width,
           height: constrained.rect.height,
         };
+        child.transform = placeAutoLayoutChild(child, constrained.rect);
         positioned.add(child.id);
       }
     }
@@ -471,8 +467,8 @@ export function resolveAutoLayoutInPlace(
           `Auto Layout child ${placement.id} does not exist`,
         );
       }
-      child.transform = [1, 0, 0, 1, placement.x, placement.y];
       child.size = { width: placement.width, height: placement.height };
+      child.transform = placeAutoLayoutChild(child, placement);
       if (isGridResolvedPlacement(placement))
         child.gridPlacement = placement.placement;
       positioned.add(child.id);
@@ -634,13 +630,39 @@ function sameAutoLayout(
   return JSON.stringify(left ?? { mode: "none" }) === JSON.stringify(right);
 }
 
-function isTranslationOnly(node: DesignNode): boolean {
+function isAutoLayoutCompatibleTransform(node: DesignNode): boolean {
   return (
-    node.transform[0] === 1 &&
+    Math.abs(Math.abs(node.transform[0]) - 1) < Number.EPSILON &&
     node.transform[1] === 0 &&
     node.transform[2] === 0 &&
-    node.transform[3] === 1
+    Math.abs(Math.abs(node.transform[3]) - 1) < Number.EPSILON
   );
+}
+
+function autoLayoutChildRect(node: DesignNode) {
+  const [scaleX, , , scaleY, x, y] = node.transform;
+  return {
+    x: scaleX < 0 ? x - node.size.width : x,
+    y: scaleY < 0 ? y - node.size.height : y,
+    width: node.size.width,
+    height: node.size.height,
+  };
+}
+
+function placeAutoLayoutChild(
+  node: DesignNode,
+  rect: { x: number; y: number; width: number; height: number },
+): Transform {
+  const scaleX = node.transform[0] < 0 ? -1 : 1;
+  const scaleY = node.transform[3] < 0 ? -1 : 1;
+  return [
+    scaleX,
+    0,
+    0,
+    scaleY,
+    rect.x + (scaleX < 0 ? rect.width : 0),
+    rect.y + (scaleY < 0 ? rect.height : 0),
+  ];
 }
 
 function isGridResolvedPlacement(value: {
