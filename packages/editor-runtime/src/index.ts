@@ -135,17 +135,26 @@ export {
   type LayerSelectionDirection,
 } from "./selection-navigation.js";
 export {
+  canFlattenNodes,
+  planFlattenNodes,
+  type FlattenOperationPlan,
+} from "./vector-flatten.js";
+export type { FlattenTextRunStyle } from "./vector-flatten-text.js";
+export {
   planDeleteVectorNode,
   planVectorLayersLineCut,
+  planVectorLayersEndpointConnect,
   planVectorLayersVertexTransform,
   planVectorNetworkUpdate,
   planVectorNetworkUpdates,
+  planVectorOutlineStroke,
   planVectorSemanticEdit,
   resolveVectorEditCollectionScope,
   resolveVectorEditScope,
   type VectorEditCollectionScope,
   type VectorEditScope,
   type VectorLayerVertexTransformTarget,
+  type VectorLayerEndpointTarget,
   type VectorNetworkUpdateTarget,
   type VectorOperationFailureCode,
   type VectorOperationPlan,

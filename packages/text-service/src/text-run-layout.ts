@@ -2,6 +2,7 @@ import type {
   TextFontDescriptor,
   TextLayoutCase,
   TextLayoutDecoration,
+  TextLayoutTruncation,
   TextLayoutWarning,
   TextLayoutWrap,
   TextResizeMode,
@@ -12,8 +13,21 @@ import {
   type TextParagraphStyle,
 } from "./text-paragraphs.js";
 import { resolveTextListMarkers } from "./text-lists.js";
+import {
+  validateTextRunLayoutDecorations,
+  type TextRunLayoutDecoration,
+} from "./text-run-layout-decoration.js";
+import {
+  textRunDisplayRequest,
+  validateTextRunDisplayIdentity,
+} from "./text-run-truncation.js";
 
-export const TEXT_RUN_LAYOUT_SERVICE_CONTRACT_VERSION = 4 as const;
+export type {
+  TextRunLayoutDecoration,
+  TextRunLayoutDecorationKind,
+} from "./text-run-layout-decoration.js";
+
+export const TEXT_RUN_LAYOUT_SERVICE_CONTRACT_VERSION = 6 as const;
 export const MAX_TEXT_RUN_LAYOUT_CHARACTERS = 100_000;
 export const MAX_TEXT_RUN_LAYOUT_RUNS = 16_384;
 export const MAX_TEXT_RUN_LAYOUT_FRAGMENTS = 100_000;
@@ -47,8 +61,10 @@ export interface TextRunLayoutRequest<
   hangingList: boolean;
   paragraphRuns?: readonly TextStyleRun<TextParagraphStyle>[];
   runs: readonly TextStyleRun<Style>[];
+  maxLines: number | null;
   textAlignHorizontal: TextRunLayoutHorizontalAlign;
   textAlignVertical: TextRunLayoutVerticalAlign;
+  textTruncation: TextLayoutTruncation;
   textWrap: TextLayoutWrap;
   width?: number;
 }
@@ -57,6 +73,7 @@ export interface TextRunLayoutFragment<
   Style extends TextRunLayoutStyle = TextRunLayoutStyle,
 > {
   baseline: number;
+  decorations?: readonly TextRunLayoutDecoration[];
   end: number;
   glyphs?: readonly TextRunLayoutGlyph[];
   height: number;
@@ -71,7 +88,9 @@ export interface TextRunLayoutFragment<
 
 /**
  * One provider-derived positioned glyph. Cluster offsets use JavaScript
- * UTF-16 indices and are always relative to the complete request content.
+ * UTF-16 indices and are relative to the result's displayContent. For an
+ * ending-truncated result, sourceContentEnd maps that display prefix back to
+ * the complete request content.
  * The outline is disposable render projection data, never document state.
  */
 export interface TextRunLayoutGlyph {
@@ -99,6 +118,7 @@ export interface TextRunLayoutMarker<
   Style extends TextRunLayoutStyle = TextRunLayoutStyle,
 > {
   baseline: number;
+  decorations?: readonly TextRunLayoutDecoration[];
   direction: "ltr" | "rtl";
   glyphs?: readonly TextRunLayoutGlyph[];
   height: number;
@@ -126,13 +146,22 @@ export type TextRunLayoutResult<
         x: number;
         y: number;
       };
+      displayContent: string;
       fragments: readonly TextRunLayoutFragment<Style>[];
+      fullContentBounds: {
+        height: number;
+        width: number;
+        x: number;
+        y: number;
+      };
       lines: readonly TextRunLayoutLine[];
       markers: readonly TextRunLayoutMarker<Style>[];
       ok: true;
       provider: string;
       providerVersion: string;
+      sourceContentEnd: number;
       size: { height: number; width: number };
+      truncated: boolean;
       warnings: readonly TextLayoutWarning[];
     }
   | {
@@ -257,6 +286,28 @@ export function validateTextRunLayoutRequest<Style extends TextRunLayoutStyle>(
   if (!["none", "word", "character"].includes(request.textWrap)) {
     return "Text run layout wrapping mode is unsupported";
   }
+  if (
+    request.textTruncation !== "disabled" &&
+    request.textTruncation !== "ending"
+  ) {
+    return "Text run layout truncation mode is unsupported";
+  }
+  if (
+    request.maxLines !== null &&
+    (!Number.isSafeInteger(request.maxLines) || request.maxLines < 1)
+  ) {
+    return "Text run layout max lines must be null or a positive integer";
+  }
+  if (request.textTruncation === "disabled" && request.maxLines !== null) {
+    return "Text run layout max lines require ending truncation";
+  }
+  if (
+    request.textTruncation === "ending" &&
+    request.mode !== "fixed" &&
+    request.maxLines === null
+  ) {
+    return "Auto Size ending truncation requires max lines";
+  }
 
   if (request.mode === "auto-width") {
     if (request.width !== undefined || request.height !== undefined) {
@@ -317,9 +368,20 @@ export function validateTextRunLayoutResult<Style extends TextRunLayoutStyle>(
   ) {
     return "Text run layout provider identity is missing";
   }
-  if (!validSize(value.size) || !validBounds(value.contentBounds)) {
+  if (
+    !validSize(value.size) ||
+    !validBounds(value.contentBounds) ||
+    !validBounds(value.fullContentBounds)
+  ) {
     return "Text run layout provider returned invalid bounds";
   }
+  const displayIdentityIssue = validateTextRunDisplayIdentity(value, request);
+  if (displayIdentityIssue) return displayIdentityIssue;
+  const displayRequest = textRunDisplayRequest(
+    request,
+    value.sourceContentEnd,
+    value.truncated,
+  );
   if (
     request.mode !== "auto-width" &&
     Math.abs(value.size.width - request.width!) > 0.000_001
@@ -352,7 +414,7 @@ export function validateTextRunLayoutResult<Style extends TextRunLayoutStyle>(
   let expectedLineStart = 0;
   for (const line of lines) {
     if (
-      !safeRange(line.start, line.end, request.content.length) ||
+      !safeRange(line.start, line.end, value.displayContent.length) ||
       line.start !== expectedLineStart ||
       !finite(line.x) ||
       !finite(line.y) ||
@@ -365,8 +427,8 @@ export function validateTextRunLayoutResult<Style extends TextRunLayoutStyle>(
     }
     expectedLineStart = line.end;
   }
-  if (lines.length > 0 && expectedLineStart !== request.content.length) {
-    return "Text run layout lines do not cover source text";
+  if (lines.length > 0 && expectedLineStart !== value.displayContent.length) {
+    return "Text run layout lines do not cover display text";
   }
 
   let expectedFragmentStart = 0;
@@ -375,10 +437,11 @@ export function validateTextRunLayoutResult<Style extends TextRunLayoutStyle>(
   for (const fragment of fragments) {
     const line = lines[fragment.lineIndex];
     if (
-      !safeRange(fragment.start, fragment.end, request.content.length) ||
+      !safeRange(fragment.start, fragment.end, value.displayContent.length) ||
       fragment.start !== expectedFragmentStart ||
       fragment.end <= fragment.start ||
-      fragment.text !== request.content.slice(fragment.start, fragment.end) ||
+      fragment.text !==
+        value.displayContent.slice(fragment.start, fragment.end) ||
       !Number.isSafeInteger(fragment.lineIndex) ||
       fragment.lineIndex < 0 ||
       fragment.lineIndex >= lines.length ||
@@ -422,7 +485,7 @@ export function validateTextRunLayoutResult<Style extends TextRunLayoutStyle>(
           !Number.isSafeInteger(glyphId) ||
           Number(glyphId) < 0 ||
           Number(glyphId) > 0xffff_ffff ||
-          !safeRange(clusterStart, clusterEnd, request.content.length) ||
+          !safeRange(clusterStart, clusterEnd, value.displayContent.length) ||
           Number(clusterStart) < fragment.start ||
           Number(clusterEnd) > fragment.end ||
           Number(clusterEnd) <= Number(clusterStart) ||
@@ -463,17 +526,27 @@ export function validateTextRunLayoutResult<Style extends TextRunLayoutStyle>(
         return "Text run layout glyph clusters do not cover their fragment";
       }
     }
+    const decoration = validateTextRunLayoutDecorations(
+      fragment.decorations,
+      fragment.style.textDecoration,
+      fragment.width,
+    );
+    if (decoration.issue) return decoration.issue;
+    totalPathCharacters += decoration.pathCharacters;
+    if (totalPathCharacters > MAX_TEXT_RUN_LAYOUT_TOTAL_PATH_CHARACTERS) {
+      return "Text run layout provider exceeded outline limits";
+    }
     expectedFragmentStart = fragment.end;
   }
-  if (expectedFragmentStart !== request.content.length) {
-    return "Text run layout fragments do not cover source text";
+  if (expectedFragmentStart !== value.displayContent.length) {
+    return "Text run layout fragments do not cover display text";
   }
-  if (request.content.length === 0 && fragments.length !== 0) {
+  if (value.displayContent.length === 0 && fragments.length !== 0) {
     return "Empty text run layout must not return fragments";
   }
   const expectedMarkers = resolveTextListMarkers(
-    request.content,
-    request.paragraphRuns ?? [],
+    displayRequest.content,
+    displayRequest.paragraphRuns ?? [],
     {
       listOptions: { type: "none" },
       indentation: 0,
@@ -510,9 +583,16 @@ export function validateTextRunLayoutResult<Style extends TextRunLayoutStyle>(
     }
     const markerGlyphIssue = validateMarkerGlyphs(marker);
     if (markerGlyphIssue) return markerGlyphIssue;
+    const decoration = validateTextRunLayoutDecorations(
+      marker.decorations,
+      marker.style.textDecoration,
+      marker.width,
+    );
+    if (decoration.issue) return decoration.issue;
     glyphCount += marker.glyphs?.length ?? 0;
     totalPathCharacters +=
       marker.glyphs?.reduce((sum, glyph) => sum + glyph.path.length, 0) ?? 0;
+    totalPathCharacters += decoration.pathCharacters;
     if (glyphCount > MAX_TEXT_RUN_LAYOUT_GLYPHS) {
       return "Text run layout provider exceeded glyph limits";
     }

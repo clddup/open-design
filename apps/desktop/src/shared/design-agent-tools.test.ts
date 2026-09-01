@@ -3683,10 +3683,12 @@ describe("design Agent tool contract", () => {
     };
     const connect = {
       action: "connect-endpoints",
+      endpoints: [
+        { nodeId: "logo_contour", vertexId: "vertex_logo_a" },
+        { nodeId: "logo_contour", vertexId: "vertex_logo_b" },
+      ],
       label: "Connect the logo contour endpoints",
-      nodeId: "logo_contour",
       pageId: "page_brand",
-      vertexIds: ["vertex_logo_a", "vertex_logo_b"],
     };
     const disconnect = {
       action: "disconnect-vertex",
@@ -3694,7 +3696,22 @@ describe("design Agent tool contract", () => {
       nodeId: "logo_contour",
       pageId: "page_brand",
       pathId: "path_logo",
+      segmentId: "segment_logo_branch",
       vertexId: "vertex_logo_mid",
+    };
+    const deleteSegments = {
+      action: "delete-segments",
+      label: "Delete the logo branch segment",
+      nodeId: "logo_contour",
+      pageId: "page_brand",
+      segmentIds: ["segment_logo_branch"],
+    };
+    const deleteVertices = {
+      action: "delete-vertices",
+      label: "Delete the logo junction",
+      nodeId: "logo_contour",
+      pageId: "page_brand",
+      vertexIds: ["vertex_logo_mid"],
     };
     const transform = {
       action: "transform-vertices",
@@ -3761,6 +3778,12 @@ describe("design Agent tool contract", () => {
       validateDesignAgentToolInput(DESIGN_VECTOR_TOOL_NAME, disconnect),
     ).toBe(true);
     expect(
+      validateDesignAgentToolInput(DESIGN_VECTOR_TOOL_NAME, deleteSegments),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_VECTOR_TOOL_NAME, deleteVertices),
+    ).toBe(true);
+    expect(
       validateDesignAgentToolInput(DESIGN_VECTOR_TOOL_NAME, transform),
     ).toBe(true);
     expect(
@@ -3775,7 +3798,10 @@ describe("design Agent tool contract", () => {
     expect(
       validateDesignAgentToolInput(DESIGN_VECTOR_TOOL_NAME, {
         ...connect,
-        vertexIds: ["vertex_logo_a", "vertex_logo_a"],
+        endpoints: [
+          { nodeId: "logo_contour", vertexId: "vertex_logo_a" },
+          { nodeId: "logo_contour", vertexId: "vertex_logo_a" },
+        ],
       }),
     ).toBe(false);
     expect(
@@ -3793,6 +3819,12 @@ describe("design Agent tool contract", () => {
     expect(
       validateDesignAgentToolInput(DESIGN_VECTOR_TOOL_NAME, {
         ...transform,
+        vertexIds: [],
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_VECTOR_TOOL_NAME, {
+        ...deleteVertices,
         vertexIds: [],
       }),
     ).toBe(false);

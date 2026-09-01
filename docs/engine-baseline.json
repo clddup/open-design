@@ -1,22 +1,22 @@
 {
-  "schemaVersion": 63,
-  "recordedAt": "2026-08-31",
+  "schemaVersion": 81,
+  "recordedAt": "2026-09-01",
   "policy": {
     "allowFloatingRefs": false,
     "upgradeRequiresCompatibilityReview": true
   },
   "contracts": {
     "documentFormat": "dev.opendesign.document",
-    "documentSchemaVersion": "1.48.0",
+    "documentSchemaVersion": "1.53.0",
     "runtimeProtocolVersion": "0.1.0",
     "agentProtocolVersion": "3.13.0",
-    "geometryServiceContractVersion": 15,
+    "geometryServiceContractVersion": 26,
     "textLayoutServiceContractVersion": 5,
     "textRangeServiceContractVersion": 1,
     "textParagraphServiceContractVersion": 2,
     "textListServiceContractVersion": 1,
     "textEditingSessionServiceContractVersion": 2,
-    "textRunLayoutServiceContractVersion": 4,
+    "textRunLayoutServiceContractVersion": 6,
     "layoutServiceContractVersion": 11,
     "imageServiceContractVersion": 8
   },
@@ -64,8 +64,8 @@
       "role": "figma-compatible-local-and-imported-shared-style-resolution-service",
       "package": "@opendesign/style-service",
       "path": "packages/style-service",
-      "contractVersion": 2,
-      "productionStatus": "same-file-and-same-project-library-paint-text-effect-grid-styles-available-native-gate-pending"
+      "contractVersion": 3,
+      "productionStatus": "same-file-and-same-project-library-paint-text-effect-grid-and-rich-text-run-style-resolution-available-native-gate-pending"
     },
     "figmaInterop": {
       "role": "isolated-figma-public-api-compatibility-adapter",
@@ -85,7 +85,7 @@
       "version": "1.0.0",
       "source": "https://github.com/google/skia/tree/main/modules/pathkit",
       "license": "BSD-3-Clause",
-      "productionStatus": "boolean-pen-advanced-bend-cut-connect-disconnect-point-transform-segment-delete-and-region-fill-native-gate-pending",
+      "productionStatus": "boolean-pen-advanced-bend-cut-connect-disconnect-branch-junction-point-transform-delete-cut-independent-handle-segment-bend-branch-segment-cut-delete-endpoint-disconnect-closed-disconnect-endpoint-merge-explicit-path-topology-segment-delete-region-fill-vector-corner-smoothing-and-frame-group-boolean-text-image-flatten-native-gate-pending",
       "entrypoint": "@opendesign/geometry-service/vector-path",
       "editableVectorEntrypoint": "@opendesign/geometry-service/editable-vector",
       "vectorEditEntrypoint": "@opendesign/geometry-service/vector-edit",
@@ -138,7 +138,7 @@
     "textRunLayout": {
       "role": "authoritative-rich-text-run-and-complex-script-layout-provider",
       "contractPackage": "@opendesign/text-service",
-      "contractVersion": 4,
+      "contractVersion": 6,
       "adapterPackage": "@opendesign/leafer-engine",
       "provider": "harfbuzzjs",
       "version": "1.4.0",
@@ -148,7 +148,7 @@
       "simpleRunProvider": "leafer-editor 2.2.9",
       "fontBinaryFormats": ["ttf", "otf", "ttc"],
       "fontBinaryLimitBytes": 33554432,
-      "productionStatus": "document-character-paragraph-and-list-range-schema-runtime-inspector-agent-figma-svg-and-exact-revision-native-harfbuzz-projection-available-caret-auto-list-custom-markers-opentype-axes-font-packaging-newer-bidi-and-native-gate-pending"
+      "productionStatus": "document-character-paragraph-and-list-range-schema-runtime-inspector-agent-figma-svg-exact-revision-native-harfbuzz-projection-and-exact-ending-truncation-available-caret-auto-list-custom-markers-opentype-axes-font-packaging-newer-bidi-and-native-gate-pending"
     },
     "layout": {
       "role": "versioned-frame-constraints-and-auto-layout-provider",

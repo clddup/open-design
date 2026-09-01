@@ -17,6 +17,28 @@ export function designDocumentDomainIssues(
           "Correct the node layout limits; do not rely on the loader to rewrite current document data.",
       });
     }
+    if (
+      (node.kind === "path" || node.kind === "vector") &&
+      "network" in node.properties
+    ) {
+      for (const [
+        regionIndex,
+        region,
+      ] of node.properties.network.regions.entries()) {
+        if (
+          region.fillStyleId !== undefined &&
+          documentStyleType(document, region.fillStyleId) !== "PAINT"
+        ) {
+          issues.push(
+            issue(
+              "design.document_vector_region_fill_style_reference_invalid",
+              `${nodePath}/properties/network/regions/${regionIndex}/fillStyleId`,
+              "Vector region fillStyleId must reference a PAINT style",
+            ),
+          );
+        }
+      }
+    }
     if (node.kind !== "text") continue;
     const textRunIssue = validateTextRuns(document, node, nodePath);
     if (textRunIssue) issues.push(textRunIssue);

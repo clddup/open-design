@@ -18,6 +18,7 @@ import { resolveTextListMarkers } from "./text-lists.js";
 import {
   validateTextRunLayoutRequest,
   validateTextRunLayoutResult,
+  type TextRunLayoutDecoration,
   type TextRunLayoutFragment,
   type TextRunLayoutGlyph,
   type TextRunLayoutLine,
@@ -27,6 +28,10 @@ import {
   type TextRunLayoutResult,
   type TextRunLayoutStyle,
 } from "./text-run-layout.js";
+import {
+  layoutTextRunWithEndingTruncation,
+  type RawTextRunLayoutResult,
+} from "./text-run-truncation.js";
 /*
  * Keep HarfBuzz behind this async factory. Importing the ordinary text
  * service must not initialize WASM or block desktop startup.
@@ -35,7 +40,7 @@ import {
 export const HARFBUZZ_TEXT_RUN_LAYOUT_PROVIDER_ID =
   "harfbuzz-wasm-text-runs" as const;
 export const HARFBUZZ_TEXT_RUN_LAYOUT_PROVIDER_VERSION =
-  "1.4.0+bidi-13+lists-v1" as const;
+  "1.6.0+bidi-13+lists-v1+decoration+ending" as const;
 export const HARFBUZZ_BIDI_UNICODE_VERSION = "13.0.0" as const;
 const HARFBUZZ_COORDINATE_SCALE = 64;
 
@@ -89,13 +94,6 @@ export async function createHarfBuzzTextRunLayoutRuntime<
           false,
         );
       }
-      if (request.baseStyle.textDecoration !== "none") {
-        return failure(
-          "unsupported",
-          "HarfBuzz glyph outline projection does not yet synthesize text decoration",
-          false,
-        );
-      }
       const runs = canonicalizeTextStyleRuns(
         request.content,
         request.runs,
@@ -111,13 +109,6 @@ export async function createHarfBuzzTextRunLayoutRuntime<
             false,
           );
         }
-        if (run.style.textDecoration !== "none") {
-          return failure(
-            "unsupported",
-            "HarfBuzz glyph outline projection does not yet synthesize text decoration",
-            false,
-          );
-        }
         const key = harfBuzzStyleKey(run.style);
         const face = registry.resolve(run.style);
         if (!face) {
@@ -130,7 +121,22 @@ export async function createHarfBuzzTextRunLayoutRuntime<
         resolved.set(key, face);
       }
       try {
-        const result = layoutWithHarfBuzz(hb, bidi, request, runs, resolved);
+        const result = layoutTextRunWithEndingTruncation(
+          request,
+          (displayRequest) =>
+            layoutWithHarfBuzz(
+              hb,
+              bidi,
+              displayRequest,
+              canonicalizeTextStyleRuns(
+                displayRequest.content,
+                displayRequest.runs,
+                displayRequest.baseStyle,
+                equalStyle,
+              ),
+              resolved,
+            ),
+        );
         const resultIssue = validateTextRunLayoutResult(result, request);
         return resultIssue
           ? failure("measurement-failed", resultIssue, false)
@@ -215,7 +221,7 @@ function layoutWithHarfBuzz<Style extends TextRunLayoutStyle>(
   request: TextRunLayoutRequest<Style>,
   runs: readonly TextStyleRun<Style>[],
   resolved: ReadonlyMap<string, RegisteredHarfBuzzFace>,
-): TextRunLayoutResult<Style> {
+): RawTextRunLayoutResult<Style> {
   const paragraphRuns = canonicalizeTextParagraphRuns(
     request.content,
     request.paragraphRuns ?? [],
@@ -387,6 +393,7 @@ function layoutWithHarfBuzz<Style extends TextRunLayoutStyle>(
         lineX,
         lineY,
         metrics,
+        resolved,
       ),
     );
     lineY += metrics.height;
@@ -402,6 +409,9 @@ function layoutWithHarfBuzz<Style extends TextRunLayoutStyle>(
       }
       return {
         baseline: normalize(marker.baseline),
+        ...(marker.decorations.length === 0
+          ? {}
+          : { decorations: marker.decorations }),
         direction: marker.direction,
         glyphs: marker.glyphs,
         height: normalize(marker.height),
@@ -439,6 +449,7 @@ function layoutWithHarfBuzz<Style extends TextRunLayoutStyle>(
     ok: true,
     provider: HARFBUZZ_TEXT_RUN_LAYOUT_PROVIDER_ID,
     providerVersion: HARFBUZZ_TEXT_RUN_LAYOUT_PROVIDER_VERSION,
+    sourceClusterEnds: clusters.map((cluster) => cluster.end),
     size: { height: normalize(height), width: normalize(width) },
     warnings: [],
   };
@@ -578,6 +589,7 @@ function shapeListMarker<Style extends TextRunLayoutStyle>(
   registered: RegisteredHarfBuzzFace,
 ): {
   baseline: number;
+  decorations: readonly TextRunLayoutDecoration[];
   glyphs: readonly TextRunLayoutGlyph[];
   height: number;
   width: number;
@@ -607,10 +619,12 @@ function shapeListMarker<Style extends TextRunLayoutStyle>(
     0,
     0,
     metrics,
-  ).flatMap((fragment) => fragment.glyphs ?? []);
+    new Map([[harfBuzzStyleKey(style), registered]]),
+  );
   return {
     baseline: metrics.ascent,
-    glyphs,
+    decorations: glyphs.flatMap((fragment) => fragment.decorations ?? []),
+    glyphs: glyphs.flatMap((fragment) => fragment.glyphs ?? []),
     height: metrics.height,
     width: metrics.width,
   };
@@ -757,6 +771,7 @@ function positionLine<Style extends TextRunLayoutStyle>(
   lineX: number,
   lineY: number,
   metrics: { ascent: number; height: number; width: number },
+  resolved: ReadonlyMap<string, RegisteredHarfBuzzFace>,
 ): TextRunLayoutFragment<Style>[] {
   const visual = [...line.clusters];
   if (line.start < line.end) {
@@ -845,8 +860,11 @@ function positionLine<Style extends TextRunLayoutStyle>(
         Math.max(maximum, candidate.x + candidate.cluster.advance),
       fragmentX,
     );
+    const width = normalize(fragmentRight - fragmentX);
+    const decorations = decorationOutlines(run.style, width, resolved);
     fragments.push({
       baseline: normalize(metrics.ascent),
+      ...(decorations.length === 0 ? {} : { decorations }),
       end,
       glyphs: absoluteGlyphs.map((glyph) => ({
         ...glyph,
@@ -857,13 +875,46 @@ function positionLine<Style extends TextRunLayoutStyle>(
       start,
       style: run.style,
       text: content.slice(start, end),
-      width: normalize(fragmentRight - fragmentX),
+      width,
       x: normalize(fragmentX),
       y: normalize(lineY),
     });
     start = end;
   }
   return fragments;
+}
+
+function decorationOutlines(
+  style: TextRunLayoutStyle,
+  width: number,
+  resolved: ReadonlyMap<string, RegisteredHarfBuzzFace>,
+): TextRunLayoutDecoration[] {
+  if (style.textDecoration === "none" || width === 0) return [];
+  const face = resolved.get(harfBuzzStyleKey(style));
+  if (!face?.decorationMetrics) {
+    throw new UnsupportedShapingError(
+      `Imported font face has no exact ${style.textDecoration} metrics`,
+    );
+  }
+  const scale = style.fontSize / face.descriptor.unitsPerEm;
+  const position =
+    style.textDecoration === "underline"
+      ? face.decorationMetrics.underlinePosition
+      : face.decorationMetrics.strikethroughPosition;
+  const thickness =
+    style.textDecoration === "underline"
+      ? face.decorationMetrics.underlineThickness
+      : face.decorationMetrics.strikethroughThickness;
+  const center = normalize(position * scale);
+  const height = normalize(thickness * scale);
+  const top = normalize(center + height / 2);
+  const bottom = normalize(center - height / 2);
+  return [
+    {
+      kind: style.textDecoration,
+      path: `M0 ${bottom}L${width} ${bottom}L${width} ${top}L0 ${top}Z`,
+    },
+  ];
 }
 
 function fontMetrics<Style extends TextRunLayoutStyle>(

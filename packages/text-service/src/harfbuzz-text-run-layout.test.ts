@@ -63,11 +63,13 @@ function request<Style extends TextRunLayoutStyle>(
     mode: "auto-width",
     hangingList: false,
     listSpacing: 0,
+    maxLines: null,
     paragraphIndent: 0,
     paragraphSpacing: 0,
     runs: [],
     textAlignHorizontal: "left",
     textAlignVertical: "top",
+    textTruncation: "disabled",
     textWrap: "none",
     ...overrides,
   };
@@ -94,11 +96,31 @@ describe("HarfBuzz text run layout", () => {
       ok: false,
       retryable: true,
     });
+    const underlined = runtime.provider.layout(
+      request("سلام", { ...style(face), textDecoration: "underline" }),
+    );
+    expect(underlined.ok).toBe(true);
+    if (!underlined.ok) return;
+    expect(underlined.fragments).not.toHaveLength(0);
     expect(
-      runtime.provider.layout(
-        request("سلام", { ...style(face), textDecoration: "underline" }),
+      underlined.fragments.every(
+        (fragment) => fragment.decorations?.[0]?.kind === "underline",
       ),
-    ).toMatchObject({ code: "unsupported", ok: false, retryable: false });
+    ).toBe(true);
+    expect(
+      underlined.fragments.every(
+        (fragment) => (fragment.decorations?.[0]?.path.length ?? 0) > 0,
+      ),
+    ).toBe(true);
+    const struck = runtime.provider.layout(
+      request("سلام", {
+        ...style(face),
+        textDecoration: "strikethrough",
+      }),
+    );
+    expect(struck.ok && struck.fragments[0]?.decorations?.[0]?.kind).toBe(
+      "strikethrough",
+    );
   });
 
   it("shapes Arabic context without breaking at a fill-only range", async () => {
@@ -129,6 +151,34 @@ describe("HarfBuzz text run layout", () => {
         .flatMap((fragment) => fragment.glyphs ?? [])
         .every((glyph) => glyph.path.length > 0),
     ).toBe(true);
+  });
+
+  it("reshapes an exact ending-truncation display string without mutating source content", async () => {
+    const runtime = await createHarfBuzzTextRunLayoutRuntime();
+    const face = await register(runtime, fontUrls.latin);
+    const content = "OpenDesign creates editable professional interfaces";
+    const result = runtime.provider.layout(
+      request(content, style(face), {
+        maxLines: 1,
+        mode: "auto-height",
+        textTruncation: "ending",
+        textWrap: "character",
+        width: 180,
+      }),
+    );
+    expect(result).toMatchObject({ ok: true, truncated: true });
+    if (!result.ok) return;
+    expect(result.displayContent).toBe(
+      `${content.slice(0, result.sourceContentEnd)}...`,
+    );
+    expect(result.sourceContentEnd).toBeLessThan(content.length);
+    expect(result.lines).toHaveLength(1);
+    expect(result.fragments.map((fragment) => fragment.text).join("")).toBe(
+      result.displayContent,
+    );
+    expect(result.fullContentBounds.height).toBeGreaterThan(
+      result.contentBounds.height,
+    );
   });
 
   it("keeps default Latin ligatures as one UTF-16 cluster", async () => {

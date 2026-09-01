@@ -332,11 +332,14 @@ export interface LeaferBooleanEditScope {
 export interface LeaferVectorEditScope {
   activeNodeId: string;
   nodes: readonly {
+    activePathId?: string;
     nodeId: string;
     readOnly: boolean;
     selectedSegmentIds: readonly string[];
     selectedVertexIds: readonly string[];
+    topologyEditable: boolean;
   }[];
+  fillStyleId?: string;
   paint?: readonly Paint[];
   tool: LeaferVectorEditTool;
 }
@@ -453,6 +456,7 @@ export interface LeaferFidelityWarning {
     | "style-resolution-failed"
     | "variable-resolution-failed"
     | "unsupported-color-alpha"
+    | "vector-stroke-appearance-unsupported"
     | "unsupported-node";
   message: string;
   nodeId: string;

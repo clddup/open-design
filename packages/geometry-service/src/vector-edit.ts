@@ -10,12 +10,20 @@ import type {
   VectorSegment,
   VectorSegmentReference,
   VectorVertex,
+  VectorVertexStrokeCap,
+  VectorVertexStrokeJoin,
 } from "@opendesign/design-contracts";
 import {
   serializeVectorNetwork,
   validateVectorNetwork,
   vectorNetworkHasBranches,
 } from "./editable-vector.js";
+import {
+  pathConnectivityGroups,
+  resolveConnectedLineCutOwnership,
+  sharedPathVertexIds,
+  type VectorLineSide,
+} from "./vector-line-cut-connectivity.js";
 
 export type VectorHandleSide = "start" | "end";
 
@@ -44,6 +52,149 @@ export type VectorEditResult =
   | { ok: true; network: VectorNetwork }
   | { ok: false; code: VectorEditFailureCode; message: string };
 
+export interface VectorVertexStrokeAppearancePatch {
+  strokeCap?: VectorVertexStrokeCap | null;
+  strokeJoin?: VectorVertexStrokeJoin | null;
+}
+
+export function setVectorVertexCornerRadius(
+  network: VectorNetwork,
+  vertexIds: readonly string[],
+  cornerRadius: number | null,
+): VectorEditResult {
+  const failure = editableFailure(network);
+  if (failure) return failure;
+  if (
+    cornerRadius !== null &&
+    (!Number.isFinite(cornerRadius) || cornerRadius < 0)
+  ) {
+    return invalidNetwork("Vector vertex corner radius must be non-negative");
+  }
+  const selected = new Set(vertexIds);
+  if (selected.size === 0)
+    return missingVertex("No vector vertices are selected");
+  if (
+    [...selected].some(
+      (vertexId) => !network.vertices.some((vertex) => vertex.id === vertexId),
+    )
+  ) {
+    return missingVertex("A selected vector vertex does not exist");
+  }
+  if (cornerRadius !== null && cornerRadius > 0) {
+    const eligible = new Set(vectorCornerRadiusEligibleVertexIds(network));
+    const unsupported = [...selected].find(
+      (vertexId) => !eligible.has(vertexId),
+    );
+    if (unsupported) {
+      return unsupportedTopology(
+        `Vector vertex ${unsupported} requires a closed contour with two straight adjacent segments`,
+      );
+    }
+  }
+  const next = structuredClone(network);
+  let changed = false;
+  for (const vertex of next.vertices) {
+    if (!selected.has(vertex.id)) continue;
+    const value = cornerRadius ?? undefined;
+    if (vertex.cornerRadius === value) continue;
+    changed = true;
+    if (cornerRadius === null) delete vertex.cornerRadius;
+    else vertex.cornerRadius = cornerRadius;
+  }
+  return changed
+    ? { ok: true, network: next }
+    : noOp("Selected vector vertices already use that corner radius");
+}
+
+export function vectorCornerRadiusEligibleVertexIds(
+  network: VectorNetwork,
+): readonly string[] {
+  const segments = new Map(
+    network.segments.map((segment) => [segment.id, segment]),
+  );
+  const straightSegment = (
+    reference: VectorSegmentReference | undefined,
+  ): boolean => {
+    const segment = reference && segments.get(reference.segmentId);
+    return Boolean(
+      segment &&
+      !meaningful(segment.tangentStart) &&
+      !meaningful(segment.tangentEnd),
+    );
+  };
+  const result: string[] = [];
+  for (const contour of editableContours(network)) {
+    if (!contour.closed) continue;
+    contour.vertexIds.forEach((vertexId, index) => {
+      const previous =
+        contour.references[
+          (index - 1 + contour.references.length) % contour.references.length
+        ];
+      const next = contour.references[index];
+      if ([previous, next].every((reference) => straightSegment(reference))) {
+        result.push(vertexId);
+      }
+    });
+  }
+  return result;
+}
+
+export function setVectorVertexStrokeAppearance(
+  network: VectorNetwork,
+  vertexIds: readonly string[],
+  patch: VectorVertexStrokeAppearancePatch,
+): VectorEditResult {
+  const issues = validateVectorNetwork(network);
+  if (issues.length > 0)
+    return invalidNetwork(issues.map((issue) => issue.message).join("; "));
+  const selected = new Set(vertexIds);
+  if (selected.size === 0)
+    return missingVertex("No vector vertices are selected");
+  if (
+    [...selected].some(
+      (vertexId) => !network.vertices.some((vertex) => vertex.id === vertexId),
+    )
+  ) {
+    return missingVertex("A selected vector vertex does not exist");
+  }
+  const hasCap = Object.hasOwn(patch, "strokeCap");
+  const hasJoin = Object.hasOwn(patch, "strokeJoin");
+  if (!hasCap && !hasJoin) {
+    return noOp("Vector vertex stroke appearance patch is empty");
+  }
+  const next = structuredClone(network);
+  let changed = false;
+  for (const vertex of next.vertices) {
+    if (!selected.has(vertex.id)) continue;
+    changed =
+      updateVertexStrokeAppearance(vertex, patch, hasCap, hasJoin) || changed;
+  }
+  return changed
+    ? { ok: true, network: next }
+    : noOp("Selected vector vertices already use that stroke appearance");
+}
+
+function updateVertexStrokeAppearance(
+  vertex: VectorVertex,
+  patch: VectorVertexStrokeAppearancePatch,
+  hasCap: boolean,
+  hasJoin: boolean,
+): boolean {
+  let changed = false;
+  if (hasCap && vertex.strokeCap !== (patch.strokeCap ?? undefined)) {
+    changed = true;
+    if (patch.strokeCap === null) delete vertex.strokeCap;
+    else if (patch.strokeCap !== undefined) vertex.strokeCap = patch.strokeCap;
+  }
+  if (hasJoin && vertex.strokeJoin !== (patch.strokeJoin ?? undefined)) {
+    changed = true;
+    if (patch.strokeJoin === null) delete vertex.strokeJoin;
+    else if (patch.strokeJoin !== undefined)
+      vertex.strokeJoin = patch.strokeJoin;
+  }
+  return changed;
+}
+
 export function setVectorRegionFills(
   network: VectorNetwork,
   regionId: string,
@@ -63,14 +214,48 @@ export function setVectorRegionFills(
     };
   }
   const current = network.regions[regionIndex]!.fills;
-  if (JSON.stringify(current ?? null) === JSON.stringify(fills)) {
+  if (
+    network.regions[regionIndex]!.fillStyleId === undefined &&
+    JSON.stringify(current ?? null) === JSON.stringify(fills)
+  ) {
     return noOp(`Vector region ${regionId} already uses those fills`);
   }
   const next = structuredClone(network);
-  next.regions[regionIndex] = {
-    ...next.regions[regionIndex]!,
-    fills: fills.map((paint) => structuredClone(paint)),
-  };
+  const region = next.regions[regionIndex]!;
+  region.fills = fills.map((paint) => structuredClone(paint));
+  delete region.fillStyleId;
+  return { ok: true, network: next };
+}
+
+export function setVectorRegionFillStyle(
+  network: VectorNetwork,
+  regionId: string,
+  fillStyleId: string,
+): VectorEditResult {
+  const issues = validateVectorNetwork(network);
+  if (issues.length > 0)
+    return invalidNetwork(issues.map((issue) => issue.message).join("; "));
+  if (!fillStyleId || fillStyleId.length > 256) {
+    return invalidNetwork("Vector region fillStyleId is invalid");
+  }
+  const regionIndex = network.regions.findIndex(
+    (candidate) => candidate.id === regionId,
+  );
+  if (regionIndex < 0) {
+    return {
+      ok: false,
+      code: "missing-region",
+      message: `Vector region ${regionId} does not exist`,
+    };
+  }
+  const current = network.regions[regionIndex]!;
+  if (current.fillStyleId === fillStyleId && current.fills === undefined) {
+    return noOp(`Vector region ${regionId} already uses Style ${fillStyleId}`);
+  }
+  const next = structuredClone(network);
+  const region = next.regions[regionIndex]!;
+  region.fillStyleId = fillStyleId;
+  delete region.fills;
   return { ok: true, network: next };
 }
 
@@ -138,17 +323,12 @@ const LINE_CUT_SIDE_EPSILON = 0.000_001;
 export function vectorNetworkEditability(
   network: VectorNetwork,
 ): { editable: true } | { editable: false; reason: string } {
-  const issues = validateVectorNetwork(network);
-  if (issues.length > 0) {
-    return {
-      editable: false,
-      reason: issues.map((issue) => issue.message).join("; "),
-    };
-  }
+  const pointEditability = vectorNetworkPointEditability(network);
+  if (!pointEditability.editable) return pointEditability;
   if (vectorNetworkHasBranches(network)) {
     return {
       editable: false,
-      reason: "Branching vector networks require the branch editing slice",
+      reason: "Branching vector networks require topology-specific editing",
     };
   }
   const owners = new Map<string, string>();
@@ -158,12 +338,24 @@ export function vectorNetworkEditability(
       if (owner && owner !== contour.pathId) {
         return {
           editable: false,
-          reason:
-            "Connected path runs require the connect/disconnect editing slice",
+          reason: "Connected path runs require topology-specific editing",
         };
       }
       owners.set(vertexId, contour.pathId);
     }
+  }
+  return { editable: true };
+}
+
+export function vectorNetworkPointEditability(
+  network: VectorNetwork,
+): { editable: true } | { editable: false; reason: string } {
+  const issues = validateVectorNetwork(network);
+  if (issues.length > 0) {
+    return {
+      editable: false,
+      reason: issues.map((issue) => issue.message).join("; "),
+    };
   }
   if (network.paths.length === 0) {
     return {
@@ -178,10 +370,11 @@ export function findVectorPathIdForVertex(
   network: VectorNetwork,
   vertexId: string,
 ): string | undefined {
-  if (!vectorNetworkEditability(network).editable) return undefined;
-  return editableContours(network).find((contour) =>
+  if (!vectorNetworkPointEditability(network).editable) return undefined;
+  const paths = uncheckedEditableContours(network).filter((contour) =>
     contour.vertexIds.includes(vertexId),
-  )?.pathId;
+  );
+  return paths.length === 1 ? paths[0]?.pathId : undefined;
 }
 
 export function listVectorVertexHandles(
@@ -250,7 +443,7 @@ export function moveVectorVertices(
   vertexIds: readonly string[],
   delta: Point,
 ): VectorEditResult {
-  const failure = editableFailure(network);
+  const failure = pointEditableFailure(network);
   if (failure) return failure;
   if (!Number.isFinite(delta.x) || !Number.isFinite(delta.y)) {
     return invalidNetwork("Vector edit delta must be finite");
@@ -306,7 +499,7 @@ export function transformVectorVertices(
   vertexIds: readonly string[],
   transform: Transform,
 ): VectorEditResult {
-  const failure = editableFailure(network);
+  const failure = pointEditableFailure(network);
   if (failure) return failure;
   if (transform.length !== 6 || !transform.every(Number.isFinite)) {
     return invalidNetwork(
@@ -388,15 +581,15 @@ export function transformVectorVertices(
 }
 
 /**
- * Connects two real endpoints without introducing a branch. Endpoints on one
- * open contour close it; endpoints on two open contours add one connector and
- * merge both path runs while preserving the earlier path ID.
+ * Connects two selected vertices. Two open endpoints retain the existing
+ * contour-merge behavior; one endpoint plus one vertex extends that path to a
+ * shared junction and creates a branch without rewriting either source path.
  */
 export function connectVectorEndpoints(
   network: VectorNetwork,
   vertexIds: readonly [string, string],
 ): VectorEditResult {
-  const failure = editableFailure(network);
+  const failure = pointEditableFailure(network);
   if (failure) return failure;
   const [firstVertexId, secondVertexId] = vertexIds;
   if (firstVertexId === secondVertexId) {
@@ -404,9 +597,25 @@ export function connectVectorEndpoints(
   }
   const first = endpointContour(network, firstVertexId);
   const second = endpointContour(network, secondVertexId);
+  if (first && !second) {
+    return connectVectorEndpointToVertex(
+      network,
+      first,
+      firstVertexId,
+      secondVertexId,
+    );
+  }
+  if (!first && second) {
+    return connectVectorEndpointToVertex(
+      network,
+      second,
+      secondVertexId,
+      firstVertexId,
+    );
+  }
   if (!first || !second) {
     return unsupportedTopology(
-      "Vector Connect requires two endpoints from supported open contours",
+      "Vector Connect requires two endpoints or one endpoint and one existing junction target",
     );
   }
   if (first.pathId === second.pathId) {
@@ -504,13 +713,245 @@ export function connectVectorEndpoints(
   return validated(next);
 }
 
-/** Creates a true topological break at one non-endpoint vertex. */
+function connectVectorEndpointToVertex(
+  network: VectorNetwork,
+  contour: EditableContour,
+  endpointVertexId: string,
+  targetVertexId: string,
+): VectorEditResult {
+  const target = network.vertices.find(({ id }) => id === targetVertexId);
+  const endpoint = network.vertices.find(({ id }) => id === endpointVertexId);
+  if (!target || !endpoint) {
+    return missingVertex("A selected Vector Connect vertex does not exist");
+  }
+  if (contour.vertexIds.includes(targetVertexId)) {
+    return unsupportedTopology(
+      "Vector branch Connect cannot target the same path as its source endpoint",
+    );
+  }
+  const references = referencesWithEndpoint(contour, endpointVertexId, "end");
+  if (!references) {
+    return unsupportedTopology(
+      "Vector branch Connect could not orient the source endpoint",
+    );
+  }
+  const next = structuredClone(network);
+  const path = next.paths.find(({ id }) => id === contour.pathId)!;
+  const coincident = samePoint(endpoint, target);
+  const connector = coincident
+    ? null
+    : branchConnector(next, endpointVertexId, targetVertexId);
+  if (coincident) {
+    replacePathEndpoint(next, references, endpointVertexId, targetVertexId);
+    next.vertices = next.vertices.filter(({ id }) => id !== endpointVertexId);
+  } else if (connector) {
+    next.segments.push(connector);
+  }
+  path.closed = false;
+  path.segments = [
+    ...references,
+    ...(connector ? [{ segmentId: connector.id, reversed: false }] : []),
+  ];
+  const junction = next.vertices.find(({ id }) => id === targetVertexId)!;
+  junction.handleMode = "independent";
+  delete junction.cornerRadius;
+  return validated(next);
+}
+
+function branchConnector(
+  network: VectorNetwork,
+  endpointVertexId: string,
+  targetVertexId: string,
+): VectorSegment {
+  const connector: VectorSegment = {
+    id: nextSegmentId(new Set(network.segments.map(({ id }) => id))),
+    startVertexId: endpointVertexId,
+    endVertexId: targetVertexId,
+  };
+  mirrorEndpointHandleIntoClosingSegment(
+    network,
+    endpointVertexId,
+    "outgoing",
+    connector,
+  );
+  return connector;
+}
+
+function replacePathEndpoint(
+  network: VectorNetwork,
+  references: readonly VectorSegmentReference[],
+  endpointVertexId: string,
+  targetVertexId: string,
+): void {
+  const segmentIds = new Set(references.map(({ segmentId }) => segmentId));
+  network.segments = network.segments.map((segment) =>
+    !segmentIds.has(segment.id)
+      ? segment
+      : {
+          ...segment,
+          ...(segment.startVertexId === endpointVertexId
+            ? { startVertexId: targetVertexId }
+            : {}),
+          ...(segment.endVertexId === endpointVertexId
+            ? { endVertexId: targetVertexId }
+            : {}),
+        },
+  );
+}
+
+/**
+ * Creates a true topological break on one explicit path. A shared endpoint can
+ * be detached directly; an internal junction additionally requires the exact
+ * incident segment so the host never guesses which edge to separate.
+ */
 export function disconnectVectorVertex(
   network: VectorNetwork,
   pathId: string,
   vertexId: string,
+  incidentSegmentId?: string,
 ): VectorCutResult {
-  return cutVectorPath(network, pathId, { kind: "vertex", vertexId });
+  const failure = pointEditableFailure(network);
+  if (failure) return failure;
+  const contour = uncheckedEditableContours(network).find(
+    (candidate) => candidate.pathId === pathId,
+  );
+  if (!contour) return missingPath(`Vector path ${pathId} does not exist`);
+  const vertexIndex = contour.vertexIds.indexOf(vertexId);
+  if (vertexIndex < 0) {
+    return missingVertex(
+      `Vector vertex ${vertexId} does not belong to path ${pathId}`,
+    );
+  }
+  const ownerCount = uncheckedEditableContours(network).filter((candidate) =>
+    candidate.vertexIds.includes(vertexId),
+  ).length;
+  if (ownerCount > 1) {
+    const endpoint =
+      !contour.closed &&
+      (vertexIndex === 0 || vertexIndex === contour.vertexIds.length - 1);
+    if (!endpoint) {
+      if (incidentSegmentId) {
+        return detachInternalJunctionEdge(
+          network,
+          contour,
+          vertexId,
+          incidentSegmentId,
+        );
+      }
+      return unsupportedTopology(
+        "Disconnecting an internal branch junction requires an explicit incident edge",
+      );
+    }
+    return detachSharedPathEndpoint(network, contour, vertexId);
+  }
+  return cutVectorPathAtVertex(network, contour, vertexId);
+}
+
+function detachInternalJunctionEdge(
+  network: VectorNetwork,
+  contour: EditableContour,
+  vertexId: string,
+  incidentSegmentId: string,
+): VectorCutResult {
+  const vertexIndex = contour.vertexIds.indexOf(vertexId);
+  const incoming = contour.references[vertexIndex - 1];
+  const outgoing = contour.references[vertexIndex];
+  const selectedIncoming = incoming?.segmentId === incidentSegmentId;
+  const selectedOutgoing = outgoing?.segmentId === incidentSegmentId;
+  if (!selectedIncoming && !selectedOutgoing) {
+    return missingSegment(
+      `Vector segment ${incidentSegmentId} is not incident to vertex ${vertexId} on path ${contour.pathId}`,
+    );
+  }
+
+  const next = structuredClone(network);
+  const source = next.vertices.find((vertex) => vertex.id === vertexId)!;
+  const duplicateId = nextVertexId(
+    new Set(next.vertices.map((vertex) => vertex.id)),
+  );
+  const duplicate: VectorVertex = {
+    ...structuredClone(source),
+    id: duplicateId,
+  };
+  const sourceIndex = next.vertices.findIndex(
+    (vertex) => vertex.id === vertexId,
+  );
+  next.vertices.splice(sourceIndex + 1, 0, duplicate);
+  const selectedReference = selectedIncoming ? incoming : outgoing;
+  if (!selectedReference) {
+    return missingSegment(
+      `Vector segment ${incidentSegmentId} is not incident to vertex ${vertexId} on path ${contour.pathId}`,
+    );
+  }
+  const selectedSegment = next.segments.find(
+    (segment) => segment.id === incidentSegmentId,
+  )!;
+  if (selectedIncoming) {
+    setDirectedEndVertexId(selectedSegment, selectedReference, duplicateId);
+  } else {
+    setDirectedStartVertexId(selectedSegment, selectedReference, duplicateId);
+  }
+
+  const path = pathById(next, contour.pathId)!;
+  if (contour.closed) {
+    path.segments = [
+      ...path.segments.slice(vertexIndex),
+      ...path.segments.slice(0, vertexIndex),
+    ];
+    path.closed = false;
+    next.regions = removePathRegions(next.regions, path.id);
+    refreshPointModes(next, [vertexId, duplicateId]);
+    return validatedCut(next, [vertexId, duplicateId], [path.id]);
+  }
+  const newPathId = nextPathId(new Set(next.paths.map((item) => item.id)));
+  const newPath: VectorPathRun = {
+    id: newPathId,
+    closed: false,
+    segments: path.segments.slice(vertexIndex),
+  };
+  path.segments = path.segments.slice(0, vertexIndex);
+  const pathIndex = next.paths.findIndex((item) => item.id === path.id);
+  next.paths.splice(pathIndex + 1, 0, newPath);
+  refreshPointModes(next, [vertexId, duplicateId]);
+  return validatedCut(next, [vertexId, duplicateId], [path.id, newPathId]);
+}
+
+function detachSharedPathEndpoint(
+  network: VectorNetwork,
+  contour: EditableContour,
+  vertexId: string,
+): VectorCutResult {
+  const next = structuredClone(network);
+  const source = next.vertices.find((vertex) => vertex.id === vertexId)!;
+  const duplicateId = nextVertexId(
+    new Set(next.vertices.map((vertex) => vertex.id)),
+  );
+  const duplicate: VectorVertex = {
+    ...structuredClone(source),
+    id: duplicateId,
+  };
+  const targetSegments = new Set(
+    contour.references.map((reference) => reference.segmentId),
+  );
+  next.segments = next.segments.map((segment) =>
+    !targetSegments.has(segment.id)
+      ? segment
+      : {
+          ...segment,
+          ...(segment.startVertexId === vertexId
+            ? { startVertexId: duplicateId }
+            : {}),
+          ...(segment.endVertexId === vertexId
+            ? { endVertexId: duplicateId }
+            : {}),
+        },
+  );
+  const sourceIndex = next.vertices.findIndex(
+    (vertex) => vertex.id === vertexId,
+  );
+  next.vertices.splice(sourceIndex + 1, 0, duplicate);
+  refreshPointModes(next, [vertexId, duplicateId]);
+  return validatedCut(next, [vertexId, duplicateId], [contour.pathId]);
 }
 
 /**
@@ -523,7 +964,7 @@ export function nearestVectorSegmentPoint(
   point: Point,
 ): VectorSegmentHit | null {
   if (
-    !vectorNetworkEditability(network).editable ||
+    !vectorNetworkPointEditability(network).editable ||
     !Number.isFinite(point.x) ||
     !Number.isFinite(point.y)
   ) {
@@ -572,13 +1013,32 @@ export function cutVectorPath(
   pathId: string,
   location: VectorCutLocation,
 ): VectorCutResult {
-  const failure = editableFailure(network);
+  const failure = pointEditableFailure(network);
   if (failure) return failure;
-  const contour = editableContour(network, pathId);
+  const contour = uncheckedEditableContours(network).find(
+    (candidate) => candidate.pathId === pathId,
+  );
   if (!contour) {
     return missingPath(`Vector path ${pathId} does not exist`);
   }
   if (location.kind === "vertex") {
+    const vertexIndex = contour.vertexIds.indexOf(location.vertexId);
+    if (vertexIndex < 0) {
+      return missingVertex(
+        `Vector vertex ${location.vertexId} does not belong to path ${pathId}`,
+      );
+    }
+    const ownerCount = uncheckedEditableContours(network).filter((candidate) =>
+      candidate.vertexIds.includes(location.vertexId),
+    ).length;
+    if (ownerCount > 1) {
+      const endpoint =
+        !contour.closed &&
+        (vertexIndex === 0 || vertexIndex === contour.vertexIds.length - 1);
+      return endpoint
+        ? detachSharedPathEndpoint(network, contour, location.vertexId)
+        : cutVectorPathAtVertex(network, contour, location.vertexId);
+    }
     return cutVectorPathAtVertex(network, contour, location.vertexId);
   }
   if (!Number.isFinite(location.t)) {
@@ -609,20 +1069,21 @@ export function cutVectorPath(
 }
 
 /**
- * Divides disjoint contours crossed by a finite line segment. Closed fill
+ * Divides point-editable contours crossed by a finite line segment. Closed fill
  * regions are partitioned at every transverse crossing and rebuilt as
  * continuous editable loops with real cut connectors. Open contours split at
  * every transverse crossing; traversal-order pieces alternate between the
- * retained and extracted networks without connectors or fill regions. The
- * result containing each source outer contour's first directed vertex retains
- * the source path and region IDs.
+ * retained and extracted networks without connectors or fill regions.
+ * Connected/branch networks then assign whole shared-vertex/region components
+ * to one output. The result containing each source outer contour's first
+ * directed vertex retains the source path and region IDs.
  */
 export function cutVectorNetworkByLine(
   network: VectorNetwork,
   start: Point,
   end: Point,
 ): VectorLineCutResult {
-  const failure = editableFailure(network);
+  const failure = pointEditableFailure(network);
   if (failure) return failure;
   if (
     !Number.isFinite(start.x) ||
@@ -640,7 +1101,12 @@ export function cutVectorNetworkByLine(
     return noOp("Vector line cut requires two distinct points");
   }
 
-  const sourceContours = editableContours(network);
+  const sourceContours = uncheckedEditableContours(network);
+  const sourcePathGroups = pathConnectivityGroups(network);
+  const pathGroupById = new Map<string, string>();
+  for (const [groupId, pathIds] of sourcePathGroups) {
+    for (const pathId of pathIds) pathGroupById.set(pathId, groupId);
+  }
   const intersectionsByPath = new Map<
     string,
     readonly ContourLineCutIntersection[]
@@ -650,12 +1116,29 @@ export function cutVectorNetworkByLine(
     if (!resolved.ok) return resolved;
     intersectionsByPath.set(contour.pathId, resolved.intersections);
   }
+  const sharedVertices = sharedPathVertexIds(network);
+  const sharedIntersectionVertexId = [...sharedVertices].find((vertexId) => {
+    const vertex = network.vertices.find((item) => item.id === vertexId)!;
+    const lineT = lineParameter(start, end, vertex);
+    return (
+      Math.abs(signedLineDistance(start, end, vertex)) <=
+        LINE_CUT_SIDE_EPSILON &&
+      lineT >= -LINE_CUT_ROOT_EPSILON &&
+      lineT <= 1 + LINE_CUT_ROOT_EPSILON
+    );
+  });
+  if (sharedIntersectionVertexId) {
+    return unsupportedTopology(
+      `Drag Cut through shared junction ${sharedIntersectionVertexId} is ambiguous; cross explicit incident edges instead`,
+    );
+  }
   if ([...intersectionsByPath.values()].every((items) => items.length === 0)) {
     return noOp("Vector line cut does not cross a supported contour");
   }
 
   let divided = structuredClone(network);
   const extractedPathIds = new Set<string>();
+  const partitionPathIds = new Set<string>();
   const intersections: VectorLineCutIntersection[] = [];
   const handledRegions = new Set<string>();
   const handledClosedPaths = new Set<string>();
@@ -699,6 +1182,11 @@ export function cutVectorNetworkByLine(
     );
     if (!result.ok) return result;
     divided = result.network;
+    const groupId = pathGroupById.get(sourceContour.pathId)!;
+    for (const pathId of result.partitionPathIds) {
+      partitionPathIds.add(pathId);
+      pathGroupById.set(pathId, groupId);
+    }
     for (const pathId of result.extractedPathIds) {
       extractedPathIds.add(pathId);
     }
@@ -722,7 +1210,7 @@ export function cutVectorNetworkByLine(
     ) {
       continue;
     }
-    const currentContour = editableContour(divided, sourceContour.pathId);
+    const currentContour = lineCutContour(divided, sourceContour.pathId);
     if (!currentContour) {
       return unsupportedTopology(
         `Drag Cut lost open path ${sourceContour.pathId} during partition`,
@@ -735,18 +1223,36 @@ export function cutVectorNetworkByLine(
     );
     if (!result.ok) return result;
     divided = result.network;
+    const groupId = pathGroupById.get(sourceContour.pathId)!;
+    for (const pathId of result.partitionPathIds) {
+      partitionPathIds.add(pathId);
+      pathGroupById.set(pathId, groupId);
+    }
     for (const pathId of result.extractedPathIds) {
       extractedPathIds.add(pathId);
     }
     intersections.push(...sourceIntersections);
   }
 
+  let resolvedExtractedPathIds = extractedPathIds;
+  if (!vectorNetworkEditability(network).editable) {
+    const ownership = resolveConnectedLineCutOwnership(
+      divided,
+      partitionPathIds,
+      extractedPathIds,
+      pathGroupById,
+      (pathId) => partitionLoopSide(divided, pathId, start, end),
+    );
+    if (!ownership.ok) return ownership;
+    resolvedExtractedPathIds = new Set(ownership.extractedPathIds);
+  }
+
   const retainedPathIds = divided.paths
     .map((path) => path.id)
-    .filter((pathId) => !extractedPathIds.has(pathId));
+    .filter((pathId) => !resolvedExtractedPathIds.has(pathId));
   const extractedOrderedPathIds = divided.paths
     .map((path) => path.id)
-    .filter((pathId) => extractedPathIds.has(pathId));
+    .filter((pathId) => resolvedExtractedPathIds.has(pathId));
   const retainedNetwork = vectorNetworkSubset(divided, retainedPathIds);
   const extractedNetwork = vectorNetworkSubset(
     divided,
@@ -788,6 +1294,7 @@ type DivideClosedContourResult =
       extractedPathIds: readonly string[];
       intersections: readonly ContourLineCutIntersection[];
       network: VectorNetwork;
+      partitionPathIds: readonly string[];
     }
   | { ok: false; code: VectorEditFailureCode; message: string };
 
@@ -796,10 +1303,11 @@ type DivideOpenContourResult =
       ok: true;
       extractedPathIds: readonly string[];
       network: VectorNetwork;
+      partitionPathIds: readonly string[];
     }
   | { ok: false; code: VectorEditFailureCode; message: string };
 
-type LineSide = -1 | 1;
+type LineSide = VectorLineSide;
 
 function contourLineCutIntersections(
   network: VectorNetwork,
@@ -961,7 +1469,7 @@ function divideClosedRegionByLine(
       `Drag Cut through compound hole requires the outer boundary ${outerLoop.pathId} to be crossed`,
     );
   }
-  const stableOuterStartVertexId = editableContour(network, outerLoop.pathId)
+  const stableOuterStartVertexId = lineCutContour(network, outerLoop.pathId)
     ?.vertexIds[0];
   if (!stableOuterStartVertexId) {
     return unsupportedTopology(
@@ -975,7 +1483,7 @@ function divideClosedRegionByLine(
   const endpointToCrossing = new Map<string, ContourLineCutIntersection>();
   for (const pathId of pathIds) {
     const sourceIntersections = intersectionsByPath.get(pathId) ?? [];
-    const sourceContour = editableContour(partitioned, pathId);
+    const sourceContour = lineCutContour(partitioned, pathId);
     if (!sourceContour) {
       return unsupportedTopology(`Closed region path ${pathId} is unavailable`);
     }
@@ -1054,6 +1562,7 @@ function divideClosedRegionByLine(
     extractedPathIds: rebuilt.extractedPathIds,
     intersections: allIntersections,
     network: rebuilt.network,
+    partitionPathIds: rebuilt.partitionPathIds,
   };
 }
 
@@ -1198,6 +1707,7 @@ type RebuiltClosedPartitionResult =
       ok: true;
       extractedPathIds: readonly string[];
       network: VectorNetwork;
+      partitionPathIds: readonly string[];
     }
   | { ok: false; code: VectorEditFailureCode; message: string };
 
@@ -1433,7 +1943,12 @@ function rebuildClosedPartitionPaths(
     ...next.paths.filter((path) => !affectedPathIds.has(path.id)),
     ...orderedAffectedPathIds.map((pathId) => pathsById.get(pathId)!),
   ];
-  return { ok: true, extractedPathIds, network: next };
+  return {
+    ok: true,
+    extractedPathIds,
+    network: next,
+    partitionPathIds: rebuiltPathIds,
+  };
 }
 
 function addPartitionEdge(
@@ -1500,7 +2015,7 @@ function closedPathContainsPoint(
   pathId: string,
   point: Point,
 ): boolean {
-  const contour = editableContour(network, pathId);
+  const contour = lineCutContour(network, pathId);
   if (!contour?.closed) return false;
   const points: Point[] = [];
   const segments = new Map(
@@ -1547,7 +2062,7 @@ function partitionLoopSide(
   lineStart: Point,
   lineEnd: Point,
 ): LineSide | null {
-  const contour = editableContour(network, pathId);
+  const contour = lineCutContour(network, pathId);
   if (!contour) return null;
   for (
     let parameter = 0;
@@ -1627,7 +2142,12 @@ function divideOpenContourByLine(
       `Drag Cut did not extract a piece from ${sourceContour.pathId}`,
     );
   }
-  return { ok: true, extractedPathIds, network: divided };
+  return {
+    ok: true,
+    extractedPathIds,
+    network: divided,
+    partitionPathIds: orderedPieceIds,
+  };
 }
 
 function directedCurveLineRoots(
@@ -1849,7 +2369,7 @@ export function setVectorPathClosed(
   closed: boolean,
   pathId?: string,
 ): VectorEditResult {
-  const failure = editableFailure(network);
+  const failure = pointEditableFailure(network);
   if (failure) return failure;
   const resolved = resolveTargetContour(network, pathId);
   if (!resolved.ok) return resolved;
@@ -1922,7 +2442,7 @@ export function reverseVectorPath(
   network: VectorNetwork,
   pathId?: string,
 ): VectorEditResult {
-  const failure = editableFailure(network);
+  const failure = pointEditableFailure(network);
   if (failure) return failure;
   const resolved = resolveTargetContour(network, pathId);
   if (!resolved.ok) return resolved;
@@ -2033,7 +2553,7 @@ export function bendVectorSegment(
   t: number,
   point: Point,
 ): VectorEditResult {
-  const failure = editableFailure(network);
+  const failure = pointEditableFailure(network);
   if (failure) return failure;
   if (
     !Number.isFinite(t) ||
@@ -2085,7 +2605,7 @@ export function moveVectorHandle(
   reference: VectorHandleReference,
   offset: Point,
 ): VectorEditResult {
-  const failure = editableFailure(network);
+  const failure = pointEditableFailure(network);
   if (failure) return failure;
   if (!Number.isFinite(offset.x) || !Number.isFinite(offset.y)) {
     return invalidNetwork("Vector handle offset must be finite");
@@ -2103,7 +2623,11 @@ export function moveVectorHandle(
   const vertex = next.vertices.find((candidate) => candidate.id === vertexId);
   if (!vertex) return missingVertex(`Vector vertex ${vertexId} does not exist`);
   const references = contourHandles(next, vertexId);
-  if (!references) return unsupportedTopology();
+  if (!references) {
+    setHandle(next, reference, offset);
+    vertex.handleMode = "independent";
+    return validated(next);
+  }
   const selected = references.find(
     (candidate) =>
       candidate.segmentId === reference.segmentId &&
@@ -2142,7 +2666,7 @@ export function deleteVectorVertices(
   network: VectorNetwork,
   vertexIds: readonly string[],
 ): VectorDeleteResult {
-  const failure = editableFailure(network);
+  const failure = pointEditableFailure(network);
   if (failure) return failure;
   const selected = new Set(vertexIds);
   if (selected.size === 0)
@@ -2162,7 +2686,7 @@ export function deleteVectorVertices(
   const modifiedVertexIds = new Set<string>();
   const deletedPathIds = new Set<string>();
 
-  for (const contour of editableContours(network)) {
+  for (const contour of uncheckedEditableContours(network)) {
     const changed = contour.vertexIds.some((vertexId) =>
       selected.has(vertexId),
     );
@@ -2263,7 +2787,7 @@ export function deleteVectorSegments(
   network: VectorNetwork,
   segmentIds: readonly string[],
 ): VectorDeleteResult {
-  const failure = editableFailure(network);
+  const failure = pointEditableFailure(network);
   if (failure) return failure;
   const selected = new Set(segmentIds);
   if (selected.size === 0)
@@ -2412,6 +2936,17 @@ function editableFailure(
     : { ok: false, code: "unsupported-topology", message: editability.reason };
 }
 
+function pointEditableFailure(
+  network: VectorNetwork,
+): Extract<VectorEditResult, { ok: false }> | null {
+  const editability = vectorNetworkPointEditability(network);
+  if (editability.editable) return null;
+  const issues = validateVectorNetwork(network);
+  return issues.length
+    ? invalidNetwork(editability.reason)
+    : { ok: false, code: "unsupported-topology", message: editability.reason };
+}
+
 function editableContours(network: VectorNetwork): EditableContour[] {
   if (!vectorNetworkEditability(network).editable) return [];
   return uncheckedEditableContours(network);
@@ -2439,13 +2974,14 @@ function uncheckedEditableContours(network: VectorNetwork): EditableContour[] {
   });
 }
 
-function editableContour(
+function lineCutContour(
   network: VectorNetwork,
   pathId: string,
 ): EditableContour | null {
   return (
-    editableContours(network).find((contour) => contour.pathId === pathId) ??
-    null
+    uncheckedEditableContours(network).find(
+      (contour) => contour.pathId === pathId,
+    ) ?? null
   );
 }
 
@@ -2453,14 +2989,13 @@ function endpointContour(
   network: VectorNetwork,
   vertexId: string,
 ): EditableContour | null {
-  return (
-    editableContours(network).find(
-      (contour) =>
-        !contour.closed &&
-        (contour.vertexIds[0] === vertexId ||
-          contour.vertexIds.at(-1) === vertexId),
-    ) ?? null
+  const matches = uncheckedEditableContours(network).filter(
+    (contour) =>
+      !contour.closed &&
+      (contour.vertexIds[0] === vertexId ||
+        contour.vertexIds.at(-1) === vertexId),
   );
+  return matches.length === 1 ? matches[0]! : null;
 }
 
 function referencesWithEndpoint(
@@ -2493,7 +3028,9 @@ function resolveTargetContour(
   }
   const resolvedPathId = pathId ?? network.paths[0]?.id;
   const contour = resolvedPathId
-    ? editableContour(network, resolvedPathId)
+    ? (uncheckedEditableContours(network).find(
+        (candidate) => candidate.pathId === resolvedPathId,
+      ) ?? null)
     : null;
   return contour
     ? { ok: true, contour }
@@ -2504,10 +3041,11 @@ function contourHandles(
   network: VectorNetwork,
   vertexId: string,
 ): ContourHandleReference[] | null {
-  const contour = editableContours(network).find((candidate) =>
+  const contours = uncheckedEditableContours(network).filter((candidate) =>
     candidate.vertexIds.includes(vertexId),
   );
-  if (!contour) return null;
+  if (contours.length !== 1) return null;
+  const contour = contours[0]!;
   const index = contour.vertexIds.indexOf(vertexId);
   if (index < 0) return [];
   const result: ContourHandleReference[] = [];

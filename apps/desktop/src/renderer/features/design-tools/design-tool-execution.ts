@@ -12,7 +12,12 @@ import type {
   DesignTransaction,
   TextFontDescriptor,
 } from "@opendesign/design-contracts";
-import type { TextLayoutQualityEvidence } from "@opendesign/text-service";
+import type {
+  TextLayoutQualityEvidence,
+  TextRunLayoutProvider,
+} from "@opendesign/text-service";
+import type { LeaferTextRunStyle } from "@opendesign/leafer-engine";
+import type { VectorGeometryProvider } from "@opendesign/geometry-service/vector-path";
 import {
   componentMainNodeId,
   diagnoseDesignTargetLayout,
@@ -26,10 +31,14 @@ import {
   planRenamePage,
   planReorderPage,
   planSvgImport,
+  planFlattenNodes,
+  planVectorLayersEndpointConnect,
   planVectorLayersLineCut,
   planVectorLayersVertexTransform,
+  planVectorOutlineStroke,
   planVectorSemanticEdit,
   type EditorRuntime,
+  type VectorOperationPlan,
 } from "@opendesign/editor-runtime";
 import {
   DESIGN_ARRANGE_TOOL_NAME,
@@ -110,6 +119,8 @@ type ExecuteDesignToolOptions = {
   exportSvg?: typeof runSvgExportInWorker;
   exportRaster?: typeof exportDesignRaster;
   importSvg?: typeof runSvgImportInWorker;
+  textRunLayoutProvider?: TextRunLayoutProvider<LeaferTextRunStyle>;
+  vectorGeometryProvider?: () => Promise<VectorGeometryProvider>;
   signal?: AbortSignal;
   stageDelayMs?: number;
   onProgress?: (
@@ -1106,88 +1117,156 @@ async function executeDesignToolRequestUnsafe(
     const safeToolCallId =
       request.call.toolCallId.replace(/[^A-Za-z0-9._:-]/g, "_").slice(0, 180) ||
       "tool";
-    const plan =
-      input.action === "cut-layers-with-line"
-        ? planVectorLayersLineCut(
+    const plan: VectorOperationPlan =
+      input.action === "outline-stroke"
+        ? planVectorOutlineStroke(
             document,
             input.pageId,
-            input.nodeIds.map((nodeId, index) => ({
-              nodeId,
-              resultNodeId:
-                `vector_cut_${safeToolCallId}_${index}_${document.revision}`.slice(
-                  0,
-                  256,
-                ),
-            })),
-            input.start,
-            input.end,
+            input.nodeId,
+            `vector_outline_${safeToolCallId}_${document.revision}`.slice(
+              0,
+              256,
+            ),
+            `outline_${safeToolCallId}`.slice(0, 96),
+            await (
+              options.vectorGeometryProvider ?? loadVectorGeometryProvider
+            )(),
           )
-        : input.action === "transform-layers-vertices"
-          ? planVectorLayersVertexTransform(
+        : input.action === "flatten"
+          ? planFlattenNodes(
               document,
               input.pageId,
-              input.targets,
-              input.transform,
+              input.nodeIds,
+              `vector_flatten_${safeToolCallId}_${document.revision}`.slice(
+                0,
+                256,
+              ),
+              `flatten_${safeToolCallId}`.slice(0, 96),
+              await (
+                options.vectorGeometryProvider ?? loadVectorGeometryProvider
+              )(),
+              options.textRunLayoutProvider,
             )
-          : planVectorSemanticEdit(
-              document,
-              input.pageId,
-              input.nodeId,
-              input.action === "set-closed"
-                ? {
-                    action: input.action,
-                    closed: input.closed,
-                    ...(input.pathId ? { pathId: input.pathId } : {}),
-                  }
-                : input.action === "bend-segment"
-                  ? {
-                      action: input.action,
-                      pathId: input.pathId,
-                      point: input.point,
-                      segmentId: input.segmentId,
-                      t: input.t,
-                    }
-                  : input.action === "set-region-fills"
-                    ? {
-                        action: input.action,
-                        fills: input.fills,
-                        regionId: input.regionId,
-                      }
-                    : input.action === "reverse-path"
+          : input.action === "cut-layers-with-line"
+            ? planVectorLayersLineCut(
+                document,
+                input.pageId,
+                input.nodeIds.map((nodeId, index) => ({
+                  nodeId,
+                  resultNodeId:
+                    `vector_cut_${safeToolCallId}_${index}_${document.revision}`.slice(
+                      0,
+                      256,
+                    ),
+                })),
+                input.start,
+                input.end,
+              )
+            : input.action === "transform-layers-vertices"
+              ? planVectorLayersVertexTransform(
+                  document,
+                  input.pageId,
+                  input.targets,
+                  input.transform,
+                )
+              : input.action === "connect-endpoints"
+                ? planVectorLayersEndpointConnect(
+                    document,
+                    input.pageId,
+                    input.endpoints,
+                  )
+                : planVectorSemanticEdit(
+                    document,
+                    input.pageId,
+                    input.nodeId,
+                    input.action === "set-closed"
                       ? {
                           action: input.action,
+                          closed: input.closed,
                           ...(input.pathId ? { pathId: input.pathId } : {}),
                         }
-                      : input.action === "connect-endpoints"
+                      : input.action === "bend-segment"
                         ? {
                             action: input.action,
-                            vertexIds: input.vertexIds,
+                            pathId: input.pathId,
+                            point: input.point,
+                            segmentId: input.segmentId,
+                            t: input.t,
                           }
-                        : input.action === "disconnect-vertex"
+                        : input.action === "set-region-fills"
                           ? {
                               action: input.action,
-                              pathId: input.pathId,
-                              vertexId: input.vertexId,
+                              fills: input.fills,
+                              regionId: input.regionId,
                             }
-                          : input.action === "transform-vertices"
+                          : input.action === "set-region-fill-style"
                             ? {
                                 action: input.action,
-                                transform: input.transform,
-                                vertexIds: input.vertexIds,
+                                fillStyleId: input.fillStyleId,
+                                regionId: input.regionId,
                               }
-                            : input.action === "cut-path"
+                            : input.action === "set-vertex-stroke-appearance"
                               ? {
                                   action: input.action,
-                                  at: input.at,
-                                  pathId: input.pathId,
+                                  vertexIds: input.vertexIds,
+                                  ...(input.strokeCap === undefined
+                                    ? {}
+                                    : { strokeCap: input.strokeCap }),
+                                  ...(input.strokeJoin === undefined
+                                    ? {}
+                                    : { strokeJoin: input.strokeJoin }),
                                 }
-                              : {
-                                  action: input.action,
-                                  end: input.end,
-                                  resultNodeId: `vector_cut_${safeToolCallId}_${document.revision}`,
-                                  start: input.start,
-                                },
-            );
+                              : input.action === "set-vertex-corner-radius"
+                                ? {
+                                    action: input.action,
+                                    cornerRadius: input.cornerRadius,
+                                    vertexIds: input.vertexIds,
+                                  }
+                                : input.action === "reverse-path"
+                                  ? {
+                                      action: input.action,
+                                      ...(input.pathId
+                                        ? { pathId: input.pathId }
+                                        : {}),
+                                    }
+                                  : input.action === "disconnect-vertex"
+                                    ? {
+                                        action: input.action,
+                                        pathId: input.pathId,
+                                        ...(input.segmentId
+                                          ? { segmentId: input.segmentId }
+                                          : {}),
+                                        vertexId: input.vertexId,
+                                      }
+                                    : input.action === "delete-segments"
+                                      ? {
+                                          action: input.action,
+                                          segmentIds: input.segmentIds,
+                                        }
+                                      : input.action === "delete-vertices"
+                                        ? {
+                                            action: input.action,
+                                            vertexIds: input.vertexIds,
+                                          }
+                                        : input.action === "transform-vertices"
+                                          ? {
+                                              action: input.action,
+                                              transform: input.transform,
+                                              vertexIds: input.vertexIds,
+                                            }
+                                          : input.action === "cut-path"
+                                            ? {
+                                                action: input.action,
+                                                at: input.at,
+                                                pathId: input.pathId,
+                                              }
+                                            : {
+                                                action: input.action,
+                                                end: input.end,
+                                                resultNodeId: `vector_cut_${safeToolCallId}_${document.revision}`,
+                                                start: input.start,
+                                              },
+                  );
     if (!plan.ok) {
       throw new Error(`vector-edit.${plan.code}: ${plan.message}`);
     }
@@ -1223,10 +1302,15 @@ async function executeDesignToolRequestUnsafe(
       throw designTransactionToolError(result.error, transaction.commands);
     }
     const singleNodeId =
-      input.action === "cut-layers-with-line" ||
-      input.action === "transform-layers-vertices"
-        ? undefined
-        : input.nodeId;
+      input.action === "connect-endpoints"
+        ? plan.layerConnectResult
+          ? undefined
+          : input.endpoints[0].nodeId
+        : input.action === "cut-layers-with-line" ||
+            input.action === "transform-layers-vertices" ||
+            input.action === "flatten"
+          ? undefined
+          : input.nodeId;
     const applied = singleNodeId
       ? runtime.getSnapshot().document.nodesById[singleNodeId]
       : undefined;
@@ -1239,7 +1323,8 @@ async function executeDesignToolRequestUnsafe(
     const pathId =
       input.action === "cut-with-line" ||
       input.action === "cut-layers-with-line" ||
-      input.action === "transform-layers-vertices"
+      input.action === "transform-layers-vertices" ||
+      (input.action === "connect-endpoints" && plan.layerConnectResult)
         ? undefined
         : (("pathId" in input ? input.pathId : undefined) ??
           network?.paths[0]?.id);
@@ -1254,15 +1339,23 @@ async function executeDesignToolRequestUnsafe(
           action: input.action,
           label: input.label,
           pageId: input.pageId,
-          ...(input.action === "cut-layers-with-line" ||
-          input.action === "transform-layers-vertices"
-            ? {
-                nodeIds:
-                  input.action === "cut-layers-with-line"
-                    ? input.nodeIds
-                    : input.targets.map((target) => target.nodeId),
-              }
-            : { nodeId: input.nodeId }),
+          ...(input.action === "connect-endpoints" && !plan.layerConnectResult
+            ? { nodeId: input.endpoints[0].nodeId }
+            : input.action === "cut-layers-with-line" ||
+                input.action === "transform-layers-vertices" ||
+                input.action === "flatten" ||
+                input.action === "connect-endpoints"
+              ? {
+                  nodeIds:
+                    input.action === "cut-layers-with-line"
+                      ? input.nodeIds
+                      : input.action === "transform-layers-vertices"
+                        ? input.targets.map((target) => target.nodeId)
+                        : input.action === "connect-endpoints"
+                          ? input.endpoints.map((target) => target.nodeId)
+                          : input.nodeIds,
+                }
+              : { nodeId: input.nodeId }),
           ...(pathId ? { pathId, closed: path?.closed } : {}),
           ...(plan.cutResult
             ? {
@@ -1283,6 +1376,18 @@ async function executeDesignToolRequestUnsafe(
                 resultNodeIds: plan.layerLineCutResult.resultNodeIds,
                 targets: plan.layerLineCutResult.targets,
               }
+            : {}),
+          ...(plan.layerConnectResult
+            ? {
+                removedNodeId: plan.layerConnectResult.removedNodeId,
+                retainedNodeId: plan.layerConnectResult.retainedNodeId,
+              }
+            : {}),
+          ...(plan.outlineResult
+            ? { resultNodeIds: [plan.outlineResult.resultNodeId] }
+            : {}),
+          ...(plan.flattenResult
+            ? { resultNodeIds: [plan.flattenResult.resultNodeId] }
             : {}),
           revision: result.revision.revision,
           atomic: true,
@@ -2691,6 +2796,12 @@ function assertPageToolMutationTarget(
       `${input.action} requires the Design File mutation scope selected before this Run`,
     );
   }
+}
+
+async function loadVectorGeometryProvider(): Promise<VectorGeometryProvider> {
+  const { loadBrowserVectorGeometryProvider } =
+    await import("@opendesign/geometry-service/browser-vector-path");
+  return loadBrowserVectorGeometryProvider();
 }
 
 function requiredMutationPageId(

@@ -153,12 +153,6 @@ function measureRichText(
       "Rich text justified layout is not supported by the production text-run layout provider",
     );
   }
-  if (node.properties.textTruncation !== "disabled") {
-    return unavailable(
-      node.id,
-      "Rich text ending truncation is not supported by the production text-run layout provider",
-    );
-  }
   const request: TextRunLayoutRequest<LeaferTextRunStyle> = {
     baseStyle: leaferTextRunStyle(node.properties),
     content: node.properties.content,
@@ -166,6 +160,7 @@ function measureRichText(
     paragraphIndent: node.properties.paragraphIndent,
     paragraphSpacing: node.properties.paragraphSpacing,
     listSpacing: node.properties.listSpacing,
+    maxLines: node.properties.maxLines,
     hangingList: node.properties.hangingList,
     paragraphRuns: node.properties.paragraphRuns ?? [],
     runs: (node.properties.runs ?? []).map((run) => ({
@@ -174,6 +169,7 @@ function measureRichText(
     })),
     textAlignHorizontal: node.properties.textAlignHorizontal,
     textAlignVertical: node.properties.textAlignVertical,
+    textTruncation: node.properties.textTruncation,
     textWrap: node.properties.textWrap,
     ...(node.properties.textResize === "auto-width"
       ? {}
@@ -195,7 +191,7 @@ function measureRichText(
     );
   }
   if (!result.ok) return unavailable(node.id, result.message);
-  const bounds = result.contentBounds;
+  const bounds = result.fullContentBounds;
   const overflow =
     node.properties.textResize === "fixed"
       ? {
@@ -207,9 +203,13 @@ function measureRichText(
             bounds.y + bounds.height > node.size.height + MEASUREMENT_TOLERANCE,
         }
       : { horizontal: false, vertical: false };
-  const contentSize = roundedSize({
+  const fullContentSize = roundedSize({
     width: bounds.width,
     height: bounds.height,
+  });
+  const displayedContentSize = roundedSize({
+    width: result.contentBounds.width,
+    height: result.contentBounds.height,
   });
   return {
     status: "measured",
@@ -217,10 +217,10 @@ function measureRichText(
     provider: result.provider,
     providerVersion: result.providerVersion,
     boxSize: roundedSize(node.size),
-    fullContentSize: contentSize,
-    displayedContentSize: contentSize,
+    fullContentSize,
+    displayedContentSize,
     overflow,
-    truncated: false,
+    truncated: result.truncated,
   };
 }
 

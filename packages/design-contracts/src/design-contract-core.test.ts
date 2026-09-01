@@ -324,6 +324,17 @@ describe("design contract core", () => {
       Value.Check(PaintSchema, {
         type: "image",
         assetId: "asset_photo",
+        fit: "crop",
+        opacity: 1,
+        rotation: 30,
+        scale: { x: -0.5, y: 0.5 },
+        offset: { x: 12, y: -8 },
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(PaintSchema, {
+        type: "image",
+        assetId: "asset_photo",
         fit: "cover",
         opacity: 1,
         filters: { tint: -1.1 },

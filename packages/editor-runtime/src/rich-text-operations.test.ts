@@ -440,6 +440,7 @@ describe("EditorRuntime rich text ranges", () => {
           providerVersion: "1",
           size: { width, height: 24 },
           contentBounds: { x: 0, y: 0, width, height: 24 },
+          displayContent: request.content,
           lines: [
             {
               start: 0,
@@ -451,6 +452,7 @@ describe("EditorRuntime rich text ranges", () => {
               baseline: 18,
             },
           ],
+          fullContentBounds: { x: 0, y: 0, width, height: 24 },
           fragments: [
             {
               start: 0,
@@ -466,6 +468,8 @@ describe("EditorRuntime rich text ranges", () => {
             },
           ],
           markers: [],
+          sourceContentEnd: request.content.length,
+          truncated: false,
           warnings: [],
         };
       },

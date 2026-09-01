@@ -1,6 +1,7 @@
 import {
   isFrameLikeNode,
   type DesignChangeSet,
+  type DesignDocument,
   type DesignNode,
   type EllipseNode,
   type FrameNode,
@@ -15,12 +16,17 @@ import {
   type VectorNode,
   type ViewportState,
 } from "@opendesign/design-contracts";
-import type { EditorRuntime, EditorSnapshot } from "@opendesign/editor-runtime";
+import type {
+  EditorRuntime,
+  EditorSnapshot,
+  VectorLayerEndpointTarget,
+} from "@opendesign/editor-runtime";
 import {
   navigateBooleanSelection,
   navigateLayerSelection,
   planImageNodeUpdate,
   planDeleteVectorNode,
+  planVectorLayersEndpointConnect,
   planVectorLayersLineCut,
   planVectorNetworkUpdates,
   planVectorSemanticEdit,
@@ -124,6 +130,7 @@ export function Canvas({
   onTextLayoutProviderReady,
   onTextEditingStyleControllerChange,
   onTextRangeSelectionChange,
+  onVectorVertexSelectionChange,
   onDeleteGridTracks,
   onMoveGridChildren,
   onResizeGridChildSpan,
@@ -189,6 +196,9 @@ export function Canvas({
   ) => void;
   onTextRangeSelectionChange: (
     selection: LeaferTextRangeSelection | null,
+  ) => void;
+  onVectorVertexSelectionChange: (
+    selection: { nodeId: string; vertexIds: readonly string[] } | null,
   ) => void;
   onReorderGridTracks: (
     frameId: string,
@@ -258,6 +268,7 @@ export function Canvas({
     selectedSegmentIdsByNode: Readonly<Record<string, readonly string[]>>;
     selectedVertexIdsByNode: Readonly<Record<string, readonly string[]>>;
     tool: LeaferVectorEditTool;
+    fillStyleId: string | null;
     paint: readonly Paint[];
   } | null>(null);
   const vectorEditStateRef = useRef(vectorEditState);
@@ -324,12 +335,51 @@ export function Canvas({
       ) ?? null,
     [vectorEditCollectionScope],
   );
+  const selectedVectorEndpoints = useMemo(
+    () =>
+      vectorEditCollectionScope?.nodes.flatMap((scope) =>
+        scope.selectedVertexIds.map((vertexId) => ({
+          nodeId: scope.nodeId,
+          vertexId,
+        })),
+      ) ?? [],
+    [vectorEditCollectionScope],
+  );
+  const vectorVertexInspectorSelection = useMemo(() => {
+    if (!vectorEditScope || vectorEditScope.selectedVertexIds.length === 0) {
+      return null;
+    }
+    return {
+      nodeId: vectorEditScope.nodeId,
+      vertexIds: [...vectorEditScope.selectedVertexIds],
+    };
+  }, [vectorEditScope]);
+
+  useEffect(() => {
+    onVectorVertexSelectionChange(vectorVertexInspectorSelection);
+  }, [onVectorVertexSelectionChange, vectorVertexInspectorSelection]);
+
+  useEffect(
+    () => () => onVectorVertexSelectionChange(null),
+    [onVectorVertexSelectionChange],
+  );
 
   useEffect(() => {
     if (vectorEditState && !vectorEditCollectionScope) {
       setVectorEditState(null);
     }
   }, [vectorEditCollectionScope, vectorEditState]);
+
+  useEffect(() => {
+    if (
+      vectorEditScope?.topologyEditable === false &&
+      vectorEditState?.tool === "paint"
+    ) {
+      setVectorEditState((current) =>
+        current ? { ...current, tool: "move" } : current,
+      );
+    }
+  }, [vectorEditScope?.topologyEditable, vectorEditState?.tool]);
 
   useEffect(() => {
     if (activeAgentRunId === null) {
@@ -506,6 +556,7 @@ export function Canvas({
         selectedVertexIdsByNode: Object.fromEntries(
           editableVectorNodeIds.map((nodeId) => [nodeId, []]),
         ),
+        fillStyleId: null,
         paint: [{ type: "solid" as const, color: "#4f7fff", opacity: 1 }],
         tool: "move" as const,
       };
@@ -832,12 +883,9 @@ export function Canvas({
         | { action: "set-closed"; closed: boolean; pathId?: string }
         | { action: "reverse-path"; pathId?: string }
         | {
-            action: "connect-endpoints";
-            vertexIds: readonly [string, string];
-          }
-        | {
             action: "disconnect-vertex";
             pathId: string;
+            segmentId?: string;
             vertexId: string;
           },
     ) => {
@@ -885,6 +933,44 @@ export function Canvas({
       runtime,
       vectorEditState?.activeNodeId,
     ],
+  );
+
+  const applyVectorEndpointConnect = useCallback(
+    (
+      targets: readonly [VectorLayerEndpointTarget, VectorLayerEndpointTarget],
+    ) => {
+      const current = runtime.getSnapshot();
+      const plan = planVectorLayersEndpointConnect(
+        current.document,
+        activePageId,
+        targets,
+      );
+      if (!plan.ok) {
+        onTransactionError(plan.message);
+        return false;
+      }
+      const accepted = applyOperations({
+        kind: "vector",
+        operations: [...plan.operations],
+      });
+      if (!accepted || !plan.layerConnectResult) return accepted;
+      const retainedNodeId = plan.layerConnectResult.retainedNodeId;
+      const state = vectorEditStateRef.current;
+      if (state) {
+        const next = {
+          ...state,
+          activeNodeId: retainedNodeId,
+          nodeIds: [retainedNodeId],
+          selectedSegmentIdsByNode: { [retainedNodeId]: [] },
+          selectedVertexIdsByNode: { [retainedNodeId]: [] },
+        };
+        vectorEditStateRef.current = next;
+        setVectorEditState(next);
+      }
+      runtime.setSelection([retainedNodeId], retainedNodeId);
+      return true;
+    },
+    [activePageId, applyOperations, onTransactionError, runtime],
   );
 
   const applyVectorCut = useCallback(
@@ -1325,11 +1411,18 @@ export function Canvas({
             vectorEditScope: {
               activeNodeId: vectorEditCollectionScope.activeNodeId,
               nodes: vectorEditCollectionScope.nodes.map((scope) => ({
+                ...(scope.activePathId
+                  ? { activePathId: scope.activePathId }
+                  : {}),
                 nodeId: scope.nodeId,
                 readOnly: scope.readOnly,
                 selectedSegmentIds: scope.selectedSegmentIds,
                 selectedVertexIds: scope.selectedVertexIds,
+                topologyEditable: scope.topologyEditable,
               })),
+              ...(vectorEditState?.fillStyleId
+                ? { fillStyleId: vectorEditState.fillStyleId }
+                : {}),
               paint: vectorEditState?.paint ?? [
                 { type: "solid", color: "#4f7fff", opacity: 1 },
               ],
@@ -1693,7 +1786,11 @@ export function Canvas({
                     {vectorEditScope.readOnly
                       ? t("canvas.vectorEditingReadOnly")
                       : vectorEditState?.tool === "cut"
-                        ? t("canvas.vectorCutHint")
+                        ? t(
+                            vectorEditScope.topologyEditable
+                              ? "canvas.vectorCutHint"
+                              : "canvas.vectorBranchCutHint",
+                          )
                         : vectorEditState?.tool === "bend"
                           ? t("canvas.vectorBendHint")
                           : vectorEditState?.tool === "lasso"
@@ -1725,10 +1822,12 @@ export function Canvas({
                         aria-keyshortcuts={shortcut ?? undefined}
                         aria-pressed={vectorEditState?.tool === mode}
                         disabled={
-                          vectorEditScope.readOnly &&
-                          (mode === "bend" ||
-                            mode === "paint" ||
-                            mode === "cut")
+                          (vectorEditScope.readOnly &&
+                            (mode === "bend" ||
+                              mode === "paint" ||
+                              mode === "cut")) ||
+                          (!vectorEditScope.topologyEditable &&
+                            mode === "paint")
                         }
                         key={mode}
                         onClick={() => {
@@ -1747,31 +1846,65 @@ export function Canvas({
                     ))}
                   </span>
                   {vectorEditState?.tool === "paint" && (
-                    <label className={styles.vectorPaint}>
-                      <span>{t("canvas.vectorPaintColor")}</span>
-                      <input
-                        aria-label={t("canvas.vectorPaintColor")}
-                        disabled={vectorEditScope.readOnly}
-                        onChange={(event) =>
-                          setVectorEditState((current) =>
-                            current
-                              ? {
-                                  ...current,
-                                  paint: [
-                                    {
-                                      type: "solid",
-                                      color: event.currentTarget.value,
-                                      opacity: 1,
-                                    },
-                                  ],
-                                }
-                              : current,
-                          )
-                        }
-                        type="color"
-                        value={solidPaintColor(vectorEditState.paint)}
-                      />
-                    </label>
+                    <span className={styles.vectorPaint}>
+                      <label>
+                        <span>{t("canvas.vectorPaintStyle")}</span>
+                        <select
+                          aria-label={t("canvas.vectorPaintStyle")}
+                          disabled={vectorEditScope.readOnly}
+                          onChange={(event) =>
+                            setVectorEditState((current) =>
+                              current
+                                ? {
+                                    ...current,
+                                    fillStyleId:
+                                      event.currentTarget.value || null,
+                                  }
+                                : current,
+                            )
+                          }
+                          value={vectorEditState.fillStyleId ?? ""}
+                        >
+                          <option value="">
+                            {t("canvas.vectorPaintDirect")}
+                          </option>
+                          {paintStyleOptions(snapshot.document).map((style) => (
+                            <option key={style.id} value={style.id}>
+                              {style.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label>
+                        <span>{t("canvas.vectorPaintColor")}</span>
+                        <input
+                          aria-label={t("canvas.vectorPaintColor")}
+                          disabled={
+                            vectorEditScope.readOnly ||
+                            vectorEditState.fillStyleId !== null
+                          }
+                          onChange={(event) =>
+                            setVectorEditState((current) =>
+                              current
+                                ? {
+                                    ...current,
+                                    fillStyleId: null,
+                                    paint: [
+                                      {
+                                        type: "solid",
+                                        color: event.currentTarget.value,
+                                        opacity: 1,
+                                      },
+                                    ],
+                                  }
+                                : current,
+                            )
+                          }
+                          type="color"
+                          value={solidPaintColor(vectorEditState.paint)}
+                        />
+                      </label>
+                    </span>
                   )}
                   <span
                     aria-label={t("canvas.vectorPointMode")}
@@ -1790,6 +1923,7 @@ export function Canvas({
                         aria-pressed={vectorEditScope.pointMode === mode}
                         disabled={
                           vectorEditScope.readOnly ||
+                          !vectorEditScope.topologyEditable ||
                           vectorEditScope.selectedVertexIds.length === 0
                         }
                         key={mode}
@@ -1811,17 +1945,16 @@ export function Canvas({
                   >
                     <button
                       disabled={
-                        vectorEditScope.readOnly ||
-                        vectorEditScope.selectedVertexIds.length !== 2
+                        selectedVectorEndpoints.length !== 2 ||
+                        (vectorEditCollectionScope?.nodes.some(
+                          (scope) => scope.readOnly,
+                        ) ??
+                          true)
                       }
                       onClick={() => {
-                        const [firstVertexId, secondVertexId] =
-                          vectorEditScope.selectedVertexIds;
-                        if (firstVertexId && secondVertexId) {
-                          applyVectorPathAction({
-                            action: "connect-endpoints",
-                            vertexIds: [firstVertexId, secondVertexId],
-                          });
+                        const [first, second] = selectedVectorEndpoints;
+                        if (first && second) {
+                          applyVectorEndpointConnect([first, second]);
                         }
                         requestAnimationFrame(() => host.current?.focus());
                       }}
@@ -1841,6 +1974,12 @@ export function Canvas({
                           applyVectorPathAction({
                             action: "disconnect-vertex",
                             pathId: vectorEditScope.activePathId,
+                            ...(vectorEditScope.selectedSegmentIds.length === 1
+                              ? {
+                                  segmentId:
+                                    vectorEditScope.selectedSegmentIds[0],
+                                }
+                              : {}),
                             vertexId,
                           });
                         }
@@ -2189,6 +2328,22 @@ function sameViewport(left: ViewportState, right: ViewportState) {
 function solidPaintColor(paints: readonly Paint[]): string {
   const solid = paints.find((paint) => paint.type === "solid");
   return solid?.color.match(/^#[0-9a-f]{6}$/i) ? solid.color : "#4f7fff";
+}
+
+function paintStyleOptions(document: DesignDocument) {
+  const local = document.styleOrderByType.PAINT.flatMap((styleId) => {
+    const style = document.stylesById[styleId];
+    return style?.styleType === "PAINT"
+      ? [{ id: style.id, name: style.name }]
+      : [];
+  });
+  const imported = Object.values(document.libraryStylesById).flatMap(
+    ({ style }) =>
+      style.styleType === "PAINT" && !document.stylesById[style.id]
+        ? [{ id: style.id, name: style.name }]
+        : [],
+  );
+  return [...local, ...imported];
 }
 
 function sameFidelityWarnings(

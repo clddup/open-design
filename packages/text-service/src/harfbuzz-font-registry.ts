@@ -22,8 +22,16 @@ export interface HarfBuzzFontFaceDescriptor {
 
 export interface RegisteredHarfBuzzFace {
   blob: HarfBuzz.Blob;
+  decorationMetrics: HarfBuzzDecorationMetrics | null;
   descriptor: HarfBuzzFontFaceDescriptor;
   face: HarfBuzz.Face;
+}
+
+export interface HarfBuzzDecorationMetrics {
+  strikethroughPosition: number;
+  strikethroughThickness: number;
+  underlinePosition: number;
+  underlineThickness: number;
 }
 
 export interface HarfBuzzFontRegistry {
@@ -72,6 +80,7 @@ export function createHarfBuzzFontRegistry(
         const face = new hb.Face(blob, faceIndex);
         registered.push({
           blob,
+          decorationMetrics: inspectDecorationMetrics(face),
           descriptor: inspectFace(face, fontId, faceIndex),
           face,
         });
@@ -169,6 +178,27 @@ function faceName(face: HarfBuzz.Face, nameId: number): string | null {
   if (!preferred) return null;
   const value = face.getName(nameId, preferred.language).trim();
   return value ? boundedName(value) : null;
+}
+
+function inspectDecorationMetrics(
+  face: HarfBuzz.Face,
+): HarfBuzzDecorationMetrics | null {
+  const post = face.referenceTable("post");
+  const os2 = face.referenceTable("OS/2");
+  if (!post || post.byteLength < 12 || !os2 || os2.byteLength < 30) {
+    return null;
+  }
+  const postView = new DataView(post.buffer, post.byteOffset, post.byteLength);
+  const os2View = new DataView(os2.buffer, os2.byteOffset, os2.byteLength);
+  const metrics: HarfBuzzDecorationMetrics = {
+    underlinePosition: postView.getInt16(8),
+    underlineThickness: postView.getInt16(10),
+    strikethroughThickness: os2View.getUint16(26),
+    strikethroughPosition: os2View.getInt16(28),
+  };
+  return metrics.underlineThickness > 0 && metrics.strikethroughThickness > 0
+    ? metrics
+    : null;
 }
 
 function sfntFaceCount(bytes: Uint8Array): number {

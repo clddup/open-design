@@ -87,6 +87,67 @@ function style(
 }
 
 describe("Leafer native text run layout provider", () => {
+  it("materializes one bounded ending-truncation display line", () => {
+    const provider = createLeaferTextRunLayoutProvider(leafer, {
+      fontAvailable: () => true,
+    });
+    const result = provider.layout({
+      baseStyle: style(),
+      content: "ABCDEFGHIJ",
+      hangingList: false,
+      listSpacing: 0,
+      maxLines: 1,
+      mode: "auto-height",
+      paragraphIndent: 0,
+      paragraphSpacing: 0,
+      runs: [],
+      textAlignHorizontal: "left",
+      textAlignVertical: "top",
+      textTruncation: "ending",
+      textWrap: "character",
+      width: 60,
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      displayContent: "ABC...",
+      sourceContentEnd: 3,
+      truncated: true,
+    });
+    if (!result.ok) return;
+    expect(result.lines).toHaveLength(1);
+    expect(result.fullContentBounds.height).toBe(48);
+    expect(result.contentBounds.height).toBe(24);
+  });
+
+  it("derives ending truncation from a Fixed text box when maxLines is null", () => {
+    const provider = createLeaferTextRunLayoutProvider(leafer, {
+      fontAvailable: () => true,
+    });
+    const result = provider.layout({
+      baseStyle: style(),
+      content: "ABCDEFGHIJ",
+      hangingList: false,
+      height: 24,
+      listSpacing: 0,
+      maxLines: null,
+      mode: "fixed",
+      paragraphIndent: 0,
+      paragraphSpacing: 0,
+      runs: [],
+      textAlignHorizontal: "left",
+      textAlignVertical: "top",
+      textTruncation: "ending",
+      textWrap: "character",
+      width: 60,
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      displayContent: "ABC...",
+      size: { width: 60, height: 24 },
+      truncated: true,
+    });
+  });
+
   it("aligns mixed face, size, and fill fragments on one native baseline", () => {
     const small = style();
     const large = style({
@@ -113,8 +174,10 @@ describe("Leafer native text run layout provider", () => {
         { start: 0, end: 2, style: small },
         { start: 2, end: 4, style: large },
       ],
+      maxLines: null,
       textAlignHorizontal: "left",
       textAlignVertical: "center",
+      textTruncation: "disabled",
       textWrap: "none",
       width: 200,
     });
@@ -190,8 +253,10 @@ describe("Leafer native text run layout provider", () => {
         { start: 0, end: 3, style: compact },
         { start: 3, end: 5, style: large },
       ],
+      maxLines: null,
       textAlignHorizontal: "left",
       textAlignVertical: "top",
+      textTruncation: "disabled",
       textWrap: "character",
       width: 25,
     });
@@ -228,8 +293,10 @@ describe("Leafer native text run layout provider", () => {
       paragraphIndent: 0,
       paragraphSpacing: 0,
       runs: [],
+      maxLines: null,
       textAlignHorizontal: "left",
       textAlignVertical: "top",
+      textTruncation: "disabled",
       textWrap: "character",
       width: 15,
     });
@@ -258,8 +325,10 @@ describe("Leafer native text run layout provider", () => {
             style: { ...base, fill: "#7c3aed" },
           },
         ],
+        maxLines: null,
         textAlignHorizontal: "left",
         textAlignVertical: "top",
+        textTruncation: "disabled",
         textWrap: "character",
         width: 100,
       }),
@@ -280,8 +349,10 @@ describe("Leafer native text run layout provider", () => {
       paragraphIndent: 8,
       paragraphSpacing: 6,
       runs: [],
+      maxLines: null,
       textAlignHorizontal: "left",
       textAlignVertical: "top",
+      textTruncation: "disabled",
       textWrap: "none",
     });
     expect(autoWidth).toMatchObject({
@@ -322,8 +393,10 @@ describe("Leafer native text run layout provider", () => {
         },
       ],
       runs: [],
+      maxLines: null,
       textAlignHorizontal: "left",
       textAlignVertical: "top",
+      textTruncation: "disabled",
       textWrap: "none",
     });
     expect(mixedParagraphs).toMatchObject({
@@ -344,8 +417,10 @@ describe("Leafer native text run layout provider", () => {
       paragraphIndent: 0,
       paragraphSpacing: 0,
       runs: [],
+      maxLines: null,
       textAlignHorizontal: "left",
       textAlignVertical: "top",
+      textTruncation: "disabled",
       textWrap: "word",
       width: 32,
     });
@@ -365,8 +440,10 @@ describe("Leafer native text run layout provider", () => {
       paragraphIndent: 0,
       paragraphSpacing: 0,
       runs: [],
+      maxLines: null,
       textAlignHorizontal: "left",
       textAlignVertical: "top",
+      textTruncation: "disabled",
       textWrap: "word",
       width: 20,
     });
@@ -407,8 +484,10 @@ describe("Leafer native text run layout provider", () => {
       paragraphSpacing: 0,
       paragraphRuns,
       runs: [],
+      maxLines: null,
       textAlignHorizontal: "left",
       textAlignVertical: "top",
+      textTruncation: "disabled",
       textWrap: "word",
       width: 120,
     });
@@ -431,8 +510,10 @@ describe("Leafer native text run layout provider", () => {
       paragraphSpacing: 0,
       paragraphRuns,
       runs: [],
+      maxLines: null,
       textAlignHorizontal: "left",
       textAlignVertical: "top",
+      textTruncation: "disabled",
       textWrap: "word",
       width: 120,
     });
@@ -473,8 +554,10 @@ describe("Leafer native text run layout provider", () => {
         paragraphIndent: 0,
         paragraphSpacing: 0,
         runs: [],
+        maxLines: null,
         textAlignHorizontal: "left",
         textAlignVertical: "top",
+        textTruncation: "disabled",
         textWrap: "none",
       }),
     ).toMatchObject({
@@ -494,8 +577,10 @@ describe("Leafer native text run layout provider", () => {
         paragraphIndent: 0,
         paragraphSpacing: 0,
         runs: [],
+        maxLines: null,
         textAlignHorizontal: "left",
         textAlignVertical: "top",
+        textTruncation: "disabled",
         textWrap: "none",
       }),
     ).toMatchObject({ code: "invalid-input", ok: false, retryable: false });
@@ -510,8 +595,10 @@ describe("Leafer native text run layout provider", () => {
         paragraphIndent: 0,
         paragraphSpacing: 0,
         runs: [],
+        maxLines: null,
         textAlignHorizontal: "left",
         textAlignVertical: "top",
+        textTruncation: "disabled",
         textWrap: "none",
       }),
     ).toMatchObject({ code: "unsupported", ok: false, retryable: false });
@@ -526,8 +613,10 @@ describe("Leafer native text run layout provider", () => {
         paragraphIndent: 0,
         paragraphSpacing: 0,
         runs: [],
+        maxLines: null,
         textAlignHorizontal: "left",
         textAlignVertical: "top",
+        textTruncation: "disabled",
         textWrap: "none",
       }),
     ).toMatchObject({ code: "unsupported", ok: false, retryable: false });
@@ -550,8 +639,10 @@ describe("Leafer native text run layout provider", () => {
       paragraphIndent: 0,
       paragraphSpacing: 0,
       runs: [],
+      maxLines: null,
       textAlignHorizontal: "left",
       textAlignVertical: "top",
+      textTruncation: "disabled",
       textWrap: "none",
     });
     expect(result).toMatchObject({

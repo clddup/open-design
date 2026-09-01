@@ -4791,10 +4791,12 @@ describe("App", () => {
         activeNodeId: "editable_vector",
         nodes: [
           {
+            activePathId: "path_open",
             nodeId: "editable_vector",
             readOnly: false,
             selectedSegmentIds: [],
             selectedVertexIds: [],
+            topologyEditable: true,
           },
         ],
         paint: [{ type: "solid", color: "#4f7fff", opacity: 1 }],

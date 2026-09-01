@@ -33,6 +33,7 @@ describe("Leafer scene projection", () => {
       exportSettings: [],
       opacity: 1,
       properties: {
+        cornerRadius: 8,
         fills: [{ type: "solid", color: "#111827", opacity: 1 }],
         strokes: [{ type: "solid", color: "#0f172a", opacity: 1 }],
         strokeWidth: 2,
@@ -109,6 +110,11 @@ describe("Leafer scene projection", () => {
         vectorRegionElementId("vector_regions", "cool"),
       )?.data.fill,
     ).toEqual([{ type: "solid", color: "#06b6d4", opacity: 1, visible: true }]);
+    expect(
+      projection.elementsById.get(
+        vectorRegionElementId("vector_regions", "warm"),
+      )?.data.path,
+    ).toContain(" C ");
   });
 
   it("projects Slice as an invisible hittable export region", () => {
@@ -904,6 +910,48 @@ describe("Leafer scene projection", () => {
     ]);
   });
 
+  it("projects crop image paint with the same explicit clip transform as an Image node", () => {
+    const document = structuredClone(createWelcomeDocument());
+    document.assetsById.photo = {
+      id: "photo",
+      kind: "image",
+      name: "Photo",
+      mimeType: "image/png",
+      source: { type: "data", value: "aW1hZ2U=" },
+      size: { width: 400, height: 200 },
+      extensions: {},
+    };
+    const node = document.nodesById.feature_one;
+    if (!node || node.kind !== "rectangle") throw new Error("Missing fixture");
+    node.properties.fills = [
+      {
+        type: "image",
+        assetId: "photo",
+        fit: "crop",
+        opacity: 1,
+        rotation: 90,
+        scale: { x: -1, y: 1 },
+        offset: { x: 150, y: 250 },
+      },
+    ];
+
+    const spec = projectDesignPage(document, "page_welcome").elementsById.get(
+      node.id,
+    );
+    expect(spec?.data.fill).toEqual([
+      {
+        type: "image",
+        url: "data:image/png;base64,aW1hZ2U=",
+        mode: "clip",
+        opacity: 1,
+        visible: true,
+        rotation: 90,
+        scale: { x: -1, y: 1 },
+        offset: { x: 150, y: 250 },
+      },
+    ]);
+  });
+
   it("projects portable path geometry with fills, strokes and winding rule", () => {
     const document = structuredClone(createWelcomeDocument());
     const frame = document.nodesById.frame_welcome;
@@ -1190,6 +1238,30 @@ describe("Leafer scene projection", () => {
       stroke: [{ type: "solid", color: "#151515", opacity: 1 }],
       strokeWidth: 2,
     });
+
+    editable.properties.network = structuredClone(originalNetwork);
+    editable.properties.network.vertices[1]!.strokeJoin = "bevel";
+    editable.properties.dashPattern = [120, 10];
+    const vertexStrokeProjection = projectDesignPage(document, "page_welcome");
+    const projectedChildIds =
+      vertexStrokeProjection.elementsById.get("editable_vector")?.childIds ??
+      [];
+    expect(projectedChildIds.length).toBeGreaterThan(7);
+    const bevelJoin = projectedChildIds
+      .map((id) => vertexStrokeProjection.elementsById.get(id)?.data)
+      .find((data) => data?.strokeJoin === "bevel");
+    expect(bevelJoin).toMatchObject({
+      strokeJoin: "bevel",
+      strokeCap: "none",
+      dashPattern: [],
+    });
+    expect(vertexStrokeProjection.warnings).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "vector-stroke-appearance-unsupported",
+        }),
+      ]),
+    );
   });
 
   it("projects directed Line semantics through Leafer Arrow without flattening endpoints", () => {

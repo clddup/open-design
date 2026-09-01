@@ -16,8 +16,10 @@ import type {
 } from "./vector-path.js";
 import {
   resolvePathPropertiesData,
+  serializeVectorNetwork,
   vectorNetworkHasFillRegion,
 } from "./editable-vector.js";
+import { outlineVectorNetworkStroke } from "./vector-materialization.js";
 
 export const BOOLEAN_GEOMETRY_RESOLVER_VERSION = 1 as const;
 
@@ -413,78 +415,84 @@ class CachedBooleanGeometryResolver implements BooleanGeometryResolver {
 
     let strokeGeometry: GeometryValue | undefined;
     if (hasStroke) {
-      const align = properties.strokeAlign ?? "center";
-      const resolvedPath =
-        node.kind === "path" || node.kind === "vector"
-          ? resolvePathPropertiesData(node.properties)
-          : null;
-      if (
-        align !== "center" &&
-        (node.kind === "path" || node.kind === "vector") &&
-        (resolvedPath === null || !hasOnlyClosedSubpaths(resolvedPath))
-      ) {
-        return {
-          ok: false,
-          issue: {
-            code: "unsupported-style",
-            message: `Open-path operand ${node.id} cannot preserve ${align}-aligned stroke geometry`,
-            nodeId: node.id,
-          },
-        };
-      }
-      let strokeSource = appearanceCore;
-      const dashPattern = properties.dashPattern ?? [];
-      if (dashPattern.length > 0) {
+      const editableStroke = this.#editableVectorStroke(node, appearanceCore);
+      if (editableStroke) {
+        if (!editableStroke.ok) return editableStroke;
+        strokeGeometry = editableStroke.value;
+      } else {
+        const align = properties.strokeAlign ?? "center";
+        const resolvedPath =
+          node.kind === "path" || node.kind === "vector"
+            ? resolvePathPropertiesData(node.properties)
+            : null;
         if (
-          dashPattern.length > 2 ||
-          dashPattern.some((value) => !Number.isFinite(value) || value <= 0)
+          align !== "center" &&
+          (node.kind === "path" || node.kind === "vector") &&
+          (resolvedPath === null || !hasOnlyClosedSubpaths(resolvedPath))
         ) {
           return {
             ok: false,
             issue: {
               code: "unsupported-style",
-              message: `Operand ${node.id} uses a dash pattern PathKit cannot preserve exactly`,
+              message: `Open-path operand ${node.id} cannot preserve ${align}-aligned stroke geometry`,
               nodeId: node.id,
             },
           };
         }
-        const on = dashPattern[0]!;
-        const off = dashPattern[1] ?? on;
-        const dashed = this.#providerAttempt(
+        let strokeSource = appearanceCore;
+        const dashPattern = properties.dashPattern ?? [];
+        if (dashPattern.length > 0) {
+          if (
+            dashPattern.length > 2 ||
+            dashPattern.some((value) => !Number.isFinite(value) || value <= 0)
+          ) {
+            return {
+              ok: false,
+              issue: {
+                code: "unsupported-style",
+                message: `Operand ${node.id} uses a dash pattern PathKit cannot preserve exactly`,
+                nodeId: node.id,
+              },
+            };
+          }
+          const on = dashPattern[0]!;
+          const off = dashPattern[1] ?? on;
+          const dashed = this.#providerAttempt(
+            node.id,
+            `dash stroke for operand ${node.id}`,
+            this.provider.dash(strokeSource, { on, off, phase: 0 }),
+          );
+          if (!dashed.ok) return dashed;
+          strokeSource = dashed.value;
+        }
+        const outlined = this.#providerAttempt(
           node.id,
-          `dash stroke for operand ${node.id}`,
-          this.provider.dash(strokeSource, { on, off, phase: 0 }),
+          `outline stroke for operand ${node.id}`,
+          this.provider.outlineStroke(strokeSource, {
+            cap:
+              properties.strokeCap === "round"
+                ? "round"
+                : properties.strokeCap === "square"
+                  ? "square"
+                  : "butt",
+            join: properties.strokeJoin ?? "miter",
+            miterLimit: 4,
+            width: properties.strokeWidth * (align === "center" ? 1 : 2),
+          }),
         );
-        if (!dashed.ok) return dashed;
-        strokeSource = dashed.value;
-      }
-      const outlined = this.#providerAttempt(
-        node.id,
-        `outline stroke for operand ${node.id}`,
-        this.provider.outlineStroke(strokeSource, {
-          cap:
-            properties.strokeCap === "round"
-              ? "round"
-              : properties.strokeCap === "square"
-                ? "square"
-                : "butt",
-          join: properties.strokeJoin ?? "miter",
-          miterLimit: 4,
-          width: properties.strokeWidth * (align === "center" ? 1 : 2),
-        }),
-      );
-      if (!outlined.ok) return outlined;
-      strokeGeometry = outlined.value;
-      if (!outlined.value.empty && align !== "center") {
-        const clipped = this.#combine(
-          align === "inside" ? "intersect" : "subtract",
-          align === "inside"
-            ? [appearanceCore, outlined.value]
-            : [outlined.value, appearanceCore],
-          node.id,
-        );
-        if (!clipped.ok) return clipped;
-        strokeGeometry = clipped.value;
+        if (!outlined.ok) return outlined;
+        strokeGeometry = outlined.value;
+        if (!outlined.value.empty && align !== "center") {
+          const clipped = this.#combine(
+            align === "inside" ? "intersect" : "subtract",
+            align === "inside"
+              ? [appearanceCore, outlined.value]
+              : [outlined.value, appearanceCore],
+            node.id,
+          );
+          if (!clipped.ok) return clipped;
+          strokeGeometry = clipped.value;
+        }
       }
     }
 
@@ -494,6 +502,59 @@ class CachedBooleanGeometryResolver implements BooleanGeometryResolver {
     return {
       ok: true,
       value: hasFill ? appearanceCore : (strokeGeometry ?? emptyGeometry()),
+    };
+  }
+
+  #editableVectorStroke(
+    node: ShapeNode,
+    core: GeometryValue,
+  ): GeometryAttempt | null {
+    if (
+      (node.kind !== "path" && node.kind !== "vector") ||
+      !("network" in node.properties)
+    ) {
+      return null;
+    }
+    const properties = node.properties;
+    const outlined = outlineVectorNetworkStroke(
+      properties.network,
+      { path: core.path, fillRule: core.fillRule },
+      {
+        align: properties.strokeAlign ?? "center",
+        cap: toVectorStrokeCap(properties.strokeCap),
+        cornerRadius: properties.cornerRadius ?? 0,
+        cornerSmoothing: properties.cornerSmoothing ?? 0,
+        dashPattern: properties.dashPattern ?? [],
+        join: properties.strokeJoin ?? "miter",
+        miterLimit: 4,
+        width: properties.strokeWidth,
+      },
+      this.provider,
+      "boolean_stroke",
+    );
+    if (!outlined.ok) return this.#unsupportedStroke(node.id, outlined.message);
+    const serialized = serializeVectorNetwork(outlined.network);
+    if (!serialized.ok) {
+      return this.#unsupportedStroke(
+        node.id,
+        serialized.issues.map((issue) => issue.message).join("; "),
+      );
+    }
+    return this.#providerAttempt(
+      node.id,
+      `normalize outlined Vector stroke ${node.id}`,
+      this.provider.normalize({ path: serialized.path }),
+    );
+  }
+
+  #unsupportedStroke(nodeId: string, message: string): GeometryAttempt {
+    return {
+      ok: false,
+      issue: {
+        code: "unsupported-style",
+        message: `Operand ${nodeId} stroke cannot be preserved: ${message}`,
+        nodeId,
+      },
     };
   }
 
@@ -740,8 +801,22 @@ function appearanceGeometrySignature(node: ShapeNode): unknown {
     properties.strokeCap ?? "none",
     properties.strokeJoin ?? "miter",
     properties.dashPattern ?? [],
+    (node.kind === "path" || node.kind === "vector") &&
+    "network" in node.properties
+      ? node.properties.network.vertices.map((vertex) => [
+          vertex.id,
+          vertex.strokeCap,
+          vertex.strokeJoin,
+        ])
+      : [],
     booleanFillRule,
   ];
+}
+
+function toVectorStrokeCap(
+  cap: "none" | "round" | "square" | undefined,
+): "butt" | "round" | "square" {
+  return cap === "round" || cap === "square" ? cap : "butt";
 }
 
 function fingerprintValue(path: string): GeometryValue {

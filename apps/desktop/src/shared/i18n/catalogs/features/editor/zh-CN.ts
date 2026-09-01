@@ -30,6 +30,11 @@ export const editorMessages = {
   "history.duplicatePage": "复制页面",
   "history.reorderPage": "调整页面顺序",
   "history.deletePage": "删除页面",
+  "history.outlineStroke": "轮廓化描边",
+  "history.flattenSelection": "拼合所选图层",
+  "history.updateVectorVertexStrokeAppearance": "更新矢量顶点描边外观",
+  "history.updateVectorVertexCornerRadius": "更新矢量顶点圆角",
+  "editor.vectorGeometryUnavailable": "矢量几何服务不可用，请重试。",
   "renameLayers.title": "重命名图层",
   "renameLayers.description":
     "预览并一次性重命名选中的 {{count}} 个图层，可通过一次撤销还原。",

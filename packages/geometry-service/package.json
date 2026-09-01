@@ -8,8 +8,11 @@
     "./boolean-resolver": "./src/boolean-resolver.ts",
     "./browser-vector-path": "./src/browser-vector-path.ts",
     "./editable-vector": "./src/editable-vector.ts",
+    "./vector-materialization": "./src/vector-materialization.ts",
     "./vector-edit": "./src/vector-edit.ts",
-    "./vector-path": "./src/vector-path.ts"
+    "./vector-corner-radius": "./src/vector-corner-radius.ts",
+    "./vector-path": "./src/vector-path.ts",
+    "./vector-stroke-appearance": "./src/vector-stroke-appearance.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit"

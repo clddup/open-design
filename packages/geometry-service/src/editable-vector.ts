@@ -9,6 +9,7 @@ import type {
   VectorSegmentReference,
   VectorVertex,
 } from "@opendesign/design-contracts";
+import { projectVectorNetworkCornerRadii } from "./vector-corner-radius.js";
 
 export interface VectorNetworkIssue {
   path: string;
@@ -41,7 +42,11 @@ export function resolvePathPropertiesData(
   properties: PathDataProperties | VectorNetworkProperties,
 ): string | null {
   if (!isVectorNetworkProperties(properties)) return properties.path;
-  const result = serializeVectorNetwork(properties.network);
+  const result = serializeVectorNetwork(
+    properties.network,
+    properties.cornerRadius ?? 0,
+    properties.cornerSmoothing ?? 0,
+  );
   return result.ok ? result.path : null;
 }
 
@@ -56,6 +61,8 @@ export function vectorNetworkHasFillRegion(network: VectorNetwork): boolean {
 
 export function serializeVectorNetwork(
   network: VectorNetwork,
+  fallbackCornerRadius = 0,
+  cornerSmoothing = 0,
 ): VectorNetworkResolution {
   const loopDirections = regionLoopDirections(network);
   const issues = [
@@ -63,6 +70,28 @@ export function serializeVectorNetwork(
     ...renderTraversalIssues(network, loopDirections),
   ];
   if (issues.length > 0) return { ok: false, issues };
+  const projected = projectVectorNetworkCornerRadii(
+    network,
+    fallbackCornerRadius,
+    cornerSmoothing,
+  );
+  if (!projected.ok) {
+    return {
+      ok: false,
+      issues: [{ path: "/cornerRadius", message: projected.message }],
+    };
+  }
+  const serialized = serializeValidatedVectorNetwork(
+    projected.network,
+    loopDirections,
+  );
+  return { ...serialized, network };
+}
+
+function serializeValidatedVectorNetwork(
+  network: VectorNetwork,
+  loopDirections: ReadonlyMap<string, ReadonlySet<boolean>>,
+): Omit<Extract<VectorNetworkResolution, { ok: true }>, "network"> {
   const vertices = new Map(
     network.vertices.map((vertex) => [vertex.id, vertex]),
   );
@@ -117,17 +146,33 @@ export function serializeVectorNetwork(
   }
 
   const resolvedBounds = boundsToRect(bounds);
-  return { ok: true, bounds: resolvedBounds, network, path: parts.join(" ") };
+  return { ok: true, bounds: resolvedBounds, path: parts.join(" ") };
 }
 
 /** Serializes one explicit fill region without inventing geometry. */
 export function serializeVectorRegion(
   network: VectorNetwork,
   regionId: string,
+  fallbackCornerRadius = 0,
+  cornerSmoothing = 0,
 ): VectorRegionResolution {
   const issues = validateVectorNetwork(network);
   if (issues.length > 0) return { ok: false, issues };
-  const region = network.regions.find((candidate) => candidate.id === regionId);
+  const projected = projectVectorNetworkCornerRadii(
+    network,
+    fallbackCornerRadius,
+    cornerSmoothing,
+  );
+  if (!projected.ok) {
+    return {
+      ok: false,
+      issues: [{ path: "/cornerRadius", message: projected.message }],
+    };
+  }
+  const renderedNetwork = projected.network;
+  const region = renderedNetwork.regions.find(
+    (candidate) => candidate.id === regionId,
+  );
   if (!region) {
     return {
       ok: false,
@@ -137,12 +182,12 @@ export function serializeVectorRegion(
     };
   }
   const vertices = new Map(
-    network.vertices.map((vertex) => [vertex.id, vertex]),
+    renderedNetwork.vertices.map((vertex) => [vertex.id, vertex]),
   );
   const segments = new Map(
-    network.segments.map((segment) => [segment.id, segment]),
+    renderedNetwork.segments.map((segment) => [segment.id, segment]),
   );
-  const paths = new Map(network.paths.map((path) => [path.id, path]));
+  const paths = new Map(renderedNetwork.paths.map((path) => [path.id, path]));
   const parts: string[] = [];
   for (const loop of region.loops) {
     const path = paths.get(loop.pathId)!;
@@ -221,8 +266,14 @@ function regionLoopDirections(
 
 export function normalizeVectorNetwork(
   network: VectorNetwork,
+  fallbackCornerRadius = 0,
+  cornerSmoothing = 0,
 ): VectorNetworkResolution & { offset?: Point } {
-  const serialized = serializeVectorNetwork(network);
+  const serialized = serializeVectorNetwork(
+    network,
+    fallbackCornerRadius,
+    cornerSmoothing,
+  );
   if (!serialized.ok) return serialized;
   const offset = { x: serialized.bounds.x, y: serialized.bounds.y };
   const normalized: VectorNetwork = {
@@ -233,7 +284,11 @@ export function normalizeVectorNetwork(
       y: normalizeNumber(vertex.y - offset.y),
     })),
   };
-  const result = serializeVectorNetwork(normalized);
+  const result = serializeVectorNetwork(
+    normalized,
+    fallbackCornerRadius,
+    cornerSmoothing,
+  );
   return result.ok ? { ...result, offset } : result;
 }
 

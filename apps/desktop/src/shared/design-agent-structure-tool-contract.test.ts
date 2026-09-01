@@ -90,6 +90,18 @@ const hierarchyInputs: DesignHierarchyToolInput[] = [
 
 const vectorInputs: DesignVectorToolInput[] = [
   {
+    action: "outline-stroke",
+    label: "Outline logo stroke",
+    pageId: "page_brand",
+    nodeId: "logo_path",
+  },
+  {
+    action: "flatten",
+    label: "Flatten logo geometry",
+    pageId: "page_brand",
+    nodeIds: ["logo_path", "logo_accent"],
+  },
+  {
     action: "set-closed",
     label: "Close logo contour",
     pageId: "page_brand",
@@ -116,6 +128,31 @@ const vectorInputs: DesignVectorToolInput[] = [
     regionId: "region_face",
   },
   {
+    action: "set-region-fill-style",
+    fillStyleId: "brand-accent",
+    label: "Use the brand accent Style",
+    nodeId: "logo_path",
+    pageId: "page_brand",
+    regionId: "region_face",
+  },
+  {
+    action: "set-vertex-stroke-appearance",
+    label: "Round selected logo corners",
+    nodeId: "logo_path",
+    pageId: "page_brand",
+    strokeCap: null,
+    strokeJoin: "round",
+    vertexIds: ["vertex_corner_a", "vertex_corner_b"],
+  },
+  {
+    action: "set-vertex-corner-radius",
+    cornerRadius: 12,
+    label: "Round selected logo vertices",
+    nodeId: "logo_path",
+    pageId: "page_brand",
+    vertexIds: ["vertex_corner_a", "vertex_corner_b"],
+  },
+  {
     action: "reverse-path",
     label: "Reverse logo contour",
     pageId: "page_brand",
@@ -123,10 +160,12 @@ const vectorInputs: DesignVectorToolInput[] = [
   },
   {
     action: "connect-endpoints",
+    endpoints: [
+      { nodeId: "logo_path", vertexId: "vertex_start" },
+      { nodeId: "logo_shadow", vertexId: "vertex_end" },
+    ],
     label: "Connect contour endpoints",
     pageId: "page_brand",
-    nodeId: "logo_path",
-    vertexIds: ["vertex_start", "vertex_end"],
   },
   {
     action: "disconnect-vertex",
@@ -134,7 +173,22 @@ const vectorInputs: DesignVectorToolInput[] = [
     pageId: "page_brand",
     nodeId: "logo_path",
     pathId: "outer_path",
+    segmentId: "segment_branch",
     vertexId: "vertex_mid",
+  },
+  {
+    action: "delete-segments",
+    label: "Delete logo branch segment",
+    pageId: "page_brand",
+    nodeId: "logo_path",
+    segmentIds: ["segment_branch"],
+  },
+  {
+    action: "delete-vertices",
+    label: "Delete logo junction",
+    pageId: "page_brand",
+    nodeId: "logo_path",
+    vertexIds: ["vertex_mid"],
   },
   {
     action: "transform-vertices",
@@ -263,6 +317,50 @@ describe("Hierarchy and Vector Agent contracts", () => {
     expect(unknown.every((issue) => issue.path === "/at/kind")).toBe(true);
   });
 
+  it("requires at least one vertex stroke appearance field", () => {
+    expect(
+      DesignVectorContract.issues({
+        action: "set-vertex-stroke-appearance",
+        label: "Update selected vertices",
+        nodeId: "logo_path",
+        pageId: "page_brand",
+        vertexIds: ["vertex_corner_a"],
+      }),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "design_vector.vertex_stroke_patch_empty",
+        path: "",
+      }),
+    );
+  });
+
+  it("rejects negative vertex corner radii at the shared schema boundary", () => {
+    expect(
+      DesignVectorContract.issues({
+        action: "set-vertex-corner-radius",
+        cornerRadius: -1,
+        label: "Round selected vertices",
+        nodeId: "logo_path",
+        pageId: "page_brand",
+        vertexIds: ["vertex_corner_a"],
+      }),
+    ).toContainEqual(expect.objectContaining({ path: "/cornerRadius" }));
+  });
+
+  it("rejects an identical endpoint pair at the shared schema boundary", () => {
+    expect(
+      DesignVectorContract.issues({
+        action: "connect-endpoints",
+        endpoints: [
+          { nodeId: "logo_path", vertexId: "vertex_start" },
+          { nodeId: "logo_path", vertexId: "vertex_start" },
+        ],
+        label: "Connect contour endpoints",
+        pageId: "page_brand",
+      }),
+    ).toContainEqual(expect.objectContaining({ path: "/endpoints" }));
+  });
+
   it("reuses the document topology ID grammar", () => {
     expect(
       DesignVectorContract.issues({
@@ -300,8 +398,8 @@ describe("Hierarchy and Vector Agent contracts", () => {
   it("reports unknown actions without leaking candidate branches", () => {
     for (const contract of [DesignHierarchyContract, DesignVectorContract]) {
       const issues = contract.issues({
-        action: "flatten",
-        label: "Flatten logo",
+        action: "unsupported-vector-action",
+        label: "Unsupported vector action",
         pageId: "page_brand",
       });
       expect(issues).toEqual(

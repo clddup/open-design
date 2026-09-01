@@ -26,6 +26,7 @@ type CanvasFitTarget = "page" | "selection";
 interface CanvasShortcutContext {
   applyBooleanOperation: (operation: BooleanOperation) => void;
   canDeleteSelection: boolean;
+  canFlattenSelection: boolean;
   canRenameSelection: boolean;
   canToggleMaskSelection: boolean;
   changeZoom: (zoom: number) => void;
@@ -33,6 +34,7 @@ interface CanvasShortcutContext {
   duplicateSelection: () => void;
   editorActive: boolean;
   fitCanvas: (target: CanvasFitTarget) => void;
+  flattenSelection: () => void;
   groupSelection: () => void;
   openRenameLayers: () => void;
   platform: NodeJS.Platform;
@@ -48,12 +50,14 @@ export function useCanvasWorkspaceController({
   activePageId,
   applyBooleanOperation,
   canDeleteSelection,
+  canFlattenSelection,
   canRenameSelection,
   canToggleMaskSelection,
   deleteNodes,
   documentId,
   duplicateSelection,
   editorActive,
+  flattenSelection,
   groupSelection,
   openRenameLayers,
   platform,
@@ -71,12 +75,14 @@ export function useCanvasWorkspaceController({
   activePageId: string;
   applyBooleanOperation: (operation: BooleanOperation) => void;
   canDeleteSelection: boolean;
+  canFlattenSelection: boolean;
   canRenameSelection: boolean;
   canToggleMaskSelection: boolean;
   deleteNodes: (nodeIds: readonly string[]) => void;
   documentId: string;
   duplicateSelection: () => void;
   editorActive: boolean;
+  flattenSelection: () => void;
   groupSelection: () => void;
   openRenameLayers: () => void;
   platform: NodeJS.Platform;
@@ -160,6 +166,7 @@ export function useCanvasWorkspaceController({
   const shortcutContext = useRef<CanvasShortcutContext>({
     applyBooleanOperation,
     canDeleteSelection,
+    canFlattenSelection,
     canRenameSelection,
     canToggleMaskSelection,
     changeZoom,
@@ -167,6 +174,7 @@ export function useCanvasWorkspaceController({
     duplicateSelection,
     editorActive,
     fitCanvas,
+    flattenSelection,
     groupSelection,
     openRenameLayers,
     platform,
@@ -180,6 +188,7 @@ export function useCanvasWorkspaceController({
   shortcutContext.current = {
     applyBooleanOperation,
     canDeleteSelection,
+    canFlattenSelection,
     canRenameSelection,
     canToggleMaskSelection,
     changeZoom,
@@ -187,6 +196,7 @@ export function useCanvasWorkspaceController({
     duplicateSelection,
     editorActive,
     fitCanvas,
+    flattenSelection,
     groupSelection,
     openRenameLayers,
     platform,
@@ -331,6 +341,11 @@ function handleCanvasShortcut(
   if (modifier && event.key.toLowerCase() === "d") {
     event.preventDefault();
     context.duplicateSelection();
+    return;
+  }
+  if (modifier && !event.altKey && !event.shiftKey && event.code === "KeyE") {
+    event.preventDefault();
+    if (context.canFlattenSelection) context.flattenSelection();
     return;
   }
   if (modifier && event.key.toLowerCase() === "g") {

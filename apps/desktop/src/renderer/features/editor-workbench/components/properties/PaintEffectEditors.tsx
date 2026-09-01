@@ -5,6 +5,7 @@ import type {
   ImageFilters,
   MaskMode,
   Paint,
+  VectorNetworkProperties,
 } from "@opendesign/design-contracts";
 import { Icon } from "@opendesign/ui";
 import type { MessageKey } from "@/shared/i18n/messages";
@@ -35,10 +36,14 @@ type FillNode = Extract<
       | "vector";
   }
 >;
-type CornerNode = Extract<
-  DesignNode,
-  { kind: "frame" | "slot" | "image" | "polygon" | "rectangle" | "star" }
->;
+type CornerNode =
+  | Extract<
+      DesignNode,
+      { kind: "frame" | "slot" | "image" | "polygon" | "rectangle" | "star" }
+    >
+  | (Extract<DesignNode, { kind: "path" | "vector" }> & {
+      properties: VectorNetworkProperties;
+    });
 type StrokeNode = FillNode | Extract<DesignNode, { kind: "line" }>;
 
 export const blendModes: BlendMode[] = [
@@ -99,7 +104,9 @@ export function isCornerNode(node: DesignNode): node is CornerNode {
     node.kind === "image" ||
     node.kind === "polygon" ||
     node.kind === "rectangle" ||
-    node.kind === "star"
+    node.kind === "star" ||
+    ((node.kind === "path" || node.kind === "vector") &&
+      "network" in node.properties)
   );
 }
 

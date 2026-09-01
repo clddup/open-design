@@ -1,10 +1,12 @@
 import type {
   DesignDocument,
+  DesignNode,
   DesignOperation,
   Paint,
   Point,
   Transform,
   VectorNetwork,
+  VectorNetworkProperties,
   VectorPointMode,
 } from "@opendesign/design-contracts";
 import {
@@ -12,17 +14,33 @@ import {
   connectVectorEndpoints,
   cutVectorNetworkByLine,
   cutVectorPath,
+  deleteVectorSegments,
+  deleteVectorVertices,
   disconnectVectorVertex,
   findVectorPathIdForVertex,
   inferVectorPointMode,
   reverseVectorPath,
+  setVectorRegionFillStyle,
   setVectorRegionFills,
+  setVectorVertexCornerRadius,
+  setVectorVertexStrokeAppearance,
   setVectorPathClosed,
   transformVectorVertices,
   vectorNetworkEditability,
+  vectorNetworkPointEditability,
   type VectorCutLocation,
+  type VectorVertexStrokeAppearancePatch,
 } from "@opendesign/geometry-service/vector-edit";
-import { normalizeVectorNetwork } from "@opendesign/geometry-service/editable-vector";
+import {
+  normalizeVectorNetwork,
+  resolvePathPropertiesData,
+} from "@opendesign/geometry-service/editable-vector";
+import {
+  outlineVectorNetworkStroke,
+  outlineVectorPath,
+} from "@opendesign/geometry-service/vector-materialization";
+import { type VectorGeometryProvider } from "@opendesign/geometry-service/vector-path";
+import { styleDefinition } from "@opendesign/style-service";
 import {
   getWorldTransform,
   invertTransform,
@@ -55,13 +73,36 @@ export type VectorSemanticEdit =
       regionId: string;
     }
   | {
+      action: "set-region-fill-style";
+      fillStyleId: string;
+      regionId: string;
+    }
+  | ({
+      action: "set-vertex-stroke-appearance";
+      vertexIds: readonly string[];
+    } & VectorVertexStrokeAppearancePatch)
+  | {
+      action: "set-vertex-corner-radius";
+      cornerRadius: number | null;
+      vertexIds: readonly string[];
+    }
+  | {
       action: "connect-endpoints";
       vertexIds: readonly [string, string];
     }
   | {
       action: "disconnect-vertex";
       pathId: string;
+      segmentId?: string;
       vertexId: string;
+    }
+  | {
+      action: "delete-segments";
+      segmentIds: readonly string[];
+    }
+  | {
+      action: "delete-vertices";
+      vertexIds: readonly string[];
     }
   | {
       action: "transform-vertices";
@@ -89,6 +130,7 @@ export interface VectorEditScope {
   readOnlyReason?: string;
   selectedSegmentIds: readonly string[];
   selectedVertexIds: readonly string[];
+  topologyEditable: boolean;
 }
 
 export interface VectorEditCollectionScope {
@@ -100,6 +142,11 @@ export interface VectorEditCollectionScope {
 export interface VectorLayerLineCutTarget {
   nodeId: string;
   resultNodeId: string;
+}
+
+export interface VectorLayerEndpointTarget {
+  nodeId: string;
+  vertexId: string;
 }
 
 export interface VectorNetworkUpdateTarget {
@@ -135,6 +182,18 @@ export type VectorOperationPlan =
           resultNodeId: string;
           retainedPathIds: readonly string[];
         }[];
+      };
+      layerConnectResult?: {
+        removedNodeId: string;
+        retainedNodeId: string;
+      };
+      outlineResult?: {
+        resultNodeId: string;
+        sourceNodeId: string;
+      };
+      flattenResult?: {
+        resultNodeId: string;
+        sourceNodeIds: readonly string[];
       };
     }
   | {
@@ -229,6 +288,7 @@ function resolveVectorNodeEditScope(
     (segmentId) => segments.has(segmentId),
   );
   const editability = vectorNetworkEditability(network);
+  const pointEditability = vectorNetworkPointEditability(network);
   const locked = isEffectivelyLocked(document, node.id);
   const modes = new Set(
     selected.map((vertexId) => inferVectorPointMode(network, vertexId)),
@@ -251,12 +311,12 @@ function resolveVectorNodeEditScope(
       : selectedPathIds.size === 0 && network.paths.length === 1
         ? network.paths[0]?.id
         : undefined;
-  const readOnly = locked || !editability.editable;
+  const readOnly = locked || !pointEditability.editable;
   const readOnlyReason = locked
     ? "The vector or one of its ancestors is locked"
-    : editability.editable
+    : pointEditability.editable
       ? null
-      : editability.reason;
+      : pointEditability.reason;
   return {
     ...(activePathId ? { activePathId } : {}),
     nodeId: node.id,
@@ -268,6 +328,7 @@ function resolveVectorNodeEditScope(
     ...(readOnlyReason ? { readOnlyReason } : {}),
     selectedSegmentIds: selectedSegments,
     selectedVertexIds: selected,
+    topologyEditable: editability.editable,
   };
 }
 
@@ -307,7 +368,7 @@ export function planVectorNetworkUpdate(
       message: `Editable vector ${nodeId} is locked`,
     };
   }
-  const editability = vectorNetworkEditability(network);
+  const editability = vectorNetworkPointEditability(network);
   if (!editability.editable) {
     return {
       ok: false,
@@ -315,7 +376,11 @@ export function planVectorNetworkUpdate(
       message: editability.reason,
     };
   }
-  const normalized = normalizeVectorNetwork(network);
+  const normalized = normalizeVectorNetwork(
+    network,
+    node.properties.cornerRadius ?? 0,
+    node.properties.cornerSmoothing ?? 0,
+  );
   if (!normalized.ok || !normalized.offset) {
     return {
       ok: false,
@@ -474,6 +539,59 @@ export function planVectorLayersVertexTransform(
   return planVectorNetworkUpdates(document, pageId, updates);
 }
 
+/**
+ * Joins endpoints from two sibling Vector layers into the earlier layer.
+ * The appended network is transformed into the retained node's local space,
+ * remapped to collision-free geometry IDs, and removed in the same revision.
+ */
+export function planVectorLayersEndpointConnect(
+  document: DesignDocument,
+  pageId: string,
+  targets: readonly [VectorLayerEndpointTarget, VectorLayerEndpointTarget],
+): VectorOperationPlan {
+  const [firstTarget, secondTarget] = targets;
+  if (firstTarget.nodeId === secondTarget.nodeId) {
+    return planVectorSemanticEdit(document, pageId, firstTarget.nodeId, {
+      action: "connect-endpoints",
+      vertexIds: [firstTarget.vertexId, secondTarget.vertexId],
+    });
+  }
+  const ordered = resolveLayerConnectTargets(document, pageId, targets);
+  if (!ordered.ok) return ordered;
+  const appended = projectAppendedNetwork(document, ordered.value);
+  if (!appended.ok) return appended;
+  const connected = connectVectorEndpoints(
+    mergeAuthoredVectorNetworks(
+      ordered.value.retained.properties.network,
+      appended.network,
+    ),
+    [ordered.value.retainedVertexId, appended.vertexId],
+  );
+  if (!connected.ok) return vectorOperationFailure(connected);
+  const update = planVectorNetworkUpdate(
+    document,
+    pageId,
+    ordered.value.retained.id,
+    connected.network,
+  );
+  if (!update.ok) return update;
+  return {
+    ok: true,
+    layerConnectResult: {
+      removedNodeId: ordered.value.appended.id,
+      retainedNodeId: ordered.value.retained.id,
+    },
+    operations: [
+      ...update.operations,
+      {
+        commandId: `delete_joined_vector_${ordered.value.appended.id}`,
+        type: "delete_element",
+        nodeId: ordered.value.appended.id,
+      },
+    ],
+  };
+}
+
 export function planVectorSemanticEdit(
   document: DesignDocument,
   pageId: string,
@@ -511,6 +629,7 @@ export function planVectorSemanticEdit(
             node.properties.network,
             edit.pathId,
             edit.vertexId,
+            edit.segmentId,
           );
     if (!cut.ok) return vectorOperationFailure(cut);
     const plan = planVectorNetworkUpdate(document, pageId, nodeId, cut.network);
@@ -531,6 +650,26 @@ export function planVectorSemanticEdit(
     if (!connected.ok) return vectorOperationFailure(connected);
     return planVectorNetworkUpdate(document, pageId, nodeId, connected.network);
   }
+  if (edit.action === "delete-segments") {
+    const deleted = deleteVectorSegments(
+      node.properties.network,
+      edit.segmentIds,
+    );
+    if (!deleted.ok) return vectorOperationFailure(deleted);
+    if (deleted.deleteNode)
+      return planDeleteVectorNode(document, pageId, nodeId);
+    return planVectorNetworkUpdate(document, pageId, nodeId, deleted.network);
+  }
+  if (edit.action === "delete-vertices") {
+    const deleted = deleteVectorVertices(
+      node.properties.network,
+      edit.vertexIds,
+    );
+    if (!deleted.ok) return vectorOperationFailure(deleted);
+    if (deleted.deleteNode)
+      return planDeleteVectorNode(document, pageId, nodeId);
+    return planVectorNetworkUpdate(document, pageId, nodeId, deleted.network);
+  }
   if (edit.action === "bend-segment") {
     const bent = bendVectorSegment(
       node.properties.network,
@@ -550,6 +689,46 @@ export function planVectorSemanticEdit(
     );
     if (!painted.ok) return vectorOperationFailure(painted);
     return planVectorNetworkUpdate(document, pageId, nodeId, painted.network);
+  }
+  if (edit.action === "set-region-fill-style") {
+    const style = styleDefinition(document, edit.fillStyleId);
+    if (!style) {
+      return vectorPlanFailure(
+        "not-found",
+        `Fill Style ${edit.fillStyleId} does not exist`,
+      );
+    }
+    if (style.styleType !== "PAINT") {
+      return vectorPlanFailure(
+        "unsupported-topology",
+        `Vector region Fill requires a PAINT Style, received ${style.styleType}`,
+      );
+    }
+    const linked = setVectorRegionFillStyle(
+      node.properties.network,
+      edit.regionId,
+      edit.fillStyleId,
+    );
+    if (!linked.ok) return vectorOperationFailure(linked);
+    return planVectorNetworkUpdate(document, pageId, nodeId, linked.network);
+  }
+  if (edit.action === "set-vertex-stroke-appearance") {
+    const updated = setVectorVertexStrokeAppearance(
+      node.properties.network,
+      edit.vertexIds,
+      edit,
+    );
+    if (!updated.ok) return vectorOperationFailure(updated);
+    return planVectorNetworkUpdate(document, pageId, nodeId, updated.network);
+  }
+  if (edit.action === "set-vertex-corner-radius") {
+    const updated = setVectorVertexCornerRadius(
+      node.properties.network,
+      edit.vertexIds,
+      edit.cornerRadius,
+    );
+    if (!updated.ok) return vectorOperationFailure(updated);
+    return planVectorNetworkUpdate(document, pageId, nodeId, updated.network);
   }
   if (edit.action === "transform-vertices") {
     const transformed = transformVectorVertices(
@@ -573,6 +752,136 @@ export function planVectorSemanticEdit(
     return vectorOperationFailure(edited);
   }
   return planVectorNetworkUpdate(document, pageId, nodeId, edited.network);
+}
+
+/** Creates a Figma-compatible editable Vector sibling while preserving source. */
+export function planVectorOutlineStroke(
+  document: DesignDocument,
+  pageId: string,
+  nodeId: string,
+  resultNodeId: string,
+  geometryIdPrefix: string,
+  provider: VectorGeometryProvider,
+): VectorOperationPlan {
+  const node = document.nodesById[nodeId];
+  if (!isEditablePathNode(document, pageId, nodeId)) {
+    return vectorPlanFailure(
+      "not-found",
+      `Editable vector ${nodeId} does not exist on page ${pageId}`,
+    );
+  }
+  if (isEffectivelyLocked(document, nodeId)) {
+    return vectorPlanFailure("locked", `Editable vector ${nodeId} is locked`);
+  }
+  if (!node || (node.kind !== "path" && node.kind !== "vector")) {
+    return vectorPlanFailure(
+      "not-found",
+      `Editable vector ${nodeId} is unavailable`,
+    );
+  }
+  if (!resultNodeId || document.nodesById[resultNodeId]) {
+    return vectorPlanFailure(
+      "invalid-geometry",
+      `Outline result node ID ${resultNodeId || "(empty)"} is unavailable`,
+    );
+  }
+  const insertion = vectorSiblingInsertion(document, pageId, node);
+  if (!insertion.ok) return insertion;
+  const sourcePath = resolvePathPropertiesData(node.properties);
+  const visibleStrokes = node.properties.strokes.filter(
+    (paint) => paint.visible !== false,
+  );
+  if (
+    !sourcePath ||
+    node.properties.strokeWidth <= 0 ||
+    visibleStrokes.length === 0
+  ) {
+    return vectorPlanFailure(
+      "no-op",
+      `Editable vector ${nodeId} has no visible stroke to outline`,
+    );
+  }
+  const cornerRadius =
+    "network" in node.properties ? node.properties.cornerRadius : undefined;
+  const cornerSmoothing =
+    "network" in node.properties ? node.properties.cornerSmoothing : undefined;
+  const outlineOptions = {
+    align: node.properties.strokeAlign ?? "center",
+    cap:
+      node.properties.strokeCap === "round" ||
+      node.properties.strokeCap === "square"
+        ? node.properties.strokeCap
+        : "butt",
+    ...(cornerRadius === undefined ? {} : { cornerRadius }),
+    ...(cornerSmoothing === undefined ? {} : { cornerSmoothing }),
+    ...(node.properties.dashPattern === undefined
+      ? {}
+      : { dashPattern: node.properties.dashPattern }),
+    join: node.properties.strokeJoin ?? "miter",
+    miterLimit: 4,
+    width: node.properties.strokeWidth,
+  } as const;
+  const source = {
+    path: sourcePath,
+    fillRule: node.properties.fillRule ?? "nonzero",
+  } as const;
+  const outlined =
+    "network" in node.properties
+      ? outlineVectorNetworkStroke(
+          node.properties.network,
+          source,
+          outlineOptions,
+          provider,
+          geometryIdPrefix,
+        )
+      : outlineVectorPath(source, outlineOptions, provider, geometryIdPrefix);
+  if (!outlined.ok)
+    return vectorPlanFailure("invalid-geometry", outlined.message);
+  const normalized = normalizeVectorNetwork(outlined.network);
+  if (!normalized.ok || !normalized.offset) {
+    return vectorPlanFailure(
+      "invalid-geometry",
+      "Outlined stroke could not be normalized",
+    );
+  }
+  const inserted = structuredClone(node);
+  inserted.id = resultNodeId;
+  inserted.kind = "vector";
+  inserted.name = `${node.name || "Vector"} Outline`;
+  inserted.transform = translateLocalTransform(
+    node.transform,
+    normalized.offset,
+  );
+  inserted.size = {
+    width: normalized.bounds.width,
+    height: normalized.bounds.height,
+  };
+  inserted.properties = {
+    ...structuredClone(node.properties),
+    cornerRadius: 0,
+    cornerSmoothing: 0,
+    dashPattern: [],
+    fillRule: normalized.network.regions[0]?.windingRule ?? "nonzero",
+    fills: structuredClone(visibleStrokes),
+    network: normalized.network,
+    strokeAlign: "center",
+    strokeWidth: 0,
+    strokes: [],
+  };
+  return {
+    ok: true,
+    operations: [
+      {
+        commandId: `insert_vector_outline_${resultNodeId}`,
+        type: "insert_element",
+        pageId,
+        parentId: node.parentId,
+        index: insertion.index,
+        node: inserted,
+      },
+    ],
+    outlineResult: { sourceNodeId: node.id, resultNodeId },
+  };
 }
 
 /**
@@ -788,8 +1097,18 @@ function planVectorLineCut(
     edit.end,
   );
   if (!divided.ok) return vectorOperationFailure(divided);
-  const retained = normalizeVectorNetwork(divided.retainedNetwork);
-  const extracted = normalizeVectorNetwork(divided.extractedNetwork);
+  const cornerRadius = node.properties.cornerRadius ?? 0;
+  const cornerSmoothing = node.properties.cornerSmoothing ?? 0;
+  const retained = normalizeVectorNetwork(
+    divided.retainedNetwork,
+    cornerRadius,
+    cornerSmoothing,
+  );
+  const extracted = normalizeVectorNetwork(
+    divided.extractedNetwork,
+    cornerRadius,
+    cornerSmoothing,
+  );
   if (!retained.ok || !retained.offset || !extracted.ok || !extracted.offset) {
     const issues = [
       ...(retained.ok ? [] : retained.issues),
@@ -883,6 +1202,269 @@ function vectorOperationFailure(failure: {
   };
 }
 
+type EditableVectorNode = Extract<DesignNode, { kind: "path" | "vector" }> & {
+  properties: VectorNetworkProperties;
+};
+
+function isEditableVectorNode(
+  node: DesignNode | undefined,
+): node is EditableVectorNode {
+  return (
+    !!node &&
+    (node.kind === "path" || node.kind === "vector") &&
+    "network" in node.properties
+  );
+}
+
+function editableVectorTarget(
+  document: DesignDocument,
+  pageId: string,
+  nodeId: string,
+):
+  | { ok: true; node: EditableVectorNode }
+  | Extract<VectorOperationPlan, { ok: false }> {
+  const node = document.nodesById[nodeId];
+  if (
+    !isEditableVectorNode(node) ||
+    !nodeBelongsToPage(document, pageId, node.id)
+  ) {
+    return vectorPlanFailure(
+      "not-found",
+      `Editable vector ${nodeId} does not exist on page ${pageId}`,
+    );
+  }
+  if (isEffectivelyLocked(document, node.id)) {
+    return vectorPlanFailure("locked", `Editable vector ${nodeId} is locked`);
+  }
+  return { ok: true, node };
+}
+
+function sameVectorAppearance(
+  first: EditableVectorNode,
+  second: EditableVectorNode,
+): boolean {
+  return (
+    serializedVectorAppearance(first) === serializedVectorAppearance(second)
+  );
+}
+
+function serializedVectorAppearance(node: EditableVectorNode): string {
+  return JSON.stringify(
+    canonicalizeJson(
+      Object.fromEntries(
+        Object.entries(node.properties).filter(([name]) => name !== "network"),
+      ),
+    ),
+  );
+}
+
+function canonicalizeJson(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalizeJson);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.entries(value)
+      .sort(([first], [second]) => first.localeCompare(second))
+      .map(([name, item]) => [name, canonicalizeJson(item)]),
+  );
+}
+
+type OrderedLayerConnectTargets = NonNullable<
+  ReturnType<typeof siblingOrderedTargets>
+>;
+
+function resolveLayerConnectTargets(
+  document: DesignDocument,
+  pageId: string,
+  targets: readonly [VectorLayerEndpointTarget, VectorLayerEndpointTarget],
+):
+  | { ok: true; value: OrderedLayerConnectTargets }
+  | Extract<VectorOperationPlan, { ok: false }> {
+  const [firstTarget, secondTarget] = targets;
+  const first = editableVectorTarget(document, pageId, firstTarget.nodeId);
+  if (!first.ok) return first;
+  const second = editableVectorTarget(document, pageId, secondTarget.nodeId);
+  if (!second.ok) return second;
+  if (first.node.parentId !== second.node.parentId) {
+    return vectorPlanFailure(
+      "unsupported-topology",
+      "Cross-layer Vector Connect requires sibling layers",
+    );
+  }
+  if (!sameVectorAppearance(first.node, second.node)) {
+    return vectorPlanFailure(
+      "unsupported-topology",
+      "Cross-layer Vector Connect requires matching layer appearance",
+    );
+  }
+  const ordered = siblingOrderedTargets(
+    document,
+    pageId,
+    first.node,
+    second.node,
+    firstTarget,
+    secondTarget,
+  );
+  return ordered
+    ? { ok: true, value: ordered }
+    : vectorPlanFailure(
+        "not-found",
+        "Cross-layer Vector Connect could not resolve sibling order",
+      );
+}
+
+function projectAppendedNetwork(
+  document: DesignDocument,
+  targets: OrderedLayerConnectTargets,
+):
+  | { ok: true; network: VectorNetwork; vertexId: string }
+  | Extract<VectorOperationPlan, { ok: false }> {
+  const retainedWorld = getWorldTransform(document, targets.retained.id);
+  const appendedWorld = getWorldTransform(document, targets.appended.id);
+  const retainedInverse = retainedWorld ? invertTransform(retainedWorld) : null;
+  if (!retainedInverse || !appendedWorld) {
+    return vectorPlanFailure(
+      "non-invertible",
+      "Cross-layer Vector Connect requires invertible layer transforms",
+    );
+  }
+  const transformed = transformVectorVertices(
+    targets.appended.properties.network,
+    targets.appended.properties.network.vertices.map(({ id }) => id),
+    multiplyTransforms(retainedInverse, appendedWorld),
+  );
+  if (!transformed.ok) return vectorOperationFailure(transformed);
+  const remapped = remapVectorNetworkIds(
+    transformed.network,
+    targets.retained.properties.network,
+    targets.appended.id,
+  );
+  const vertexId = remapped.vertexIds.get(targets.appendedVertexId);
+  return vertexId
+    ? { ok: true, network: remapped.network, vertexId }
+    : vectorPlanFailure(
+        "not-found",
+        `Vector endpoint ${targets.appendedVertexId} does not exist`,
+      );
+}
+
+function siblingOrderedTargets(
+  document: DesignDocument,
+  pageId: string,
+  first: EditableVectorNode,
+  second: EditableVectorNode,
+  firstTarget: VectorLayerEndpointTarget,
+  secondTarget: VectorLayerEndpointTarget,
+): {
+  appended: EditableVectorNode;
+  appendedVertexId: string;
+  retained: EditableVectorNode;
+  retainedVertexId: string;
+} | null {
+  const siblings = first.parentId
+    ? document.nodesById[first.parentId]?.childIds
+    : document.pagesById[pageId]?.rootNodeIds;
+  const firstIndex = siblings?.indexOf(first.id) ?? -1;
+  const secondIndex = siblings?.indexOf(second.id) ?? -1;
+  if (firstIndex < 0 || secondIndex < 0) return null;
+  return firstIndex < secondIndex
+    ? {
+        retained: first,
+        retainedVertexId: firstTarget.vertexId,
+        appended: second,
+        appendedVertexId: secondTarget.vertexId,
+      }
+    : {
+        retained: second,
+        retainedVertexId: secondTarget.vertexId,
+        appended: first,
+        appendedVertexId: firstTarget.vertexId,
+      };
+}
+
+function remapVectorNetworkIds(
+  source: VectorNetwork,
+  retained: VectorNetwork,
+  prefix: string,
+): { network: VectorNetwork; vertexIds: ReadonlyMap<string, string> } {
+  const used = new Set([
+    ...retained.vertices.map(({ id }) => id),
+    ...retained.segments.map(({ id }) => id),
+    ...retained.paths.map(({ id }) => id),
+    ...retained.regions.map(({ id }) => id),
+  ]);
+  const remap = (items: readonly { id: string }[], role: string) =>
+    new Map(
+      items.map(({ id }) => [
+        id,
+        uniqueGeometryId(`${prefix}.${role}.${id}`, used),
+      ]),
+    );
+  const vertexIds = remap(source.vertices, "vertex");
+  const segmentIds = remap(source.segments, "segment");
+  const pathIds = remap(source.paths, "path");
+  const regionIds = remap(source.regions, "region");
+  return {
+    vertexIds,
+    network: {
+      vertices: source.vertices.map((vertex) => ({
+        ...structuredClone(vertex),
+        id: vertexIds.get(vertex.id)!,
+      })),
+      segments: source.segments.map((segment) => ({
+        ...structuredClone(segment),
+        id: segmentIds.get(segment.id)!,
+        startVertexId: vertexIds.get(segment.startVertexId)!,
+        endVertexId: vertexIds.get(segment.endVertexId)!,
+      })),
+      paths: source.paths.map((path) => ({
+        ...structuredClone(path),
+        id: pathIds.get(path.id)!,
+        segments: path.segments.map((reference) => ({
+          ...reference,
+          segmentId: segmentIds.get(reference.segmentId)!,
+        })),
+      })),
+      regions: source.regions.map((region) => ({
+        ...structuredClone(region),
+        id: regionIds.get(region.id)!,
+        loops: region.loops.map((loop) => ({
+          ...loop,
+          pathId: pathIds.get(loop.pathId)!,
+        })),
+      })),
+    },
+  };
+}
+
+function uniqueGeometryId(candidate: string, used: Set<string>): string {
+  let id = candidate;
+  let suffix = 2;
+  while (used.has(id)) id = `${candidate}.${suffix++}`;
+  used.add(id);
+  return id;
+}
+
+function mergeAuthoredVectorNetworks(
+  first: VectorNetwork,
+  second: VectorNetwork,
+): VectorNetwork {
+  return {
+    vertices: [
+      ...structuredClone(first.vertices),
+      ...structuredClone(second.vertices),
+    ],
+    segments: [
+      ...structuredClone(first.segments),
+      ...structuredClone(second.segments),
+    ],
+    paths: [...structuredClone(first.paths), ...structuredClone(second.paths)],
+    regions: [
+      ...structuredClone(first.regions),
+      ...structuredClone(second.regions),
+    ],
+  };
+}
+
 export function planDeleteVectorNode(
   document: DesignDocument,
   pageId: string,
@@ -933,6 +1515,54 @@ function translateLocalTransform(
     normalizeNumber(e + a * offset.x + c * offset.y),
     normalizeNumber(f + b * offset.x + d * offset.y),
   ];
+}
+
+function isEditablePathNode(
+  document: DesignDocument,
+  pageId: string,
+  nodeId: string,
+): boolean {
+  const node = document.nodesById[nodeId];
+  return Boolean(
+    node &&
+    (node.kind === "path" || node.kind === "vector") &&
+    nodeBelongsToPage(document, pageId, nodeId),
+  );
+}
+
+function vectorSiblingInsertion(
+  document: DesignDocument,
+  pageId: string,
+  node: Extract<DesignNode, { kind: "path" | "vector" }>,
+): { ok: true; index: number } | Extract<VectorOperationPlan, { ok: false }> {
+  const parent = node.parentId ? document.nodesById[node.parentId] : undefined;
+  if (parent?.kind === "boolean") {
+    return vectorPlanFailure(
+      "unsupported-topology",
+      "Outlining a Boolean operand requires leaving Boolean edit scope",
+    );
+  }
+  const siblings = node.parentId
+    ? parent?.kind === "frame" ||
+      parent?.kind === "slot" ||
+      parent?.kind === "group"
+      ? parent.childIds
+      : undefined
+    : document.pagesById[pageId]?.rootNodeIds;
+  const sourceIndex = siblings?.indexOf(node.id) ?? -1;
+  return siblings && sourceIndex >= 0
+    ? { ok: true, index: sourceIndex + 1 }
+    : vectorPlanFailure(
+        "not-found",
+        `Editable vector ${node.id} has no valid insertion parent`,
+      );
+}
+
+function vectorPlanFailure(
+  code: VectorOperationFailureCode,
+  message: string,
+): Extract<VectorOperationPlan, { ok: false }> {
+  return { ok: false, code, message };
 }
 
 function nodeBelongsToPage(

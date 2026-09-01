@@ -1,5 +1,10 @@
-export const GEOMETRY_SERVICE_CONTRACT_VERSION = 15 as const;
+export const GEOMETRY_SERVICE_CONTRACT_VERSION = 22 as const;
 
+export {
+  projectVectorNetworkCornerRadii,
+  vectorNetworkHasCornerRadius,
+  type VectorCornerRadiusProjectionResult,
+} from "./vector-corner-radius.js";
 export {
   alignItems,
   analyzeSmartSelection,
@@ -40,11 +45,17 @@ export {
   moveVectorVertices,
   nearestVectorSegmentPoint,
   reverseVectorPath,
+  setVectorRegionFills,
+  setVectorRegionFillStyle,
+  setVectorVertexCornerRadius,
+  setVectorVertexStrokeAppearance,
   setVectorPathClosed,
   setVectorPointMode,
   transformVectorVertices,
+  vectorCornerRadiusEligibleVertexIds,
   vectorVertexBounds,
   vectorNetworkEditability,
+  vectorNetworkPointEditability,
   type VectorCutLocation,
   type VectorCutResult,
   type VectorDeleteResult,
@@ -56,4 +67,23 @@ export {
   type VectorLineCutResult,
   type VectorSegmentHit,
   type VectorVertexHandle,
+  type VectorVertexStrokeAppearancePatch,
 } from "./vector-edit.js";
+export {
+  projectVectorNetworkStrokePaths,
+  resolveVectorVertexStrokeAppearance,
+  vectorNetworkHasVertexStrokeOverrides,
+  type EffectiveVectorVertexStrokeAppearance,
+  type ProjectedVectorStrokePath,
+  type VectorStrokeAppearanceFallback,
+  type VectorStrokePathProjectionResult,
+} from "./vector-stroke-appearance.js";
+export {
+  materializeTransformedVectorNetwork,
+  materializeVectorNetwork,
+  mergeVectorNetworks,
+  outlineVectorNetworkStroke,
+  outlineVectorPath,
+  type VectorMaterializationResult,
+  type VectorOutlineOptions,
+} from "./vector-materialization.js";

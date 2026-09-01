@@ -18,6 +18,14 @@ describe("Style Service", () => {
       delete node.textStyleId;
       delete node.effectStyleId;
       delete node.gridStyleId;
+      if (
+        (node.kind === "path" || node.kind === "vector") &&
+        "network" in node.properties
+      ) {
+        for (const region of node.properties.network.regions) {
+          delete region.fillStyleId;
+        }
+      }
     }
     expect(materializeSharedStyles(document).document).toBe(document);
   });
@@ -41,9 +49,103 @@ describe("Style Service", () => {
     expect(result.document.nodesById.frame).toMatchObject({
       properties: { layoutGuides: [{ type: "grid", size: 8 }] },
     });
+    expect(result.document.nodesById.vector).toMatchObject({
+      properties: {
+        network: {
+          regions: [
+            {
+              id: "region",
+              fillStyleId: "paint",
+              fills: [{ type: "solid", color: "#2563eb", opacity: 1 }],
+            },
+          ],
+        },
+      },
+    });
     expect(document.nodesById.text?.properties).toMatchObject({
       fills: [{ color: "#111111" }],
       fontSize: 14,
+    });
+  });
+
+  it("materializes current Text and Paint Styles inside rich-text runs", () => {
+    const document = fixture();
+    const text = document.nodesById.text;
+    if (!text || text.kind !== "text") throw new Error("Missing Text fixture");
+    text.properties.runs = [
+      {
+        start: 0,
+        end: text.properties.content.length,
+        style: {
+          fontFamily: "Fallback Sans",
+          fontStyleName: null,
+          fontSize: 12,
+          fontWeight: 400,
+          fontSlant: "normal",
+          letterSpacing: 0,
+          lineHeight: 16,
+          textCase: "original",
+          textDecoration: "none",
+          fills: [{ type: "solid", color: "#111111", opacity: 1 }],
+          textStyleId: "text",
+          fillStyleId: "paint",
+        },
+      },
+    ];
+
+    const result = materializeSharedStyles(document);
+    expect(result.issues).toEqual([]);
+    const projected = result.document.nodesById.text;
+    if (!projected || projected.kind !== "text") {
+      throw new Error("Missing projected Text");
+    }
+    expect(projected.properties.runs?.[0]).toMatchObject({
+      style: {
+        fontFamily: "Inter",
+        fontSize: 18,
+        fontWeight: 600,
+        fills: [{ type: "solid", color: "#2563eb", opacity: 1 }],
+        textStyleId: "text",
+        fillStyleId: "paint",
+      },
+    });
+    expect(text.properties.runs[0]?.style).toMatchObject({
+      fontFamily: "Fallback Sans",
+      fontSize: 12,
+      fills: [{ color: "#111111" }],
+    });
+  });
+
+  it("reports the exact rich-text run Style path", () => {
+    const document = fixture();
+    const text = document.nodesById.text;
+    if (!text || text.kind !== "text") throw new Error("Missing Text fixture");
+    text.properties.runs = [
+      {
+        start: 0,
+        end: text.properties.content.length,
+        style: {
+          fontFamily: "Fallback Sans",
+          fontStyleName: null,
+          fontSize: 12,
+          fontWeight: 400,
+          fontSlant: "normal",
+          letterSpacing: 0,
+          lineHeight: 16,
+          textCase: "original",
+          textDecoration: "none",
+          fills: [],
+          textStyleId: "paint",
+        },
+      },
+    ];
+
+    expect(materializeSharedStyles(document).issues).toContainEqual({
+      code: "incompatible-reference",
+      path: "/nodesById/text/properties/runs/0/style/textStyleId",
+      message: "Text run textStyleId cannot consume PAINT style paint",
+      nodeId: "text",
+      styleId: "paint",
     });
   });
 
@@ -67,6 +169,7 @@ describe("Style Service", () => {
   it("finds every consumer through stable style references", () => {
     expect(styleConsumers(fixture(), "paint")).toEqual([
       { nodeId: "text", field: "fillStyleId" },
+      { nodeId: "vector", regionId: "region", field: "fillStyleId" },
     ]);
   });
 });
@@ -92,7 +195,7 @@ function fixture(): DesignDocument {
         kind: "frame",
         name: "Frame",
         parentId: null,
-        childIds: ["text"],
+        childIds: ["text", "vector"],
         visible: true,
         locked: false,
         transform: [1, 0, 0, 1, 0, 0],
@@ -149,6 +252,56 @@ function fixture(): DesignDocument {
           textOverflow: "clip",
           textTruncation: "disabled",
           maxLines: null,
+        },
+        extensions: {},
+      },
+      vector: {
+        id: "vector",
+        kind: "vector",
+        name: "Vector",
+        parentId: "frame",
+        childIds: [],
+        visible: true,
+        locked: false,
+        transform: [1, 0, 0, 1, 20, 80],
+        size: { width: 80, height: 80 },
+        exportSettings: [],
+        opacity: 1,
+        properties: {
+          network: {
+            vertices: [
+              { id: "a", x: 0, y: 0 },
+              { id: "b", x: 80, y: 0 },
+              { id: "c", x: 40, y: 80 },
+            ],
+            segments: [
+              { id: "ab", startVertexId: "a", endVertexId: "b" },
+              { id: "bc", startVertexId: "b", endVertexId: "c" },
+              { id: "ca", startVertexId: "c", endVertexId: "a" },
+            ],
+            paths: [
+              {
+                id: "path",
+                closed: true,
+                segments: [
+                  { segmentId: "ab", reversed: false },
+                  { segmentId: "bc", reversed: false },
+                  { segmentId: "ca", reversed: false },
+                ],
+              },
+            ],
+            regions: [
+              {
+                id: "region",
+                windingRule: "nonzero",
+                loops: [{ pathId: "path", reversed: false }],
+                fillStyleId: "paint",
+              },
+            ],
+          },
+          fills: [],
+          strokes: [],
+          strokeWidth: 0,
         },
         extensions: {},
       },

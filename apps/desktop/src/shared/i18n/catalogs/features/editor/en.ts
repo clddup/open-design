@@ -28,6 +28,13 @@ export const editorMessages = {
   "history.duplicatePage": "Duplicate Page",
   "history.reorderPage": "Reorder Page",
   "history.deletePage": "Delete Page",
+  "history.outlineStroke": "Outline stroke",
+  "history.flattenSelection": "Flatten selection",
+  "history.updateVectorVertexStrokeAppearance":
+    "Update vector point stroke appearance",
+  "history.updateVectorVertexCornerRadius": "Update vector point radius",
+  "editor.vectorGeometryUnavailable":
+    "Vector geometry is unavailable. Try the operation again.",
   "renameLayers.title": "Rename layers",
   "renameLayers.description":
     "Preview and rename {{count}} selected layers in one undoable change.",

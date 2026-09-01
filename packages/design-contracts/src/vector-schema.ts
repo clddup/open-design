@@ -25,12 +25,25 @@ export function createVectorSchemas<
     Type.Literal("mirrored"),
     Type.Literal("independent"),
   ]);
+  const VectorVertexStrokeCapSchema = Type.Union([
+    Type.Literal("none"),
+    Type.Literal("round"),
+    Type.Literal("square"),
+  ]);
+  const VectorVertexStrokeJoinSchema = Type.Union([
+    Type.Literal("miter"),
+    Type.Literal("round"),
+    Type.Literal("bevel"),
+  ]);
   const VectorVertexSchema = Type.Object(
     {
       id: VectorGeometryIdSchema,
       x: Type.Number(),
       y: Type.Number(),
       handleMode: Type.Optional(VectorPointModeSchema),
+      strokeCap: Type.Optional(VectorVertexStrokeCapSchema),
+      strokeJoin: Type.Optional(VectorVertexStrokeJoinSchema),
+      cornerRadius: Type.Optional(Type.Number({ minimum: 0 })),
     },
     { additionalProperties: false },
   );
@@ -64,6 +77,7 @@ export function createVectorSchemas<
       id: VectorGeometryIdSchema,
       windingRule: fillRuleSchema(),
       fills: Type.Optional(Type.Array(paintSchema, { maxItems: 4_096 })),
+      fillStyleId: Type.Optional(Type.String({ minLength: 1, maxLength: 256 })),
       loops: Type.Array(
         Type.Object(
           { pathId: VectorGeometryIdSchema, reversed: Type.Boolean() },
@@ -105,6 +119,8 @@ export function createVectorSchemas<
       ...shapeProperties,
       network: VectorNetworkSchema,
       fillRule: Type.Optional(fillRuleSchema()),
+      cornerRadius: Type.Optional(Type.Number({ minimum: 0 })),
+      cornerSmoothing: Type.Optional(Type.Number({ minimum: 0, maximum: 1 })),
     },
     { additionalProperties: false },
   );
@@ -115,6 +131,8 @@ export function createVectorSchemas<
   return {
     VectorGeometryIdSchema,
     VectorPointModeSchema,
+    VectorVertexStrokeCapSchema,
+    VectorVertexStrokeJoinSchema,
     VectorVertexSchema,
     VectorSegmentSchema,
     VectorSegmentReferenceSchema,

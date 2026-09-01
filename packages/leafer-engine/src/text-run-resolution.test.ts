@@ -14,6 +14,7 @@ describe("design rich-text projection resolution", () => {
         providerVersion: "1",
         size: { width: 320, height: 64 },
         contentBounds: { x: 0, y: 0, width: 120, height: 24 },
+        displayContent: request.content,
         lines: [
           {
             start: 0,
@@ -37,7 +38,10 @@ describe("design rich-text projection resolution", () => {
           baseline: 18,
           lineIndex: 0,
         })),
+        fullContentBounds: { x: 0, y: 0, width: 120, height: 24 },
         markers: [],
+        sourceContentEnd: request.content.length,
+        truncated: false,
         warnings: [],
       }),
     );
@@ -107,6 +111,7 @@ describe("design rich-text projection resolution", () => {
         providerVersion: "1",
         size: { width: 320, height: 64 },
         contentBounds: { x: 24, y: 0, width: 120, height: 24 },
+        displayContent: request.content,
         lines: [
           {
             start: 0,
@@ -132,7 +137,10 @@ describe("design rich-text projection resolution", () => {
             lineIndex: 0,
           },
         ],
+        fullContentBounds: { x: 24, y: 0, width: 120, height: 24 },
         markers: [],
+        sourceContentEnd: request.content.length,
+        truncated: false,
         warnings: [],
       }),
     );

@@ -35,8 +35,20 @@ export const DesignVectorContract = defineContract<DesignVectorToolInput>({
 });
 
 function refineDesignVector(input: DesignVectorToolInput): ValidationIssue[] {
-  if (input.action !== "transform-layers-vertices") return [];
   const issues: ValidationIssue[] = [];
+  if (input.action === "set-vertex-stroke-appearance") {
+    if (input.strokeCap === undefined && input.strokeJoin === undefined) {
+      issues.push({
+        code: "design_vector.vertex_stroke_patch_empty",
+        path: "",
+        message: "Vertex stroke appearance requires strokeCap or strokeJoin",
+        recovery:
+          "Set at least one override, or use null to clear an inspected vertex override.",
+      });
+    }
+    return issues;
+  }
+  if (input.action !== "transform-layers-vertices") return issues;
   const seenNodeIds = new Set<string>();
   let vertexCount = 0;
   input.targets.forEach((target, index) => {

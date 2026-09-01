@@ -2,11 +2,15 @@ import { Value } from "@sinclair/typebox/value";
 import { describe, expect, it } from "vitest";
 import {
   DesignNodeSchema,
+  DesignDocumentContract,
   normalizeLineEndpoints,
   resolveRegularPolygonPoints,
   resolveLineEndpointPoint,
   resolveStarPoints,
+  type DesignDocument,
+  type DesignNode,
 } from "./index.js";
+import { textDocumentFixture } from "./index-test-fixtures.js";
 
 describe("vector design contracts", () => {
   it("defines portable SVG path geometry with the same appearance semantics as shapes", () => {
@@ -62,7 +66,15 @@ describe("vector design contracts", () => {
       properties: {
         network: {
           vertices: [
-            { id: "vertex_a", x: 0, y: 0, handleMode: "corner" },
+            {
+              id: "vertex_a",
+              x: 0,
+              y: 0,
+              handleMode: "corner",
+              strokeCap: "round",
+              strokeJoin: "bevel",
+              cornerRadius: 8.5,
+            },
             { id: "vertex_b", x: 100, y: 0, handleMode: "smooth" },
             { id: "vertex_c", x: 50, y: 100, handleMode: "independent" },
           ],
@@ -100,10 +112,13 @@ describe("vector design contracts", () => {
               windingRule: "nonzero",
               loops: [{ pathId: "path_outer", reversed: false }],
               fills: [{ type: "solid", color: "#22c55e", opacity: 1 }],
+              fillStyleId: "brand-accent",
             },
           ],
         },
         fillRule: "nonzero",
+        cornerRadius: 4,
+        cornerSmoothing: 0.6,
         fills: [{ type: "solid", color: "#111827", opacity: 1 }],
         strokes: [{ type: "solid", color: "#ffffff", opacity: 1 }],
         strokeWidth: 2,
@@ -111,6 +126,71 @@ describe("vector design contracts", () => {
     };
 
     expect(Value.Check(DesignNodeSchema, vectorNode)).toBe(true);
+    expect(
+      Value.Check(DesignNodeSchema, {
+        ...vectorNode,
+        properties: {
+          ...vectorNode.properties,
+          network: {
+            ...vectorNode.properties.network,
+            vertices: [
+              {
+                ...vectorNode.properties.network.vertices[0],
+                cornerRadius: -1,
+              },
+              ...vectorNode.properties.network.vertices.slice(1),
+            ],
+          },
+        },
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(DesignNodeSchema, {
+        ...vectorNode,
+        properties: { ...vectorNode.properties, cornerRadius: -1 },
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(DesignNodeSchema, {
+        ...vectorNode,
+        properties: { ...vectorNode.properties, cornerSmoothing: 1.01 },
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(DesignNodeSchema, {
+        ...vectorNode,
+        properties: {
+          ...vectorNode.properties,
+          network: {
+            ...vectorNode.properties.network,
+            vertices: [
+              {
+                ...vectorNode.properties.network.vertices[0],
+                strokeCap: "arrow-equilateral",
+              },
+              ...vectorNode.properties.network.vertices.slice(1),
+            ],
+          },
+        },
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(DesignNodeSchema, {
+        ...vectorNode,
+        properties: {
+          ...vectorNode.properties,
+          network: {
+            ...vectorNode.properties.network,
+            regions: [
+              {
+                ...vectorNode.properties.network.regions[0],
+                fillStyleId: "",
+              },
+            ],
+          },
+        },
+      }),
+    ).toBe(false);
     expect(
       Value.Check(DesignNodeSchema, {
         ...vectorNode,
@@ -173,6 +253,34 @@ describe("vector design contracts", () => {
         properties: { ...vectorNode.properties, unsupportedGeometry: true },
       }),
     ).toBe(false);
+
+    const document = textDocumentFixture() as unknown as DesignDocument;
+    document.nodesById.vector_mark = vectorNode as unknown as DesignNode;
+    document.pagesById.page_1!.rootNodeIds.push("vector_mark");
+    document.stylesById["brand-accent"] = {
+      id: "brand-accent",
+      key: "brand-accent-key",
+      name: "Brand/Accent",
+      description: "",
+      hiddenFromPublishing: false,
+      styleType: "PAINT",
+      paints: [{ type: "solid", color: "#22c55e", opacity: 1 }],
+      extensions: {},
+    };
+    document.styleOrderByType.PAINT.push("brand-accent");
+    expect(DesignDocumentContract.parse(document)).toMatchObject({ ok: true });
+
+    delete document.stylesById["brand-accent"];
+    document.styleOrderByType.PAINT = [];
+    expect(DesignDocumentContract.parse(document)).toEqual({
+      ok: false,
+      issues: [
+        expect.objectContaining({
+          code: "design.document_vector_region_fill_style_reference_invalid",
+          path: "/nodesById/vector_mark/properties/network/regions/0/fillStyleId",
+        }),
+      ],
+    });
   });
 
   it("defines a directed editable line with independent endpoint decorations", () => {

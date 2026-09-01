@@ -615,6 +615,7 @@ export function resolveTextFirstBaseline(
       paragraphIndent: node.properties.paragraphIndent,
       paragraphSpacing: node.properties.paragraphSpacing,
       listSpacing: node.properties.listSpacing,
+      maxLines: node.properties.maxLines,
       hangingList: node.properties.hangingList,
       paragraphRuns: node.properties.paragraphRuns ?? [],
       runs: (node.properties.runs ?? []).map((run) => ({
@@ -623,6 +624,7 @@ export function resolveTextFirstBaseline(
       })),
       textAlignHorizontal: node.properties.textAlignHorizontal,
       textAlignVertical: node.properties.textAlignVertical,
+      textTruncation: node.properties.textTruncation,
       textWrap: node.properties.textWrap,
       ...(node.properties.textResize === "auto-width"
         ? {}
@@ -751,17 +753,6 @@ function resolveRichTextAutoSize(
       },
     );
   }
-  if (node.properties.textTruncation !== "disabled") {
-    throw new OperationError(
-      commandId,
-      "design.text.rich_truncation_unsupported",
-      "Rich Text Auto Size does not support ending truncation yet",
-      "unsupported",
-      {
-        path: `/nodesById/${escapeJsonPointer(node.id)}/properties/textTruncation`,
-      },
-    );
-  }
   const request = {
     baseStyle: runtimeTextRunStyle(textRunBaseStyle(node)),
     content: node.properties.content,
@@ -769,6 +760,7 @@ function resolveRichTextAutoSize(
     paragraphIndent: node.properties.paragraphIndent,
     paragraphSpacing: node.properties.paragraphSpacing,
     listSpacing: node.properties.listSpacing,
+    maxLines: node.properties.maxLines,
     hangingList: node.properties.hangingList,
     paragraphRuns: node.properties.paragraphRuns ?? [],
     runs: (node.properties.runs ?? []).map((run) => ({
@@ -777,6 +769,7 @@ function resolveRichTextAutoSize(
     })),
     textAlignHorizontal: node.properties.textAlignHorizontal,
     textAlignVertical: node.properties.textAlignVertical,
+    textTruncation: node.properties.textTruncation,
     textWrap: node.properties.textWrap,
     ...(node.properties.textResize === "auto-height"
       ? { width: node.size.width }

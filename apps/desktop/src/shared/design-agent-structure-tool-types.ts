@@ -83,6 +83,18 @@ export type DesignHierarchyToolInput =
 
 export type DesignVectorToolInput =
   | {
+      action: "outline-stroke";
+      label: string;
+      nodeId: string;
+      pageId: string;
+    }
+  | {
+      action: "flatten";
+      label: string;
+      nodeIds: string[];
+      pageId: string;
+    }
+  | {
       action: "set-closed";
       closed: boolean;
       label: string;
@@ -109,6 +121,31 @@ export type DesignVectorToolInput =
       regionId: string;
     }
   | {
+      action: "set-region-fill-style";
+      fillStyleId: string;
+      label: string;
+      nodeId: string;
+      pageId: string;
+      regionId: string;
+    }
+  | {
+      action: "set-vertex-stroke-appearance";
+      label: string;
+      nodeId: string;
+      pageId: string;
+      strokeCap?: "none" | "round" | "square" | null;
+      strokeJoin?: "miter" | "round" | "bevel" | null;
+      vertexIds: string[];
+    }
+  | {
+      action: "set-vertex-corner-radius";
+      cornerRadius: number | null;
+      label: string;
+      nodeId: string;
+      pageId: string;
+      vertexIds: string[];
+    }
+  | {
       action: "reverse-path";
       label: string;
       nodeId: string;
@@ -117,10 +154,12 @@ export type DesignVectorToolInput =
     }
   | {
       action: "connect-endpoints";
+      endpoints: [
+        { nodeId: string; vertexId: string },
+        { nodeId: string; vertexId: string },
+      ];
       label: string;
-      nodeId: string;
       pageId: string;
-      vertexIds: [string, string];
     }
   | {
       action: "disconnect-vertex";
@@ -128,7 +167,22 @@ export type DesignVectorToolInput =
       nodeId: string;
       pageId: string;
       pathId: string;
+      segmentId?: string;
       vertexId: string;
+    }
+  | {
+      action: "delete-segments";
+      label: string;
+      nodeId: string;
+      pageId: string;
+      segmentIds: string[];
+    }
+  | {
+      action: "delete-vertices";
+      label: string;
+      nodeId: string;
+      pageId: string;
+      vertexIds: string[];
     }
   | {
       action: "transform-vertices";

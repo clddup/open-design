@@ -1,14 +1,19 @@
 import type { DesignNode } from "@opendesign/design-contracts";
+import type { VectorGeometryProvider } from "@opendesign/geometry-service/vector-path";
 import { resolveComponentInstance } from "@opendesign/component-service";
 import {
   createWelcomeDocument,
   EditorRuntime,
+  type FlattenTextRunStyle,
   getNodeBounds,
   getWorldTransform,
   planCreateBooleanGroup,
 } from "@opendesign/editor-runtime";
 import { memoizeTextLayoutProvider } from "@opendesign/text-service";
-import type { TextLayoutProvider } from "@opendesign/text-service";
+import type {
+  TextLayoutProvider,
+  TextRunLayoutProvider,
+} from "@opendesign/text-service";
 import { describe, expect, it, vi } from "vitest";
 import {
   DESIGN_ARRANGE_TOOL_NAME,
@@ -59,6 +64,100 @@ const pageContext = {
     selectedNodeIds: [],
   },
 };
+
+function outlineGeometryProvider(): VectorGeometryProvider {
+  const geometry = (path: string) => ({
+    ok: true as const,
+    path,
+    fillRule: "nonzero" as const,
+    bounds: { x: 0, y: -2, width: 104, height: 104 },
+    empty: false,
+    provider: "skia-pathkit" as const,
+    providerVersion: "1.0.0" as const,
+  });
+  return {
+    id: "skia-pathkit",
+    version: "1.0.0",
+    combine: (paths) => geometry(paths[0]?.path ?? "M0 0L1 0L1 1Z"),
+    dash: (path) => geometry(path.path),
+    normalize: (path) => geometry(path.path),
+    outlineStroke: () => geometry("M0 -2L102 -2L102 102L0 102L0 -2Z"),
+    transform: (path) => geometry(path.path),
+  };
+}
+
+function booleanFlattenGeometryProvider(): VectorGeometryProvider {
+  const provider = outlineGeometryProvider();
+  const resolved = provider.normalize({
+    path: "M0 0L104 0L104 104L0 104Z",
+    fillRule: "nonzero",
+  });
+  if (!resolved.ok) throw new Error(resolved.message);
+  return {
+    ...provider,
+    combine: () => resolved,
+    transform: () => resolved,
+  };
+}
+
+function glyphOutlineProvider(): TextRunLayoutProvider<FlattenTextRunStyle> {
+  return {
+    id: "test-glyph-outlines",
+    version: "1",
+    layout(request) {
+      return {
+        ok: true,
+        provider: "test-glyph-outlines",
+        providerVersion: "1",
+        size: { width: 12, height: 16 },
+        contentBounds: { x: 0, y: 0, width: 12, height: 16 },
+        displayContent: request.content,
+        fragments: [
+          {
+            baseline: 12,
+            end: 1,
+            glyphs: [
+              {
+                clusterEnd: 1,
+                clusterStart: 0,
+                glyphId: 1,
+                path: "M0 0L12 0L12 16L0 16Z",
+                x: 0,
+                xAdvance: 12,
+                y: 0,
+                yAdvance: 0,
+              },
+            ],
+            height: 16,
+            lineIndex: 0,
+            start: 0,
+            style: request.baseStyle,
+            text: request.content,
+            width: 12,
+            x: 0,
+            y: 0,
+          },
+        ],
+        fullContentBounds: { x: 0, y: 0, width: 12, height: 16 },
+        lines: [
+          {
+            baseline: 12,
+            end: 1,
+            height: 16,
+            start: 0,
+            width: 12,
+            x: 0,
+            y: 0,
+          },
+        ],
+        markers: [],
+        sourceContentEnd: request.content.length,
+        truncated: false,
+        warnings: [],
+      };
+    },
+  };
+}
 
 function plannedInsertRequest(nodeId: string): RendererDesignToolRequest {
   return {
@@ -5044,6 +5143,382 @@ describe("Renderer semantic hierarchy tool", () => {
     expect(runtime.redo()).toMatchObject({ ok: true, mode: "redo" });
   });
 
+  it("outlines an inspected stroke into a new editable Vector sibling", async () => {
+    const source = structuredClone(
+      createEditableVectorRuntime().getSnapshot().document,
+    );
+    const vector = source.nodesById.editable_logo_contour;
+    if (!vector || vector.kind !== "vector") {
+      throw new Error("Missing editable vector fixture");
+    }
+    vector.properties.fills = [];
+    vector.properties.strokes = [
+      { type: "solid", color: "#151515", opacity: 1 },
+    ];
+    vector.properties.strokeWidth = 4;
+    const runtime = new EditorRuntime(source);
+    const result = await executeDesignToolRequest(
+      {
+        requestId: "vector_outline",
+        call: {
+          toolCallId: "tool_vector_outline",
+          toolName: DESIGN_VECTOR_TOOL_NAME,
+          input: {
+            action: "outline-stroke",
+            label: "Outline the logo stroke",
+            nodeId: "editable_logo_contour",
+            pageId: "page_welcome",
+          },
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_welcome",
+      {
+        vectorGeometryProvider: () =>
+          Promise.resolve(outlineGeometryProvider()),
+      },
+    );
+    const resultNodeId = "vector_outline_tool_vector_outline_0";
+    expect(result).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "outline-stroke",
+          atomic: true,
+          nodeId: "editable_logo_contour",
+          resultNodeIds: [resultNodeId],
+          revision: 1,
+        },
+      },
+    });
+    const outlined = runtime.getSnapshot().document.nodesById[resultNodeId];
+    expect(outlined).toMatchObject({
+      kind: "vector",
+      properties: { strokes: [], strokeWidth: 0 },
+    });
+    expect(
+      runtime.getSnapshot().document.nodesById.editable_logo_contour,
+    ).toBeDefined();
+    expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
+    expect(runtime.undo()).toMatchObject({ ok: true, mode: "undo" });
+    expect(
+      runtime.getSnapshot().document.nodesById[resultNodeId],
+    ).toBeUndefined();
+  });
+
+  it("flattens explicit same-parent Vector layers into one editable result", async () => {
+    const runtime = createClosedEditableVectorRuntime();
+    runtime.setSelection(["title_welcome"], "title_welcome");
+    const result = await executeDesignToolRequest(
+      {
+        requestId: "vector_flatten",
+        call: {
+          toolCallId: "tool/vector flatten",
+          toolName: DESIGN_VECTOR_TOOL_NAME,
+          input: {
+            action: "flatten",
+            label: "Flatten the logo geometry",
+            nodeIds: ["editable_logo_contour"],
+            pageId: "page_welcome",
+          },
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_welcome",
+      {
+        vectorGeometryProvider: () =>
+          Promise.resolve(outlineGeometryProvider()),
+      },
+    );
+    const resultNodeId = "vector_flatten_tool_vector_flatten_0";
+    expect(result).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "flatten",
+          atomic: true,
+          nodeIds: ["editable_logo_contour"],
+          resultNodeIds: [resultNodeId],
+          revision: 1,
+        },
+      },
+    });
+    expect(
+      runtime.getSnapshot().document.nodesById.editable_logo_contour,
+    ).toBeUndefined();
+    expect(
+      runtime.getSnapshot().document.nodesById[resultNodeId],
+    ).toMatchObject({
+      kind: "vector",
+      properties: { strokes: [], strokeWidth: 0 },
+    });
+    expect(runtime.getSnapshot().state.selection.nodeIds).toEqual([
+      "title_welcome",
+    ]);
+    expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
+    expect(runtime.undo()).toMatchObject({ ok: true, mode: "undo" });
+    expect(
+      runtime.getSnapshot().document.nodesById.editable_logo_contour,
+    ).toBeDefined();
+    expect(
+      runtime.getSnapshot().document.nodesById[resultNodeId],
+    ).toBeUndefined();
+  });
+
+  it("flattens an explicit regular shape without rebuilding it through low-level commands", async () => {
+    const runtime = new EditorRuntime(structuredClone(createWelcomeDocument()));
+    const result = await executeDesignToolRequest(
+      {
+        requestId: "shape_flatten",
+        call: {
+          toolCallId: "tool/shape flatten",
+          toolName: DESIGN_VECTOR_TOOL_NAME,
+          input: {
+            action: "flatten",
+            label: "Flatten the ellipse",
+            nodeIds: ["feature_three"],
+            pageId: "page_welcome",
+          },
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_welcome",
+      {
+        vectorGeometryProvider: () =>
+          Promise.resolve(outlineGeometryProvider()),
+      },
+    );
+    const resultNodeId = "vector_flatten_tool_shape_flatten_0";
+    expect(result).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "flatten",
+          nodeIds: ["feature_three"],
+          resultNodeIds: [resultNodeId],
+          revision: 1,
+        },
+      },
+    });
+    expect(
+      runtime.getSnapshot().document.nodesById.feature_three,
+    ).toBeUndefined();
+    const flattened = runtime.getSnapshot().document.nodesById[resultNodeId];
+    if (
+      !flattened ||
+      flattened.kind !== "vector" ||
+      !("network" in flattened.properties)
+    ) {
+      throw new Error("Missing flattened regular shape");
+    }
+    expect(flattened.properties.network.regions[0]?.fills?.[0]).toMatchObject({
+      color: "#f5b942",
+    });
+    expect(runtime.undo()).toMatchObject({ ok: true, mode: "undo" });
+    expect(
+      runtime.getSnapshot().document.nodesById.feature_three,
+    ).toBeDefined();
+  });
+
+  it("flattens an inspected clipped Frame through the same Agent Vector action", async () => {
+    const document = structuredClone(createWelcomeDocument());
+    const frame = document.nodesById.frame_welcome;
+    if (!frame || frame.kind !== "frame") {
+      throw new Error("Missing Frame fixture");
+    }
+    frame.childIds = ["feature_group"];
+    frame.properties.clipsContent = true;
+    delete document.nodesById.shape_accent;
+    delete document.nodesById.title_welcome;
+    delete document.nodesById.subtitle_welcome;
+    const runtime = new EditorRuntime(document);
+
+    const result = await executeDesignToolRequest(
+      {
+        requestId: "frame_flatten",
+        call: {
+          toolCallId: "tool/frame flatten",
+          toolName: DESIGN_VECTOR_TOOL_NAME,
+          input: {
+            action: "flatten",
+            label: "Flatten the Frame",
+            nodeIds: [frame.id],
+            pageId: "page_welcome",
+          },
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_welcome",
+      {
+        vectorGeometryProvider: () =>
+          Promise.resolve(booleanFlattenGeometryProvider()),
+      },
+    );
+
+    const resultNodeId = "vector_flatten_tool_frame_flatten_0";
+    expect(result).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "flatten",
+          nodeIds: [frame.id],
+          resultNodeIds: [resultNodeId],
+          revision: 1,
+        },
+      },
+    });
+    expect(runtime.getSnapshot().document.nodesById[frame.id]).toBeUndefined();
+    expect(
+      runtime.getSnapshot().document.nodesById[resultNodeId],
+    ).toMatchObject({ kind: "vector", parentId: null });
+    expect(runtime.undo()).toMatchObject({ ok: true, mode: "undo" });
+    expect(runtime.getSnapshot().document.nodesById[frame.id]).toBeDefined();
+  });
+
+  it("flattens inspected Text with trusted glyph outlines through the same Agent action", async () => {
+    const document = structuredClone(createWelcomeDocument());
+    const text = document.nodesById.title_welcome;
+    if (!text || text.kind !== "text") {
+      throw new Error("Missing Text fixture");
+    }
+    text.properties = {
+      ...text.properties,
+      content: "A",
+      maxLines: null,
+      textOverflow: "visible",
+      textResize: "auto-width",
+      textTruncation: "disabled",
+      textWrap: "none",
+    };
+    const runtime = new EditorRuntime(document);
+    const result = await executeDesignToolRequest(
+      {
+        requestId: "text_flatten",
+        call: {
+          toolCallId: "tool/text flatten",
+          toolName: DESIGN_VECTOR_TOOL_NAME,
+          input: {
+            action: "flatten",
+            label: "Flatten the headline",
+            nodeIds: [text.id],
+            pageId: "page_welcome",
+          },
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_welcome",
+      {
+        textRunLayoutProvider: glyphOutlineProvider(),
+        vectorGeometryProvider: () =>
+          Promise.resolve(booleanFlattenGeometryProvider()),
+      },
+    );
+
+    const resultNodeId = "vector_flatten_tool_text_flatten_0";
+    expect(result).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "flatten",
+          nodeIds: [text.id],
+          resultNodeIds: [resultNodeId],
+          revision: 1,
+        },
+      },
+    });
+    expect(runtime.getSnapshot().document.nodesById[text.id]).toBeUndefined();
+    expect(
+      runtime.getSnapshot().document.nodesById[resultNodeId],
+    ).toMatchObject({ kind: "vector", parentId: "frame_welcome" });
+    expect(runtime.undo()).toMatchObject({ ok: true, mode: "undo" });
+    expect(runtime.getSnapshot().document.nodesById[text.id]).toBeDefined();
+  });
+
+  it("flattens an inspected Boolean through the same Agent Vector action", async () => {
+    const runtime = new EditorRuntime(structuredClone(createWelcomeDocument()));
+    const booleanPlan = planCreateBooleanGroup(
+      runtime.getSnapshot().document,
+      "page_welcome",
+      ["feature_one", "feature_two"],
+      "union",
+      {
+        booleanId: "agent_boolean",
+        commandPrefix: "agent_boolean",
+        name: "Agent Boolean",
+      },
+    );
+    expect(booleanPlan).toMatchObject({ ok: true });
+    if (!booleanPlan.ok) return;
+    expect(
+      runtime.apply({
+        transactionId: "create_agent_boolean",
+        documentId: runtime.getSnapshot().document.documentId,
+        baseRevision: runtime.getSnapshot().document.revision,
+        actor: { type: "user", id: "local-user" },
+        label: "Create Agent Boolean",
+        commands: [...booleanPlan.commands],
+      }),
+    ).toMatchObject({ ok: true });
+
+    const result = await executeDesignToolRequest(
+      {
+        requestId: "boolean_flatten",
+        call: {
+          toolCallId: "tool/boolean flatten",
+          toolName: DESIGN_VECTOR_TOOL_NAME,
+          input: {
+            action: "flatten",
+            label: "Flatten the Boolean",
+            nodeIds: ["agent_boolean"],
+            pageId: "page_welcome",
+          },
+        },
+        context: { ...pageContext, revision: 1 },
+      },
+      runtime,
+      "page_welcome",
+      {
+        vectorGeometryProvider: () =>
+          Promise.resolve(booleanFlattenGeometryProvider()),
+      },
+    );
+    const resultNodeId = "vector_flatten_tool_boolean_flatten_1";
+    expect(result).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "flatten",
+          nodeIds: ["agent_boolean"],
+          resultNodeIds: [resultNodeId],
+          revision: 2,
+        },
+      },
+    });
+    expect(
+      runtime.getSnapshot().document.nodesById.agent_boolean,
+    ).toBeUndefined();
+    expect(
+      runtime.getSnapshot().document.nodesById.feature_one,
+    ).toBeUndefined();
+    expect(
+      runtime.getSnapshot().document.nodesById.feature_two,
+    ).toBeUndefined();
+    expect(
+      runtime.getSnapshot().document.nodesById[resultNodeId],
+    ).toMatchObject({
+      kind: "vector",
+    });
+    expect(runtime.undo()).toMatchObject({ ok: true, mode: "undo" });
+    expect(
+      runtime.getSnapshot().document.nodesById.agent_boolean,
+    ).toBeDefined();
+  });
+
   it("bends an inspected segment without model-authored handles", async () => {
     const runtime = createEditableVectorRuntime();
     const result = await executeDesignToolRequest(
@@ -5134,10 +5609,18 @@ describe("Renderer semantic hierarchy tool", () => {
           toolName: DESIGN_VECTOR_TOOL_NAME,
           input: {
             action: "connect-endpoints",
+            endpoints: [
+              {
+                nodeId: "editable_logo_contour",
+                vertexId: "vertex_b",
+              },
+              {
+                nodeId: "editable_logo_contour",
+                vertexId: "vertex_edit_1",
+              },
+            ],
             label: "Reconnect the logo contour",
-            nodeId: "editable_logo_contour",
             pageId: "page_welcome",
-            vertexIds: ["vertex_b", "vertex_edit_1"],
           },
         },
         context: { ...pageContext, revision: 1 },
@@ -5203,6 +5686,246 @@ describe("Renderer semantic hierarchy tool", () => {
     expect(runtime.getSnapshot().state.selection.nodeIds).toEqual([
       "title_welcome",
     ]);
+    expect(runtime.undo()).toMatchObject({ ok: true, mode: "undo" });
+  });
+
+  it("deletes inspected vector segments without model-authored topology", async () => {
+    const runtime = createEditableVectorRuntime();
+    const result = await executeDesignToolRequest(
+      {
+        requestId: "vector_delete_segments",
+        call: {
+          toolCallId: "tool_vector_delete_segments",
+          toolName: DESIGN_VECTOR_TOOL_NAME,
+          input: {
+            action: "delete-segments",
+            label: "Delete the logo segment",
+            nodeId: "editable_logo_contour",
+            pageId: "page_welcome",
+            segmentIds: ["segment_ab"],
+          },
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(result).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "delete-segments",
+          atomic: true,
+          nodeId: "editable_logo_contour",
+          revision: 1,
+        },
+      },
+    });
+    expect(editableVectorNetwork(runtime).paths).toEqual([
+      {
+        id: "logo_path",
+        closed: false,
+        segments: [{ segmentId: "segment_bc", reversed: false }],
+      },
+    ]);
+    expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
+    expect(runtime.undo()).toMatchObject({ ok: true, mode: "undo" });
+  });
+
+  it("deletes inspected vector vertices without model-authored topology", async () => {
+    const runtime = createEditableVectorRuntime();
+    const result = await executeDesignToolRequest(
+      {
+        requestId: "vector_delete_vertices",
+        call: {
+          toolCallId: "tool_vector_delete_vertices",
+          toolName: DESIGN_VECTOR_TOOL_NAME,
+          input: {
+            action: "delete-vertices",
+            label: "Delete the logo point",
+            nodeId: "editable_logo_contour",
+            pageId: "page_welcome",
+            vertexIds: ["vertex_b"],
+          },
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(result).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "delete-vertices",
+          atomic: true,
+          nodeId: "editable_logo_contour",
+          revision: 1,
+        },
+      },
+    });
+    expect(editableVectorNetwork(runtime).paths).toEqual([
+      {
+        id: "logo_path",
+        closed: false,
+        segments: [{ segmentId: "segment_edit_1", reversed: false }],
+      },
+    ]);
+    expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
+    expect(runtime.undo()).toMatchObject({ ok: true, mode: "undo" });
+  });
+
+  it("connects inspected endpoints across sibling Vector layers in one revision", async () => {
+    const sourceRuntime = createEditableVectorRuntime();
+    const document = structuredClone(sourceRuntime.getSnapshot().document);
+    const frame = document.nodesById.frame_welcome;
+    const first = document.nodesById.editable_logo_contour;
+    if (!frame || frame.kind !== "frame" || !first) {
+      throw new Error("Missing cross-layer Connect fixture");
+    }
+    const second = structuredClone(first);
+    second.id = "editable_logo_shadow";
+    second.name = "Editable logo shadow";
+    second.transform = [1, 0, 0, 1, 240, 40];
+    document.nodesById[second.id] = second;
+    frame.childIds.push(second.id);
+    const runtime = new EditorRuntime(document);
+
+    const result = await executeDesignToolRequest(
+      {
+        requestId: "vector_connect_layers",
+        call: {
+          toolCallId: "tool_vector_connect_layers",
+          toolName: DESIGN_VECTOR_TOOL_NAME,
+          input: {
+            action: "connect-endpoints",
+            endpoints: [
+              {
+                nodeId: "editable_logo_contour",
+                vertexId: "vertex_c",
+              },
+              {
+                nodeId: "editable_logo_shadow",
+                vertexId: "vertex_a",
+              },
+            ],
+            label: "Join the logo contour layers",
+            pageId: "page_welcome",
+          },
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_welcome",
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "connect-endpoints",
+          atomic: true,
+          removedNodeId: "editable_logo_shadow",
+          retainedNodeId: "editable_logo_contour",
+          revision: 1,
+        },
+        designRevision: { previousRevision: 0, revision: 1 },
+      },
+    });
+    expect(runtime.getSnapshot().document.nodesById.editable_logo_shadow).toBe(
+      undefined,
+    );
+    expect(editableVectorNetwork(runtime).paths).toHaveLength(1);
+    expect(editableVectorNetwork(runtime).vertices).toHaveLength(6);
+    expect(runtime.undo()).toMatchObject({ ok: true, mode: "undo" });
+    expect(
+      runtime.getSnapshot().document.nodesById.editable_logo_shadow,
+    ).toBeDefined();
+  });
+
+  it("creates an editable branch from an endpoint and an inspected junction target", async () => {
+    const sourceRuntime = createEditableVectorRuntime();
+    const document = structuredClone(sourceRuntime.getSnapshot().document);
+    const vector = document.nodesById.editable_logo_contour;
+    if (
+      !vector ||
+      vector.kind !== "vector" ||
+      !("network" in vector.properties)
+    ) {
+      throw new Error("Missing branch Agent fixture");
+    }
+    vector.properties.network.vertices.push(
+      { id: "vertex_d", x: 180, y: 0, handleMode: "corner" },
+      { id: "vertex_e", x: 220, y: 40, handleMode: "corner" },
+      { id: "vertex_f", x: 180, y: 80, handleMode: "corner" },
+    );
+    vector.properties.network.segments.push(
+      {
+        id: "segment_de",
+        startVertexId: "vertex_d",
+        endVertexId: "vertex_e",
+      },
+      {
+        id: "segment_ef",
+        startVertexId: "vertex_e",
+        endVertexId: "vertex_f",
+      },
+    );
+    vector.properties.network.paths.push({
+      id: "path_branch_target",
+      closed: false,
+      segments: [
+        { segmentId: "segment_de", reversed: false },
+        { segmentId: "segment_ef", reversed: false },
+      ],
+    });
+    const runtime = new EditorRuntime(document);
+    const result = await executeDesignToolRequest(
+      {
+        requestId: "vector_create_branch",
+        call: {
+          toolCallId: "tool_vector_create_branch",
+          toolName: DESIGN_VECTOR_TOOL_NAME,
+          input: {
+            action: "connect-endpoints",
+            endpoints: [
+              {
+                nodeId: "editable_logo_contour",
+                vertexId: "vertex_c",
+              },
+              {
+                nodeId: "editable_logo_contour",
+                vertexId: "vertex_e",
+              },
+            ],
+            label: "Connect the logo branch",
+            pageId: "page_welcome",
+          },
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(result).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "connect-endpoints",
+          atomic: true,
+          nodeId: "editable_logo_contour",
+          revision: 1,
+        },
+      },
+    });
+    expect(editableVectorNetwork(runtime).paths).toHaveLength(2);
+    expect(
+      editableVectorNetwork(runtime).segments.filter(
+        (segment) =>
+          segment.startVertexId === "vertex_e" ||
+          segment.endVertexId === "vertex_e",
+      ),
+    ).toHaveLength(3);
     expect(runtime.undo()).toMatchObject({ ok: true, mode: "undo" });
   });
 
@@ -5557,6 +6280,145 @@ describe("Renderer semantic hierarchy tool", () => {
     ]);
     expect(runtime.undo()).toMatchObject({ ok: true, mode: "undo" });
     expect(editableVectorNetwork(runtime).regions[0]?.fills).toBeUndefined();
+  });
+
+  it("links one inspected vector region to a PAINT Style", async () => {
+    const sourceRuntime = createClosedEditableVectorRuntime();
+    const document = structuredClone(sourceRuntime.getSnapshot().document);
+    document.stylesById["brand-accent"] = {
+      id: "brand-accent",
+      key: "brand-accent-key",
+      name: "Brand/Accent",
+      description: "",
+      hiddenFromPublishing: false,
+      styleType: "PAINT",
+      paints: [{ type: "solid", color: "#7c3aed", opacity: 1 }],
+      extensions: {},
+    };
+    document.styleOrderByType.PAINT.push("brand-accent");
+    const runtime = new EditorRuntime(document);
+    const result = await executeDesignToolRequest(
+      {
+        requestId: "vector_region_style",
+        call: {
+          toolCallId: "tool_vector_region_style",
+          toolName: DESIGN_VECTOR_TOOL_NAME,
+          input: {
+            action: "set-region-fill-style",
+            fillStyleId: "brand-accent",
+            label: "Use the brand accent Style",
+            nodeId: "editable_logo_contour",
+            pageId: "page_welcome",
+            regionId: "region_logo",
+          },
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(result).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "set-region-fill-style",
+          nodeId: "editable_logo_contour",
+          revision: 1,
+        },
+      },
+    });
+    expect(editableVectorNetwork(runtime).regions[0]).toMatchObject({
+      fillStyleId: "brand-accent",
+    });
+    expect(editableVectorNetwork(runtime).regions[0]).not.toHaveProperty(
+      "fills",
+    );
+    expect(runtime.undo()).toMatchObject({ ok: true, mode: "undo" });
+    expect(
+      editableVectorNetwork(runtime).regions[0]?.fillStyleId,
+    ).toBeUndefined();
+  });
+
+  it("updates inspected Vector vertices through the shared semantic planner", async () => {
+    const runtime = createEditableVectorRuntime();
+    const result = await executeDesignToolRequest(
+      {
+        requestId: "vector_vertex_stroke",
+        call: {
+          toolCallId: "tool_vector_vertex_stroke",
+          toolName: DESIGN_VECTOR_TOOL_NAME,
+          input: {
+            action: "set-vertex-stroke-appearance",
+            label: "Round the selected contour point",
+            nodeId: "editable_logo_contour",
+            pageId: "page_welcome",
+            strokeCap: "round",
+            strokeJoin: "bevel",
+            vertexIds: ["vertex_b"],
+          },
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(result).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "set-vertex-stroke-appearance",
+          nodeId: "editable_logo_contour",
+          revision: 1,
+        },
+      },
+    });
+    expect(editableVectorNetwork(runtime).vertices[1]).toMatchObject({
+      strokeCap: "round",
+      strokeJoin: "bevel",
+    });
+    expect(runtime.undo()).toMatchObject({ ok: true, mode: "undo" });
+    expect(editableVectorNetwork(runtime).vertices[1]).not.toHaveProperty(
+      "strokeCap",
+    );
+  });
+
+  it("rounds inspected closed Vector vertices through the shared semantic planner", async () => {
+    const runtime = createClosedEditableVectorRuntime();
+    const result = await executeDesignToolRequest(
+      {
+        requestId: "vector_vertex_corner_radius",
+        call: {
+          toolCallId: "tool_vector_vertex_corner_radius",
+          toolName: DESIGN_VECTOR_TOOL_NAME,
+          input: {
+            action: "set-vertex-corner-radius",
+            cornerRadius: 10,
+            label: "Round the selected contour points",
+            nodeId: "editable_logo_contour",
+            pageId: "page_welcome",
+            vertexIds: ["vertex_a", "vertex_b"],
+          },
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(result).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "set-vertex-corner-radius",
+          nodeId: "editable_logo_contour",
+          revision: 1,
+        },
+      },
+    });
+    expect(editableVectorNetwork(runtime).vertices.slice(0, 2)).toEqual([
+      expect.objectContaining({ cornerRadius: 10 }),
+      expect.objectContaining({ cornerRadius: 10 }),
+    ]);
+    expect(runtime.undo()).toMatchObject({ ok: true, mode: "undo" });
   });
 
   it("divides multiple explicit Vector layers with one document-space line and one undo step", async () => {

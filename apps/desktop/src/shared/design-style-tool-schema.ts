@@ -1,6 +1,6 @@
 import {
   executableJsonSchema,
-  StyleReferenceTargetSchema,
+  StyleReferenceFieldSchema,
 } from "@opendesign/design-contracts";
 
 const STYLE_ACTIONS = [
@@ -37,7 +37,7 @@ const DESCRIPTION_SCHEMA = {
   maxLength: 2_000,
 } as const;
 
-const STYLE_FIELD_SCHEMA = StyleReferenceTargetSchema.properties.field;
+const STYLE_FIELD_SCHEMA = StyleReferenceFieldSchema;
 
 const COMMON_PROPERTIES = {
   label: LABEL_SCHEMA,

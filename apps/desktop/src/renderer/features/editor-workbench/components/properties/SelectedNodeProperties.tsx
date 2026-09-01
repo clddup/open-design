@@ -42,6 +42,10 @@ import type { FontInspectorContext } from "./TypographySection";
 import { VariableSection } from "./VariableSection";
 import { StyleReferencesSection } from "./StyleReferencesSection";
 import { Field, Section, commitNumber, formatNumber } from "./controls";
+import type {
+  VectorVertexInspectorSelection,
+  VectorVertexAppearancePatch,
+} from "./VectorVertexAppearanceSection";
 
 const nodeIcons: Record<DesignNode["kind"], IconName> = {
   frame: "lucide:frame",
@@ -106,6 +110,7 @@ export function SelectedNodeProperties({
   booleanOperationEditable,
   booleanOperandParent,
   canDelete,
+  canOutlineStroke,
   constraintsAvailable,
   layoutSizingAvailable,
   layoutLimitsAvailable,
@@ -120,6 +125,8 @@ export function SelectedNodeProperties({
   onDelete,
   onDetachComponentInstance,
   onDuplicate,
+  onOutlineStroke,
+  onSetVectorVertexAppearance,
   onGoToComponentMain,
   onCropImage,
   onSelectImageArea,
@@ -172,6 +179,7 @@ export function SelectedNodeProperties({
   styleActions,
   projectLibraries,
   fontContext,
+  vectorVertexSelection,
 }: {
   node: DesignNode;
   activePageId: string;
@@ -180,6 +188,7 @@ export function SelectedNodeProperties({
   booleanOperationEditable: boolean;
   booleanOperandParent?: { id: string; name: string };
   canDelete: boolean;
+  canOutlineStroke: boolean;
   constraintsAvailable: boolean;
   layoutSizingAvailable: boolean;
   layoutLimitsAvailable: boolean;
@@ -194,6 +203,12 @@ export function SelectedNodeProperties({
   onDelete: () => void;
   onDetachComponentInstance: () => void;
   onDuplicate: () => void;
+  onOutlineStroke: () => void;
+  onSetVectorVertexAppearance: (
+    nodeId: string,
+    vertexIds: readonly string[],
+    patch: VectorVertexAppearancePatch,
+  ) => void;
   onGoToComponentMain: () => void;
   onCropImage: () => boolean;
   onSelectImageArea: () => boolean;
@@ -305,6 +320,7 @@ export function SelectedNodeProperties({
   styleActions?: StyleActions;
   projectLibraries?: ProjectLibraryActions;
   fontContext?: FontInspectorContext;
+  vectorVertexSelection: VectorVertexInspectorSelection | null;
 }) {
   const { t } = useI18n();
   const flowPositioned =
@@ -990,11 +1006,15 @@ export function SelectedNodeProperties({
       )}
       <PaintAndEffectsSections
         appearanceControlled={booleanOperandParent !== undefined}
+        canOutlineStroke={canOutlineStroke}
         node={node}
+        onOutlineStroke={onOutlineStroke}
+        onSetVectorVertexAppearance={onSetVectorVertexAppearance}
         onUpdate={onUpdate}
         onUpdateImagePaintFilters={(...args) =>
           onUpdateImagePaintFilters(node.id, ...args)
         }
+        vectorVertexSelection={vectorVertexSelection}
       />
       {styleActions && (
         <StyleReferencesSection

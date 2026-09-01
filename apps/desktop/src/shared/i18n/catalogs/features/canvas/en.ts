@@ -44,6 +44,8 @@ export const canvasMessages = {
     "{{pointCount}} points · {{pathCount}} paths selected · Shift-click adds",
   "canvas.vectorCutHint":
     "Click a point or path to create a break, or drag across the object to divide it into layers",
+  "canvas.vectorBranchCutHint":
+    "Click a branch segment to create a break · Drag Cut is unavailable for branching geometry",
   "canvas.vectorBendHint":
     "Click a point or path to add handles, or drag a path to bend it",
   "canvas.vectorLassoHint":
@@ -62,6 +64,8 @@ export const canvasMessages = {
   "canvas.vectorToolBend": "Bend",
   "canvas.vectorToolPaint": "Paint",
   "canvas.vectorPaintColor": "Region color",
+  "canvas.vectorPaintStyle": "Region style",
+  "canvas.vectorPaintDirect": "Direct paint",
   "canvas.vectorToolCut": "Cut",
   "canvas.vectorToolLasso": "Lasso",
   "canvas.vectorPointMode": "Bézier point mode",

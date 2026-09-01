@@ -5,8 +5,16 @@ import type {
   SharedStyleType,
   StyleReferenceTarget,
 } from "@opendesign/design-contracts";
+import {
+  materializeTextRunStyles,
+  textRunUsesAnyStyle,
+} from "./text-run-style-projection.js";
+import {
+  materializeVectorRegionStyles,
+  vectorRegionUsesAnyStyle,
+} from "./vector-region-style-projection.js";
 
-export const STYLE_SERVICE_VERSION = 2 as const;
+export const STYLE_SERVICE_VERSION = 3 as const;
 
 export type StyleIssueCode =
   | "duplicate-key"
@@ -196,6 +204,33 @@ export function validateStyleDocument(
         });
       }
     }
+    if (
+      (node.kind === "path" || node.kind === "vector") &&
+      "network" in node.properties
+    ) {
+      for (const [
+        regionIndex,
+        region,
+      ] of node.properties.network.regions.entries()) {
+        const styleId = region.fillStyleId;
+        if (!styleId) continue;
+        const path = `/nodesById/${pointer(node.id)}/properties/network/regions/${regionIndex}/fillStyleId`;
+        const style = styleDefinition(document, styleId);
+        if (!style || style.styleType !== "PAINT") {
+          issues.push({
+            ...issue(
+              style ? "incompatible-reference" : "missing-style",
+              path,
+              style
+                ? `Vector region fillStyleId cannot consume ${style.styleType} style ${styleId}`
+                : `Style ${styleId} does not exist`,
+              styleId,
+            ),
+            nodeId: node.id,
+          });
+        }
+      }
+    }
   }
   return issues;
 }
@@ -207,8 +242,11 @@ export function materializeSharedStyles(
     REFERENCE_TYPES,
   ) as StyleReferenceTarget["field"][];
   if (
-    !Object.values(document.nodesById).some((node) =>
-      fields.some((field) => node[field] !== undefined),
+    !Object.values(document.nodesById).some(
+      (node) =>
+        fields.some((field) => node[field] !== undefined) ||
+        vectorRegionUsesAnyStyle(node) ||
+        textRunUsesAnyStyle(node),
     )
   ) {
     return { document, issues: [] };
@@ -216,7 +254,13 @@ export function materializeSharedStyles(
   const nodesById = { ...document.nodesById };
   const issues: StyleDocumentIssue[] = [];
   for (const source of Object.values(document.nodesById)) {
-    if (!fields.some((field) => source[field] !== undefined)) continue;
+    if (
+      !fields.some((field) => source[field] !== undefined) &&
+      !vectorRegionUsesAnyStyle(source) &&
+      !textRunUsesAnyStyle(source)
+    ) {
+      continue;
+    }
     const node = structuredClone(source);
     nodesById[node.id] = node;
     for (const field of fields) {
@@ -240,6 +284,16 @@ export function materializeSharedStyles(
       }
       applyStyle(node, field, style);
     }
+    issues.push(
+      ...materializeVectorRegionStyles(node, (styleId) =>
+        styleDefinition(document, styleId),
+      ),
+    );
+    issues.push(
+      ...materializeTextRunStyles(node, (styleId) =>
+        styleDefinition(document, styleId),
+      ),
+    );
   }
   return { document: { ...document, nodesById }, issues };
 }
@@ -265,6 +319,20 @@ export function styleConsumers(
       REFERENCE_TYPES,
     ) as StyleReferenceTarget["field"][]) {
       if (node[field] === styleId) consumers.push({ nodeId: node.id, field });
+    }
+    if (
+      (node.kind === "path" || node.kind === "vector") &&
+      "network" in node.properties
+    ) {
+      for (const region of node.properties.network.regions) {
+        if (region.fillStyleId === styleId) {
+          consumers.push({
+            nodeId: node.id,
+            regionId: region.id,
+            field: "fillStyleId",
+          });
+        }
+      }
     }
   }
   return consumers;
@@ -385,6 +453,15 @@ function nodeUsesStyle(node: DesignNode, styleId: string): boolean {
   if (
     (Object.keys(REFERENCE_TYPES) as StyleReferenceTarget["field"][]).some(
       (field) => node[field] === styleId,
+    )
+  ) {
+    return true;
+  }
+  if (
+    (node.kind === "path" || node.kind === "vector") &&
+    "network" in node.properties &&
+    node.properties.network.regions.some(
+      (region) => region.fillStyleId === styleId,
     )
   ) {
     return true;

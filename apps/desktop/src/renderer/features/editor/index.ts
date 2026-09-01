@@ -19,6 +19,7 @@ export {
 export { useLayerCommandController } from "./use-layer-command-controller";
 export { useLayerRenameWorkflow } from "./use-layer-rename-workflow";
 export { usePageCommandController } from "./use-page-command-controller";
+export { useGeometryCommandController } from "./use-geometry-command-controller";
 export type {
   LayerActionResult,
   LayerDropPosition,

@@ -59,6 +59,8 @@ function success(providerId: string) {
     providerVersion: "1",
     size: { width: 10, height: 10 },
     contentBounds: { x: 0, y: 0, width: 10, height: 10 },
+    displayContent: "A",
+    fullContentBounds: { x: 0, y: 0, width: 10, height: 10 },
     lines: [
       { start: 0, end: 1, x: 0, y: 0, width: 10, height: 10, baseline: 8 },
     ],
@@ -77,6 +79,8 @@ function success(providerId: string) {
       },
     ],
     markers: [],
+    sourceContentEnd: 1,
+    truncated: false,
     warnings: [],
   };
 }
@@ -90,11 +94,13 @@ function request() {
     height: 10,
     hangingList: false,
     listSpacing: 0,
+    maxLines: null,
     paragraphIndent: 0,
     paragraphSpacing: 0,
     runs: [],
     textAlignHorizontal: "left" as const,
     textAlignVertical: "top" as const,
+    textTruncation: "disabled" as const,
     textWrap: "character" as const,
   };
 }

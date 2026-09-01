@@ -19,12 +19,19 @@ const HIERARCHY_ACTIONS = [
 ] as const;
 
 const VECTOR_ACTIONS = [
+  "outline-stroke",
+  "flatten",
   "set-closed",
   "bend-segment",
   "set-region-fills",
+  "set-region-fill-style",
+  "set-vertex-stroke-appearance",
+  "set-vertex-corner-radius",
   "reverse-path",
   "connect-endpoints",
   "disconnect-vertex",
+  "delete-segments",
+  "delete-vertices",
   "transform-vertices",
   "transform-layers-vertices",
   "cut-path",
@@ -238,6 +245,24 @@ const VECTOR_TARGETS_SCHEMA = {
   items: VECTOR_VERTEX_TARGET_SCHEMA,
 } as const;
 
+const VECTOR_ENDPOINT_TARGET_SCHEMA = {
+  type: "object",
+  properties: {
+    nodeId: ID_SCHEMA,
+    vertexId: VECTOR_ID_SCHEMA,
+  },
+  required: ["nodeId", "vertexId"],
+  additionalProperties: false,
+} as const;
+
+const VECTOR_ENDPOINTS_SCHEMA = {
+  type: "array",
+  minItems: 2,
+  maxItems: 2,
+  uniqueItems: true,
+  items: VECTOR_ENDPOINT_TARGET_SCHEMA,
+} as const;
+
 const VECTOR_CUT_AT_SCHEMA = {
   anyOf: [
     {
@@ -269,9 +294,11 @@ const VECTOR_COMMON_PROPERTIES = {
 
 const FULL_VECTOR_BRANCH_PROPERTIES = new Set([
   "at",
+  "endpoints",
   "fills",
   "nodeIds",
   "point",
+  "segmentIds",
   "targets",
   "vertexIds",
 ]);
@@ -315,6 +342,8 @@ function vectorBranch<
 }
 
 const VECTOR_ACTION_BRANCHES = [
+  vectorBranch("outline-stroke", { nodeId: ID_SCHEMA }, ["nodeId"]),
+  vectorBranch("flatten", { nodeIds: nodeIdsSchema(1, 500) }, ["nodeIds"]),
   vectorBranch(
     "set-closed",
     {
@@ -345,19 +374,66 @@ const VECTOR_ACTION_BRANCHES = [
     ["nodeId", "regionId", "fills"],
   ),
   vectorBranch(
+    "set-region-fill-style",
+    {
+      nodeId: ID_SCHEMA,
+      regionId: VECTOR_ID_SCHEMA,
+      fillStyleId: ID_SCHEMA,
+    },
+    ["nodeId", "regionId", "fillStyleId"],
+  ),
+  vectorBranch(
+    "set-vertex-stroke-appearance",
+    {
+      nodeId: ID_SCHEMA,
+      vertexIds: vertexIdsSchema(1, 16_384),
+      strokeCap: {
+        anyOf: [{ enum: ["none", "round", "square"] }, { type: "null" }],
+      },
+      strokeJoin: {
+        anyOf: [{ enum: ["miter", "round", "bevel"] }, { type: "null" }],
+      },
+    },
+    ["nodeId", "vertexIds"],
+  ),
+  vectorBranch(
+    "set-vertex-corner-radius",
+    {
+      nodeId: ID_SCHEMA,
+      vertexIds: vertexIdsSchema(1, 16_384),
+      cornerRadius: {
+        anyOf: [{ type: "number", minimum: 0 }, { type: "null" }],
+      },
+    },
+    ["nodeId", "vertexIds", "cornerRadius"],
+  ),
+  vectorBranch(
     "reverse-path",
     { nodeId: ID_SCHEMA, pathId: VECTOR_ID_SCHEMA },
     ["nodeId"],
   ),
-  vectorBranch(
-    "connect-endpoints",
-    { nodeId: ID_SCHEMA, vertexIds: vertexIdsSchema(2, 2) },
-    ["nodeId", "vertexIds"],
-  ),
+  vectorBranch("connect-endpoints", { endpoints: VECTOR_ENDPOINTS_SCHEMA }, [
+    "endpoints",
+  ]),
   vectorBranch(
     "disconnect-vertex",
-    { nodeId: ID_SCHEMA, pathId: VECTOR_ID_SCHEMA, vertexId: VECTOR_ID_SCHEMA },
+    {
+      nodeId: ID_SCHEMA,
+      pathId: VECTOR_ID_SCHEMA,
+      segmentId: VECTOR_ID_SCHEMA,
+      vertexId: VECTOR_ID_SCHEMA,
+    },
     ["nodeId", "pathId", "vertexId"],
+  ),
+  vectorBranch(
+    "delete-segments",
+    { nodeId: ID_SCHEMA, segmentIds: vertexIdsSchema(1, 16_384) },
+    ["nodeId", "segmentIds"],
+  ),
+  vectorBranch(
+    "delete-vertices",
+    { nodeId: ID_SCHEMA, vertexIds: vertexIdsSchema(1, 16_384) },
+    ["nodeId", "vertexIds"],
   ),
   vectorBranch(
     "transform-vertices",
@@ -401,7 +477,7 @@ const VECTOR_ACTION_BRANCHES = [
 export const DESIGN_VECTOR_TOOL_INPUT_SCHEMA = executableJsonSchema({
   type: "object",
   description:
-    "Edit explicit existing editable Vector Networks by stable Page, node, path, region, vertex, and segment IDs from current inspection. Every action has one closed field shape. The host derives local transforms, topology, result layer IDs, bounds, and one atomic transaction. set-region-fills applies typed paints to one inspected closed region without changing geometry. bend-segment moves one inspected point on a segment to a node-local point and derives its Bézier handles. transform-vertices uses one node-local affine matrix; transform-layers-vertices uses one document-space matrix across explicit layer targets. Paint, Bend, Cut, connect, disconnect, open, close, and reverse preserve unaffected stable IDs and reject unsupported branching or ambiguous geometry.",
+    "Edit explicit existing editable Vector Networks by stable Page, node, path, region, vertex, and segment IDs from current inspection. Every action has one closed field shape. The host derives local transforms, topology, result layer IDs, bounds, and one atomic transaction. outline-stroke creates a new editable Vector sibling from the visible stroke and preserves the source. flatten destructively replaces supported same-parent Frame, Group, Boolean, exact glyph-outline Text, Rectangle, Ellipse, plain Line, sharp Polygon/Star, Path, and Vector layers with one editable Vector while preserving nested child order, Frame clipping, and visible fill/stroke paint order. set-region-fills applies typed paints and detaches any Style from one inspected closed region; set-region-fill-style links that region to one inspected PAINT Style. set-vertex-stroke-appearance changes point cap/join overrides; set-vertex-corner-radius applies a circular radius to inspected straight closed-contour vertices or clears an override with null. bend-segment moves one inspected point on a segment to a node-local point and derives its Bézier handles. connect-endpoints accepts two explicit point targets from one layer or two matching sibling layers; two endpoints join contours, while one endpoint plus another path vertex creates a shared branch junction. The host resolves transforms and atomically merges cross-layer geometry. transform-vertices uses one node-local affine matrix; transform-layers-vertices uses one document-space matrix across explicit layer targets, including valid branch junctions. Existing-branch unique endpoint merge, explicit-path Open/Close/Reverse, branch-segment Bend/Cut/Delete, branch-junction vertex Delete/Cut, and explicit incident-edge/open-path endpoint Disconnect are supported; topology-specific operations continue to reject ambiguous branch mutations.",
   properties: {
     action: { enum: VECTOR_ACTIONS },
     label: LABEL_SCHEMA,
@@ -412,7 +488,18 @@ export const DESIGN_VECTOR_TOOL_INPUT_SCHEMA = executableJsonSchema({
     point: BOUNDED_POINT_SCHEMA,
     regionId: VECTOR_ID_SCHEMA,
     fills: { type: "array", maxItems: 4_096, items: PaintSchema },
+    fillStyleId: ID_SCHEMA,
+    strokeCap: {
+      anyOf: [{ enum: ["none", "round", "square"] }, { type: "null" }],
+    },
+    strokeJoin: {
+      anyOf: [{ enum: ["miter", "round", "bevel"] }, { type: "null" }],
+    },
+    cornerRadius: {
+      anyOf: [{ type: "number", minimum: 0 }, { type: "null" }],
+    },
     segmentId: VECTOR_ID_SCHEMA,
+    segmentIds: vertexIdsSchema(1, 16_384),
     t: { type: "number", exclusiveMinimum: 0, exclusiveMaximum: 1 },
     vertexId: VECTOR_ID_SCHEMA,
     vertexIds: vertexIdsSchema(1, 16_384),
@@ -422,6 +509,7 @@ export const DESIGN_VECTOR_TOOL_INPUT_SCHEMA = executableJsonSchema({
     at: VECTOR_CUT_AT_SCHEMA,
     start: BOUNDED_POINT_SCHEMA,
     end: BOUNDED_POINT_SCHEMA,
+    endpoints: VECTOR_ENDPOINTS_SCHEMA,
   },
   required: ["action", "label", "pageId"],
   anyOf: VECTOR_ACTION_BRANCHES,

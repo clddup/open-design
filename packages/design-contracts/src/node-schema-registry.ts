@@ -52,6 +52,7 @@ export const {
   GridStyleDefinitionSchema,
   SharedStyleDefinitionSchema,
   StyleOrderByTypeSchema,
+  StyleReferenceFieldSchema,
   StyleReferenceTargetSchema,
   PutStyleCommandSchema,
   DeleteStyleCommandSchema,
@@ -112,6 +113,8 @@ const vectorSchemas = createVectorSchemas({
 export const {
   VectorGeometryIdSchema,
   VectorPointModeSchema,
+  VectorVertexStrokeCapSchema,
+  VectorVertexStrokeJoinSchema,
   VectorVertexSchema,
   VectorSegmentSchema,
   VectorSegmentReferenceSchema,

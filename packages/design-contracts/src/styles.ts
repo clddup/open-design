@@ -134,19 +134,32 @@ export function createSharedStyleSchemas<
     },
     { additionalProperties: false },
   );
-  const StyleReferenceTargetSchema = Type.Object(
+  const StyleReferenceFieldSchema = Type.Union([
+    Type.Literal("fillStyleId"),
+    Type.Literal("strokeStyleId"),
+    Type.Literal("effectStyleId"),
+    Type.Literal("textStyleId"),
+    Type.Literal("gridStyleId"),
+  ]);
+  const NodeStyleReferenceTargetSchema = Type.Object(
     {
       nodeId: styleId,
-      field: Type.Union([
-        Type.Literal("fillStyleId"),
-        Type.Literal("strokeStyleId"),
-        Type.Literal("effectStyleId"),
-        Type.Literal("textStyleId"),
-        Type.Literal("gridStyleId"),
-      ]),
+      field: StyleReferenceFieldSchema,
     },
     { additionalProperties: false },
   );
+  const VectorRegionStyleReferenceTargetSchema = Type.Object(
+    {
+      nodeId: styleId,
+      regionId: styleId,
+      field: Type.Literal("fillStyleId"),
+    },
+    { additionalProperties: false },
+  );
+  const StyleReferenceTargetSchema = Type.Union([
+    NodeStyleReferenceTargetSchema,
+    VectorRegionStyleReferenceTargetSchema,
+  ]);
   const operationBase = { commandId: Type.String({ minLength: 1 }) };
   const PutStyleCommandSchema = Type.Object(
     {
@@ -214,6 +227,7 @@ export function createSharedStyleSchemas<
     GridStyleDefinitionSchema,
     SharedStyleDefinitionSchema,
     StyleOrderByTypeSchema,
+    StyleReferenceFieldSchema,
     StyleReferenceTargetSchema,
     PutStyleCommandSchema,
     DeleteStyleCommandSchema,

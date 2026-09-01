@@ -48,6 +48,12 @@ export type LineEndpoint = Static<typeof schema.LineEndpointSchema>;
 export type BooleanOperation = Static<typeof schema.BooleanOperationSchema>;
 export type VectorVertex = Static<typeof schema.VectorVertexSchema>;
 export type VectorPointMode = Static<typeof schema.VectorPointModeSchema>;
+export type VectorVertexStrokeCap = Static<
+  typeof schema.VectorVertexStrokeCapSchema
+>;
+export type VectorVertexStrokeJoin = Static<
+  typeof schema.VectorVertexStrokeJoinSchema
+>;
 export type VectorSegment = Static<typeof schema.VectorSegmentSchema>;
 export type VectorSegmentReference = Static<
   typeof schema.VectorSegmentReferenceSchema

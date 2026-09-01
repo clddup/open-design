@@ -18,6 +18,7 @@ import {
   moveVectorVertices,
   nearestVectorSegmentPoint,
   setVectorPointMode,
+  setVectorRegionFillStyle,
   setVectorRegionFills,
   transformVectorVertices,
   type VectorCutLocation,
@@ -125,6 +126,7 @@ type VectorEditDrag =
     };
 
 interface VectorEditSession {
+  activePathId?: string;
   anchorControls: LeaferElement[];
   cutGuidePath: LeaferElement;
   cutHitPath: LeaferElement;
@@ -136,11 +138,13 @@ interface VectorEditSession {
   nodeId: string;
   overlayGroup: LeaferGroup;
   pathElement: LeaferElement;
+  fillStyleId?: string;
   paint: NonNullable<LeaferVectorEditScope["paint"]>;
   readOnly: boolean;
   segmentSelectionPath: LeaferElement;
   selectedSegmentIds: string[];
   selectedVertexIds: string[];
+  topologyEditable: boolean;
   tool: LeaferVectorEditTool;
   tracePath: LeaferElement;
 }
@@ -291,6 +295,7 @@ export class VectorEditController {
     if (
       !session ||
       session.readOnly ||
+      !session.topologyEditable ||
       session.drag ||
       session.selectedVertexIds.length === 0
     ) {
@@ -441,9 +446,12 @@ export class VectorEditController {
           item.nodeId,
           pathElement,
           network,
+          item.activePathId,
           selectedSegmentIds,
           selectedVertexIds,
           item.readOnly,
+          item.topologyEditable,
+          scope.fillStyleId,
           scope.paint ?? [{ type: "solid", color: "#4f7fff", opacity: 1 }],
           scope.tool,
         );
@@ -459,7 +467,12 @@ export class VectorEditController {
           this.#cancelVectorEditDrag(session);
         }
         session.pathElement = pathElement;
+        if (item.activePathId) session.activePathId = item.activePathId;
+        else delete session.activePathId;
         session.readOnly = item.readOnly;
+        session.topologyEditable = item.topologyEditable;
+        if (scope.fillStyleId) session.fillStyleId = scope.fillStyleId;
+        else delete session.fillStyleId;
         session.paint = scope.paint ?? [
           { type: "solid", color: "#4f7fff", opacity: 1 },
         ];
@@ -482,9 +495,12 @@ export class VectorEditController {
     nodeId: string,
     pathElement: LeaferElement,
     network: VectorNetwork,
+    activePathId: string | undefined,
     selectedSegmentIds: string[],
     selectedVertexIds: string[],
     readOnly: boolean,
+    topologyEditable: boolean,
+    fillStyleId: string | undefined,
     paint: NonNullable<LeaferVectorEditScope["paint"]>,
     tool: LeaferVectorEditTool,
   ): VectorEditSession | undefined {
@@ -505,7 +521,7 @@ export class VectorEditController {
       cursor: tool === "bend" ? "pointer" : "crosshair",
       editable: false,
       fill: null,
-      hittable: (tool === "cut" || tool === "bend") && !readOnly,
+      hittable: !readOnly && (tool === "bend" || tool === "cut"),
       stroke: "rgba(0, 0, 0, 0.001)",
     }) as LeaferElement;
     const cutGuidePath = new this.#options.leafer.Path({
@@ -544,10 +560,12 @@ export class VectorEditController {
     parent.add(overlayGroup);
     this.#vectorEditControls.set(cutHitPath, { kind: "path", nodeId });
     return {
+      ...(activePathId ? { activePathId } : {}),
       anchorControls: [],
       cutGuidePath,
       cutHitPath,
       drag: null,
+      ...(fillStyleId ? { fillStyleId } : {}),
       handleControls: [],
       handlePath,
       lassoPath,
@@ -561,6 +579,7 @@ export class VectorEditController {
       selectedSegmentIds,
       selectedVertexIds,
       tool,
+      topologyEditable,
       tracePath,
     };
   }
@@ -579,7 +598,12 @@ export class VectorEditController {
   }
 
   #renderVectorEditOverlay(session: VectorEditSession): void {
-    const serialized = serializeVectorNetwork(session.network);
+    const corner = this.#vectorCornerAppearance(session.nodeId);
+    const serialized = serializeVectorNetwork(
+      session.network,
+      corner.radius,
+      corner.smoothing,
+    );
     if (!serialized.ok) {
       this.#options.report(
         new Error(serialized.issues.map((issue) => issue.message).join("; ")),
@@ -606,6 +630,8 @@ export class VectorEditController {
       const serializedRegion = serializeVectorRegion(
         session.network,
         region.id,
+        corner.radius,
+        corner.smoothing,
       );
       if (!element || !serializedRegion.ok) continue;
       element.set({
@@ -1050,12 +1076,24 @@ export class VectorEditController {
       return;
     }
     if (session.tool === "paint") {
-      if (session.readOnly || control?.kind !== "region") return;
-      const painted = setVectorRegionFills(
-        session.network,
-        control.regionId,
-        pointer.altKey ? [] : session.paint,
-      );
+      if (
+        session.readOnly ||
+        !session.topologyEditable ||
+        control?.kind !== "region"
+      )
+        return;
+      const painted =
+        !pointer.altKey && session.fillStyleId
+          ? setVectorRegionFillStyle(
+              session.network,
+              control.regionId,
+              session.fillStyleId,
+            )
+          : setVectorRegionFills(
+              session.network,
+              control.regionId,
+              pointer.altKey ? [] : session.paint,
+            );
       if (!painted.ok) {
         if (painted.code !== "no-op")
           this.#options.report(new Error(painted.message));
@@ -1068,10 +1106,9 @@ export class VectorEditController {
       if (session.readOnly) return;
       let clickTarget: { at: VectorCutLocation; pathId: string } | undefined;
       if (control?.kind === "vertex") {
-        const pathId = findVectorPathIdForVertex(
-          session.network,
-          control.vertexId,
-        );
+        const pathId =
+          session.activePathId ??
+          findVectorPathIdForVertex(session.network, control.vertexId);
         if (pathId) {
           clickTarget = {
             at: { kind: "vertex", vertexId: control.vertexId },
@@ -1109,6 +1146,7 @@ export class VectorEditController {
     if (session.tool === "bend" && control?.kind !== "handle") {
       if (session.readOnly) return;
       if (control?.kind === "vertex") {
+        if (!session.topologyEditable) return;
         this.#setVectorSelection(session, [], [control.vertexId]);
         if (listVectorVertexHandles(session.network, control.vertexId).length) {
           return;
@@ -1451,8 +1489,9 @@ export class VectorEditController {
       const start = drag.startDocument;
       session.drag = null;
       this.#renderVectorCutGuide(session);
-      if (moved) this.#submitVectorLineCut(start, end);
-      else if (clickTarget) {
+      if (moved) {
+        this.#submitVectorLineCut(start, end);
+      } else if (clickTarget) {
         this.#submitVectorCut(clickTarget.pathId, clickTarget.at);
       }
       return;
@@ -1709,7 +1748,11 @@ export class VectorEditController {
       (node.kind === "path" || node.kind === "vector") &&
       "network" in node.properties
     ) {
-      const authoritative = serializeVectorNetwork(node.properties.network);
+      const authoritative = serializeVectorNetwork(
+        node.properties.network,
+        node.properties.cornerRadius ?? 0,
+        node.properties.cornerSmoothing ?? 0,
+      );
       if (authoritative.ok)
         session.pathElement.set({ path: authoritative.path });
     }
@@ -1724,6 +1767,21 @@ export class VectorEditController {
     }
     this.#activeVectorEditNodeId = null;
     this.#renderVectorSelectionOverlay();
+  }
+
+  #vectorCornerAppearance(nodeId: string): {
+    radius: number;
+    smoothing: number;
+  } {
+    const node = this.#input?.document.nodesById[nodeId];
+    return node &&
+      (node.kind === "path" || node.kind === "vector") &&
+      "network" in node.properties
+      ? {
+          radius: node.properties.cornerRadius ?? 0,
+          smoothing: node.properties.cornerSmoothing ?? 0,
+        }
+      : { radius: 0, smoothing: 0 };
   }
 }
 

@@ -116,6 +116,7 @@ export function useRendererDesignToolHost(
                 };
               },
               onProgress: reportProgress,
+              ...(textRunLayoutProvider ? { textRunLayoutProvider } : {}),
               onCanvasWait: (durationMs, configuredDelayMs) => {
                 toolPerformance.canvasWaitCount += 1;
                 toolPerformance.canvasWaitMs += Math.max(

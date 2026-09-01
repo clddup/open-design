@@ -31,6 +31,10 @@ import type { ComponentInspectorContext } from "@/renderer/features/editor";
 import type { SvgInterchangeFeedback } from "../../import-export/types";
 import type { UpdatePropertiesPatch } from "@/renderer/features/editor";
 import type { FontInspectorContext } from "./properties/TypographySection";
+import type {
+  VectorVertexInspectorSelection,
+  VectorVertexAppearancePatch,
+} from "./properties/VectorVertexAppearanceSection";
 
 function renderPanel(
   options: {
@@ -44,8 +48,16 @@ function renderPanel(
     componentContext?: ComponentInspectorContext;
     canCombineVariants?: boolean;
     canAddToVariantSet?: boolean;
+    canOutlineStroke?: boolean;
     onCombineVariants?: () => void;
     onAddToVariantSet?: () => void;
+    onOutlineStroke?: () => void;
+    onSetVectorVertexAppearance?: (
+      nodeId: string,
+      vertexIds: readonly string[],
+      patch: VectorVertexAppearancePatch,
+    ) => void;
+    vectorVertexSelection?: VectorVertexInspectorSelection | null;
     onDissolveVariantSet?: () => void;
     onDuplicateVariant?: () => void;
     onRemoveVariant?: () => void;
@@ -154,6 +166,7 @@ function renderPanel(
           canAddToVariantSet={options.canAddToVariantSet ?? false}
           canCombineVariants={options.canCombineVariants ?? false}
           canDelete
+          canOutlineStroke={options.canOutlineStroke ?? false}
           layoutMode={options.layoutMode ?? null}
           componentContext={options.componentContext}
           document={createWelcomeDocument()}
@@ -173,6 +186,10 @@ function renderPanel(
           onDissolveVariantSet={options.onDissolveVariantSet ?? vi.fn()}
           onDismissSvgFeedback={onDismissSvgFeedback}
           onDuplicate={vi.fn()}
+          onOutlineStroke={options.onOutlineStroke ?? vi.fn()}
+          onSetVectorVertexAppearance={
+            options.onSetVectorVertexAppearance ?? vi.fn()
+          }
           onDuplicateVariant={options.onDuplicateVariant ?? vi.fn()}
           onGoToComponentMain={vi.fn()}
           onExportFormatChange={vi.fn()}
@@ -252,6 +269,7 @@ function renderPanel(
           svgExportSettings={{ includeLayerIds: false, padding: 0 }}
           svgFeedback={options.feedback ?? null}
           svgOperation={options.operation ?? null}
+          vectorVertexSelection={options.vectorVertexSelection ?? null}
         />
       </I18nProvider>
     </TooltipProvider>,
@@ -294,6 +312,47 @@ const lineNode: DesignNode = {
     end: { x: 0, y: 1 },
     startEndpoint: "circle",
     endEndpoint: "line-arrow",
+  },
+};
+
+const strokedVectorNode: Extract<DesignNode, { kind: "vector" }> = {
+  id: "vector_1",
+  name: "Editable mark",
+  parentId: null,
+  childIds: [],
+  visible: true,
+  locked: false,
+  transform: [1, 0, 0, 1, 120, 80],
+  size: { width: 100, height: 1 },
+  exportSettings: [],
+  opacity: 1,
+  extensions: {},
+  kind: "vector",
+  properties: {
+    fills: [],
+    strokes: [{ type: "solid", color: "#2563eb", opacity: 1 }],
+    strokeWidth: 4,
+    network: {
+      vertices: [
+        { id: "vertex_a", x: 0, y: 0, handleMode: "corner" },
+        { id: "vertex_b", x: 100, y: 0, handleMode: "corner" },
+      ],
+      segments: [
+        {
+          id: "segment_ab",
+          startVertexId: "vertex_a",
+          endVertexId: "vertex_b",
+        },
+      ],
+      paths: [
+        {
+          id: "path_open",
+          closed: false,
+          segments: [{ segmentId: "segment_ab", reversed: false }],
+        },
+      ],
+      regions: [],
+    },
   },
 };
 
@@ -404,6 +463,146 @@ const componentInstanceNode: Extract<DesignNode, { kind: "instance" }> = {
 };
 
 describe("PropertiesPanel information architecture", () => {
+  it("edits the node fallback corner radius for an editable Vector", () => {
+    const onUpdate = vi.fn();
+    renderPanel({
+      node: strokedVectorNode,
+      onUpdate,
+      selectionCount: 1,
+    });
+    const radius = screen.getByRole("spinbutton", { name: "Corner radius" });
+    fireEvent.change(radius, { target: { value: "6.5" } });
+    fireEvent.blur(radius);
+    expect(onUpdate).toHaveBeenCalledWith({
+      properties: { cornerRadius: 6.5 },
+    });
+  });
+
+  it("edits node-level Vector corner smoothing as a percentage", () => {
+    const onUpdate = vi.fn();
+    renderPanel({
+      node: {
+        ...strokedVectorNode,
+        properties: {
+          ...strokedVectorNode.properties,
+          cornerSmoothing: 0.6,
+        },
+      },
+      onUpdate,
+      selectionCount: 1,
+    });
+    const smoothing = screen.getByRole("spinbutton", {
+      name: "Corner smoothing",
+    });
+    expect(smoothing).toHaveValue(60);
+    fireEvent.change(smoothing, { target: { value: "75" } });
+    fireEvent.blur(smoothing);
+    expect(onUpdate).toHaveBeenCalledWith({
+      properties: { cornerSmoothing: 0.75 },
+    });
+  });
+
+  it("shows selected Vector point stroke overrides without changing layer-level controls", () => {
+    const node = structuredClone(strokedVectorNode);
+    if (!("network" in node.properties)) throw new Error("Missing network");
+    node.properties.network.vertices[0].strokeCap = "round";
+    node.properties.network.vertices[0].strokeJoin = "bevel";
+    renderPanel({
+      node,
+      selectionCount: 1,
+      vectorVertexSelection: {
+        nodeId: node.id,
+        vertexIds: ["vertex_a"],
+      },
+    });
+
+    expect(screen.getByText("Selected points · 1")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Point cap" })).toHaveValue(
+      "round",
+    );
+    expect(screen.getByRole("combobox", { name: "Point join" })).toHaveValue(
+      "bevel",
+    );
+    expect(screen.getByRole("combobox", { name: "Cap" })).toHaveValue("none");
+  });
+
+  it("shows mixed point appearance and clears overrides through Inherit", () => {
+    const node = structuredClone(strokedVectorNode);
+    if (!("network" in node.properties)) throw new Error("Missing network");
+    node.properties.network.vertices[0].strokeCap = "round";
+    const onSetVectorVertexAppearance = vi.fn();
+    renderPanel({
+      node,
+      onSetVectorVertexAppearance,
+      selectionCount: 1,
+      vectorVertexSelection: {
+        nodeId: node.id,
+        vertexIds: ["vertex_a", "vertex_b"],
+      },
+    });
+
+    const cap = screen.getByRole("combobox", { name: "Point cap" });
+    expect(cap).toHaveValue("mixed");
+    fireEvent.change(cap, { target: { value: "inherit" } });
+    expect(onSetVectorVertexAppearance).toHaveBeenCalledWith(
+      node.id,
+      ["vertex_a", "vertex_b"],
+      { strokeCap: null },
+    );
+  });
+
+  it("shows mixed point radii and supports numeric override plus Inherit", () => {
+    const node = structuredClone(strokedVectorNode);
+    if (!("network" in node.properties)) throw new Error("Missing network");
+    node.properties.network.vertices[0].cornerRadius = 8;
+    const onSetVectorVertexAppearance = vi.fn();
+    renderPanel({
+      node,
+      onSetVectorVertexAppearance,
+      selectionCount: 1,
+      vectorVertexSelection: {
+        nodeId: node.id,
+        vertexIds: ["vertex_a", "vertex_b"],
+      },
+    });
+
+    const radius = screen.getByRole("spinbutton", { name: "Point radius" });
+    expect(radius).toHaveAttribute("placeholder", "Mixed");
+    fireEvent.change(radius, { target: { value: "12.5" } });
+    fireEvent.blur(radius);
+    expect(onSetVectorVertexAppearance).toHaveBeenCalledWith(
+      node.id,
+      ["vertex_a", "vertex_b"],
+      { cornerRadius: 12.5 },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Inherit" }));
+    expect(onSetVectorVertexAppearance).toHaveBeenCalledWith(
+      node.id,
+      ["vertex_a", "vertex_b"],
+      { cornerRadius: null },
+    );
+  });
+
+  it("does not expose point appearance without an active point selection", () => {
+    renderPanel({ node: strokedVectorNode, selectionCount: 1 });
+    expect(
+      screen.queryByRole("combobox", { name: "Point cap" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps Outline stroke contextual to an editable stroked Vector", () => {
+    const onOutlineStroke = vi.fn();
+    renderPanel({
+      canOutlineStroke: true,
+      node: strokedVectorNode,
+      onOutlineStroke,
+      selectionCount: 1,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Outline stroke" }));
+    expect(onOutlineStroke).toHaveBeenCalledOnce();
+  });
+
   it("prioritizes real design controls and progressively discloses advanced sections", async () => {
     const user = userEvent.setup();
     renderPanel({ node: lineNode, selectionCount: 1 });

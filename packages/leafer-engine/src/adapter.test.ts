@@ -7626,6 +7626,32 @@ describe("Leafer engine selection bounds synchronization", () => {
       );
     if (!app || !region) throw new Error("Missing projected Vector region");
 
+    adapter.sync({
+      ...input,
+      vectorEditScope: {
+        ...input.vectorEditScope!,
+        fillStyleId: "brand-accent",
+        tool: "paint",
+      },
+    });
+    app.emit("pointer.down", pointerEvent(30, 15, region));
+    const style = onVectorEdit.mock.calls[0]?.[0];
+    if (!style || style.deleteNode)
+      throw new Error("Missing region Style edit");
+    expect(style.edits[0]?.network.regions[0]).toMatchObject({
+      fillStyleId: "brand-accent",
+    });
+    expect(style.edits[0]?.network.regions[0]).not.toHaveProperty("fills");
+
+    onVectorEdit.mockClear();
+    adapter.sync({
+      ...input,
+      vectorEditScope: {
+        ...input.vectorEditScope!,
+        paint: [{ type: "solid", color: "#22c55e", opacity: 1 }],
+        tool: "paint",
+      },
+    });
     app.emit("pointer.down", pointerEvent(30, 15, region));
     expect(onVectorEdit).toHaveBeenCalledTimes(1);
     const paint = onVectorEdit.mock.calls[0]?.[0];
@@ -7840,6 +7866,306 @@ describe("Leafer engine selection bounds synchronization", () => {
       nodeId: "editable_curve",
     });
     expect(onVectorEditExit).toHaveBeenCalledTimes(1);
+    adapter.dispose();
+  });
+
+  it("keeps branch point movement and Delete available while ambiguous topology controls stay disabled", async () => {
+    const onVectorEdit = vi.fn<(request: LeaferVectorEditRequest) => boolean>(
+      () => true,
+    );
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onVectorEdit,
+    });
+    const input = withVectorEditFixture(createInput(), ["vertex_b"]);
+    input.vectorEditScope!.nodes[0]!.topologyEditable = false;
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    const path =
+      app && findElement(app.tree, vectorStrokeElementId("editable_curve"));
+    const overlay = path?.parent?.children.at(-1);
+    if (!app || !(overlay instanceof FakeGroup)) {
+      throw new Error("Missing branch vector overlay");
+    }
+    const anchors = overlay.children.filter(
+      (child): child is FakeEllipse => child instanceof FakeEllipse,
+    );
+    app.emit("pointer.down", pointerEvent(60, 30, anchors[1]!));
+    app.emit("pointer.move", pointerEvent(72, 38, anchors[1]!));
+    app.emit("pointer.up", pointerEvent(72, 38, anchors[1]!));
+    expect(onVectorEdit).toHaveBeenCalledTimes(1);
+
+    onVectorEdit.mockClear();
+    expect(adapter.setVectorPointMode("smooth")).toBe(false);
+    emitWindowKey("Delete");
+    const vertexDeletion = onVectorEdit.mock.calls[0]?.[0];
+    if (!vertexDeletion || vertexDeletion.deleteNode) {
+      throw new Error("Missing branch vertex Delete edit");
+    }
+    expect(vertexDeletion.edits[0]!.network.paths).toEqual([
+      {
+        id: "path_open",
+        closed: false,
+        segments: [{ segmentId: "segment_edit_1", reversed: false }],
+      },
+    ]);
+
+    onVectorEdit.mockClear();
+    input.vectorEditScope = {
+      ...input.vectorEditScope!,
+      nodes: input.vectorEditScope!.nodes.map((item) => ({
+        ...item,
+        selectedSegmentIds: ["segment_ab"],
+        selectedVertexIds: [],
+      })),
+    };
+    adapter.sync(input);
+    emitWindowKey("Delete");
+    const deletion = onVectorEdit.mock.calls[0]?.[0];
+    if (!deletion || deletion.deleteNode) {
+      throw new Error("Missing branch segment Delete edit");
+    }
+    expect(deletion.edits[0]!.network.paths).toEqual([
+      {
+        id: "path_open",
+        closed: false,
+        segments: [{ segmentId: "segment_bc", reversed: false }],
+      },
+    ]);
+    adapter.dispose();
+  });
+
+  it("cuts a shared junction on the explicit active path", async () => {
+    const input = withVectorEditFixture(createInput(), ["vertex_b"]);
+    const vector = input.document.nodesById.editable_curve;
+    if (
+      !vector ||
+      vector.kind !== "vector" ||
+      !("network" in vector.properties)
+    ) {
+      throw new Error("Missing branch Cut fixture");
+    }
+    vector.properties.network.vertices.push({
+      id: "vertex_branch",
+      x: 60,
+      y: 90,
+    });
+    vector.properties.network.segments.push({
+      id: "segment_branch",
+      startVertexId: "vertex_b",
+      endVertexId: "vertex_branch",
+    });
+    vector.properties.network.paths.push({
+      id: "path_branch",
+      closed: false,
+      segments: [{ segmentId: "segment_branch", reversed: false }],
+    });
+    let network = structuredClone(vector.properties.network);
+    const onVectorCut = vi.fn<
+      NonNullable<LeaferEngineCallbacks["onVectorCut"]>
+    >((request) => {
+      const result = cutVectorPath(network, request.pathId, request.at);
+      if (!result.ok) return { ok: false };
+      network = result.network;
+      return {
+        ok: true,
+        network,
+        selectedVertexIds: result.cutVertexIds,
+      };
+    });
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onVectorCut,
+    });
+    input.vectorEditScope = {
+      ...input.vectorEditScope!,
+      nodes: input.vectorEditScope!.nodes.map((item) => ({
+        ...item,
+        activePathId: "path_open",
+        selectedSegmentIds: ["segment_ab"],
+        topologyEditable: false,
+      })),
+      tool: "cut",
+    };
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    const path =
+      app && findElement(app.tree, vectorStrokeElementId("editable_curve"));
+    const overlay = path?.parent?.children.at(-1);
+    if (!app || !(overlay instanceof FakeGroup)) {
+      throw new Error("Missing branch Cut overlay");
+    }
+    const anchors = overlay.children.filter(
+      (child): child is FakeEllipse => child instanceof FakeEllipse,
+    );
+    app.emit("pointer.down", pointerEvent(60, 30, anchors[1]!));
+    app.emit("pointer.up", pointerEvent(60, 30, anchors[1]!));
+    expect(onVectorCut).toHaveBeenCalledWith({
+      at: { kind: "vertex", vertexId: "vertex_b" },
+      nodeId: "editable_curve",
+      pathId: "path_open",
+    });
+    expect(network.paths.map(({ id }) => id)).toEqual([
+      "path_open",
+      "path_edit_1",
+      "path_branch",
+    ]);
+    adapter.dispose();
+  });
+
+  it("moves an existing branch-junction handle without enabling topology mutations", async () => {
+    const onVectorEdit = vi.fn<(request: LeaferVectorEditRequest) => boolean>(
+      () => true,
+    );
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onVectorEdit,
+    });
+    const input = withVectorEditFixture(createInput(), ["vertex_b"], true);
+    const vector = input.document.nodesById.editable_curve;
+    if (
+      !vector ||
+      vector.kind !== "vector" ||
+      !("network" in vector.properties)
+    ) {
+      throw new Error("Missing editable Vector fixture");
+    }
+    vector.properties.network.vertices.push({
+      id: "vertex_branch",
+      x: 60,
+      y: 90,
+    });
+    vector.properties.network.segments.push({
+      id: "segment_branch",
+      startVertexId: "vertex_b",
+      endVertexId: "vertex_branch",
+      tangentStart: { x: 0, y: 20 },
+    });
+    vector.properties.network.paths.push({
+      id: "path_branch",
+      closed: false,
+      segments: [{ segmentId: "segment_branch", reversed: false }],
+    });
+    input.vectorEditScope!.nodes[0]!.topologyEditable = false;
+    adapter.sync(input);
+
+    const app = leaferHarness.app;
+    const path =
+      app && findElement(app.tree, vectorStrokeElementId("editable_curve"));
+    const overlay = path?.parent?.children.at(-1);
+    if (!app || !(overlay instanceof FakeGroup)) {
+      throw new Error("Missing branch vector overlay");
+    }
+    const controls = overlay.children.filter(
+      (child): child is FakeEllipse => child instanceof FakeEllipse,
+    );
+    const branchHandle = controls.at(-1);
+    if (!branchHandle) throw new Error("Missing branch junction handle");
+
+    app.emit("pointer.down", pointerEvent(60, 50, branchHandle));
+    app.emit("pointer.move", pointerEvent(68, 56, branchHandle));
+    app.emit("pointer.up", pointerEvent(68, 56, branchHandle));
+
+    const request = onVectorEdit.mock.calls[0]?.[0];
+    if (!request || request.deleteNode) {
+      throw new Error("Missing branch handle edit");
+    }
+    expect(
+      request.edits[0]!.network.segments.find(
+        ({ id }) => id === "segment_branch",
+      )?.tangentStart,
+    ).toEqual({ x: 8, y: 26 });
+    expect(adapter.setVectorPointMode("smooth")).toBe(false);
+    adapter.dispose();
+  });
+
+  it("supports explicit segment and drag line Cut in a branch network", async () => {
+    const input = withVectorEditFixture(createInput(), [], true);
+    const vector = input.document.nodesById.editable_curve;
+    if (
+      !vector ||
+      vector.kind !== "vector" ||
+      !("network" in vector.properties)
+    ) {
+      throw new Error("Missing editable Vector fixture");
+    }
+    vector.properties.network.vertices.push({
+      id: "vertex_branch",
+      x: 60,
+      y: 90,
+    });
+    vector.properties.network.segments.push({
+      id: "segment_branch",
+      startVertexId: "vertex_b",
+      endVertexId: "vertex_branch",
+    });
+    vector.properties.network.paths.push({
+      id: "path_branch",
+      closed: false,
+      segments: [{ segmentId: "segment_branch", reversed: false }],
+    });
+    const cut = cutVectorPath(vector.properties.network, "path_branch", {
+      kind: "segment",
+      segmentId: "segment_branch",
+      t: 0.5,
+    });
+    if (!cut.ok) throw new Error(cut.message);
+    const onVectorCut = vi.fn<
+      NonNullable<LeaferEngineCallbacks["onVectorCut"]>
+    >(() => ({
+      ok: true,
+      network: cut.network,
+      selectedVertexIds: cut.cutVertexIds,
+    }));
+    const onVectorLineCut = vi.fn<
+      NonNullable<LeaferEngineCallbacks["onVectorLineCut"]>
+    >(() => ({ ok: false }));
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onVectorCut,
+      onVectorLineCut,
+    });
+    input.vectorEditScope = {
+      ...input.vectorEditScope!,
+      nodes: input.vectorEditScope!.nodes.map((item) => ({
+        ...item,
+        topologyEditable: false,
+      })),
+      tool: "cut",
+    };
+    adapter.sync(input);
+
+    const app = leaferHarness.app;
+    const path =
+      app && findElement(app.tree, vectorStrokeElementId("editable_curve"));
+    const overlay = path?.parent?.children.at(-1);
+    if (!app || !(overlay instanceof FakeGroup)) {
+      throw new Error("Missing branch Cut overlay");
+    }
+    const hitPath = overlay.children.filter(
+      (child): child is FakePath => child instanceof FakePath,
+    )[0];
+    if (!hitPath) throw new Error("Missing branch Cut hit path");
+    expect((hitPath as FakePath & { hittable: boolean }).hittable).toBe(true);
+
+    app.emit("pointer.down", pointerEvent(60, 60, hitPath));
+    app.emit("pointer.up", pointerEvent(60, 60, hitPath));
+    expect(onVectorCut).toHaveBeenCalledWith({
+      at: { kind: "segment", segmentId: "segment_branch", t: 0.5 },
+      nodeId: "editable_curve",
+      pathId: "path_branch",
+    });
+
+    onVectorCut.mockClear();
+    app.emit("pointer.down", pointerEvent(60, 60, hitPath));
+    app.emit("pointer.move", pointerEvent(100, 80, hitPath));
+    app.emit("pointer.up", pointerEvent(100, 80, hitPath));
+    expect(onVectorCut).not.toHaveBeenCalled();
+    expect(onVectorLineCut).toHaveBeenCalledWith({
+      end: { x: 100, y: 80 },
+      nodeIds: ["editable_curve"],
+      start: { x: 60, y: 60 },
+    });
     adapter.dispose();
   });
 
@@ -8578,6 +8904,7 @@ function withVectorEditFixture(
           readOnly: false,
           selectedSegmentIds,
           selectedVertexIds,
+          topologyEditable: true,
         },
       ],
       tool: "move",
@@ -8648,12 +8975,14 @@ function withMultiVectorEditFixture(
           readOnly: false,
           selectedSegmentIds: [],
           selectedVertexIds: [],
+          topologyEditable: true,
         },
         {
           nodeId: second.id,
           readOnly: false,
           selectedSegmentIds: [],
           selectedVertexIds: [],
+          topologyEditable: true,
         },
       ],
       tool: "move",

@@ -79,6 +79,11 @@ export function applyStyleOperation(
               (run) =>
                 run.style.textStyleId === command.styleId ||
                 run.style.fillStyleId === command.styleId,
+            )) ||
+          ((node.kind === "path" || node.kind === "vector") &&
+            "network" in node.properties &&
+            node.properties.network.regions.some(
+              (region) => region.fillStyleId === command.styleId,
             )),
       );
       if (consumer) {
@@ -120,6 +125,10 @@ export function applyStyleOperation(
     case "set_style_reference": {
       const node = document.nodesById[command.target.nodeId];
       if (!node) throw notFound(command.commandId, command.target.nodeId);
+      if ("regionId" in command.target) {
+        applyVectorRegionStyleReference(document, node, command);
+        return;
+      }
       if (command.styleId) {
         const style = styleDefinition(document, command.styleId);
         if (!style) throw notFound(command.commandId, command.styleId);
@@ -198,6 +207,50 @@ export function applyStyleOperation(
       return;
     }
   }
+}
+
+function applyVectorRegionStyleReference(
+  document: DesignDocument,
+  node: DesignNode,
+  command: Extract<StyleCommand, { type: "set_style_reference" }>,
+): void {
+  const target = command.target;
+  if (
+    !("regionId" in target) ||
+    (node.kind !== "path" && node.kind !== "vector") ||
+    !("network" in node.properties)
+  ) {
+    throw new OperationError(
+      command.commandId,
+      "design.style.reference_incompatible",
+      "Vector region Fill Style requires an editable Vector Network",
+    );
+  }
+  const region = node.properties.network.regions.find(
+    (candidate) => candidate.id === target.regionId,
+  );
+  if (!region) throw notFound(command.commandId, target.regionId);
+  if (command.styleId) {
+    const style = styleDefinition(document, command.styleId);
+    if (!style) throw notFound(command.commandId, command.styleId);
+    if (style.styleType !== "PAINT") {
+      throw new OperationError(
+        command.commandId,
+        "design.style.reference_incompatible",
+        `Vector region fillStyleId cannot consume ${style.styleType} style ${style.id}`,
+      );
+    }
+    region.fillStyleId = command.styleId;
+    delete region.fills;
+    return;
+  }
+  if (region.fillStyleId) {
+    const style = styleDefinition(document, region.fillStyleId);
+    if (style?.styleType === "PAINT") {
+      region.fills = structuredClone(style.paints);
+    }
+  }
+  delete region.fillStyleId;
 }
 
 function sameLibraryStyleIdentity(

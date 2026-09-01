@@ -37,9 +37,6 @@ export function resolveDesignTextRuns(
         if (node.properties.textAlignHorizontal === "justify") {
           throw new Error("Rich text justified alignment is not supported yet");
         }
-        if (node.properties.textTruncation !== "disabled") {
-          throw new Error("Rich text ending truncation is not supported yet");
-        }
         const result = provider.layout({
           baseStyle: leaferStyle(
             document,
@@ -63,6 +60,7 @@ export function resolveDesignTextRuns(
           paragraphIndent: node.properties.paragraphIndent,
           paragraphSpacing: node.properties.paragraphSpacing,
           listSpacing: node.properties.listSpacing,
+          maxLines: node.properties.maxLines,
           hangingList: node.properties.hangingList,
           paragraphRuns: node.properties.paragraphRuns ?? [],
           runs: (node.properties.runs ?? []).map((run) => ({
@@ -72,6 +70,7 @@ export function resolveDesignTextRuns(
           })),
           textAlignHorizontal: node.properties.textAlignHorizontal,
           textAlignVertical: node.properties.textAlignVertical,
+          textTruncation: node.properties.textTruncation,
           textWrap: node.properties.textWrap,
           ...(node.properties.textResize === "auto-width"
             ? {}

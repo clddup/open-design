@@ -308,6 +308,6 @@ describe("native rich-text projection boundary", () => {
           ],
         ]),
       }),
-    ).toThrow("fragments are invalid");
+    ).toThrow("does not cover source text");
   });
 });

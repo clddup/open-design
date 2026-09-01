@@ -154,6 +154,50 @@ describe("useCanvasWorkspaceController", () => {
     unmount();
   });
 
+  it("routes Figma-compatible Flatten shortcuts on macOS and Windows", () => {
+    const workspace = createWorkspace();
+    const flattenSelection = vi.fn();
+    const { rerender, unmount } = renderHook(
+      ({ platform }: { platform: NodeJS.Platform }) =>
+        useCanvasWorkspaceController(
+          controllerArgs(workspace, {
+            canFlattenSelection: true,
+            flattenSelection,
+            platform,
+          }),
+        ),
+      { initialProps: { platform: "darwin" as NodeJS.Platform } },
+    );
+
+    fireEvent.keyDown(window, { code: "KeyE", key: "e", metaKey: true });
+    expect(flattenSelection).toHaveBeenCalledTimes(1);
+
+    rerender({ platform: "win32" });
+    fireEvent.keyDown(window, { code: "KeyE", key: "e", ctrlKey: true });
+    expect(flattenSelection).toHaveBeenCalledTimes(2);
+
+    rerender({ platform: "win32" });
+    const input = document.createElement("input");
+    document.body.append(input);
+    fireEvent.keyDown(input, { code: "KeyE", key: "e", ctrlKey: true });
+    input.remove();
+    expect(flattenSelection).toHaveBeenCalledTimes(2);
+    unmount();
+
+    const disabled = renderHook(() =>
+      useCanvasWorkspaceController(
+        controllerArgs(workspace, {
+          canFlattenSelection: false,
+          flattenSelection,
+          platform: "win32",
+        }),
+      ),
+    );
+    fireEvent.keyDown(window, { code: "KeyE", key: "e", ctrlKey: true });
+    expect(flattenSelection).toHaveBeenCalledTimes(2);
+    disabled.unmount();
+  });
+
   it("owns disposable hover, text and image session bridges", async () => {
     const workspace = createWorkspace();
     const setEditorError = vi.fn();
@@ -211,12 +255,14 @@ function controllerArgs(
     activePageId: "page_welcome",
     applyBooleanOperation: vi.fn(),
     canDeleteSelection: true,
+    canFlattenSelection: false,
     canRenameSelection: true,
     canToggleMaskSelection: true,
     deleteNodes: vi.fn(),
     documentId: runtime.getSnapshot().document.documentId,
     duplicateSelection: vi.fn(),
     editorActive: true,
+    flattenSelection: vi.fn(),
     groupSelection: vi.fn(),
     openRenameLayers: vi.fn(),
     platform: "darwin",

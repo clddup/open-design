@@ -6,6 +6,7 @@ import type {
   Effect,
   ImageNode,
   Paint,
+  VectorNetwork,
 } from "@opendesign/design-contracts";
 import { resolveLineEndpointPoint } from "@opendesign/design-contracts";
 import {
@@ -23,6 +24,10 @@ import {
   serializeVectorNetwork,
   serializeVectorRegion,
 } from "@opendesign/geometry-service/editable-vector";
+import {
+  projectVectorNetworkStrokePaths,
+  vectorNetworkHasVertexStrokeOverrides,
+} from "@opendesign/geometry-service/vector-stroke-appearance";
 import type {
   BooleanEditProjectionOptions,
   BooleanProjectionOptions,
@@ -684,7 +689,11 @@ function projectEditableVectorNetworkChildren(
     ) {
       continue;
     }
-    const serialized = serializeVectorNetwork(node.properties.network);
+    const serialized = serializeVectorNetwork(
+      node.properties.network,
+      node.properties.cornerRadius ?? 0,
+      node.properties.cornerSmoothing ?? 0,
+    );
     if (!serialized.ok) continue;
     const metadata = projectionMetadata(spec.data.data);
     const shape = mapShapeProperties(
@@ -695,7 +704,12 @@ function projectEditableVectorNetworkChildren(
     );
     const childIds: string[] = [];
     for (const region of node.properties.network.regions) {
-      const result = serializeVectorRegion(node.properties.network, region.id);
+      const result = serializeVectorRegion(
+        node.properties.network,
+        region.id,
+        node.properties.cornerRadius ?? 0,
+        node.properties.cornerSmoothing ?? 0,
+      );
       if (!result.ok) continue;
       const id = vectorRegionElementId(node.id, region.id);
       childIds.push(id);
@@ -730,36 +744,54 @@ function projectEditableVectorNetworkChildren(
         transform: [1, 0, 0, 1, 0, 0],
       });
     }
-    const strokeId = vectorStrokeElementId(node.id);
-    childIds.push(strokeId);
-    elementsById.set(strokeId, {
-      childIds: [],
-      data: {
-        data: {
-          ...metadata,
-          opendesignProjectionId: strokeId,
-          opendesignSynthetic: true,
-        },
-        dashPattern: shape.dashPattern,
-        editable: false,
-        fill: null,
-        hitStroke: "all",
-        hittable: true,
-        id: strokeId,
-        name: `${node.name} · stroke`,
-        path: serialized.path,
-        stroke: shape.stroke,
-        strokeAlign: shape.strokeAlign,
-        strokeCap: shape.strokeCap,
-        strokeJoin: shape.strokeJoin,
-        strokeWidth: shape.strokeWidth,
+    const strokePaths = projectedVectorStrokePaths(
+      node.properties.network,
+      serialized.path,
+      shape,
+      node.properties.cornerRadius ?? 0,
+      node.properties.cornerSmoothing ?? 0,
+    );
+    if (!strokePaths.ok) {
+      warnings.push({
+        code: "vector-stroke-appearance-unsupported",
+        message: strokePaths.message,
+        nodeId: node.id,
+      });
+    }
+    (strokePaths.ok ? strokePaths.paths : strokePaths.fallback).forEach(
+      (strokePath, index) => {
+        const strokeId = vectorStrokeElementId(node.id, index);
+        childIds.push(strokeId);
+        elementsById.set(strokeId, {
+          childIds: [],
+          data: {
+            data: {
+              ...metadata,
+              opendesignProjectionId: strokeId,
+              opendesignSynthetic: true,
+            },
+            dashPattern: strokePath.dashPattern,
+            editable: false,
+            fill: null,
+            hitStroke: "all",
+            hittable: true,
+            id: strokeId,
+            name: `${node.name} · stroke`,
+            path: strokePath.path,
+            stroke: shape.stroke,
+            strokeAlign: shape.strokeAlign,
+            strokeCap: strokePath.strokeCap,
+            strokeJoin: strokePath.strokeJoin,
+            strokeWidth: shape.strokeWidth,
+          },
+          id: strokeId,
+          kind: "path",
+          parentId: node.id,
+          tag: "Path",
+          transform: [1, 0, 0, 1, 0, 0],
+        });
       },
-      id: strokeId,
-      kind: "path",
-      parentId: node.id,
-      tag: "Path",
-      transform: [1, 0, 0, 1, 0, 0],
-    });
+    );
     elementsById.set(node.id, { ...spec, childIds });
   }
 }
@@ -771,8 +803,71 @@ export function vectorRegionElementId(
   return `${VECTOR_REGION_ELEMENT_PREFIX}${nodeId}:${regionId}`;
 }
 
-export function vectorStrokeElementId(nodeId: string): string {
-  return `${VECTOR_STROKE_ELEMENT_PREFIX}${nodeId}`;
+export function vectorStrokeElementId(nodeId: string, index = 0): string {
+  return `${VECTOR_STROKE_ELEMENT_PREFIX}${nodeId}${index === 0 ? "" : `:${index}`}`;
+}
+
+function projectedVectorStrokePaths(
+  network: VectorNetwork,
+  fallbackPath: string,
+  shape: {
+    dashPattern: readonly number[];
+    strokeCap: "none" | "round" | "square";
+    strokeJoin: "miter" | "round" | "bevel";
+    strokeWidth: number;
+  },
+  cornerRadius: number,
+  cornerSmoothing: number,
+):
+  | {
+      ok: true;
+      paths: Array<{
+        dashPattern: readonly number[];
+        path: string;
+        strokeCap: "none" | "round" | "square";
+        strokeJoin: "miter" | "round" | "bevel";
+      }>;
+    }
+  | {
+      ok: false;
+      fallback: Array<{
+        dashPattern: readonly number[];
+        path: string;
+        strokeCap: "none" | "round" | "square";
+        strokeJoin: "miter" | "round" | "bevel";
+      }>;
+      message: string;
+    } {
+  const fallback = [
+    {
+      dashPattern: shape.dashPattern,
+      path: fallbackPath,
+      strokeCap: shape.strokeCap,
+      strokeJoin: shape.strokeJoin,
+    },
+  ];
+  if (!vectorNetworkHasVertexStrokeOverrides(network)) {
+    return { ok: true, paths: fallback };
+  }
+  const projected = projectVectorNetworkStrokePaths(
+    network,
+    { strokeCap: shape.strokeCap, strokeJoin: shape.strokeJoin },
+    shape.strokeWidth,
+    cornerRadius,
+    cornerSmoothing,
+    shape.dashPattern,
+  );
+  return projected.ok
+    ? {
+        ok: true,
+        paths: projected.paths.map((path) => ({
+          dashPattern: [],
+          path: path.path,
+          strokeCap: path.cap === "butt" ? "none" : path.cap,
+          strokeJoin: path.join,
+        })),
+      }
+    : { ok: false, fallback, message: projected.message };
 }
 
 function projectionMetadata(value: unknown): Record<string, unknown> {
@@ -1116,9 +1211,11 @@ function mapPaints(
             ? "fit"
             : paint.fit === "cover"
               ? "cover"
-              : paint.fit === "tile"
-                ? "repeat"
-                : "stretch",
+              : paint.fit === "crop"
+                ? "clip"
+                : paint.fit === "tile"
+                  ? "repeat"
+                  : "stretch",
         ...common,
         ...(paint.rotation === undefined ? {} : { rotation: paint.rotation }),
         ...(paint.scale === undefined ? {} : { scale: paint.scale }),

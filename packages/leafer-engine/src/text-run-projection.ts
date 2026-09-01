@@ -42,9 +42,12 @@ export interface LeaferTextRunMarker {
 }
 
 export interface LeaferTextRunProjectionResult {
+  displayContent?: string;
   fragments: readonly LeaferTextRunFragment[];
   markers?: readonly LeaferTextRunMarker[];
   nodeId: string;
+  sourceContentEnd?: number;
+  truncated?: boolean;
 }
 
 export interface LeaferTextRunProjectionResolution {
@@ -95,7 +98,18 @@ export function projectResolvedTextRuns(
     if (!source || source.kind !== "text" || source.tag !== "Text") {
       throw new Error(`Text run projection source is unavailable: ${nodeId}`);
     }
-    validateFragments(source, result.fragments);
+    const displayContent =
+      result.displayContent ??
+      result.fragments.map((fragment) => fragment.text).join("");
+    const sourceText =
+      typeof source.data.text === "string" ? source.data.text : "";
+    const sourceContentEnd = result.sourceContentEnd ?? sourceText.length;
+    validateFragments(
+      source,
+      result.fragments,
+      displayContent,
+      result.truncated === true,
+    );
     validateMarkers(source, result.markers ?? []);
 
     elementsById.set(nodeId, {
@@ -138,9 +152,10 @@ export function projectResolvedTextRuns(
                 opendesignNodeKind: "text",
                 opendesignProjectionId: id,
                 opendesignSynthetic: true,
+                opendesignTextEllipsis: glyph.clusterStart >= sourceContentEnd,
                 opendesignTextRun: {
-                  start: glyph.clusterStart,
-                  end: glyph.clusterEnd,
+                  start: Math.min(glyph.clusterStart, sourceContentEnd),
+                  end: Math.min(glyph.clusterEnd, sourceContentEnd),
                 },
               },
             },
@@ -186,9 +201,10 @@ export function projectResolvedTextRuns(
             opendesignNodeKind: "text",
             opendesignProjectionId: id,
             opendesignSynthetic: true,
+            opendesignTextEllipsis: fragment.start >= sourceContentEnd,
             opendesignTextRun: {
-              start: fragment.start,
-              end: fragment.end,
+              start: Math.min(fragment.start, sourceContentEnd),
+              end: Math.min(fragment.end, sourceContentEnd),
             },
           },
         },
@@ -402,6 +418,7 @@ export function textRunFragmentElementIds(
     return value.opendesignSynthetic === true &&
       value.opendesignNodeId === nodeId &&
       (isTextRunRange(value.opendesignTextRun) ||
+        value.opendesignTextEllipsis === true ||
         isTextMarker(value.opendesignTextMarker))
       ? [spec.id]
       : [];
@@ -504,12 +521,19 @@ function validateMarkerGlyphs(
 function validateFragments(
   source: LeaferElementSpec,
   fragments: readonly LeaferTextRunFragment[],
+  displayContent: string,
+  truncated: boolean,
 ): void {
   if (fragments.length === 0) {
     throw new Error(`Text run projection is empty: ${source.id}`);
   }
   const sourceText =
     typeof source.data.text === "string" ? source.data.text : "";
+  if (!truncated && displayContent !== sourceText) {
+    throw new Error(
+      `Text run projection does not cover source text: ${source.id}`,
+    );
+  }
   let expectedStart = 0;
   for (const fragment of fragments) {
     if (
@@ -518,8 +542,8 @@ function validateFragments(
       fragment.start !== expectedStart ||
       fragment.end <= fragment.start ||
       typeof fragment.text !== "string" ||
-      fragment.text.length !== fragment.end - fragment.start ||
-      fragment.text !== sourceText.slice(fragment.start, fragment.end) ||
+      fragment.text.length === 0 ||
+      fragment.text !== displayContent.slice(fragment.start, fragment.end) ||
       !finite(fragment.x) ||
       !finite(fragment.y) ||
       !finiteNonNegative(fragment.width) ||
@@ -586,9 +610,12 @@ function validateFragments(
     }
     expectedStart = fragment.end;
   }
-  if (expectedStart !== sourceText.length) {
+  if (
+    typeof displayContent !== "string" ||
+    fragments.map((fragment) => fragment.text).join("") !== displayContent
+  ) {
     throw new Error(
-      `Text run projection does not cover source text: ${source.id}`,
+      `Text run projection does not cover display text: ${source.id}`,
     );
   }
 }

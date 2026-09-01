@@ -3,7 +3,13 @@ import type {
   UpdatePropertiesCommand,
 } from "@opendesign/design-contracts";
 import { ResizeHandle, useMessage } from "@opendesign/ui";
-import { useCallback, useRef, type CSSProperties, type ReactNode } from "react";
+import {
+  useCallback,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import type { ThemePreference } from "@/shared/desktop-api";
 import { AgentTimeline } from "../agent-conversation/components/AgentTimeline";
 import {
@@ -29,6 +35,7 @@ import {
   layoutInspectorMode,
   useLayerCommandController,
   useLayerRenameWorkflow,
+  useGeometryCommandController,
 } from "@/renderer/features/editor";
 import {
   useEditorRuntime,
@@ -104,6 +111,10 @@ export function EditorWorkbenchFeature({
     useEditorRuntime();
   const snapshot = useEditorSnapshot();
   const transactionCounter = useRef(0);
+  const [vectorVertexSelection, setVectorVertexSelection] = useState<{
+    nodeId: string;
+    vertexIds: readonly string[];
+  } | null>(null);
   const { activeConversation, conversations, requestDeleteConversation } =
     conversationLifecycle;
   const { createConversation, openConversation } = conversationNavigation;
@@ -237,6 +248,24 @@ export function EditorWorkbenchFeature({
     selectedNodeIds: state.selection.nodeIds,
     setEditorError,
     t,
+    transactionCounter,
+  });
+  const {
+    canFlattenSelection,
+    canOutlineStroke,
+    flattenSelection,
+    outlineSelectedStroke,
+    setVectorVertexAppearance,
+  } = useGeometryCommandController({
+    activePageId,
+    applyCommands,
+    componentTargetActive,
+    document: designDocument,
+    runtime,
+    selectedNodeIds: state.selection.nodeIds,
+    setEditorError,
+    t,
+    textRunLayoutProvider: fontBinaryRuntime.provider,
     transactionCounter,
   });
 
@@ -394,12 +423,14 @@ export function EditorWorkbenchFeature({
     activePageId,
     applyBooleanOperation,
     canDeleteSelection,
+    canFlattenSelection,
     canRenameSelection,
     canToggleMaskSelection,
     deleteNodes,
     documentId: designDocument.documentId,
     duplicateSelection: duplicateSelectionAction,
     editorActive: true,
+    flattenSelection: () => void flattenSelection(),
     groupSelection,
     openRenameLayers,
     platform,
@@ -657,6 +688,7 @@ export function EditorWorkbenchFeature({
                 handleTextEditingStyleControllerChange
               }
               onTextRangeSelectionChange={setTextRangeSelection}
+              onVectorVertexSelectionChange={setVectorVertexSelection}
               harfBuzzTextRunLayoutProvider={fontBinaryRuntime.provider}
               onDeleteGridTracks={deleteCanvasGridTracks}
               onMoveGridChildren={editorCommands.moveGridChildren}
@@ -797,6 +829,7 @@ export function EditorWorkbenchFeature({
                     : undefined
                 }
                 canDelete={canDeleteSelection}
+                canOutlineStroke={canOutlineStroke}
                 canAddToVariantSet={canAddToVariantSet}
                 canCombineVariants={canCombineVariants}
                 layoutMode={
@@ -819,6 +852,8 @@ export function EditorWorkbenchFeature({
                 onDuplicateVariant={duplicateSelectedVariant}
                 onDismissSvgFeedback={importExport.dismissSvgFeedback}
                 onDuplicate={duplicateSelectionAction}
+                onOutlineStroke={() => void outlineSelectedStroke()}
+                onSetVectorVertexAppearance={setVectorVertexAppearance}
                 onGoToComponentMain={goToSelectedInstanceMain}
                 onExportFormatChange={importExport.setExportFormat}
                 onExportRaster={() => void importExport.exportRaster()}
@@ -922,6 +957,11 @@ export function EditorWorkbenchFeature({
                 svgExportSettings={importExport.svgExportSettings}
                 svgFeedback={importExport.svgFeedback}
                 svgOperation={importExport.operation}
+                vectorVertexSelection={
+                  vectorVertexSelection?.nodeId === selectedNode?.id
+                    ? vectorVertexSelection
+                    : null
+                }
               />
             }
           />

@@ -224,6 +224,53 @@ describe("non-destructive Boolean geometry resolver", () => {
     });
   });
 
+  it("preserves custom dash phase and vertex joins in editable Vector operands", () => {
+    const editable = vectorNode("editable_stroke", "network_stroke_boolean");
+    if (!("network" in editable.properties)) {
+      throw new Error("Missing editable vector network fixture");
+    }
+    editable.properties.fills = [];
+    editable.properties.strokes = [solid("#111827")];
+    editable.properties.strokeWidth = 8;
+    editable.properties.strokeCap = "round";
+    editable.properties.strokeJoin = "miter";
+    editable.properties.dashPattern = [60, 10, 5, 10];
+    editable.properties.network.vertices[1]!.strokeJoin = "bevel";
+    const hidden = rectangle(
+      "hidden_network_stroke",
+      "network_stroke_boolean",
+      10,
+      10,
+    );
+    hidden.visible = false;
+    const group = booleanNode("network_stroke_boolean", null, "union", [
+      editable.id,
+      hidden.id,
+    ]);
+    const document = designDocument([group, editable, hidden], [group.id]);
+    const resolver = createBooleanGeometryResolver(provider);
+    const result = resolver.resolve(document, "page");
+
+    expect(result.issues).toEqual([]);
+    expect(result.resultsByNodeId.get(group.id)).toMatchObject({
+      empty: false,
+    });
+    const changed = structuredClone(document);
+    changed.revision += 1;
+    const changedVector = changed.nodesById.editable_stroke;
+    if (
+      !changedVector ||
+      changedVector.kind !== "vector" ||
+      !("network" in changedVector.properties)
+    ) {
+      throw new Error("Missing changed editable vector fixture");
+    }
+    changedVector.properties.network.vertices[1]!.strokeJoin = "round";
+    expect(resolver.resolve(changed, "page").computedNodeIds).toContain(
+      group.id,
+    );
+  });
+
   it("uses fill plus aligned stroke geometry and supports nested Booleans", () => {
     const left = rectangle("left", "inner", 40, 40);
     const right = rectangle("right", "inner", 40, 40, [1, 0, 0, 1, 20, 0]);

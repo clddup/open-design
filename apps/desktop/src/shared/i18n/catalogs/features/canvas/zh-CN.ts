@@ -44,6 +44,8 @@ export const canvasMessages = {
     "已选择 {{pointCount}} 个节点 · {{pathCount}} 条路径 · Shift 点击可多选",
   "canvas.vectorCutHint":
     "点击节点或路径创建断点，或拖拽穿过对象将其分为独立图层",
+  "canvas.vectorBranchCutHint":
+    "点击分支 segment 创建断点 · 分支几何暂不支持拖拽切割",
   "canvas.vectorBendHint": "点击节点或路径添加手柄，或拖动路径直接弯曲",
   "canvas.vectorLassoHint": "圈选矢量节点与路径 · 按住 Shift 切换圈内内容",
   "canvas.vectorCutUnavailable": "路径切断结果不可用",
@@ -57,6 +59,8 @@ export const canvasMessages = {
   "canvas.vectorToolBend": "弯曲",
   "canvas.vectorToolPaint": "上色",
   "canvas.vectorPaintColor": "区域颜色",
+  "canvas.vectorPaintStyle": "区域样式",
+  "canvas.vectorPaintDirect": "直接颜色",
   "canvas.vectorToolCut": "切断",
   "canvas.vectorToolLasso": "套索",
   "canvas.vectorPointMode": "贝塞尔节点模式",

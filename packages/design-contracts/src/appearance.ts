@@ -77,6 +77,7 @@ export const ImagePaintSchema = Type.Object(
       Type.Literal("fill"),
       Type.Literal("contain"),
       Type.Literal("cover"),
+      Type.Literal("crop"),
       Type.Literal("tile"),
     ]),
     ...PaintBaseProperties,

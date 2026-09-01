@@ -48,6 +48,10 @@ import {
 } from "./properties/ExportSection";
 import { SelectedNodeProperties } from "./properties/SelectedNodeProperties";
 import type { FontInspectorContext } from "./properties/TypographySection";
+import type {
+  VectorVertexInspectorSelection,
+  VectorVertexAppearancePatch,
+} from "./properties/VectorVertexAppearanceSection";
 import { ExportSettingsEditor } from "./properties/ExportSettingsEditor";
 import { Field, formatNumber } from "./properties/controls";
 import styles from "./PropertiesPanel.module.scss";
@@ -65,6 +69,7 @@ export function PropertiesPanel({
   canCombineVariants,
   canAddToVariantSet,
   canDelete,
+  canOutlineStroke,
   layoutMode,
   onArrange,
   onBooleanOperationChange,
@@ -77,6 +82,8 @@ export function PropertiesPanel({
   onDissolveVariantSet,
   onDuplicateVariant,
   onDuplicate,
+  onOutlineStroke,
+  onSetVectorVertexAppearance,
   onGoToComponentMain,
   onCancelSvgOperation,
   onDismissSvgFeedback,
@@ -143,6 +150,7 @@ export function PropertiesPanel({
   onSvgExportSettingsChange,
   onRasterExportSettingsChange,
   fontContext,
+  vectorVertexSelection,
 }: {
   node: DesignNode | undefined;
   activePageId: string;
@@ -154,6 +162,7 @@ export function PropertiesPanel({
   canCombineVariants: boolean;
   canAddToVariantSet: boolean;
   canDelete: boolean;
+  canOutlineStroke: boolean;
   layoutMode: "constraints" | "sizing" | "absolute" | null;
   onArrange: (operation: ArrangeOperation) => void;
   onBooleanOperationChange: (operation: BooleanOperation) => void;
@@ -166,6 +175,12 @@ export function PropertiesPanel({
   onDissolveVariantSet: () => void;
   onDuplicateVariant: () => void;
   onDuplicate: () => void;
+  onOutlineStroke: () => void;
+  onSetVectorVertexAppearance: (
+    nodeId: string,
+    vertexIds: readonly string[],
+    patch: VectorVertexAppearancePatch,
+  ) => void;
   onGoToComponentMain: () => void;
   onCancelSvgOperation: () => void;
   onDismissSvgFeedback: () => void;
@@ -291,6 +306,7 @@ export function PropertiesPanel({
   onSvgExportSettingsChange: (settings: SvgWorkerExportSettings) => void;
   onRasterExportSettingsChange: (settings: RasterExportSettings) => void;
   fontContext?: FontInspectorContext;
+  vectorVertexSelection: VectorVertexInspectorSelection | null;
 }) {
   const { t } = useI18n();
   return (
@@ -318,6 +334,7 @@ export function PropertiesPanel({
             booleanOperationEditable={booleanOperationEditable}
             booleanOperandParent={booleanOperandParent}
             canDelete={canDelete}
+            canOutlineStroke={canOutlineStroke}
             constraintsAvailable={
               (layoutMode === "constraints" || layoutMode === "absolute") &&
               node.kind !== "group" &&
@@ -345,6 +362,8 @@ export function PropertiesPanel({
             onDelete={onDelete}
             onDetachComponentInstance={onDetachComponentInstance}
             onDuplicate={onDuplicate}
+            onOutlineStroke={onOutlineStroke}
+            onSetVectorVertexAppearance={onSetVectorVertexAppearance}
             onGoToComponentMain={onGoToComponentMain}
             onCropImage={onCropImage}
             onSelectImageArea={onSelectImageArea}
@@ -397,6 +416,7 @@ export function PropertiesPanel({
             styleActions={styleActions}
             projectLibraries={projectLibraries}
             fontContext={fontContext}
+            vectorVertexSelection={vectorVertexSelection}
           />
         ) : selectionCount > 1 ? (
           <div className={styles.multiProperties}>

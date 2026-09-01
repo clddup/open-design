@@ -170,7 +170,7 @@ describe("design text layout quality inspection", () => {
     expect(measure).toHaveBeenCalledTimes(3);
   });
 
-  it("uses rich-text content bounds and fails closed for unsupported ellipsis", () => {
+  it("uses rich-text full/display bounds and reports ending truncation", () => {
     const document = structuredClone(createWelcomeDocument());
     const title = document.nodesById.title_welcome;
     if (!title || title.kind !== "text") throw new Error("Missing title");
@@ -194,40 +194,58 @@ describe("design text layout quality inspection", () => {
       },
     ];
     const layout = vi.fn<TextRunLayoutProvider<LeaferTextRunStyle>["layout"]>(
-      (request) => ({
-        ok: true,
-        provider: "test-runs",
-        providerVersion: "1",
-        size: { width: request.width ?? 320, height: request.height ?? 96 },
-        contentBounds: { x: 0, y: 0, width: 300, height: 96 },
-        lines: [
-          {
-            start: 0,
-            end: request.content.length,
+      (request) => {
+        const truncated = request.textTruncation === "ending";
+        const sourceContentEnd = truncated
+          ? Math.max(0, request.content.length - 1)
+          : request.content.length;
+        const displayContent = truncated
+          ? `${request.content.slice(0, sourceContentEnd)}...`
+          : request.content;
+        return {
+          ok: true,
+          provider: "test-runs",
+          providerVersion: "1",
+          size: { width: request.width ?? 320, height: request.height ?? 96 },
+          contentBounds: {
             x: 0,
             y: 0,
             width: 300,
-            height: 96,
-            baseline: 72,
+            height: truncated ? 40 : 96,
           },
-        ],
-        fragments: [
-          {
-            start: 0,
-            end: request.content.length,
-            text: request.content,
-            style: request.baseStyle,
-            x: 0,
-            y: 0,
-            width: 300,
-            height: 96,
-            baseline: 72,
-            lineIndex: 0,
-          },
-        ],
-        markers: [],
-        warnings: [],
-      }),
+          displayContent,
+          fullContentBounds: { x: 0, y: 0, width: 300, height: 96 },
+          lines: [
+            {
+              start: 0,
+              end: displayContent.length,
+              x: 0,
+              y: 0,
+              width: 300,
+              height: truncated ? 40 : 96,
+              baseline: truncated ? 30 : 72,
+            },
+          ],
+          fragments: [
+            {
+              start: 0,
+              end: displayContent.length,
+              text: displayContent,
+              style: request.baseStyle,
+              x: 0,
+              y: 0,
+              width: 300,
+              height: truncated ? 40 : 96,
+              baseline: truncated ? 30 : 72,
+              lineIndex: 0,
+            },
+          ],
+          markers: [],
+          sourceContentEnd,
+          truncated,
+          warnings: [],
+        };
+      },
     );
     const providers = {
       plain: unusedPlainProvider(),
@@ -256,12 +274,15 @@ describe("design text layout quality inspection", () => {
       providers.plain,
       providers.rich,
     );
-    expect(evidence.measurements).toContainEqual({
-      status: "unavailable",
-      nodeId: "title_welcome",
-      message:
-        "Rich text ending truncation is not supported by the production text-run layout provider",
-    });
+    expect(evidence.measurements).toContainEqual(
+      expect.objectContaining({
+        status: "measured",
+        nodeId: "title_welcome",
+        truncated: true,
+        fullContentSize: { width: 300, height: 96 },
+        displayedContentSize: { width: 300, height: 40 },
+      }),
+    );
   });
 });
 

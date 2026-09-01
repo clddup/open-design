@@ -100,7 +100,7 @@ const MODEL_PAINT_PROPERTIES = {
   color: { type: "string", minLength: 1 },
   ...MODEL_GRADIENT_PROPERTIES,
   assetId: { type: "string", minLength: 1 },
-  fit: { enum: ["fill", "contain", "cover", "tile"] },
+  fit: { enum: ["fill", "contain", "cover", "crop", "tile"] },
   scale: MODEL_POINT_SCHEMA,
   offset: MODEL_POINT_SCHEMA,
 } as const;
@@ -441,6 +441,7 @@ const MODEL_PATH_PROPERTY = {
 const MODEL_NODE_PROPERTY_FIELDS = {
   ...MODEL_SHAPE_PROPERTIES,
   cornerRadius: { type: "number", minimum: 0 },
+  cornerSmoothing: { type: "number", minimum: 0, maximum: 1 },
   clipsContent: { type: "boolean" },
   content: MODEL_TEXT_PROPERTIES.content,
   fontFamily: MODEL_TEXT_PROPERTIES.fontFamily,
@@ -480,7 +481,7 @@ const MODEL_NODE_PROPERTY_FIELDS = {
 const MODEL_NODE_PROPERTIES_SCHEMA = {
   type: "object",
   description:
-    "Kind fields: Group/Slice {}; Frame shape+cornerRadius+clipsContent; Rectangle shape+cornerRadius; Ellipse shape; Line shape+start/end/endpoints; Polygon shape+pointCount+cornerRadius; Star shape+pointCount+innerRadius+cornerRadius; Text typography+shape; Image assetId+placement+altText+cornerRadius; Path/Vector shape plus exactly one of path or network.",
+    "Kind fields: Group/Slice {}; Frame shape+cornerRadius+clipsContent; Rectangle shape+cornerRadius; Ellipse shape; Line shape+start/end/endpoints; Polygon shape+pointCount+cornerRadius; Star shape+pointCount+innerRadius+cornerRadius; Text typography+shape; Image assetId+placement+altText+cornerRadius; Path/Vector shape plus exactly one of path or network; cornerRadius/cornerSmoothing apply only to editable network geometry.",
   properties: MODEL_NODE_PROPERTY_FIELDS,
   additionalProperties: false,
 } as const;
@@ -648,6 +649,8 @@ const MODEL_PATH_PROPERTY_KEYS = [
   "path",
   "network",
   "fillRule",
+  "cornerRadius",
+  "cornerSmoothing",
 ] as const;
 const MODEL_PATH_DATA_PROPERTIES_SCHEMA = requiredPropertiesSchema(["path"]);
 

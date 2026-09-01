@@ -54,6 +54,15 @@ export function pageUsesDesignSystems(
     ) {
       return true;
     }
+    if (
+      (node.kind === "path" || node.kind === "vector") &&
+      "network" in node.properties &&
+      node.properties.network.regions.some(
+        (region) => region.fillStyleId !== undefined,
+      )
+    ) {
+      return true;
+    }
     pending.push(...node.childIds);
   }
   return false;

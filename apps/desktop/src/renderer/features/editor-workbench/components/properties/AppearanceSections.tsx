@@ -5,8 +5,9 @@ import type {
   ImageFilters,
   ImagePaint,
   MaskMode,
+  VectorNetworkProperties,
 } from "@opendesign/design-contracts";
-import { Icon } from "@opendesign/ui";
+import { Button, Icon } from "@opendesign/ui";
 import { useI18n } from "../../../../i18n";
 import type { UpdatePropertiesPatch } from "@/renderer/features/editor";
 import styles from "../PropertiesPanel.module.scss";
@@ -22,6 +23,11 @@ import {
   maskModeLabelKeys,
   maskModes,
 } from "./PaintEffectEditors";
+import {
+  VectorVertexAppearanceSection,
+  type VectorVertexInspectorSelection,
+  type VectorVertexAppearancePatch,
+} from "./VectorVertexAppearanceSection";
 
 export function AppearanceBasicsSection({
   appearanceControlled,
@@ -61,13 +67,34 @@ export function AppearanceBasicsSection({
             onCommit={(draft) =>
               commitNumber(
                 draft,
-                node.properties.cornerRadius,
+                node.properties.cornerRadius ?? 0,
                 (cornerRadius) => onUpdate({ properties: { cornerRadius } }),
                 { min: 0 },
               )
             }
             suffix="px"
-            value={formatNumber(node.properties.cornerRadius)}
+            value={formatNumber(node.properties.cornerRadius ?? 0)}
+          />
+        )}
+        {isEditableVectorNode(node) && (
+          <Field
+            accessibleLabel={t("properties.cornerSmoothing")}
+            label="S"
+            max={100}
+            min={0}
+            onCommit={(draft) =>
+              commitNumber(
+                draft,
+                (node.properties.cornerSmoothing ?? 0) * 100,
+                (cornerSmoothing) =>
+                  onUpdate({
+                    properties: { cornerSmoothing: cornerSmoothing / 100 },
+                  }),
+                { min: 0, max: 100 },
+              )
+            }
+            suffix="%"
+            value={formatNumber((node.properties.cornerSmoothing ?? 0) * 100)}
           />
         )}
         <label className={styles.select}>
@@ -109,14 +136,37 @@ export function AppearanceBasicsSection({
   );
 }
 
+function isEditableVectorNode(node: DesignNode): node is Extract<
+  DesignNode,
+  { kind: "path" | "vector" }
+> & {
+  properties: VectorNetworkProperties;
+} {
+  return (
+    (node.kind === "path" || node.kind === "vector") &&
+    "network" in node.properties
+  );
+}
+
 export function PaintAndEffectsSections({
   appearanceControlled,
+  canOutlineStroke,
   node,
+  onOutlineStroke,
+  onSetVectorVertexAppearance,
   onUpdate,
   onUpdateImagePaintFilters,
+  vectorVertexSelection,
 }: {
   appearanceControlled: boolean;
+  canOutlineStroke: boolean;
   node: DesignNode;
+  onOutlineStroke: () => void;
+  onSetVectorVertexAppearance: (
+    nodeId: string,
+    vertexIds: readonly string[],
+    patch: VectorVertexAppearancePatch,
+  ) => void;
   onUpdate: (updates: UpdatePropertiesPatch) => void;
   onUpdateImagePaintFilters: (
     paintField: "fills" | "strokes",
@@ -124,10 +174,24 @@ export function PaintAndEffectsSections({
     expectedPaint: ImagePaint,
     filters: ImageFilters,
   ) => void;
+  vectorVertexSelection: VectorVertexInspectorSelection | null;
 }) {
   const { t } = useI18n();
   return (
     <>
+      {!appearanceControlled && vectorVertexSelection && (
+        <VectorVertexAppearanceSection
+          node={node}
+          onChange={(patch) =>
+            onSetVectorVertexAppearance(
+              vectorVertexSelection.nodeId,
+              vectorVertexSelection.vertexIds,
+              patch,
+            )
+          }
+          selection={vectorVertexSelection}
+        />
+      )}
       {isFillNode(node) && !appearanceControlled && (
         <Section title={t("properties.fill")}>
           {node.properties.fills.map((paint, index) => (
@@ -308,6 +372,15 @@ export function PaintAndEffectsSections({
             <Icon name="lucide:plus" size={13} />
             {t("properties.addStroke")}
           </button>
+          {(node.kind === "path" || node.kind === "vector") && (
+            <Button
+              disabled={!canOutlineStroke}
+              onClick={onOutlineStroke}
+              tone="quiet"
+            >
+              {t("properties.outlineStroke")}
+            </Button>
+          )}
         </Section>
       )}
       {!appearanceControlled && (

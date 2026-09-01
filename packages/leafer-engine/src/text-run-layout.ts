@@ -16,6 +16,8 @@ import {
   type TextRunLayoutStyle,
   type TextParagraphStyle,
   type TextStyleRun,
+  layoutTextRunWithEndingTruncation,
+  type RawTextRunLayoutResult,
 } from "@opendesign/text-service";
 import type * as LeaferEditorModule from "leafer-editor";
 import {
@@ -41,7 +43,7 @@ import {
 
 export const LEAFER_TEXT_RUN_LAYOUT_PROVIDER_ID = "leafer-text-runs" as const;
 export const LEAFER_TEXT_RUN_LAYOUT_PROVIDER_VERSION =
-  "2.2.9+lists-v1" as const;
+  "2.2.9+lists-v1+ending" as const;
 
 type LeaferModule = typeof LeaferEditorModule;
 
@@ -102,7 +104,11 @@ export function createLeaferTextRunLayoutProvider(
         return failure("unsupported", unsupportedIssue, false);
 
       try {
-        const result = layoutWithLeafer(Text, request, fontAvailable);
+        const result = layoutTextRunWithEndingTruncation(
+          request,
+          (displayRequest) =>
+            layoutWithLeafer(Text, displayRequest, fontAvailable),
+        );
         if (!result.ok) return result;
         const resultIssue = validateTextRunLayoutResult(result, request);
         return resultIssue
@@ -131,7 +137,10 @@ export function leaferTextRunLayoutToProjection(
     );
   }
   return {
+    displayContent: result.displayContent,
     nodeId,
+    sourceContentEnd: result.sourceContentEnd,
+    truncated: result.truncated,
     fragments: result.fragments.map((fragment): LeaferTextRunFragment => ({
       data: leaferTextRunData(fragment.style),
       end: fragment.end,
@@ -165,7 +174,7 @@ function layoutWithLeafer(
   fontAvailable: NonNullable<
     LeaferTextRunLayoutProviderOptions["fontAvailable"]
   >,
-): TextRunLayoutResult<LeaferTextRunStyle> {
+): RawTextRunLayoutResult<LeaferTextRunStyle> {
   const runs = materializedRuns(request);
   const paragraphRuns = canonicalizeTextParagraphRuns(
     request.content,
@@ -445,6 +454,7 @@ function layoutWithLeafer(
     ok: true,
     provider: LEAFER_TEXT_RUN_LAYOUT_PROVIDER_ID,
     providerVersion: LEAFER_TEXT_RUN_LAYOUT_PROVIDER_VERSION,
+    sourceClusterEnds: clusters.map((cluster) => cluster.end),
     size: { height, width },
     warnings,
   };

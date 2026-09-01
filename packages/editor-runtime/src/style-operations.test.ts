@@ -3,6 +3,7 @@ import type {
   DesignOperation,
   DesignTransaction,
   SharedStyleDefinition,
+  VectorNode,
 } from "@opendesign/design-contracts";
 import { materializeSharedStyles } from "@opendesign/style-service";
 import { exportSvg } from "@opendesign/import-export-service";
@@ -272,6 +273,60 @@ describe("Shared Styles EditorRuntime", () => {
     expect(runtime.undo("user")).toMatchObject({ ok: true, mode: "undo" });
     expect(runtime.getSnapshot().document.stylesById).toHaveProperty(
       "brand-primary",
+    );
+  });
+
+  it("materializes and detaches Vector region Paint Styles before deletion", () => {
+    const document = structuredClone(createWelcomeDocument());
+    document.stylesById["brand-region"] = paintStyle(
+      "brand-region",
+      "Brand/Region",
+      "#7c3aed",
+    );
+    document.styleOrderByType.PAINT.push("brand-region");
+    const vector = styledRegionVector();
+    document.nodesById[vector.id] = vector;
+    const frame = document.nodesById.frame_welcome;
+    if (!frame || frame.kind !== "frame") throw new Error("Missing frame");
+    frame.childIds.push(vector.id);
+    const runtime = new EditorRuntime(document);
+
+    const exportPlan = planSvgExportRequest(runtime.getSnapshot().document, {
+      pageId: "page_welcome",
+      rootNodeIds: [vector.id],
+      baseRevision: runtime.getSnapshot().document.revision,
+    });
+    if (!exportPlan.ok) throw new Error(exportPlan.message);
+    const exported = exportSvg(exportPlan.request);
+    if (!exported.ok) throw new Error(exported.issues[0]?.message);
+    expect(exported.svg).toContain('fill="#7c3aed"');
+
+    const deleted = applyPlan(
+      runtime,
+      planDeleteStyle(runtime.getSnapshot().document, {
+        styleId: "brand-region",
+        commandPrefix: "delete_region_style",
+      }),
+    );
+
+    expect(deleted.changes.removedStyleIds).toEqual(["brand-region"]);
+    const detached = runtime.getSnapshot().document.nodesById[vector.id];
+    if (
+      !detached ||
+      detached.kind !== "vector" ||
+      !("network" in detached.properties)
+    ) {
+      throw new Error("Missing detached vector");
+    }
+    expect(detached.properties.network.regions[0]?.fills).toEqual([
+      { type: "solid", color: "#7c3aed", opacity: 1 },
+    ]);
+    expect(detached.properties.network.regions[0]).not.toHaveProperty(
+      "fillStyleId",
+    );
+    expect(runtime.undo("user")).toMatchObject({ ok: true, mode: "undo" });
+    expect(runtime.getSnapshot().document.stylesById).toHaveProperty(
+      "brand-region",
     );
   });
 
@@ -580,6 +635,60 @@ function paintStyle(id: string, name: string, color: string) {
     styleType: "PAINT" as const,
     paints: [{ type: "solid" as const, color, opacity: 1 }],
     extensions: {},
+  };
+}
+
+function styledRegionVector(): VectorNode {
+  return {
+    id: "styled_region_vector",
+    name: "Styled region",
+    parentId: "frame_welcome",
+    childIds: [],
+    visible: true,
+    locked: false,
+    transform: [1, 0, 0, 1, 40, 40],
+    size: { width: 100, height: 100 },
+    exportSettings: [],
+    opacity: 1,
+    extensions: {},
+    kind: "vector",
+    properties: {
+      network: {
+        vertices: [
+          { id: "a", x: 0, y: 0 },
+          { id: "b", x: 100, y: 0 },
+          { id: "c", x: 100, y: 100 },
+        ],
+        segments: [
+          { id: "ab", startVertexId: "a", endVertexId: "b" },
+          { id: "bc", startVertexId: "b", endVertexId: "c" },
+          { id: "ca", startVertexId: "c", endVertexId: "a" },
+        ],
+        paths: [
+          {
+            id: "triangle",
+            closed: true,
+            segments: [
+              { segmentId: "ab", reversed: false },
+              { segmentId: "bc", reversed: false },
+              { segmentId: "ca", reversed: false },
+            ],
+          },
+        ],
+        regions: [
+          {
+            id: "face",
+            windingRule: "nonzero",
+            loops: [{ pathId: "triangle", reversed: false }],
+            fillStyleId: "brand-region",
+          },
+        ],
+      },
+      fillRule: "nonzero",
+      fills: [],
+      strokes: [],
+      strokeWidth: 0,
+    },
   };
 }
 

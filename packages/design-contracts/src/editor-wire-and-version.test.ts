@@ -16,6 +16,7 @@ import {
   LIBRARY_VARIABLE_SOURCE_DESIGN_SCHEMA_VERSION,
   IMAGE_ADJUSTMENTS_DESIGN_SCHEMA_VERSION,
   IMAGE_PAINT_ADJUSTMENTS_DESIGN_SCHEMA_VERSION,
+  IMAGE_PAINT_CROP_DESIGN_SCHEMA_VERSION,
   IMAGE_ASSET_DERIVATIONS_DESIGN_SCHEMA_VERSION,
   IMAGE_BACKGROUND_REPLACEMENT_DESIGN_SCHEMA_VERSION,
   IMAGE_RELIGHTING_DESIGN_SCHEMA_VERSION,
@@ -23,6 +24,10 @@ import {
   AUTO_LAYOUT_WRAP_DISTRIBUTION_DESIGN_SCHEMA_VERSION,
   AUTO_LAYOUT_BASELINE_DESIGN_SCHEMA_VERSION,
   VECTOR_REGION_FILL_DESIGN_SCHEMA_VERSION,
+  VECTOR_REGION_FILL_STYLE_DESIGN_SCHEMA_VERSION,
+  VECTOR_VERTEX_STROKE_APPEARANCE_DESIGN_SCHEMA_VERSION,
+  VECTOR_VERTEX_CORNER_RADIUS_DESIGN_SCHEMA_VERSION,
+  VECTOR_CORNER_SMOOTHING_DESIGN_SCHEMA_VERSION,
   FONT_FACE_IDENTITY_DESIGN_SCHEMA_VERSION,
   FIGMA_TEXT_LISTS_DESIGN_SCHEMA_VERSION,
   AUTO_LAYOUT_GRID_DESIGN_SCHEMA_VERSION,
@@ -295,7 +300,57 @@ it("keeps Auto Layout and Layout Guide schema milestones distinct", () => {
   expect(AUTO_LAYOUT_WRAP_FILL_DESIGN_SCHEMA_VERSION).toBe("1.46.0");
   expect(AUTO_LAYOUT_BASELINE_DESIGN_SCHEMA_VERSION).toBe("1.47.0");
   expect(VECTOR_REGION_FILL_DESIGN_SCHEMA_VERSION).toBe("1.48.0");
-  expect(DESIGN_SCHEMA_VERSION).toBe(VECTOR_REGION_FILL_DESIGN_SCHEMA_VERSION);
+  expect(VECTOR_REGION_FILL_STYLE_DESIGN_SCHEMA_VERSION).toBe("1.49.0");
+  expect(VECTOR_VERTEX_STROKE_APPEARANCE_DESIGN_SCHEMA_VERSION).toBe("1.50.0");
+  expect(VECTOR_VERTEX_CORNER_RADIUS_DESIGN_SCHEMA_VERSION).toBe("1.51.0");
+  expect(VECTOR_CORNER_SMOOTHING_DESIGN_SCHEMA_VERSION).toBe("1.52.0");
+  expect(IMAGE_PAINT_CROP_DESIGN_SCHEMA_VERSION).toBe("1.53.0");
+  expect(DESIGN_SCHEMA_VERSION).toBe(IMAGE_PAINT_CROP_DESIGN_SCHEMA_VERSION);
+});
+
+it("migrates 1.52 documents without inventing Image Paint crop transforms", () => {
+  const source = textDocumentFixture();
+  source.schemaVersion =
+    VECTOR_CORNER_SMOOTHING_DESIGN_SCHEMA_VERSION as typeof source.schemaVersion;
+  const migrated = migrateDesignDocument(source);
+  expect(migrated?.schemaVersion).toBe(DESIGN_SCHEMA_VERSION);
+  expect(migrated?.nodesById).toEqual(source.nodesById);
+});
+
+it("migrates 1.51 documents without inventing Vector corner smoothing", () => {
+  const source = textDocumentFixture();
+  source.schemaVersion =
+    VECTOR_VERTEX_CORNER_RADIUS_DESIGN_SCHEMA_VERSION as typeof source.schemaVersion;
+  const migrated = migrateDesignDocument(source);
+  expect(migrated?.schemaVersion).toBe(DESIGN_SCHEMA_VERSION);
+  expect(migrated?.nodesById).toEqual(source.nodesById);
+});
+
+it("migrates 1.50 documents without inventing Vector corner radii", () => {
+  const source = textDocumentFixture();
+  source.schemaVersion =
+    VECTOR_VERTEX_STROKE_APPEARANCE_DESIGN_SCHEMA_VERSION as typeof source.schemaVersion;
+  const migrated = migrateDesignDocument(source);
+  expect(migrated?.schemaVersion).toBe(DESIGN_SCHEMA_VERSION);
+  expect(migrated?.nodesById).toEqual(source.nodesById);
+});
+
+it("migrates 1.49 documents without inventing vertex stroke overrides", () => {
+  const source = textDocumentFixture();
+  source.schemaVersion =
+    VECTOR_REGION_FILL_STYLE_DESIGN_SCHEMA_VERSION as typeof source.schemaVersion;
+  const migrated = migrateDesignDocument(source);
+  expect(migrated?.schemaVersion).toBe(DESIGN_SCHEMA_VERSION);
+  expect(migrated?.nodesById).toEqual(source.nodesById);
+});
+
+it("migrates 1.48 documents without inventing Vector region Style links", () => {
+  const source = textDocumentFixture();
+  source.schemaVersion =
+    VECTOR_REGION_FILL_DESIGN_SCHEMA_VERSION as typeof source.schemaVersion;
+  const migrated = migrateDesignDocument(source);
+  expect(migrated?.schemaVersion).toBe(DESIGN_SCHEMA_VERSION);
+  expect(migrated?.nodesById).toEqual(source.nodesById);
 });
 
 it("migrates 1.47 documents without inventing Vector region Paint", () => {
