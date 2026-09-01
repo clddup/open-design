@@ -85,7 +85,9 @@ const designPlan: DesignPlanToolInput = {
         spacingRhythm: "4/8/12/20/32 px rhythm",
       },
       editableLayers: ["Navigation", "Workspace", "Inspector"],
-      implementationSteps: ["Create artboard", "Build hierarchy", "Add states"],
+      implementationSteps: [
+        { stepId: "build_hierarchy", label: "Build hierarchy" },
+      ],
       validationChecks: ["Check hierarchy", "Check density", "Check focus"],
       qualityProfile: {
         kind: "ui",
@@ -235,6 +237,9 @@ function existingArtboardPlan(
     rasterAssetRoles: [],
     targets: plan.targets.map((target) => ({
       ...target,
+      implementationSteps: [
+        { stepId: "build_hierarchy", label: "Build hierarchy" },
+      ],
       artboard: {
         mode: "existing",
         frameId,
@@ -292,7 +297,9 @@ function multiTargetPlan(pageId: string): DesignPlanToolInput {
       spacingRhythm: "8/12/16/24 px rhythm",
     },
     editableLayers: ["Navigation", "Main content"],
-    implementationSteps: ["Create the screen", "Build its content"],
+    implementationSteps: [
+      { stepId: "build_content", label: "Build its content" },
+    ],
     validationChecks: ["Check hierarchy", "Check mobile spacing"],
     qualityProfile: {
       kind: "ui",
@@ -382,112 +389,140 @@ function qualityProfilePlan(pageId: string): DesignPlanToolInput {
 function draftTargets(
   pageId: string,
   targets: readonly DesignPlanTarget[],
+  includeArtboards = false,
 ): DesignApplyToolInput {
+  const allCommands = targets.flatMap((target, index) => [
+    {
+      commandId: `insert_${target.artboard.frameId}`,
+      type: "insert_element" as const,
+      pageId,
+      parentId: null,
+      index,
+      node: {
+        id: target.artboard.frameId,
+        kind: "frame" as const,
+        name: target.label,
+        parentId: null,
+        childIds: [],
+        visible: true,
+        locked: false,
+        transform: [1, 0, 0, 1, target.artboard.x, target.artboard.y] as [
+          number,
+          number,
+          number,
+          number,
+          number,
+          number,
+        ],
+        size: {
+          width: target.artboard.width,
+          height: target.artboard.height,
+        },
+        exportSettings: [],
+        opacity: 1,
+        properties: {
+          fills: [{ type: "solid" as const, color: "#ffffff", opacity: 1 }],
+          strokes: [],
+          strokeWidth: 0,
+          cornerRadius: 0,
+          clipsContent: true,
+        },
+        extensions: {},
+      },
+    },
+    {
+      commandId: `insert_${target.artboard.frameId}_content`,
+      type: "insert_element" as const,
+      pageId,
+      parentId: target.artboard.frameId,
+      index: 0,
+      node: {
+        id: `${target.artboard.frameId}_content`,
+        kind: "group" as const,
+        name: "Main content",
+        parentId: target.artboard.frameId,
+        childIds: [],
+        visible: true,
+        locked: false,
+        transform: [1, 0, 0, 1, 24, 96] as [
+          number,
+          number,
+          number,
+          number,
+          number,
+          number,
+        ],
+        size: { width: 342, height: 700 },
+        exportSettings: [],
+        opacity: 1,
+        properties: {},
+        extensions: {},
+      },
+    },
+    {
+      commandId: `insert_${target.artboard.frameId}_material`,
+      type: "insert_element" as const,
+      pageId,
+      parentId: `${target.artboard.frameId}_content`,
+      index: 0,
+      node: {
+        id: `${target.artboard.frameId}_material`,
+        kind: "rectangle" as const,
+        name: "Material content",
+        parentId: `${target.artboard.frameId}_content`,
+        childIds: [],
+        visible: true,
+        locked: false,
+        transform: [1, 0, 0, 1, 0, 0] as [
+          number,
+          number,
+          number,
+          number,
+          number,
+          number,
+        ],
+        size: { width: 280, height: 160 },
+        exportSettings: [],
+        opacity: 1,
+        properties: {
+          fills: [{ type: "solid" as const, color: "#f1f5f9", opacity: 1 }],
+          strokes: [],
+          strokeWidth: 0,
+          cornerRadius: 16,
+        },
+        extensions: {},
+      },
+    },
+  ]);
+  const commands = allCommands.filter(
+    (command) =>
+      includeArtboards ||
+      command.type !== "insert_element" ||
+      !targets.some((target) => target.artboard.frameId === command.node.id),
+  );
+  const implementationSteps = targets.flatMap(
+    (target) => target.implementationSteps,
+  );
+  const commandsPerStep = Math.floor(
+    commands.length / implementationSteps.length,
+  );
+  let offset = 0;
+  const steps = implementationSteps.map((step, index) => {
+    const remaining = commands.length - offset;
+    const count =
+      index === implementationSteps.length - 1
+        ? remaining
+        : Math.max(1, commandsPerStep);
+    const commandIds = commands
+      .slice(offset, offset + count)
+      .map((command) => command.commandId);
+    offset += count;
+    return { ...step, commandIds };
+  });
   return {
     label: "Build requested screens",
-    commands: targets.flatMap((target, index) => [
-      {
-        commandId: `insert_${target.artboard.frameId}`,
-        type: "insert_element" as const,
-        pageId,
-        parentId: null,
-        index,
-        node: {
-          id: target.artboard.frameId,
-          kind: "frame" as const,
-          name: target.label,
-          parentId: null,
-          childIds: [],
-          visible: true,
-          locked: false,
-          transform: [1, 0, 0, 1, target.artboard.x, target.artboard.y] as [
-            number,
-            number,
-            number,
-            number,
-            number,
-            number,
-          ],
-          size: {
-            width: target.artboard.width,
-            height: target.artboard.height,
-          },
-          exportSettings: [],
-          opacity: 1,
-          properties: {
-            fills: [{ type: "solid" as const, color: "#ffffff", opacity: 1 }],
-            strokes: [],
-            strokeWidth: 0,
-            cornerRadius: 0,
-            clipsContent: true,
-          },
-          extensions: {},
-        },
-      },
-      {
-        commandId: `insert_${target.artboard.frameId}_content`,
-        type: "insert_element" as const,
-        pageId,
-        parentId: target.artboard.frameId,
-        index: 0,
-        node: {
-          id: `${target.artboard.frameId}_content`,
-          kind: "group" as const,
-          name: "Main content",
-          parentId: target.artboard.frameId,
-          childIds: [],
-          visible: true,
-          locked: false,
-          transform: [1, 0, 0, 1, 24, 96] as [
-            number,
-            number,
-            number,
-            number,
-            number,
-            number,
-          ],
-          size: { width: 342, height: 700 },
-          exportSettings: [],
-          opacity: 1,
-          properties: {},
-          extensions: {},
-        },
-      },
-      {
-        commandId: `insert_${target.artboard.frameId}_material`,
-        type: "insert_element" as const,
-        pageId,
-        parentId: `${target.artboard.frameId}_content`,
-        index: 0,
-        node: {
-          id: `${target.artboard.frameId}_material`,
-          kind: "rectangle" as const,
-          name: "Material content",
-          parentId: `${target.artboard.frameId}_content`,
-          childIds: [],
-          visible: true,
-          locked: false,
-          transform: [1, 0, 0, 1, 0, 0] as [
-            number,
-            number,
-            number,
-            number,
-            number,
-            number,
-          ],
-          size: { width: 280, height: 160 },
-          exportSettings: [],
-          opacity: 1,
-          properties: {
-            fills: [{ type: "solid" as const, color: "#f1f5f9", opacity: 1 }],
-            strokes: [],
-            strokeWidth: 0,
-            cornerRadius: 16,
-          },
-          extensions: {},
-        },
-      },
-    ]),
+    steps,
+    commands,
   };
 }
 
@@ -935,6 +970,219 @@ describe("GlobalTaskCoordinator", () => {
       nodeId: "frame_home",
       qualityProfile: plan.targets[0]?.qualityProfile,
     });
+  });
+
+  it("advances Plan steps only from the active step with material revision evidence", async () => {
+    const { store, host, file, opened, pageId } = await setup();
+    const coordinator = new GlobalTaskCoordinator(host, store);
+    const runId = "run_serial_plan";
+    await coordinator.registerRun({
+      type: "run.start",
+      runId,
+      sessionId: "conversation_mobile",
+      prompt: "Design a polished product workspace",
+      documentId: file.documentId,
+      revision: opened.document.revision,
+      modelSelection,
+      scope: { kind: "page", pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page", pageId },
+    });
+    const context = {
+      runId,
+      sessionId: "conversation_mobile",
+      documentId: file.documentId,
+      revision: opened.document.revision,
+      scope: { kind: "page" as const, pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page" as const, pageId },
+    };
+    coordinator.recordDocumentInspection(
+      context,
+      inspectionResult(opened.document, pageId),
+    );
+    const serialPlan = designPlanForPage(pageId);
+    serialPlan.targets[0].implementationSteps.push({
+      stepId: "add_states",
+      label: "Add states",
+    });
+    coordinator.registerDesignPlan(context, serialPlan);
+
+    expect(coordinator.getDeliveryLedger(runId)?.planExecution).toMatchObject({
+      planRevision: 1,
+      targets: [
+        {
+          steps: [
+            { stepId: "build_hierarchy", status: "in_progress" },
+            { stepId: "add_states", status: "pending" },
+            { kind: "review-refine", status: "pending" },
+          ],
+        },
+      ],
+    });
+    expect(() =>
+      coordinator.updateDesignPlan(context, {
+        planRevision: 2,
+        targetId: "workspace",
+        completeStepId: "build_hierarchy",
+      }),
+    ).toThrow("design_workflow.plan_revision_stale");
+    expect(() =>
+      coordinator.updateDesignPlan(context, {
+        planRevision: 1,
+        targetId: "workspace",
+        completeStepId: "add_states",
+      }),
+    ).toThrow("design_workflow.plan_step_state_invalid");
+    expect(() =>
+      coordinator.updateDesignPlan(context, {
+        planRevision: 1,
+        targetId: "workspace",
+        completeStepId: "build_hierarchy",
+      }),
+    ).toThrow("design_workflow.plan_step_evidence_missing");
+
+    coordinator.recordMaterialDesignWriteCompleted(runId, ["workspace"], 1);
+    expect(
+      coordinator.updateDesignPlan(context, {
+        planRevision: 1,
+        targetId: "workspace",
+        completeStepId: "build_hierarchy",
+      }).planExecution,
+    ).toMatchObject({
+      targets: [
+        {
+          steps: [
+            {
+              stepId: "build_hierarchy",
+              status: "completed",
+              completedRevision: 1,
+            },
+            {
+              stepId: "add_states",
+              status: "in_progress",
+              startedRevision: 1,
+            },
+            { kind: "review-refine", status: "pending" },
+          ],
+        },
+      ],
+    });
+    coordinator.recordMaterialDesignWriteCompleted(runId, ["workspace"], 2);
+    coordinator.updateDesignPlan(context, {
+      planRevision: 1,
+      targetId: "workspace",
+      completeStepId: "add_states",
+    });
+    const reviewStep = coordinator
+      .getDeliveryLedger(runId)
+      ?.planExecution?.targets[0]?.steps.at(-1);
+    expect(reviewStep).toMatchObject({
+      kind: "review-refine",
+      status: "in_progress",
+      startedRevision: 2,
+    });
+    expect(() =>
+      coordinator.updateDesignPlan(context, {
+        planRevision: 1,
+        targetId: "workspace",
+        completeStepId: reviewStep?.stepId ?? "missing",
+      }),
+    ).toThrow("design_workflow.plan_review_step_host_owned");
+    coordinator.handleAgentEvent({
+      type: "run.completed",
+      runId,
+      finishedAt: "2026-08-08T12:30:00.000Z",
+      stopReason: "complete",
+    });
+    expect(
+      store.listGlobalTasks().find((task) => task.runId === runId)?.lifecycle,
+    ).toBe("needs_attention");
+    store.close();
+  });
+
+  it("records a staged Apply through real semantic revisions without skipping pending steps", async () => {
+    const { store, host, file, opened, pageId } = await setup();
+    const coordinator = new GlobalTaskCoordinator(host, store);
+    const runId = "run_staged_plan";
+    await coordinator.registerRun({
+      type: "run.start",
+      runId,
+      sessionId: "conversation_mobile",
+      prompt: "Design a polished product workspace",
+      documentId: file.documentId,
+      revision: opened.document.revision,
+      modelSelection,
+      scope: { kind: "page", pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page", pageId },
+    });
+    const context = {
+      runId,
+      sessionId: "conversation_mobile",
+      documentId: file.documentId,
+      revision: opened.document.revision,
+      scope: { kind: "page" as const, pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page" as const, pageId },
+    };
+    coordinator.recordDocumentInspection(
+      context,
+      inspectionResult(opened.document, pageId),
+    );
+    const plan = designPlanForPage(pageId);
+    plan.targets[0].implementationSteps.push({
+      stepId: "add_states",
+      label: "Add states",
+    });
+    coordinator.registerDesignPlan(context, plan);
+    const input: DesignApplyToolInput = {
+      label: "Build the staged design",
+      commands: [],
+      steps: [
+        {
+          stepId: "build_hierarchy",
+          label: "Build hierarchy",
+          commandIds: [],
+        },
+        { stepId: "add_states", label: "Add states", commandIds: [] },
+      ],
+    };
+    coordinator.recordDesignApplyCompleted(
+      runId,
+      input,
+      { input, plan, targetIds: ["workspace"] },
+      2,
+      {
+        committedSteps: [
+          {
+            stepIds: ["build_hierarchy"],
+            label: "Build hierarchy",
+            revision: 1,
+          },
+          { stepIds: ["add_states"], label: "Add states", revision: 2 },
+        ],
+      },
+    );
+
+    expect(
+      coordinator.getDeliveryLedger(runId)?.planExecution?.targets[0]?.steps,
+    ).toMatchObject([
+      {
+        stepId: "build_hierarchy",
+        status: "completed",
+        startedRevision: 0,
+        completedRevision: 1,
+      },
+      {
+        stepId: "add_states",
+        status: "completed",
+        startedRevision: 1,
+        completedRevision: 2,
+      },
+      {
+        kind: "review-refine",
+        status: "in_progress",
+        startedRevision: 2,
+      },
+    ]);
+    store.close();
   });
 
   it("lets a later Run reuse same-Conversation attachments while feedback screenshots default to ignored", async () => {
@@ -1518,6 +1766,13 @@ describe("GlobalTaskCoordinator", () => {
 
     const plannedDraft: DesignApplyToolInput = {
       label: "Create planned editable workspace",
+      steps: [
+        {
+          stepId: "build_hierarchy",
+          label: "Build hierarchy",
+          commandIds: ["insert_artboard", "insert_title", "insert_signal_rail"],
+        },
+      ],
       commands: [
         {
           commandId: "insert_artboard",
@@ -3291,7 +3546,7 @@ describe("GlobalTaskCoordinator", () => {
 
     const home = plan.targets[0];
     if (!home) throw new Error("Home target is missing");
-    const draft = draftTargets(pageId, [home]);
+    const draft = draftTargets(pageId, [home], true);
     const authorization = coordinator.assertDesignPlanForApply(context, draft);
     coordinator.recordDesignApplyCompleted(
       context.runId,
@@ -3358,7 +3613,10 @@ describe("GlobalTaskCoordinator", () => {
           ...structuredClone(home),
           implementationSteps: [
             ...home.implementationSteps,
-            "Improve the Home hierarchy after visual review",
+            {
+              stepId: "improve_home_hierarchy",
+              label: "Improve the Home hierarchy after visual review",
+            },
           ],
         },
         structuredClone(profile),
@@ -3454,7 +3712,7 @@ describe("GlobalTaskCoordinator", () => {
       targets: [homeTarget],
     };
     coordinator.registerDesignPlan(context, plan);
-    const fullDraft = draftTargets(pageId, plan.targets);
+    const fullDraft = draftTargets(pageId, plan.targets, true);
     const emptyDraft: DesignApplyToolInput = {
       ...fullDraft,
       commands: fullDraft.commands.filter(
@@ -3634,8 +3892,8 @@ describe("GlobalTaskCoordinator", () => {
       label: "Build login content",
       steps: [
         {
-          stepId: "login",
-          label: "Build real login content",
+          stepId: "build_content",
+          label: "Build its content",
           commandIds: ["insert_form_copy", "insert_footer_copy"],
         },
       ],
@@ -3754,7 +4012,7 @@ describe("GlobalTaskCoordinator", () => {
       ...interrupted,
       lifecycle: "interrupted",
       delivery: {
-        version: 3,
+        version: 4,
         targets: [
           {
             targetId: "target_home",
@@ -3943,6 +4201,15 @@ describe("GlobalTaskCoordinator", () => {
       "existing_nested_frame",
       "workspace_navigation",
     );
+    logicalRegionWrite.steps = [
+      {
+        stepId: "build_hierarchy",
+        label: "Build hierarchy",
+        commandIds: logicalRegionWrite.commands.map(
+          (command) => command.commandId,
+        ),
+      },
+    ];
     const resolvedLogicalRegion = coordinator.assertDesignPlanForApply(
       context,
       logicalRegionWrite,

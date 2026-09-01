@@ -7,7 +7,6 @@ import {
   DesignDeliveryLedgerContract,
   type DesignDeliveryStatus,
 } from "@opendesign/workspace-contracts";
-import { committedStepsFromResult } from "./timeline-design-delivery";
 import type { AgentTimelineItem, Translate } from "./timeline-types";
 
 type TimelinePlan = NonNullable<AgentTimelineItem["plan"]>;
@@ -15,6 +14,7 @@ type TimelinePlan = NonNullable<AgentTimelineItem["plan"]>;
 export function projectDesignPlanTimeline(
   toolName: string | undefined,
   result: unknown,
+  t: Translate,
 ): TimelinePlan | undefined {
   if (
     toolName !== DESIGN_PLAN_TOOL_NAME &&
@@ -29,7 +29,6 @@ export function projectDesignPlanTimeline(
   }
   const parsedDelivery = DesignDeliveryLedgerContract.parse(record?.delivery);
   const delivery = parsedDelivery.ok ? parsedDelivery.value : undefined;
-  const committedSteps = committedStepsFromResult(result);
   const statuses = new Map<string, DesignDeliveryStatus>();
   delivery?.targets.forEach((target) => {
     statuses.set(target.targetId, target.status);
@@ -44,24 +43,43 @@ export function projectDesignPlanTimeline(
       return [];
     }
     const implementationSteps = Array.isArray(target.implementationSteps)
-      ? target.implementationSteps
-          .filter((step): step is string => typeof step === "string")
-          .map((label) => ({
-            label,
-            status: committedSteps.some(
-              (step) => step.label.trim() === label.trim(),
-            )
-              ? ("completed" as const)
-              : ("pending" as const),
-          }))
+      ? target.implementationSteps.flatMap((candidate) => {
+          const step = asRecord(candidate);
+          return typeof step?.stepId === "string" &&
+            typeof step.label === "string"
+            ? [
+                {
+                  stepId: step.stepId,
+                  kind: "implementation" as const,
+                  label: step.label,
+                  status: "pending" as const,
+                },
+              ]
+            : [];
+        })
       : [];
+    const execution = delivery?.planExecution?.targets.find(
+      (candidate) => candidate.targetId === target.targetId,
+    );
+    const projectedSteps = execution
+      ? execution.steps.map((step) => ({
+          stepId: step.stepId,
+          kind: step.kind,
+          label:
+            step.kind === "review-refine"
+              ? t("agent.planStepReviewRefine")
+              : step.label,
+          status:
+            step.status === "in_progress" ? ("active" as const) : step.status,
+        }))
+      : implementationSteps;
     const status = statuses.get(target.targetId);
     return [
       {
         targetId: target.targetId,
         label: target.label,
         objective: target.objective,
-        implementationSteps,
+        implementationSteps: projectedSteps,
         ...(status === undefined ? {} : { status }),
       },
     ];
@@ -70,6 +88,10 @@ export function projectDesignPlanTimeline(
   const parsedStage = DesignDeliveryStageContract.parse(record?.deliveryStage);
   const deliveryStage = parsedStage.ok ? parsedStage.value : undefined;
   return {
+    planRevision:
+      typeof record?.planRevision === "number" && record.planRevision >= 1
+        ? record.planRevision
+        : 1,
     stage:
       deliveryStage?.currentPlan?.stage ??
       (typeof record?.planRevision === "number" && record.planRevision >= 1

@@ -71,7 +71,11 @@ const generationPlan = {
         spacingRhythm: "8/16/24/48 px editorial rhythm",
       },
       editableLayers: ["Hero visual", "Title", "Supporting copy"],
-      implementationSteps: ["Create artboard", "Build regions", "Refine depth"],
+      implementationSteps: [
+        { stepId: "create_artboard", label: "Create artboard" },
+        { stepId: "build_regions", label: "Build regions" },
+        { stepId: "refine_depth", label: "Refine depth" },
+      ],
       validationChecks: ["Check silhouette", "Check type hierarchy"],
       qualityProfile: { kind: "graphic" },
     },

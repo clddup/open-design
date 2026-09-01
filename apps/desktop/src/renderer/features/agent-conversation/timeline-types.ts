@@ -38,6 +38,7 @@ export interface AgentTimelineItem {
   toolCallId?: string;
   historical?: boolean;
   plan?: {
+    planRevision: number;
     stage: number;
     totalTargets?: number;
     status: "active" | "verified";
@@ -46,6 +47,8 @@ export interface AgentTimelineItem {
       label: string;
       objective: string;
       implementationSteps: Array<{
+        stepId: string;
+        kind?: "implementation" | "review-refine";
         label: string;
         status: "pending" | "active" | "completed" | "failed";
       }>;

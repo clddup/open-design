@@ -7360,9 +7360,12 @@ function rendererGenerationPlan(): DesignPlanToolInput {
         },
         editableLayers: ["Hero visual", "Title", "Supporting copy"],
         implementationSteps: [
-          "Create the artboard",
-          "Build the planned regions",
-          "Refine depth and hierarchy",
+          { stepId: "create_artboard", label: "Create the artboard" },
+          { stepId: "build_regions", label: "Build the planned regions" },
+          {
+            stepId: "refine_depth_hierarchy",
+            label: "Refine depth and hierarchy",
+          },
         ],
         validationChecks: ["Check silhouette", "Check type hierarchy"],
         qualityProfile: { kind: "graphic" },

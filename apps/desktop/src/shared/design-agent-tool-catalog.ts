@@ -35,6 +35,7 @@ import {
   DESIGN_INSPECT_TOOL_NAME,
   DESIGN_PAGE_TOOL_NAME,
   DESIGN_PLAN_TOOL_NAME,
+  DESIGN_PLAN_UPDATE_TOOL_NAME,
   DESIGN_REVIEW_TOOL_NAME,
   DESIGN_TEXT_RANGE_TOOL_NAME,
   DESIGN_VECTOR_TOOL_NAME,
@@ -55,6 +56,10 @@ import {
   READ_IMAGE_TOOL_NAME,
   UPDATE_IMAGE_TOOL_NAME,
 } from "./design-agent-tool-names";
+import {
+  DESIGN_PLAN_UPDATE_TOOL_INPUT_SCHEMA,
+  DesignPlanUpdateContract,
+} from "./design-plan-execution";
 import {
   EditImageContract,
   GenerateImageContract,
@@ -210,6 +215,20 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     risk: "design_write" as const,
     approval: "never" as const,
     validateInputIssues: DesignPlanContract.issues,
+  },
+  {
+    name: DESIGN_PLAN_UPDATE_TOOL_NAME,
+    modelDisclosure: {
+      bootstrap: "deferred" as const,
+      afterInspection: "available" as const,
+      surfaces: ["general" as const, "new-design" as const],
+    },
+    description:
+      "Advance the current user-visible execution Plan after completing its active implementation step. Submit the exact planRevision, targetId, and active completeStepId returned by the host. Main requires a real revision-advancing write after that step started, marks only that step completed, and activates only its immediate successor. Review/refine is host-owned and completes only after exact-revision capture verification. Never skip, reorder, backfill, or mark a step complete before its work exists.",
+    inputSchema: DESIGN_PLAN_UPDATE_TOOL_INPUT_SCHEMA,
+    risk: "design_write" as const,
+    approval: "never" as const,
+    validateInputIssues: DesignPlanUpdateContract.issues,
   },
   {
     name: DESIGN_REVIEW_TOOL_NAME,

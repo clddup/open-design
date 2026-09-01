@@ -549,7 +549,11 @@ function logoPlan(): DesignPlanToolInput {
           ],
         },
         editableLayers: ["symbol", "wordmark", "specimens"],
-        implementationSteps: ["symbol", "wordmark", "small-size tests"],
+        implementationSteps: [
+          { stepId: "symbol", label: "symbol" },
+          { stepId: "wordmark", label: "wordmark" },
+          { stepId: "small_size_tests", label: "small-size tests" },
+        ],
         validationChecks: ["silhouette", "optical balance"],
         qualityProfile: { kind: "graphic" },
       },

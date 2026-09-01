@@ -179,6 +179,17 @@ describe("handleDesignFirstSliceTool", () => {
       stableCompiled.apply,
       expect.objectContaining({ targetIds: ["home"] }),
       5,
+      {
+        ok: true,
+        committedSteps: [
+          {
+            stepIds: ["allocate_artboards"],
+            label: "Create real artboard",
+            revision: 4,
+          },
+          { stepIds: ["hero"], label: "Build hero", revision: 5 },
+        ],
+      },
     );
     expect(coordinator.registerDesignPlan).toHaveBeenCalledWith(
       context,

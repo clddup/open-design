@@ -2,6 +2,8 @@ import { designWorkflowError } from "@/shared/design-workflow-failure-classifica
 import type {
   DesignDeliveryLedger,
   DesignDeliveryTarget,
+  DesignPlanExecution,
+  DesignPlanStepExecution,
 } from "@opendesign/workspace-contracts";
 import {
   componentStrategyOccurrencesForTarget,
@@ -17,6 +19,7 @@ import {
   type DesignPlanToolInput,
   type DesignVisualReviewToolInput,
 } from "@/shared/design-agent-tools.js";
+import { createInitialPlanExecution } from "@/shared/design-plan-execution.js";
 import type { DesignSystemComponentCatalogEntry } from "@/shared/design-system-component-catalog.js";
 
 export type InspectedHierarchy = {
@@ -58,6 +61,7 @@ export type DesignDeliveryTargetState = {
 
 export type DesignWorkflowState = {
   plan: DesignPlanToolInput;
+  planExecution: DesignPlanExecution;
   planRevision: number;
   targetOrder: string[];
   targetsById: Map<string, DesignDeliveryTargetState>;
@@ -147,8 +151,12 @@ export function registerDesignWorkflowPlan(options: {
       designPlanReferenceStrategy(existing.plan),
       designPlanReferenceStrategy(plan),
     );
+  const currentTargetIds = new Set(targets.map((target) => target.targetId));
   const targetsById = new Map<string, DesignDeliveryTargetState>(
-    existing?.targetsById ?? [],
+    [...(existing?.targetsById ?? [])].filter(
+      ([targetId, target]) =>
+        currentTargetIds.has(targetId) || target.delivery.status === "verified",
+    ),
   );
   const changedTargetIds: string[] = [];
   for (const target of targets) {
@@ -201,17 +209,27 @@ export function registerDesignWorkflowPlan(options: {
       changedTargetIds.push(target.targetId);
     }
   }
-  const targetOrder = [...(existing?.targetOrder ?? [])];
+  const targetOrder = [...(existing?.targetOrder ?? [])].filter((targetId) =>
+    targetsById.has(targetId),
+  );
   for (const target of targets) {
     if (!targetOrder.includes(target.targetId))
       targetOrder.push(target.targetId);
   }
+  const planRevision = (existing?.planRevision ?? 0) + 1;
   const state: DesignWorkflowState = {
     plan: structuredClone(plan),
-    planRevision: (existing?.planRevision ?? 0) + 1,
+    planExecution: reconcilePlanExecution(
+      existing,
+      plan,
+      planRevision,
+      inspection.revision,
+    ),
+    planRevision,
     targetOrder,
     targetsById,
   };
+  normalizePlanExecution(state, inspection.revision);
   return {
     changedTargetIds: [...new Set(changedTargetIds)],
     plan: structuredClone(state.plan),
@@ -219,6 +237,131 @@ export function registerDesignWorkflowPlan(options: {
     state,
     status: existing ? (stageAdvanced ? "advanced" : "amended") : "accepted",
   };
+}
+
+function normalizePlanExecution(
+  state: DesignWorkflowState,
+  currentRevision: number,
+): void {
+  let activeAssigned = false;
+  for (const execution of state.planExecution.targets) {
+    const delivery = state.targetsById.get(execution.targetId)?.delivery;
+    if (delivery?.status === "verified") {
+      const revision = delivery.verifiedRevision ?? currentRevision;
+      execution.steps.forEach((step) => {
+        step.status = "completed";
+        step.startedRevision ??= revision;
+        step.completedRevision = revision;
+      });
+      continue;
+    }
+    let openSeen = false;
+    for (const step of execution.steps) {
+      if (!openSeen && step.status === "completed") continue;
+      openSeen = true;
+      if (!activeAssigned) {
+        step.status = "in_progress";
+        step.startedRevision ??= currentRevision;
+        delete step.completedRevision;
+        activeAssigned = true;
+        continue;
+      }
+      step.status = "pending";
+      delete step.startedRevision;
+      delete step.completedRevision;
+    }
+  }
+}
+
+function reconcilePlanExecution(
+  existing: DesignWorkflowState | undefined,
+  plan: DesignPlanToolInput,
+  planRevision: number,
+  currentRevision: number,
+): DesignPlanExecution {
+  const fresh = createInitialPlanExecution(plan, planRevision, currentRevision);
+  if (!existing) return fresh;
+
+  const currentTargetIds = new Set(
+    plan.targets.map((target) => target.targetId),
+  );
+  const nextTargets = existing.planExecution.targets
+    .filter(
+      (target) =>
+        !currentTargetIds.has(target.targetId) &&
+        existing.targetsById.get(target.targetId)?.delivery.status ===
+          "verified",
+    )
+    .map((target) => structuredClone(target));
+  for (const target of fresh.targets) {
+    const previous = existing.planExecution.targets.find(
+      (candidate) => candidate.targetId === target.targetId,
+    );
+    nextTargets.push(
+      previous
+        ? reconcileTargetExecution(
+            target.targetId,
+            previous.steps,
+            target.steps,
+          )
+        : structuredClone(target),
+    );
+  }
+  activateFirstOpenImplementationStep(nextTargets, currentRevision);
+  return { planRevision, targets: nextTargets };
+}
+
+function reconcileTargetExecution(
+  targetId: string,
+  previous: readonly DesignPlanStepExecution[],
+  next: readonly DesignPlanStepExecution[],
+): { targetId: string; steps: DesignPlanStepExecution[] } {
+  const locked = previous.filter(
+    (step) => step.kind === "implementation" && step.status !== "pending",
+  );
+  locked.forEach((step, index) => {
+    const candidate = next[index];
+    if (
+      !candidate ||
+      candidate.stepId !== step.stepId ||
+      candidate.label !== step.label ||
+      candidate.kind !== step.kind
+    ) {
+      throw designWorkflowError(
+        "plan_amendment_invalid",
+        `Started Plan step ${step.stepId} must remain at the same position with the same label`,
+      );
+    }
+  });
+  return {
+    targetId,
+    steps: next.map((step, index) =>
+      index < locked.length
+        ? structuredClone(locked[index])
+        : structuredClone(step),
+    ),
+  };
+}
+
+function activateFirstOpenImplementationStep(
+  targets: Array<{ steps: DesignPlanStepExecution[] }>,
+  currentRevision: number,
+): void {
+  if (
+    targets.some((target) =>
+      target.steps.some((step) => step.status === "in_progress"),
+    )
+  ) {
+    return;
+  }
+  const next = targets
+    .flatMap((target) => target.steps)
+    .find(
+      (step) => step.kind === "implementation" && step.status === "pending",
+    );
+  if (!next) return;
+  next.status = "in_progress";
+  next.startedRevision = currentRevision;
 }
 
 function assertReusableComponentsAreAvailable(

@@ -63,6 +63,13 @@ OpenDesign 是跨平台桌面产品。macOS 与 Windows 是同级一级支持平
 - OpenDesign 是编辑器而不是流程管理系统。当前 Design File 中的用户内容和历史 Agent 产物都保持同等可编辑，不得按创建 Run、Conversation、模型或工具建立写入所有权。Run `targetSet` 只限定本次作用域，revision 只处理并发，二者都不得阻止用户重构已存在的设计。
 - Typed 专用工具是原子语义、并发安全和效率入口，不是互斥权限孤岛。普通 Figma 式编辑（选择、移动、缩放、重组、替换外观、删除、重建）不得仅因“应改用另一个 OpenDesign 工具”而失败；宿主应自动编译/路由，或让通用事务直接执行。只有 capability、approval、stale revision、外部资产授权和文档 invariant 可以形成硬拒绝。
 
+### Agent Plan 执行事实
+
+- 用户可见 Plan 必须代表真实执行状态，不能作为装饰性说明或根据聊天文案猜造。Main 是 Plan execution ledger 的唯一事实源；Renderer 只能按稳定 `stepId` 投影 ledger，不得解析 label、message、revision 文案或工具名称推断步骤状态。
+- Plan 状态固定为 `pending → in_progress → completed`。全部 target 按声明顺序形成一条串行执行链：已完成步骤必须构成连续前缀，未完成步骤必须构成后缀，未完成时恰好一个步骤为 `in_progress`；禁止跳步、倒退、跨步骤并行和直接 `pending → completed`。
+- 设计事务只有在命中当前步骤并产生真实 material revision 后才能完成实现步骤；review/refine 步骤只能由可信 capture、review、refinement 与 verified revision 证据完成。失败事务、消息文本和仅有工具请求不能推进 Plan。
+- 修改 Plan 必须显式生成新的 `planRevision`，已经开始的步骤保持稳定 ID、顺序和语义。Run completion 必须与 ledger 一致；仍有 `pending` 或 `in_progress` 步骤时不得宣称完成，也不得让 UI 显示完成。
+
 ## UI 质量基线
 
 - 优先使用桌面信息架构：稳定的应用框架、可调整面板、画布中央舞台、上下文检查器、命令面板和明确状态区。

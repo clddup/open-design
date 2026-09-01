@@ -78,14 +78,20 @@ describe("AgentTimeline", () => {
                 label: "Home",
                 objective: "Establish the primary product hierarchy",
                 implementationSteps: [
-                  "Build navigation and hero",
-                  "Add primary content and status",
+                  {
+                    stepId: "navigation-hero",
+                    label: "Build navigation and hero",
+                  },
+                  {
+                    stepId: "primary-content",
+                    label: "Add primary content and status",
+                  },
                 ],
               },
             ],
           },
           delivery: {
-            version: 3,
+            version: 4,
             targets: [
               {
                 targetId: "target_home",
@@ -99,6 +105,37 @@ describe("AgentTimeline", () => {
               },
             ],
             activeTargetId: "target_home",
+            planExecution: {
+              planRevision: 1,
+              targets: [
+                {
+                  targetId: "target_home",
+                  steps: [
+                    {
+                      stepId: "navigation-hero",
+                      label: "Build navigation and hero",
+                      kind: "implementation",
+                      status: "completed",
+                      startedRevision: 1,
+                      completedRevision: 2,
+                    },
+                    {
+                      stepId: "primary-content",
+                      label: "Add primary content and status",
+                      kind: "implementation",
+                      status: "in_progress",
+                      startedRevision: 2,
+                    },
+                    {
+                      stepId: "target_home.review-refine",
+                      label: "Review and refine the rendered target",
+                      kind: "review-refine",
+                      status: "pending",
+                    },
+                  ],
+                },
+              ],
+            },
           },
           deliveryStage: {
             totalTargets: 12,
@@ -167,7 +204,7 @@ describe("AgentTimeline", () => {
         status: "completed",
         result: {
           delivery: {
-            version: 3,
+            version: 4,
             targets: [
               {
                 targetId: "target_home",

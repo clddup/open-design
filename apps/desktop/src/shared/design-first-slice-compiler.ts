@@ -21,7 +21,10 @@ export function compileValidatedDesignFirstSliceToolInput(
     compileTarget(
       target,
       index === 0
-        ? input.firstSlice.stages.map((stage) => stage.label)
+        ? input.firstSlice.stages.map((stage) => ({
+            stepId: stage.stageId,
+            label: stage.label,
+          }))
         : undefined,
     ),
   );
@@ -132,7 +135,7 @@ export function compileValidatedDesignFirstSliceToolInput(
 
 function compileTarget(
   target: DesignFirstSliceToolInput["targets"][number],
-  firstSliceSteps?: readonly string[],
+  firstSliceSteps?: readonly DesignPlanTarget["implementationSteps"][number][],
 ): DesignPlanTarget {
   const regionNames = target.regions.map((region) => region.name);
   return {
@@ -161,10 +164,12 @@ function compileTarget(
       spacingRhythm: target.spacing,
     },
     editableLayers: unique([...regionNames, "Typography and controls"]),
-    implementationSteps: unique([
-      ...(firstSliceSteps ?? regionNames.map((name) => `Build ${name}`)),
-      "Review and refine the rendered target",
-    ]),
+    implementationSteps:
+      firstSliceSteps?.map((step) => ({ ...step })) ??
+      regionNames.map((name, index) => ({
+        stepId: `${target.targetId}.region.${index + 1}`,
+        label: `Build ${name}`,
+      })),
     validationChecks: [
       "All visible material remains inside the delivery artboard with intentional spacing.",
       "Typography, hierarchy, reusable structure and contrast remain coherent after rendering.",

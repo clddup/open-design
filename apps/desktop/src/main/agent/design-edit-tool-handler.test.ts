@@ -80,6 +80,7 @@ describe("Edit Design Main boundary", () => {
       canonicalInput,
       authorization,
       5,
+      result.content,
     );
   });
 

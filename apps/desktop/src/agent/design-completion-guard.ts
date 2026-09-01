@@ -93,6 +93,27 @@ export function reviewDesignCompletion(
         message: `The confirmed delivery artboards are allocated but no executable target Plan exists yet. Define the first bounded Plan for ${nextTarget?.targetId ?? "the first confirmed target"} using its host-owned existing artboard, then create its first meaningful editable slice. Empty allocated Frames are not completed design.`,
       };
     }
+    if (
+      context.toolCalls.some(isExecutablePlanCall) &&
+      !delivery.planExecution
+    ) {
+      return {
+        allow: false,
+        message:
+          "The executable Plan has no Main-owned execution ledger. Re-establish the current Plan from the live delivery state before finishing; tool messages or verified-looking UI cannot replace Plan execution evidence.",
+      };
+    }
+    const incompletePlanStep = delivery.planExecution?.targets
+      .flatMap((target) =>
+        target.steps.map((step) => ({ ...step, targetId: target.targetId })),
+      )
+      .find((step) => step.status !== "completed");
+    if (incompletePlanStep) {
+      return {
+        allow: false,
+        message: `The executable Plan is not complete. Continue the current serial step ${incompletePlanStep.stepId} (${incompletePlanStep.label}) for target ${incompletePlanStep.targetId}; do not skip pending steps or finish the Run before Main records their execution evidence.`,
+      };
+    }
     const incomplete = delivery.targets.find(
       (target) => target.status !== "verified",
     );

@@ -32,6 +32,7 @@ import {
   isRunAccessSnapshot,
   isRunTargetSet,
   type DesignFileDescriptor,
+  type DesignDeliveryLedger,
   type DesignTarget,
   type ProjectManifest,
   type ResourceLocator,
@@ -831,6 +832,181 @@ describe("workspace contract schemas", () => {
     if (!result.ok) {
       expect(result.issues).toEqual(
         expect.arrayContaining([expect.objectContaining({ path: "/version" })]),
+      );
+    }
+  });
+
+  it("enforces one serial Main-owned Plan execution state", () => {
+    const ledger: DesignDeliveryLedger & {
+      planExecution: NonNullable<DesignDeliveryLedger["planExecution"]>;
+    } = {
+      version: DESIGN_DELIVERY_LEDGER_VERSION,
+      targets: [
+        {
+          targetId: "target_home",
+          label: "Home",
+          pageId: "page_1",
+          rootNodeId: "frame_home",
+          reservedNodeIds: ["frame_home"],
+          status: "drafted" as const,
+          allocatedRevision: 1,
+          draftRevision: 2,
+        },
+      ],
+      activeTargetId: "target_home",
+      planExecution: {
+        planRevision: 1,
+        targets: [
+          {
+            targetId: "target_home",
+            steps: [
+              {
+                stepId: "navigation",
+                label: "Build navigation",
+                kind: "implementation" as const,
+                status: "completed" as const,
+                startedRevision: 1,
+                completedRevision: 2,
+              },
+              {
+                stepId: "content",
+                label: "Build content",
+                kind: "implementation" as const,
+                status: "in_progress" as const,
+                startedRevision: 2,
+              },
+              {
+                stepId: "target_home.review-refine",
+                label: "Review and refine",
+                kind: "review-refine" as const,
+                status: "pending" as const,
+              },
+            ],
+          },
+        ],
+      },
+    };
+    expect(DesignDeliveryLedgerContract.parse(ledger).ok).toBe(true);
+
+    const issueCodes = (value: unknown) => {
+      const result = DesignDeliveryLedgerContract.parse(value);
+      expect(result.ok).toBe(false);
+      return result.ok ? [] : result.issues.map((issue) => issue.code);
+    };
+    const mutate = (mutation: (copy: typeof ledger) => void) => {
+      const copy = structuredClone(ledger);
+      mutation(copy);
+      return copy;
+    };
+
+    expect(
+      issueCodes(
+        mutate((copy) => {
+          const review = copy.planExecution.targets[0]!.steps[2]!;
+          review.status = "in_progress";
+          review.startedRevision = 2;
+        }),
+      ),
+    ).toContain("workspace.plan_execution_active_step_count_invalid");
+    expect(
+      issueCodes(
+        mutate((copy) => {
+          const first = copy.planExecution.targets[0]!.steps[0]!;
+          first.status = "pending";
+          delete first.startedRevision;
+          delete first.completedRevision;
+        }),
+      ),
+    ).toContain("workspace.plan_execution_order_invalid");
+    expect(
+      issueCodes(
+        mutate((copy) => {
+          const active = copy.planExecution.targets[0]!.steps[1]!;
+          active.status = "pending";
+          delete active.startedRevision;
+        }),
+      ),
+    ).toContain("workspace.plan_execution_active_step_required");
+    expect(
+      issueCodes(
+        mutate((copy) => {
+          const steps = copy.planExecution.targets[0]!.steps;
+          steps[0]!.stepId = steps[1]!.stepId;
+        }),
+      ),
+    ).toContain("workspace.plan_execution_step_duplicate");
+    expect(
+      issueCodes(
+        mutate((copy) => {
+          const steps = copy.planExecution.targets[0]!.steps;
+          steps[0]!.kind = "review-refine";
+          steps[2]!.kind = "implementation";
+        }),
+      ),
+    ).toEqual(
+      expect.arrayContaining([
+        "workspace.plan_execution_review_step_position_invalid",
+        "workspace.plan_execution_review_step_required",
+      ]),
+    );
+    expect(
+      issueCodes(
+        mutate((copy) => {
+          const pending = copy.planExecution.targets[0]!.steps[2]!;
+          pending.startedRevision = 2;
+        }),
+      ),
+    ).toContain("workspace.plan_execution_pending_revision_invalid");
+    expect(
+      issueCodes(
+        mutate((copy) => {
+          delete copy.planExecution.targets[0]!.steps[0]!.completedRevision;
+        }),
+      ),
+    ).toContain("workspace.plan_execution_completed_revision_required");
+    expect(
+      issueCodes(
+        mutate((copy) => {
+          const completed = copy.planExecution.targets[0]!.steps[0]!;
+          completed.completedRevision = 0;
+        }),
+      ),
+    ).toContain("workspace.plan_execution_revision_order_invalid");
+    expect(
+      issueCodes(
+        mutate((copy) => {
+          const target = copy.targets[0]!;
+          target.status = "verified";
+          target.captureRevision = 2;
+          target.reviewRevision = 2;
+          target.refinementRevision = 2;
+          target.verifiedRevision = 2;
+          copy.activeTargetId = null;
+        }),
+      ),
+    ).toContain("workspace.plan_execution_verified_target_incomplete");
+
+    const completedProjection = GlobalTaskProjectionContract.parse({
+      version: WORKSPACE_CONTRACT_VERSION,
+      taskId: "task_plan_incomplete",
+      conversationId: "conversation_1",
+      runId: "run_1",
+      title: "Incomplete design",
+      lifecycle: "completed",
+      targetSet: targetSet(),
+      delivery: ledger,
+      createdAt: now,
+      updatedAt: now,
+    });
+    expect(completedProjection.ok).toBe(false);
+    if (!completedProjection.ok) {
+      expect(completedProjection.issues).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            code: "workspace.completed_task_delivery_incomplete",
+            path: "/lifecycle",
+          }),
+        ]),
       );
     }
   });

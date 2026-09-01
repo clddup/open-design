@@ -61,6 +61,15 @@ export {
 export type { DesignArrangeToolInput } from "./design-arrange-tool";
 export { componentStrategyOccurrencesForTarget } from "./design-plan-component-strategy";
 export {
+  DESIGN_PLAN_UPDATE_TOOL_INPUT_SCHEMA,
+  DESIGN_PLAN_REVIEW_STEP_LABEL,
+  DesignPlanUpdateContract,
+  createInitialPlanExecution,
+  designPlanReviewStepId,
+  serializePlanStepStatuses,
+} from "./design-plan-execution";
+export type { DesignPlanUpdateToolInput } from "./design-plan-execution";
+export {
   DESIGN_PLAN_CANONICAL_INPUT_SCHEMA,
   DESIGN_LOGO_EXPLORATION_SCHEMA,
   DESIGN_PLAN_TOOL_INPUT_SCHEMA,

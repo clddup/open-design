@@ -350,7 +350,7 @@ function ledger(
     (target) => target.status !== "verified",
   );
   return {
-    version: 3,
+    version: 4,
     targets,
     activeTargetId: firstUnverified?.targetId ?? null,
   };

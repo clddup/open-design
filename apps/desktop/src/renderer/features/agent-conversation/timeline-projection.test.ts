@@ -19,7 +19,7 @@ describe("Agent continuation timeline projection", () => {
     const now = "2026-08-26T04:00:00.000Z";
     const runId = "run_visible_plan";
     const delivery = {
-      version: 3 as const,
+      version: 4 as const,
       targets: [
         {
           targetId: "target_home",
@@ -33,6 +33,37 @@ describe("Agent continuation timeline projection", () => {
         },
       ],
       activeTargetId: "target_home",
+      planExecution: {
+        planRevision: 1,
+        targets: [
+          {
+            targetId: "target_home",
+            steps: [
+              {
+                stepId: "navigation_hero",
+                label: "构建导航与首屏层级",
+                kind: "implementation" as const,
+                status: "completed" as const,
+                startedRevision: 1,
+                completedRevision: 2,
+              },
+              {
+                stepId: "core_content",
+                label: "完成核心内容与底部状态",
+                kind: "implementation" as const,
+                status: "in_progress" as const,
+                startedRevision: 2,
+              },
+              {
+                stepId: "target_home.review-refine",
+                label: "Review and refine the rendered target",
+                kind: "review-refine" as const,
+                status: "pending" as const,
+              },
+            ],
+          },
+        ],
+      },
     };
     const timeline: SessionTimelineItem[] = [
       {
@@ -57,8 +88,14 @@ describe("Agent continuation timeline projection", () => {
                 label: "首页",
                 objective: "建立核心信息层级与首要行动",
                 implementationSteps: [
-                  "构建导航与首屏层级",
-                  "完成核心内容与底部状态",
+                  {
+                    stepId: "navigation_hero",
+                    label: "构建导航与首屏层级",
+                  },
+                  {
+                    stepId: "core_content",
+                    label: "完成核心内容与底部状态",
+                  },
                 ],
               },
             ],
@@ -119,6 +156,24 @@ describe("Agent continuation timeline projection", () => {
               },
             ],
             activeTargetId: null,
+            planExecution: {
+              planRevision: 1,
+              targets: [
+                {
+                  targetId: "target_home",
+                  steps: delivery.planExecution.targets[0].steps.map(
+                    (step) => ({
+                      ...step,
+                      status: "completed" as const,
+                      startedRevision:
+                        step.startedRevision ??
+                        (step.kind === "review-refine" ? 3 : 2),
+                      completedRevision: step.completedRevision ?? 3,
+                    }),
+                  ),
+                },
+              ],
+            },
           },
         },
         revision: 3,
@@ -145,14 +200,14 @@ describe("Agent continuation timeline projection", () => {
       label: "首页",
       status: "verified",
       implementationSteps: [
-        { label: "构建导航与首屏层级", status: "pending" },
-        { label: "完成核心内容与底部状态", status: "pending" },
-        { label: "完成真实导航结构", status: "completed" },
+        { label: "构建导航与首屏层级", status: "completed" },
+        { label: "完成核心内容与底部状态", status: "completed" },
+        { label: "审查实际渲染并按需优化", status: "completed" },
       ],
     });
   });
 
-  it("projects pending, active, failed, and completed Plan steps from real tool state", () => {
+  it("projects Plan state only from the latest Main delivery ledger", () => {
     const now = "2026-08-26T04:00:00.000Z";
     const runId = "run_step_state";
     const timeline: SessionTimelineItem[] = [
@@ -176,12 +231,15 @@ describe("Agent continuation timeline projection", () => {
                 targetId: "target_home",
                 label: "首页",
                 objective: "建立首页",
-                implementationSteps: ["构建导航", "完成内容"],
+                implementationSteps: [
+                  { stepId: "navigation", label: "构建导航" },
+                  { stepId: "content", label: "完成内容" },
+                ],
               },
             ],
           },
           delivery: {
-            version: 3,
+            version: 4,
             targets: [
               {
                 targetId: "target_home",
@@ -194,6 +252,35 @@ describe("Agent continuation timeline projection", () => {
               },
             ],
             activeTargetId: "target_home",
+            planExecution: {
+              planRevision: 1,
+              targets: [
+                {
+                  targetId: "target_home",
+                  steps: [
+                    {
+                      stepId: "navigation",
+                      label: "构建导航",
+                      kind: "implementation",
+                      status: "in_progress",
+                      startedRevision: 1,
+                    },
+                    {
+                      stepId: "content",
+                      label: "完成内容",
+                      kind: "implementation",
+                      status: "pending",
+                    },
+                    {
+                      stepId: "target_home.review-refine",
+                      label: "Review and refine the rendered target",
+                      kind: "review-refine",
+                      status: "pending",
+                    },
+                  ],
+                },
+              ],
+            },
           },
         },
         revision: 1,
@@ -246,12 +333,14 @@ describe("Agent continuation timeline projection", () => {
     };
 
     expect(project([])).toMatchObject([
-      { label: "构建导航", status: "pending" },
+      { label: "构建导航", status: "active" },
       { label: "完成内容", status: "pending" },
+      { label: "审查实际渲染并按需优化", status: "pending" },
     ]);
     expect(project([requested])).toMatchObject([
       { label: "构建导航", status: "active" },
       { label: "完成内容", status: "pending" },
+      { label: "审查实际渲染并按需优化", status: "pending" },
     ]);
     expect(
       project([
@@ -265,8 +354,9 @@ describe("Agent continuation timeline projection", () => {
         },
       ]),
     ).toMatchObject([
-      { label: "构建导航", status: "failed" },
+      { label: "构建导航", status: "active" },
       { label: "完成内容", status: "pending" },
+      { label: "审查实际渲染并按需优化", status: "pending" },
     ]);
     expect(
       project([
@@ -280,9 +370,191 @@ describe("Agent continuation timeline projection", () => {
         },
       ]),
     ).toMatchObject([
-      { label: "构建导航", status: "completed" },
+      { label: "构建导航", status: "active" },
       { label: "完成内容", status: "pending" },
+      { label: "审查实际渲染并按需优化", status: "pending" },
     ]);
+
+    const laterInput = structuredClone(input);
+    laterInput.edits[0].input.steps[0] = {
+      stepId: "content",
+      label: "完成内容",
+      commandIds: ["update_navigation"],
+    };
+    expect(
+      project([
+        {
+          ...requested,
+          toolCallId: "edit_content_out_of_order",
+          input: laterInput,
+        },
+      ]),
+    ).toMatchObject([
+      { label: "构建导航", status: "active" },
+      { label: "完成内容", status: "pending" },
+      { label: "审查实际渲染并按需优化", status: "pending" },
+    ]);
+  });
+
+  it("does not project a newer Plan revision onto an older Plan card", () => {
+    const now = "2026-08-26T04:00:00.000Z";
+    const runId = "run_plan_amendment";
+    const timeline: SessionTimelineItem[] = [
+      {
+        itemId: "tool:old_plan",
+        sessionId: "conversation_1",
+        runId,
+        sequence: 1,
+        createdAt: now,
+        updatedAt: now,
+        type: "tool",
+        toolCallId: "old_plan",
+        toolName: "opendesign_define_design_plan",
+        input: {},
+        risk: "design_write",
+        status: "completed",
+        result: {
+          planRevision: 1,
+          plan: {
+            targets: [
+              {
+                targetId: "target_home",
+                label: "首页",
+                objective: "建立首页",
+                implementationSteps: [
+                  { stepId: "old_content", label: "旧步骤" },
+                ],
+              },
+            ],
+          },
+          delivery: {
+            version: 4,
+            targets: [
+              {
+                targetId: "target_home",
+                label: "首页",
+                pageId: "page_1",
+                rootNodeId: "frame_home",
+                reservedNodeIds: ["frame_home"],
+                status: "allocated",
+                allocatedRevision: 1,
+              },
+            ],
+            activeTargetId: "target_home",
+            planExecution: {
+              planRevision: 1,
+              targets: [
+                {
+                  targetId: "target_home",
+                  steps: [
+                    {
+                      stepId: "old_content",
+                      label: "旧步骤",
+                      kind: "implementation",
+                      status: "in_progress",
+                      startedRevision: 1,
+                    },
+                    {
+                      stepId: "target_home.review-refine",
+                      label: "Review and refine",
+                      kind: "review-refine",
+                      status: "pending",
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+        },
+      },
+      {
+        itemId: "tool:new_plan",
+        sessionId: "conversation_1",
+        runId,
+        sequence: 2,
+        createdAt: now,
+        updatedAt: now,
+        type: "tool",
+        toolCallId: "new_plan",
+        toolName: "opendesign_define_design_plan",
+        input: {},
+        risk: "design_write",
+        status: "completed",
+        result: {
+          planRevision: 2,
+          plan: {
+            targets: [
+              {
+                targetId: "target_home",
+                label: "首页",
+                objective: "建立首页",
+                implementationSteps: [
+                  { stepId: "new_content", label: "新步骤" },
+                ],
+              },
+            ],
+          },
+          delivery: {
+            version: 4,
+            targets: [
+              {
+                targetId: "target_home",
+                label: "首页",
+                pageId: "page_1",
+                rootNodeId: "frame_home",
+                reservedNodeIds: ["frame_home"],
+                status: "allocated",
+                allocatedRevision: 1,
+              },
+            ],
+            activeTargetId: "target_home",
+            planExecution: {
+              planRevision: 2,
+              targets: [
+                {
+                  targetId: "target_home",
+                  steps: [
+                    {
+                      stepId: "new_content",
+                      label: "新步骤",
+                      kind: "implementation",
+                      status: "in_progress",
+                      startedRevision: 1,
+                    },
+                    {
+                      stepId: "target_home.review-refine",
+                      label: "Review and refine",
+                      kind: "review-refine",
+                      status: "pending",
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+        },
+      },
+    ];
+
+    const plans = projectAgentTimeline({
+      activeRunId: runId,
+      events: [],
+      locale: "zh-CN",
+      stoppingRunId: null,
+      timeline,
+      t: (key, parameters) => translate("zh-CN", key, parameters),
+    }).filter((item) => item.kind === "plan");
+
+    expect(plans[0]?.plan?.planRevision).toBe(1);
+    expect(plans[0]?.plan?.targets[0]?.implementationSteps[0]).toMatchObject({
+      stepId: "old_content",
+      status: "active",
+    });
+    expect(plans[1]?.plan?.planRevision).toBe(2);
+    expect(plans[1]?.plan?.targets[0]?.implementationSteps[0]).toMatchObject({
+      stepId: "new_content",
+      status: "active",
+    });
   });
 
   it("keeps terminal failures at the end without duplicating one root cause", () => {

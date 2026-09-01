@@ -34,6 +34,7 @@ import { prepareInitialDesignInspection } from "./agent/agent-initial-design-ins
 import { AgentIpcRouter } from "./agent/agent-ipc-router";
 import { AgentRunCoordinator } from "./agent/agent-run-coordinator";
 import { handleDesignPlanTool } from "./agent/design-plan-tool-handler";
+import { handleDesignPlanUpdateTool } from "./agent/design-plan-update-tool-handler.js";
 import { handleDeliveryScopeTool } from "./agent/delivery-scope-tool-handler";
 import { handleDesignFirstSliceTool } from "./agent/design-first-slice-tool-handler";
 import {
@@ -98,6 +99,7 @@ import {
   DESIGN_INSPECT_TOOL_NAME,
   DESIGN_FIRST_SLICE_TOOL_NAME,
   DESIGN_PLAN_TOOL_NAME,
+  DESIGN_PLAN_UPDATE_TOOL_NAME,
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
   DesignApplyContract,
   DeliveryScopeContract,
@@ -864,6 +866,7 @@ async function startDesktopApplication(
           resolvedInput,
           authorization,
           result.designRevision?.revision,
+          result.content,
         );
         return withDesignDelivery(result, context.runId);
       };
@@ -946,6 +949,9 @@ async function startDesktopApplication(
           signal,
           reportProgress,
         );
+      }
+      if (call.toolName === DESIGN_PLAN_UPDATE_TOOL_NAME) {
+        return handleDesignPlanUpdateTool(globalTaskCoordinator, call, context);
       }
       const captureReviewResult = await captureReviewSession.handle(call);
       if (captureReviewResult) return captureReviewResult;

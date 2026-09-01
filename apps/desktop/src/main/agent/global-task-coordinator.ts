@@ -42,6 +42,7 @@ import {
   type DesignFirstSliceToolInput,
   type DesignPlanTarget,
   type DesignPlanToolInput,
+  type DesignPlanUpdateToolInput,
   type DesignReferenceStrategy,
   type DesignVisualReviewToolInput,
   type PlannedDesignRebaseGuard,
@@ -770,6 +771,56 @@ export class GlobalTaskCoordinator {
     return result;
   }
 
+  updateDesignPlan(
+    context: TrustedToolContext,
+    input: DesignPlanUpdateToolInput,
+  ): DesignDeliveryLedger {
+    this.assertDesignToolContext(context);
+    const state = this.#requireDesignPlan(context);
+    if (input.planRevision !== state.planRevision) {
+      throw designWorkflowError(
+        "plan_revision_stale",
+        `Plan revision ${input.planRevision} is stale; the current Plan revision is ${state.planRevision}`,
+      );
+    }
+    const owner = state.planExecution.targets.find(
+      (target) => target.targetId === input.targetId,
+    );
+    const step = owner?.steps.find(
+      (candidate) => candidate.status === "in_progress",
+    );
+    if (!owner || !step || step.stepId !== input.completeStepId) {
+      throw designWorkflowError(
+        "plan_step_state_invalid",
+        `Plan step ${input.completeStepId} is not the current in-progress step`,
+      );
+    }
+    if (step.kind !== "implementation") {
+      throw designWorkflowError(
+        "plan_review_step_host_owned",
+        "Review and refine progress is derived from trusted capture and verification evidence",
+      );
+    }
+    const target = state.targetsById.get(owner.targetId);
+    const evidenceRevision = target?.lastMaterialWriteRevision;
+    if (
+      evidenceRevision === null ||
+      evidenceRevision === undefined ||
+      step.startedRevision === undefined ||
+      evidenceRevision <= step.startedRevision
+    ) {
+      throw designWorkflowError(
+        "plan_step_evidence_missing",
+        `Plan step ${step.stepId} requires a real material revision after it started`,
+      );
+    }
+    step.status = "completed";
+    step.completedRevision = evidenceRevision;
+    activateNextPlanStep(state, evidenceRevision);
+    this.#persistDelivery(context.runId, state);
+    return deliveryLedger(state);
+  }
+
   createDesignPlanAllocation(runId: string): DesignPlanAllocation | undefined {
     const state = this.#designPlansByRunId.get(runId);
     if (!state) return undefined;
@@ -1000,8 +1051,18 @@ export class GlobalTaskCoordinator {
       target.captureCount = captureSequence;
       target.lastCaptureRevision = observedRevision;
       target.delivery = {
-        ...target.delivery,
+        targetId: target.delivery.targetId,
+        label: target.delivery.label,
+        pageId: target.delivery.pageId,
+        rootNodeId: target.delivery.rootNodeId,
+        reservedNodeIds: [...target.delivery.reservedNodeIds],
         status: "captured",
+        ...(target.delivery.allocatedRevision === undefined
+          ? {}
+          : { allocatedRevision: target.delivery.allocatedRevision }),
+        ...(target.lastMaterialWriteRevision === null
+          ? {}
+          : { draftRevision: target.lastMaterialWriteRevision }),
         captureRevision: observedRevision,
       };
       this.#persistDelivery(context.runId, state);
@@ -1011,6 +1072,44 @@ export class GlobalTaskCoordinator {
         deliveryTargetId: target.delivery.targetId,
         nextAction: "place-required-raster-assets",
         pendingRasterRoles,
+        reviewEligible: false,
+      };
+    }
+    if (!implementationPlanCompleted(state, target.delivery.targetId)) {
+      target.captureCount = captureSequence;
+      target.lastCaptureRevision = observedRevision;
+      target.delivery = {
+        targetId: target.delivery.targetId,
+        label: target.delivery.label,
+        pageId: target.delivery.pageId,
+        rootNodeId: target.delivery.rootNodeId,
+        reservedNodeIds: [...target.delivery.reservedNodeIds],
+        status: "captured",
+        ...(target.delivery.allocatedRevision === undefined
+          ? {}
+          : { allocatedRevision: target.delivery.allocatedRevision }),
+        ...(target.lastMaterialWriteRevision === null
+          ? {}
+          : { draftRevision: target.lastMaterialWriteRevision }),
+        captureRevision: observedRevision,
+      };
+      this.#persistDelivery(context.runId, state);
+      const activeStep = state.planExecution.targets
+        .find((candidate) => candidate.targetId === target.delivery.targetId)
+        ?.steps.find((step) => step.status === "in_progress");
+      return {
+        captureSequence,
+        capturedRevision: observedRevision,
+        deliveryTargetId: target.delivery.targetId,
+        nextAction: "complete-current-plan-step",
+        ...(activeStep
+          ? {
+              currentPlanStep: {
+                stepId: activeStep.stepId,
+                label: activeStep.label,
+              },
+            }
+          : {}),
         reviewEligible: false,
       };
     }
@@ -1048,6 +1147,7 @@ export class GlobalTaskCoordinator {
       target.lastCaptureRevision = observedRevision;
       target.reviewedCaptureCount = captureSequence;
       target.reviewedCaptureRevision = observedRevision;
+      completeReviewPlanStep(state, target.delivery.targetId, observedRevision);
       target.delivery = {
         ...target.delivery,
         status: "verified",
@@ -1092,6 +1192,7 @@ export class GlobalTaskCoordinator {
       target.lastCaptureRevision = observedRevision;
       target.reviewedCaptureCount = captureSequence;
       target.reviewedCaptureRevision = observedRevision;
+      completeReviewPlanStep(state, target.delivery.targetId, observedRevision);
       target.delivery = {
         ...target.delivery,
         status: "verified",
@@ -1191,6 +1292,7 @@ export class GlobalTaskCoordinator {
     target.captureCount = captureSequence;
     target.lastCaptureRevision = observedRevision;
     if (target.delivery.status === "refined") {
+      completeReviewPlanStep(state, target.delivery.targetId, observedRevision);
       target.delivery = {
         ...target.delivery,
         status: "verified",
@@ -1574,6 +1676,7 @@ export class GlobalTaskCoordinator {
       reservedNodeIdsForTargets(state, targetIds),
     );
     assertDeliveryAcceptsMaterialWrites(state);
+    assertApplyPlanSteps(state, targetIds, resolvedInput.steps);
     const rebaseTargets = targetIds.flatMap((targetId) => {
       const target = state.targetsById.get(targetId);
       if (!target?.artboardEstablished) return [];
@@ -1677,6 +1780,7 @@ export class GlobalTaskCoordinator {
       reservedNodeIdsForTargets(state, targetIds),
     );
     assertDeliveryAcceptsMaterialWrites(state);
+    assertApplyPlanSteps(state, targetIds, resolvedInput.steps);
     return {
       input: resolvedInput,
       plan: state.plan,
@@ -1717,6 +1821,7 @@ export class GlobalTaskCoordinator {
     input: DesignApplyToolInput,
     authorization: DesignPlanApplyAuthorization | undefined,
     revision?: number,
+    resultContent?: unknown,
   ): void {
     const state = this.#designPlansByRunId.get(runId);
     if (!state || !authorization || authorization.targetIds.length === 0)
@@ -1775,6 +1880,14 @@ export class GlobalTaskCoordinator {
       });
     }
     this.#recordTargetWrites(runId, state, authorization.targetIds, revision);
+    this.#recordCommittedPlanSteps(
+      runId,
+      state,
+      authorization.targetIds,
+      input.steps,
+      revision,
+      resultContent,
+    );
   }
 
   recordMaterialDesignWriteCompleted(
@@ -1922,6 +2035,56 @@ export class GlobalTaskCoordinator {
     this.#persistDelivery(runId, state);
   }
 
+  #recordCommittedPlanSteps(
+    runId: string,
+    state: DesignWorkflowState,
+    targetIds: readonly string[],
+    steps: DesignApplyToolInput["steps"],
+    revision?: number,
+    resultContent?: unknown,
+  ): void {
+    if (!validRevision(revision) || !steps || steps.length === 0) return;
+    const allowedTargets = new Set(targetIds);
+    const committedRevisions = committedPlanStepRevisions(resultContent);
+    for (const committed of steps) {
+      const owner = state.planExecution.targets.find((target) =>
+        target.steps.some((step) => step.status === "in_progress"),
+      );
+      const step = owner?.steps.find(
+        (candidate) => candidate.status === "in_progress",
+      );
+      if (
+        !owner ||
+        !allowedTargets.has(owner.targetId) ||
+        !step ||
+        step.kind !== "implementation" ||
+        step.stepId !== committed.stepId
+      ) {
+        throw designWorkflowError(
+          "plan_step_order_invalid",
+          `Committed step ${committed.stepId} does not match the current serial Plan step`,
+        );
+      }
+      const completedRevision =
+        committedRevisions.get(committed.stepId) ??
+        (steps.length === 1 ? revision : undefined);
+      if (
+        completedRevision === undefined ||
+        step.startedRevision === undefined ||
+        completedRevision <= step.startedRevision
+      ) {
+        throw designWorkflowError(
+          "plan_step_evidence_missing",
+          `Committed step ${committed.stepId} requires its real semantic revision after the step started`,
+        );
+      }
+      step.status = "completed";
+      step.completedRevision = completedRevision;
+      activateNextPlanStep(state, completedRevision);
+    }
+    this.#persistDelivery(runId, state);
+  }
+
   #persistDelivery(runId: string, state: DesignWorkflowState): void {
     const task = this.#tasksByRunId.get(runId);
     if (!task) return;
@@ -2027,10 +2190,15 @@ export class GlobalTaskCoordinator {
     }
     const activityAt = conversationActivityAt(event, this.now);
     if (activityAt) this.#touchConversation(task.conversationId, activityAt);
-    const lifecycle = projectGlobalTaskLifecycle(
+    const projectedLifecycle = projectGlobalTaskLifecycle(
       { ...event, runId },
       task.lifecycle,
     );
+    const lifecycle =
+      projectedLifecycle === "completed" &&
+      !designDeliveryCanComplete(task.delivery)
+        ? "needs_attention"
+        : projectedLifecycle;
     if (lifecycle === task.lifecycle) {
       if (event.type === "run.completed") {
         this.#tasksByRunId.delete(runId);
@@ -3162,7 +3330,128 @@ function deliveryLedger(state: DesignWorkflowState): DesignDeliveryLedger {
       return target ? [structuredClone(target.delivery)] : [];
     }),
     activeTargetId: nextIncompleteTarget(state)?.delivery.targetId ?? null,
+    planExecution: structuredClone(state.planExecution),
   };
+}
+
+function committedPlanStepRevisions(content: unknown): Map<string, number> {
+  if (!isPlainRecord(content) || !Array.isArray(content.committedSteps)) {
+    return new Map();
+  }
+  const revisions = new Map<string, number>();
+  for (const candidate of content.committedSteps) {
+    if (
+      !isPlainRecord(candidate) ||
+      !Array.isArray(candidate.stepIds) ||
+      !Number.isSafeInteger(candidate.revision) ||
+      Number(candidate.revision) < 0
+    ) {
+      continue;
+    }
+    for (const stepId of candidate.stepIds) {
+      if (typeof stepId === "string") {
+        revisions.set(stepId, Number(candidate.revision));
+      }
+    }
+  }
+  return revisions;
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function designDeliveryCanComplete(
+  delivery: DesignDeliveryLedger | undefined,
+): boolean {
+  if (!delivery) return true;
+  return (
+    delivery.targets.every((target) => target.status === "verified") &&
+    delivery.planExecution !== undefined &&
+    delivery.planExecution.targets.every((target) =>
+      target.steps.every((step) => step.status === "completed"),
+    )
+  );
+}
+
+function assertApplyPlanSteps(
+  state: DesignWorkflowState,
+  targetIds: readonly string[],
+  steps: DesignApplyToolInput["steps"],
+): void {
+  if (!steps || steps.length === 0) return;
+  const flattened = state.planExecution.targets.flatMap((target) =>
+    target.steps.map((step) => ({ ...step, targetId: target.targetId })),
+  );
+  const activeIndex = flattened.findIndex(
+    (step) => step.status === "in_progress",
+  );
+  if (activeIndex < 0) {
+    throw designWorkflowError(
+      "plan_step_state_invalid",
+      "No executable Plan step is currently in progress",
+    );
+  }
+  const allowedTargets = new Set(targetIds);
+  steps.forEach((step, offset) => {
+    const expected = flattened[activeIndex + offset];
+    if (
+      !expected ||
+      expected.kind !== "implementation" ||
+      !allowedTargets.has(expected.targetId) ||
+      expected.stepId !== step.stepId ||
+      expected.label !== step.label ||
+      (offset > 0 && expected.status !== "pending")
+    ) {
+      throw designWorkflowError(
+        "plan_step_order_invalid",
+        `Design Apply step ${step.stepId} must match the current serial Plan step`,
+      );
+    }
+  });
+}
+
+function activateNextPlanStep(
+  state: DesignWorkflowState,
+  revision: number,
+): void {
+  const steps = state.planExecution.targets.flatMap((target) => target.steps);
+  if (steps.some((step) => step.status === "in_progress")) return;
+  const next = steps.find((step) => step.status === "pending");
+  if (!next) return;
+  next.status = "in_progress";
+  next.startedRevision = revision;
+}
+
+function implementationPlanCompleted(
+  state: DesignWorkflowState,
+  targetId: string,
+): boolean {
+  return (
+    state.planExecution.targets
+      .find((target) => target.targetId === targetId)
+      ?.steps.filter((step) => step.kind === "implementation")
+      .every((step) => step.status === "completed") ?? false
+  );
+}
+
+function completeReviewPlanStep(
+  state: DesignWorkflowState,
+  targetId: string,
+  revision: number,
+): void {
+  const step = state.planExecution.targets
+    .find((target) => target.targetId === targetId)
+    ?.steps.find((candidate) => candidate.kind === "review-refine");
+  if (!step || step.status !== "in_progress") {
+    throw designWorkflowError(
+      "plan_review_step_invalid",
+      `Target ${targetId} cannot be verified before its review Plan step is active`,
+    );
+  }
+  step.status = "completed";
+  step.completedRevision = revision;
+  activateNextPlanStep(state, revision);
 }
 
 function explicitlyRequestsSingleRaster(value: string): boolean {

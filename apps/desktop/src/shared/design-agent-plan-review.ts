@@ -104,9 +104,14 @@ export type DesignPlanTarget = {
   artboard: DesignPlanArtboard;
   composition: DesignPlanComposition;
   editableLayers: string[];
-  implementationSteps: string[];
+  implementationSteps: DesignPlanImplementationStep[];
   validationChecks: string[];
   qualityProfile: DesignTargetQualityProfile;
+};
+
+export type DesignPlanImplementationStep = {
+  stepId: string;
+  label: string;
 };
 
 export type DesignPlanVisualSystem = {
@@ -371,14 +376,29 @@ const DESIGN_PLAN_TARGET_BASE_SCHEMA = {
     },
     implementationSteps: {
       type: "array",
-      minItems: 2,
+      minItems: 1,
       maxItems: 16,
       items: {
-        type: "string",
-        minLength: 1,
-        maxLength: 500,
-        pattern: "\\S",
+        type: "object",
+        properties: {
+          stepId: {
+            type: "string",
+            minLength: 1,
+            maxLength: 128,
+            pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          },
+          label: {
+            type: "string",
+            minLength: 1,
+            maxLength: 500,
+            pattern: "\\S",
+          },
+        },
+        required: ["stepId", "label"],
+        additionalProperties: false,
       },
+      description:
+        "Ordered material implementation steps with stable IDs. Steps execute serially; keep them coarse enough that each one can be completed by a bounded set of real design writes. Visual review and refinement are appended and owned by the host, so do not include them here.",
     },
     validationChecks: {
       type: "array",
@@ -924,6 +944,7 @@ function refineDesignPlan(
   const targetIds = new Map<string, string>();
   const documentNodeIds = new Map<string, string>();
   for (const [targetIndex, target] of input.targets.entries()) {
+    const implementationStepIds = new Map<string, string>();
     registerPlanId(
       targetIds,
       target.targetId,
@@ -939,6 +960,16 @@ function refineDesignPlan(
       "design_plan.duplicate_document_node_id",
       "Frame or region node ID",
       issues,
+    );
+    target.implementationSteps.forEach((step, stepIndex) =>
+      registerPlanId(
+        implementationStepIds,
+        step.stepId,
+        `/targets/${targetIndex}/implementationSteps/${stepIndex}/stepId`,
+        "design_plan.duplicate_implementation_step_id",
+        "Implementation step ID",
+        issues,
+      ),
     );
   }
 

@@ -11,6 +11,36 @@ import {
 } from "./design-plan-registration.js";
 
 describe("current Design Plan amendments", () => {
+  it("removes an omitted pending target instead of reactivating a ghost step", () => {
+    const initialPlan = plan();
+    const initial = registerDesignWorkflowPlan({
+      inspection: inspectedExistingDesign(),
+      plan: initialPlan,
+    });
+    const retained = initialPlan.targets[0];
+    if (!retained) throw new Error("Home target is missing");
+
+    const amended = registerDesignWorkflowPlan({
+      existing: initial.state,
+      inspection: inspectedExistingDesign(),
+      plan: {
+        ...initialPlan,
+        targets: [retained],
+        briefFidelity: {
+          ...initialPlan.briefFidelity,
+          requiredContent: ["Existing Home navigation and content"],
+        },
+      },
+    });
+
+    expect(amended.state.targetsById.has("target_profile")).toBe(false);
+    expect(amended.state.targetOrder).toEqual(["target_home"]);
+    expect(amended.state.planExecution.targets).toHaveLength(1);
+    expect(amended.state.planExecution.targets[0]?.targetId).toBe(
+      "target_home",
+    );
+  });
+
   it("rejects new allocation roots that cover existing Page artwork", () => {
     const input = plan();
     input.targets[0] = {
@@ -65,7 +95,7 @@ describe("current Design Plan amendments", () => {
       inspection: inspectedExistingDesign(),
       plan: plan(),
       recoverableDelivery: {
-        version: 3,
+        version: 4,
         targets: [
           {
             targetId: "target_home",
@@ -486,7 +516,13 @@ function plan(): DesignPlanToolInput {
           spacingRhythm: "4/8/16/24 px rhythm",
         },
         editableLayers: ["Navigation", "Content"],
-        implementationSteps: ["Refine hierarchy", "Verify component intent"],
+        implementationSteps: [
+          { stepId: "refine_hierarchy", label: "Refine hierarchy" },
+          {
+            stepId: "verify_component_intent",
+            label: "Verify component intent",
+          },
+        ],
         validationChecks: ["Check hierarchy", "Check component identity"],
         qualityProfile: {
           kind: "ui",

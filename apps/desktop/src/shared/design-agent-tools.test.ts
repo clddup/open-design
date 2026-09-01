@@ -1246,9 +1246,12 @@ describe("design Agent tool contract", () => {
       },
       editableLayers: ["Navigation", "Charts", "Inspector"],
       implementationSteps: [
-        "Create the artboard",
-        "Build the hierarchy",
-        "Add interaction states",
+        { stepId: `create_artboard_${suffix}`, label: "Create the artboard" },
+        { stepId: `build_hierarchy_${suffix}`, label: "Build the hierarchy" },
+        {
+          stepId: `add_interaction_states_${suffix}`,
+          label: "Add interaction states",
+        },
       ],
       validationChecks: ["Check hierarchy", "Check density", "Check focus"],
       qualityProfile: {

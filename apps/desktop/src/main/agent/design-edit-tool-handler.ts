@@ -109,6 +109,7 @@ export async function handleEditDesignTool(input: {
       nodeInput,
       authorization,
       result.designRevision?.revision,
+      result.content,
     );
   }
   coordinator.recordMaterialDesignWriteCompleted(

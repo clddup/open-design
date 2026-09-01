@@ -167,6 +167,7 @@ export async function handleDesignFirstSliceTool(
     resolvedApply,
     authorization,
     applied.designRevision?.revision,
+    applied.content,
   );
 
   const rendererContent = isRecord(applied.content) ? applied.content : {};

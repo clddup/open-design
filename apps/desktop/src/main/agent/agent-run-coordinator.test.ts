@@ -279,7 +279,7 @@ describe("AgentRunCoordinator", () => {
       toolCallId: "inspect_1",
       result: {
         unfinishedDelivery: {
-          version: 3,
+          version: 4,
           activeTargetId: "target_1",
           targets: [
             {

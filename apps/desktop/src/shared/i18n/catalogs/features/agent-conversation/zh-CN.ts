@@ -151,6 +151,7 @@ export const agentConversationMessages = {
   "agent.planStepActive": "执行中",
   "agent.planStepCompleted": "已完成",
   "agent.planStepFailed": "失败",
+  "agent.planStepReviewRefine": "审查实际渲染并按需优化",
   "agent.reviewingDesign": "正在审查渲染结果",
   "agent.visualReviewReady": "视觉审查已记录",
   "agent.checkpointingDesign": "正在应用并检查设计",

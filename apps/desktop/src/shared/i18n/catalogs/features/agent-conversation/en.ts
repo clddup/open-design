@@ -165,6 +165,8 @@ export const agentConversationMessages = {
   "agent.planStepActive": "In progress",
   "agent.planStepCompleted": "Completed",
   "agent.planStepFailed": "Failed",
+  "agent.planStepReviewRefine":
+    "Review the rendered result and refine if needed",
   "agent.reviewingDesign": "Reviewing rendered design",
   "agent.visualReviewReady": "Visual review recorded",
   "agent.checkpointingDesign": "Applying and checking the design",

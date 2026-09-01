@@ -830,7 +830,11 @@ function projectLiveEvents(
         time: t("common.done"),
         title: toolTitle(existing?.toolName ?? "", "done", t),
       });
-      const plan = projectDesignPlanTimeline(existing?.toolName, event.result);
+      const plan = projectDesignPlanTimeline(
+        existing?.toolName,
+        event.result,
+        t,
+      );
       if (plan) {
         update(
           `plan:${event.toolCallId}`,
@@ -971,7 +975,7 @@ function projectDurablePlans(
 ): AgentTimelineItem[] {
   return timeline.flatMap((item) => {
     if (item.type !== "tool" || item.status !== "completed") return [];
-    const plan = projectDesignPlanTimeline(item.toolName, item.result);
+    const plan = projectDesignPlanTimeline(item.toolName, item.result, t);
     if (!plan) return [];
     return [
       {

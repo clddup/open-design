@@ -192,7 +192,7 @@ describe("Agent run experience projection", () => {
 
 function delivery(firstStatus: "drafted") {
   return {
-    version: 3 as const,
+    version: 4 as const,
     targets: [
       {
         targetId: "home",

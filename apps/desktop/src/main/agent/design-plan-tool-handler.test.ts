@@ -288,7 +288,10 @@ function target(targetId: string, label: string, frameId: string, x: number) {
       spacingRhythm: "8px rhythm",
     },
     editableLayers: ["Navigation", "Content"],
-    implementationSteps: ["Build navigation", "Build content"],
+    implementationSteps: [
+      { stepId: "build_navigation", label: "Build navigation" },
+      { stepId: "build_content", label: "Build content" },
+    ],
     validationChecks: ["Check hierarchy", "Check spacing"],
     qualityProfile: {
       kind: "ui" as const,

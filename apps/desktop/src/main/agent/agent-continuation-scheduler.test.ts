@@ -21,7 +21,7 @@ function request(
 }
 
 const incomplete: DesignDeliveryLedger = {
-  version: 3,
+  version: 4,
   activeTargetId: "target_1",
   targets: [
     {

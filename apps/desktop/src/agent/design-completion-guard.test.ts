@@ -172,7 +172,7 @@ function expectBlocked(
 function deliveryResult(profileStatus: "pending" | "verified") {
   return {
     delivery: {
-      version: 3,
+      version: 4,
       targets: [
         {
           targetId: "target_home",
@@ -213,6 +213,70 @@ function deliveryResult(profileStatus: "pending" | "verified") {
             },
       ],
       activeTargetId: profileStatus === "verified" ? null : "target_profile",
+      planExecution: {
+        planRevision: 1,
+        targets: [
+          {
+            targetId: "target_home",
+            steps: [
+              {
+                stepId: "home_content",
+                label: "Build Home",
+                kind: "implementation",
+                status: "completed",
+                startedRevision: 4,
+                completedRevision: 5,
+              },
+              {
+                stepId: "target_home.review-refine",
+                label: "Review and refine Home",
+                kind: "review-refine",
+                status: "completed",
+                startedRevision: 5,
+                completedRevision: 6,
+              },
+            ],
+          },
+          {
+            targetId: "target_profile",
+            steps:
+              profileStatus === "verified"
+                ? [
+                    {
+                      stepId: "profile_content",
+                      label: "Build Profile",
+                      kind: "implementation",
+                      status: "completed",
+                      startedRevision: 6,
+                      completedRevision: 7,
+                    },
+                    {
+                      stepId: "target_profile.review-refine",
+                      label: "Review and refine Profile",
+                      kind: "review-refine",
+                      status: "completed",
+                      startedRevision: 7,
+                      completedRevision: 8,
+                    },
+                  ]
+                : [
+                    {
+                      stepId: "profile_content",
+                      label: "Build Profile",
+                      kind: "implementation",
+                      status: "in_progress",
+                      startedRevision: 6,
+                    },
+                    {
+                      stepId: "target_profile.review-refine",
+                      label: "Review and refine Profile",
+                      kind: "review-refine",
+                      status: "pending",
+                    },
+                  ],
+          },
+        ],
+      },
     },
   };
 }
@@ -220,6 +284,63 @@ function deliveryResult(profileStatus: "pending" | "verified") {
 describe("design completion guard", () => {
   it("allows non-material conversations to finish normally", () => {
     expect(reviewDesignCompletion(context([]))).toEqual({ allow: true });
+  });
+
+  it("blocks Run completion while the Main Plan ledger has an unfinished step", () => {
+    const result = reviewDesignCompletion(
+      context([
+        {
+          ...finalCapture,
+          toolCallId: "capture_plan_incomplete",
+          result: {
+            delivery: {
+              version: 4,
+              targets: [
+                {
+                  targetId: "target_home",
+                  label: "Home",
+                  pageId: "page_1",
+                  rootNodeId: "frame_home",
+                  reservedNodeIds: ["frame_home"],
+                  status: "drafted",
+                  allocatedRevision: 4,
+                  draftRevision: 5,
+                },
+              ],
+              activeTargetId: "target_home",
+              planExecution: {
+                planRevision: 1,
+                targets: [
+                  {
+                    targetId: "target_home",
+                    steps: [
+                      {
+                        stepId: "build_content",
+                        label: "Build content",
+                        kind: "implementation",
+                        status: "in_progress",
+                        startedRevision: 4,
+                      },
+                      {
+                        stepId: "target_home.review-refine",
+                        label: "Review and refine",
+                        kind: "review-refine",
+                        status: "pending",
+                      },
+                    ],
+                  },
+                ],
+              },
+            },
+          },
+        },
+      ]),
+    );
+
+    expect(result.allow).toBe(false);
+    if (result.allow) throw new Error("Expected incomplete Plan rejection");
+    expect(result.message).toContain("build_content");
+    expect(result.message).toContain("do not skip pending steps");
   });
 
   it("requires and enforces a user-confirmed scope for a broad brief", () => {
@@ -265,6 +386,8 @@ describe("design completion guard", () => {
       deliveryResult("verified").delivery,
     );
     firstStageDelivery.targets = firstStageDelivery.targets.slice(0, 1);
+    firstStageDelivery.planExecution.targets =
+      firstStageDelivery.planExecution.targets.slice(0, 1);
     firstStageDelivery.activeTargetId = null;
     const nextStage = reviewDesignCompletion(
       context(
@@ -352,7 +475,7 @@ describe("design completion guard", () => {
     allocatedScope.result = {
       ...(allocatedScope.result as Record<string, unknown>),
       delivery: {
-        version: 3,
+        version: 4,
         targets: [
           {
             targetId: "target_home",
@@ -442,7 +565,7 @@ describe("design completion guard", () => {
           result: { unfinishedDelivery: unfinished },
         },
       ],
-      "1/2 verified",
+      "profile_content",
     );
   });
 
@@ -613,7 +736,7 @@ describe("design completion guard", () => {
         refinementWrite,
         firstTargetVerified,
       ],
-      "1/2 verified",
+      "profile_content",
     );
     const allTargetsVerified = {
       ...finalCapture,

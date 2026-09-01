@@ -311,7 +311,10 @@ function planInput(): Omit<DesignPlanToolInput, "skillRefs"> {
           spacingRhythm: "8/12/20/32 px progression",
         },
         editableLayers: ["Brand context", "Authentication form"],
-        implementationSteps: ["Build hierarchy", "Author form controls"],
+        implementationSteps: [
+          { stepId: "build_hierarchy", label: "Build hierarchy" },
+          { stepId: "author_form_controls", label: "Author form controls" },
+        ],
         validationChecks: ["Check safe area", "Check form target sizes"],
         qualityProfile: {
           kind: "ui",

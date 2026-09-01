@@ -540,7 +540,10 @@ function target(
       spacingRhythm: "4/8/16/24 px rhythm",
     },
     editableLayers: ["Navigation", "Content"],
-    implementationSteps: ["Build hierarchy", "Add content"],
+    implementationSteps: [
+      { stepId: "build_hierarchy", label: "Build hierarchy" },
+      { stepId: "add_content", label: "Add content" },
+    ],
     validationChecks: ["Check hierarchy", "Check component identity"],
     qualityProfile: {
       kind: "ui",
