@@ -14,8 +14,14 @@ describe("canonicalUserMessage", () => {
     ]);
 
     const [textBlock, imageBlock] = message.content;
-    expect(textBlock?.type).toBe("text");
-    if (textBlock?.type !== "text") throw new Error("Expected text block");
+    if (
+      typeof textBlock !== "object" ||
+      textBlock === null ||
+      textBlock.type !== "text"
+    ) {
+      throw new Error("Expected text block");
+    }
+    expect(textBlock.type).toBe("text");
     expect(textBlock.text).toContain(`attachmentId=${attachmentId}`);
     expect(imageBlock).toMatchObject({ type: "image_ref", attachmentId });
   });
