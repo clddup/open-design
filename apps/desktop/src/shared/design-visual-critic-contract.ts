@@ -6,8 +6,6 @@ import {
 } from "@opendesign/design-contracts";
 import { defineContract } from "./contract-validation";
 
-export type DesignVisualCriticPhase = "draft" | "final";
-
 export type DesignVisualCriticVerdict<CriterionId extends string = string> = {
   summary: string;
   criteria: Record<
@@ -19,7 +17,7 @@ export type DesignVisualCriticVerdict<CriterionId extends string = string> = {
 
 export function createDesignVisualCriticVerdictContract<
   CriterionId extends string,
->(criterionIds: readonly CriterionId[], phase: DesignVisualCriticPhase) {
+>(criterionIds: readonly CriterionId[]) {
   const criterionSchema = {
     type: "object",
     properties: {
@@ -35,6 +33,8 @@ export function createDesignVisualCriticVerdictContract<
         minLength: 8,
         maxLength: 500,
         pattern: "\\S",
+        description:
+          "A required material change. Omit when this criterion is already delivery-ready.",
       },
     },
     required: ["score", "evidence"],
@@ -59,7 +59,7 @@ export function createDesignVisualCriticVerdictContract<
       },
       refinements: {
         type: "array",
-        minItems: phase === "draft" ? 2 : 0,
+        minItems: 0,
         maxItems: 12,
         items: {
           type: "string",
@@ -78,7 +78,7 @@ export function createDesignVisualCriticVerdictContract<
     subject: "independent visual critic verdict",
     maximum: 64,
     recovery:
-      "Submit one complete scorecard containing exactly every required criterion and actionable draft refinements.",
+      "Submit one complete scorecard containing exactly every required criterion and only material refinements that block delivery readiness.",
   });
 }
 

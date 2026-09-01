@@ -6,10 +6,10 @@ import {
 
 describe("independent visual critic contracts", () => {
   it("uses the same dynamic schema for Provider disclosure and Runtime parsing", () => {
-    const contract = createDesignVisualCriticVerdictContract(
-      ["visual-thesis", "craft-precision"] as const,
-      "draft",
-    );
+    const contract = createDesignVisualCriticVerdictContract([
+      "visual-thesis",
+      "craft-precision",
+    ] as const);
 
     expect(JSON.stringify(contract.schema)).toContain(
       '"required":["visual-thesis","craft-precision"]',

@@ -99,10 +99,7 @@ export async function runIndependentDesignVisualCritic(
   signal: AbortSignal,
 ): Promise<DesignVisualCriticResult> {
   const criterionIds = criticCriteria(context.plan);
-  const verdictContract = createDesignVisualCriticVerdictContract(
-    criterionIds,
-    context.phase,
-  );
+  const verdictContract = createDesignVisualCriticVerdictContract(criterionIds);
   const logoDirectionCriteria = logoDirectionCriterionContracts(context.plan);
   const attemptId =
     `visual_critic_${context.runId}_${context.observedRevision}`.slice(0, 220);
@@ -119,8 +116,9 @@ export async function runIndependentDesignVisualCritic(
       system: [
         "You are OpenDesign's stateless independent visual delivery critic.",
         "You did not author this design. You receive no author conversation, reasoning, tool history, or self-review. Judge only the user brief, frozen target contract, and exact-revision capture.",
-        "Call the critique tool exactly once. Do not answer with prose. Scores are integers from 1 (unacceptable) to 5 (delivery quality). Attractive presentation cannot compensate for a failed criterion.",
-        "At final phase, use pass only when every criterion is independently delivery-ready. At draft phase, identify the most consequential real defects, not invented praise or minor filler.",
+        "Call the critique tool exactly once. Do not answer with prose. Score anchors: 1 is broken or unusable; 2 has major defects; 3 is coherent but visibly not delivery-ready; 4 is delivery-ready with no material change required; 5 is exceptional. Attractive presentation cannot compensate for a failed criterion.",
+        "Judge visible pixels before labels or rationale. A refinement means a material change is still required, so never attach one to a delivery-ready score. Omit optional nice-to-have polish. At either phase, pass-quality evidence requires every criterion to be independently ready; a first draft may pass honestly, and a final capture with unresolved refinements must fail.",
+        "For UI, score glance-legibility, composition, typography, template-avoidance, and craft at 3 or lower when the task area is visually subordinate to decoration, important copy loses contrast, or generic gradients, light beams, rings, HUD lines, and floating panels carry the composition without product-specific behavior.",
         "For every logo-concept-*-quality criterion, judge that declared direction independently. It must have an ownable silhouette, visibly intentional construction, controlled contour or counterform, recognition at 32/24/16 px, anti-template originality, and visible agreement with its thesis. A caption cannot rescue an arbitrary shape, and stronger sibling concepts cannot compensate for one filler direction.",
         "For Logo color, treat monochrome as a required stress test rather than the default primary identity. brand-color-system fails when the main mark is only black/white/gray without an explicitly monochrome-only user brief, when color is decorative rather than semantic, or when light/dark adaptation is not visible. color-system-divergence requires explored directions to make materially different color decisions, not hue swaps. app-icon-ecosystem-distinction requires ownable color and optical weight among real macOS/Windows app icons.",
         "When visual references are supplied, the first image is always the delivery capture and later images are the authorized references named in the JSON contract. Judge the declared transferable decisions and avoidances; do not demand literal copying or confuse a content asset with a style reference.",
@@ -134,25 +132,13 @@ export async function runIndependentDesignVisualCritic(
           content: [
             {
               type: "text",
-              text: JSON.stringify({
-                phase: context.phase,
-                observedRevision: context.observedRevision,
-                userRequest: context.userRequest,
-                deliverable: context.plan.deliverable,
-                objective: context.plan.objective,
-                target: context.target,
-                visualSystem: context.plan.visualSystem,
-                briefFidelity: context.plan.briefFidelity,
-                designIntent: context.plan.designIntent,
-                referenceStrategy: context.plan.referenceStrategy,
-                deliveryCaptureAttachmentId: context.attachment.attachmentId,
-                visualReferenceAttachmentIds: context.referenceAttachments.map(
-                  (attachment) => attachment.attachmentId,
+              text: JSON.stringify(
+                criticEvidenceContract(
+                  context,
+                  criterionIds,
+                  logoDirectionCriteria,
                 ),
-                logoExploration: context.plan.logoExploration,
-                logoDirectionCriteria,
-                requiredCriteria: criterionIds,
-              }),
+              ),
             },
             { type: "image_ref", ...context.attachment },
             ...context.referenceAttachments.map((attachment) => ({
@@ -210,36 +196,14 @@ export async function runIndependentDesignVisualCritic(
         scoreValues.length) *
         100,
     ) / 100;
-  const criticalIds =
-    context.plan.deliverable === "logo"
-      ? new Set<CriticCriterionId>([
-          "concept-divergence",
-          "black-silhouette",
-          "counterform-contour",
-          "small-size-recognition",
-          "brand-color-system",
-          "app-icon-optical-redraw",
-          "app-icon-ecosystem-distinction",
-          "color-system-divergence",
-          "template-avoidance",
-        ])
-      : new Set<CriticCriterionId>([
-          "visual-thesis",
-          "signature-motif",
-          "glance-legibility",
-          "template-avoidance",
-        ]);
-  for (const direction of logoDirectionCriteria) {
-    criticalIds.add(direction.criterionId);
-  }
-  if (criterionIds.includes(REFERENCE_CRITERION)) {
-    criticalIds.add(REFERENCE_CRITERION);
-  }
   const failedCriteria = criterionIds.filter((id) => {
-    const score = verdict.criteria[id].score;
-    return score < (criticalIds.has(id) ? 4 : 3);
+    const criterion = verdict.criteria[id];
+    return criterion.score < 4 || criterion.refinement !== undefined;
   });
-  const passed = failedCriteria.length === 0 && averageScore >= 3.5;
+  const passed =
+    failedCriteria.length === 0 &&
+    verdict.refinements.length === 0 &&
+    averageScore >= 4;
   const refinements = uniqueText([
     ...failedCriteria.map(
       (id) =>
@@ -263,6 +227,42 @@ export async function runIndependentDesignVisualCritic(
     review: passed
       ? null
       : toLedgerVisualReview(context.plan, verdict, refinements),
+  };
+}
+
+function criticEvidenceContract(
+  context: DesignVisualCriticContext,
+  requiredCriteria: readonly CriticCriterionId[],
+  logoDirectionCriteria: ReturnType<typeof logoDirectionCriterionContracts>,
+) {
+  const logoEvidence =
+    context.plan.deliverable === "logo"
+      ? {
+          logoExploration: context.plan.logoExploration,
+          logoDirectionCriteria,
+        }
+      : {};
+  return {
+    phase: context.phase,
+    observedRevision: context.observedRevision,
+    userRequest: context.userRequest,
+    deliverable: context.plan.deliverable,
+    objective: context.plan.objective,
+    target: {
+      targetId: context.target.targetId,
+      label: context.target.label,
+      objective: context.target.objective,
+      qualityProfile: context.target.qualityProfile,
+    },
+    briefFidelity: context.plan.briefFidelity,
+    calibration: context.plan.designIntent.calibration,
+    referenceStrategy: context.plan.referenceStrategy,
+    deliveryCaptureAttachmentId: context.attachment.attachmentId,
+    visualReferenceAttachmentIds: context.referenceAttachments.map(
+      (attachment) => attachment.attachmentId,
+    ),
+    ...logoEvidence,
+    requiredCriteria,
   };
 }
 

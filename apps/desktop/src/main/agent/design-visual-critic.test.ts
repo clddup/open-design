@@ -56,6 +56,8 @@ const singleMarkCriterionIds = [
   "brand-color-system",
 ] as const;
 
+const genericCriterionIds = criterionIds.slice(0, 9);
+
 describe("independent design visual critic", () => {
   it("blocks a generic Logo when one non-compensating critical score fails", async () => {
     let capturedRequest: Omit<ModelRequest, "signal"> | undefined;
@@ -292,22 +294,17 @@ describe("independent design visual critic", () => {
     ).rejects.toThrow("Independent critic did not submit");
   });
 
-  it("requires actionable draft refinements and the exact JPEG attachment shape", async () => {
-    await expect(
-      runIndependentDesignVisualCritic(
-        {
-          complete: (request) =>
-            Promise.resolve(
-              responseEvents(request.attemptId, {
-                ...scorecard(4),
-                refinements: [],
-              }),
-            ),
-        },
-        criticContext("draft"),
-        new AbortController().signal,
-      ),
-    ).rejects.toThrow("design_visual_critic.schema_invalid at /refinements");
+  it("allows an honestly ready first draft and requires the exact JPEG attachment shape", async () => {
+    const result = await runIndependentDesignVisualCritic(
+      {
+        complete: (request) =>
+          Promise.resolve(responseEvents(request.attemptId, scorecard(4))),
+      },
+      criticContext("draft"),
+      new AbortController().signal,
+    );
+
+    expect(result.passed).toBe(true);
 
     expect(
       requireDesignVisualCriticAttachment({
@@ -349,6 +346,77 @@ describe("independent design visual critic", () => {
     ).toThrow(
       "design_visual_critic.capture_schema_invalid at /attachment/filePath",
     );
+  });
+
+  it("does not pass a scorecard that still requests material refinements", async () => {
+    const unresolved = scorecard(4);
+    unresolved.criteria["template-avoidance"] = {
+      score: 4,
+      evidence:
+        "The layout is coherent but the dominant light beam remains a generic technology template device.",
+      refinement:
+        "Replace the generic light beam with a product-specific spatial relationship.",
+    };
+    unresolved.refinements = [
+      "Replace the generic light beam with a product-specific spatial relationship.",
+    ];
+
+    const result = await runIndependentDesignVisualCritic(
+      {
+        complete: (request) =>
+          Promise.resolve(responseEvents(request.attemptId, unresolved)),
+      },
+      criticContext("final"),
+      new AbortController().signal,
+    );
+
+    expect(result).toMatchObject({
+      passed: false,
+      averageScore: 4,
+      failedCriteria: ["template-avoidance"],
+    });
+  });
+
+  it("judges ordinary UI from the brief and capture without author rationale", async () => {
+    const context = criticContext("final");
+    context.plan.deliverable = "ui";
+    delete context.plan.logoOutputs;
+    delete context.plan.logoExploration;
+    let capturedRequest: Omit<ModelRequest, "signal"> | undefined;
+
+    await runIndependentDesignVisualCritic(
+      {
+        complete: (request) => {
+          capturedRequest = request;
+          return Promise.resolve(
+            responseEvents(
+              request.attemptId,
+              scorecardFor(genericCriterionIds, 4),
+            ),
+          );
+        },
+      },
+      context,
+      new AbortController().signal,
+    );
+
+    const message = capturedRequest?.messages[0];
+    if (message?.role !== "user" || !Array.isArray(message.content)) {
+      throw new Error("Critic UI request is missing multimodal content");
+    }
+    const evidence = message.content.find((block) => block.type === "text");
+    if (evidence?.type !== "text") {
+      throw new Error("Critic UI request is missing evidence JSON");
+    }
+    const parsed = JSON.parse(evidence.text) as Record<string, unknown>;
+    expect(parsed).toMatchObject({
+      userRequest: context.userRequest,
+      deliverable: "ui",
+      calibration: context.plan.designIntent.calibration,
+      deliveryCaptureAttachmentId: context.attachment.attachmentId,
+    });
+    expect(parsed).not.toHaveProperty("designIntent");
+    expect(parsed).not.toHaveProperty("visualSystem");
   });
 
   it("reviews declared visual references as a non-compensating criterion", async () => {
@@ -446,10 +514,7 @@ function scorecardFor(
         },
       ]),
     ),
-    refinements: [
-      "Tighten the most visually consequential spacing relationship.",
-      "Strengthen one visible identifying detail without adding decoration.",
-    ],
+    refinements: [],
   };
 }
 

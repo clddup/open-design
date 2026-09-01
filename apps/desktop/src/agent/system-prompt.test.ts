@@ -74,6 +74,9 @@ describe("OpenDesign Agent system prompt", () => {
       "inspection.document.componentCatalog",
     );
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain("linked Instances");
+    expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
+      "never use a fixed acknowledgement",
+    );
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT.length).toBeLessThan(17_000);
   });
 
