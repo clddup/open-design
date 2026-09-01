@@ -8,6 +8,7 @@
     "./boolean-resolver": "./src/boolean-resolver.ts",
     "./browser-vector-path": "./src/browser-vector-path.ts",
     "./editable-vector": "./src/editable-vector.ts",
+    "./line-endpoint": "./src/line-endpoint.ts",
     "./regular-shape": "./src/regular-shape.ts",
     "./vector-materialization": "./src/vector-materialization.ts",
     "./vector-edit": "./src/vector-edit.ts",

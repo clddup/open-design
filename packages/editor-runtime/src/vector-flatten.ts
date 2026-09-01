@@ -10,6 +10,7 @@ import type {
   Transform,
   VectorNetwork,
 } from "@opendesign/design-contracts";
+import { resolveLineEndpointPoint } from "@opendesign/design-contracts";
 import {
   createBooleanGeometryResolver,
   type BooleanGeometryResolution,
@@ -24,8 +25,13 @@ import {
   mergeVectorNetworks,
   outlineVectorNetworkStroke,
   outlineVectorPath,
+  type VectorOutlineOptions,
 } from "@opendesign/geometry-service/vector-materialization";
-import type { VectorGeometryProvider } from "@opendesign/geometry-service/vector-path";
+import { resolveLineEndpointVisiblePath } from "@opendesign/geometry-service/line-endpoint";
+import type {
+  VectorGeometryProvider,
+  VectorPathInput,
+} from "@opendesign/geometry-service/vector-path";
 import { materializeNodeStyle } from "@opendesign/style-service";
 import { planDeleteNodes } from "./deletion-operations.js";
 import { multiplyTransforms } from "./geometry.js";
@@ -511,28 +517,27 @@ function flattenStrokeNetwork(
     width: node.properties.strokeWidth,
   } as const;
   const sourcePath = { path: source.path, fillRule: source.fillRule } as const;
-  const outlined =
-    "network" in node.properties
-      ? outlineVectorNetworkStroke(
-          node.properties.network,
-          sourcePath,
-          outlineOptions,
-          provider,
-          `${idPrefix}_local`,
-        )
-      : outlineVectorPath(
-          sourcePath,
-          outlineOptions,
-          provider,
-          `${idPrefix}_local`,
-        );
+  const outlined = outlineFlattenStroke(
+    node,
+    sourcePath,
+    outlineOptions,
+    provider,
+    idPrefix,
+  );
   if (!outlined.ok) return failure("invalid-geometry", outlined.message);
   const serialized = serializeVectorNetwork(outlined.network);
   if (!serialized.ok) {
     return failure("invalid-geometry", "Stroke outline is invalid");
   }
-  return materializePaintedPath(
+  const visiblePath = combineLineEndpointGeometry(
+    node,
     serialized.path,
+    outlineOptions,
+    provider,
+  );
+  if (!visiblePath.ok) return visiblePath;
+  return materializePaintedPath(
+    visiblePath.path,
     "nonzero",
     node.transform,
     node.properties.strokes,
@@ -540,6 +545,68 @@ function flattenStrokeNetwork(
     provider,
     idPrefix,
   );
+}
+
+function outlineFlattenStroke(
+  node: FlattenSourceNode,
+  sourcePath: {
+    readonly fillRule: "evenodd" | "nonzero";
+    readonly path: string;
+  },
+  options: VectorOutlineOptions,
+  provider: VectorGeometryProvider,
+  idPrefix: string,
+) {
+  return "network" in node.properties
+    ? outlineVectorNetworkStroke(
+        node.properties.network,
+        sourcePath,
+        options,
+        provider,
+        `${idPrefix}_local`,
+      )
+    : outlineVectorPath(sourcePath, options, provider, `${idPrefix}_local`);
+}
+
+function combineLineEndpointGeometry(
+  node: FlattenSourceNode,
+  strokePath: string,
+  options: VectorOutlineOptions,
+  provider: VectorGeometryProvider,
+): { ok: true; path: string } | FlattenFailure {
+  if (
+    node.kind !== "line" ||
+    (node.properties.startEndpoint === "none" &&
+      node.properties.endEndpoint === "none")
+  ) {
+    return { ok: true, path: strokePath };
+  }
+  const start = resolveLineEndpointPoint(node.size, node.properties.start);
+  const end = resolveLineEndpointPoint(node.size, node.properties.end);
+  const paths: VectorPathInput[] = [{ path: strokePath, fillRule: "nonzero" }];
+  for (const position of ["start", "end"] as const) {
+    const endpoint =
+      position === "start"
+        ? node.properties.startEndpoint
+        : node.properties.endEndpoint;
+    if (endpoint === "none") continue;
+    const resolved = resolveLineEndpointVisiblePath({
+      endpoint,
+      lineEnd: end,
+      lineStart: start,
+      position,
+      provider,
+      strokeCap: options.cap,
+      strokeJoin: options.join,
+      strokeWidth: options.width,
+    });
+    if (!resolved.ok) return failure("invalid-geometry", resolved.message);
+    paths.push({ path: resolved.path, fillRule: resolved.fillRule });
+  }
+  const combined = provider.combine(paths, "union");
+  return combined.ok
+    ? { ok: true, path: combined.path }
+    : failure("invalid-geometry", combined.message);
 }
 
 function materializePaintedPath(

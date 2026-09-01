@@ -1,7 +1,6 @@
 import {
   normalizeLineEndpoints,
   type DesignNode,
-  type LineEndpoint,
   type Rect,
   type Transform,
 } from "@opendesign/design-contracts";
@@ -39,6 +38,7 @@ import {
 import {
   collectSvgLineEndpointDefinitions,
   readSvgLineEndpoints,
+  type SvgLineEndpointDefinition,
 } from "./svg-line-endpoints.js";
 import { readSvgRegularShape } from "./svg-regular-shapes.js";
 import { readSvgText, svgTextShapeMatches } from "./svg-text.js";
@@ -71,10 +71,7 @@ interface ImportContext {
   idPrefix: string;
   issues: SvgInterchangeIssue[];
   maskDefinitions: ReadonlyMap<string, Element>;
-  markerDefinitions: ReadonlyMap<
-    string,
-    { element: Element; endpoint: LineEndpoint }
-  >;
+  markerDefinitions: ReadonlyMap<string, SvgLineEndpointDefinition>;
   nodeSequence: number;
   nodes: DesignNode[];
   rootStyle: ImportedSvgStyle;
@@ -976,6 +973,11 @@ function importElement(
       element,
       issues: context.issues,
       nodeId,
+      strokeCap:
+        properties.strokeCap === "round" || properties.strokeCap === "square"
+          ? properties.strokeCap
+          : "butt",
+      strokeJoin: properties.strokeJoin ?? "miter",
     });
     if (!endpoints) return null;
     const geometry = normalizeLineEndpoints(

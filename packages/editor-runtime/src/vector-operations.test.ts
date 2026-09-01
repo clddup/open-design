@@ -1,6 +1,8 @@
 import type {
   DesignDocument,
   ImageNode,
+  LineEndpoint,
+  LineNode,
   VectorNetwork,
   VectorNode,
 } from "@opendesign/design-contracts";
@@ -1393,42 +1395,158 @@ describe("vector editing runtime plans", () => {
     expect(runtime.getSnapshot().document.nodesById[image.id]).toBeDefined();
   });
 
-  it("rejects decorated Lines until exact endpoint outlines exist", () => {
-    const document = structuredClone(createWelcomeDocument());
-    const rectangle = document.nodesById.feature_one;
-    const parent = rectangle?.parentId
-      ? document.nodesById[rectangle.parentId]
-      : undefined;
-    if (!parent || rectangle?.kind !== "rectangle") {
-      throw new Error("Missing flatten rejection fixture");
-    }
-    const line = {
-      ...structuredClone(rectangle),
-      id: "decorated_line",
-      kind: "line" as const,
-      properties: {
-        fills: [],
-        strokes: rectangle.properties.fills,
-        strokeWidth: 4,
-        start: { x: 0, y: 0.5 },
-        end: { x: 1, y: 0.5 },
-        startEndpoint: "none" as const,
-        endEndpoint: "triangle-arrow" as const,
-      },
-    };
-    document.nodesById[line.id] = line;
-    line.parentId = parent.id;
-    parent.childIds.push(line.id);
+  it.each([
+    "line-arrow",
+    "triangle-arrow",
+    "reversed-triangle-arrow",
+    "circle",
+    "diamond",
+  ] as const)(
+    "flattens %s Line endpoints into editable geometry",
+    (endpoint) => {
+      const { document, line } = decoratedLineFixture({
+        id: `decorated_line_${endpoint}`,
+        endEndpoint: endpoint,
+      });
+      const plan = planFlattenNodes(
+        document,
+        "page_welcome",
+        [line.id],
+        `decorated_result_${endpoint}`,
+        `decorated_result_${endpoint}`,
+        geometry,
+      );
+      expect(plan.ok).toBe(true);
+      if (!plan.ok) return;
+      const runtime = new EditorRuntime(document);
+      expect(
+        runtime.apply({
+          transactionId: `flatten_${endpoint}`,
+          documentId: document.documentId,
+          baseRevision: document.revision,
+          actor: { type: "user", id: "local-user" },
+          label: `Flatten ${endpoint}`,
+          commands: [...plan.operations],
+        }),
+      ).toMatchObject({ ok: true });
+      const result = vectorNetworkFrom(runtime, `decorated_result_${endpoint}`);
+      expect(result.regions.length).toBeGreaterThan(0);
+      expect(result.regions.every((region) => region.fills?.length === 1)).toBe(
+        true,
+      );
+      expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
+    },
+  );
+
+  it("preserves dual endpoint Paint, dash semantics, transform, undo, and reopen", () => {
+    const { document, line } = decoratedLineFixture({
+      id: "dual_endpoint_line",
+      startEndpoint: "circle",
+      endEndpoint: "triangle-arrow",
+      diagonal: true,
+      dashPattern: [10, 6],
+    });
+    const plan = planFlattenNodes(
+      document,
+      "page_welcome",
+      [line.id],
+      "dual_endpoint_result",
+      "dual_endpoint_result",
+      geometry,
+    );
+    if (!plan.ok) throw new Error(plan.message);
+    const runtime = new EditorRuntime(document);
+    expect(
+      runtime.apply({
+        transactionId: "flatten_dual_endpoint",
+        documentId: document.documentId,
+        baseRevision: document.revision,
+        actor: { type: "user", id: "local-user" },
+        label: "Flatten dual endpoint Line",
+        commands: [...plan.operations],
+      }),
+    ).toMatchObject({
+      ok: true,
+      revision: { revision: document.revision + 1 },
+    });
+    const result =
+      runtime.getSnapshot().document.nodesById.dual_endpoint_result;
+    expect(result).toMatchObject({ kind: "vector", parentId: line.parentId });
+    const network = vectorNetworkFrom(runtime, "dual_endpoint_result");
+    expect(network.regions.length).toBeGreaterThan(0);
+    expect(network.vertices.length).toBeGreaterThan(8);
+    expect(network.regions.every((region) => region.fills?.length === 1)).toBe(
+      true,
+    );
+    const reopened = new EditorRuntime(
+      JSON.parse(JSON.stringify(runtime.getSnapshot().document)) as unknown,
+    );
+    expect(vectorNetworkFrom(reopened, "dual_endpoint_result")).toEqual(
+      network,
+    );
+    expect(runtime.undo()).toMatchObject({ ok: true, mode: "undo" });
+    expect(runtime.getSnapshot().document.nodesById[line.id]).toBeDefined();
+  });
+
+  it("rejects a zero-length decorated Line without creating a revision", () => {
+    const { document, line } = decoratedLineFixture({
+      id: "zero_length_endpoint_line",
+      startEndpoint: "diamond",
+      endEndpoint: "line-arrow",
+      zeroLength: true,
+    });
+    const revision = document.revision;
     expect(
       planFlattenNodes(
         document,
         "page_welcome",
         [line.id],
-        "decorated_result",
-        "decorated_result",
+        "zero_length_result",
+        "zero_length_result",
         geometry,
       ),
-    ).toMatchObject({ ok: false, code: "unsupported-topology" });
+    ).toMatchObject({ ok: false, code: "invalid-geometry" });
+    expect(document.revision).toBe(revision);
+    expect(document.nodesById.zero_length_result).toBeUndefined();
+  });
+
+  it("clips decorated Line geometry when flattening its containing Frame", () => {
+    const { document, line } = decoratedLineFixture({
+      id: "clipped_endpoint_line",
+      startEndpoint: "diamond",
+      endEndpoint: "triangle-arrow",
+    });
+    const frame = document.nodesById.frame_welcome;
+    if (!frame || frame.kind !== "frame") throw new Error("Missing Frame");
+    frame.childIds = [line.id];
+    frame.properties = { ...frame.properties, fills: [], strokes: [] };
+    line.parentId = frame.id;
+    line.transform = [1, 0, 0, 1, -2, 40];
+    document.nodesById = { [frame.id]: frame, [line.id]: line };
+    const plan = planFlattenNodes(
+      document,
+      "page_welcome",
+      [frame.id],
+      "clipped_endpoint_result",
+      "clipped_endpoint_result",
+      geometry,
+    );
+    if (!plan.ok) throw new Error(plan.message);
+    const runtime = new EditorRuntime(document);
+    expect(
+      runtime.apply({
+        transactionId: "flatten_clipped_endpoint",
+        documentId: document.documentId,
+        baseRevision: document.revision,
+        actor: { type: "user", id: "local-user" },
+        label: "Flatten clipped endpoint Line",
+        commands: [...plan.operations],
+      }),
+    ).toMatchObject({ ok: true });
+    const result =
+      runtime.getSnapshot().document.nodesById.clipped_endpoint_result;
+    expect(result?.transform[4]).toBeGreaterThanOrEqual(frame.transform[4]);
+    expect(result?.size.width).toBeLessThanOrEqual(frame.size.width);
   });
 
   it("flattens exact Text glyph outlines while preserving Paint and transform", () => {
@@ -3515,6 +3633,48 @@ function vectorNetworkFrom(
     throw new Error("Missing editable vector");
   }
   return node.properties.network;
+}
+
+function decoratedLineFixture(options: {
+  id: string;
+  endEndpoint: LineEndpoint;
+  startEndpoint?: LineEndpoint;
+  dashPattern?: readonly number[];
+  diagonal?: boolean;
+  zeroLength?: boolean;
+}): { document: DesignDocument; line: LineNode } {
+  const document = structuredClone(createWelcomeDocument());
+  const rectangle = document.nodesById.feature_one;
+  const parent = rectangle?.parentId
+    ? document.nodesById[rectangle.parentId]
+    : undefined;
+  if (!parent || rectangle?.kind !== "rectangle") {
+    throw new Error("Missing decorated Line fixture");
+  }
+  const line: LineNode = {
+    ...structuredClone(rectangle),
+    id: options.id,
+    kind: "line",
+    properties: {
+      fills: [],
+      strokes: rectangle.properties.fills,
+      strokeWidth: 4,
+      strokeAlign: "center",
+      strokeCap: "square",
+      strokeJoin: "bevel",
+      ...(options.dashPattern ? { dashPattern: [...options.dashPattern] } : {}),
+      start: { x: 0, y: options.diagonal ? 0 : 0.5 },
+      end: options.zeroLength
+        ? { x: 0, y: options.diagonal ? 0 : 0.5 }
+        : { x: 1, y: options.diagonal ? 1 : 0.5 },
+      startEndpoint: options.startEndpoint ?? "none",
+      endEndpoint: options.endEndpoint,
+    },
+  };
+  line.parentId = parent.id;
+  document.nodesById[line.id] = line;
+  parent.childIds.push(line.id);
+  return { document, line };
 }
 
 function worldVertex(

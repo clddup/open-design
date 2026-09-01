@@ -521,10 +521,16 @@ function applyExportLineEndpoints(
     if (endpoint === "none") return;
     const id = `od_line_marker_${++context.markerSequence}_${sanitizeSvgXmlId(node.id)}_${position}`;
     appendSvgLineEndpointDefinition({
+      cap:
+        node.properties.strokeCap === "round" ||
+        node.properties.strokeCap === "square"
+          ? node.properties.strokeCap
+          : "butt",
       definitions: context.definitions,
       document: context.document,
       endpoint,
       id,
+      join: node.properties.strokeJoin ?? "miter",
     });
     element.setAttribute(`marker-${position}`, `url(#${id})`);
   };

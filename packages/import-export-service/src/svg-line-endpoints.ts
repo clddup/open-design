@@ -1,4 +1,16 @@
 import type { LineEndpoint } from "@opendesign/design-contracts";
+import {
+  LINE_ENDPOINT_MARKER_SIZE,
+  LINE_ENDPOINT_MARKER_VIEW_BOX,
+  LINE_ENDPOINT_STROKE_WIDTH,
+  resolveLineEndpointGeometry,
+  serializeLineEndpointPath,
+  type PaintedLineEndpoint,
+} from "@opendesign/geometry-service/line-endpoint";
+import type {
+  VectorStrokeCap,
+  VectorStrokeJoin,
+} from "@opendesign/geometry-service/vector-path";
 import type { SvgInterchangeIssue } from "./svg-issues.js";
 
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
@@ -11,31 +23,43 @@ const ENDPOINTS = new Set<LineEndpoint>([
   "diamond",
 ]);
 
+export interface SvgLineEndpointDefinition {
+  cap: VectorStrokeCap;
+  element: Element;
+  endpoint: LineEndpoint;
+  join: VectorStrokeJoin;
+}
+
 export function appendSvgLineEndpointDefinition(options: {
+  cap: VectorStrokeCap;
   definitions: Element;
   document: Document;
   endpoint: Exclude<LineEndpoint, "none">;
   id: string;
+  join: VectorStrokeJoin;
 }): void {
-  const marker = createMarker(options.document, options.id, options.endpoint);
+  const marker = createMarker(
+    options.document,
+    options.id,
+    options.endpoint,
+    options.cap,
+    options.join,
+  );
   options.definitions.appendChild(marker);
 }
 
 export function collectSvgLineEndpointDefinitions(
   root: Element,
   issues: SvgInterchangeIssue[],
-): ReadonlyMap<string, { element: Element; endpoint: LineEndpoint }> {
-  const definitions = new Map<
-    string,
-    { element: Element; endpoint: LineEndpoint }
-  >();
+): ReadonlyMap<string, SvgLineEndpointDefinition> {
+  const definitions = new Map<string, SvgLineEndpointDefinition>();
   const pending = [root];
   while (pending.length > 0) {
     const element = pending.pop();
     if (!element) break;
     if (element.localName.toLowerCase() === "marker") {
-      const endpoint = readEndpoint(element);
-      if (endpoint) {
+      const definition = readEndpointDefinition(element);
+      if (definition) {
         const id = element.getAttribute("id")?.trim();
         if (!id || definitions.has(id)) {
           issues.push(
@@ -44,7 +68,7 @@ export function collectSvgLineEndpointDefinitions(
               element,
             ),
           );
-        } else if (!matchesMarker(element, endpoint)) {
+        } else if (!matchesMarker(element, definition)) {
           issues.push(
             issue(
               `OpenDesign SVG line endpoint marker #${id} was modified or is malformed`,
@@ -52,7 +76,7 @@ export function collectSvgLineEndpointDefinitions(
             ),
           );
         } else {
-          definitions.set(id, { element, endpoint });
+          definitions.set(id, { element, ...definition });
         }
       }
     }
@@ -62,13 +86,12 @@ export function collectSvgLineEndpointDefinitions(
 }
 
 export function readSvgLineEndpoints(options: {
-  definitions: ReadonlyMap<
-    string,
-    { element: Element; endpoint: LineEndpoint }
-  >;
+  definitions: ReadonlyMap<string, SvgLineEndpointDefinition>;
   element: Element;
   issues: SvgInterchangeIssue[];
   nodeId: string;
+  strokeCap: VectorStrokeCap;
+  strokeJoin: VectorStrokeJoin;
 }): { startEndpoint: LineEndpoint; endEndpoint: LineEndpoint } | null {
   const startEndpoint = readMarkerReference(options, "marker-start");
   const endEndpoint = readMarkerReference(options, "marker-end");
@@ -104,33 +127,52 @@ function readMarkerReference(
     );
     return null;
   }
+  if (
+    definition.cap !== options.strokeCap ||
+    definition.join !== options.strokeJoin
+  ) {
+    options.issues.push(
+      issue(
+        `SVG ${attribute} on ${options.nodeId} does not match the Line stroke cap and join`,
+        options.element,
+        options.nodeId,
+      ),
+    );
+    return null;
+  }
   return definition.endpoint;
 }
 
 function createMarker(
   document: Document,
   id: string,
-  endpoint: Exclude<LineEndpoint, "none">,
+  endpoint: PaintedLineEndpoint,
+  cap: VectorStrokeCap,
+  join: VectorStrokeJoin,
 ): Element {
   const marker = document.createElementNS(SVG_NAMESPACE, "marker");
-  setAttributes(marker, markerAttributes(id, endpoint));
-  const shape = endpointShape(document, endpoint);
+  setAttributes(marker, markerAttributes(id, endpoint, cap, join));
+  const shape = endpointShape(document, endpoint, cap, join);
   marker.appendChild(shape);
   return marker;
 }
 
 function markerAttributes(
   id: string,
-  endpoint: Exclude<LineEndpoint, "none">,
+  endpoint: PaintedLineEndpoint,
+  cap: VectorStrokeCap,
+  join: VectorStrokeJoin,
 ): Record<string, string> {
   return {
     id,
     "data-opendesign-line-endpoint": endpoint,
-    viewBox: "0 0 10 10",
-    refX: "5",
-    refY: "5",
-    markerWidth: "4",
-    markerHeight: "4",
+    "data-opendesign-stroke-cap": cap,
+    "data-opendesign-stroke-join": join,
+    viewBox: LINE_ENDPOINT_MARKER_VIEW_BOX,
+    refX: "0",
+    refY: "0",
+    markerWidth: String(LINE_ENDPOINT_MARKER_SIZE),
+    markerHeight: String(LINE_ENDPOINT_MARKER_SIZE),
     markerUnits: "strokeWidth",
     orient: "auto-start-reverse",
     overflow: "visible",
@@ -139,61 +181,63 @@ function markerAttributes(
 
 function endpointShape(
   document: Document,
-  endpoint: Exclude<LineEndpoint, "none">,
+  endpoint: PaintedLineEndpoint,
+  cap: VectorStrokeCap,
+  join: VectorStrokeJoin,
 ): Element {
-  if (endpoint === "circle") {
-    const circle = document.createElementNS(SVG_NAMESPACE, "circle");
-    setAttributes(circle, {
-      cx: "5",
-      cy: "5",
-      r: "3.5",
-      fill: "context-stroke",
-      stroke: "none",
-    });
-    return circle;
-  }
+  const geometry = resolveLineEndpointGeometry(endpoint);
   const path = document.createElementNS(SVG_NAMESPACE, "path");
-  if (endpoint === "line-arrow") {
-    setAttributes(path, {
-      d: "M 1 1 L 9 5 L 1 9",
-      fill: "none",
-      stroke: "context-stroke",
-      "stroke-width": "1.5",
-      "stroke-linecap": "round",
-      "stroke-linejoin": "round",
-    });
-  } else {
-    setAttributes(path, {
-      d:
-        endpoint === "triangle-arrow"
-          ? "M 1 1 L 9 5 L 1 9 Z"
-          : endpoint === "reversed-triangle-arrow"
-            ? "M 9 1 L 1 5 L 9 9 Z"
-            : "M 5 1 L 9 5 L 5 9 L 1 5 Z",
-      fill: "context-stroke",
-      stroke: "none",
-    });
-  }
+  setAttributes(path, {
+    d: serializeLineEndpointPath(geometry),
+    fill: geometry.fill ? "context-stroke" : "none",
+    stroke: "context-stroke",
+    "stroke-width": String(LINE_ENDPOINT_STROKE_WIDTH),
+    "stroke-linecap": cap,
+    "stroke-linejoin": join,
+  });
   return path;
 }
 
-function readEndpoint(
-  marker: Element,
-): Exclude<LineEndpoint, "none"> | undefined {
+function readEndpointDefinition(marker: Element):
+  | {
+      cap: VectorStrokeCap;
+      endpoint: PaintedLineEndpoint;
+      join: VectorStrokeJoin;
+    }
+  | undefined {
   const value = marker.getAttribute("data-opendesign-line-endpoint");
-  return value && value !== "none" && ENDPOINTS.has(value as LineEndpoint)
-    ? (value as Exclude<LineEndpoint, "none">)
-    : undefined;
+  const cap = marker.getAttribute("data-opendesign-stroke-cap");
+  const join = marker.getAttribute("data-opendesign-stroke-join");
+  if (
+    !value ||
+    value === "none" ||
+    !ENDPOINTS.has(value as LineEndpoint) ||
+    !isStrokeCap(cap) ||
+    !isStrokeJoin(join)
+  ) {
+    return undefined;
+  }
+  return { cap, endpoint: value as PaintedLineEndpoint, join };
 }
 
 function matchesMarker(
   marker: Element,
-  endpoint: Exclude<LineEndpoint, "none">,
+  definition: {
+    cap: VectorStrokeCap;
+    endpoint: PaintedLineEndpoint;
+    join: VectorStrokeJoin;
+  },
 ): boolean {
   const id = marker.getAttribute("id");
   const children = elementChildren(marker);
   if (!id || children.length !== 1) return false;
-  const expected = createMarker(marker.ownerDocument, id, endpoint);
+  const expected = createMarker(
+    marker.ownerDocument,
+    id,
+    definition.endpoint,
+    definition.cap,
+    definition.join,
+  );
   const expectedChild = expected.firstChild as Element | null;
   return (
     exactAttributes(marker, expected) &&
@@ -202,6 +246,14 @@ function matchesMarker(
     exactAttributes(children[0]!, expectedChild) &&
     elementChildren(children[0]!).length === 0
   );
+}
+
+function isStrokeCap(value: string | null): value is VectorStrokeCap {
+  return value === "butt" || value === "round" || value === "square";
+}
+
+function isStrokeJoin(value: string | null): value is VectorStrokeJoin {
+  return value === "bevel" || value === "miter" || value === "round";
 }
 
 function exactAttributes(actual: Element, expected: Element): boolean {

@@ -57,15 +57,6 @@ export function flattenSourcePath(
       ? { ok: true, fillRule: "nonzero", path: geometry.path }
       : { ok: false, message: geometry.message };
   }
-  if (
-    node.properties.startEndpoint !== "none" ||
-    node.properties.endEndpoint !== "none"
-  ) {
-    return {
-      ok: false,
-      message: `Line ${node.id} endpoint decorations require exact outline support before Flatten`,
-    };
-  }
   const start = resolveLineEndpointPoint(node.size, node.properties.start);
   const end = resolveLineEndpointPoint(node.size, node.properties.end);
   return {

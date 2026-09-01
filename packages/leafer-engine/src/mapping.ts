@@ -19,7 +19,12 @@ import {
   resolveImagePlacement,
 } from "@opendesign/image-service";
 import type { BooleanGeometryResolution } from "@opendesign/geometry-service/boolean-resolver";
+import {
+  resolveLineEndpointGeometry,
+  type LineEndpointPathCommand,
+} from "@opendesign/geometry-service/line-endpoint";
 import { resolveRegularShapeGeometry } from "@opendesign/geometry-service/regular-shape";
+import { PathCommandMap } from "@leafer-ui/draw";
 import {
   resolvePathPropertiesData,
   serializeVectorNetwork,
@@ -919,20 +924,33 @@ function mapLineEndpoint(
     | "reversed-triangle-arrow"
     | "circle"
     | "diamond",
-): "none" | "angle" | "triangle" | "triangle-flip" | "circle" | "diamond" {
-  switch (endpoint) {
-    case "none":
-      return "none";
-    case "line-arrow":
-      return "angle";
-    case "triangle-arrow":
-      return "triangle";
-    case "reversed-triangle-arrow":
-      return "triangle-flip";
-    case "circle":
-      return "circle";
-    case "diamond":
-      return "diamond";
+): "none" | { fill: boolean; path: number[] } {
+  if (endpoint === "none") return "none";
+  const geometry = resolveLineEndpointGeometry(endpoint);
+  return {
+    fill: geometry.fill,
+    path: geometry.commands.flatMap(toLeaferPathCommand),
+  };
+}
+
+function toLeaferPathCommand(command: LineEndpointPathCommand): number[] {
+  switch (command[0]) {
+    case "M":
+      return [PathCommandMap.M!, command[1], command[2]];
+    case "L":
+      return [PathCommandMap.L!, command[1], command[2]];
+    case "C":
+      return [
+        PathCommandMap.C!,
+        command[1],
+        command[2],
+        command[3],
+        command[4],
+        command[5],
+        command[6],
+      ];
+    case "Z":
+      return [PathCommandMap.Z!];
   }
 }
 

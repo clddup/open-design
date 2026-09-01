@@ -44,7 +44,7 @@
 通过人工 UI 与 Agent 共用的 planner 将单层对齐到显式父级、排列多层对象、编辑 Smart Selection 间距与回流、翻转图层，并设置持久旋转原点。
 
 - ID：`transform.precise-arrangement`
-- 实现方：DesignDocument 1.56.0 + Geometry Service contract 30 + EditorRuntime + Leafer editor projection
+- 实现方：DesignDocument 1.56.0 + Geometry Service contract 31 + EditorRuntime + Leafer editor projection
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=unavailable
 - 证据：自动化 9 项；实机 0 项
 - 限制：吸附、标尺、手工参考线、像素网格取整和 macOS/Windows 打包产品交互证据仍未补齐。
@@ -60,12 +60,12 @@
 使用 Pen 创建可编辑三次曲线轮廓、继续调整节点与贝塞尔手柄、连接同层或 sibling Vector 图层的端点、按顶点覆盖端帽、转角与 circular 圆角、给稳定填充区域设置直接 Paint 或共享 Paint Style、把可见描边转换为新的 filled editable Vector sibling，并将同父级受支持的 Frame、nested Group、Boolean、可信 glyph-outline Text、Image、图形、Path 与 Vector 拼合为一个 editable Vector，同时保持唯一权威 Vector Network。
 
 - ID：`vector.path-rendering`
-- 实现方：DesignDocument 1.56.0 + Geometry Service contract 30 point/path selection-delete/transform/Bend/Connect/Disconnect/Cut/region Fill/region Paint Style/vertex stroke appearance/vertex corner radius/regular-shape corner smoothing/Outline Stroke/Flatten + EditorRuntime document-space multi-Vector transform/Cut/cross-layer Connect/branch junction/Frame-Group-Boolean-Text-Image Flatten planner + Leafer exact regular-shape and synthetic region/stroke/corner projection + controlled SVG metadata
+- 实现方：DesignDocument 1.56.0 + Geometry Service contract 31 point/path selection-delete/transform/Bend/Connect/Disconnect/Cut/region Fill/region Paint Style/vertex stroke appearance/vertex corner radius/regular-shape corner smoothing/Outline Stroke/Flatten + EditorRuntime document-space multi-Vector transform/Cut/cross-layer Connect/branch junction/Frame-Group-Boolean-Text-Image Flatten planner + Leafer exact regular-shape/Line-endpoint and synthetic region/stroke/corner projection + controlled SVG metadata
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=degraded
-- 证据：自动化 28 项；实机 0 项
+- 证据：自动化 29 项；实机 0 项
 - 限制：Pen 已支持点击放点、拖拽镜像三次曲线手柄、首点闭合、Enter/Escape 完成开放路径、Backspace 回退、切换工具收尾、精确 bounds 和单次可撤销事务；当前只创建单条非分叉轮廓。
 - 限制：Enter 或双击可让一个或多个已选 Vector 图层进入 schema-valid network 节点编辑；每层拥有独立 trace、稳定 point/path 选区、节点可编辑状态与 topology 可编辑状态。branch junction 节点仍可选择、变换和删除，歧义 topology 控件会被禁用。Q 套索可圈选完整包含的节点与 line/cubic segment；Delete 对节点执行重连，对 segment 则真实断开并确定性生成开放 runs。编辑集合中任意两个以上节点共用一个 document-space 移动/八向缩放/旋转框；缩放或旋转中按住 Space 可平移选区，松开后无跳变继续原操作。pointer-up 与 Agent document-space 变换都把所有变化层提交为一次 revision/undo。
-- 限制：Cut 模式（X）支持节点/路径真实断点和跨多个 Vector 图层的有限 document-space 分割；闭合边界通过同侧 connector 与连续边界缝合处理穿孔和凹形多交点 component，开放 contour 按每个真实横穿交点拆成 retained/extracted 开放 runs，不补 connector、region 或隐式 Fill。跨层 Connect 会原子合并外观一致的 sibling Vector 图层并保留较早图层；一个 endpoint 也可连接到另一 path vertex 以创建 shared branch junction，显式开放 path endpoint 也可从该 junction 断开而不重写其他 path。稳定 region 已支持继承、显式无填充或 region-local Paint 三态；Paint 点击设置区域，Alt 点击清除，Cut 会把已创作的区域 Paint 传承到两个有效结果。顶点级 stroke cap/join、circular corner radius、节点级 corner smoothing 与 custom dash 连续 phase 已通过 Inspector 与 Agent 支持并回退到节点外观；嵌套或重叠 region、只切孔洞、shared-junction 精确命中和切后仍跨两侧的 connected Cut component、像素基线和打包交互证据仍未完成。Outline Stroke 会创建新的 editable sibling 并保留源层；同父级 Frame、nested Group、Boolean、可信 glyph-outline Text、Image、Rectangle、Ellipse、无端点装饰 Line、精确零圆角或圆角 Polygon/Star、Path 与 Vector 可破坏性生成一个 editable 结果；Frame 保留 Fill、递归 children、Stroke 的绘制顺序与 rounded clipping boundary，Group 保留递归 child order 与祖先 transform，Boolean 复用已解析的 PathKit geometry，Text 从可信 layout provider 保留 UTF-16 run Paint、当前 Text/Paint Style 投影、baseline、glyph geometry、基础 underline/strikethrough 轮廓、solid/wavy/dotted 高级 underline 的 offset/thickness/独立 color、重新 shaping 的 ending truncation/maxLines 显示 glyph 与祖先 transform。Image Flatten 会把 Stretch/Fit/Fill/Crop、焦点、缩放、旋转、翻转、filters 与圆角裁剪保存为 region-local Image Paint。端点装饰 Line、缺失精确 outline 或 exact geometry provider 的 Text，以及任意像素合成 Flatten 仍未完成；导入字体 exact skip-ink 已可用。两种操作均有人工与 Agent 入口。
+- 限制：Cut 模式（X）支持节点/路径真实断点和跨多个 Vector 图层的有限 document-space 分割；闭合边界通过同侧 connector 与连续边界缝合处理穿孔和凹形多交点 component，开放 contour 按每个真实横穿交点拆成 retained/extracted 开放 runs，不补 connector、region 或隐式 Fill。跨层 Connect 会原子合并外观一致的 sibling Vector 图层并保留较早图层；一个 endpoint 也可连接到另一 path vertex 以创建 shared branch junction，显式开放 path endpoint 也可从该 junction 断开而不重写其他 path。稳定 region 已支持继承、显式无填充或 region-local Paint 三态；Paint 点击设置区域，Alt 点击清除，Cut 会把已创作的区域 Paint 传承到两个有效结果。顶点级 stroke cap/join、circular corner radius、节点级 corner smoothing 与 custom dash 连续 phase 已通过 Inspector 与 Agent 支持并回退到节点外观；嵌套或重叠 region、只切孔洞、shared-junction 精确命中和切后仍跨两侧的 connected Cut component、像素基线和打包交互证据仍未完成。Outline Stroke 会创建新的 editable sibling 并保留源层；同父级 Frame、nested Group、Boolean、可信 glyph-outline Text、Image、Rectangle、Ellipse、含端点装饰的 Line、精确零圆角或圆角 Polygon/Star、Path 与 Vector 可破坏性生成一个 editable 结果；Frame 保留 Fill、递归 children、Stroke 的绘制顺序与 rounded clipping boundary，Group 保留递归 child order 与祖先 transform，Boolean 复用已解析的 PathKit geometry，Text 从可信 layout provider 保留 UTF-16 run Paint、当前 Text/Paint Style 投影、baseline、glyph geometry、基础 underline/strikethrough 轮廓、solid/wavy/dotted 高级 underline 的 offset/thickness/独立 color、重新 shaping 的 ending truncation/maxLines 显示 glyph 与祖先 transform。Image Flatten 会把 Stretch/Fit/Fill/Crop、焦点、缩放、旋转、翻转、filters 与圆角裁剪保存为 region-local Image Paint。缺失精确 outline 或 exact geometry provider 的 Text，以及任意像素合成 Flatten 仍未完成；导入字体 exact skip-ink 已可用。两种操作均有人工与 Agent 入口。
 - 限制：受控 OpenDesign SVG metadata v6 只在通过 schema、拓扑且与标准渲染 region paths 精确匹配时保留 editable network；没有 metadata 的外部 SVG 保持为精确 path 数据，不猜测可编辑拓扑。当前 SVG vector slice 仍显式不支持 Image Paint。
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360040450213-Vector-networks)
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360039957634-Edit-vector-layers)
@@ -79,11 +79,12 @@
 创建并直接编辑有方向的直线，独立设置起终点装饰和专业描边，并通过 SVG 保持可编辑交换。
 
 - ID：`vector.line-arrow`
-- 实现方：DesignDocument 1.10.0 + Leafer Arrow / LineEditTool + SVG controlled markers
+- 实现方：DesignDocument 1.56.0 + Geometry Service contract 31 shared Line endpoint geometry + Leafer Arrow / LineEditTool + EditorRuntime Flatten + SVG controlled markers
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=degraded
-- 证据：自动化 8 项；实机 0 项
+- 证据：自动化 10 项；实机 0 项
 - 限制：当前切片支持单段可编辑直线、Shift 45 度约束、Alt 中心绘制、独立的无/线性箭头/三角/反向三角/圆点/菱形端点、端帽/连接/虚线控制和原生端点拖动；折线连接器、正交路由、吸附、标签挂接及 macOS/Windows 打包交互证据仍未完成。
 - 限制：SVG 往返使用精确的本地 OpenDesign marker 定义；普通外部 line 可导入为 Line，未知、外部、缺失或被修改的 marker 会明确失败，不会被扁平化或盲目信任。
+- 限制：Leafer 投影、受控 SVG marker 与破坏性 Flatten 共用 OpenDesign 自有的端点 path、方向与比例；中心线 dash 不作用于端点，零长度端点 Line 在产生部分几何前失败关闭。
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360040450133-Shape-tools)
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360049283914-Apply-and-adjust-stroke-properties)
 - 专业参照：[官方说明](https://www.leaferjs.com/ui/reference/display/Line.html)
@@ -95,7 +96,7 @@
 创建、缩放、调整外观并交换语义化 Polygon 与 Star 节点，不将其扁平化为普通 Path。
 
 - ID：`vector.regular-shapes`
-- 实现方：DesignDocument 1.56.0 + Geometry Service contract 30 + Leafer exact projection + controlled SVG regular-shape metadata 2
+- 实现方：DesignDocument 1.56.0 + Geometry Service contract 31 + Leafer exact projection + controlled SVG regular-shape metadata 2
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=degraded
 - 证据：自动化 12 项；实机 0 项
 - 限制：Polygon 支持 3–60 个顶点；Star 支持 3–60 个顶点和归一化内径。两者均支持非负圆角及 0–1 的 Figma-compatible 整形级 corner smoothing；Star 只对外尖角应用圆角。Shift 将绘制边界约束为正方形，Alt/Option 从中心绘制。
@@ -113,10 +114,10 @@
 通过节点和贝塞尔手柄创建、编辑开放、闭合、分支与曲线矢量几何。
 
 - ID：`vector.pen-node-editing`
-- 实现方：DesignDocument 1.56.0 Vector Network + Geometry Service contract 30 point/path selection-delete/transform/Bend/Connect/Disconnect/Cut/region Fill/region Paint Style/vertex stroke appearance/vertex corner radius/Outline Stroke/Flatten + EditorRuntime document-space multi-Vector transform/Cut/cross-layer Connect/branch junction/Frame-Group-Boolean-Text-Image Flatten planner + Leafer synthetic region/stroke/corner projection and native editing overlays
+- 实现方：DesignDocument 1.56.0 Vector Network + Geometry Service contract 31 point/path selection-delete/transform/Bend/Connect/Disconnect/Cut/region Fill/region Paint Style/vertex stroke appearance/vertex corner radius/Outline Stroke/Flatten + EditorRuntime document-space multi-Vector transform/Cut/cross-layer Connect/branch junction/Frame-Group-Boolean-Text-Image Flatten planner + Leafer synthetic region/stroke/corner projection and native editing overlays
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=degraded
 - 证据：自动化 18 项；实机 0 项
-- 限制：Pen 当前创建单条非分支轮廓；已有节点编辑支持多 Vector collection、Open/Close/Reverse、同层或跨层 Connect/Disconnect、endpoint 到另一 path vertex 的 branch 创建、point/path Lasso 与 segment Delete、跨所选节点的统一 document-space 变换框、缩放/旋转中 Space 平移、点击/document-space Cut 和 region-local Paint 或共享 PAINT Style；branch junction 节点仍可选择、变换和删除，已有入射 handle 可独立拖动，明确 branch segment 可 Bend/Cut/Delete 且不改变其他入射边，明确 path 可在 shared junction 执行 Open/Close/Reverse/Cut，已有 branch network 内的唯一 endpoint 可继续合并，显式开放 path endpoint 或明确 incident edge 也可从开放或闭合 junction 断开。有限线 Cut 会按 shared vertex 与 region connectivity 分配 connected/branch network，未切 branch 会跟随真实 junction component。Bend 已支持节点/路径添加手柄和直接拖动 segment；顶点级 cap/join 外观、circular corner radius、节点级 corner smoothing 与 custom dash 连续 phase 已通过 Inspector 与 Agent 支持；嵌套或重叠 region、只切孔洞、shared-junction 精确命中和切后仍跨两侧的 connected Cut component、剩余 SceneNode 像素保真 Flatten 与打包证据仍未完成。Outline Stroke 会保留源层并创建 filled editable Vector sibling；同父级 Frame、nested Group、Boolean、Image、Rectangle、Ellipse、无端点装饰 Line、零圆角或圆角 Polygon/Star、Path 与 Vector 可用一个 editable 结果替换源层。
+- 限制：Pen 当前创建单条非分支轮廓；已有节点编辑支持多 Vector collection、Open/Close/Reverse、同层或跨层 Connect/Disconnect、endpoint 到另一 path vertex 的 branch 创建、point/path Lasso 与 segment Delete、跨所选节点的统一 document-space 变换框、缩放/旋转中 Space 平移、点击/document-space Cut 和 region-local Paint 或共享 PAINT Style；branch junction 节点仍可选择、变换和删除，已有入射 handle 可独立拖动，明确 branch segment 可 Bend/Cut/Delete 且不改变其他入射边，明确 path 可在 shared junction 执行 Open/Close/Reverse/Cut，已有 branch network 内的唯一 endpoint 可继续合并，显式开放 path endpoint 或明确 incident edge 也可从开放或闭合 junction 断开。有限线 Cut 会按 shared vertex 与 region connectivity 分配 connected/branch network，未切 branch 会跟随真实 junction component。Bend 已支持节点/路径添加手柄和直接拖动 segment；顶点级 cap/join 外观、circular corner radius、节点级 corner smoothing 与 custom dash 连续 phase 已通过 Inspector 与 Agent 支持；嵌套或重叠 region、只切孔洞、shared-junction 精确命中和切后仍跨两侧的 connected Cut component、剩余 SceneNode 像素保真 Flatten 与打包证据仍未完成。Outline Stroke 会保留源层并创建 filled editable Vector sibling；同父级 Frame、nested Group、Boolean、Image、Rectangle、Ellipse、含端点装饰的 Line、零圆角或圆角 Polygon/Star、Path 与 Vector 可用一个 editable 结果替换源层。
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360040450213-Vector-networks)
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360039957634-Edit-vector-layers)
 - 专业参照：[官方说明](https://github.com/ZSeven-W/openpencil/blob/449f31dd8b7df12965f65d9da774597332fc153d/crates/op-editor-core/src/path_edit.rs)
@@ -126,7 +127,7 @@
 非破坏性的 union、subtract、intersect 与 exclude，且源图层保持可编辑。
 
 - ID：`vector.boolean-operations`
-- 实现方：DesignDocument 1.56.0 + Geometry Service contract 30 + EditorRuntime Boolean planner + recursive Skia PathKit resolver + Leafer derived projection
+- 实现方：DesignDocument 1.56.0 + Geometry Service contract 31 + EditorRuntime Boolean planner + recursive Skia PathKit resolver + Leafer derived projection
 - 表面：contract=available；runtime=available；human=degraded；agent=available；render=available；export=unavailable
 - 证据：自动化 13 项；实机 0 项
 - 限制：递归 resolver 会把 Rectangle、Ellipse、零圆角或圆角 Polygon/Star、Path、Vector 与嵌套 Boolean 转换为包含 fill+stroke 的 PathKit 几何，应用局部 transform、保留真实空结果，并在不持久化 provider 输出的前提下投影稳定的 Leafer synthetic Path。

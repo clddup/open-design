@@ -1,6 +1,6 @@
 # @opendesign/geometry-service
 
-OpenDesign-owned, versioned geometry provider boundary. Contract v30 contains deterministic arrangement, layer reflection, shared rounded regular-shape geometry, and isolated vector-path and vector-edit providers:
+OpenDesign-owned, versioned geometry provider boundary. Contract v31 contains deterministic arrangement, layer reflection, shared rounded regular-shape and Line endpoint geometry, and isolated vector-path and vector-edit providers:
 
 - align multiple axis-aligned world bounds to a selection edge or center;
 - distribute one-dimensional gaps while preserving distinct outermost anchors;
@@ -18,6 +18,8 @@ Tidy up and Smart Selection reject selections whose overlap graph cannot prove s
 The root entry accepts plain IDs and bounds and returns pure placement deltas. It does not read or save `DesignDocument`, modify Leafer objects, infer the live selection, or own history. `EditorRuntime` resolves world/parent transforms, maintains dynamic Group bounds, validates the resulting `DesignOperation[]`, and applies one transaction.
 
 The `@opendesign/geometry-service/vector-path` sub-entry fixes Skia `pathkit-wasm 1.0.0` behind a plain-data `VectorGeometryProvider`. It covers cubic Boolean operations, simplify, Canvas/SVG transforms, exact two-value dash geometry, outline stroke, fill rules, tight bounds, deterministic output, bounded input and explicit WASM initialization. Every PathKit object remains adapter-private and is explicitly deleted.
+
+The `line-endpoint` sub-entry owns the normalized path, fill/stroke behavior, orientation, and scale for Line/Arrow endpoint decorations. Leafer Arrow projection, controlled SVG markers, and destructive Flatten consume this same geometry. Dash applies only to the Line center stroke; endpoint Paint follows the Line stroke without inheriting the dash pattern.
 
 The `vector-edit` sub-entry validates stable editable Vector Network topology and provides pure point/handle transforms, point/path deletion, Connect/Disconnect, explicit-path Open/Close/Reverse, nearest line/cubic hit resolution, click Cut, and finite-line drag Cut. Click Cut creates coincident but topologically independent endpoints and uses exact de Casteljau splitting for cubic segments. Drag Cut handles open multi-crossing runs, closed regions, holes, concave components, multiple layers through the Runtime planner, and connected/branch networks. Branch output ownership follows shared-vertex and region connectivity so an uncut arm cannot detach from its real junction component. Tangencies, overlaps, exact shared-junction hits, mixed-side connected components, ambiguous nested regions, and self-intersections fail explicitly.
 

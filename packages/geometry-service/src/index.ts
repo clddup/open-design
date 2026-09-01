@@ -1,4 +1,15 @@
-export const GEOMETRY_SERVICE_CONTRACT_VERSION = 30 as const;
+export const GEOMETRY_SERVICE_CONTRACT_VERSION = 31 as const;
+export {
+  LINE_ENDPOINT_MARKER_SIZE,
+  LINE_ENDPOINT_MARKER_VIEW_BOX,
+  LINE_ENDPOINT_STROKE_WIDTH,
+  resolveLineEndpointGeometry,
+  resolveLineEndpointVisiblePath,
+  serializeLineEndpointPath,
+  type LineEndpointGeometry,
+  type LineEndpointPathCommand,
+  type PaintedLineEndpoint,
+} from "./line-endpoint.js";
 export {
   resolveRegularShapeGeometry,
   type RegularShapeGeometryResult,

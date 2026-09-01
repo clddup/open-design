@@ -1329,23 +1329,26 @@ describe("Leafer scene projection", () => {
     };
     frame.childIds.push("flow_arrow");
 
-    expect(
-      projectDesignPage(document, "page_welcome").elementsById.get(
-        "flow_arrow",
-      ),
-    ).toMatchObject({
+    const projected = projectDesignPage(
+      document,
+      "page_welcome",
+    ).elementsById.get("flow_arrow");
+    expect(projected).toMatchObject({
       tag: "Arrow",
       transform: [1, 0, 0, 1, 70, 90],
       data: {
         fill: null,
         points: [240, 0, 0, 120],
-        startArrow: "circle",
-        endArrow: "triangle",
+        startArrow: { fill: true },
+        endArrow: { fill: true, path: [1, 0, 0, 2, -3, -2, 2, -3, 2, 11] },
         strokeWidth: 4,
         strokeCap: "round",
         dashPattern: [10, 6],
       },
     });
+    expect(
+      (projected?.data.startArrow as { path?: unknown[] } | undefined)?.path,
+    ).toHaveLength(32);
   });
 });
 

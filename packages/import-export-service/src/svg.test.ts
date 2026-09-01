@@ -14,6 +14,10 @@ import {
   resolvePathPropertiesData,
 } from "@opendesign/geometry-service/editable-vector";
 import {
+  resolveLineEndpointGeometry,
+  serializeLineEndpointPath,
+} from "@opendesign/geometry-service/line-endpoint";
+import {
   materializeTransformedVectorNetwork,
   mergeVectorNetworks,
   outlineVectorPath,
@@ -2064,6 +2068,11 @@ describe("versioned SVG interchange", () => {
     expect(exported.svg).toContain(
       'data-opendesign-line-endpoint="triangle-arrow"',
     );
+    expect(exported.svg).toContain('data-opendesign-stroke-cap="round"');
+    expect(exported.svg).toContain('data-opendesign-stroke-join="round"');
+    expect(exported.svg).toContain(
+      `d="${serializeLineEndpointPath(resolveLineEndpointGeometry("triangle-arrow"))}"`,
+    );
     expect(exported.svg).toContain('orient="auto-start-reverse"');
 
     const imported = importSvg(
@@ -2418,7 +2427,7 @@ describe("versioned SVG interchange", () => {
     const tampered = importSvg(
       {
         idPrefix: "tampered_marker",
-        svg: exported.svg.replace('markerWidth="4"', 'markerWidth="40"'),
+        svg: exported.svg.replace('markerWidth="8"', 'markerWidth="80"'),
       },
       geometry,
     );
