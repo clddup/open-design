@@ -24,7 +24,7 @@ const items = (
 
 describe("geometry arrangement", () => {
   it("exposes a stable service contract version", () => {
-    expect(GEOMETRY_SERVICE_CONTRACT_VERSION).toBe(22);
+    expect(GEOMETRY_SERVICE_CONTRACT_VERSION).toBe(27);
   });
 
   it("aligns unequal items against the requested selection edge or center", () => {
@@ -45,6 +45,57 @@ describe("geometry arrangement", () => {
         { id: "two", delta: { x: 0, y: -25 } },
       ],
     });
+  });
+
+  it("aligns one item against explicit container bounds", () => {
+    const source = items(["child", 24, 36, 80, 40]);
+    const target = { x: 0, y: 0, width: 320, height: 180 };
+
+    expect(alignItems(source, "align-left", target)).toMatchObject({
+      ok: true,
+      placements: [{ id: "child", delta: { x: -24, y: 0 } }],
+    });
+    expect(alignItems(source, "align-horizontal-center", target)).toMatchObject(
+      {
+        ok: true,
+        placements: [{ id: "child", delta: { x: 96, y: 0 } }],
+      },
+    );
+    expect(alignItems(source, "align-right", target)).toMatchObject({
+      ok: true,
+      placements: [{ id: "child", delta: { x: 216, y: 0 } }],
+    });
+    expect(alignItems(source, "align-top", target)).toMatchObject({
+      ok: true,
+      placements: [{ id: "child", delta: { x: 0, y: -36 } }],
+    });
+    expect(alignItems(source, "align-vertical-center", target)).toMatchObject({
+      ok: true,
+      placements: [{ id: "child", delta: { x: 0, y: 34 } }],
+    });
+    expect(alignItems(source, "align-bottom", target)).toMatchObject({
+      ok: true,
+      placements: [{ id: "child", delta: { x: 0, y: 104 } }],
+    });
+  });
+
+  it("rejects invalid alignment targets and reports an aligned item as a no-op", () => {
+    expect(
+      alignItems(items(["child", 0, 0, 40, 20]), "align-left", {
+        x: 0,
+        y: 0,
+        width: Number.NaN,
+        height: 100,
+      }),
+    ).toMatchObject({ ok: false, code: "invalid-input" });
+    expect(
+      alignItems(items(["child", 0, 0, 40, 20]), "align-left", {
+        x: 0,
+        y: 0,
+        width: 100,
+        height: 100,
+      }),
+    ).toMatchObject({ ok: false, code: "no-op" });
   });
 
   it("distributes spacing while preserving distinct outermost layers", () => {

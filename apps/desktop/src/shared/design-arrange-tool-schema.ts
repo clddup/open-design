@@ -127,7 +127,7 @@ function arrangeBranch<
 
 const ARRANGE_ACTION_BRANCHES = [
   ...ALIGN_ACTIONS.map((action) =>
-    arrangeBranch(action, { nodeIds: nodeIdsSchema(2) }, ["nodeIds"]),
+    arrangeBranch(action, { nodeIds: nodeIdsSchema(1) }, ["nodeIds"]),
   ),
   ...DISTRIBUTION_ACTIONS.map((action) =>
     arrangeBranch(action, { nodeIds: nodeIdsSchema(3) }, ["nodeIds"]),
@@ -220,7 +220,7 @@ const ARRANGE_TOOL_PROPERTIES = {
   action: { enum: DESIGN_ARRANGE_ACTIONS },
   label: LABEL_SCHEMA,
   pageId: ID_SCHEMA,
-  nodeIds: nodeIdsSchema(2),
+  nodeIds: nodeIdsSchema(1),
   spacing: SPACING_SCHEMA,
   nodeId: ID_SCHEMA,
   constraints: LayoutConstraintsSchema,
@@ -250,7 +250,7 @@ const ARRANGE_CONTINUATION_TOOL_PROPERTIES = {
   action: { enum: CONTINUATION_ARRANGE_ACTIONS },
   label: LABEL_SCHEMA,
   pageId: ID_SCHEMA,
-  nodeIds: nodeIdsSchema(2),
+  nodeIds: nodeIdsSchema(1),
   spacing: SPACING_SCHEMA,
   frameId: ID_SCHEMA,
   width: FRAME_SIZE_SCHEMA,
@@ -260,7 +260,7 @@ const ARRANGE_CONTINUATION_TOOL_PROPERTIES = {
 export const DESIGN_ARRANGE_TOOL_INPUT_SCHEMA = executableJsonSchema({
   type: "object",
   description:
-    "Arrange explicit inspected layers with one of 21 closed action shapes. Align needs at least two unique layer IDs; distribute and tidy-up need at least three. Spacing may be negative, zero, or positive. Constraints, Frame resize, linear/wrapped Auto Layout, Auto Layout Grid, child sizing/positioning/limits, Grid placement/track reorder, Layout Guides, and bounded overflow repair use the same Figma-shaped document fields as the Runtime. Grid autoTracks is valid only for row-auto-flow. Layout Guide IDs must be unique. The host owns current Page/revision checks, geometry, preview, transaction, and undo.",
+    "Arrange explicit inspected layers with one of 21 closed action shapes. Align accepts one or more unique layer IDs: one direct child aligns to its explicit Frame or Slot parent, while multiple layers align to their selection bounds. Distribute and tidy-up need at least three. Spacing may be negative, zero, or positive. Constraints, Frame resize, linear/wrapped Auto Layout, Auto Layout Grid, child sizing/positioning/limits, Grid placement/track reorder, Layout Guides, and bounded overflow repair use the same Figma-shaped document fields as the Runtime. Grid autoTracks is valid only for row-auto-flow. Layout Guide IDs must be unique. The host owns current Page/revision checks, geometry, preview, transaction, and undo.",
   properties: ARRANGE_TOOL_PROPERTIES,
   required: ["action", "label", "pageId"],
   anyOf: ARRANGE_ACTION_BRANCHES,

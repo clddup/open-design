@@ -39,6 +39,7 @@ import type {
 function renderPanel(
   options: {
     arrangement?: ArrangementSelectionMetrics | null;
+    canAlignSelection?: boolean;
     feedback?: SvgInterchangeFeedback | null;
     node?: DesignNode;
     onArrange?: (operation: ArrangeOperation) => void;
@@ -162,6 +163,7 @@ function renderPanel(
         <PropertiesPanel
           activePageId="page_welcome"
           arrangement={options.arrangement ?? null}
+          canAlignSelection={options.canAlignSelection ?? false}
           booleanOperationEditable={false}
           canAddToVariantSet={options.canAddToVariantSet ?? false}
           canCombineVariants={options.canCombineVariants ?? false}
@@ -763,6 +765,19 @@ describe("PropertiesPanel image adjustments", () => {
 });
 
 describe("PropertiesPanel SVG workflow", () => {
+  it("offers parent-relative alignment for one eligible selected layer", async () => {
+    const user = userEvent.setup();
+    const document = createWelcomeDocument();
+    const { onArrange } = renderPanel({
+      node: document.nodesById.title_welcome,
+      selectionCount: 1,
+      canAlignSelection: true,
+    });
+
+    await user.click(screen.getByRole("button", { name: "Align right" }));
+    expect(onArrange).toHaveBeenCalledWith({ action: "align-right" });
+  });
+
   it("runs the shared Tidy up planner from an enabled multi-selection control", async () => {
     const user = userEvent.setup();
     const { onArrange } = renderPanel({

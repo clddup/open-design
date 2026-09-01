@@ -250,7 +250,7 @@
         "en": "Create editable cubic contours with Pen, refine vertices and Bézier handles, connect endpoints within or across sibling Vector layers, override cap/join appearance and circular radius per vertex, apply direct Paint or shared Paint Styles to stable fill regions, convert visible strokes into filled editable Vector siblings, and flatten supported same-parent Frames, nested Groups, Booleans, exact glyph-outline Text, Images, shapes, Paths, and Vectors into one editable Vector while preserving one authoritative Vector Network.",
         "zh-CN": "使用 Pen 创建可编辑三次曲线轮廓、继续调整节点与贝塞尔手柄、连接同层或 sibling Vector 图层的端点、按顶点覆盖端帽、转角与 circular 圆角、给稳定填充区域设置直接 Paint 或共享 Paint Style、把可见描边转换为新的 filled editable Vector sibling，并将同父级受支持的 Frame、nested Group、Boolean、可信 glyph-outline Text、Image、图形、Path 与 Vector 拼合为一个 editable Vector，同时保持唯一权威 Vector Network。"
       },
-      "provider": "DesignDocument 1.54.0 + Geometry Service contract 26 point/path selection-delete/transform/Bend/Connect/Disconnect/Cut/region Fill/region Paint Style/vertex stroke appearance/vertex corner radius/Outline Stroke/Flatten + EditorRuntime document-space multi-Vector transform/Cut/cross-layer Connect/branch junction/Frame-Group-Boolean-Text-Image Flatten planner + Leafer synthetic region/stroke/corner projection and native editing overlays + controlled SVG metadata v6",
+      "provider": "DesignDocument 1.54.0 + Geometry Service contract 27 point/path selection-delete/transform/Bend/Connect/Disconnect/Cut/region Fill/region Paint Style/vertex stroke appearance/vertex corner radius/Outline Stroke/Flatten + EditorRuntime document-space multi-Vector transform/Cut/cross-layer Connect/branch junction/Frame-Group-Boolean-Text-Image Flatten planner + Leafer synthetic region/stroke/corner projection and native editing overlays + controlled SVG metadata v6",
       "requiredSurfaces": [
         "contract",
         "runtime",
@@ -464,7 +464,7 @@
         "en": "Create and refine open, closed, branching, and curved vector geometry using points and Bézier handles.",
         "zh-CN": "通过节点和贝塞尔手柄创建、编辑开放、闭合、分支与曲线矢量几何。"
       },
-      "provider": "DesignDocument 1.54.0 Vector Network + Geometry Service contract 26 point/path selection-delete/transform/Bend/Connect/Disconnect/Cut/region Fill/region Paint Style/vertex stroke appearance/vertex corner radius/Outline Stroke/Flatten + EditorRuntime document-space multi-Vector transform/Cut/cross-layer Connect/branch junction/Frame-Group-Boolean-Text-Image Flatten planner + Leafer synthetic region/stroke/corner projection and native editing overlays",
+      "provider": "DesignDocument 1.54.0 Vector Network + Geometry Service contract 27 point/path selection-delete/transform/Bend/Connect/Disconnect/Cut/region Fill/region Paint Style/vertex stroke appearance/vertex corner radius/Outline Stroke/Flatten + EditorRuntime document-space multi-Vector transform/Cut/cross-layer Connect/branch junction/Frame-Group-Boolean-Text-Image Flatten planner + Leafer synthetic region/stroke/corner projection and native editing overlays",
       "requiredSurfaces": ["contract", "runtime", "human", "agent"],
       "surfaces": {
         "contract": "available",

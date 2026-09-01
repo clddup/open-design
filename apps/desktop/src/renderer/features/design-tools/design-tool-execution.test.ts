@@ -6721,6 +6721,45 @@ describe("Renderer semantic hierarchy tool", () => {
     expect(arranged.state.history.undo).toHaveLength(1);
   });
 
+  it("aligns one explicit layer to its parent Frame as one material revision", async () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    const response = await executeDesignToolRequest(
+      {
+        requestId: "arrange_parent_align",
+        call: {
+          toolCallId: "tool_arrange_parent_align",
+          toolName: DESIGN_ARRANGE_TOOL_NAME,
+          input: {
+            action: "align-right",
+            label: "Align title to parent",
+            pageId: "page_welcome",
+            nodeIds: ["title_welcome"],
+          },
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_welcome",
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "align-right",
+          nodeIds: ["title_welcome"],
+          revision: 1,
+          atomic: true,
+        },
+        designRevision: { previousRevision: 0, revision: 1 },
+      },
+    });
+    expect(
+      runtime.getSnapshot().document.nodesById.title_welcome?.transform[4],
+    ).toBe(400);
+    expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
+  });
+
   it("tidies explicit layers and reports the host-resolved layout", async () => {
     const runtime = new EditorRuntime(createWelcomeDocument());
     const response = await executeDesignToolRequest(

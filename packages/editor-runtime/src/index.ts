@@ -62,6 +62,7 @@ export {
   type DeleteNodesPlan,
 } from "./deletion-operations.js";
 export {
+  canAlignNodeToParent,
   getArrangementSelectionMetrics,
   planArrangeNodes,
   planSmartSelectionSpacing,

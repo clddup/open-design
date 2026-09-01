@@ -54,6 +54,7 @@ import type {
 } from "./properties/VectorVertexAppearanceSection";
 import { ExportSettingsEditor } from "./properties/ExportSettingsEditor";
 import { Field, formatNumber } from "./properties/controls";
+import { AlignmentControls } from "./properties/AlignmentControls";
 import styles from "./PropertiesPanel.module.scss";
 
 export type { ComponentInspectorOption, ComponentInspectorSource };
@@ -64,6 +65,7 @@ export function PropertiesPanel({
   document,
   componentContext,
   arrangement,
+  canAlignSelection,
   booleanOperationEditable,
   booleanOperandParent,
   canCombineVariants,
@@ -157,6 +159,7 @@ export function PropertiesPanel({
   document: DesignDocument;
   componentContext?: ComponentInspectorContext;
   arrangement: ArrangementSelectionMetrics | null;
+  canAlignSelection: boolean;
   booleanOperationEditable: boolean;
   booleanOperandParent?: { id: string; name: string };
   canCombineVariants: boolean;
@@ -340,6 +343,7 @@ export function PropertiesPanel({
               node.kind !== "group" &&
               node.kind !== "boolean"
             }
+            canAlignToParent={canAlignSelection}
             layoutPositioningAvailable={
               layoutMode === "sizing" || layoutMode === "absolute"
             }
@@ -355,6 +359,7 @@ export function PropertiesPanel({
                 node.properties.autoLayout.mode !== "none")
             }
             onBooleanOperationChange={onBooleanOperationChange}
+            onArrange={onArrange}
             onCreateComponent={onCreateComponent}
             onCreateComponentInstance={onCreateComponentInstance}
             onDuplicateVariant={onDuplicateVariant}
@@ -431,56 +436,10 @@ export function PropertiesPanel({
               <span className={styles.multiHeading}>
                 {t("properties.alignment")}
               </span>
-              <div
-                aria-label={t("properties.alignment")}
-                className={styles.alignmentGrid}
-                role="group"
-              >
-                {(
-                  [
-                    [
-                      "align-left",
-                      "lucide:align-start-horizontal",
-                      "properties.alignLeft",
-                    ],
-                    [
-                      "align-horizontal-center",
-                      "lucide:align-center-horizontal",
-                      "properties.alignHCenter",
-                    ],
-                    [
-                      "align-right",
-                      "lucide:align-end-horizontal",
-                      "properties.alignRight",
-                    ],
-                    [
-                      "align-top",
-                      "lucide:align-start-vertical",
-                      "properties.alignTop",
-                    ],
-                    [
-                      "align-vertical-center",
-                      "lucide:align-center-vertical",
-                      "properties.alignVCenter",
-                    ],
-                    [
-                      "align-bottom",
-                      "lucide:align-end-vertical",
-                      "properties.alignBottom",
-                    ],
-                  ] as const
-                ).map(([action, icon, key]) => (
-                  <button
-                    aria-label={t(key)}
-                    disabled={!arrangement}
-                    key={action}
-                    onClick={() => onArrange({ action })}
-                    type="button"
-                  >
-                    <Icon name={icon} size={15} />
-                  </button>
-                ))}
-              </div>
+              <AlignmentControls
+                disabled={!canAlignSelection}
+                onArrange={onArrange}
+              />
             </div>
             <div className={styles.multiSection}>
               <span className={styles.multiHeading}>

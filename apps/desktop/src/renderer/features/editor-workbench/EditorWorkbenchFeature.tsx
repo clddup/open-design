@@ -220,6 +220,7 @@ export function EditorWorkbenchFeature({
     adjustSmartSelectionSpacing,
     arrangementMetrics,
     arrangeSelection,
+    canAlignSelection,
     canChangeSelectedBoolean,
     canCreateBooleanSelection,
     canDeleteSelection,
@@ -818,6 +819,7 @@ export function EditorWorkbenchFeature({
               <PropertiesPanel
                 activePageId={activePageId}
                 arrangement={arrangementMetrics}
+                canAlignSelection={canAlignSelection}
                 componentContext={selectedComponentContext}
                 booleanOperationEditable={canChangeSelectedBoolean}
                 booleanOperandParent={

@@ -2,6 +2,7 @@ import type {
   DesignDocument,
   DesignNode,
   DesignOperation,
+  Rect,
 } from "@opendesign/design-contracts";
 import { MAX_TRANSACTION_COMMANDS } from "@opendesign/design-contracts";
 import {
@@ -20,6 +21,7 @@ import {
   type TidyUpPlan,
 } from "@opendesign/geometry-service";
 import {
+  getLocalSelectionBounds,
   getNodeBounds,
   getWorldTransform,
   invertTransform,
@@ -84,9 +86,11 @@ export type ArrangementSelectionMetrics = {
 };
 
 type ArrangeSelection = {
+  coordinateSpace: "document" | "parent-local";
   nodeIds: string[];
   items: ArrangementItem[];
   nodes: DesignNode[];
+  targetBounds?: Rect;
 };
 
 export function planArrangeNodes(
@@ -96,9 +100,17 @@ export function planArrangeNodes(
   operation: ArrangeOperation,
   commandPrefix: string,
 ): ArrangeOperationPlan {
-  const selection = analyzeArrangeSelection(document, pageId, nodeIds);
+  const uniqueNodeIds = [...new Set(nodeIds)];
+  const selection =
+    uniqueNodeIds.length === 1 && isAlignOperation(operation)
+      ? analyzeParentAlignment(document, pageId, uniqueNodeIds[0]!)
+      : analyzeArrangeSelection(document, pageId, nodeIds);
   if (!selection.ok) return selection;
-  const geometryPlan = planGeometry(selection.items, operation);
+  const geometryPlan = planGeometry(
+    selection.items,
+    operation,
+    selection.targetBounds,
+  );
   if (!geometryPlan.ok) {
     return failure(
       geometryPlan.code === "no-op" ? "no-op" : "invalid-selection",
@@ -214,11 +226,10 @@ function arrangementCommands(
     if (placement.delta.x === 0 && placement.delta.y === 0) continue;
     const node = projected.nodesById[placement.id];
     if (!node) return failure("not-found", `Layer ${placement.id} is missing`);
-    const localDelta = documentDeltaToParent(
-      document,
-      node.parentId,
-      placement.delta,
-    );
+    const localDelta =
+      selection.coordinateSpace === "parent-local"
+        ? placement.delta
+        : documentDeltaToParent(document, node.parentId, placement.delta);
     if (!localDelta) {
       return failure(
         "visual-fidelity",
@@ -311,9 +322,18 @@ export function getArrangementSelectionMetrics(
   };
 }
 
+export function canAlignNodeToParent(
+  document: DesignDocument,
+  pageId: string,
+  nodeId: string,
+): boolean {
+  return analyzeParentAlignment(document, pageId, nodeId).ok;
+}
+
 function planGeometry(
   items: readonly ArrangementItem[],
   operation: ArrangeOperation,
+  targetBounds?: Rect,
 ): ArrangementPlan | TidyUpPlan {
   if ("spacing" in operation) {
     return setItemSpacing(
@@ -331,7 +351,13 @@ function planGeometry(
   if (operation.action === "tidy-up") {
     return tidyUpItems(items);
   }
-  return alignItems(items, operation.action);
+  return alignItems(items, operation.action, targetBounds);
+}
+
+function isAlignOperation(
+  operation: ArrangeOperation,
+): operation is { action: AlignAction } {
+  return operation.action.startsWith("align-");
 }
 
 function analyzeArrangeSelection(
@@ -377,10 +403,93 @@ function analyzeArrangeSelection(
   }
   return {
     ok: true,
+    coordinateSpace: "document",
     nodeIds: selected,
     nodes,
     items: items.filter((item): item is ArrangementItem => item !== null),
   };
+}
+
+function analyzeParentAlignment(
+  document: DesignDocument,
+  pageId: string,
+  nodeId: string,
+):
+  | ({ ok: true } & ArrangeSelection)
+  | Extract<ArrangeOperationPlan, { ok: false }> {
+  if (!document.pagesById[pageId]) {
+    return failure("not-found", `Page ${pageId} does not exist`);
+  }
+  const node = document.nodesById[nodeId];
+  if (!node) return failure("not-found", `Layer ${nodeId} does not exist`);
+  if (!nodeBelongsToPage(document, pageId, nodeId)) {
+    return failure(
+      "invalid-selection",
+      "The selected layer does not belong to the target Page hierarchy",
+    );
+  }
+  if (isEffectivelyLocked(document, nodeId)) {
+    return failure("locked", "Locked layers cannot be aligned");
+  }
+  if (!node.parentId) {
+    return failure(
+      "invalid-selection",
+      "A Page root layer has no parent container to align against",
+    );
+  }
+  const parent = document.nodesById[node.parentId];
+  if (
+    !parent ||
+    (parent.kind !== "frame" && parent.kind !== "slot") ||
+    !parent.childIds.includes(node.id)
+  ) {
+    return failure(
+      "invalid-selection",
+      "Single-layer alignment requires a direct Frame or Slot parent",
+    );
+  }
+  const autoLayout = parent.properties.autoLayout;
+  if (
+    autoLayout !== undefined &&
+    autoLayout.mode !== "none" &&
+    node.layoutPositioning !== "absolute"
+  ) {
+    return failure(
+      "invalid-selection",
+      "Auto Layout flow children are positioned by their parent and cannot be aligned directly",
+    );
+  }
+  const bounds = getLocalSelectionBounds([node]);
+  const targetBounds = {
+    x: 0,
+    y: 0,
+    width: parent.size.width,
+    height: parent.size.height,
+  };
+  if (!bounds || !validRect(targetBounds)) {
+    return failure(
+      "visual-fidelity",
+      "The selected layer or its parent has invalid local geometry",
+    );
+  }
+  return {
+    ok: true,
+    coordinateSpace: "parent-local",
+    nodeIds: [node.id],
+    nodes: [node],
+    items: [{ id: node.id, bounds }],
+    targetBounds,
+  };
+}
+
+function validRect(rect: Rect): boolean {
+  return (
+    [rect.x, rect.y, rect.width, rect.height].every(Number.isFinite) &&
+    rect.width >= 0 &&
+    rect.height >= 0 &&
+    Number.isFinite(rect.x + rect.width) &&
+    Number.isFinite(rect.y + rect.height)
+  );
 }
 
 function documentDeltaToParent(

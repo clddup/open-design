@@ -114,6 +114,21 @@ describe("editor command controllers", () => {
     ]);
   });
 
+  it("aligns a single selected layer to its Frame through the shared planner", () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    runtime.setSelection(["title_welcome"], "title_welcome");
+    const { result, setEditorError } = renderControllers(runtime);
+
+    expect(result.current.layer.canAlignSelection).toBe(true);
+    act(() => result.current.layer.arrangeSelection({ action: "align-right" }));
+
+    const snapshot = runtime.getSnapshot();
+    expect(snapshot.document.nodesById.title_welcome?.transform[4]).toBe(400);
+    expect(snapshot.document.revision).toBe(1);
+    expect(snapshot.state.history.undo).toHaveLength(1);
+    expect(setEditorError).toHaveBeenLastCalledWith(null);
+  });
+
   it("uses one authoritative command for creating and removing a canvas mask", () => {
     const runtime = new EditorRuntime(createWelcomeDocument());
     runtime.setSelection(

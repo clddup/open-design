@@ -1,6 +1,7 @@
 import type { DesignTransaction } from "@opendesign/design-contracts";
 import { describe, expect, it } from "vitest";
 import {
+  canAlignNodeToParent,
   EditorRuntime,
   createWelcomeDocument,
   getArrangementSelectionMetrics,
@@ -136,6 +137,127 @@ describe("arrange operations", () => {
       getNodeBounds(aligned, "feature_one")?.x ?? Number.NaN,
       9,
     );
+  });
+
+  it("aligns one layer against its explicit parent in parent-local coordinates", () => {
+    const document = structuredClone(createWelcomeDocument());
+    document.nodesById.frame_welcome!.transform = [
+      0.8, 0.25, -0.15, 0.9, 120, 80,
+    ];
+    const runtime = new EditorRuntime(normalizeDesignDocument(document));
+    const plan = planArrangeNodes(
+      runtime.getSnapshot().document,
+      "page_welcome",
+      ["title_welcome"],
+      { action: "align-right" },
+      "align_title_to_frame",
+    );
+    if (!plan.ok) throw new Error(plan.message);
+
+    expect(plan.selectionNodeIds).toEqual(["title_welcome"]);
+    expect(
+      runtime.apply(transaction(runtime, "align_title_to_frame", plan.commands))
+        .ok,
+    ).toBe(true);
+    const aligned = runtime.getSnapshot();
+    expect(aligned.document.nodesById.title_welcome?.transform[4]).toBe(400);
+    expect(aligned.document.nodesById.title_welcome?.constraints).toBe(
+      document.nodesById.title_welcome?.constraints,
+    );
+    expect(aligned.document.revision).toBe(1);
+    expect(aligned.state.history.undo).toHaveLength(1);
+
+    const reopened = normalizeDesignDocument(
+      JSON.parse(JSON.stringify(aligned.document)),
+    );
+    expect(reopened.nodesById.title_welcome?.transform[4]).toBe(400);
+    expect(runtime.undo().ok).toBe(true);
+    expect(
+      runtime.getSnapshot().document.nodesById.title_welcome?.transform[4],
+    ).toBe(64);
+    expect(runtime.redo().ok).toBe(true);
+    expect(
+      runtime.getSnapshot().document.nodesById.title_welcome?.transform[4],
+    ).toBe(400);
+  });
+
+  it("aligns an absolute Auto Layout child but rejects flow and dynamic parents", () => {
+    const flow = structuredClone(createWelcomeDocument());
+    const frame = flow.nodesById.frame_welcome;
+    if (frame?.kind !== "frame") throw new Error("missing Frame");
+    frame.properties.autoLayout = {
+      mode: "vertical",
+      padding: { top: 16, right: 16, bottom: 16, left: 16 },
+      gap: 12,
+      primaryAlignment: "start",
+      counterAlignment: "start",
+    };
+    expect(
+      planArrangeNodes(
+        flow,
+        "page_welcome",
+        ["title_welcome"],
+        { action: "align-bottom" },
+        "flow_child",
+      ),
+    ).toMatchObject({ ok: false, code: "invalid-selection" });
+    expect(canAlignNodeToParent(flow, "page_welcome", "title_welcome")).toBe(
+      false,
+    );
+
+    flow.nodesById.title_welcome!.layoutPositioning = "absolute";
+    flow.nodesById.title_welcome!.constraints = {
+      horizontal: "left",
+      vertical: "bottom",
+    };
+    const absolutePlan = planArrangeNodes(
+      flow,
+      "page_welcome",
+      ["title_welcome"],
+      { action: "align-bottom" },
+      "absolute_child",
+    );
+    if (!absolutePlan.ok) throw new Error(absolutePlan.message);
+    expect(absolutePlan.commands).toEqual([
+      expect.objectContaining({
+        type: "update_properties",
+        nodeId: "title_welcome",
+        transform: [1, 0, 0, 1, 64, 648],
+      }),
+    ]);
+    expect(canAlignNodeToParent(flow, "page_welcome", "title_welcome")).toBe(
+      true,
+    );
+
+    expect(
+      planArrangeNodes(
+        flow,
+        "page_welcome",
+        ["feature_one"],
+        { action: "align-left" },
+        "group_parent",
+      ),
+    ).toMatchObject({ ok: false, code: "invalid-selection" });
+    expect(
+      planArrangeNodes(
+        flow,
+        "page_welcome",
+        ["frame_welcome"],
+        { action: "align-left" },
+        "page_root",
+      ),
+    ).toMatchObject({ ok: false, code: "invalid-selection" });
+
+    flow.nodesById.title_welcome!.locked = true;
+    expect(
+      planArrangeNodes(
+        flow,
+        "page_welcome",
+        ["title_welcome"],
+        { action: "align-left" },
+        "locked_child",
+      ),
+    ).toMatchObject({ ok: false, code: "locked" });
   });
 
   it("reports current spacing metrics without mutating the document", () => {
@@ -386,9 +508,9 @@ describe("arrange operations", () => {
       planArrangeNodes(
         document,
         "page_welcome",
-        ["feature_one"],
+        [],
         { action: "align-left" },
-        "one",
+        "none",
       ),
     ).toMatchObject({ ok: false, code: "invalid-selection" });
   });

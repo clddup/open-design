@@ -4,6 +4,7 @@ import type {
   DesignOperation,
 } from "@opendesign/design-contracts";
 import {
+  canAlignNodeToParent,
   canCreateBooleanGroup,
   canDeleteNodes,
   canGroupNodes,
@@ -103,12 +104,19 @@ export function useLayerCommandController({
       selectedNodeIds.length === 1
         ? document.nodesById[selectedNodeIds[0] ?? ""]
         : undefined;
+    const arrangementMetrics = getArrangementSelectionMetrics(
+      document,
+      activePageId,
+      componentTargetActive ? [] : selectedNodeIds,
+    );
     return {
-      arrangementMetrics: getArrangementSelectionMetrics(
-        document,
-        activePageId,
-        componentTargetActive ? [] : selectedNodeIds,
-      ),
+      canAlignSelection:
+        !componentTargetActive &&
+        (selectedNodeIds.length > 1
+          ? arrangementMetrics !== null
+          : selectedNode !== undefined &&
+            canAlignNodeToParent(document, activePageId, selectedNode.id)),
+      arrangementMetrics,
       canChangeSelectedBoolean:
         !componentTargetActive &&
         selectedNode?.kind === "boolean" &&

@@ -10,7 +10,7 @@
     "documentSchemaVersion": "1.54.0",
     "runtimeProtocolVersion": "0.1.0",
     "agentProtocolVersion": "3.13.0",
-    "geometryServiceContractVersion": 26,
+    "geometryServiceContractVersion": 27,
     "textLayoutServiceContractVersion": 5,
     "textRangeServiceContractVersion": 1,
     "textParagraphServiceContractVersion": 2,

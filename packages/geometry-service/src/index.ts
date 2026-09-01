@@ -1,4 +1,4 @@
-export const GEOMETRY_SERVICE_CONTRACT_VERSION = 22 as const;
+export const GEOMETRY_SERVICE_CONTRACT_VERSION = 27 as const;
 
 export {
   projectVectorNetworkCornerRadii,

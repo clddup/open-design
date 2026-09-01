@@ -190,6 +190,35 @@ describe("Arrange Agent contract", () => {
     );
   });
 
+  it("accepts one alignment target while preserving minimums for other actions", () => {
+    expect(
+      DesignArrangeContract.parse({
+        ...common,
+        action: "align-right",
+        nodeIds: ["layer_a"],
+      }),
+    ).toMatchObject({ ok: true });
+    expect(
+      DesignArrangeContract.issues({
+        ...common,
+        action: "distribute-horizontal",
+        nodeIds: ["layer_a", "layer_b"],
+      }),
+    ).toEqual(
+      expect.arrayContaining([expect.objectContaining({ path: "/nodeIds" })]),
+    );
+    expect(
+      DesignArrangeContract.issues({
+        ...common,
+        action: "set-horizontal-spacing",
+        nodeIds: ["layer_a"],
+        spacing: 12,
+      }),
+    ).toEqual(
+      expect.arrayContaining([expect.objectContaining({ path: "/nodeIds" })]),
+    );
+  });
+
   it("rejects zero Fill weights and invalid Grid spans at exact paths", () => {
     expect(
       DesignArrangeContract.issues({

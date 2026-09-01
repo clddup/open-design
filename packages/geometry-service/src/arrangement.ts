@@ -103,9 +103,13 @@ export const MAX_ARRANGEMENT_SPACING = 1_000_000;
 export function alignItems(
   items: readonly ArrangementItem[],
   action: AlignAction,
+  targetBounds?: Rect,
 ): ArrangementPlan {
-  const validated = validateItems(items, 2);
+  const validated = validateItems(items, targetBounds ? 1 : 2);
   if (!validated.ok) return validated;
+  if (targetBounds && !validBounds(targetBounds)) {
+    return failure("invalid-input", "Alignment target has invalid bounds");
+  }
   const axis =
     action.includes("top") ||
     action.includes("vertical") ||
@@ -113,8 +117,15 @@ export function alignItems(
       ? "vertical"
       : "horizontal";
   const projected = projectAxis(validated.items, axis);
-  const minimum = Math.min(...projected.map((item) => item.start));
-  const maximum = Math.max(...projected.map((item) => item.end));
+  const minimum = targetBounds
+    ? axis === "horizontal"
+      ? targetBounds.x
+      : targetBounds.y
+    : Math.min(...projected.map((item) => item.start));
+  const maximum = targetBounds
+    ? minimum +
+      (axis === "horizontal" ? targetBounds.width : targetBounds.height)
+    : Math.max(...projected.map((item) => item.end));
   const center = (minimum + maximum) / 2;
   const placements = projected.map((item) => {
     const targetLeadingEdge =
@@ -129,6 +140,16 @@ export function alignItems(
     axis,
     projected.map((item) => item.id),
     placements,
+  );
+}
+
+function validBounds({ x, y, width, height }: Rect): boolean {
+  return (
+    [x, y, width, height].every(Number.isFinite) &&
+    Number.isFinite(x + width) &&
+    Number.isFinite(y + height) &&
+    width >= 0 &&
+    height >= 0
   );
 }
 

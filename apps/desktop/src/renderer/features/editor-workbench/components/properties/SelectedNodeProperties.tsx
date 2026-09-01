@@ -20,6 +20,7 @@ import type {
   SlotSettings,
   VariableBindingTarget,
 } from "@opendesign/design-contracts";
+import type { ArrangeOperation } from "@opendesign/editor-runtime";
 import { Button, Icon, IconButton, type IconName } from "@opendesign/ui";
 import type { DesignImageEditAction } from "@/shared/desktop-api";
 import type { MessageKey } from "@/shared/i18n/messages";
@@ -42,6 +43,7 @@ import type { FontInspectorContext } from "./TypographySection";
 import { VariableSection } from "./VariableSection";
 import { StyleReferencesSection } from "./StyleReferencesSection";
 import { Field, Section, commitNumber, formatNumber } from "./controls";
+import { AlignmentControls } from "./AlignmentControls";
 import type {
   VectorVertexInspectorSelection,
   VectorVertexAppearancePatch,
@@ -110,6 +112,7 @@ export function SelectedNodeProperties({
   booleanOperationEditable,
   booleanOperandParent,
   canDelete,
+  canAlignToParent,
   canOutlineStroke,
   constraintsAvailable,
   layoutSizingAvailable,
@@ -118,6 +121,7 @@ export function SelectedNodeProperties({
   layoutPositioningConstraintsAvailable,
   layoutGuidesAvailable,
   onBooleanOperationChange,
+  onArrange,
   onCreateComponent,
   onCreateComponentInstance,
   onDuplicateVariant,
@@ -188,6 +192,7 @@ export function SelectedNodeProperties({
   booleanOperationEditable: boolean;
   booleanOperandParent?: { id: string; name: string };
   canDelete: boolean;
+  canAlignToParent: boolean;
   canOutlineStroke: boolean;
   constraintsAvailable: boolean;
   layoutSizingAvailable: boolean;
@@ -196,6 +201,7 @@ export function SelectedNodeProperties({
   layoutPositioningConstraintsAvailable: boolean;
   layoutGuidesAvailable: boolean;
   onBooleanOperationChange: (operation: BooleanOperation) => void;
+  onArrange: (operation: ArrangeOperation) => void;
   onCreateComponent: () => void;
   onCreateComponentInstance: () => void;
   onDuplicateVariant: () => void;
@@ -686,6 +692,7 @@ export function SelectedNodeProperties({
         </Section>
       )}
       <Section title={t("properties.layout")}>
+        <AlignmentControls disabled={!canAlignToParent} onArrange={onArrange} />
         {layoutGuidesAvailable && node.kind === "frame" && (
           <LayoutGuidesSection
             frameId={node.id}
