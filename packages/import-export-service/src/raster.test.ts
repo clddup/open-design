@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  RasterExportRequestContract,
   isRasterExportRequest,
   planRasterExportDimensions,
   rasterExportExtension,
@@ -75,6 +76,39 @@ describe("Raster Export v1", () => {
     expect(isRasterExportRequest({ ...request, filePath: "/tmp/a.png" })).toBe(
       false,
     );
+
+    expect(
+      RasterExportRequestContract.issues({ ...request, quality: 0.8 }),
+    ).toEqual([
+      expect.objectContaining({
+        code: "raster_export.request_domain_invalid",
+        path: "/quality",
+      }),
+    ]);
+    expect(
+      RasterExportRequestContract.issues({
+        ...request,
+        format: "jpeg",
+        quality: 0.9,
+        background: { mode: "transparent" },
+      }),
+    ).toEqual([
+      expect.objectContaining({
+        code: "raster_export.request_domain_invalid",
+        path: "/background/mode",
+      }),
+    ]);
+    expect(
+      RasterExportRequestContract.issues({
+        ...request,
+        filePath: "/tmp/a.png",
+      }),
+    ).toEqual([
+      expect.objectContaining({
+        code: "raster_export.request_structure_invalid",
+        path: "/filePath",
+      }),
+    ]);
   });
 
   it("maps stable MIME types and portable extensions", () => {

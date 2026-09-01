@@ -1,7 +1,18 @@
-import type { DesignNode, Rect } from "@opendesign/design-contracts";
+import {
+  DesignNodeSchema,
+  RectSchema,
+  Type,
+  type Rect,
+  type Static,
+} from "@opendesign/design-contracts";
+import {
+  defineContract,
+  type ValidationIssue,
+} from "@opendesign/contract-runtime";
 import type { VectorGeometryProvider } from "@opendesign/geometry-service/vector-path";
 import {
   createSvgIssue,
+  SvgInterchangeIssueSchema,
   svgIssuesHaveErrors,
   type SvgInterchangeIssue,
   type SvgInterchangeIssueCode,
@@ -16,6 +27,8 @@ import {
   createSvgExportDocument,
   serializeSvgExportDocument,
 } from "./svg-serialize.js";
+import { SVG_MAX_CHARACTERS } from "./limits.js";
+import { SVG_IMPORT_MAX_NODES } from "./svg-parse.js";
 
 export * from "./svg-issues.js";
 export {
@@ -32,21 +45,43 @@ export interface SvgExportRequest extends SvgNodeExportRequest {
   title?: string;
 }
 
-export type SvgExportResult =
-  | {
-      ok: true;
-      version: typeof SVG_INTERCHANGE_VERSION;
-      mimeType: typeof SVG_MIME_TYPE;
-      svg: string;
-      viewport: Rect;
-      exportedNodeIds: readonly string[];
-      issues: readonly SvgInterchangeIssue[];
-    }
-  | {
-      ok: false;
-      version: typeof SVG_INTERCHANGE_VERSION;
-      issues: readonly SvgInterchangeIssue[];
-    };
+const SvgResultIdSchema = Type.String({
+  minLength: 1,
+  maxLength: 512,
+  pattern: "^[^\\u0000-\\u001F\\u007F]+$",
+});
+const SvgIssueListSchema = Type.Array(SvgInterchangeIssueSchema, {
+  maxItems: SVG_IMPORT_MAX_NODES,
+});
+
+export const SuccessfulSvgExportResultSchema = Type.Object(
+  {
+    ok: Type.Literal(true),
+    version: Type.Literal(SVG_INTERCHANGE_VERSION),
+    mimeType: Type.Literal(SVG_MIME_TYPE),
+    svg: Type.String({ minLength: 1, maxLength: SVG_MAX_CHARACTERS }),
+    viewport: RectSchema,
+    exportedNodeIds: Type.Array(SvgResultIdSchema, {
+      maxItems: SVG_IMPORT_MAX_NODES,
+      uniqueItems: true,
+    }),
+    issues: SvgIssueListSchema,
+  },
+  { additionalProperties: false },
+);
+const FailedSvgInterchangeResultSchema = Type.Object(
+  {
+    ok: Type.Literal(false),
+    version: Type.Literal(SVG_INTERCHANGE_VERSION),
+    issues: SvgIssueListSchema,
+  },
+  { additionalProperties: false },
+);
+export const SvgExportResultSchema = Type.Union([
+  SuccessfulSvgExportResultSchema,
+  FailedSvgInterchangeResultSchema,
+]);
+export type SvgExportResult = Static<typeof SvgExportResultSchema>;
 
 export interface SvgImportRequest {
   svg: string;
@@ -54,26 +89,43 @@ export interface SvgImportRequest {
   name?: string;
 }
 
-export type SvgImportResult =
-  | {
-      ok: true;
-      version: typeof SVG_INTERCHANGE_VERSION;
-      rootNodeId: string;
-      nodes: readonly DesignNode[];
-      sourceViewport: Rect;
-      issues: readonly SvgInterchangeIssue[];
-    }
-  | {
-      ok: false;
-      version: typeof SVG_INTERCHANGE_VERSION;
-      issues: readonly SvgInterchangeIssue[];
-    };
+export const SuccessfulSvgImportResultSchema = Type.Object(
+  {
+    ok: Type.Literal(true),
+    version: Type.Literal(SVG_INTERCHANGE_VERSION),
+    rootNodeId: SvgResultIdSchema,
+    nodes: Type.Array(DesignNodeSchema, {
+      minItems: 1,
+      maxItems: SVG_IMPORT_MAX_NODES,
+    }),
+    sourceViewport: RectSchema,
+    issues: SvgIssueListSchema,
+  },
+  { additionalProperties: false },
+);
+export const SvgImportResultSchema = Type.Union([
+  SuccessfulSvgImportResultSchema,
+  FailedSvgInterchangeResultSchema,
+]);
+export type SvgImportResult = Static<typeof SvgImportResultSchema>;
 
-interface SvgFailureResult {
-  ok: false;
-  version: typeof SVG_INTERCHANGE_VERSION;
-  issues: readonly SvgInterchangeIssue[];
-}
+export const SvgExportResultContract = defineContract<SvgExportResult>({
+  schema: SvgExportResultSchema,
+  code: "svg_interchange.export_result_structure_invalid",
+  subject: "SVG export result",
+  refine: svgExportResultDomainIssues,
+  clone: false,
+});
+
+export const SvgImportResultContract = defineContract<SvgImportResult>({
+  schema: SvgImportResultSchema,
+  code: "svg_interchange.import_result_structure_invalid",
+  subject: "SVG import result",
+  refine: svgImportResultDomainIssues,
+  clone: false,
+});
+
+type SvgFailureResult = Extract<SvgExportResult, { ok: false }>;
 
 export function exportSvg(request: SvgExportRequest): SvgExportResult {
   const issues: SvgInterchangeIssue[] = [];
@@ -149,7 +201,7 @@ export function exportSvg(request: SvgExportRequest): SvgExportResult {
     mimeType: SVG_MIME_TYPE,
     svg: serialized.svg,
     viewport: { ...request.viewport },
-    exportedNodeIds,
+    exportedNodeIds: [...exportedNodeIds],
     issues,
   };
 }
@@ -174,9 +226,9 @@ export function importSvg(
     ok: true,
     version: SVG_INTERCHANGE_VERSION,
     rootNodeId: imported.rootNodeId,
-    nodes: imported.nodes,
-    sourceViewport: imported.sourceViewport,
-    issues: imported.issues,
+    nodes: [...imported.nodes],
+    sourceViewport: { ...imported.sourceViewport },
+    issues: [...imported.issues],
   };
 }
 
@@ -191,6 +243,62 @@ function isFinitePositiveRect(value: Rect): boolean {
   );
 }
 
+function svgExportResultDomainIssues(
+  result: SvgExportResult,
+): ValidationIssue[] {
+  if (!result.ok || isFinitePositiveRect(result.viewport)) return [];
+  return [invalidResultBounds("/viewport")];
+}
+
+function svgImportResultDomainIssues(
+  result: SvgImportResult,
+): ValidationIssue[] {
+  if (!result.ok) return [];
+  if (!isFinitePositiveRect(result.sourceViewport)) {
+    return [invalidResultBounds("/sourceViewport")];
+  }
+  const rootCount = result.nodes.filter(
+    (node) => node.id === result.rootNodeId,
+  ).length;
+  if (rootCount !== 1) {
+    return [
+      {
+        code: "svg_interchange.import_root_invalid",
+        path: "/rootNodeId",
+        message: "Imported SVG root must identify exactly one returned node",
+        expected: 1,
+        actual: rootCount,
+        recovery: "Regenerate the imported node tree from the SVG source.",
+      },
+    ];
+  }
+  const nodeIds = new Set<string>();
+  for (const [index, node] of result.nodes.entries()) {
+    if (nodeIds.has(node.id)) {
+      return [
+        {
+          code: "svg_interchange.import_node_duplicate",
+          path: `/nodes/${index}/id`,
+          message: "Imported SVG nodes must have unique IDs",
+          actual: node.id,
+          recovery: "Regenerate the imported node IDs from one stable prefix.",
+        },
+      ];
+    }
+    nodeIds.add(node.id);
+  }
+  return [];
+}
+
+function invalidResultBounds(path: string): ValidationIssue {
+  return {
+    code: "svg_interchange.result_bounds_invalid",
+    path,
+    message: "SVG result bounds must be finite and positive",
+    recovery: "Recompute the SVG source bounds before returning the result.",
+  };
+}
+
 function failure(
   code: SvgInterchangeIssueCode,
   message: string,
@@ -202,6 +310,6 @@ function failed(issues: readonly SvgInterchangeIssue[]): SvgFailureResult {
   return {
     ok: false,
     version: SVG_INTERCHANGE_VERSION,
-    issues,
+    issues: [...issues],
   };
 }

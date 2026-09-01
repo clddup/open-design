@@ -1,11 +1,13 @@
 import {
   TextPropertiesSchema,
-  schemaValidationIssues,
+  Type,
   type DesignNode,
   type Paint,
+  type Static,
   type TextParagraphStyle,
   type TextRunStyle,
 } from "@opendesign/design-contracts";
+import { defineContract } from "@opendesign/contract-runtime";
 import {
   resolveTextListMarkers,
   textParagraphDirection,
@@ -29,10 +31,34 @@ const XML_NAMESPACE = "http://www.w3.org/XML/1998/namespace";
 type TextNode = Extract<DesignNode, { kind: "text" }>;
 type TextProperties = TextNode["properties"];
 
-interface SerializedText {
-  height: number;
+export const SvgTextMetadataEnvelopeSchema = Type.Object(
+  {
+    height: Type.Number({ exclusiveMinimum: 0 }),
+    properties: Type.Record(Type.String(), Type.Unknown()),
+    width: Type.Number({ exclusiveMinimum: 0 }),
+  },
+  { additionalProperties: false },
+);
+
+type SvgTextMetadataEnvelope = Static<typeof SvgTextMetadataEnvelopeSchema>;
+
+export const SvgTextMetadataEnvelopeContract =
+  defineContract<SvgTextMetadataEnvelope>({
+    schema: SvgTextMetadataEnvelopeSchema,
+    code: "svg_text.metadata_structure_invalid",
+    subject: "SVG text metadata",
+    clone: false,
+  });
+
+const SvgTextPropertiesContract = defineContract<TextProperties>({
+  schema: TextPropertiesSchema,
+  code: "svg_text.properties_structure_invalid",
+  subject: "SVG text properties",
+  clone: false,
+});
+
+interface SerializedText extends SvgTextMetadataEnvelope {
   properties: TextProperties;
-  width: number;
 }
 
 export type SvgTextReadResult =
@@ -147,53 +173,44 @@ export function readSvgText(element: Element): SvgTextReadResult {
   } catch {
     return invalid("OpenDesign text metadata is not valid JSON");
   }
-  if (
-    !isRecord(parsed) ||
-    !hasExactKeys(parsed, ["width", "height", "properties"])
-  ) {
+  const envelope = SvgTextMetadataEnvelopeContract.parse(parsed);
+  if (!envelope.ok) {
     return invalid("OpenDesign text metadata has an invalid shape");
   }
-  if (isRecord(parsed.properties)) {
-    if (
-      metadataVersion === LEGACY_TEXT_METADATA_VERSION &&
-      (Object.hasOwn(parsed.properties, "textWrap") ||
-        Object.hasOwn(parsed.properties, "textOverflow") ||
-        Object.hasOwn(parsed.properties, "textResize"))
-    ) {
-      return invalid(
-        "OpenDesign legacy text metadata contains unsupported layout fields",
-      );
-    }
-    if (
-      metadataVersion === FIXED_LAYOUT_TEXT_METADATA_VERSION &&
-      Object.hasOwn(parsed.properties, "textResize")
-    ) {
-      return invalid(
-        "OpenDesign fixed-layout text metadata contains unsupported resize fields",
-      );
-    }
+  const metadata = envelope.value;
+  if (
+    metadataVersion === LEGACY_TEXT_METADATA_VERSION &&
+    (Object.hasOwn(metadata.properties, "textWrap") ||
+      Object.hasOwn(metadata.properties, "textOverflow") ||
+      Object.hasOwn(metadata.properties, "textResize"))
+  ) {
+    return invalid(
+      "OpenDesign legacy text metadata contains unsupported layout fields",
+    );
   }
-  if (!isPositive(parsed.width) || !isPositive(parsed.height)) {
-    return invalid("OpenDesign text metadata requires finite positive bounds");
+  if (
+    metadataVersion === FIXED_LAYOUT_TEXT_METADATA_VERSION &&
+    Object.hasOwn(metadata.properties, "textResize")
+  ) {
+    return invalid(
+      "OpenDesign fixed-layout text metadata contains unsupported resize fields",
+    );
   }
   const migratedProperties = migrateTextProperties(
     metadataVersion,
-    parsed.properties,
+    metadata.properties,
   );
-  const schemaIssues = schemaValidationIssues(
-    TextPropertiesSchema,
-    migratedProperties,
-  );
-  if (schemaIssues.length > 0) {
+  const properties = SvgTextPropertiesContract.parse(migratedProperties);
+  if (!properties.ok) {
     return invalid(
-      `OpenDesign text metadata does not match the versioned schema: ${schemaIssues[0]?.message ?? "invalid text properties"}`,
+      `OpenDesign text metadata does not match the versioned schema: ${properties.issues[0]?.message ?? "invalid text properties"}`,
     );
   }
 
   const value: SerializedText = {
-    width: parsed.width,
-    height: parsed.height,
-    properties: migratedProperties as TextProperties,
+    width: metadata.width,
+    height: metadata.height,
+    properties: properties.value,
   };
   const mismatch = renderedTextMismatch(element, value, metadataVersion);
   return mismatch ? invalid(mismatch) : { status: "valid", value };
@@ -1086,20 +1103,6 @@ function isXmlText(value: string): boolean {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function hasExactKeys(
-  value: Record<string, unknown>,
-  expected: readonly string[],
-): boolean {
-  const keys = Object.keys(value);
-  return (
-    keys.length === expected.length && expected.every((key) => key in value)
-  );
-}
-
-function isPositive(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value) && value > 0;
 }
 
 function formatNumber(value: number): string {

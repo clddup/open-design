@@ -45,7 +45,7 @@ const IMPORT_SVG_REQUIRED = [
 export const IMPORT_SVG_TOOL_INPUT_SCHEMA = executableJsonSchema({
   type: "object",
   description:
-    "Import one current-Run content-addressed SVG attachment into an explicit inspected Page/Frame/Group insertion target at finite parent-local coordinates. The host resolves source bytes, allocates node IDs, validates capability/revision, and commits one atomic editable transaction; the model never submits SVG XML or a file path.",
+    "Import one content-addressed SVG attachment authorized by this Conversation into an explicit inspected Page/Frame/Group insertion target at finite parent-local coordinates. The host resolves source bytes, allocates node IDs, validates capability/revision, and commits one atomic editable transaction; the model never submits SVG XML or a file path.",
   properties: IMPORT_SVG_COMMON_PROPERTIES,
   required: IMPORT_SVG_REQUIRED,
   additionalProperties: false,

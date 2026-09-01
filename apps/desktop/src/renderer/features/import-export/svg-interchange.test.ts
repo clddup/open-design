@@ -16,6 +16,8 @@ import {
 } from "./svg-interchange.js";
 import {
   SVG_WORKER_PROTOCOL_VERSION,
+  SvgWorkerRequestContract,
+  SvgWorkerResponseContract,
   type SuccessfulSvgImportResult,
   type SvgWorkerRequest,
   type SvgWorkerResponse,
@@ -95,6 +97,118 @@ function completedImport(request: SvgWorkerRequest): SvgWorkerResponse {
     result: importedResult(),
   };
 }
+
+describe("SVG worker contract", () => {
+  it("accepts the supported import and export request branches", () => {
+    const importRequest = {
+      protocolVersion: SVG_WORKER_PROTOCOL_VERSION,
+      requestId: "request_import",
+      operation: "import",
+      svg: "<svg />",
+      idPrefix: "svg_import",
+      name: "Imported SVG",
+    };
+    const exportRequest = {
+      protocolVersion: SVG_WORKER_PROTOCOL_VERSION,
+      requestId: "request_export",
+      operation: "export",
+      document: createWelcomeDocument(),
+      pageId: "page_welcome",
+      rootNodeIds: ["frame_welcome"],
+      settings: { includeLayerIds: false, padding: 0 },
+    };
+
+    expect(SvgWorkerRequestContract.parse(importRequest).ok).toBe(true);
+    expect(SvgWorkerRequestContract.parse(exportRequest).ok).toBe(true);
+  });
+
+  it("reports exact request fields instead of a top-level union failure", () => {
+    const importRequest = {
+      protocolVersion: SVG_WORKER_PROTOCOL_VERSION,
+      requestId: "request_import",
+      operation: "import",
+      svg: "<svg />",
+      idPrefix: "invalid prefix",
+      name: "Imported SVG",
+      filePath: "/tmp/import.svg",
+    };
+    expect(SvgWorkerRequestContract.issues(importRequest)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: "/idPrefix" }),
+        expect.objectContaining({ path: "/filePath" }),
+      ]),
+    );
+
+    const document = createWelcomeDocument();
+    expect(
+      SvgWorkerRequestContract.issues({
+        protocolVersion: SVG_WORKER_PROTOCOL_VERSION,
+        requestId: "request_export",
+        operation: "export",
+        document,
+        pageId: "page_welcome",
+        rootNodeIds: ["frame_welcome", "frame_welcome"],
+        settings: { includeLayerIds: false, padding: 1_000_001 },
+      }),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: "/rootNodeIds" }),
+        expect.objectContaining({ path: "/settings/padding" }),
+      ]),
+    );
+  });
+
+  it("validates completed and failed responses with positive export bounds", () => {
+    const importResponse = completedImport({
+      protocolVersion: SVG_WORKER_PROTOCOL_VERSION,
+      requestId: "request_import",
+      operation: "import",
+      svg: "<svg />",
+      idPrefix: "svg_import",
+      name: "Imported SVG",
+    });
+    const exportResponse = {
+      protocolVersion: SVG_WORKER_PROTOCOL_VERSION,
+      requestId: "request_export",
+      operation: "export",
+      type: "completed",
+      result: {
+        svg: "<svg />",
+        issues: [],
+        exportedNodeIds: ["frame_welcome"],
+        revision: 0,
+        sourceBounds: { x: 0, y: 0, width: 120, height: 80 },
+      },
+    };
+    const failedResponse = {
+      protocolVersion: SVG_WORKER_PROTOCOL_VERSION,
+      requestId: "request_failed",
+      operation: "import",
+      type: "failed",
+      code: "invalid-svg",
+      message: "SVG import failed",
+      issues: [],
+    };
+
+    expect(SvgWorkerResponseContract.parse(importResponse).ok).toBe(true);
+    expect(SvgWorkerResponseContract.parse(exportResponse).ok).toBe(true);
+    expect(SvgWorkerResponseContract.parse(failedResponse).ok).toBe(true);
+    expect(
+      SvgWorkerResponseContract.issues({
+        ...exportResponse,
+        result: {
+          ...exportResponse.result,
+          sourceBounds: { x: 0, y: 0, width: 0, height: 80 },
+        },
+      }),
+    ).toEqual([
+      expect.objectContaining({
+        code: "svg_worker.export_bounds_invalid",
+        path: "/result/sourceBounds",
+      }),
+    ]);
+  });
+});
 
 describe("SVG worker runner", () => {
   it("projects a bounded import request and terminates after a valid response", async () => {

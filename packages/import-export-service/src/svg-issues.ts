@@ -1,7 +1,5 @@
-import {
-  executableJsonSchema,
-  schemaValidationIssues,
-} from "@opendesign/design-contracts";
+import { defineContract } from "@opendesign/contract-runtime";
+import { Type, type Static } from "@opendesign/design-contracts";
 
 export type SvgInterchangeIssueSeverity = "error" | "warning";
 
@@ -40,32 +38,33 @@ export const SVG_INTERCHANGE_ISSUE_CODES = [
 export type SvgInterchangeIssueCode =
   (typeof SVG_INTERCHANGE_ISSUE_CODES)[number];
 
-export interface SvgInterchangeIssue {
-  code: SvgInterchangeIssueCode;
-  message: string;
-  nodeId?: string;
-  severity: SvgInterchangeIssueSeverity;
-  sourceElement?: string;
-}
-
-const BOUNDED_IDENTIFIER_SCHEMA = {
-  type: "string",
+const BoundedSvgIdentifierSchema = Type.String({
   minLength: 1,
   maxLength: 512,
   pattern: "^[^\\u0000-\\u001F\\u007F]+$",
-} as const;
+});
 
-export const SvgInterchangeIssueSchema = executableJsonSchema({
-  type: "object",
-  properties: {
-    code: { enum: [...SVG_INTERCHANGE_ISSUE_CODES] },
-    message: { type: "string", minLength: 1, maxLength: 10_000 },
-    nodeId: BOUNDED_IDENTIFIER_SCHEMA,
-    severity: { enum: ["error", "warning"] },
-    sourceElement: { type: "string", minLength: 1, maxLength: 512 },
+const SvgInterchangeIssueCodeSchema = Type.Union(
+  SVG_INTERCHANGE_ISSUE_CODES.map((code) => Type.Literal(code)),
+);
+
+export const SvgInterchangeIssueSchema = Type.Object(
+  {
+    code: SvgInterchangeIssueCodeSchema,
+    message: Type.String({ minLength: 1, maxLength: 10_000 }),
+    nodeId: Type.Optional(BoundedSvgIdentifierSchema),
+    severity: Type.Union([Type.Literal("error"), Type.Literal("warning")]),
+    sourceElement: Type.Optional(Type.String({ minLength: 1, maxLength: 512 })),
   },
-  required: ["code", "message", "severity"],
-  additionalProperties: false,
+  { additionalProperties: false },
+);
+export type SvgInterchangeIssue = Static<typeof SvgInterchangeIssueSchema>;
+
+export const SvgInterchangeIssueContract = defineContract<SvgInterchangeIssue>({
+  schema: SvgInterchangeIssueSchema,
+  code: "svg_interchange.issue_structure_invalid",
+  subject: "SVG interchange issue",
+  clone: false,
 });
 
 export function createSvgIssue(
@@ -122,5 +121,5 @@ export function reportUnsupportedSvgElementAttributes(
 export function isSvgInterchangeIssue(
   value: unknown,
 ): value is SvgInterchangeIssue {
-  return schemaValidationIssues(SvgInterchangeIssueSchema, value).length === 0;
+  return SvgInterchangeIssueContract.parse(value).ok;
 }

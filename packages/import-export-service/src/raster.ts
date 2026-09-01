@@ -1,30 +1,113 @@
+import {
+  defineContract,
+  type ValidationIssue,
+} from "@opendesign/contract-runtime";
+import { Type, type Static } from "@opendesign/design-contracts";
+
 export const RASTER_EXPORT_VERSION = 1 as const;
 export const RASTER_EXPORT_MAX_DIMENSION = 16_384;
 export const RASTER_EXPORT_MAX_PIXELS = 100_000_000;
 export const RASTER_EXPORT_MAX_ENCODED_BYTES = 256 * 1024 * 1024;
 
-export type RasterExportFormat = "png" | "jpeg" | "webp";
+export const RasterExportFormatSchema = Type.Union([
+  Type.Literal("png"),
+  Type.Literal("jpeg"),
+  Type.Literal("webp"),
+]);
+export type RasterExportFormat = Static<typeof RasterExportFormatSchema>;
 export type RasterExportMimeType = "image/png" | "image/jpeg" | "image/webp";
 export type RasterExportResampling = "smooth" | "pixelated";
 
-export type RasterExportSize =
-  | { mode: "scale"; value: number }
-  | { mode: "width"; value: number }
-  | { mode: "height"; value: number };
+export const RasterExportSizeSchema = Type.Union([
+  Type.Object(
+    {
+      mode: Type.Literal("scale"),
+      value: Type.Number({ exclusiveMinimum: 0, maximum: 64 }),
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      mode: Type.Literal("width"),
+      value: Type.Integer({
+        minimum: 1,
+        maximum: RASTER_EXPORT_MAX_DIMENSION,
+      }),
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      mode: Type.Literal("height"),
+      value: Type.Integer({
+        minimum: 1,
+        maximum: RASTER_EXPORT_MAX_DIMENSION,
+      }),
+    },
+    { additionalProperties: false },
+  ),
+]);
+export type RasterExportSize = Static<typeof RasterExportSizeSchema>;
 
-export type RasterExportBackground =
-  { mode: "transparent" } | { mode: "color"; color: string };
+export const RasterExportBackgroundSchema = Type.Union([
+  Type.Object(
+    { mode: Type.Literal("transparent") },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      mode: Type.Literal("color"),
+      color: Type.String({ pattern: "^#[\\da-fA-F]{6}$" }),
+    },
+    { additionalProperties: false },
+  ),
+]);
+export type RasterExportBackground = Static<
+  typeof RasterExportBackgroundSchema
+>;
 
-export interface RasterExportRequest {
-  version: typeof RASTER_EXPORT_VERSION;
-  pageId: string;
-  rootNodeId: string;
-  format: RasterExportFormat;
-  size: RasterExportSize;
-  background: RasterExportBackground;
-  quality?: number;
-  resampling: RasterExportResampling;
-}
+const RasterExportIdSchema = Type.String({
+  minLength: 1,
+  maxLength: 256,
+  pattern: "^[^\\u0000-\\u001F\\u007F]+$",
+});
+
+export const RasterExportRequestSchema = Type.Object(
+  {
+    version: Type.Literal(RASTER_EXPORT_VERSION),
+    pageId: RasterExportIdSchema,
+    rootNodeId: RasterExportIdSchema,
+    format: RasterExportFormatSchema,
+    size: RasterExportSizeSchema,
+    background: RasterExportBackgroundSchema,
+    quality: Type.Optional(Type.Number({ minimum: 0.01, maximum: 1 })),
+    resampling: Type.Union([Type.Literal("smooth"), Type.Literal("pixelated")]),
+  },
+  { additionalProperties: false },
+);
+export type RasterExportRequest = Static<typeof RasterExportRequestSchema>;
+
+export const RasterExportRequestContract = defineContract<RasterExportRequest>({
+  schema: RasterExportRequestSchema,
+  code: "raster_export.request_structure_invalid",
+  subject: "raster export request",
+  refine: rasterExportRequestDomainIssues,
+  clone: false,
+});
+
+const RasterExportSizeContract = defineContract<RasterExportSize>({
+  schema: RasterExportSizeSchema,
+  code: "raster_export.size_structure_invalid",
+  subject: "raster export size",
+  clone: false,
+});
+
+const RasterExportFormatContract = defineContract<RasterExportFormat>({
+  schema: RasterExportFormatSchema,
+  code: "raster_export.format_structure_invalid",
+  subject: "raster export format",
+  clone: false,
+});
 
 export interface RasterExportDimensions {
   width: number;
@@ -50,7 +133,7 @@ export function planRasterExportDimensions(
       "Raster export source must have finite positive dimensions",
     );
   }
-  if (!isRasterExportSize(size)) {
+  if (!RasterExportSizeContract.parse(size).ok) {
     return failure("invalid-size", "Raster export size is invalid");
   }
   const scale =
@@ -80,36 +163,13 @@ export function planRasterExportDimensions(
 export function isRasterExportRequest(
   value: unknown,
 ): value is RasterExportRequest {
-  if (!record(value)) return false;
-  return (
-    value.version === RASTER_EXPORT_VERSION &&
-    safeId(value.pageId) &&
-    safeId(value.rootNodeId) &&
-    isRasterExportFormat(value.format) &&
-    isRasterExportSize(value.size) &&
-    isRasterExportBackground(value.background) &&
-    (value.quality === undefined ||
-      (finite(value.quality) && value.quality >= 0.01 && value.quality <= 1)) &&
-    (value.format !== "png" || value.quality === undefined) &&
-    (value.format !== "jpeg" || value.background.mode === "color") &&
-    (value.resampling === "smooth" || value.resampling === "pixelated") &&
-    exactKeys(value, [
-      "version",
-      "pageId",
-      "rootNodeId",
-      "format",
-      "size",
-      "background",
-      "quality",
-      "resampling",
-    ])
-  );
+  return RasterExportRequestContract.parse(value).ok;
 }
 
 export function isRasterExportFormat(
   value: unknown,
 ): value is RasterExportFormat {
-  return value === "png" || value === "jpeg" || value === "webp";
+  return RasterExportFormatContract.parse(value).ok;
 }
 
 export function rasterExportMimeType(
@@ -122,32 +182,46 @@ export function rasterExportExtension(format: RasterExportFormat): string {
   return format === "jpeg" ? ".jpg" : `.${format}`;
 }
 
-function isRasterExportSize(value: unknown): value is RasterExportSize {
-  if (!record(value) || !exactKeys(value, ["mode", "value"])) return false;
-  if (value.mode === "scale") {
-    return finite(value.value) && value.value > 0 && value.value <= 64;
+function rasterExportRequestDomainIssues(
+  request: RasterExportRequest,
+): ValidationIssue[] {
+  if (request.format === "png" && request.quality !== undefined) {
+    return [
+      requestIssue(
+        "/quality",
+        "PNG export does not accept a lossy quality setting",
+        "omit quality",
+        request.quality,
+      ),
+    ];
   }
-  return (
-    (value.mode === "width" || value.mode === "height") &&
-    Number.isInteger(value.value) &&
-    Number(value.value) >= 1 &&
-    Number(value.value) <= RASTER_EXPORT_MAX_DIMENSION
-  );
+  if (request.format === "jpeg" && request.background.mode !== "color") {
+    return [
+      requestIssue(
+        "/background/mode",
+        "JPEG export requires an explicit opaque background color",
+        "color",
+        request.background.mode,
+      ),
+    ];
+  }
+  return [];
 }
 
-function isRasterExportBackground(
-  value: unknown,
-): value is RasterExportBackground {
-  if (!record(value)) return false;
-  if (value.mode === "transparent") {
-    return exactKeys(value, ["mode"]);
-  }
-  return (
-    value.mode === "color" &&
-    typeof value.color === "string" &&
-    /^#[\da-f]{6}$/i.test(value.color) &&
-    exactKeys(value, ["mode", "color"])
-  );
+function requestIssue(
+  path: string,
+  message: string,
+  expected: string,
+  actual: string | number,
+): ValidationIssue {
+  return {
+    code: "raster_export.request_domain_invalid",
+    path,
+    message,
+    expected,
+    actual,
+    recovery: "Correct the reported export option and retry once.",
+  };
 }
 
 function failure(
@@ -157,36 +231,6 @@ function failure(
   return { ok: false, code, message };
 }
 
-function finite(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value);
-}
-
-function finitePositive(value: unknown): value is number {
-  return finite(value) && value > 0;
-}
-
-function safeId(value: unknown): value is string {
-  return (
-    typeof value === "string" &&
-    value.length > 0 &&
-    value.length <= 256 &&
-    ![...value].some((character) => {
-      const codePoint = character.codePointAt(0);
-      return codePoint !== undefined && (codePoint <= 31 || codePoint === 127);
-    })
-  );
-}
-
-function record(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function exactKeys(
-  value: Record<string, unknown>,
-  allowed: readonly string[],
-): boolean {
-  return (
-    Object.keys(value).every((key) => allowed.includes(key)) &&
-    allowed.filter((key) => key !== "quality").every((key) => key in value)
-  );
+function finitePositive(value: number): boolean {
+  return Number.isFinite(value) && value > 0;
 }

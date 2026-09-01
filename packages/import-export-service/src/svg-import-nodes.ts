@@ -1039,7 +1039,11 @@ function importElement(
     return null;
   }
   if (editableVector.status === "valid") {
-    const normalizedNetwork = normalizeVectorNetwork(editableVector.network);
+    const normalizedNetwork = normalizeVectorNetwork(
+      editableVector.network,
+      editableVector.cornerRadius ?? 0,
+      editableVector.cornerSmoothing ?? 0,
+    );
     if (!normalizedNetwork.ok || !normalizedNetwork.offset) {
       context.issues.push(
         createSvgIssue(
@@ -1073,6 +1077,12 @@ function importElement(
         ...properties,
         network: normalizedNetwork.network,
         fillRule: localStyle.fillRule,
+        ...(editableVector.cornerRadius !== undefined
+          ? { cornerRadius: editableVector.cornerRadius }
+          : {}),
+        ...(editableVector.cornerSmoothing !== undefined
+          ? { cornerSmoothing: editableVector.cornerSmoothing }
+          : {}),
       },
     };
     context.nodes.push(node);
@@ -1206,10 +1216,22 @@ function importEditableVectorRegionContainer(
     );
     return null;
   }
-  if (!renderedVectorRegionsMatch(context, children, editable.network)) {
+  if (
+    !renderedVectorRegionsMatch(
+      context,
+      children,
+      editable.network,
+      editable.cornerRadius ?? 0,
+      editable.cornerSmoothing ?? 0,
+    )
+  ) {
     return null;
   }
-  const normalized = normalizeVectorNetwork(editable.network);
+  const normalized = normalizeVectorNetwork(
+    editable.network,
+    editable.cornerRadius ?? 0,
+    editable.cornerSmoothing ?? 0,
+  );
   if (!normalized.ok || !normalized.offset) return null;
   const sourceStyle = readImportedSvgStyle(
     source,
@@ -1242,6 +1264,12 @@ function importEditableVectorRegionContainer(
       fills: editable.fallbackFills,
       network: normalized.network,
       fillRule: sourceStyle.fillRule,
+      ...(editable.cornerRadius !== undefined
+        ? { cornerRadius: editable.cornerRadius }
+        : {}),
+      ...(editable.cornerSmoothing !== undefined
+        ? { cornerSmoothing: editable.cornerSmoothing }
+        : {}),
     },
   };
   context.nodes.push(node);
@@ -1255,13 +1283,18 @@ function renderedVectorRegionsMatch(
     ReturnType<typeof readSvgEditableVector>,
     { status: "valid" }
   >["network"],
+  cornerRadius: number,
+  cornerSmoothing: number,
 ): boolean {
   const rendered = children.filter((child) =>
     child.hasAttribute("data-opendesign-vector-region-id"),
   );
+  const strokeParts = children.filter((child) =>
+    child.hasAttribute("data-opendesign-vector-stroke-part"),
+  );
   if (
     rendered.length !== network.regions.length ||
-    children.length !== rendered.length + 1
+    children.length !== rendered.length + strokeParts.length + 1
   ) {
     context.issues.push(
       createSvgIssue(
@@ -1278,7 +1311,12 @@ function renderedVectorRegionsMatch(
         candidate.getAttribute("data-opendesign-vector-region-id") ===
         region.id,
     );
-    const serialized = serializeVectorRegion(network, region.id);
+    const serialized = serializeVectorRegion(
+      network,
+      region.id,
+      cornerRadius,
+      cornerSmoothing,
+    );
     if (
       !element ||
       element.localName.toLowerCase() !== "path" ||

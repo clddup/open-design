@@ -1,7 +1,6 @@
 import {
   isFrameLikeNode,
   type DesignDocument,
-  type Rect,
   type ViewportState,
 } from "@opendesign/design-contracts";
 import {
@@ -9,13 +8,10 @@ import {
   screenToDocument,
   type SvgImportOperationPlan,
 } from "@opendesign/editor-runtime";
-import {
-  SVG_INTERCHANGE_VERSION,
-  SVG_MAX_CHARACTERS,
-  type SvgInterchangeIssue,
-} from "@opendesign/import-export-service";
+import { type SvgInterchangeIssue } from "@opendesign/import-export-service";
 import {
   SVG_WORKER_PROTOCOL_VERSION,
+  SvgWorkerResponseContract,
   type SuccessfulSvgImportResult,
   type SvgWorkerExportSettings,
   type SvgWorkerRequest,
@@ -294,71 +290,7 @@ function createSvgWorker(): SvgWorkerLike {
 }
 
 function isSvgWorkerResponse(value: unknown): value is SvgWorkerResponse {
-  if (!isRecord(value)) return false;
-  if (
-    value.protocolVersion !== SVG_WORKER_PROTOCOL_VERSION ||
-    typeof value.requestId !== "string" ||
-    (value.operation !== "import" && value.operation !== "export") ||
-    (value.type !== "completed" && value.type !== "failed")
-  ) {
-    return false;
-  }
-  if (value.type === "failed") {
-    return (
-      typeof value.code === "string" &&
-      value.code.length > 0 &&
-      typeof value.message === "string" &&
-      value.message.length > 0 &&
-      (value.issues === undefined || isIssueArray(value.issues))
-    );
-  }
-  if (!isRecord(value.result)) return false;
-  if (value.operation === "import") {
-    return (
-      value.result.ok === true &&
-      value.result.version === SVG_INTERCHANGE_VERSION &&
-      typeof value.result.rootNodeId === "string" &&
-      Array.isArray(value.result.nodes) &&
-      isRect(value.result.sourceViewport) &&
-      isIssueArray(value.result.issues)
-    );
-  }
-  return (
-    typeof value.result.svg === "string" &&
-    value.result.svg.length > 0 &&
-    value.result.svg.length <= SVG_MAX_CHARACTERS &&
-    isIssueArray(value.result.issues) &&
-    Array.isArray(value.result.exportedNodeIds) &&
-    value.result.exportedNodeIds.every((id) => typeof id === "string") &&
-    Number.isInteger(value.result.revision) &&
-    isRect(value.result.sourceBounds)
-  );
-}
-
-function isIssueArray(value: unknown): value is SvgInterchangeIssue[] {
-  return (
-    Array.isArray(value) &&
-    value.every(
-      (issue) =>
-        isRecord(issue) &&
-        (issue.severity === "warning" || issue.severity === "error") &&
-        typeof issue.code === "string" &&
-        typeof issue.message === "string",
-    )
-  );
-}
-
-function isRect(value: unknown): value is Rect {
-  return (
-    isRecord(value) &&
-    [value.x, value.y, value.width, value.height].every(
-      (number) => typeof number === "number" && Number.isFinite(number),
-    ) &&
-    typeof value.width === "number" &&
-    value.width > 0 &&
-    typeof value.height === "number" &&
-    value.height > 0
-  );
+  return SvgWorkerResponseContract.parse(value).ok;
 }
 
 function portableFileStem(value: string): string {
@@ -406,8 +338,4 @@ function nodeBelongsToPage(
     if (node) pending.push(...node.childIds);
   }
   return false;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
 }

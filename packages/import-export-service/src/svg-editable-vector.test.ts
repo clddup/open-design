@@ -82,8 +82,92 @@ describe("controlled editable-vector SVG metadata", () => {
       ),
     ).toEqual({ status: "valid", fallbackFills: [], network });
     expect(element.getAttribute("data-opendesign-vector-network-version")).toBe(
-      "3",
+      "6",
     );
+  });
+
+  it("round-trips radius and smoothing without persisting projected points", () => {
+    const rounded = structuredClone(network);
+    rounded.vertices[2]!.cornerRadius = 8;
+    const serialized = serializeVectorNetwork(rounded, 6, 0.6);
+    if (!serialized.ok) throw new Error("Rounded path did not serialize");
+    const element = pathElement();
+
+    expect(writeSvgEditableVector(element, rounded, [], 6, 0.6)).toBe(true);
+    expect(readSvgEditableVector(element, serialized.path)).toEqual({
+      status: "valid",
+      cornerRadius: 6,
+      cornerSmoothing: 0.6,
+      fallbackFills: [],
+      network: rounded,
+    });
+    expect(
+      element.getAttribute("data-opendesign-vector-network"),
+    ).not.toContain("__corner_");
+  });
+
+  it("continues to read version 5 radius metadata with zero smoothing", () => {
+    const rounded = structuredClone(network);
+    rounded.vertices[2]!.cornerRadius = 8;
+    const serialized = serializeVectorNetwork(rounded, 6);
+    if (!serialized.ok) throw new Error("Rounded path did not serialize");
+    const element = pathElement();
+    expect(writeSvgEditableVector(element, rounded, [], 6)).toBe(true);
+    element.setAttribute("data-opendesign-vector-network-version", "5");
+    element.removeAttribute("data-opendesign-vector-corner-smoothing");
+
+    expect(readSvgEditableVector(element, serialized.path)).toEqual({
+      status: "valid",
+      cornerRadius: 6,
+      fallbackFills: [],
+      network: rounded,
+    });
+  });
+
+  it("exports resolved region Paints without persisting document-local Style links", () => {
+    const styled = structuredClone(network);
+    styled.regions[0]!.fillStyleId = "brand-accent";
+    styled.regions[0]!.fills = [
+      { type: "solid", color: "#7c3aed", opacity: 1 },
+    ];
+    const element = pathElement();
+
+    expect(writeSvgEditableVector(element, styled)).toBe(true);
+    const result = readSvgEditableVector(
+      element,
+      "M 0 0 C 25 0 75 0 100 0 L 50 100 L 0 0 Z",
+    );
+
+    expect(result).toMatchObject({
+      status: "valid",
+      network: {
+        regions: [
+          {
+            fills: [{ type: "solid", color: "#7c3aed", opacity: 1 }],
+          },
+        ],
+      },
+    });
+    if (result.status !== "valid") throw new Error("Missing vector metadata");
+    expect(result.network.regions[0]).not.toHaveProperty("fillStyleId");
+    expect(
+      element.getAttribute("data-opendesign-vector-network"),
+    ).not.toContain("fillStyleId");
+  });
+
+  it("round-trips vertex-local stroke appearance metadata", () => {
+    const styled = structuredClone(network);
+    styled.vertices[0]!.strokeCap = "round";
+    styled.vertices[1]!.strokeJoin = "bevel";
+    const element = pathElement();
+
+    expect(writeSvgEditableVector(element, styled)).toBe(true);
+    expect(
+      readSvgEditableVector(
+        element,
+        "M 0 0 C 25 0 75 0 100 0 L 50 100 L 0 0 Z",
+      ),
+    ).toEqual({ status: "valid", fallbackFills: [], network: styled });
   });
 
   it("continues to read version 1 metadata without inventing handle modes", () => {
@@ -156,6 +240,9 @@ describe("controlled editable-vector SVG metadata", () => {
     );
     expect(element.hasAttribute("data-opendesign-vector-network")).toBe(false);
     expect(element.hasAttribute("data-opendesign-vector-fallback-fills")).toBe(
+      false,
+    );
+    expect(element.hasAttribute("data-opendesign-vector-corner-radius")).toBe(
       false,
     );
   });

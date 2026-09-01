@@ -15,6 +15,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@opendesign/contract-runtime": "workspace:*",
     "@opendesign/design-contracts": "workspace:*",
     "@opendesign/geometry-service": "workspace:*",
     "@opendesign/text-service": "workspace:*",

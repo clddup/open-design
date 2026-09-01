@@ -1,18 +1,14 @@
-import { isDesignDocument } from "@opendesign/design-contracts";
 import { createBooleanGeometryResolver } from "@opendesign/geometry-service/boolean-resolver";
 import { loadBrowserVectorGeometryProvider } from "@opendesign/geometry-service/browser-vector-path";
-import {
-  MAX_SVG_EXPORT_PADDING,
-  planSvgExportRequest,
-} from "@opendesign/editor-runtime";
+import { planSvgExportRequest } from "@opendesign/editor-runtime";
 import {
   exportSvg,
   importSvg,
-  SVG_MAX_CHARACTERS,
   type SvgInterchangeIssue,
 } from "@opendesign/import-export-service";
 import {
   SVG_WORKER_PROTOCOL_VERSION,
+  SvgWorkerRequestContract,
   type SvgWorkerRequest,
   type SvgWorkerResponse,
 } from "./svg-interchange-contract.js";
@@ -23,9 +19,9 @@ const scope = self as unknown as {
 };
 
 scope.onmessage = (event) => {
-  const request = event.data;
-  if (!isSvgWorkerRequest(request)) return;
-  void execute(request);
+  const parsed = SvgWorkerRequestContract.parse(event.data);
+  if (!parsed.ok) return;
+  void execute(parsed.value);
 };
 
 async function execute(request: SvgWorkerRequest): Promise<void> {
@@ -123,92 +119,6 @@ function fail(
     type: "failed",
     code,
     message,
-    ...(issues === undefined ? {} : { issues }),
+    ...(issues === undefined ? {} : { issues: [...issues] }),
   });
-}
-
-function isSvgWorkerRequest(value: unknown): value is SvgWorkerRequest {
-  if (!isRecord(value)) return false;
-  if (
-    value.protocolVersion !== SVG_WORKER_PROTOCOL_VERSION ||
-    !isRequestId(value.requestId)
-  ) {
-    return false;
-  }
-  if (value.operation === "import") {
-    return (
-      typeof value.svg === "string" &&
-      value.svg.length > 0 &&
-      value.svg.length <= SVG_MAX_CHARACTERS &&
-      typeof value.idPrefix === "string" &&
-      /^[A-Za-z][A-Za-z0-9_-]{0,79}$/.test(value.idPrefix) &&
-      typeof value.name === "string" &&
-      value.name.length > 0 &&
-      value.name.length <= 255 &&
-      hasExactKeys(value, [
-        "protocolVersion",
-        "requestId",
-        "operation",
-        "svg",
-        "idPrefix",
-        "name",
-      ])
-    );
-  }
-  if (value.operation !== "export") return false;
-  return (
-    isDesignDocument(value.document) &&
-    typeof value.pageId === "string" &&
-    value.pageId.length > 0 &&
-    Array.isArray(value.rootNodeIds) &&
-    value.rootNodeIds.length > 0 &&
-    value.rootNodeIds.every(
-      (nodeId) => typeof nodeId === "string" && nodeId.length > 0,
-    ) &&
-    isExportSettings(value.settings) &&
-    hasExactKeys(value, [
-      "protocolVersion",
-      "requestId",
-      "operation",
-      "document",
-      "pageId",
-      "rootNodeIds",
-      "settings",
-    ])
-  );
-}
-
-function isExportSettings(value: unknown): boolean {
-  return (
-    isRecord(value) &&
-    typeof value.includeLayerIds === "boolean" &&
-    typeof value.padding === "number" &&
-    Number.isFinite(value.padding) &&
-    value.padding >= 0 &&
-    value.padding <= MAX_SVG_EXPORT_PADDING &&
-    hasExactKeys(value, ["includeLayerIds", "padding"])
-  );
-}
-
-function isRequestId(value: unknown): value is string {
-  return (
-    typeof value === "string" &&
-    value.length > 0 &&
-    value.length <= 128 &&
-    /^[A-Za-z0-9_-]+$/.test(value)
-  );
-}
-
-function hasExactKeys(
-  value: Record<string, unknown>,
-  keys: readonly string[],
-): boolean {
-  const actual = Object.keys(value);
-  return (
-    actual.length === keys.length && actual.every((key) => keys.includes(key))
-  );
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
 }

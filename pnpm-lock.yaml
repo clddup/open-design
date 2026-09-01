@@ -410,6 +410,9 @@ importers:
 
   packages/import-export-service:
     dependencies:
+      '@opendesign/contract-runtime':
+        specifier: workspace:*
+        version: link:../contract-runtime
       '@opendesign/design-contracts':
         specifier: workspace:*
         version: link:../design-contracts

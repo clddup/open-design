@@ -14,6 +14,10 @@ import {
   serializeVectorRegion,
   vectorNetworkHasFillRegion,
 } from "@opendesign/geometry-service/editable-vector";
+import {
+  projectVectorNetworkStrokePaths,
+  vectorNetworkHasVertexStrokeOverrides,
+} from "@opendesign/geometry-service/vector-stroke-appearance";
 import { applyToPoint } from "transformation-matrix";
 import {
   applyExportNodeAppearance,
@@ -285,9 +289,10 @@ function exportNode(
       }
       if (
         "network" in node.properties &&
-        node.properties.network.regions.some(
+        (node.properties.network.regions.some(
           (region) => region.fills !== undefined,
-        )
+        ) ||
+          vectorNetworkHasVertexStrokeOverrides(node.properties.network))
       ) {
         return exportEditableVectorRegions(context, node, path, options);
       }
@@ -300,6 +305,8 @@ function exportNode(
           element,
           node.properties.network,
           node.properties.fills,
+          node.properties.cornerRadius ?? 0,
+          node.properties.cornerSmoothing ?? 0,
         )
       ) {
         context.issues.push(
@@ -415,6 +422,8 @@ function exportEditableVectorRegions(
     const serialized = serializeVectorRegion(
       node.properties.network,
       region.id,
+      node.properties.cornerRadius ?? 0,
+      node.properties.cornerSmoothing ?? 0,
     );
     if (!serialized.ok) continue;
     const element = context.document.createElementNS(SVG_NAMESPACE, "path");
@@ -440,11 +449,17 @@ function exportEditableVectorRegions(
     ...node.properties,
     fills: [],
   });
+  if (vectorNetworkHasVertexStrokeOverrides(node.properties.network)) {
+    const strokeParts = appendEditableVectorStrokeParts(context, group, node);
+    if (strokeParts) source.setAttribute("display", "none");
+  }
   if (
     !writeSvgEditableVector(
       source,
       node.properties.network,
       node.properties.fills,
+      node.properties.cornerRadius ?? 0,
+      node.properties.cornerSmoothing ?? 0,
     )
   ) {
     group.removeAttribute("data-opendesign-vector-region-container");
@@ -460,6 +475,49 @@ function exportEditableVectorRegions(
   }
   group.appendChild(source);
   return group;
+}
+
+function appendEditableVectorStrokeParts(
+  context: ExportContext,
+  group: Element,
+  node: Extract<DesignNode, { kind: "path" | "vector" }>,
+): boolean {
+  if (!("network" in node.properties)) return false;
+  const projected = projectVectorNetworkStrokePaths(
+    node.properties.network,
+    {
+      strokeCap: node.properties.strokeCap ?? "none",
+      strokeJoin: node.properties.strokeJoin ?? "miter",
+    },
+    node.properties.strokeWidth,
+    node.properties.cornerRadius ?? 0,
+    node.properties.cornerSmoothing ?? 0,
+    node.properties.dashPattern ?? [],
+  );
+  if (!projected.ok) {
+    context.issues.push(
+      createSvgIssue("invalid-geometry", "error", projected.message, {
+        nodeId: node.id,
+      }),
+    );
+    return false;
+  }
+  projected.paths.forEach((part, index) => {
+    const element = context.document.createElementNS(SVG_NAMESPACE, "path");
+    element.setAttribute("d", part.path);
+    element.setAttribute("fill", "none");
+    element.setAttribute("data-opendesign-vector-stroke-part", String(index));
+    applyExportShapeAppearance(context, element, `${node.id}_stroke_${index}`, {
+      ...node.properties,
+      fills: [],
+      dashPattern: [],
+      strokeAlign: "center",
+      strokeCap: part.cap === "butt" ? "none" : part.cap,
+      strokeJoin: part.join,
+    });
+    group.appendChild(element);
+  });
+  return true;
 }
 
 function applyExportLineEndpoints(

@@ -14,6 +14,11 @@ import {
   resolvePathPropertiesData,
 } from "@opendesign/geometry-service/editable-vector";
 import {
+  materializeTransformedVectorNetwork,
+  mergeVectorNetworks,
+  outlineVectorPath,
+} from "@opendesign/geometry-service/vector-materialization";
+import {
   cutVectorNetworkByLine,
   cutVectorPath,
   setVectorPathClosed,
@@ -1095,8 +1100,8 @@ describe("versioned SVG interchange", () => {
           properties: {
             network: {
               vertices: [
-                { id: "vertex_a", x: 0, y: 0 },
-                { id: "vertex_b", x: 100, y: 0 },
+                { id: "vertex_a", x: 0, y: 0, strokeCap: "round" },
+                { id: "vertex_b", x: 100, y: 0, strokeJoin: "bevel" },
                 { id: "vertex_c", x: 50, y: 100 },
               ],
               segments: [
@@ -1140,8 +1145,11 @@ describe("versioned SVG interchange", () => {
             },
             fillRule: "nonzero",
             fills: [{ type: "solid", color: "#4f7fff", opacity: 1 }],
-            strokes: [],
-            strokeWidth: 0,
+            strokes: [{ type: "solid", color: "#111827", opacity: 1 }],
+            strokeWidth: 4,
+            strokeCap: "none",
+            strokeJoin: "miter",
+            dashPattern: [60, 10, 5, 10],
           },
         },
       },
@@ -1175,12 +1183,17 @@ describe("versioned SVG interchange", () => {
     if (!exported.ok) return;
     expect(exported.issues).toEqual([]);
     expect(exported.svg).toContain(
-      'data-opendesign-vector-network-version="3"',
+      'data-opendesign-vector-network-version="6"',
     );
     expect(exported.svg).toContain(
       'data-opendesign-vector-region-id="region_1"',
     );
     expect(exported.svg).toContain('fill="#22c55e"');
+    expect(exported.svg).toContain('data-opendesign-vector-stroke-part="0"');
+    expect(exported.svg).toContain('stroke-linejoin="bevel"');
+    expect(exported.svg).not.toContain("cannot preserve dash phase");
+    expect(exported.svg).toContain('data-opendesign-vector-source="true"');
+    expect(exported.svg).toContain('display="none"');
     const imported = importSvg(
       { svg: exported.svg, idPrefix: "editable_vector" },
       geometry,
@@ -1202,6 +1215,7 @@ describe("versioned SVG interchange", () => {
       transform: [1, 0, 0, 1, 12, 16],
       size: { width: 100, height: 100 },
       properties: {
+        dashPattern: [60, 10, 5, 10],
         network: sourceVector.properties.network,
       },
     });
@@ -1242,7 +1256,10 @@ describe("versioned SVG interchange", () => {
     );
     expect(importedOpenVector).toMatchObject({
       kind: "vector",
-      properties: { network: opened.network, fills: [] },
+      properties: {
+        network: opened.network,
+        fills: sourceVector.properties.fills,
+      },
     });
 
     const cut = cutVectorPath(opened.network, "path_1", {
@@ -1274,7 +1291,10 @@ describe("versioned SVG interchange", () => {
       cutImported.nodes.find((node) => node.kind === "vector"),
     ).toMatchObject({
       kind: "vector",
-      properties: { network: cut.network, fills: [] },
+      properties: {
+        network: cut.network,
+        fills: sourceVector.properties.fills,
+      },
     });
 
     const divided = cutVectorNetworkByLine(
@@ -1348,7 +1368,7 @@ describe("versioned SVG interchange", () => {
     if (!dividedExport.ok) return;
     expect(dividedExport.issues).toEqual([]);
     expect(
-      dividedExport.svg.match(/data-opendesign-vector-network-version="3"/g),
+      dividedExport.svg.match(/data-opendesign-vector-network-version="6"/g),
     ).toHaveLength(2);
     expect(
       dividedExport.svg.match(/data-opendesign-vector-region-id=/g),
@@ -1490,7 +1510,7 @@ describe("versioned SVG interchange", () => {
     expect(openDividedExport.issues).toEqual([]);
     expect(
       openDividedExport.svg.match(
-        /data-opendesign-vector-network-version="3"/g,
+        /data-opendesign-vector-network-version="6"/g,
       ),
     ).toHaveLength(2);
     const openPathData = [...openDividedExport.svg.matchAll(/\sd="([^"]+)"/g)]
@@ -1533,6 +1553,150 @@ describe("versioned SVG interchange", () => {
           network.paths.every((path) => !path.closed),
       ),
     ).toBe(true);
+  });
+
+  it("round-trips an outlined stroke as a filled editable Vector", () => {
+    const outlined = outlineVectorPath(
+      { path: "M0 0L100 0", fillRule: "nonzero" },
+      {
+        align: "center",
+        cap: "round",
+        join: "round",
+        miterLimit: 4,
+        width: 8,
+      },
+      geometry,
+      "svg_outline",
+    );
+    expect(outlined.ok).toBe(true);
+    if (!outlined.ok) return;
+    const normalized = normalizeVectorNetwork(outlined.network);
+    expect(normalized.ok).toBe(true);
+    if (!normalized.ok) return;
+    const node = editableVectorNode("outlined_stroke", normalized);
+    node.properties.fills = [{ type: "solid", color: "#2563eb", opacity: 1 }];
+    const document = documentFromNodes(
+      "document_outlined_stroke",
+      [node],
+      [node.id],
+    );
+    const exported = exportSvg({
+      document,
+      rootNodeIds: [node.id],
+      viewport: { x: -8, y: -8, width: 116, height: 16 },
+      includeLayerIds: true,
+      title: "Outlined stroke",
+    });
+
+    expect(exported.ok).toBe(true);
+    if (!exported.ok) return;
+    expect(exported.issues).toEqual([]);
+    expect(exported.svg).toContain(
+      'data-opendesign-vector-network-version="6"',
+    );
+    const imported = importSvg(
+      { svg: exported.svg, idPrefix: "outlined_stroke_roundtrip" },
+      geometry,
+    );
+    expect(imported.ok).toBe(true);
+    if (!imported.ok) return;
+    const importedNode = findImportedSource(imported.nodes, node.id);
+    expect(importedNode).toMatchObject({
+      kind: "vector",
+      properties: {
+        fills: [{ type: "solid", color: "#2563eb", opacity: 1 }],
+        strokes: [],
+        strokeWidth: 0,
+      },
+    });
+    if (
+      !importedNode ||
+      importedNode.kind !== "vector" ||
+      !("network" in importedNode.properties)
+    ) {
+      throw new Error("Outlined stroke lost editable Vector metadata");
+    }
+    expect(importedNode.properties.network.paths).not.toHaveLength(0);
+    expect(
+      importedNode.properties.network.paths.every((path) => path.closed),
+    ).toBe(true);
+    expect(importedNode.properties.network.regions).not.toHaveLength(0);
+  });
+
+  it("round-trips a flattened editable Vector with ordered region paints", () => {
+    const first = materializeTransformedVectorNetwork(
+      { path: "M0 0L40 0L40 40L0 40Z", fillRule: "nonzero" },
+      [1, 0, 0, 1, 8, 12],
+      geometry,
+      "flatten_first",
+    );
+    const second = materializeTransformedVectorNetwork(
+      { path: "M0 0L40 0L40 40L0 40Z", fillRule: "nonzero" },
+      [1, 0, 0, 1, 56, 12],
+      geometry,
+      "flatten_second",
+    );
+    expect(first.ok).toBe(true);
+    expect(second.ok).toBe(true);
+    if (!first.ok || !second.ok) return;
+    first.network.regions[0]!.fills = [
+      { type: "solid", color: "#ef4444", opacity: 1 },
+    ];
+    second.network.regions[0]!.fills = [
+      { type: "solid", color: "#2563eb", opacity: 1 },
+    ];
+    const merged = mergeVectorNetworks([first.network, second.network]);
+    expect(merged.ok).toBe(true);
+    if (!merged.ok) return;
+    const normalized = normalizeVectorNetwork(merged.network);
+    expect(normalized.ok).toBe(true);
+    if (!normalized.ok) return;
+    const node = editableVectorNode("flattened_vector", normalized);
+    node.properties.fills = [];
+    const document = documentFromNodes(
+      "document_flattened_vector",
+      [node],
+      [node.id],
+    );
+    const exported = exportSvg({
+      document,
+      rootNodeIds: [node.id],
+      viewport: { x: 0, y: 0, width: 112, height: 64 },
+      includeLayerIds: true,
+      title: "Flattened editable vector",
+    });
+
+    expect(exported.ok).toBe(true);
+    if (!exported.ok) return;
+    expect(exported.issues).toEqual([]);
+    expect(exported.svg).toContain(
+      'data-opendesign-vector-network-version="6"',
+    );
+    const imported = importSvg(
+      { svg: exported.svg, idPrefix: "flattened_vector_roundtrip" },
+      geometry,
+    );
+    expect(imported.ok).toBe(true);
+    if (!imported.ok) return;
+    const importedNode = findImportedSource(imported.nodes, node.id);
+    expect(importedNode).toMatchObject({
+      kind: "vector",
+      properties: { fills: [], strokes: [], strokeWidth: 0 },
+    });
+    if (
+      !importedNode ||
+      importedNode.kind !== "vector" ||
+      !("network" in importedNode.properties)
+    ) {
+      throw new Error("Flattened Vector lost editable metadata");
+    }
+    expect(
+      importedNode.properties.network.regions.map((region) => region.fills),
+    ).toEqual([
+      [{ type: "solid", color: "#ef4444", opacity: 1 }],
+      [{ type: "solid", color: "#2563eb", opacity: 1 }],
+    ]);
+    expect(importedNode.properties.network.paths).toHaveLength(2);
   });
 
   it("round-trips a divided compound region with its uncut hole on the containing sibling", () => {
@@ -1613,7 +1777,7 @@ describe("versioned SVG interchange", () => {
     if (!exported.ok) return;
     expect(exported.issues).toEqual([]);
     expect(
-      exported.svg.match(/data-opendesign-vector-network-version="3"/g),
+      exported.svg.match(/data-opendesign-vector-network-version="6"/g),
     ).toHaveLength(2);
     const pathData = [...exported.svg.matchAll(/\sd="([^"]+)"/g)]
       .map((match) => match[1])
