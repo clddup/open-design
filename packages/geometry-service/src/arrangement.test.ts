@@ -7,6 +7,7 @@ import {
   MAX_ARRANGEMENT_SPACING,
   measureItemSpacing,
   rearrangeSmartSelectionGrid,
+  reflowSmartSelectionMutation,
   reorderSmartSelection,
   setItemSpacing,
   setSmartSelectionSpacing,
@@ -24,7 +25,7 @@ const items = (
 
 describe("geometry arrangement", () => {
   it("exposes a stable service contract version", () => {
-    expect(GEOMETRY_SERVICE_CONTRACT_VERSION).toBe(27);
+    expect(GEOMETRY_SERVICE_CONTRACT_VERSION).toBe(28);
   });
 
   it("aligns unequal items against the requested selection edge or center", () => {
@@ -420,6 +421,134 @@ describe("geometry arrangement", () => {
         { id: "c", target: { x: 40, y: 0 } },
         { id: "d", target: { x: 60, y: 3 } },
       ],
+    });
+  });
+
+  it("reflows linear Smart Selection delete, duplicate, and resize mutations", () => {
+    const source = items(
+      ["a", 0, 0, 40, 20],
+      ["b", 50, 0, 30, 20],
+      ["c", 90, 0, 20, 20],
+    );
+    expect(
+      reflowSmartSelectionMutation(source, {
+        kind: "delete",
+        removedNodeIds: ["a"],
+      }),
+    ).toMatchObject({
+      ok: true,
+      orderedIds: ["b", "c"],
+      placements: [
+        { id: "b", target: { x: 0, y: 0 } },
+        { id: "c", target: { x: 40, y: 0 } },
+      ],
+    });
+    expect(
+      reflowSmartSelectionMutation(source, {
+        duplicates: [{ id: "b-copy", sourceId: "b" }],
+        kind: "duplicate",
+      }),
+    ).toMatchObject({
+      ok: true,
+      orderedIds: ["a", "b", "b-copy", "c"],
+      placements: [
+        { id: "a", target: { x: 0, y: 0 } },
+        { id: "b", target: { x: 50, y: 0 } },
+        { id: "b-copy", target: { x: 90, y: 0 } },
+        { id: "c", target: { x: 130, y: 0 } },
+      ],
+    });
+    expect(
+      reflowSmartSelectionMutation(source, {
+        kind: "resize",
+        markedNodeIds: ["b"],
+        updatedItems: items(["b", 45, 0, 60, 20]),
+      }),
+    ).toMatchObject({
+      ok: true,
+      placements: [
+        { id: "a", target: { x: -5, y: 0 } },
+        { id: "b", target: { x: 45, y: 0 } },
+        { id: "c", target: { x: 115, y: 0 } },
+      ],
+    });
+  });
+
+  it("reflows each grid column upward and duplicates below the source", () => {
+    const source = items(
+      ["a", 0, 0, 20, 20],
+      ["b", 40, 0, 20, 20],
+      ["c", 0, 30, 20, 20],
+      ["d", 40, 30, 20, 20],
+      ["e", 0, 60, 20, 20],
+      ["f", 40, 60, 20, 20],
+    );
+    const deleted = reflowSmartSelectionMutation(source, {
+      kind: "delete",
+      removedNodeIds: ["a", "d"],
+    });
+    expect(deleted).toMatchObject({ ok: true, dimension: "grid" });
+    if (!deleted.ok) return;
+    expect(
+      Object.fromEntries(
+        deleted.placements.map((item) => [item.id, item.target]),
+      ),
+    ).toMatchObject({
+      c: { x: 0, y: 0 },
+      e: { x: 0, y: 30 },
+      f: { x: 40, y: 30 },
+    });
+    const duplicated = reflowSmartSelectionMutation(source, {
+      duplicates: [{ id: "b-copy", sourceId: "b" }],
+      kind: "duplicate",
+    });
+    expect(duplicated).toMatchObject({ ok: true });
+    if (!duplicated.ok) return;
+    expect(
+      Object.fromEntries(
+        duplicated.placements.map((item) => [item.id, item.target]),
+      ),
+    ).toMatchObject({
+      b: { x: 40, y: 0 },
+      "b-copy": { x: 40, y: 30 },
+      d: { x: 40, y: 60 },
+      f: { x: 40, y: 90 },
+    });
+
+    const resized = reflowSmartSelectionMutation(source, {
+      kind: "resize",
+      markedNodeIds: ["c"],
+      updatedItems: items(["c", -5, 25, 55, 30]),
+    });
+    expect(resized).toMatchObject({ ok: true });
+    if (!resized.ok) return;
+    expect(
+      Object.fromEntries(
+        resized.placements.map((item) => [item.id, item.target]),
+      ),
+    ).toMatchObject({
+      a: { x: -5, y: -5 },
+      b: { x: 70, y: 0 },
+      c: { x: -5, y: 25 },
+      d: { x: 70, y: 30 },
+      e: { x: -5, y: 65 },
+      f: { x: 70, y: 60 },
+    });
+
+    const deletedColumn = reflowSmartSelectionMutation(source, {
+      kind: "delete",
+      removedNodeIds: ["a", "c", "e"],
+    });
+    expect(deletedColumn).toMatchObject({ ok: true });
+    if (!deletedColumn.ok) return;
+    expect(
+      Object.fromEntries(
+        deletedColumn.placements.map((item) => [item.id, item.target]),
+      ),
+    ).toMatchObject({
+      b: { x: 0, y: 0 },
+      d: { x: 0, y: 30 },
+      f: { x: 0, y: 60 },
     });
   });
 

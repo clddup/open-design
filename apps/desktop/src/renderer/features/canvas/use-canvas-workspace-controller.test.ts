@@ -198,6 +198,40 @@ describe("useCanvasWorkspaceController", () => {
     disabled.unmount();
   });
 
+  it("routes duplicate and delete shortcuts to the marked Smart Selection subset", () => {
+    const workspace = createWorkspace();
+    const runtime = workspace.getActiveRuntime();
+    const duplicateSelection = vi.fn();
+    const deleteNodes = vi.fn();
+    const { result, unmount } = renderHook(() =>
+      useCanvasWorkspaceController(
+        controllerArgs(workspace, { deleteNodes, duplicateSelection }),
+      ),
+    );
+    const nodeIds = ["feature_one", "feature_two", "feature_three"];
+    act(() => {
+      runtime.setSelection(nodeIds, "feature_two");
+      result.current.setSmartSelectionMarkState({
+        dimension: "horizontal",
+        documentId: runtime.getSnapshot().document.documentId,
+        markedNodeIds: ["feature_two"],
+        nodeIds,
+        pageId: "page_welcome",
+        revision: runtime.getSnapshot().document.revision,
+      });
+    });
+
+    fireEvent.keyDown(window, { code: "KeyD", key: "d", metaKey: true });
+    expect(duplicateSelection).toHaveBeenCalledWith(["feature_two"]);
+    fireEvent.keyDown(window, { code: "Backspace", key: "Backspace" });
+    expect(deleteNodes).toHaveBeenCalledWith(["feature_two"]);
+
+    act(() => runtime.setSelection(["feature_one", "feature_two"]));
+    fireEvent.keyDown(window, { code: "KeyD", key: "d", metaKey: true });
+    expect(duplicateSelection).toHaveBeenLastCalledWith(undefined);
+    unmount();
+  });
+
   it("owns disposable hover, text and image session bridges", async () => {
     const workspace = createWorkspace();
     const setEditorError = vi.fn();

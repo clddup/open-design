@@ -25,8 +25,11 @@ import {
   planReorderNodes,
   planSetBooleanOperation,
   planSmartSelectionSpacing,
+  planSmartSelectionDelete,
+  planSmartSelectionDuplicate,
   planSmartSelectionGridRearrange,
   planSmartSelectionReorder,
+  planSmartSelectionResize,
   planToggleMaskNodes,
   planUngroupBooleanGroup,
   planUngroupNode,
@@ -38,8 +41,11 @@ import {
 import type {
   LeaferSmartSelectionReorderRequest,
   LeaferSmartSelectionSpacingRequest,
+  LeaferSmartSelectionMarkState,
+  LeaferOperationRequest,
 } from "@opendesign/leafer-engine";
 import { useCallback, useMemo } from "react";
+import { sameNodeSet } from "@/renderer/state/smart-selection";
 import type { MessageKey, MessageParameters } from "@/shared/i18n/messages";
 import type {
   LayerActionResult,
@@ -174,43 +180,152 @@ export function useLayerCommandController({
         return false;
       }
       const operationId = `delete_${Date.now()}_${++transactionCounter.current}`;
-      const plan = planDeleteNodes(current.document, {
-        nodeIds,
-        commandPrefix: operationId,
-      });
+      const currentSelection = current.state.selection.nodeIds;
+      const smartSelection =
+        nodeIds.length > 0 &&
+        nodeIds.length < currentSelection.length &&
+        nodeIds.every((id) => currentSelection.includes(id));
+      const plan = smartSelection
+        ? planSmartSelectionDelete(
+            current.document,
+            activePageId,
+            currentSelection,
+            nodeIds,
+            operationId,
+          )
+        : planDeleteNodes(current.document, {
+            nodeIds,
+            commandPrefix: operationId,
+          });
       if (!plan.ok) {
         setEditorError(plan.message);
         return false;
       }
       const deleted = applyCommands(
-        t("history.deleteLayers", { count: plan.rootNodeIds.length }),
+        t("history.deleteLayers", { count: nodeIds.length }),
         plan.commands,
       );
-      if (deleted) runtime.setSelection([]);
+      if (deleted) {
+        runtime.setSelection(
+          smartSelection && "selectionNodeIds" in plan
+            ? plan.selectionNodeIds
+            : [],
+        );
+      }
       return deleted;
     },
-    [applyCommands, runtime, setEditorError, t, transactionCounter],
+    [
+      activePageId,
+      applyCommands,
+      runtime,
+      setEditorError,
+      t,
+      transactionCounter,
+    ],
   );
 
-  const duplicateSelection = useCallback(() => {
-    const current = runtime.getSnapshot();
-    if (current.state.selection.componentTarget) return;
-    const duplicated = duplicateNodes(
-      current.document,
+  const duplicateSelection = useCallback(
+    (nodeIds?: readonly string[]) => {
+      const current = runtime.getSnapshot();
+      if (current.state.selection.componentTarget) return;
+      const currentSelection = current.state.selection.nodeIds;
+      const smartSelection =
+        nodeIds !== undefined &&
+        nodeIds.length > 0 &&
+        nodeIds.every((id) => currentSelection.includes(id));
+      if (smartSelection) {
+        const operationId = `smart_duplicate_${Date.now()}_${++transactionCounter.current}`;
+        const plan = planSmartSelectionDuplicate(
+          current.document,
+          activePageId,
+          currentSelection,
+          nodeIds,
+          operationId,
+        );
+        if (!plan.ok) {
+          setEditorError(plan.message);
+          return;
+        }
+        if (
+          applyCommands(
+            t("history.duplicateLayers", { count: plan.markedNodeIds.length }),
+            plan.commands,
+          )
+        ) {
+          runtime.setSelection(
+            plan.selectionNodeIds,
+            plan.markedNodeIds.at(-1),
+          );
+        }
+        return;
+      }
+      const duplicated = duplicateNodes(
+        current.document,
+        activePageId,
+        currentSelection,
+        Date.now(),
+      );
+      if (duplicated.commands.length === 0) return;
+      if (
+        applyCommands(
+          t("history.duplicateLayers", { count: duplicated.rootIds.length }),
+          duplicated.commands,
+        )
+      ) {
+        runtime.setSelection(duplicated.rootIds, duplicated.rootIds.at(-1));
+      }
+    },
+    [
       activePageId,
-      current.state.selection.nodeIds,
-      Date.now(),
-    );
-    if (duplicated.commands.length === 0) return;
-    if (
-      applyCommands(
-        t("history.duplicateLayers", { count: duplicated.rootIds.length }),
-        duplicated.commands,
-      )
-    ) {
-      runtime.setSelection(duplicated.rootIds, duplicated.rootIds.at(-1));
-    }
-  }, [activePageId, applyCommands, runtime, t]);
+      applyCommands,
+      runtime,
+      setEditorError,
+      t,
+      transactionCounter,
+    ],
+  );
+
+  const resizeSmartSelection = useCallback(
+    (
+      request: LeaferOperationRequest,
+      state: LeaferSmartSelectionMarkState,
+    ): boolean => {
+      const current = runtime.getSnapshot();
+      if (
+        request.kind !== "resize" ||
+        current.document.documentId !== state.documentId ||
+        current.document.revision !== state.revision ||
+        activePageId !== state.pageId ||
+        !sameNodeSet(current.state.selection.nodeIds, state.nodeIds) ||
+        !request.selectionNodeIds ||
+        !sameNodeSet(request.selectionNodeIds, state.markedNodeIds)
+      ) {
+        return false;
+      }
+      const operationId = `smart_resize_${Date.now()}_${++transactionCounter.current}`;
+      const plan = planSmartSelectionResize(
+        current.document,
+        activePageId,
+        state.nodeIds,
+        state.markedNodeIds,
+        request.operations,
+        operationId,
+      );
+      if (!plan.ok) {
+        setEditorError(plan.message);
+        return false;
+      }
+      return applyCommands(t("canvas.resizeLayer"), plan.commands);
+    },
+    [
+      activePageId,
+      applyCommands,
+      runtime,
+      setEditorError,
+      t,
+      transactionCounter,
+    ],
+  );
 
   const groupSelection = useCallback(() => {
     const current = runtime.getSnapshot();
@@ -642,6 +757,7 @@ export function useLayerCommandController({
     duplicateSelection,
     groupSelection,
     renameLayers,
+    resizeSmartSelection,
     reorderSmartSelection,
     reorderSelection,
     reparentLayers,
@@ -666,18 +782,6 @@ function filterTopLevelNodeIds(
     }
     return true;
   });
-}
-
-function sameNodeSet(
-  left: readonly string[],
-  right: readonly string[],
-): boolean {
-  if (left.length !== right.length) return false;
-  const rightSet = new Set(right);
-  return (
-    rightSet.size === left.length &&
-    left.every((nodeId) => rightSet.has(nodeId))
-  );
 }
 
 function duplicateNodes(

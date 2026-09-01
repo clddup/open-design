@@ -10,7 +10,10 @@ import {
   documentDeltaToNodeParent,
   type SmartSelectionOverlayPlan,
 } from "./smart-selection-overlay.js";
-import type { LeaferSmartSelectionReorderRequest } from "./types.js";
+import type {
+  LeaferSmartSelectionMarkState,
+  LeaferSmartSelectionReorderRequest,
+} from "./types.js";
 
 type LeaferModule = typeof LeaferEditorModule;
 type LeaferElement = InstanceType<LeaferModule["UI"]>;
@@ -49,12 +52,24 @@ interface SmartSelectionGridDragSession {
   valid: boolean;
 }
 
+interface SmartSelectionRingClick {
+  at: number;
+  nodeId: string;
+}
+
+interface SmartSelectionRingPress {
+  moved: boolean;
+  nodeId: string;
+  startClientPoint: { x: number; y: number };
+}
+
 const MATRIX_EPSILON = 0.000_001;
 const SMART_COLOR = "#f24e8a";
 const SMART_INSERTION_COLOR = "#0d99ff";
 const SMART_HIT_FILL = "rgba(0, 0, 0, 0.001)";
 const RING_SIZE = 8;
 const RING_HIT_SIZE = 20;
+const DOUBLE_CLICK_INTERVAL = 400;
 
 export class SmartSelectionReorderController {
   #document: DesignDocument | null = null;
@@ -69,7 +84,10 @@ export class SmartSelectionReorderController {
   readonly #leafer: LeaferModule;
   readonly #markedNodeIds = new Set<string>();
   readonly #onReorder: (request: LeaferSmartSelectionReorderRequest) => boolean;
+  readonly #onMarkChange: (state: LeaferSmartSelectionMarkState | null) => void;
   #plan: SmartSelectionOverlayPlan | null = null;
+  #lastClick: SmartSelectionRingClick | null = null;
+  #ringPress: SmartSelectionRingPress | null = null;
   readonly #presentationRoot: LeaferGroup;
   readonly #restoreProjection: () => void;
   readonly #rings = new Map<string, SmartRingElements>();
@@ -81,6 +99,7 @@ export class SmartSelectionReorderController {
     layerIndex: number;
     leafer: LeaferModule;
     onReorder: (request: LeaferSmartSelectionReorderRequest) => boolean;
+    onMarkChange: (state: LeaferSmartSelectionMarkState | null) => void;
     presentationRoot: LeaferGroup;
     restoreProjection: () => void;
     viewportRoot: LeaferGroup;
@@ -89,6 +108,7 @@ export class SmartSelectionReorderController {
     this.#finishNodePresentation = options.finishNodePresentation;
     this.#leafer = options.leafer;
     this.#onReorder = options.onReorder;
+    this.#onMarkChange = options.onMarkChange;
     this.#presentationRoot = options.presentationRoot;
     this.#restoreProjection = options.restoreProjection;
     this.#viewportRoot = options.viewportRoot;
@@ -139,19 +159,41 @@ export class SmartSelectionReorderController {
         : undefined;
     const plan = this.#plan;
     if (!nodeId || !plan || event.right || event.middle) return false;
-    if (event.shiftKey && plan.dimension !== "grid") {
+    this.#beginRingPress(nodeId, event);
+    if (event.shiftKey) return true;
+    const before = this.#captureTransforms(plan.nodeIds);
+    if (!before) return true;
+    this.#beginReorderDrag(plan, nodeId, before, event);
+    return true;
+  }
+
+  #beginRingPress(nodeId: string, event: LeaferEventLike): void {
+    this.#ringPress = {
+      moved: false,
+      nodeId,
+      startClientPoint: eventClientPoint(event),
+    };
+    if (event.shiftKey) {
       if (this.#markedNodeIds.has(nodeId)) this.#markedNodeIds.delete(nodeId);
       else this.#markedNodeIds.add(nodeId);
       this.#syncAppearance();
-      return true;
+      this.#publishMarkState();
+      return;
     }
     if (!this.#markedNodeIds.has(nodeId)) {
       this.#markedNodeIds.clear();
       this.#markedNodeIds.add(nodeId);
     }
     this.#syncAppearance();
-    const before = this.#captureTransforms(plan.nodeIds);
-    if (!before) return true;
+    this.#publishMarkState();
+  }
+
+  #beginReorderDrag(
+    plan: SmartSelectionOverlayPlan,
+    nodeId: string,
+    before: ReadonlyMap<string, Transform>,
+    event: LeaferEventLike,
+  ): void {
     if (plan.dimension === "grid") {
       this.#gridDrag = {
         before,
@@ -166,7 +208,7 @@ export class SmartSelectionReorderController {
         targetNodeId: nodeId,
         valid: false,
       };
-      return true;
+      return;
     }
     this.#drag = {
       axis: plan.dimension,
@@ -181,65 +223,80 @@ export class SmartSelectionReorderController {
       startClientPoint: eventClientPoint(event),
       valid: false,
     };
-    return true;
   }
 
   pointerMove(event: LeaferEventLike): boolean {
+    this.#updateRingPress(event);
     const gridDrag = this.#gridDrag;
-    const gridPlan = this.#plan;
-    if (gridDrag && gridPlan && this.#document) {
-      if (event.isCancel) {
-        this.cancelDrag(true);
-        return true;
-      }
-      const clientPoint = eventClientPoint(event);
-      if (
-        Math.hypot(
-          clientPoint.x - gridDrag.startClientPoint.x,
-          clientPoint.y - gridDrag.startClientPoint.y,
-        ) >= 3
-      ) {
-        gridDrag.moved = true;
-      }
-      if (!gridDrag.moved) return true;
-      const point = event.getInnerPoint(this.#layer);
-      const target = nearestGridItem(gridPlan, gridDrag.movedNodeId, point);
-      if (!target) return true;
-      gridDrag.mode = event.metaKey || event.ctrlKey ? "swap" : "insert";
-      gridDrag.targetNodeId = target.id;
-      const preview = rearrangeSmartSelectionGrid(
-        gridPlan.items,
-        gridDrag.movedNodeId,
-        target.id,
-        gridDrag.mode,
-      );
-      if (!preview.ok) {
-        this.#restorePreview(gridDrag.before);
-        gridDrag.valid = false;
-        this.#insertionIndicator.visible = false;
-        return true;
-      }
-      if (!this.#applyPreview(preview.placements, gridDrag.before)) return true;
-      gridDrag.valid = true;
-      this.#syncGridTarget(target.bounds);
-      return true;
+    const plan = this.#plan;
+    if (gridDrag && plan && this.#document) {
+      return this.#moveGridDrag(event, gridDrag, plan);
     }
     const drag = this.#drag;
-    const plan = this.#plan;
     if (!drag || !plan || !this.#document) return false;
+    return this.#moveLinearDrag(event, drag, plan);
+  }
+
+  #updateRingPress(event: LeaferEventLike): void {
+    const ringPress = this.#ringPress;
+    if (!ringPress) return;
+    const point = eventClientPoint(event);
+    ringPress.moved ||=
+      Math.hypot(
+        point.x - ringPress.startClientPoint.x,
+        point.y - ringPress.startClientPoint.y,
+      ) >= 3;
+  }
+
+  #moveGridDrag(
+    event: LeaferEventLike,
+    drag: SmartSelectionGridDragSession,
+    plan: SmartSelectionOverlayPlan,
+  ): boolean {
     if (event.isCancel) {
       this.cancelDrag(true);
       return true;
     }
     const clientPoint = eventClientPoint(event);
-    if (
+    drag.moved ||=
       Math.hypot(
         clientPoint.x - drag.startClientPoint.x,
         clientPoint.y - drag.startClientPoint.y,
-      ) >= 3
-    ) {
-      drag.moved = true;
+      ) >= 3;
+    if (!drag.moved) return true;
+    const point = event.getInnerPoint(this.#layer);
+    const target = nearestGridItem(plan, drag.movedNodeId, point);
+    if (!target) return true;
+    drag.mode = event.metaKey || event.ctrlKey ? "swap" : "insert";
+    drag.targetNodeId = target.id;
+    const preview = rearrangeSmartSelectionGrid(
+      plan.items,
+      drag.movedNodeId,
+      target.id,
+      drag.mode,
+    );
+    if (!preview.ok) return this.#rejectPreview(drag);
+    if (!this.#applyPreview(preview.placements, drag.before)) return true;
+    drag.valid = true;
+    this.#syncGridTarget(target.bounds);
+    return true;
+  }
+
+  #moveLinearDrag(
+    event: LeaferEventLike,
+    drag: SmartSelectionReorderDragSession,
+    plan: SmartSelectionOverlayPlan,
+  ): boolean {
+    if (event.isCancel) {
+      this.cancelDrag(true);
+      return true;
     }
+    const clientPoint = eventClientPoint(event);
+    drag.moved ||=
+      Math.hypot(
+        clientPoint.x - drag.startClientPoint.x,
+        clientPoint.y - drag.startClientPoint.y,
+      ) >= 3;
     if (!drag.moved) return true;
     const point = event.getInnerPoint(this.#layer);
     const insertionIndex = smartInsertionIndex(
@@ -254,15 +311,19 @@ export class SmartSelectionReorderController {
       insertionIndex,
     );
     drag.insertionIndex = insertionIndex;
-    if (!preview.ok) {
-      this.#restorePreview(drag.before);
-      drag.valid = false;
-      this.#insertionIndicator.visible = false;
-      return true;
-    }
+    if (!preview.ok) return this.#rejectPreview(drag);
     if (!this.#applyPreview(preview.placements, drag.before)) return true;
     drag.valid = true;
     this.#syncInsertionIndicator(plan, drag, insertionIndex);
+    return true;
+  }
+
+  #rejectPreview(
+    drag: SmartSelectionGridDragSession | SmartSelectionReorderDragSession,
+  ): true {
+    this.#restorePreview(drag.before);
+    drag.valid = false;
+    this.#insertionIndicator.visible = false;
     return true;
   }
 
@@ -272,6 +333,7 @@ export class SmartSelectionReorderController {
       if (!event.isCancel) this.pointerMove(event);
       const current = this.#gridDrag;
       this.cancelDrag(true);
+      this.#finishRingPress(event, event.isCancel === true);
       if (!event.isCancel && current?.moved && current.valid) {
         this.#onReorder({
           documentId: current.documentId,
@@ -287,10 +349,11 @@ export class SmartSelectionReorderController {
       return true;
     }
     const drag = this.#drag;
-    if (!drag) return false;
+    if (!drag) return this.#finishRingPress(event, event.isCancel === true);
     if (!event.isCancel) this.pointerMove(event);
     const current = this.#drag;
     this.cancelDrag(true);
+    this.#finishRingPress(event, event.isCancel === true);
     if (!event.isCancel && current?.moved && current.valid) {
       this.#onReorder({
         documentId: current.documentId,
@@ -331,20 +394,122 @@ export class SmartSelectionReorderController {
       this.cancelDrag(true);
     }
     this.#document = document;
+    const previousPlan = this.#plan;
     this.#plan = plan;
     if (!plan) {
       this.#markedNodeIds.clear();
+      this.#lastClick = null;
+      this.#ringPress = null;
       this.#hovered = false;
       this.#destroyRings();
       this.#insertionIndicator.visible = false;
       this.#layer.visible = false;
+      this.#publishMarkState();
       return;
     }
+    this.#rebaseMarksAfterDuplicate(previousPlan, plan);
     for (const nodeId of this.#markedNodeIds) {
       if (!plan.nodeIds.includes(nodeId)) this.#markedNodeIds.delete(nodeId);
     }
     this.#reconcileRings(plan);
+    this.#publishMarkState();
     this.syncViewport();
+  }
+
+  #rebaseMarksAfterDuplicate(
+    previous: SmartSelectionOverlayPlan | null,
+    next: SmartSelectionOverlayPlan,
+  ): void {
+    if (
+      !previous ||
+      this.#markedNodeIds.size === 0 ||
+      previous.documentId !== next.documentId ||
+      previous.pageId !== next.pageId ||
+      previous.revision >= next.revision ||
+      !previous.nodeIds.every((id) => next.nodeIds.includes(id))
+    ) {
+      return;
+    }
+    const previousIds = new Set(previous.nodeIds);
+    const addedIds = next.nodeIds.filter((id) => !previousIds.has(id));
+    if (addedIds.length !== this.#markedNodeIds.size) return;
+    this.#markedNodeIds.clear();
+    addedIds.forEach((id) => this.#markedNodeIds.add(id));
+  }
+
+  #handleRingClick(nodeId: string, event: LeaferEventLike): void {
+    if (!nodeId || !this.#plan) return;
+    const at = Number.isFinite(event.timeStamp)
+      ? Number(event.timeStamp)
+      : Date.now();
+    const doubleClick =
+      this.#lastClick?.nodeId === nodeId &&
+      at - this.#lastClick.at >= 0 &&
+      at - this.#lastClick.at <= DOUBLE_CLICK_INTERVAL;
+    this.#lastClick = doubleClick ? null : { at, nodeId };
+    if (!doubleClick) return;
+    if (this.#plan.dimension !== "grid") {
+      this.#markAll();
+      return;
+    }
+    if (!event.shiftKey) return;
+    const axis = this.#gridAxisThrough(nodeId);
+    if (!axis) return;
+    const axisSet = new Set(axis);
+    const axisAlreadyMarked = axis.every((id) => this.#markedNodeIds.has(id));
+    this.#markedNodeIds.clear();
+    for (const id of axisAlreadyMarked ? this.#plan.nodeIds : axisSet) {
+      this.#markedNodeIds.add(id);
+    }
+    this.#syncAppearance();
+    this.#publishMarkState();
+  }
+
+  #finishRingPress(event: LeaferEventLike, cancelled: boolean): boolean {
+    const press = this.#ringPress;
+    this.#ringPress = null;
+    if (!press) return false;
+    if (!cancelled && !press.moved) this.#handleRingClick(press.nodeId, event);
+    return true;
+  }
+
+  #gridAxisThrough(nodeId: string): readonly string[] | null {
+    const plan = this.#plan;
+    if (!plan) return null;
+    const marked = [...this.#markedNodeIds].filter((id) => id !== nodeId);
+    const candidates = [...plan.rows, ...plan.columns].filter((axis) =>
+      axis.includes(nodeId),
+    );
+    return (
+      candidates.find((axis) => marked.some((id) => axis.includes(id))) ??
+      candidates.sort((left, right) => right.length - left.length)[0] ??
+      null
+    );
+  }
+
+  #markAll(): void {
+    const plan = this.#plan;
+    if (!plan) return;
+    this.#markedNodeIds.clear();
+    plan.nodeIds.forEach((id) => this.#markedNodeIds.add(id));
+    this.#syncAppearance();
+    this.#publishMarkState();
+  }
+
+  #publishMarkState(): void {
+    const plan = this.#plan;
+    if (!plan || this.#markedNodeIds.size === 0) {
+      this.#onMarkChange(null);
+      return;
+    }
+    this.#onMarkChange({
+      dimension: plan.dimension,
+      documentId: plan.documentId,
+      markedNodeIds: plan.nodeIds.filter((id) => this.#markedNodeIds.has(id)),
+      nodeIds: plan.nodeIds,
+      pageId: plan.pageId,
+      revision: plan.revision,
+    });
   }
 
   syncViewport(): void {
@@ -516,20 +681,12 @@ export class SmartSelectionReorderController {
           ? left.bounds.x - right.bounds.x || left.id.localeCompare(right.id)
           : left.bounds.y - right.bounds.y || left.id.localeCompare(right.id),
       );
-    const previous = remaining[insertionIndex - 1];
-    const next = remaining[insertionIndex];
-    const coordinate =
-      drag.axis === "horizontal"
-        ? previous && next
-          ? (previous.bounds.x + previous.bounds.width + next.bounds.x) / 2
-          : previous
-            ? previous.bounds.x + previous.bounds.width
-            : (next?.bounds.x ?? plan.bounds.x)
-        : previous && next
-          ? (previous.bounds.y + previous.bounds.height + next.bounds.y) / 2
-          : previous
-            ? previous.bounds.y + previous.bounds.height
-            : (next?.bounds.y ?? plan.bounds.y);
+    const coordinate = insertionCoordinate(
+      plan,
+      drag.axis,
+      remaining[insertionIndex - 1],
+      remaining[insertionIndex],
+    );
     const zoom = this.#zoom();
     const thickness = 2 / zoom;
     const overhang = 8 / zoom;
@@ -587,6 +744,28 @@ export class SmartSelectionReorderController {
       ),
     );
   }
+}
+
+function insertionCoordinate(
+  plan: SmartSelectionOverlayPlan,
+  axis: "horizontal" | "vertical",
+  previous: SmartSelectionOverlayPlan["items"][number] | undefined,
+  next: SmartSelectionOverlayPlan["items"][number] | undefined,
+): number {
+  if (axis === "horizontal") {
+    if (previous && next) {
+      return (previous.bounds.x + previous.bounds.width + next.bounds.x) / 2;
+    }
+    return previous
+      ? previous.bounds.x + previous.bounds.width
+      : (next?.bounds.x ?? plan.bounds.x);
+  }
+  if (previous && next) {
+    return (previous.bounds.y + previous.bounds.height + next.bounds.y) / 2;
+  }
+  return previous
+    ? previous.bounds.y + previous.bounds.height
+    : (next?.bounds.y ?? plan.bounds.y);
 }
 
 function originalInsertionIndex(

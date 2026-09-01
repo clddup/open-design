@@ -11,9 +11,11 @@ import {
 } from "@opendesign/editor-runtime";
 import type {
   LeaferTextRangeSelection,
+  LeaferSmartSelectionMarkState,
   LeaferTextStyleUpdate,
 } from "@opendesign/leafer-engine";
 import type { TextLayoutProvider } from "@opendesign/text-service";
+import { isCurrentSmartSelectionMarkState } from "@/renderer/state/smart-selection";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { MessageKey, MessageParameters } from "@/shared/i18n/messages";
 import type { LayerHoverTarget } from "./layer-hover-target";
@@ -24,6 +26,7 @@ type Translate = (key: MessageKey, parameters?: MessageParameters) => string;
 type CanvasFitTarget = "page" | "selection";
 
 interface CanvasShortcutContext {
+  activePageId: string;
   applyBooleanOperation: (operation: BooleanOperation) => void;
   canDeleteSelection: boolean;
   canFlattenSelection: boolean;
@@ -31,7 +34,7 @@ interface CanvasShortcutContext {
   canToggleMaskSelection: boolean;
   changeZoom: (zoom: number) => void;
   deleteNodes: (nodeIds: readonly string[]) => void;
-  duplicateSelection: () => void;
+  duplicateSelection: (nodeIds?: readonly string[]) => void;
   editorActive: boolean;
   fitCanvas: (target: CanvasFitTarget) => void;
   flattenSelection: () => void;
@@ -44,6 +47,7 @@ interface CanvasShortcutContext {
   toggleSelectedLayerState: (field: "locked" | "visible") => void;
   toggleUtilityPanel: () => void;
   ungroupSelection: () => void;
+  smartSelectionMarkState: LeaferSmartSelectionMarkState | null;
 }
 
 export function useCanvasWorkspaceController({
@@ -80,7 +84,7 @@ export function useCanvasWorkspaceController({
   canToggleMaskSelection: boolean;
   deleteNodes: (nodeIds: readonly string[]) => void;
   documentId: string;
-  duplicateSelection: () => void;
+  duplicateSelection: (nodeIds?: readonly string[]) => void;
   editorActive: boolean;
   flattenSelection: () => void;
   groupSelection: () => void;
@@ -102,6 +106,8 @@ export function useCanvasWorkspaceController({
   const [textRangeSelection, setTextRangeSelection] =
     useState<LeaferTextRangeSelection | null>(null);
   const [textLayoutProviderEpoch, setTextLayoutProviderEpoch] = useState(0);
+  const [smartSelectionMarkState, setSmartSelectionMarkState] =
+    useState<LeaferSmartSelectionMarkState | null>(null);
   const textEditingStyleController = useRef<
     ((style: LeaferTextStyleUpdate) => boolean) | null
   >(null);
@@ -164,6 +170,7 @@ export function useCanvasWorkspaceController({
   );
 
   const shortcutContext = useRef<CanvasShortcutContext>({
+    activePageId,
     applyBooleanOperation,
     canDeleteSelection,
     canFlattenSelection,
@@ -184,8 +191,10 @@ export function useCanvasWorkspaceController({
     toggleSelectedLayerState,
     toggleUtilityPanel,
     ungroupSelection,
+    smartSelectionMarkState,
   });
   shortcutContext.current = {
+    activePageId,
     applyBooleanOperation,
     canDeleteSelection,
     canFlattenSelection,
@@ -206,6 +215,7 @@ export function useCanvasWorkspaceController({
     toggleSelectedLayerState,
     toggleUtilityPanel,
     ungroupSelection,
+    smartSelectionMarkState,
   };
 
   useEffect(() => {
@@ -219,6 +229,7 @@ export function useCanvasWorkspaceController({
   useEffect(() => {
     setLayerHoverTarget(null);
     setTextRangeSelection(null);
+    setSmartSelectionMarkState(null);
   }, [activePageId, documentId]);
 
   const handleTextLayoutProviderReady = useCallback(
@@ -288,12 +299,14 @@ export function useCanvasWorkspaceController({
     handleTextLayoutProviderReady,
     layerHoverTarget,
     setLayerHoverTarget,
+    setSmartSelectionMarkState,
     setTextRangeSelection,
     startImageAreaSelection,
     startImageCrop,
     startImageExpand,
     textLayoutProviderEpoch,
     textRangeSelection,
+    smartSelectionMarkState,
     updateTextEditingStyle,
   };
 }
@@ -316,6 +329,11 @@ function handleCanvasShortcut(
   }
   if (isEditableTarget(event.target)) return;
   const selection = runtime.getSnapshot().state.selection.nodeIds;
+  const marked = currentSmartSelectionMarkState(
+    runtime,
+    context.activePageId,
+    context.smartSelectionMarkState,
+  );
   if (event.key === "Escape" && selection.length > 0) {
     event.preventDefault();
     runtime.setSelection([]);
@@ -340,7 +358,7 @@ function handleCanvasShortcut(
   }
   if (modifier && event.key.toLowerCase() === "d") {
     event.preventDefault();
-    context.duplicateSelection();
+    context.duplicateSelection(marked?.markedNodeIds);
     return;
   }
   if (modifier && !event.altKey && !event.shiftKey && event.code === "KeyE") {
@@ -411,10 +429,10 @@ function handleCanvasShortcut(
   }
   if (
     (event.key === "Delete" || event.key === "Backspace") &&
-    context.canDeleteSelection
+    (context.canDeleteSelection || marked !== null)
   ) {
     event.preventDefault();
-    context.deleteNodes(selection);
+    context.deleteNodes(marked?.markedNodeIds ?? selection);
     return;
   }
   if (event.shiftKey && (event.key === "1" || event.key === "2")) {
@@ -433,6 +451,22 @@ function handleCanvasShortcut(
   }
   const next = toolForShortcut(event);
   if (next) runtime.setTool(next);
+}
+
+function currentSmartSelectionMarkState(
+  runtime: EditorRuntime,
+  activePageId: string,
+  state: LeaferSmartSelectionMarkState | null,
+): LeaferSmartSelectionMarkState | null {
+  const current = runtime.getSnapshot();
+  return isCurrentSmartSelectionMarkState(state, {
+    documentId: current.document.documentId,
+    nodeIds: current.state.selection.nodeIds,
+    pageId: activePageId,
+    revision: current.document.revision,
+  })
+    ? state
+    : null;
 }
 
 function booleanOperationForShortcut(

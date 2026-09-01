@@ -352,6 +352,87 @@ describe("editor command controllers", () => {
     expect(snapshot.document.nodesById.feature_one?.transform[4]).toBe(560);
   });
 
+  it("routes marked Smart Selection duplicate, delete, and resize through one Runtime transaction", () => {
+    const createRuntime = () => {
+      const document = structuredClone(createWelcomeDocument());
+      for (const [index, id] of [
+        "feature_one",
+        "feature_two",
+        "feature_three",
+      ].entries()) {
+        document.nodesById[id].transform = [1, 0, 0, 1, index * 280, 0];
+        document.nodesById[id].size = { width: 260, height: 100 };
+      }
+      const runtime = new EditorRuntime(document);
+      runtime.setSelection(
+        ["feature_one", "feature_two", "feature_three"],
+        "feature_two",
+      );
+      return runtime;
+    };
+
+    const duplicateRuntime = createRuntime();
+    const duplicate = renderControllers(duplicateRuntime);
+    act(() =>
+      duplicate.result.current.layer.duplicateSelection(["feature_two"]),
+    );
+    expect(duplicateRuntime.getSnapshot().document.revision).toBe(1);
+    expect(duplicateRuntime.getSnapshot().state.selection.nodeIds).toHaveLength(
+      4,
+    );
+    expect(duplicateRuntime.getSnapshot().state.history.undo).toHaveLength(1);
+
+    const deleteRuntime = createRuntime();
+    const deletion = renderControllers(deleteRuntime);
+    act(() => void deletion.result.current.layer.deleteNodes(["feature_two"]));
+    expect(
+      deleteRuntime.getSnapshot().document.nodesById.feature_two,
+    ).toBeUndefined();
+    expect(deleteRuntime.getSnapshot().state.selection.nodeIds).toEqual([
+      "feature_one",
+      "feature_three",
+    ]);
+    expect(deleteRuntime.getSnapshot().state.history.undo).toHaveLength(1);
+
+    const resizeRuntime = createRuntime();
+    const resize = renderControllers(resizeRuntime);
+    const before = resizeRuntime.getSnapshot();
+    let accepted = false;
+    act(() => {
+      accepted = resize.result.current.layer.resizeSmartSelection(
+        {
+          kind: "resize",
+          operations: [
+            {
+              commandId: "resize_feature_two",
+              type: "update_properties",
+              nodeId: "feature_two",
+              size: { width: 320, height: 100 },
+            },
+          ],
+          selectionNodeIds: ["feature_two"],
+        },
+        {
+          dimension: "horizontal",
+          documentId: before.document.documentId,
+          markedNodeIds: ["feature_two"],
+          nodeIds: ["feature_one", "feature_two", "feature_three"],
+          pageId: "page_welcome",
+          revision: before.document.revision,
+        },
+      );
+    });
+    expect(accepted).toBe(true);
+    expect(
+      resizeRuntime.getSnapshot().document.nodesById.feature_two?.size.width,
+    ).toBe(320);
+    expect(
+      resizeRuntime.getSnapshot().document.nodesById.feature_three
+        ?.transform[4],
+    ).toBe(620);
+    expect(resizeRuntime.getSnapshot().state.history.undo).toHaveLength(1);
+  });
+
   it("routes flow-child Fill sizing through the dedicated planner", () => {
     const document = structuredClone(createWelcomeDocument());
     const frame = document.nodesById.frame_welcome;

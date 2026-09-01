@@ -167,6 +167,15 @@ export interface LeaferSmartSelectionSpacingRequest {
   spacing: number;
 }
 
+export interface LeaferSmartSelectionMarkState {
+  dimension: "horizontal" | "vertical" | "grid";
+  documentId: string;
+  markedNodeIds: readonly string[];
+  nodeIds: readonly string[];
+  pageId: string;
+  revision: number;
+}
+
 type LeaferSmartSelectionReorderScope = {
   documentId: string;
   expectedRevision: number;
@@ -276,6 +285,9 @@ export interface LeaferEngineCallbacks {
   onSmartSelectionSpacing?(
     request: LeaferSmartSelectionSpacingRequest,
   ): boolean;
+  onSmartSelectionMarkChange?(
+    state: LeaferSmartSelectionMarkState | null,
+  ): void;
   onSmartSelectionReorder?(
     request: LeaferSmartSelectionReorderRequest,
   ): boolean;

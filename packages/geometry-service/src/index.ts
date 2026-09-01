@@ -1,4 +1,4 @@
-export const GEOMETRY_SERVICE_CONTRACT_VERSION = 27 as const;
+export const GEOMETRY_SERVICE_CONTRACT_VERSION = 28 as const;
 
 export {
   projectVectorNetworkCornerRadii,
@@ -30,6 +30,11 @@ export {
   type TidyUpPlacement,
   type TidyUpPlan,
 } from "./arrangement.js";
+export {
+  reflowSmartSelectionMutation,
+  type SmartSelectionReflowMutation,
+  type SmartSelectionReflowPlan,
+} from "./smart-selection-reflow.js";
 export {
   connectVectorEndpoints,
   cutVectorNetworkByLine,

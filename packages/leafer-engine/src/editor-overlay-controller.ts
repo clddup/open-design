@@ -37,6 +37,7 @@ import type {
   LeaferAutoLayoutSpacingCommitRequest,
   LeaferAutoLayoutSpacingInputRequest,
   LeaferGridTrackInputRequest,
+  LeaferSmartSelectionMarkState,
   LeaferSmartSelectionSpacingRequest,
   LeaferSmartSelectionReorderRequest,
 } from "./types.js";
@@ -108,6 +109,9 @@ export class EditorOverlayController {
     onSmartSelectionReorder: (
       request: LeaferSmartSelectionReorderRequest,
     ) => boolean;
+    onSmartSelectionMarkChange: (
+      state: LeaferSmartSelectionMarkState | null,
+    ) => void;
     presentationRoot: LeaferGroup;
     restoreProjection: () => void;
     viewportRoot: LeaferGroup;
@@ -143,6 +147,7 @@ export class EditorOverlayController {
       leafer: options.leafer,
       onCommit: options.onSmartSelectionSpacing,
       onReorder: options.onSmartSelectionReorder,
+      onMarkChange: options.onSmartSelectionMarkChange,
       presentationRoot: options.presentationRoot,
       restoreProjection: options.restoreProjection,
       viewportRoot: options.viewportRoot,

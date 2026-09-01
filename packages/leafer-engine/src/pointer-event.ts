@@ -12,6 +12,7 @@ export interface LeaferEventLike {
   right?: boolean;
   shiftKey: boolean;
   target: unknown;
+  timeStamp?: number;
   x?: number;
   y?: number;
 }

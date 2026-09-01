@@ -59,6 +59,7 @@ import {
   type LeaferGridChildSpanRequest,
   type LeaferSmartSelectionSpacingRequest,
   type LeaferSmartSelectionReorderRequest,
+  type LeaferSmartSelectionMarkState,
   type LeaferImageCropCommitRequest,
   type LeaferImageCropState,
   type LeaferOperationKind,
@@ -136,11 +137,14 @@ export function Canvas({
   onResizeGridChildSpan,
   onAdjustSmartSelectionSpacing,
   onReorderSmartSelection,
+  onResizeSmartSelection,
+  onSmartSelectionMarkChange,
   onReorderGridTracks,
   onSetGridTracks,
   onResizeFrame,
   selectionActions,
   showAgentRunStatus,
+  smartSelectionMarkState,
 }: {
   activeAgentRunId: string | null;
   agentRunStatus?: {
@@ -220,6 +224,13 @@ export function Canvas({
   onReorderSmartSelection: (
     request: LeaferSmartSelectionReorderRequest,
   ) => boolean;
+  onResizeSmartSelection: (
+    request: LeaferOperationRequest,
+    state: LeaferSmartSelectionMarkState,
+  ) => boolean;
+  onSmartSelectionMarkChange: (
+    state: LeaferSmartSelectionMarkState | null,
+  ) => void;
   onSetGridTracks: (
     frameId: string,
     expectedRevision: number,
@@ -230,10 +241,13 @@ export function Canvas({
   onResizeFrame: ResizeFrameHandler;
   selectionActions?: ReactNode;
   showAgentRunStatus: boolean;
+  smartSelectionMarkState: LeaferSmartSelectionMarkState | null;
 }) {
   const { t } = useI18n();
   const host = useRef<HTMLElement>(null);
   const adapter = useRef<LeaferEngineAdapter | null>(null);
+  const smartSelectionMarkStateRef = useRef(smartSelectionMarkState);
+  smartSelectionMarkStateRef.current = smartSelectionMarkState;
   const latestInput = useRef<LeaferEngineSyncInput | null>(null);
   const changesByRevision = useRef(new Map<number, DesignChangeSet>());
   const generationRevealByRevision = useRef(
@@ -822,16 +836,21 @@ export function Canvas({
   };
 
   const applyOperations = useCallback(
-    (request: LeaferOperationRequest) =>
-      commitCanvasOperation({
+    (request: LeaferOperationRequest) => {
+      const markState = smartSelectionMarkStateRef.current;
+      if (request.kind === "resize" && markState) {
+        return onResizeSmartSelection(request, markState);
+      }
+      return commitCanvasOperation({
         request,
         runtime,
         onResizeFrame,
         onTransactionError,
         label: operationLabel(request.kind, request.operations.length, t),
         transactionId: `canvas_${crypto.randomUUID().replaceAll("-", "")}`,
-      }),
-    [onResizeFrame, onTransactionError, runtime, t],
+      });
+    },
+    [onResizeFrame, onResizeSmartSelection, onTransactionError, runtime, t],
   );
 
   const applyImageCrop = useCallback(
@@ -1268,6 +1287,7 @@ export function Canvas({
       },
       onSmartSelectionSpacing: onAdjustSmartSelectionSpacing,
       onSmartSelectionReorder: onReorderSmartSelection,
+      onSmartSelectionMarkChange,
       onTextRangeSelectionChange,
       onVectorCut: applyVectorCut,
       onVectorEdit: applyVectorEdit,
@@ -1340,6 +1360,7 @@ export function Canvas({
       setImageCropState(null);
       setTextRunLayoutProvider(undefined);
       onTextRangeSelectionChange(null);
+      onSmartSelectionMarkChange(null);
     };
   }, [
     applyImageCrop,
@@ -1362,6 +1383,7 @@ export function Canvas({
     onAdjustAutoLayoutSpacing,
     onAdjustSmartSelectionSpacing,
     onReorderSmartSelection,
+    onSmartSelectionMarkChange,
     onTextLayoutProviderReady,
     onTextEditingStyleControllerChange,
     onTextRangeSelectionChange,

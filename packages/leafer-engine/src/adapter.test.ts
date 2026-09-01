@@ -1802,6 +1802,147 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
+  it("publishes scoped Smart Selection marks and supports Figma double-click marking", async () => {
+    const onSmartSelectionMarkChange = vi.fn();
+    const input = withSmartSelectionFixture(createInput());
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onSmartSelectionMarkChange,
+    });
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    const firstRing =
+      app &&
+      findElement(
+        app.sky,
+        "__opendesign_smart_selection_ring__:smart-ring:feature_one",
+      );
+    if (!app || !firstRing) throw new Error("Missing Smart Selection ring");
+
+    app.emit(
+      "pointer.down",
+      pointerEvent(274, 454, firstRing, { timeStamp: 100 }),
+    );
+    app.emit(
+      "pointer.up",
+      pointerEvent(274, 454, firstRing, { timeStamp: 120 }),
+    );
+    expect(app.editor.list.map((element) => element.id)).toEqual([
+      "feature_one",
+    ]);
+    expect(onSmartSelectionMarkChange).toHaveBeenLastCalledWith({
+      dimension: "horizontal",
+      documentId: input.document.documentId,
+      markedNodeIds: ["feature_one"],
+      nodeIds: ["feature_one", "feature_two", "feature_three"],
+      pageId: input.pageId,
+      revision: input.document.revision,
+    });
+
+    app.emit(
+      "pointer.down",
+      pointerEvent(274, 454, firstRing, { timeStamp: 300 }),
+    );
+    app.emit(
+      "pointer.up",
+      pointerEvent(274, 454, firstRing, { timeStamp: 320 }),
+    );
+    expect(app.editor.list.map((element) => element.id)).toEqual([
+      "feature_one",
+      "feature_two",
+      "feature_three",
+    ]);
+    expect(onSmartSelectionMarkChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        markedNodeIds: ["feature_one", "feature_two", "feature_three"],
+      }),
+    );
+    adapter.dispose();
+  });
+
+  it("moves Smart Selection marks to newly duplicated layers", async () => {
+    const onSmartSelectionMarkChange = vi.fn();
+    const input = withSmartSelectionFixture(createInput());
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onSmartSelectionMarkChange,
+    });
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    const firstRing =
+      app &&
+      findElement(
+        app.sky,
+        "__opendesign_smart_selection_ring__:smart-ring:feature_one",
+      );
+    if (!app || !firstRing) throw new Error("Missing Smart Selection ring");
+    app.emit("pointer.down", pointerEvent(274, 454, firstRing));
+    app.emit("pointer.up", pointerEvent(274, 454, firstRing));
+
+    const document = structuredClone(input.document);
+    document.revision += 1;
+    const copy = structuredClone(document.nodesById.feature_one!);
+    copy.id = "feature_one_copy";
+    copy.name = "Feature one copy";
+    copy.transform = [1, 0, 0, 1, 280, 0];
+    document.nodesById.feature_two!.transform = [1, 0, 0, 1, 560, 0];
+    document.nodesById.feature_three!.transform = [1, 0, 0, 1, 840, 0];
+    document.nodesById.feature_group!.childIds.splice(1, 0, copy.id);
+    document.nodesById.feature_group!.size.width = 1_100;
+    document.nodesById[copy.id] = copy;
+    adapter.sync({
+      ...input,
+      document,
+      selection: {
+        anchorNodeId: copy.id,
+        nodeIds: ["feature_one", copy.id, "feature_two", "feature_three"],
+      },
+    });
+
+    expect(app.editor.list.map((element) => element.id)).toEqual([copy.id]);
+    expect(onSmartSelectionMarkChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ markedNodeIds: [copy.id] }),
+    );
+    adapter.dispose();
+  });
+
+  it("marks a grid axis and then the full grid with repeated Shift double-click", async () => {
+    const onSmartSelectionMarkChange = vi.fn();
+    const input = withSmartGridFixture(createInput());
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onSmartSelectionMarkChange,
+    });
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    const ringA =
+      app &&
+      findElement(app.sky, "__opendesign_smart_selection_ring__:smart-ring:a");
+    if (!app || !ringA) throw new Error("Missing grid Smart Selection ring");
+    const click = (timeStamp: number) => {
+      const event = pointerEvent(159, 414, ringA, {
+        shiftKey: true,
+        timeStamp,
+      });
+      app.emit("pointer.down", event);
+      app.emit("pointer.up", { ...event, timeStamp: timeStamp + 10 });
+    };
+
+    click(100);
+    click(250);
+    expect(onSmartSelectionMarkChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ markedNodeIds: ["a", "b", "c"] }),
+    );
+    click(1_000);
+    click(1_150);
+    expect(onSmartSelectionMarkChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        markedNodeIds: ["a", "b", "c", "d", "e", "f"],
+      }),
+    );
+    adapter.dispose();
+  });
+
   it("rearranges or swaps one layer in a two-dimensional Smart Selection", async () => {
     const onSmartSelectionReorder = vi.fn(() => true);
     const input = withSmartGridFixture(createInput());
@@ -9085,6 +9226,7 @@ function pointerEvent(
     ctrlKey?: boolean;
     metaKey?: boolean;
     shiftKey?: boolean;
+    timeStamp?: number;
   } = {},
 ) {
   return {
@@ -9096,6 +9238,9 @@ function pointerEvent(
     metaKey: modifiers.metaKey ?? false,
     shiftKey: modifiers.shiftKey ?? false,
     target,
+    ...(modifiers.timeStamp === undefined
+      ? {}
+      : { timeStamp: modifiers.timeStamp }),
   };
 }
 

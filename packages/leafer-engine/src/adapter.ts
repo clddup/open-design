@@ -52,6 +52,7 @@ import type {
   LeaferEngineOptions,
   LeaferEngineSyncInput,
   LeaferRasterExportResult,
+  LeaferSmartSelectionMarkState,
   LeaferTextStyleUpdate,
 } from "./types.js";
 import { BoxDrawController } from "./box-draw-controller.js";
@@ -124,6 +125,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   #disposed = false;
   #input: LeaferEngineSyncInput | null = null;
   #projectionDirty = false;
+  #smartSelectionMarkState: LeaferSmartSelectionMarkState | null = null;
   #synchronizing = false;
 
   constructor(
@@ -304,6 +306,11 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         this.#callbacks.onSmartSelectionSpacing?.(request) ?? false,
       onSmartSelectionReorder: (request) =>
         this.#callbacks.onSmartSelectionReorder?.(request) ?? false,
+      onSmartSelectionMarkChange: (state) => {
+        this.#smartSelectionMarkState = state;
+        this.#syncProjectedSelection();
+        this.#callbacks.onSmartSelectionMarkChange?.(state);
+      },
       presentationRoot: this.#generationPresentationRoot,
       restoreProjection: () => this.#restoreProjection(),
       viewportRoot: this.#app.tree as unknown as LeaferGroup,
@@ -999,7 +1006,16 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   }
 
   #syncSelection(selection: SelectionState): void {
-    const target = this.#selectionElements(selection);
+    const marked = this.#smartSelectionMarkState;
+    const target = this.#selectionElements(
+      marked &&
+        this.#input &&
+        marked.documentId === this.#input.document.documentId &&
+        marked.pageId === this.#input.pageId &&
+        marked.revision === this.#input.document.revision
+        ? { nodeIds: [...marked.markedNodeIds] }
+        : selection,
+    );
     const current = this.#editor.list;
     if (
       current.length === target.length &&
@@ -1009,6 +1025,16 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     }
     this.#editor.target = target.length === 0 ? (null as never) : target;
     this.#scheduleEditorRefresh();
+  }
+
+  #syncProjectedSelection(): void {
+    if (!this.#input || this.#disposed) return;
+    this.#synchronizing = true;
+    try {
+      this.#syncSelection(this.#input.selection);
+    } finally {
+      this.#synchronizing = false;
+    }
   }
 
   #emitSelection(): void {

@@ -62,6 +62,13 @@ export {
   type DeleteNodesPlan,
 } from "./deletion-operations.js";
 export {
+  planSmartSelectionDelete,
+  planSmartSelectionDuplicate,
+  planSmartSelectionResize,
+  type SmartSelectionMutationFailureCode,
+  type SmartSelectionMutationPlan,
+} from "./smart-selection-mutation-operations.js";
+export {
   canAlignNodeToParent,
   getArrangementSelectionMetrics,
   planArrangeNodes,

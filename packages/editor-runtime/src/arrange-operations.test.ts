@@ -11,7 +11,10 @@ import {
   planArrangeNodes,
   planSmartSelectionSpacing,
   planSmartSelectionGridRearrange,
+  planSmartSelectionDelete,
+  planSmartSelectionDuplicate,
   planSmartSelectionReorder,
+  planSmartSelectionResize,
 } from "./index.js";
 
 function transaction(
@@ -466,6 +469,122 @@ describe("arrange operations", () => {
     expect(
       runtime.getSnapshot().document.nodesById.feature_one?.transform,
     ).toEqual(before.document.nodesById.feature_one?.transform);
+  });
+
+  it("duplicates, deletes, and resizes marked Smart Selection layers with one reflow transaction", () => {
+    const createRow = () => {
+      const document = structuredClone(createWelcomeDocument());
+      for (const [index, id] of [
+        "feature_one",
+        "feature_two",
+        "feature_three",
+      ].entries()) {
+        const node = document.nodesById[id]!;
+        node.transform = [1, 0, 0, 1, index * 280, 0];
+        node.size = { width: 260, height: 100 };
+      }
+      return document;
+    };
+    const nodeIds = ["feature_one", "feature_two", "feature_three"];
+
+    const duplicateDocument = createRow();
+    const collision = structuredClone(duplicateDocument.nodesById.feature_one!);
+    collision.id = "smart_duplicate_1";
+    duplicateDocument.nodesById[collision.id] = collision;
+    duplicateDocument.nodesById.feature_group!.childIds.push(collision.id);
+    const duplicateRuntime = new EditorRuntime(duplicateDocument);
+    const duplicate = planSmartSelectionDuplicate(
+      duplicateRuntime.getSnapshot().document,
+      "page_welcome",
+      nodeIds,
+      ["feature_two"],
+      "smart_duplicate",
+    );
+    if (!duplicate.ok) throw new Error(duplicate.message);
+    expect(
+      duplicateRuntime.apply(
+        transaction(duplicateRuntime, "smart_duplicate", duplicate.commands),
+      ).ok,
+    ).toBe(true);
+    const duplicateId = duplicate.markedNodeIds[0]!;
+    expect(duplicateId).toBe("smart_duplicate_2");
+    expect(
+      getNodeBounds(duplicateRuntime.getSnapshot().document, duplicateId)?.x,
+    ).toBe(704);
+    expect(
+      getNodeBounds(duplicateRuntime.getSnapshot().document, "feature_three")
+        ?.x,
+    ).toBe(984);
+
+    const deleteRuntime = new EditorRuntime(createRow());
+    const deletion = planSmartSelectionDelete(
+      deleteRuntime.getSnapshot().document,
+      "page_welcome",
+      nodeIds,
+      ["feature_two"],
+      "smart_delete",
+    );
+    if (!deletion.ok) throw new Error(deletion.message);
+    expect(
+      deleteRuntime.apply(
+        transaction(deleteRuntime, "smart_delete", deletion.commands),
+      ).ok,
+    ).toBe(true);
+    expect(
+      deleteRuntime.getSnapshot().document.nodesById.feature_two,
+    ).toBeUndefined();
+    expect(
+      getNodeBounds(deleteRuntime.getSnapshot().document, "feature_three")?.x,
+    ).toBe(424);
+
+    const resizeRuntime = new EditorRuntime(createRow());
+    const resize = planSmartSelectionResize(
+      resizeRuntime.getSnapshot().document,
+      "page_welcome",
+      nodeIds,
+      ["feature_two"],
+      [
+        {
+          commandId: "direct_resize_two",
+          type: "update_properties",
+          nodeId: "feature_two",
+          size: { width: 320, height: 100 },
+        },
+      ],
+      "smart_resize",
+    );
+    if (!resize.ok) throw new Error(resize.message);
+    expect(
+      resizeRuntime.apply(
+        transaction(resizeRuntime, "smart_resize", resize.commands),
+      ).ok,
+    ).toBe(true);
+    expect(
+      resizeRuntime.getSnapshot().document.nodesById.feature_two?.size.width,
+    ).toBe(320);
+    expect(
+      getNodeBounds(resizeRuntime.getSnapshot().document, "feature_three")?.x,
+    ).toBe(764);
+    expect(resizeRuntime.getSnapshot().state.history.undo).toHaveLength(1);
+    expect(resizeRuntime.undo().ok).toBe(true);
+
+    expect(
+      planSmartSelectionResize(
+        createRow(),
+        "page_welcome",
+        nodeIds,
+        ["feature_one", "feature_two"],
+        [
+          {
+            commandId: "partial_resize",
+            type: "update_properties",
+            nodeId: "feature_one",
+            size: { width: 280, height: 100 },
+          },
+        ],
+        "smart_partial_resize",
+      ),
+    ).toMatchObject({ ok: false, code: "invalid-operation" });
   });
 
   it("rejects locked, singular, no-op, and insufficient selections atomically", () => {

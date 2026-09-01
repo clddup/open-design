@@ -58,6 +58,7 @@ import { useImportExportWorkflow } from "../import-export/use-import-export-work
 import type { useProjectNavigationController } from "../project/use-project-navigation-controller";
 import type { useProjectWorkspaceState } from "../project/use-project-workspace-state";
 import { useWorkbenchLayoutController } from "@/renderer/features/workbench";
+import { isCurrentSmartSelectionMarkState } from "@/renderer/state/smart-selection";
 
 export type EditorWorkbenchFeatureProps = {
   activeProject:
@@ -236,6 +237,7 @@ export function EditorWorkbenchFeature({
     maskSelectionAction,
     reorderSelection,
     renameLayers,
+    resizeSmartSelection,
     reorderSmartSelection,
     reparentLayers,
     toggleMaskSelection,
@@ -413,12 +415,14 @@ export function EditorWorkbenchFeature({
     handleTextLayoutProviderReady,
     layerHoverTarget,
     setLayerHoverTarget,
+    setSmartSelectionMarkState,
     setTextRangeSelection,
     startImageAreaSelection,
     startImageCrop,
     startImageExpand,
     textLayoutProviderEpoch,
     textRangeSelection,
+    smartSelectionMarkState,
     updateTextEditingStyle,
   } = useCanvasWorkspaceController({
     activePageId,
@@ -429,7 +433,8 @@ export function EditorWorkbenchFeature({
     canToggleMaskSelection,
     deleteNodes,
     documentId: designDocument.documentId,
-    duplicateSelection: duplicateSelectionAction,
+    duplicateSelection: (nodeIds) =>
+      nodeIds ? duplicateSelection(nodeIds) : duplicateSelectionAction(),
     editorActive: true,
     flattenSelection: () => void flattenSelection(),
     groupSelection,
@@ -446,6 +451,23 @@ export function EditorWorkbenchFeature({
     ungroupSelection,
     workspace,
   });
+  const activeMarkState = isCurrentSmartSelectionMarkState(
+    smartSelectionMarkState,
+    {
+      documentId: designDocument.documentId,
+      nodeIds: state.selection.nodeIds,
+      pageId: activePageId,
+      revision: designDocument.revision,
+    },
+  )
+    ? smartSelectionMarkState
+    : null;
+  const activeLayerMutationIds =
+    activeMarkState?.markedNodeIds ?? state.selection.nodeIds;
+  const duplicateActiveSelection = () =>
+    activeMarkState
+      ? duplicateSelection(activeMarkState.markedNodeIds)
+      : duplicateSelectionAction();
 
   const fontInspectorContext = useFontInspectorContext({
     applyCommands,
@@ -552,8 +574,8 @@ export function EditorWorkbenchFeature({
               : "group"
           }
           onBooleanOperation={applyBooleanOperation}
-          onDelete={() => deleteNodes(state.selection.nodeIds)}
-          onDuplicate={duplicateSelectionAction}
+          onDelete={() => deleteNodes(activeLayerMutationIds)}
+          onDuplicate={duplicateActiveSelection}
           onGroup={groupSelection}
           onToggleMask={toggleMaskSelection}
           onReorder={reorderSelection}
@@ -669,6 +691,8 @@ export function EditorWorkbenchFeature({
               onAdjustAutoLayoutSpacing={editorCommands.adjustAutoLayoutSpacing}
               onAdjustSmartSelectionSpacing={adjustSmartSelectionSpacing}
               onReorderSmartSelection={reorderSmartSelection}
+              onResizeSmartSelection={resizeSmartSelection}
+              onSmartSelectionMarkChange={setSmartSelectionMarkState}
               onAssetDrop={placeImageAssetAtPoint}
               onRenameFrame={(nodeId, name) =>
                 renameLayerTarget({ nodeId }, name)
@@ -698,6 +722,7 @@ export function EditorWorkbenchFeature({
               onReorderGridTracks={editorCommands.reorderGridTracks}
               onSetGridTracks={editorCommands.setGridTracks}
               runtime={runtime}
+              smartSelectionMarkState={smartSelectionMarkState}
               showAgentRunStatus={
                 !utilityPanelVisible || utilityTab !== "agent"
               }
@@ -720,8 +745,8 @@ export function EditorWorkbenchFeature({
                         : "group"
                     }
                     name={selectedNode?.name}
-                    onDelete={() => deleteNodes(state.selection.nodeIds)}
-                    onDuplicate={duplicateSelectionAction}
+                    onDelete={() => deleteNodes(activeLayerMutationIds)}
+                    onDuplicate={duplicateActiveSelection}
                     onGroup={groupSelection}
                     onOpenProperties={() => showUtilityTab("properties")}
                     onReorder={reorderSelection}
@@ -848,12 +873,12 @@ export function EditorWorkbenchFeature({
                 onCreateComponentInstance={createSelectedComponentInstance}
                 onCombineVariants={combineSelectedComponentsAsVariants}
                 onAddToVariantSet={addSelectedComponentToVariantSet}
-                onDelete={() => deleteNodes(state.selection.nodeIds)}
+                onDelete={() => deleteNodes(activeLayerMutationIds)}
                 onDetachComponentInstance={detachSelectedInstance}
                 onDissolveVariantSet={dissolveSelectedVariantSet}
                 onDuplicateVariant={duplicateSelectedVariant}
                 onDismissSvgFeedback={importExport.dismissSvgFeedback}
-                onDuplicate={duplicateSelectionAction}
+                onDuplicate={duplicateActiveSelection}
                 onOutlineStroke={() => void outlineSelectedStroke()}
                 onSetVectorVertexAppearance={setVectorVertexAppearance}
                 onGoToComponentMain={goToSelectedInstanceMain}

@@ -43,6 +43,8 @@ export interface SmartSelectionOverlayPlan {
   pageId: string;
   revision: number;
   rings: readonly SmartSelectionRingSpec[];
+  columns: readonly (readonly string[])[];
+  rows: readonly (readonly string[])[];
 }
 
 export function createSmartSelectionOverlayPlan(
@@ -110,6 +112,7 @@ export function createSmartSelectionOverlayPlan(
   const bounds = unionBounds(items.map((item) => item.bounds));
   return {
     bounds,
+    columns: analysis.columns,
     dimension: analysis.dimension,
     documentId: document.documentId,
     handles,
@@ -117,6 +120,7 @@ export function createSmartSelectionOverlayPlan(
     nodeIds: analysis.orderedIds,
     pageId,
     revision: document.revision,
+    rows: analysis.rows,
     rings: items.map((item) => ({
       id: `smart-ring:${item.id}`,
       nodeId: item.id,

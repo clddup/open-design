@@ -11,6 +11,7 @@ import {
 } from "./smart-selection-overlay.js";
 import { SmartSelectionReorderController } from "./smart-selection-reorder-controller.js";
 import type {
+  LeaferSmartSelectionMarkState,
   LeaferSmartSelectionReorderRequest,
   LeaferSmartSelectionSpacingRequest,
 } from "./types.js";
@@ -82,6 +83,7 @@ export class SmartSelectionOverlayController {
     leafer: LeaferModule;
     onCommit: (request: LeaferSmartSelectionSpacingRequest) => boolean;
     onReorder: (request: LeaferSmartSelectionReorderRequest) => boolean;
+    onMarkChange: (state: LeaferSmartSelectionMarkState | null) => void;
     presentationRoot: LeaferGroup;
     restoreProjection: () => void;
     viewportRoot: LeaferGroup;
@@ -124,6 +126,7 @@ export class SmartSelectionOverlayController {
       layerIndex: options.layerIndex + 1,
       leafer: options.leafer,
       onReorder: options.onReorder,
+      onMarkChange: options.onMarkChange,
       presentationRoot: options.presentationRoot,
       restoreProjection: options.restoreProjection,
       viewportRoot: options.viewportRoot,
