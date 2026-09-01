@@ -204,6 +204,11 @@ it("defines strict Paint, Text, Effect and Grid shared-style payloads", () => {
         hangingList: false,
         textCase: "original",
         textDecoration: "none",
+        textDecorationStyle: null,
+        textDecorationOffset: null,
+        textDecorationThickness: null,
+        textDecorationColor: null,
+        textDecorationSkipInk: null,
       },
     },
     {

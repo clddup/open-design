@@ -1768,7 +1768,7 @@ describe("design Agent tool contract", () => {
     expect(bootstrap).toContain('"paragraphIndent"');
     expect(bootstrap).toContain('"textCase"');
     expect(bootstrap).toContain('"textDecoration"');
-    expect(bootstrap).toContain('"textDecorationStyle"');
+    expect(bootstrap).not.toContain('"textDecorationStyle"');
     expect(bootstrap).toContain('"textTruncation"');
     expect(bootstrap).toContain('"maxLines"');
     expect(bootstrap).not.toContain('"ellipsis"');
