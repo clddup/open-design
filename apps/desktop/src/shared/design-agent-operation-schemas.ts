@@ -3,10 +3,7 @@ import {
   executableJsonSchema,
 } from "@opendesign/design-contracts";
 import { DESIGN_IMAGE_PLACEMENT_SCHEMA } from "./design-agent-image-tools";
-import {
-  DESIGN_MODEL_TEXT_DECORATION_KEYS,
-  DESIGN_MODEL_TEXT_DECORATION_PROPERTIES,
-} from "./design-agent-text-decoration-schema";
+import { DESIGN_MODEL_TEXT_DECORATION_PROPERTIES } from "./design-agent-text-decoration-schema";
 
 const MODEL_BLEND_MODES = [
   "pass-through",
@@ -571,19 +568,12 @@ const MODEL_TEXT_CORE_REQUIRED = [
   "fontSlant",
   "lineHeight",
   "letterSpacing",
-  "paragraphIndent",
-  "paragraphSpacing",
-  "listSpacing",
-  "hangingList",
-  "textCase",
-  ...DESIGN_MODEL_TEXT_DECORATION_KEYS,
   "textAlignHorizontal",
   "textAlignVertical",
   "textResize",
   "textWrap",
   "textOverflow",
   "textTruncation",
-  "maxLines",
 ] as const;
 
 function textMode(
@@ -592,6 +582,7 @@ function textMode(
   textOverflow: readonly ("visible" | "clip")[],
   textTruncation: "disabled" | "ending",
   maxLines: Record<string, unknown>,
+  requireMaxLines = false,
 ) {
   return {
     type: "object" as const,
@@ -607,7 +598,7 @@ function textMode(
       "textWrap",
       "textOverflow",
       "textTruncation",
-      "maxLines",
+      ...(requireMaxLines ? ["maxLines"] : []),
     ],
   };
 }
@@ -627,17 +618,31 @@ const MODEL_TEXT_PROPERTIES_SCHEMA = requiredPropertiesSchema(
       anyOf: [{ type: "null" }, { type: "integer", minimum: 1 }],
     }),
     textMode("auto-width", ["none"], ["visible"], "disabled", { type: "null" }),
-    textMode("auto-width", ["none"], ["visible"], "ending", {
-      type: "integer",
-      minimum: 1,
-    }),
+    textMode(
+      "auto-width",
+      ["none"],
+      ["visible"],
+      "ending",
+      {
+        type: "integer",
+        minimum: 1,
+      },
+      true,
+    ),
     textMode("auto-height", ["word", "character"], ["visible"], "disabled", {
       type: "null",
     }),
-    textMode("auto-height", ["word", "character"], ["visible"], "ending", {
-      type: "integer",
-      minimum: 1,
-    }),
+    textMode(
+      "auto-height",
+      ["word", "character"],
+      ["visible"],
+      "ending",
+      {
+        type: "integer",
+        minimum: 1,
+      },
+      true,
+    ),
   ],
 );
 

@@ -128,24 +128,12 @@ describe("design checkpoint contract", () => {
                   fontSlant: "normal",
                   lineHeight: 32,
                   letterSpacing: 0,
-                  paragraphIndent: 0,
-                  paragraphSpacing: 0,
-                  listSpacing: 0,
-                  hangingList: false,
-                  textCase: "original",
-                  textDecoration: "none",
-                  textDecorationStyle: null,
-                  textDecorationOffset: null,
-                  textDecorationThickness: null,
-                  textDecorationColor: null,
-                  textDecorationSkipInk: null,
                   textAlignHorizontal: "left",
                   textAlignVertical: "top",
                   textResize: "fixed",
                   textWrap: "none",
                   textOverflow: "visible",
                   textTruncation: "disabled",
-                  maxLines: null,
                 },
               },
             ],
@@ -157,7 +145,36 @@ describe("design checkpoint contract", () => {
     expect(
       schemaValidationIssues(DESIGN_CHECKPOINT_TOOL_INPUT_SCHEMA, input),
     ).toHaveLength(0);
-    expect(DesignCheckpointContract.parse(input)).toMatchObject({ ok: true });
+    expect(DesignCheckpointContract.parse(input)).toMatchObject({
+      ok: true,
+      value: {
+        apply: {
+          commands: [
+            {
+              nodes: [
+                {},
+                {
+                  properties: {
+                    paragraphIndent: 0,
+                    paragraphSpacing: 0,
+                    listSpacing: 0,
+                    hangingList: false,
+                    textCase: "original",
+                    textDecoration: "none",
+                    textDecorationStyle: null,
+                    textDecorationOffset: null,
+                    textDecorationThickness: null,
+                    textDecorationColor: null,
+                    textDecorationSkipInk: null,
+                    maxLines: null,
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      },
+    });
   });
 
   it("canonicalizes the refinement branch through the same Apply contract", () => {

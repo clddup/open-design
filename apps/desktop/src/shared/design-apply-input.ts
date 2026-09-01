@@ -2,6 +2,7 @@ import {
   DesignOperationSchema,
   MAX_TRANSACTION_COMMANDS,
   Type,
+  defaultAdvancedTextDecoration,
   designCommandListDomainIssues,
   type DesignOperation,
 } from "@opendesign/design-contracts";
@@ -392,16 +393,42 @@ function compileModelNodeProperties(kind: unknown, value: unknown): unknown {
   if (
     kind === "ellipse" ||
     kind === "line" ||
-    kind === "text" ||
     kind === "vector" ||
     kind === "path"
   ) {
     return { ...shapeDefaults, ...value };
   }
+  if (kind === "text") {
+    return compileModelTextProperties(shapeDefaults, value);
+  }
   if (kind === "image") {
     return { cornerRadius: 0, ...value };
   }
   return value;
+}
+
+function compileModelTextProperties(
+  shapeDefaults: Record<string, unknown>,
+  value: Record<string, unknown>,
+): Record<string, unknown> {
+  const decoration =
+    value.textDecoration === "underline"
+      ? "underline"
+      : value.textDecoration === "strikethrough"
+        ? "strikethrough"
+        : "none";
+  return {
+    ...shapeDefaults,
+    paragraphIndent: 0,
+    paragraphSpacing: 0,
+    listSpacing: 0,
+    hangingList: false,
+    textCase: "original",
+    textDecoration: decoration,
+    ...defaultAdvancedTextDecoration(decoration),
+    maxLines: null,
+    ...value,
+  };
 }
 
 function compileModelExportSetting(value: unknown): unknown {

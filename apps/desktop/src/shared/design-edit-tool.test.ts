@@ -5,6 +5,98 @@ import {
 } from "./design-edit-tool";
 
 describe("Edit Design contract", () => {
+  it("compiles omitted deterministic Text defaults from a production edit payload", () => {
+    const input = {
+      label: "Redesign the login page",
+      edits: [
+        {
+          kind: "node",
+          input: {
+            label: "Build the editor preview",
+            commands: [
+              {
+                commandId: "toolbar-title",
+                type: "insert_element",
+                pageId: "page_login",
+                parentId: "editor_preview",
+                index: 0,
+                node: {
+                  id: "toolbar_title",
+                  name: "Project name",
+                  transform: [1, 0, 0, 1, 22, 13],
+                  size: { width: 240, height: 22 },
+                  kind: "text",
+                  properties: {
+                    content: "品牌主页设计  ·  已保存",
+                    fontFamily: "Noto Sans SC",
+                    fontStyleName: "Medium",
+                    fontSize: 12,
+                    fontWeight: 500,
+                    fontSlant: "normal",
+                    lineHeight: 20,
+                    letterSpacing: 0.2,
+                    textAlignHorizontal: "left",
+                    textAlignVertical: "top",
+                    textResize: "fixed",
+                    textWrap: "none",
+                    textOverflow: "visible",
+                    textTruncation: "disabled",
+                    fills: [{ type: "solid", color: "#C9D6DB", opacity: 1 }],
+                    strokes: [],
+                    strokeWidth: 0,
+                  },
+                },
+              },
+            ],
+          },
+        },
+      ],
+    };
+    const result = EditDesignContract.parse(input);
+
+    expect(result).toMatchObject({
+      ok: true,
+      value: {
+        edits: [
+          {
+            kind: "node",
+            input: {
+              commands: [
+                {
+                  node: {
+                    properties: {
+                      paragraphIndent: 0,
+                      paragraphSpacing: 0,
+                      listSpacing: 0,
+                      hangingList: false,
+                      textCase: "original",
+                      textDecoration: "none",
+                      textDecorationStyle: null,
+                      textDecorationOffset: null,
+                      textDecorationThickness: null,
+                      textDecorationColor: null,
+                      textDecorationSkipInk: null,
+                      maxLines: null,
+                    },
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    });
+
+    const autoHeightEnding = structuredClone(input);
+    const autoHeightProperties =
+      autoHeightEnding.edits[0].input.commands[0].node.properties;
+    autoHeightProperties.textResize = "auto-height";
+    autoHeightProperties.textWrap = "word";
+    autoHeightProperties.textOverflow = "visible";
+    autoHeightProperties.textTruncation = "ending";
+    expect(EditDesignContract.parse(autoHeightEnding).ok).toBe(false);
+  });
+
   it("compiles one node transaction and validates ordered hierarchy/layout edits", () => {
     const result = EditDesignContract.parse({
       label: "Refine the card system",
