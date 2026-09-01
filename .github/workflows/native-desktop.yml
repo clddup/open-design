@@ -7,6 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: write
   contents: read
 
 concurrency:
@@ -81,10 +82,29 @@ jobs:
           & "apps/desktop/release/win-unpacked/OpenDesign.exe"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Remove previous native installer artifact
+        if: github.event_name != 'pull_request'
+        shell: bash
+        env:
+          ARTIFACT_NAME: OpenDesign-${{ runner.os }}-${{ runner.arch }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          artifact_ids="$(
+            gh api --paginate \
+              "repos/${GITHUB_REPOSITORY}/actions/artifacts?name=${ARTIFACT_NAME}" \
+              --jq '.artifacts[].id'
+          )"
+          if [[ -n "$artifact_ids" ]]; then
+            while IFS= read -r artifact_id; do
+              gh api --method DELETE \
+                "repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}"
+            done <<< "$artifact_ids"
+          fi
+
       - name: Upload native installers
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: OpenDesign-${{ runner.os }}-${{ runner.arch }}
           path: ${{ matrix.artifact-pattern }}
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 1
