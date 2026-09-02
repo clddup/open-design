@@ -8882,6 +8882,95 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
+  it("snaps a mixed-affine multi-selection and commits one resize", async () => {
+    const onOperations = vi.fn(() => true);
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onOperations,
+    });
+    const input = createInput();
+    input.document = structuredClone(input.document);
+    input.selection = {
+      anchorNodeId: "feature_two",
+      nodeIds: ["title_welcome", "feature_two"],
+    };
+    input.document.nodesById.frame_welcome!.transform = [1, 0, 0, 1, 0, 0];
+    input.document.nodesById.feature_group!.transform = [1, 0, 0, 1, 200, 0];
+    input.document.nodesById.title_welcome!.transform = [0, 1, -1, 0, 100, 100];
+    input.document.nodesById.title_welcome!.size = {
+      width: 100,
+      height: 60,
+    };
+    input.document.nodesById.feature_two!.transform = [1, 0.25, 0.4, 1, 0, 120];
+    input.document.nodesById.feature_two!.size = { width: 80, height: 40 };
+    input.document.pagesById.page_welcome!.guides = [
+      { axis: "X", offset: 300 },
+    ];
+    input.rulerGuidesVisible = true;
+    input.snapSettings = {
+      geometry: false,
+      objects: false,
+      pixelGrid: false,
+    };
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    const title = app && findElement(app.tree, "title_welcome");
+    const feature = app && findElement(app.tree, "feature_two");
+    const beforeScale = (
+      leaferHarness.appConfig?.editor as
+        | {
+            beforeScale?: (data: {
+              origin: { x: number; y: number };
+              scaleX: number;
+              scaleY: number;
+              target: FakeElement;
+            }) => { scaleX: number; scaleY: number };
+          }
+        | undefined
+    )?.beforeScale;
+    if (!app || !title || !feature || !beforeScale) {
+      throw new Error("Missing mixed-affine multi-resize fixture");
+    }
+
+    app.editor.target = [title, feature];
+    app.editor.resizing = true;
+    app.editor.editBox.dragging = true;
+    (
+      app.editor.editBox as typeof app.editor.editBox & {
+        dragPoint: { direction: number };
+      }
+    ).dragPoint = { direction: 3 };
+    const result = beforeScale({
+      origin: { x: 40, y: 150 },
+      scaleX: 259 / 256,
+      scaleY: 1,
+      target: {
+        boxBounds: { x: 40, y: 100, width: 256, height: 100 },
+      } as unknown as FakeElement,
+    });
+    expect(result).toEqual({ scaleX: 260 / 256, scaleY: 1 });
+
+    title.localTransform.e = 101;
+    feature.localTransform.e = 2;
+    app.editor.emit("editor.before-scale");
+    app.editor.emit("editor.scale");
+    app.editor.editBox.dragging = false;
+    app.editor.editBox.emit("drag.end");
+
+    expect(onOperations).toHaveBeenCalledTimes(1);
+    expect(onOperations).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "resize",
+        selectionNodeIds: ["title_welcome", "feature_two"],
+        operations: [
+          expect.objectContaining({ nodeId: "title_welcome" }),
+          expect.objectContaining({ nodeId: "feature_two" }),
+        ],
+      }),
+    );
+    adapter.dispose();
+  });
+
   it("converts document snap deltas through a rotated and scaled parent", async () => {
     const onOperations = vi.fn(() => true);
     const adapter = await createLeaferEngineAdapter(createHost(), {

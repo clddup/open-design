@@ -85,12 +85,12 @@ export class DirectTransformSnapSession {
       input.engineInput.document,
       input.selectedNodeIds,
     );
-    const axisAligned = this.#selectionIsAxisAligned(nodeIds);
+    const usesSelectionBox = this.#usesAxisAlignedSelectionBox(nodeIds);
     const oriented =
-      !axisAligned && nodeIds.length === 1
+      !usesSelectionBox && nodeIds.length === 1
         ? this.#orientedFrame(nodeIds[0]!)
         : null;
-    if (nodeIds.length === 0 || (!axisAligned && !oriented)) {
+    if (nodeIds.length === 0 || (!usesSelectionBox && !oriented)) {
       return false;
     }
     this.#active = "resize";
@@ -141,7 +141,7 @@ export class DirectTransformSnapSession {
     else if (
       this.#resizeOriented
         ? nodeIds.length === 1 && Boolean(this.#orientedFrame(nodeIds[0]!))
-        : this.#selectionIsAxisAligned(nodeIds)
+        : this.#usesAxisAlignedSelectionBox(nodeIds)
     ) {
       this.#resizeNodeIds = nodeIds;
       this.#resize.refresh(next);
@@ -234,6 +234,10 @@ export class DirectTransformSnapSession {
         Math.abs(transform[2]) <= 0.000_001
       );
     });
+  }
+
+  #usesAxisAlignedSelectionBox(nodeIds: readonly string[]): boolean {
+    return nodeIds.length > 1 || this.#selectionIsAxisAligned(nodeIds);
   }
 
   #orientedFrame(nodeId: string) {

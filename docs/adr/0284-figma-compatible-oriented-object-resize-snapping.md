@@ -23,7 +23,7 @@ Leafer 的 `beforeScale` 提供当前 local resize scale，真正写入仍围绕
 
 - 单个旋转、轴缩放或倾斜普通对象可以从四边和四角沿真实 affine 方向 resize，并命中对象、Page guide 与 pixel grid。
 - 比例锁定、中心 resize、左右 `Control`、viewport 阈值刷新、取消和连续 revision 生命周期与轴对齐 resize 一致。
-- 不同 orientation 多选、旋转 Frame-local guide、path/handle 吸附和 macOS/Windows 打包产品实机证据仍待后续。
+- 不同 orientation 多选已由 ADR-0285 后续使用真实轴对齐 selection box 完成；旋转 Frame-local guide、path/handle 吸附和 macOS/Windows 打包产品实机证据仍待后续。
 
 ## 公开语义参照
 

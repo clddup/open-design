@@ -46,8 +46,8 @@
 - ID：`transform.precise-arrangement`
 - 实现方：DesignDocument 1.57.0 + Geometry Service contract 38 + EditorRuntime + Leafer editor projection + Canvas ruler/snap/measurement overlays
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=unavailable
-- 证据：自动化 29 项；实机 0 项
-- 限制：移动与 resize 吸附已支持对象外边缘与中心、Page 参考线、轴对齐 Frame-local 参考线和像素网格取整；单个旋转/倾斜对象会在完整 affine basis 中求解 resize。Vector edit 已支持直接及多点移动的 point-to-point geometry 吸附、独立持久偏好、Control 临时关闭和每次手势一次既有 Vector 提交；Option/Alt 对象、参考线与单选 Vector anchor 测量均已可用。不同 orientation 多选、旋转 Frame 参考线、path/handle 吸附及 macOS/Windows 打包产品交互证据仍未补齐。
+- 证据：自动化 30 项；实机 0 项
+- 限制：移动与 resize 吸附已支持对象外边缘与中心、Page 参考线、轴对齐 Frame-local 参考线和像素网格取整；单个旋转/倾斜对象会在完整 affine basis 中求解 resize，不同 orientation 多选则使用真实轴对齐 selection box。Vector edit 已支持直接及多点移动的 point-to-point geometry 吸附、独立持久偏好、Control 临时关闭和每次手势一次既有 Vector 提交；Option/Alt 对象、参考线与单选 Vector anchor 测量均已可用。旋转 Frame 参考线、path/handle 吸附及 macOS/Windows 打包产品交互证据仍未补齐。
 - 限制：Vector geometry 吸附只消费可编辑 network 锚点与文档变换；它不依赖隔离的 PathKit provider，也不把普通对象 bounds 当作矢量几何。
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360040449713-Add-guides-to-the-canvas-or-frames)
 - 专业参照：[官方说明](https://developers.figma.com/docs/plugins/api/Guide/)
