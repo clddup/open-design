@@ -1,5 +1,9 @@
 import type { Rect, ViewportState } from "@opendesign/design-contracts";
 import {
+  resolveOrientedResizeSnapping,
+  type OrientedResizeFrame,
+} from "@opendesign/geometry-service/oriented-resize-snapping";
+import {
   createSnapTargetIndex,
   resolveResizeSnapping,
   type SnapGuideLine,
@@ -24,6 +28,7 @@ export interface DirectResizeScaleInput {
   aroundCenter: boolean;
   bounds: Rect;
   direction: number;
+  frame?: OrientedResizeFrame;
   lockRatio: boolean;
   origin: { x: number; y: number };
   scaleX: number;
@@ -73,6 +78,22 @@ export class DirectResizeSnapController {
     if (raw.width <= 0 || raw.height <= 0) {
       this.#onLines([]);
       return originalScale(input);
+    }
+    if (input.frame) {
+      const resolution = resolveOrientedResizeSnapping({
+        aroundCenter: input.aroundCenter,
+        frame: input.frame,
+        horizontal: axes.horizontal,
+        lockRatio: input.lockRatio,
+        pixelGrid: session.pixelGrid,
+        scaleX: input.scaleX,
+        scaleY: input.scaleY,
+        targets: this.#suppressed ? { x: [], y: [] } : session.targets,
+        threshold: session.threshold,
+        vertical: axes.vertical,
+      });
+      this.#onLines(resolution.lines);
+      return { scaleX: resolution.scaleX, scaleY: resolution.scaleY };
     }
     const resolution = resolveResizeSnapping({
       aroundCenter: input.aroundCenter,

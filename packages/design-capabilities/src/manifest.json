@@ -202,7 +202,7 @@
         "en": "Align and arrange layers, edit Smart Selection spacing and reflow, flip layers, set a persistent rotation origin, author Figma-shaped Page/Frame ruler guides, snap ordinary objects and editable Vector points, and inspect object, ruler-guide, or Vector-anchor distances through the shared editor geometry path.",
         "zh-CN": "通过共享编辑器几何链对齐与排列图层、编辑 Smart Selection 间距与回流、翻转图层、设置持久旋转原点、创建 Figma-shaped Page/Frame 标尺参考线、吸附普通对象与可编辑 Vector 锚点，并检查对象、参考线或 Vector 锚点距离。"
       },
-      "provider": "DesignDocument 1.57.0 + Geometry Service contract 37 + EditorRuntime + Leafer editor projection + Canvas ruler/snap/measurement overlays",
+      "provider": "DesignDocument 1.57.0 + Geometry Service contract 38 + EditorRuntime + Leafer editor projection + Canvas ruler/snap/measurement overlays",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
       "surfaces": {
         "contract": "available",
@@ -214,8 +214,8 @@
       },
       "limitations": [
         {
-          "en": "Move and axis-aligned resize snapping support object outer edges and centers, Page guides, axis-aligned Frame-local guides, and pixel-grid rounding. Vector edit supports point-to-point geometry snapping for direct and multi-point moves, an independent persistent preference, Control suppression, and one existing Vector commit per gesture. Option/Alt object, ruler-guide, and single-selected Vector-anchor measurements are available. Rotated/skewed directional resize and Frame-guide snapping, path/handle snapping, and packaged macOS/Windows interaction evidence remain incomplete.",
-          "zh-CN": "移动与轴对齐 resize 吸附已支持对象外边缘与中心、Page 参考线、轴对齐 Frame-local 参考线和像素网格取整。Vector edit 已支持直接及多点移动的 point-to-point geometry 吸附、独立持久偏好、Control 临时关闭和每次手势一次既有 Vector 提交；Option/Alt 对象、参考线与单选 Vector anchor 测量均已可用。旋转/倾斜对象定向 resize 与 Frame 参考线吸附、path/handle 吸附及 macOS/Windows 打包产品交互证据仍未补齐。"
+          "en": "Move and resize snapping support object outer edges and centers, Page guides, axis-aligned Frame-local guides, and pixel-grid rounding; single rotated/skewed objects resolve resize in their full affine basis. Vector edit supports point-to-point geometry snapping for direct and multi-point moves, an independent persistent preference, Control suppression, and one existing Vector commit per gesture. Option/Alt object, ruler-guide, and single-selected Vector-anchor measurements are available. Mixed-orientation multi-selection, rotated Frame-guide snapping, path/handle snapping, and packaged macOS/Windows interaction evidence remain incomplete.",
+          "zh-CN": "移动与 resize 吸附已支持对象外边缘与中心、Page 参考线、轴对齐 Frame-local 参考线和像素网格取整；单个旋转/倾斜对象会在完整 affine basis 中求解 resize。Vector edit 已支持直接及多点移动的 point-to-point geometry 吸附、独立持久偏好、Control 临时关闭和每次手势一次既有 Vector 提交；Option/Alt 对象、参考线与单选 Vector anchor 测量均已可用。不同 orientation 多选、旋转 Frame 参考线、path/handle 吸附及 macOS/Windows 打包产品交互证据仍未补齐。"
         },
         {
           "en": "Vector geometry snapping consumes editable network anchors and document transforms only; it does not depend on the isolated PathKit provider or treat ordinary object bounds as vector geometry.",
@@ -242,6 +242,7 @@
           "apps/desktop/src/main/agent/design-edit-tool-handler.test.ts",
           "apps/desktop/src/renderer/features/canvas/use-canvas-workspace-controller.test.ts",
           "packages/geometry-service/src/snapping.test.ts",
+          "packages/geometry-service/src/oriented-resize-snapping.test.ts",
           "packages/leafer-engine/src/direct-move-snap-controller.test.ts",
           "packages/leafer-engine/src/direct-resize-snap-controller.test.ts",
           "packages/leafer-engine/src/adapter-event-controller.test.ts",
@@ -504,7 +505,7 @@
         "en": "Create and refine open, closed, branching, and curved vector geometry using points and Bézier handles, with Figma-compatible point snapping and anchor measurements in Vector edit mode.",
         "zh-CN": "通过节点和贝塞尔手柄创建、编辑开放、闭合、分支与曲线矢量几何，并在 Vector edit mode 中使用 Figma-compatible 节点吸附与锚点测量。"
       },
-      "provider": "DesignDocument 1.57.0 Vector Network + Geometry Service contract 37 point/path selection-delete/transform/point-snapping/anchor-measurement/Bend/Connect/Disconnect/Cut/region Fill/region Paint Style/vertex stroke appearance/vertex corner radius/Outline Stroke/Flatten + EditorRuntime document-space multi-Vector transform/Cut/cross-layer Connect/branch junction/Frame-Group-Boolean-Component-Text-Image and root-shell/isolated-pixel-compositing Flatten planner + Leafer synthetic region/stroke/corner projection and native editing overlays",
+      "provider": "DesignDocument 1.57.0 Vector Network + Geometry Service contract 38 point/path selection-delete/transform/point-snapping/anchor-measurement/Bend/Connect/Disconnect/Cut/region Fill/region Paint Style/vertex stroke appearance/vertex corner radius/Outline Stroke/Flatten + EditorRuntime document-space multi-Vector transform/Cut/cross-layer Connect/branch junction/Frame-Group-Boolean-Component-Text-Image and root-shell/isolated-pixel-compositing Flatten planner + Leafer synthetic region/stroke/corner projection and native editing overlays",
       "requiredSurfaces": ["contract", "runtime", "human", "agent"],
       "surfaces": {
         "contract": "available",

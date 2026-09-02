@@ -10,6 +10,7 @@
     "./editable-vector": "./src/editable-vector.ts",
     "./line-endpoint": "./src/line-endpoint.ts",
     "./measurements": "./src/measurements.ts",
+    "./oriented-resize-snapping": "./src/oriented-resize-snapping.ts",
     "./regular-shape": "./src/regular-shape.ts",
     "./snapping": "./src/snapping.ts",
     "./vector-materialization": "./src/vector-materialization.ts",

@@ -108,6 +108,37 @@ describe("DirectResizeSnapController", () => {
     expect(result.scaleY).toBe(1);
   });
 
+  it("routes rotated affine frames through directional snapping", () => {
+    const onLines = vi.fn();
+    const controller = new DirectResizeSnapController({ onLines });
+    controller.begin(
+      resizeInput([{ axis: "Y", offset: 200 }], {
+        geometry: false,
+        objects: false,
+        pixelGrid: false,
+      }),
+    );
+
+    const result = controller.resolve({
+      aroundCenter: false,
+      bounds: { x: 850, y: 100, width: 50, height: 100 },
+      direction: 3,
+      frame: {
+        bounds: { x: 0, y: 0, width: 100, height: 50 },
+        transform: [0, 1, -1, 0, 900, 100],
+      },
+      lockRatio: false,
+      origin: { x: 850, y: 100 },
+      scaleX: 0.96,
+      scaleY: 1,
+    });
+
+    expect(result.scaleX).toBeCloseTo(1);
+    expect(onLines).toHaveBeenLastCalledWith([
+      expect.objectContaining({ axis: "y", position: 200 }),
+    ]);
+  });
+
   it("fails open for flips, invalid values, and unsupported directions", () => {
     const controller = new DirectResizeSnapController({ onLines: vi.fn() });
     controller.begin(

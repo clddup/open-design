@@ -1,4 +1,4 @@
-export const GEOMETRY_SERVICE_CONTRACT_VERSION = 37 as const;
+export const GEOMETRY_SERVICE_CONTRACT_VERSION = 38 as const;
 export {
   LINE_ENDPOINT_MARKER_SIZE,
   LINE_ENDPOINT_MARKER_VIEW_BOX,
@@ -69,6 +69,12 @@ export {
   type SnapTargetIndex,
   type SnapTargetSource,
 } from "./snapping.js";
+export {
+  resolveOrientedResizeSnapping,
+  type OrientedResizeFrame,
+  type OrientedResizeMatch,
+  type OrientedResizeResolution,
+} from "./oriented-resize-snapping.js";
 export {
   createVectorSnapTargetIndex,
   resolveVectorPointSnapping,

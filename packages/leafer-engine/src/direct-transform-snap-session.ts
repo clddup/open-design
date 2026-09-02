@@ -14,6 +14,7 @@ import {
 import {
   directTransformElementBounds,
   readDirectTransformElementState,
+  type DirectTransformElementState,
 } from "./direct-transform-element-state.js";
 import {
   getVisibleWorldTransform,
@@ -37,6 +38,7 @@ export class DirectTransformSnapSession {
   readonly #move: DirectMoveSnapController;
   readonly #resize: DirectResizeSnapController;
   #resizeNodeIds: readonly string[] = [];
+  #resizeOriented = false;
 
   constructor(options: {
     currentDocument: () => DesignDocument | null;
@@ -83,11 +85,17 @@ export class DirectTransformSnapSession {
       input.engineInput.document,
       input.selectedNodeIds,
     );
-    if (nodeIds.length === 0 || !this.#selectionIsAxisAligned(nodeIds)) {
+    const axisAligned = this.#selectionIsAxisAligned(nodeIds);
+    const oriented =
+      !axisAligned && nodeIds.length === 1
+        ? this.#orientedFrame(nodeIds[0]!)
+        : null;
+    if (nodeIds.length === 0 || (!axisAligned && !oriented)) {
       return false;
     }
     this.#active = "resize";
     this.#resizeNodeIds = nodeIds;
+    this.#resizeOriented = Boolean(oriented);
     this.#resize.setSuppressed(this.#controlKeys.size > 0);
     this.#resize.begin(
       snapInput(input.engineInput, nodeIds, input.excludedNodeIds),
@@ -102,9 +110,14 @@ export class DirectTransformSnapSession {
     if (this.#active !== "resize") return originalScale(input);
     const bounds = this.#selectionBounds(this.#resizeNodeIds);
     if (!bounds) return originalScale(input);
+    const frame = this.#resizeOriented
+      ? this.#orientedFrame(this.#resizeNodeIds[0]!)
+      : undefined;
+    if (this.#resizeOriented && !frame) return originalScale(input);
     return this.#resize.resolve({
       ...input,
       bounds,
+      ...(frame ? { frame } : undefined),
       origin: resizeOrigin(bounds, input.direction, input.aroundCenter),
     });
   }
@@ -125,7 +138,11 @@ export class DirectTransformSnapSession {
     }
     const next = snapInput(input.engineInput, nodeIds, input.excludedNodeIds);
     if (this.#active === "move") this.#move.refresh(next);
-    else if (this.#selectionIsAxisAligned(nodeIds)) {
+    else if (
+      this.#resizeOriented
+        ? nodeIds.length === 1 && Boolean(this.#orientedFrame(nodeIds[0]!))
+        : this.#selectionIsAxisAligned(nodeIds)
+    ) {
       this.#resizeNodeIds = nodeIds;
       this.#resize.refresh(next);
     } else this.cancel();
@@ -178,6 +195,7 @@ export class DirectTransformSnapSession {
   finish(): void {
     this.#active = null;
     this.#resizeNodeIds = [];
+    this.#resizeOriented = false;
     this.#move.finish();
     this.#resize.finish();
   }
@@ -185,6 +203,7 @@ export class DirectTransformSnapSession {
   cancel(): void {
     this.#active = null;
     this.#resizeNodeIds = [];
+    this.#resizeOriented = false;
     this.#move.cancel();
     this.#resize.cancel();
   }
@@ -193,18 +212,12 @@ export class DirectTransformSnapSession {
     const document = this.#currentDocument();
     if (!document) return null;
     const bounds = nodeIds.flatMap((nodeId) => {
-      const node = document.nodesById[nodeId];
-      const element = this.#element(nodeId);
-      if (!node || !element) return [];
-      const parentTransform = node.parentId
-        ? getVisibleWorldTransform(document.nodesById, node.parentId)
-        : IDENTITY_TRANSFORM;
-      if (!parentTransform) return [];
-      const state = readDirectTransformElementState(element);
+      const world = this.#worldElementState(nodeId);
+      if (!world) return [];
       return [
         directTransformElementBounds({
-          ...state,
-          transform: multiplyTransforms(parentTransform, state.transform),
+          ...world.state,
+          transform: world.transform,
         }),
       ];
     });
@@ -213,25 +226,54 @@ export class DirectTransformSnapSession {
   }
 
   #selectionIsAxisAligned(nodeIds: readonly string[]): boolean {
-    const document = this.#currentDocument();
-    if (!document) return false;
     return nodeIds.every((nodeId) => {
-      const node = document.nodesById[nodeId];
-      const element = this.#element(nodeId);
-      if (!node || !element) return false;
-      const parentTransform = node.parentId
-        ? getVisibleWorldTransform(document.nodesById, node.parentId)
-        : IDENTITY_TRANSFORM;
-      if (!parentTransform) return false;
-      const transform = multiplyTransforms(
-        parentTransform,
-        readDirectTransformElementState(element).transform,
-      );
+      const transform = this.#worldElementState(nodeId)?.transform;
+      if (!transform) return false;
       return (
         Math.abs(transform[1]) <= 0.000_001 &&
         Math.abs(transform[2]) <= 0.000_001
       );
     });
+  }
+
+  #orientedFrame(nodeId: string) {
+    const world = this.#worldElementState(nodeId);
+    if (
+      !world ||
+      world.state.linePoints ||
+      world.state.size.width <= 0 ||
+      world.state.size.height <= 0
+    ) {
+      return null;
+    }
+    return {
+      bounds: {
+        x: 0,
+        y: 0,
+        width: world.state.size.width,
+        height: world.state.size.height,
+      },
+      transform: world.transform,
+    };
+  }
+
+  #worldElementState(nodeId: string): {
+    state: DirectTransformElementState;
+    transform: Transform;
+  } | null {
+    const document = this.#currentDocument();
+    const node = document?.nodesById[nodeId];
+    const element = this.#element(nodeId);
+    if (!document || !node || !element) return null;
+    const parentTransform = node.parentId
+      ? getVisibleWorldTransform(document.nodesById, node.parentId)
+      : IDENTITY_TRANSFORM;
+    if (!parentTransform) return null;
+    const state = readDirectTransformElementState(element);
+    return {
+      state,
+      transform: multiplyTransforms(parentTransform, state.transform),
+    };
   }
 
   #translate(
