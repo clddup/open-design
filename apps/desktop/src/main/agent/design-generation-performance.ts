@@ -163,7 +163,7 @@ export class DesignGenerationPerformanceTracker {
     if (!state) return null;
     const observedAtMs = this.now();
 
-    if (event.type === "message.delta") {
+    if (event.type === "message.delta" && event.blockType === "text") {
       state.firstAssistantTextAtMs ??= observedAtMs;
       return null;
     }

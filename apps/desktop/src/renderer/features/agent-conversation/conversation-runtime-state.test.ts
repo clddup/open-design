@@ -18,6 +18,8 @@ describe("conversation runtime state", () => {
         runId: "run_1",
         messageId: "assistant_1",
         blockId: "reasoning",
+        blockType: "text",
+        blockIndex: 0,
         delta: "先分析",
       },
       {
@@ -35,6 +37,8 @@ describe("conversation runtime state", () => {
       runId: "run_1",
       messageId: "assistant_1",
       blockId: "reasoning",
+      blockType: "text",
+      blockIndex: 0,
       delta: "，再执行",
     });
 
@@ -49,6 +53,8 @@ describe("conversation runtime state", () => {
       runId: "run_1",
       messageId: "assistant_1",
       blockId: "text_1",
+      blockType: "text",
+      blockIndex: 0,
       delta: "已经显示的回复",
     };
     const completed: AgentEvent = {
@@ -61,6 +67,44 @@ describe("conversation runtime state", () => {
     expect(appendLiveAgentEvent([delta], completed)).toEqual([
       delta,
       completed,
+    ]);
+  });
+
+  it("finalizes a streamed message without moving it past later activity", () => {
+    const reasoning: AgentEvent = {
+      type: "message.delta",
+      runId: "run_1",
+      messageId: "assistant_1",
+      blockId: "reasoning_0",
+      blockType: "reasoning_summary",
+      blockIndex: 0,
+      delta: "先分析",
+    };
+    const tool: AgentEvent = {
+      type: "tool.requested",
+      runId: "run_1",
+      toolCallId: "inspect_1",
+      toolName: "opendesign_inspect_document",
+      input: {},
+      risk: "read",
+    };
+    const completed: AgentEvent = {
+      type: "message.completed",
+      runId: "run_1",
+      messageId: "assistant_1",
+      blocks: [
+        {
+          blockId: "reasoning_0",
+          type: "reasoning_summary",
+          status: "completed",
+          summary: "先分析",
+        },
+      ],
+    };
+
+    expect(appendLiveAgentEvent([reasoning, tool], completed)).toEqual([
+      completed,
+      tool,
     ]);
   });
 

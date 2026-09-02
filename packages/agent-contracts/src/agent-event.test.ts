@@ -165,6 +165,30 @@ describe("Agent event and timeline contracts", () => {
     ).toContain("agent_event.schema_invalid at /blocks");
   });
 
+  it("identifies streamed assistant blocks so text and reasoning cannot mix", () => {
+    expect(
+      isAgentEvent({
+        type: "message.delta",
+        runId: "run_1",
+        messageId: "message_1",
+        blockId: "reasoning_0",
+        blockType: "reasoning_summary",
+        blockIndex: 0,
+        delta: "正在分析",
+      }),
+    ).toBe(true);
+    expect(
+      agentEventValidationError({
+        type: "message.delta",
+        runId: "run_1",
+        messageId: "message_1",
+        blockId: "reasoning_0",
+        blockIndex: 0,
+        delta: "正在分析",
+      }),
+    ).toContain("agent_event.schema_invalid at /blockType");
+  });
+
   it("reports stable paths for Agent event domain failures", () => {
     const failure = {
       code: "provider_timeout",

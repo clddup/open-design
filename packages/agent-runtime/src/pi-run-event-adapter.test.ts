@@ -119,6 +119,22 @@ describe("Pi run event adapter", () => {
     expect(normalizeJournal(pi.store.events)).toEqual(
       normalizeJournal(production.store.events),
     );
+    expect(
+      pi.events.filter((event) => event.type === "message.delta"),
+    ).toMatchObject([
+      {
+        type: "message.delta",
+        blockType: "reasoning_summary",
+        blockIndex: 0,
+        delta: "Inspect hierarchy and visual balance.",
+      },
+      {
+        type: "message.delta",
+        blockType: "text",
+        blockIndex: 1,
+        delta: "The current design has a clear hierarchy.",
+      },
+    ]);
     const timeline = await pi.store.readTimeline(request.sessionId);
     expect(timeline).toMatchObject([
       { type: "user.message", content: request.prompt },

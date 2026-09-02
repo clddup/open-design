@@ -1,7 +1,6 @@
 import type {
   AgentRunFailure,
   AgentToolFailureDetails,
-  AssistantTimelineBlock,
 } from "@opendesign/agent-contracts";
 import type { DesignDeliveryStatus } from "@opendesign/workspace-contracts";
 import type { AppLocale } from "@/shared/i18n/locale";
@@ -41,31 +40,6 @@ export function eventTime(
     second: "2-digit",
     hour12: false,
   }).format(date);
-}
-
-export function assistantText(blocks: AssistantTimelineBlock[]): string {
-  return blocks
-    .map((block) => (block.type === "text" ? block.text : ""))
-    .filter(Boolean)
-    .join("\n");
-}
-
-export function assistantReasoningSummary(
-  blocks: AssistantTimelineBlock[],
-): string {
-  return blocks
-    .map((block) =>
-      block.type === "reasoning_summary" &&
-      block.status === "completed" &&
-      block.summary
-        ? block.summary
-            .replace(/^\s*#{1,6}\s+/gm, "")
-            .replace(/\*\*([^*]+)\*\*/g, "$1")
-            .trim()
-        : "",
-    )
-    .filter(Boolean)
-    .join("\n");
 }
 
 export function isNativeDesignTool(toolName: string | undefined): boolean {

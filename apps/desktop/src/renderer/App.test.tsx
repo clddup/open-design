@@ -6570,6 +6570,8 @@ describe("App", () => {
         runId: request.runId,
         messageId: "message_interrupted",
         blockId: "block_interrupted",
+        blockType: "text",
+        blockIndex: 0,
         delta: "Partial design response",
       });
     });
@@ -6636,6 +6638,8 @@ describe("App", () => {
         runId: retry.runId,
         messageId: "message_retry",
         blockId: "block_retry",
+        blockType: "text",
+        blockIndex: 0,
         delta: "Retry response",
       });
     });
@@ -6665,6 +6669,8 @@ describe("App", () => {
         runId: request.runId,
         messageId: "message_process_exit",
         blockId: "block_process_exit",
+        blockType: "text",
+        blockIndex: 0,
         delta: "Interrupted by process exit",
       });
     });

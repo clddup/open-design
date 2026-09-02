@@ -10,21 +10,12 @@ export type Translate = (
 export interface AgentTimelineItem {
   id: string;
   runId?: string;
-  kind?:
-    | "assistant"
-    | "reasoning"
-    | "user"
-    | "tool"
-    | "run"
-    | "approval"
-    | "system"
-    | "plan";
+  kind?: "assistant" | "user" | "tool" | "run" | "approval" | "system" | "plan";
   state: "done" | "active" | "stopping" | "queued" | "error";
   time: string;
   title: string;
   detail?: string;
-  reasoning?: string;
-  reasoningCount?: number;
+  assistantBlocks?: AgentAssistantBlock[];
   attachments?: AgentAttachment[];
   toolName?: string;
   routine?: boolean;
@@ -55,4 +46,12 @@ export interface AgentTimelineItem {
       status?: DesignDeliveryStatus;
     }>;
   };
+}
+
+export interface AgentAssistantBlock {
+  blockId: string;
+  blockIndex: number;
+  type: "text" | "reasoning_summary";
+  content: string;
+  state: "active" | "done";
 }

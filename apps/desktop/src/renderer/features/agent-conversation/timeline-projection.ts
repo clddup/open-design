@@ -1,6 +1,7 @@
 import type {
   AgentEvent,
   AgentToolFailureDetails,
+  AssistantTimelineBlock,
   SessionTimelineItem,
 } from "@opendesign/agent-contracts";
 import type { AppLocale } from "@/shared/i18n/locale";
@@ -16,8 +17,6 @@ import {
 } from "./timeline-plan-projection";
 import {
   approvalDecisionKey,
-  assistantReasoningSummary,
-  assistantText,
   eventTime,
   friendlyAgentError,
   isNativeDesignTool,
@@ -27,8 +26,11 @@ import {
   toolFailureTitle,
   toolTitle,
 } from "./timeline-presentation";
-import { projectReasoningInPlace } from "./timeline-reasoning";
-import type { AgentTimelineItem, Translate } from "./timeline-types";
+import type {
+  AgentAssistantBlock,
+  AgentTimelineItem,
+  Translate,
+} from "./timeline-types";
 export { latestDeliveryLedger } from "./timeline-design-delivery";
 export interface AgentTimelineProjectionInput {
   activeRunId: string | null;
@@ -205,7 +207,7 @@ export function projectAgentTimeline({
       }
       return left.order - right.order || left.id.localeCompare(right.id);
     });
-  return projectReasoningInPlace(ordered, t);
+  return ordered;
 }
 
 function collapseRecoverableFailures(
@@ -323,7 +325,7 @@ export function timelineRenderMarker(
   return items
     .map(
       (item) =>
-        `${item.id}:${item.state}:${item.title.length}:${item.detail?.length ?? 0}:${item.reasoning?.length ?? 0}:${item.plan?.status ?? ""}:${item.plan?.targets.map((target) => `${target.status ?? ""}:${target.implementationSteps.map((step) => step.status).join(";")}`).join(",") ?? ""}`,
+        `${item.id}:${item.state}:${item.title.length}:${item.detail?.length ?? 0}:${item.assistantBlocks?.map((block) => `${block.blockId}:${block.state}:${block.content.length}`).join(",") ?? ""}:${item.plan?.status ?? ""}:${item.plan?.targets.map((target) => `${target.status ?? ""}:${target.implementationSteps.map((step) => step.status).join(";")}`).join(",") ?? ""}`,
     )
     .join("|");
 }
@@ -408,19 +410,14 @@ function projectDurableTimeline(
       };
     }
     if (item.type === "assistant.message") {
-      const detail = assistantText(item.blocks);
-      const reasoning = assistantReasoningSummary(item.blocks);
-      const reasoningOnly = detail.length === 0 && reasoning.length > 0;
+      const assistantBlocks = projectAssistantBlocks(item.blocks, "done");
       return {
         ...base,
-        routine: detail.length === 0 && reasoning.length === 0,
+        routine: assistantBlocks.length === 0,
         state: "done",
-        kind: reasoningOnly ? "reasoning" : "assistant",
-        title: reasoningOnly
-          ? t("agent.modelThinkingSummary")
-          : t("agent.response"),
-        ...(detail ? { detail } : {}),
-        ...(reasoning ? { reasoning, reasoningCount: 1 } : {}),
+        kind: "assistant",
+        title: t("agent.response"),
+        assistantBlocks,
       };
     }
     if (item.type === "tool") {
@@ -751,35 +748,37 @@ function projectLiveEvents(
       hideGenericRunStatus(event.runId);
       const id = `message:${event.messageId}`;
       const existing = items.get(id);
+      const assistantBlocks = appendAssistantBlockDelta(
+        existing?.assistantBlocks ?? [],
+        event,
+      );
       updateEvent(id, {
         routine: false,
         state: "active",
         kind: "assistant",
         time: t("common.now"),
         title: t("agent.response"),
-        detail: `${existing?.detail ?? ""}${event.delta}`,
+        assistantBlocks,
       });
     }
     if (event.type === "message.completed") {
       hideGenericRunStatus(event.runId);
-      const detail = assistantText(event.blocks);
-      const reasoning = assistantReasoningSummary(event.blocks);
       const existing = items.get(`message:${event.messageId}`);
-      const projectedDetail = detail || existing?.detail;
-      const projectedReasoning = reasoning || existing?.reasoning;
-      const reasoningOnly = !projectedDetail && Boolean(projectedReasoning);
+      const completedBlocks = projectAssistantBlocks(event.blocks, "done");
+      const assistantBlocks =
+        completedBlocks.length > 0
+          ? completedBlocks
+          : (existing?.assistantBlocks ?? []).map((block) => ({
+              ...block,
+              state: "done" as const,
+            }));
       updateEvent(`message:${event.messageId}`, {
-        routine: !projectedDetail && !projectedReasoning,
+        routine: assistantBlocks.length === 0,
         state: "done",
-        kind: reasoningOnly ? "reasoning" : "assistant",
+        kind: "assistant",
         time: t("common.now"),
-        title: reasoningOnly
-          ? t("agent.modelThinkingSummary")
-          : t("agent.response"),
-        ...(projectedDetail ? { detail: projectedDetail } : {}),
-        ...(projectedReasoning
-          ? { reasoning: projectedReasoning, reasoningCount: 1 }
-          : {}),
+        title: t("agent.response"),
+        assistantBlocks,
       });
     }
     if (event.type === "tool.requested") {
@@ -967,6 +966,67 @@ function projectLiveEvents(
     }
   });
   return [...items.values()];
+}
+
+function projectAssistantBlocks(
+  blocks: readonly AssistantTimelineBlock[],
+  state: AgentAssistantBlock["state"],
+): AgentAssistantBlock[] {
+  const projected: AgentAssistantBlock[] = [];
+  blocks.forEach((block, blockIndex) => {
+    if (block.type === "text" && block.text.length > 0) {
+      projected.push({
+        blockId: block.blockId,
+        blockIndex,
+        type: "text",
+        content: block.text,
+        state,
+      });
+      return;
+    }
+    if (
+      block.type === "reasoning_summary" &&
+      block.status === "completed" &&
+      block.summary
+    ) {
+      projected.push({
+        blockId: block.blockId,
+        blockIndex,
+        type: "reasoning_summary",
+        content: block.summary,
+        state,
+      });
+    }
+  });
+  return projected;
+}
+
+function appendAssistantBlockDelta(
+  blocks: readonly AgentAssistantBlock[],
+  event: Extract<AgentEvent, { type: "message.delta" }>,
+): AgentAssistantBlock[] {
+  const existing = blocks.find((block) => block.blockId === event.blockId);
+  const next = existing
+    ? blocks.map((block) =>
+        block.blockId === event.blockId
+          ? { ...block, content: `${block.content}${event.delta}` }
+          : block,
+      )
+    : [
+        ...blocks,
+        {
+          blockId: event.blockId,
+          blockIndex: event.blockIndex,
+          type: event.blockType,
+          content: event.delta,
+          state: "active" as const,
+        },
+      ];
+  return next.sort(
+    (left, right) =>
+      left.blockIndex - right.blockIndex ||
+      left.blockId.localeCompare(right.blockId),
+  );
 }
 
 function projectDurablePlans(

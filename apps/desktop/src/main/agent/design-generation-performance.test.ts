@@ -32,6 +32,8 @@ describe("DesignGenerationPerformanceTracker", () => {
         runId,
         messageId: "assistant_1",
         blockId: "text_1",
+        blockType: "text",
+        blockIndex: 0,
         delta: "开始设计",
       });
       now = baseTime + 10;

@@ -143,19 +143,33 @@ export class PiRunMessageController {
       throw new Error("Pi updated an assistant message before message_start");
     }
     const update = event.assistantMessageEvent;
-    if (update.type !== "text_delta" || update.delta.length === 0) return;
+    if (
+      (update.type !== "text_delta" && update.type !== "thinking_delta") ||
+      update.delta.length === 0
+    ) {
+      return;
+    }
     if (update.delta.length > 200_000) {
-      throw new RangeError("Pi text delta exceeds AgentEvent protocol limits");
+      throw new RangeError(
+        "Pi message delta exceeds AgentEvent protocol limits",
+      );
     }
     const block = message.content[update.contentIndex];
-    if (block?.type !== "text") {
-      throw new Error("Pi text delta referenced a non-text content block");
+    const blockType =
+      update.type === "text_delta" ? "text" : "reasoning_summary";
+    const expectedPiType = update.type === "text_delta" ? "text" : "thinking";
+    if (block?.type !== expectedPiType) {
+      throw new Error(
+        `Pi ${update.type} referenced a non-${expectedPiType} content block`,
+      );
     }
     await this.#options.publish({
       type: "message.delta",
       runId: this.#options.request.runId,
       messageId: active.messageId,
       blockId: blockId(active.messageId, update.contentIndex),
+      blockType,
+      blockIndex: update.contentIndex,
       delta: update.delta,
     });
   }

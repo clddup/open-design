@@ -84,6 +84,11 @@ export const AgentEventSchema = Type.Union([
       runId: RunIdSchema,
       messageId: MessageIdSchema,
       blockId: IdSchema,
+      blockType: Type.Union([
+        Type.Literal("text"),
+        Type.Literal("reasoning_summary"),
+      ]),
+      blockIndex: Type.Integer({ minimum: 0, maximum: 1_023 }),
       delta: Type.String({ maxLength: 200_000 }),
     },
     { additionalProperties: false },

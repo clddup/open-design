@@ -82,7 +82,9 @@ export function appendLiveAgentEvent(
         candidate.type === "message.delta" &&
         candidate.runId === event.runId &&
         candidate.messageId === event.messageId &&
-        candidate.blockId === event.blockId,
+        candidate.blockId === event.blockId &&
+        candidate.blockType === event.blockType &&
+        candidate.blockIndex === event.blockIndex,
     );
     if (index >= 0) {
       return events.map((candidate, candidateIndex) =>
@@ -104,17 +106,14 @@ export function appendLiveAgentEvent(
   }
   if (event.type === "message.completed") {
     if (!hasVisibleAssistantContent(event)) return [...events, event];
-    return [
-      ...events.filter(
-        (candidate) =>
-          !(
-            candidate.type === "message.delta" &&
-            candidate.runId === event.runId &&
-            candidate.messageId === event.messageId
-          ),
-      ),
-      event,
-    ];
+    const firstDeltaIndex = events.findIndex((candidate) =>
+      isMatchingMessageDelta(candidate, event),
+    );
+    if (firstDeltaIndex < 0) return [...events, event];
+    return events.flatMap((candidate, index) => {
+      if (index === firstDeltaIndex) return [event];
+      return isMatchingMessageDelta(candidate, event) ? [] : [candidate];
+    });
   }
   if (event.type === "tool.completed" || event.type === "tool.failed") {
     return [
@@ -218,6 +217,17 @@ export function pruneLiveEventsCoveredByTimeline(
     }
     return true;
   });
+}
+
+function isMatchingMessageDelta(
+  candidate: AgentEvent,
+  completed: Extract<AgentEvent, { type: "message.completed" }>,
+): boolean {
+  return (
+    candidate.type === "message.delta" &&
+    candidate.runId === completed.runId &&
+    candidate.messageId === completed.messageId
+  );
 }
 
 function hasVisibleAssistantContent(

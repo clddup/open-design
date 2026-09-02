@@ -774,6 +774,8 @@ describe("Agent continuation timeline projection", () => {
           runId,
           messageId: "assistant_partial",
           blockId: "text_1",
+          blockType: "text",
+          blockIndex: 0,
           delta: "中断前已经展示的内容",
         },
         {
@@ -792,8 +794,14 @@ describe("Agent continuation timeline projection", () => {
     expect(items).toContainEqual(
       expect.objectContaining({
         id: "message:assistant_partial",
-        detail: "中断前已经展示的内容",
         state: "done",
+        assistantBlocks: [
+          expect.objectContaining({
+            type: "text",
+            content: "中断前已经展示的内容",
+            state: "done",
+          }),
+        ],
       }),
     );
   });
@@ -1027,11 +1035,25 @@ describe("Agent continuation timeline projection", () => {
     });
 
     expect(items).toContainEqual(
-      expect.objectContaining({ detail: "组件已补齐，正在重新捕获。" }),
+      expect.objectContaining({
+        assistantBlocks: [
+          expect.objectContaining({
+            type: "text",
+            content: "组件已补齐，正在重新捕获。",
+          }),
+        ],
+      }),
     );
     expect(items.some((item) => item.title === "设计更改失败")).toBe(false);
     expect(items).toContainEqual(
-      expect.objectContaining({ detail: "任务需要继续修复组件绑定。" }),
+      expect.objectContaining({
+        assistantBlocks: [
+          expect.objectContaining({
+            type: "text",
+            content: "任务需要继续修复组件绑定。",
+          }),
+        ],
+      }),
     );
   });
 
@@ -1085,7 +1107,12 @@ describe("Agent continuation timeline projection", () => {
     expect(items).toContainEqual(
       expect.objectContaining({
         kind: "assistant",
-        detail: "我会先落下窗口骨架和导航，再继续完善内容。",
+        assistantBlocks: [
+          expect.objectContaining({
+            type: "text",
+            content: "我会先落下窗口骨架和导航，再继续完善内容。",
+          }),
+        ],
       }),
     );
   });
@@ -1164,26 +1191,33 @@ describe("Agent continuation timeline projection", () => {
 
     expect(items.map((item) => item.id)).toEqual([
       "message:mixed",
-      "reasoning:message:mixed",
       "tool:apply_shell",
       "message:reasoning_only",
     ]);
     expect(items[0]).toMatchObject({
       kind: "assistant",
-      detail: "我会先建立真实画板，再完善首屏。",
+      assistantBlocks: [
+        {
+          blockIndex: 0,
+          type: "reasoning_summary",
+          content: "Planning the first editable structure",
+        },
+        {
+          blockIndex: 1,
+          type: "text",
+          content: "我会先建立真实画板，再完善首屏。",
+        },
+      ],
     });
-    expect(items[0]?.reasoning).toBeUndefined();
-    expect(items[1]).toMatchObject({
-      kind: "reasoning",
-      reasoningCount: 1,
-      title: "模型思考摘要",
-      reasoning: "Planning the first editable structure",
-    });
-    expect(items[3]).toMatchObject({
-      kind: "reasoning",
-      reasoningCount: 1,
-      title: "模型思考摘要",
-      reasoning: "Checking hierarchy and spacing",
+    expect(items[2]).toMatchObject({
+      kind: "assistant",
+      assistantBlocks: [
+        {
+          blockIndex: 0,
+          type: "reasoning_summary",
+          content: "Checking hierarchy and spacing",
+        },
+      ],
     });
   });
 

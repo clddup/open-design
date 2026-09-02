@@ -751,6 +751,8 @@ describe("AgentTimeline", () => {
         runId: "run_complete",
         messageId,
         blockId: "block_complete",
+        blockType: "text",
+        blockIndex: 0,
         delta: "- Final point",
       },
       { type: "run.started", runId: "run_next", startedAt: now },
@@ -1460,6 +1462,8 @@ describe("AgentTimeline", () => {
             runId: "run_failed",
             messageId: "message_failed",
             blockId: "block_failed",
+            blockType: "text",
+            blockIndex: 0,
             delta: "Interrupted response",
           },
           {
@@ -1473,6 +1477,8 @@ describe("AgentTimeline", () => {
             runId: "run_current",
             messageId: "message_current",
             blockId: "block_current",
+            blockType: "text",
+            blockIndex: 0,
             delta: "Current response",
           },
         ]}
@@ -1581,14 +1587,18 @@ describe("AgentTimeline", () => {
     fireEvent.click(summaries[1]);
     expect(disclosures[1]).toHaveAttribute("open");
     const timelineItems = container.querySelectorAll("[data-agent-item]");
+    expect(timelineItems).toHaveLength(3);
     expect(timelineItems[0]).toHaveTextContent(
       "I will build the editable shell first.",
     );
-    expect(timelineItems[1]).toHaveTextContent("Planning internal");
-    expect(timelineItems[2]).toHaveTextContent(
+    const firstMessage = timelineItems[0]?.textContent ?? "";
+    expect(firstMessage.indexOf("Planning internal")).toBeLessThan(
+      firstMessage.indexOf("I will build"),
+    );
+    expect(timelineItems[1]).toHaveTextContent(
       "Checking spacing and hierarchy",
     );
-    expect(timelineItems[3]).toHaveTextContent("Canvas updated");
+    expect(timelineItems[2]).toHaveTextContent("Canvas updated");
     expect(container).toHaveTextContent("Planning internal");
     expect(container).toHaveTextContent("Checking spacing and hierarchy");
     expect(container).toHaveTextContent(
@@ -1596,6 +1606,52 @@ describe("AgentTimeline", () => {
     );
     expect(container).not.toHaveTextContent("revision");
     expect(container).not.toHaveTextContent("Response completed");
+  });
+
+  it("streams reasoning in its original position while keeping it folded", () => {
+    const { container } = render(
+      <AgentTimeline
+        activeRunId="run_streaming_reasoning"
+        conversationId="conversation_1"
+        conversationTitle="Conversation"
+        error={null}
+        events={[
+          {
+            type: "message.delta",
+            runId: "run_streaming_reasoning",
+            messageId: "assistant_streaming",
+            blockId: "reasoning_0",
+            blockType: "reasoning_summary",
+            blockIndex: 0,
+            delta: "正在分析画布结构",
+          },
+          {
+            type: "message.delta",
+            runId: "run_streaming_reasoning",
+            messageId: "assistant_streaming",
+            blockId: "text_1",
+            blockType: "text",
+            blockIndex: 1,
+            delta: "接下来开始设计。",
+          },
+        ]}
+        onStop={vi.fn()}
+        onSubmit={vi.fn().mockResolvedValue(true)}
+        timeline={[]}
+      />,
+    );
+
+    const disclosure = screen
+      .getByText("Model thinking summary")
+      .closest("details");
+    expect(disclosure).not.toHaveAttribute("open");
+    const message = container.querySelector("[data-agent-message]");
+    const content = message?.textContent ?? "";
+    expect(content).toContain("正在分析画布结构");
+    expect(content).toContain("接下来开始设计。");
+    expect(content.indexOf("正在分析画布结构")).toBeLessThan(
+      content.indexOf("接下来开始设计。"),
+    );
   });
 
   it("folds adjacent completed tools in place without hiding their details", () => {
@@ -2235,6 +2291,8 @@ describe("AgentTimeline", () => {
             runId: "run_1",
             messageId: "message_1",
             blockId: "block_1",
+            blockType: "text",
+            blockIndex: 0,
             delta: "Partial response",
           },
         ]}
@@ -2282,6 +2340,8 @@ describe("AgentTimeline", () => {
             runId: "run_1",
             messageId: "message_1",
             blockId: "block_1",
+            blockType: "text",
+            blockIndex: 0,
             delta: "Partial response",
           },
           {

@@ -29,6 +29,7 @@ import type { AgentTimelineItem, Translate } from "../timeline-types";
 import { useAgentComposerController } from "../use-agent-composer-controller";
 import { useI18n } from "../../../i18n";
 import { AgentComposer } from "./AgentComposer";
+import { AssistantMessageBlocks } from "./AssistantMessageBlocks";
 import { AgentMessageMarkdown } from "./AgentMessageMarkdown";
 import { AgentRunStatus } from "./AgentRunStatus";
 import { ConversationActions } from "./ConversationActions";
@@ -88,28 +89,6 @@ export type AgentTimelineProps = {
   submissionAvailable?: boolean;
   submissionBlockedMessage?: string;
 };
-
-function ReasoningDisclosure({
-  item,
-  t,
-}: {
-  item: AgentTimelineItem;
-  t: Translate;
-}) {
-  if (!item.reasoning) return null;
-  return (
-    <details className={styles.reasoning} data-agent-reasoning="">
-      <summary>
-        <span aria-hidden="true" className={styles.reasoningChevron}>
-          ›
-        </span>
-        <span>{item.title}</span>
-      </summary>
-      <p>{item.reasoning}</p>
-      <small>{t("agent.reasoningSummaryNotice")}</small>
-    </details>
-  );
-}
 
 function PlanDisclosure({
   current,
@@ -599,15 +578,20 @@ export function AgentTimeline({
                 >
                   {item.kind === "plan" ? (
                     <PlanDisclosure current={false} item={item} t={t} />
-                  ) : item.kind === "reasoning" ? (
-                    <ReasoningDisclosure item={item} t={t} />
                   ) : item.kind === "user" || item.kind === "assistant" ? (
                     <article
                       className={styles.message}
                       data-agent-message=""
                       title={item.time}
                     >
-                      {(item.detail || item.state === "active") &&
+                      {item.kind === "assistant" && item.assistantBlocks ? (
+                        <AssistantMessageBlocks
+                          blocks={item.assistantBlocks}
+                          state={item.state}
+                          t={t}
+                        />
+                      ) : (
+                        (item.detail || item.state === "active") &&
                         (item.kind === "assistant" ? (
                           <AgentMessageMarkdown
                             content={item.detail ?? ""}
@@ -615,20 +599,7 @@ export function AgentTimeline({
                           />
                         ) : (
                           <p>{item.detail}</p>
-                        ))}
-                      {item.kind === "assistant" && (
-                        <ReasoningDisclosure
-                          item={{
-                            ...item,
-                            title:
-                              item.reasoningCount && item.reasoningCount > 1
-                                ? t("agent.modelThinkingSummaryCount", {
-                                    count: item.reasoningCount,
-                                  })
-                                : t("agent.modelThinkingSummary"),
-                          }}
-                          t={t}
-                        />
+                        ))
                       )}
                       {item.attachments && item.attachments.length > 0 && (
                         <TimelineAttachments attachments={item.attachments} />
