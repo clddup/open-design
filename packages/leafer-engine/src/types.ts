@@ -98,7 +98,8 @@ export type LeaferVectorEditRequest =
       edits: readonly { network: VectorNetwork; nodeId: string }[];
     };
 
-export type LeaferVectorEditTool = "move" | "bend" | "cut" | "lasso" | "paint";
+export type LeaferVectorEditTool =
+  "move" | "pen" | "bend" | "cut" | "lasso" | "paint";
 
 export interface LeaferImageCropCommitRequest {
   nodeId: string;

@@ -16,6 +16,7 @@
     "./snapping": "./src/snapping.ts",
     "./vector-materialization": "./src/vector-materialization.ts",
     "./vector-point-append": "./src/vector-point-append.ts",
+    "./vector-point-insert": "./src/vector-point-insert.ts",
     "./vector-snapping": "./src/vector-snapping.ts",
     "./vector-edit": "./src/vector-edit.ts",
     "./vector-corner-radius": "./src/vector-corner-radius.ts",

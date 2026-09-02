@@ -24,6 +24,12 @@ import {
   sharedPathVertexIds,
   type VectorLineSide,
 } from "./vector-line-cut-connectivity.js";
+import {
+  directedVectorCurve,
+  splitDirectedVectorCurve,
+  storedSegmentFromDirectedVectorCurve,
+  type DirectedVectorCurve,
+} from "./vector-segment-geometry.js";
 
 export type VectorHandleSide = "start" | "end";
 
@@ -980,7 +986,7 @@ export function nearestVectorSegmentPoint(
   for (const path of network.paths) {
     for (const reference of path.segments) {
       const segment = segments.get(reference.segmentId)!;
-      const curve = directedCurve(segment, reference, vertices);
+      const curve = directedVectorCurve(segment, reference, vertices);
       const candidate =
         meaningful(curve.tangentStart) || meaningful(curve.tangentEnd)
           ? nearestCubicPoint(curve, point)
@@ -1324,7 +1330,7 @@ function contourLineCutIntersections(
   const candidates = new Map<string, ContourLineCutIntersection>();
   for (const [referenceIndex, reference] of contour.references.entries()) {
     const segment = segments.get(reference.segmentId)!;
-    const curve = directedCurve(segment, reference, vertices);
+    const curve = directedVectorCurve(segment, reference, vertices);
     const roots = directedCurveLineRoots(curve, lineStart, lineEnd);
     if (!roots.ok) {
       return unsupportedTopology(
@@ -2025,7 +2031,7 @@ function closedPathContainsPoint(
     network.vertices.map((vertex) => [vertex.id, vertex]),
   );
   for (const reference of contour.references) {
-    const curve = directedCurve(
+    const curve = directedVectorCurve(
       segments.get(reference.segmentId)!,
       reference,
       vertices,
@@ -2151,7 +2157,7 @@ function divideOpenContourByLine(
 }
 
 function directedCurveLineRoots(
-  curve: DirectedCurve,
+  curve: DirectedVectorCurve,
   lineStart: Point,
   lineEnd: Point,
 ): { ok: true; roots: readonly number[] } | { ok: false } {
@@ -2240,10 +2246,13 @@ function contourPointAt(
   const vertices = new Map(
     network.vertices.map((vertex) => [vertex.id, vertex]),
   );
-  return editableCurvePoint(directedCurve(segment, reference, vertices), t);
+  return editableCurvePoint(
+    directedVectorCurve(segment, reference, vertices),
+    t,
+  );
 }
 
-function editableCurvePoint(curve: DirectedCurve, t: number): Point {
+function editableCurvePoint(curve: DirectedVectorCurve, t: number): Point {
   return meaningful(curve.tangentStart) || meaningful(curve.tangentEnd)
     ? directedCurvePoint(curve, t)
     : lerp(curve.start, curve.end, t);
@@ -3142,7 +3151,7 @@ function contourCanFormClosedRegion(
     network.segments.map((segment) => [segment.id, segment]),
   );
   return contour.references.some((reference) => {
-    const curve = directedCurve(
+    const curve = directedVectorCurve(
       segments.get(reference.segmentId)!,
       reference,
       vertices,
@@ -3244,8 +3253,8 @@ function cutVectorPathAtSegment(
   );
   const segment = next.segments[segmentIndex]!;
   const vertices = new Map(next.vertices.map((vertex) => [vertex.id, vertex]));
-  const curve = directedCurve(segment, reference, vertices);
-  const split = splitDirectedCurve(curve, t);
+  const curve = directedVectorCurve(segment, reference, vertices);
+  const split = splitDirectedVectorCurve(curve, t);
 
   const usedVertexIds = new Set(next.vertices.map((vertex) => vertex.id));
   const firstCutVertexId = nextVertexId(usedVertexIds);
@@ -3264,14 +3273,14 @@ function cutVectorPathAtSegment(
   const newSegmentId = nextSegmentId(
     new Set(next.segments.map((item) => item.id)),
   );
-  const firstSegment = storedSegmentFromDirectedCurve(
+  const firstSegment = storedSegmentFromDirectedVectorCurve(
     segment.id,
     curve.startVertexId,
     firstCutVertexId,
     split.first,
     reference.reversed,
   );
-  const secondSegment = storedSegmentFromDirectedCurve(
+  const secondSegment = storedSegmentFromDirectedVectorCurve(
     newSegmentId,
     secondCutVertexId,
     curve.endVertexId,
@@ -3311,113 +3320,6 @@ function cutVectorPathAtSegment(
   return validatedCut(next, [firstCutVertexId, secondCutVertexId], pathIds);
 }
 
-interface DirectedCurve {
-  end: Point;
-  endVertexId: string;
-  start: Point;
-  startVertexId: string;
-  tangentEnd?: Point;
-  tangentStart?: Point;
-}
-
-function directedCurve(
-  segment: VectorSegment,
-  reference: VectorSegmentReference,
-  vertices: ReadonlyMap<string, VectorVertex>,
-): DirectedCurve {
-  const ids = directedVertexIds(segment, reference);
-  return {
-    start: vertices.get(ids.start)!,
-    startVertexId: ids.start,
-    end: vertices.get(ids.end)!,
-    endVertexId: ids.end,
-    ...(reference.reversed
-      ? {
-          ...(segment.tangentEnd
-            ? { tangentStart: { ...segment.tangentEnd } }
-            : {}),
-          ...(segment.tangentStart
-            ? { tangentEnd: { ...segment.tangentStart } }
-            : {}),
-        }
-      : {
-          ...(segment.tangentStart
-            ? { tangentStart: { ...segment.tangentStart } }
-            : {}),
-          ...(segment.tangentEnd
-            ? { tangentEnd: { ...segment.tangentEnd } }
-            : {}),
-        }),
-  };
-}
-
-function splitDirectedCurve(
-  curve: DirectedCurve,
-  t: number,
-): {
-  first: Pick<DirectedCurve, "tangentStart" | "tangentEnd">;
-  point: Point;
-  second: Pick<DirectedCurve, "tangentStart" | "tangentEnd">;
-} {
-  if (!meaningful(curve.tangentStart) && !meaningful(curve.tangentEnd)) {
-    return {
-      first: {},
-      point: normalizePoint(lerp(curve.start, curve.end, t)),
-      second: {},
-    };
-  }
-  const controlStart = add(curve.start, curve.tangentStart ?? { x: 0, y: 0 });
-  const controlEnd = add(curve.end, curve.tangentEnd ?? { x: 0, y: 0 });
-  const q0 = lerp(curve.start, controlStart, t);
-  const q1 = lerp(controlStart, controlEnd, t);
-  const q2 = lerp(controlEnd, curve.end, t);
-  const r0 = lerp(q0, q1, t);
-  const r1 = lerp(q1, q2, t);
-  const point = normalizePoint(lerp(r0, r1, t));
-  return {
-    first: {
-      tangentStart: normalizePoint(subtract(q0, curve.start)),
-      tangentEnd: normalizePoint(subtract(r0, point)),
-    },
-    point,
-    second: {
-      tangentStart: normalizePoint(subtract(r1, point)),
-      tangentEnd: normalizePoint(subtract(q2, curve.end)),
-    },
-  };
-}
-
-function storedSegmentFromDirectedCurve(
-  id: string,
-  startVertexId: string,
-  endVertexId: string,
-  curve: Pick<DirectedCurve, "tangentStart" | "tangentEnd">,
-  reversed: boolean,
-): VectorSegment {
-  const tangentStart = meaningful(curve.tangentStart)
-    ? normalizePoint(curve.tangentStart!)
-    : undefined;
-  const tangentEnd = meaningful(curve.tangentEnd)
-    ? normalizePoint(curve.tangentEnd!)
-    : undefined;
-  if (!reversed) {
-    return {
-      id,
-      startVertexId,
-      endVertexId,
-      ...(tangentStart ? { tangentStart } : {}),
-      ...(tangentEnd ? { tangentEnd } : {}),
-    };
-  }
-  return {
-    id,
-    startVertexId: endVertexId,
-    endVertexId: startVertexId,
-    ...(tangentEnd ? { tangentStart: tangentEnd } : {}),
-    ...(tangentStart ? { tangentEnd: tangentStart } : {}),
-  };
-}
-
 function nearestLinePoint(
   start: Point,
   end: Point,
@@ -3441,7 +3343,7 @@ function nearestLinePoint(
 }
 
 function nearestCubicPoint(
-  curve: DirectedCurve,
+  curve: DirectedVectorCurve,
   point: Point,
 ): Pick<VectorSegmentHit, "distance" | "point" | "t"> {
   const sampleCount = 32;
@@ -3474,7 +3376,7 @@ function nearestCubicPoint(
   return { distance: distance(nearest, point), point: nearest, t };
 }
 
-function directedCurvePoint(curve: DirectedCurve, t: number): Point {
+function directedCurvePoint(curve: DirectedVectorCurve, t: number): Point {
   const controlStart = add(curve.start, curve.tangentStart ?? { x: 0, y: 0 });
   const controlEnd = add(curve.end, curve.tangentEnd ?? { x: 0, y: 0 });
   const mt = 1 - t;

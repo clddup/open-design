@@ -147,6 +147,10 @@ export {
   type VectorPointAppendResult,
 } from "./vector-point-append.js";
 export {
+  insertVectorPoint,
+  type VectorPointInsertResult,
+} from "./vector-point-insert.js";
+export {
   projectVectorNetworkStrokePaths,
   resolveVectorVertexStrokeAppearance,
   vectorNetworkHasVertexStrokeOverrides,

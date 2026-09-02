@@ -7434,6 +7434,215 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
+  it("uses Vector Pen to insert one point without changing the path shape", async () => {
+    const onVectorEdit = vi.fn<(request: LeaferVectorEditRequest) => boolean>(
+      () => true,
+    );
+    const onVectorEditSelectionChange = vi.fn();
+    const input = withVectorEditFixture(createInput());
+    input.vectorEditScope = { ...input.vectorEditScope!, tool: "pen" };
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onVectorEdit,
+      onVectorEditSelectionChange,
+    });
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    const path =
+      app && findElement(app.tree, vectorStrokeElementId("editable_curve"));
+    const overlay = path?.parent?.children.at(-1);
+    if (!app || !(overlay instanceof FakeGroup)) {
+      throw new Error("Missing Vector Pen fixture");
+    }
+    const hitPath = overlay.children.find(
+      (child): child is FakePath => child instanceof FakePath && child.hittable,
+    );
+    if (!hitPath) throw new Error("Missing Vector Pen hit path");
+
+    app.emit("pointer.down", pointerEvent(30, 15, hitPath));
+    expect(onVectorEdit).not.toHaveBeenCalled();
+    app.emit("pointer.up", pointerEvent(30, 15, hitPath));
+
+    expect(onVectorEdit).toHaveBeenCalledOnce();
+    const request = onVectorEdit.mock.calls[0]?.[0];
+    if (!request || request.deleteNode) throw new Error("Missing Pen edit");
+    expect(request.edits[0]!.network.vertices.at(-1)).toEqual({
+      id: "vertex_pen_1",
+      x: 30,
+      y: 15,
+    });
+    expect(request.edits[0]!.network.paths[0]?.segments).toEqual([
+      { segmentId: "segment_ab", reversed: false },
+      { segmentId: "segment_pen_1", reversed: false },
+      { segmentId: "segment_bc", reversed: false },
+    ]);
+    expect(onVectorEditSelectionChange).toHaveBeenLastCalledWith(
+      "editable_curve",
+      { segmentIds: [], vertexIds: ["vertex_pen_1"] },
+    );
+    adapter.dispose();
+  });
+
+  it("creates mirrored handles when Vector Pen insertion is dragged", async () => {
+    const onVectorEdit = vi.fn<(request: LeaferVectorEditRequest) => boolean>(
+      () => true,
+    );
+    const input = withVectorEditFixture(createInput());
+    input.vectorEditScope = { ...input.vectorEditScope!, tool: "pen" };
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onVectorEdit,
+    });
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    const path =
+      app && findElement(app.tree, vectorStrokeElementId("editable_curve"));
+    const overlay = path?.parent?.children.at(-1);
+    const hitPath =
+      overlay instanceof FakeGroup
+        ? overlay.children.find(
+            (child): child is FakePath =>
+              child instanceof FakePath && child.hittable,
+          )
+        : undefined;
+    if (!app || !hitPath) throw new Error("Missing Vector Pen drag fixture");
+
+    app.emit("pointer.down", pointerEvent(30, 15, hitPath));
+    app.emit("pointer.move", pointerEvent(40, 5, hitPath));
+    app.emit("pointer.up", pointerEvent(40, 5, hitPath));
+
+    const request = onVectorEdit.mock.calls[0]?.[0];
+    if (!request || request.deleteNode)
+      throw new Error("Missing Pen drag edit");
+    expect(request.edits[0]!.network.segments[0]?.tangentEnd).toEqual({
+      x: -10,
+      y: 10,
+    });
+    expect(request.edits[0]!.network.segments[1]?.tangentStart).toEqual({
+      x: 10,
+      y: -10,
+    });
+    expect(request.edits[0]!.network.vertices.at(-1)).toMatchObject({
+      handleMode: "mirrored",
+      id: "vertex_pen_1",
+    });
+    expect(onVectorEdit).toHaveBeenCalledOnce();
+    adapter.dispose();
+  });
+
+  it("continues Vector Pen drawing from the newly selected point", async () => {
+    const onVectorEdit = vi.fn<(request: LeaferVectorEditRequest) => boolean>(
+      () => true,
+    );
+    const input = withVectorEditFixture(createInput(), ["vertex_b"]);
+    input.vectorEditScope = { ...input.vectorEditScope!, tool: "pen" };
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onVectorEdit,
+    });
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Missing Vector Pen continuation fixture");
+
+    app.emit("pointer.down", pointerEvent(90, 70, app.tree));
+    app.emit("pointer.up", pointerEvent(90, 70, app.tree));
+    app.emit("pointer.down", pointerEvent(120, 90, app.tree));
+    app.emit("pointer.up", pointerEvent(120, 90, app.tree));
+
+    expect(onVectorEdit).toHaveBeenCalledTimes(2);
+    const request = onVectorEdit.mock.calls[1]?.[0];
+    if (!request || request.deleteNode) {
+      throw new Error("Missing continued Vector Pen edit");
+    }
+    expect(request.edits[0]!.network.paths.at(-1)?.segments).toEqual([
+      { segmentId: "segment_edit_1", reversed: false },
+      { segmentId: "segment_edit_2", reversed: false },
+    ]);
+    expect(request.edits[0]!.network.vertices.at(-1)).toEqual({
+      id: "vertex_edit_2",
+      x: 120,
+      y: 90,
+    });
+    adapter.dispose();
+  });
+
+  it("restores Vector Pen previews when the authoritative commit is rejected", async () => {
+    const onVectorEdit = vi.fn<(request: LeaferVectorEditRequest) => boolean>(
+      () => false,
+    );
+    const onVectorEditSelectionChange = vi.fn();
+    const input = withVectorEditFixture(createInput(), ["vertex_a"]);
+    input.vectorEditScope = { ...input.vectorEditScope!, tool: "pen" };
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onVectorEdit,
+      onVectorEditSelectionChange,
+    });
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    const path =
+      app && findElement(app.tree, vectorStrokeElementId("editable_curve"));
+    const overlay = path?.parent?.children.at(-1);
+    const hitPath =
+      overlay instanceof FakeGroup
+        ? overlay.children.find(
+            (child): child is FakePath =>
+              child instanceof FakePath && child.hittable,
+          )
+        : undefined;
+    if (!app || !(path instanceof FakePath) || !hitPath) {
+      throw new Error("Missing rejected Vector Pen fixture");
+    }
+    const authoritativePath = path.path;
+
+    app.emit("pointer.down", pointerEvent(30, 15, hitPath));
+    expect(path.path).not.toBe(authoritativePath);
+    app.emit("pointer.up", pointerEvent(30, 15, hitPath));
+
+    expect(onVectorEdit).toHaveBeenCalledOnce();
+    expect(onVectorEditSelectionChange).not.toHaveBeenCalled();
+    expect(path.path).toBe(authoritativePath);
+    adapter.dispose();
+  });
+
+  it("keeps Vector Pen read-only scopes non-interactive", async () => {
+    const onVectorEdit = vi.fn<(request: LeaferVectorEditRequest) => boolean>(
+      () => true,
+    );
+    const input = withVectorEditFixture(createInput(), ["vertex_a"]);
+    input.vectorEditScope = {
+      ...input.vectorEditScope!,
+      nodes: input.vectorEditScope!.nodes.map((node) => ({
+        ...node,
+        readOnly: true,
+      })),
+      tool: "pen",
+    };
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onVectorEdit,
+    });
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    const path =
+      app && findElement(app.tree, vectorStrokeElementId("editable_curve"));
+    const overlay = path?.parent?.children.at(-1);
+    const hitPath =
+      overlay instanceof FakeGroup
+        ? overlay.children.find(
+            (child): child is FakePath => child instanceof FakePath,
+          )
+        : undefined;
+    if (!app || !hitPath)
+      throw new Error("Missing read-only Vector Pen fixture");
+
+    expect(hitPath.hittable).toBe(false);
+    app.emit("pointer.down", pointerEvent(30, 15, hitPath));
+    app.emit("pointer.up", pointerEvent(30, 15, hitPath));
+    expect(onVectorEdit).not.toHaveBeenCalled();
+    adapter.dispose();
+  });
+
   it("cancels stale Vector previews before rebuilding scope and disposes every overlay", async () => {
     const onVectorEdit = vi.fn<(request: LeaferVectorEditRequest) => boolean>(
       () => true,

@@ -47,6 +47,7 @@ export const canvasMessages = {
   "canvas.vectorBranchCutHint":
     "点击分支 segment 创建断点 · 分支几何暂不支持拖拽切割",
   "canvas.vectorBendHint": "点击节点或路径添加手柄，或拖动路径直接弯曲",
+  "canvas.vectorPenHint": "点击路径无损插入节点；选中节点后点击画布继续绘制",
   "canvas.vectorLassoHint": "圈选矢量节点与路径 · 按住 Shift 切换圈内内容",
   "canvas.vectorCutUnavailable": "路径切断结果不可用",
   "canvas.vectorCutApplyMissing": "应用切断操作后找不到对应矢量",
@@ -56,6 +57,7 @@ export const canvasMessages = {
   "canvas.exitVectorEditing": "完成矢量节点编辑",
   "canvas.vectorEditTool": "矢量编辑工具",
   "canvas.vectorToolMove": "移动",
+  "canvas.vectorToolPen": "钢笔",
   "canvas.vectorToolBend": "弯曲",
   "canvas.vectorToolPaint": "上色",
   "canvas.vectorPaintColor": "区域颜色",

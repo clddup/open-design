@@ -61,6 +61,12 @@ import {
   VectorAnchorMeasurementController,
   type VectorAnchorMeasurementReference,
 } from "./vector-anchor-measurement-controller.js";
+import {
+  beginVectorPenAppend,
+  beginVectorPenInsert,
+  dragVectorPenPoint,
+  type VectorPenPointEdit,
+} from "./vector-pen-edit.js";
 
 type LeaferModule = typeof LeaferEditorModule;
 type LeaferElement = InstanceType<LeaferModule["UI"]>;
@@ -134,6 +140,16 @@ type VectorEditDrag =
       startClient: Point;
       startDocument: Point;
       startLocal: Point;
+    }
+  | {
+      before: VectorNetwork;
+      beforeSegmentIds: readonly string[];
+      beforeVertexIds: readonly string[];
+      edit: VectorPenPointEdit;
+      failed: boolean;
+      kind: "pen";
+      moved: boolean;
+      startClient: Point;
     };
 
 interface VectorEditSession {
@@ -489,7 +505,9 @@ export class VectorEditController {
           (session.drag?.kind === "cut" &&
             (scope.tool !== "cut" || item.readOnly)) ||
           (session.drag?.kind === "bend" &&
-            (scope.tool !== "bend" || item.readOnly))
+            (scope.tool !== "bend" || item.readOnly)) ||
+          (session.drag?.kind === "pen" &&
+            (scope.tool !== "pen" || item.readOnly))
         ) {
           this.#cancelVectorEditDrag(session);
         }
@@ -549,7 +567,8 @@ export class VectorEditController {
       cursor: tool === "bend" ? "pointer" : "crosshair",
       editable: false,
       fill: null,
-      hittable: !readOnly && (tool === "bend" || tool === "cut"),
+      hittable:
+        !readOnly && (tool === "bend" || tool === "cut" || tool === "pen"),
       stroke: "rgba(0, 0, 0, 0.001)",
     }) as LeaferElement;
     const cutGuidePath = new this.#options.leafer.Path({
@@ -648,7 +667,9 @@ export class VectorEditController {
     session.cutHitPath.set({
       cursor: session.tool === "bend" ? "pointer" : "crosshair",
       hittable:
-        (session.tool === "cut" || session.tool === "bend") &&
+        (session.tool === "cut" ||
+          session.tool === "bend" ||
+          session.tool === "pen") &&
         !session.readOnly,
       path: serialized.path,
       strokeWidth: 14 / zoom,
@@ -698,7 +719,7 @@ export class VectorEditController {
       const anchor = new this.#options.leafer.Ellipse({
         cursor: session.readOnly
           ? "default"
-          : session.tool === "cut"
+          : session.tool === "cut" || session.tool === "pen"
             ? "crosshair"
             : "pointer",
         editable: false,
@@ -1096,6 +1117,10 @@ export class VectorEditController {
       this.#options.callbacks.onVectorEditActiveNodeChange?.(session.nodeId);
     }
     if (this.#appendMeasuredVectorPoint(pointer, session, control)) return;
+    if (session.tool === "pen") {
+      this.#beginVectorPenPoint(pointer, session, control, target);
+      return;
+    }
     if (session.tool === "lasso") {
       const client = eventClientPoint(pointer);
       this.#vectorLasso = {
@@ -1388,6 +1413,23 @@ export class VectorEditController {
       this.#renderVectorEditOverlay(session);
       return;
     }
+    if (drag.kind === "pen") {
+      const result = dragVectorPenPoint(
+        drag.edit,
+        pointer.getInnerPoint(session.pathElement),
+      );
+      if (!result.ok) {
+        drag.failed = true;
+        session.network = structuredClone(drag.before);
+        this.#options.report(new Error(result.message));
+      } else {
+        drag.edit = result.edit;
+        drag.failed = false;
+        session.network = result.edit.network;
+      }
+      this.#renderVectorEditOverlay(session);
+      return;
+    }
     if (drag.kind === "selection-transform") {
       const currentDocument = pointer.getInnerPoint(this.#options.root);
       drag.currentDocument = currentDocument;
@@ -1596,6 +1638,28 @@ export class VectorEditController {
       this.#submitVectorEdit(session, result.network);
       return;
     }
+    if (drag.kind === "pen") {
+      session.drag = null;
+      if (drag.failed) {
+        session.network = structuredClone(drag.before);
+        session.selectedSegmentIds = [...drag.beforeSegmentIds];
+        session.selectedVertexIds = [...drag.beforeVertexIds];
+        this.#renderVectorEditOverlays();
+        return;
+      }
+      const accepted = this.#submitVectorEdit(session, drag.edit.network);
+      if (accepted) {
+        session.selectedSegmentIds = [];
+        session.selectedVertexIds = [];
+        this.#setVectorSelection(session, [], [drag.edit.vertexId]);
+      } else {
+        session.network = structuredClone(drag.before);
+        session.selectedSegmentIds = [...drag.beforeSegmentIds];
+        session.selectedVertexIds = [...drag.beforeVertexIds];
+        this.#renderVectorEditOverlays();
+      }
+      return;
+    }
     if (drag.kind === "selection-transform") {
       session.drag = null;
       if (moved) {
@@ -1689,6 +1753,10 @@ export class VectorEditController {
       }
     } else if (drag.kind !== "cut") {
       session.network = drag.before;
+    }
+    if (drag.kind === "pen") {
+      session.selectedSegmentIds = [...drag.beforeSegmentIds];
+      session.selectedVertexIds = [...drag.beforeVertexIds];
     }
     session.drag = null;
     this.#vectorGeometrySnap.finish();
@@ -1925,6 +1993,61 @@ export class VectorEditController {
       this.#setVectorSelection(session, [], [result.vertexId]);
     }
     return true;
+  }
+
+  #beginVectorPenPoint(
+    pointer: ReturnType<typeof asLeaferEvent>,
+    session: VectorEditSession,
+    control: VectorEditControl | undefined,
+    target: LeaferElement | undefined,
+  ): void {
+    if (session.readOnly) return;
+    if (control?.kind === "vertex") {
+      this.#setVectorSelection(session, [], [control.vertexId]);
+      return;
+    }
+    const local = pointer.getInnerPoint(session.pathElement);
+    const zoom = Math.max(
+      MATRIX_EPSILON,
+      Math.abs(this.#input?.viewport.zoom ?? 1),
+    );
+    const hit =
+      target === session.cutHitPath
+        ? nearestVectorSegmentPoint(session.network, local)
+        : null;
+    const sourceVertexId =
+      session.selectedVertexIds.length === 1
+        ? session.selectedVertexIds[0]
+        : undefined;
+    const result =
+      hit && hit.distance <= 8 / zoom
+        ? beginVectorPenInsert(session.network, hit)
+        : sourceVertexId
+          ? beginVectorPenAppend(session.network, sourceVertexId, local)
+          : null;
+    if (!result) return;
+    if (!result.ok) {
+      if (result.code !== "no-op") {
+        this.#options.report(new Error(result.message));
+      }
+      return;
+    }
+    const before = structuredClone(session.network);
+    session.drag = {
+      before,
+      beforeSegmentIds: [...session.selectedSegmentIds],
+      beforeVertexIds: [...session.selectedVertexIds],
+      edit: result.edit,
+      failed: false,
+      kind: "pen",
+      moved: false,
+      startClient: eventClientPoint(pointer),
+    };
+    session.network = result.edit.network;
+    session.selectedSegmentIds = [];
+    session.selectedVertexIds = [result.edit.vertexId];
+    this.#renderVectorEditOverlay(session);
+    this.#renderVectorSelectionOverlay();
   }
 
   #selectedVectorAnchorSource(): {

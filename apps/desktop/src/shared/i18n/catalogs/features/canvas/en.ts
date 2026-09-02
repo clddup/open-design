@@ -48,6 +48,8 @@ export const canvasMessages = {
     "Click a branch segment to create a break · Drag Cut is unavailable for branching geometry",
   "canvas.vectorBendHint":
     "Click a point or path to add handles, or drag a path to bend it",
+  "canvas.vectorPenHint":
+    "Click a path to insert a point; select a point and click the canvas to continue drawing",
   "canvas.vectorLassoHint":
     "Draw around vector points and paths · Hold Shift to toggle enclosed content",
   "canvas.vectorCutUnavailable": "Vector cut result is unavailable",
@@ -61,6 +63,7 @@ export const canvasMessages = {
   "canvas.exitVectorEditing": "Finish editing vector points",
   "canvas.vectorEditTool": "Vector edit tool",
   "canvas.vectorToolMove": "Move",
+  "canvas.vectorToolPen": "Pen",
   "canvas.vectorToolBend": "Bend",
   "canvas.vectorToolPaint": "Paint",
   "canvas.vectorPaintColor": "Region color",

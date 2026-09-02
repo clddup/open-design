@@ -758,14 +758,17 @@ export function Canvas({
         !event.ctrlKey &&
         !event.metaKey &&
         !event.shiftKey &&
-        ["q", "v", "x"].includes(event.key.toLowerCase())
+        ["p", "q", "v", "x"].includes(event.key.toLowerCase())
       ) {
+        const shortcut = event.key.toLowerCase();
         const nextTool =
-          event.key.toLowerCase() === "x"
+          shortcut === "x"
             ? "cut"
-            : event.key.toLowerCase() === "q"
+            : shortcut === "q"
               ? "lasso"
-              : "move";
+              : shortcut === "p"
+                ? "pen"
+                : "move";
         setVectorEditState((current) =>
           current ? { ...current, tool: nextTool } : current,
         );
@@ -1957,14 +1960,16 @@ export function Canvas({
                           )
                         : vectorEditState?.tool === "bend"
                           ? t("canvas.vectorBendHint")
-                          : vectorEditState?.tool === "lasso"
-                            ? t("canvas.vectorLassoHint")
-                            : t("canvas.vectorEditingHint", {
-                                pathCount:
-                                  vectorEditScope.selectedSegmentIds.length,
-                                pointCount:
-                                  vectorEditScope.selectedVertexIds.length,
-                              })}
+                          : vectorEditState?.tool === "pen"
+                            ? t("canvas.vectorPenHint")
+                            : vectorEditState?.tool === "lasso"
+                              ? t("canvas.vectorLassoHint")
+                              : t("canvas.vectorEditingHint", {
+                                  pathCount:
+                                    vectorEditScope.selectedSegmentIds.length,
+                                  pointCount:
+                                    vectorEditScope.selectedVertexIds.length,
+                                })}
                   </small>
                 </span>
                 <span className={styles.vectorTools}>
@@ -1976,6 +1981,7 @@ export function Canvas({
                     {(
                       [
                         ["move", "canvas.vectorToolMove", "V"],
+                        ["pen", "canvas.vectorToolPen", "P"],
                         ["bend", "canvas.vectorToolBend", null],
                         ["paint", "canvas.vectorToolPaint", null],
                         ["cut", "canvas.vectorToolCut", "X"],
@@ -1988,6 +1994,7 @@ export function Canvas({
                         disabled={
                           (vectorEditScope.readOnly &&
                             (mode === "bend" ||
+                              mode === "pen" ||
                               mode === "paint" ||
                               mode === "cut")) ||
                           (!vectorEditScope.topologyEditable &&
