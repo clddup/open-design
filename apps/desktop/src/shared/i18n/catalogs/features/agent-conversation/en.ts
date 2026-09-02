@@ -23,39 +23,9 @@ export const agentConversationMessages = {
   "task.interrupted": "Interrupted",
   "agent.timeline": "Agent conversation",
   "agent.designAgent": "Design agent",
-  "agent.runStatus": "Design run status",
-  "agent.runPhase.waiting-model": "Preparing the first real design",
-  "agent.runPhase.creating-artboards": "Creating real artboards",
-  "agent.runPhase.artboards-ready": "Real artboards created",
-  "agent.runPhase.first-content": "First editable design is visible",
-  "agent.runPhase.reviewing": "Checking the rendered design",
-  "agent.runPhase.refining": "Refining visible details",
-  "agent.runPhase.stopping": "Stopping safely",
-  "agent.runPhase.complete": "Design work complete",
   "agent.runPhase.partial": "Page saved; later checks incomplete",
-  "agent.runPhase.stopped": "Design work stopped",
-  "agent.runPhase.failed": "Design did not reach the canvas",
-  "agent.runPhaseDetail.waiting-model":
-    "Waiting for the model · the canvas has not changed yet",
-  "agent.runPhaseDetail.creating-artboards":
-    "The first trusted commit will appear on the canvas immediately",
-  "agent.runPhaseDetail.artboards-ready":
-    "Stable editable roots exist · building the first useful region",
-  "agent.runPhaseDetail.first-content":
-    "The canvas has changed · later design steps will appear as they commit",
-  "agent.runPhaseDetail.reviewing":
-    "Reviewing a captured revision, without blocking canvas interaction",
-  "agent.runPhaseDetail.refining":
-    "Applying corrections to the real editable design",
-  "agent.runPhaseDetail.stopping":
-    "No new writes will start; committed revisions remain intact",
-  "agent.runPhaseDetail.complete":
-    "The requested targets passed final delivery checks",
   "agent.runPhaseDetail.partial":
     "Generated content remains editable and can be checked when the model service recovers",
-  "agent.runPhaseDetail.stopped":
-    "Committed revisions remain available to edit or undo",
-  "agent.runPhaseDetail.failed": "No trusted design revision was committed",
   "agent.selectConversation": "Select or create a Conversation",
   "agent.requestProgress": "Request in progress",
   "agent.deliveryProgress": "Design delivery",

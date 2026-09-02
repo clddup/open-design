@@ -20,7 +20,6 @@ import {
   deliveryStatusKey,
   friendlyAgentError,
 } from "../timeline-presentation";
-import { projectAgentRunExperience } from "../agent-run-experience";
 import {
   groupAgentTimelineItems,
   type AgentTimelineRenderEntry,
@@ -31,7 +30,6 @@ import { useI18n } from "../../../i18n";
 import { AgentComposer } from "./AgentComposer";
 import { AssistantMessageBlocks } from "./AssistantMessageBlocks";
 import { AgentMessageMarkdown } from "./AgentMessageMarkdown";
-import { AgentRunStatus } from "./AgentRunStatus";
 import { ConversationActions } from "./ConversationActions";
 import styles from "./AgentTimeline.module.scss";
 
@@ -332,13 +330,6 @@ export function AgentTimeline({
   });
   const { activePlan, items } = projection;
   const renderEntries = groupAgentTimelineItems(items, t);
-  const runExperience = projectAgentRunExperience({
-    activeRunId,
-    events,
-    timeline,
-    stopping: composer.stopping,
-    error,
-  });
   const pendingApprovalIds = items
     .filter((item) => item.kind === "approval" && item.state === "queued")
     .map((item) => item.approvalId)
@@ -505,9 +496,6 @@ export function AgentTimeline({
             />
           )}
         </div>
-        {runExperience?.active && (
-          <AgentRunStatus experience={runExperience} t={t} />
-        )}
         {activePlan && (
           <div className={styles.activePlan} data-agent-active-plan="">
             <PlanDisclosure current item={activePlan} t={t} />

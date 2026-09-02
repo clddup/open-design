@@ -117,7 +117,6 @@ import { RulerGuides } from "./RulerGuides";
 
 export function Canvas({
   activeAgentRunId,
-  agentRunStatus,
   activePageId,
   generationActivity,
   harfBuzzTextRunLayoutProvider,
@@ -155,16 +154,9 @@ export function Canvas({
   renderSelectionContextMenu,
   rulersVisible,
   snapSettings,
-  showAgentRunStatus,
   smartSelectionMarkState,
 }: {
   activeAgentRunId: string | null;
-  agentRunStatus?: {
-    detail: string;
-    hasCanvasChanges: boolean;
-    phase: string;
-    title: string;
-  };
   activePageId: string;
   generationActivity?: LeaferGenerationActivity;
   harfBuzzTextRunLayoutProvider?: TextRunLayoutProvider<LeaferTextRunStyle>;
@@ -261,7 +253,6 @@ export function Canvas({
   renderSelectionContextMenu?: (trigger: ReactElement) => ReactElement;
   rulersVisible: boolean;
   snapSettings: LeaferSnapSettings;
-  showAgentRunStatus: boolean;
   smartSelectionMarkState: LeaferSmartSelectionMarkState | null;
 }) {
   const { t } = useI18n();
@@ -1769,24 +1760,6 @@ export function Canvas({
         <span aria-live="polite" className="visually-hidden" role="status">
           {generationActivity.label}
         </span>
-      )}
-      {showAgentRunStatus && agentRunStatus && (
-        <div
-          aria-label={t("agent.runStatus")}
-          className={styles.agentRunStatus}
-          data-canvas-agent-status=""
-          data-canvas-changed={
-            agentRunStatus.hasCanvasChanges ? "true" : "false"
-          }
-          data-phase={agentRunStatus.phase}
-          role="status"
-        >
-          <span aria-hidden="true" className={styles.agentRunMark} />
-          <span>
-            <strong>{agentRunStatus.title}</strong>
-            <small>{agentRunStatus.detail}</small>
-          </span>
-        </div>
       )}
       {selectionActions &&
         tool === "select" &&

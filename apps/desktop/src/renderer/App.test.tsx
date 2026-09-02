@@ -1340,13 +1340,10 @@ describe("App", () => {
     expect(
       within(canvas).queryByText("Preparing the first real design"),
     ).not.toBeInTheDocument();
-    const runStatus = screen.getByRole("status", {
-      name: "Design run status",
-    });
-    expect(runStatus).toHaveTextContent("Preparing the first real design");
-    expect(runStatus).toHaveTextContent(
-      "Waiting for the model · the canvas has not changed yet",
-    );
+    expect(
+      screen.queryByRole("status", { name: "Design run status" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("Request in progress")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Acme Design" }));
     await user.click(
@@ -6057,7 +6054,7 @@ describe("App", () => {
     expect(runtimeOutput()).toHaveAttribute("data-tool", "select");
   });
 
-  it("keeps the active utility tab stable and shows one primary run status", async () => {
+  it("keeps the active utility tab stable without duplicating run status", async () => {
     const { user } = await openProjectConversation();
     const utilityTabs = screen.getByRole("tablist", { name: "Utility views" });
     const agentTab = within(utilityTabs).getByRole("tab", { name: "Agent" });
@@ -6099,16 +6096,10 @@ describe("App", () => {
       ),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("status", { name: "Design run status" }),
-    ).toHaveAttribute("data-canvas-agent-status");
+      screen.queryByRole("status", { name: "Design run status" }),
+    ).not.toBeInTheDocument();
 
     await user.click(agentTab);
-    expect(
-      document.querySelector("[data-canvas-agent-status]"),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("status", { name: "Design run status" }),
-    ).not.toHaveAttribute("data-canvas-agent-status");
     expect(screen.getByText("Request in progress")).toBeInTheDocument();
     expect(screen.getByLabelText("Continue the task")).toBeEnabled();
     expect(
@@ -6125,9 +6116,7 @@ describe("App", () => {
       "data-utility-panel",
       "hidden",
     );
-    expect(
-      document.querySelector("[data-canvas-agent-status]"),
-    ).toHaveAttribute("data-canvas-agent-status");
+    expect(document.querySelector("[data-canvas-agent-status]")).toBeNull();
   });
 
   it("shows an honest multi-selection state in Properties", async () => {

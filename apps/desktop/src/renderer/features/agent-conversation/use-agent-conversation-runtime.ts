@@ -33,7 +33,6 @@ import type {
   WorkspaceRuntime,
   WorkspaceSnapshot,
 } from "../../state/workspace-runtime";
-import { projectAgentRunExperience } from "./agent-run-experience";
 import {
   EMPTY_AGENT_STATE,
   agentEventActivityAt,
@@ -148,24 +147,6 @@ export function useAgentConversationRuntime({
     generationPlanPresentation.activityByRunId,
     t,
   ]);
-  const activeCanvasRunExperience = useMemo(
-    () =>
-      activeCanvasAgentRunId
-        ? projectAgentRunExperience({
-            activeRunId: activeCanvasAgentRunId,
-            events: activeAgentState.events,
-            timeline: activeAgentState.timeline,
-            error: activeAgentState.error,
-          })
-        : null,
-    [
-      activeAgentState.error,
-      activeAgentState.events,
-      activeAgentState.timeline,
-      activeCanvasAgentRunId,
-    ],
-  );
-
   const refreshGlobalTasks = useCallback(async () => {
     const tasks = await window.desktop?.listGlobalTasks();
     if (tasks) setGlobalTasks(tasks);
@@ -638,7 +619,6 @@ export function useAgentConversationRuntime({
   return {
     activeAgentState,
     activeCanvasAgentRunId,
-    activeCanvasRunExperience,
     agentRuntimeError,
     conversationDeleteBlockedIds: globalTasks
       .filter((task) =>

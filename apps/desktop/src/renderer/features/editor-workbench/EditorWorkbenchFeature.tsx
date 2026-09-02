@@ -16,10 +16,6 @@ import {
 import type { ThemePreference } from "@/shared/desktop-api";
 import { AgentTimeline } from "../agent-conversation/components/AgentTimeline";
 import {
-  agentRunPhaseDetailKey,
-  agentRunPhaseTitleKey,
-} from "../agent-conversation/agent-run-experience";
-import {
   Canvas,
   CanvasSelectionActions,
   useCanvasSnapSettings,
@@ -144,7 +140,6 @@ export function EditorWorkbenchFeature({
   const {
     activeAgentState,
     activeCanvasAgentRunId,
-    activeCanvasRunExperience,
     agentRuntimeError,
     generationActivity,
     resolveAgentApproval,
@@ -726,21 +721,6 @@ export function EditorWorkbenchFeature({
             />
             <Canvas
               activeAgentRunId={activeCanvasAgentRunId}
-              agentRunStatus={
-                activeCanvasRunExperience?.active
-                  ? {
-                      detail: t(
-                        agentRunPhaseDetailKey(activeCanvasRunExperience.phase),
-                      ),
-                      hasCanvasChanges:
-                        activeCanvasRunExperience.hasCanvasChanges,
-                      phase: activeCanvasRunExperience.phase,
-                      title: t(
-                        agentRunPhaseTitleKey(activeCanvasRunExperience.phase),
-                      ),
-                    }
-                  : undefined
-              }
               activePageId={activePageId}
               generationActivity={generationActivity}
               layerHoverTarget={layerHoverTarget ?? undefined}
@@ -805,9 +785,6 @@ export function EditorWorkbenchFeature({
               rulersVisible={rulersVisible}
               snapSettings={snapSettings}
               smartSelectionMarkState={smartSelectionMarkState}
-              showAgentRunStatus={
-                !utilityPanelVisible || utilityTab !== "agent"
-              }
               selectionActions={
                 state.selection.nodeIds.length > 0 ? (
                   <CanvasSelectionActions

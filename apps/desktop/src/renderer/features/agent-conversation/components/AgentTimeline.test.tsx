@@ -187,7 +187,7 @@ describe("AgentTimeline", () => {
     ).toBe(true);
   });
 
-  it("shows a trustworthy milestone without inferred delivery counts", () => {
+  it("does not add a synthetic canvas milestone to the conversation", () => {
     const timeline: SessionTimelineItem[] = [
       {
         itemId: "tool:capture_home",
@@ -249,8 +249,8 @@ describe("AgentTimeline", () => {
     );
 
     expect(
-      screen.getByText("First editable design is visible"),
-    ).toBeInTheDocument();
+      screen.queryByText("First editable design is visible"),
+    ).not.toBeInTheDocument();
     expect(screen.queryByText(/real artboards/)).not.toBeInTheDocument();
     expect(screen.queryByText(/targets complete/)).not.toBeInTheDocument();
     expect(screen.queryByText(/1\/2/)).not.toBeInTheDocument();
