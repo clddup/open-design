@@ -22,7 +22,91 @@ export type VectorPointAppendResult =
     }
   | { ok: false; code: VectorEditFailureCode; message: string };
 
+export type VectorContourAppendResult =
+  | {
+      ok: true;
+      network: VectorNetwork;
+      pathId: string;
+      segmentId: string;
+      startVertexId: string;
+      endVertexId: string;
+    }
+  | { ok: false; code: VectorEditFailureCode; message: string };
+
 const POINT_EPSILON = 0.000_001;
+
+/** Adds a new two-point open contour without creating a second Vector layer. */
+export function appendVectorContour(
+  network: VectorNetwork,
+  start: Point,
+  end: Point,
+): VectorContourAppendResult {
+  const invalid = validateContourInput(network, start, end);
+  if (invalid) return invalid;
+
+  const next = structuredClone(network);
+  const vertexIds = new Set(next.vertices.map(({ id }) => id));
+  const startVertexId = nextId("vertex_edit", vertexIds);
+  vertexIds.add(startVertexId);
+  const endVertexId = nextId("vertex_edit", vertexIds);
+  const segmentId = nextId(
+    "segment_edit",
+    new Set(next.segments.map(({ id }) => id)),
+  );
+  const pathId = nextId("path_edit", new Set(next.paths.map(({ id }) => id)));
+  next.vertices.push(
+    { id: startVertexId, x: start.x, y: start.y },
+    { id: endVertexId, x: end.x, y: end.y },
+  );
+  next.segments.push({
+    id: segmentId,
+    startVertexId,
+    endVertexId,
+  });
+  next.paths.push({
+    id: pathId,
+    closed: false,
+    segments: [{ segmentId, reversed: false }],
+  });
+  const resultIssues = validateVectorNetwork(next);
+  return resultIssues.length > 0
+    ? failure(
+        "invalid-network",
+        resultIssues.map(({ message }) => message).join("; "),
+      )
+    : {
+        endVertexId,
+        network: next,
+        ok: true,
+        pathId,
+        segmentId,
+        startVertexId,
+      };
+}
+
+function validateContourInput(
+  network: VectorNetwork,
+  start: Point,
+  end: Point,
+): Extract<VectorContourAppendResult, { ok: false }> | null {
+  const issues = validateVectorNetwork(network);
+  if (issues.length > 0) {
+    return failure(
+      "invalid-network",
+      issues.map(({ message }) => message).join("; "),
+    );
+  }
+  if (![start.x, start.y, end.x, end.y].every(Number.isFinite)) {
+    return failure(
+      "invalid-network",
+      "Vector point coordinates must be finite",
+    );
+  }
+  return Math.abs(start.x - end.x) <= POINT_EPSILON &&
+    Math.abs(start.y - end.y) <= POINT_EPSILON
+    ? failure("no-op", "A Vector contour requires two distinct points")
+    : null;
+}
 
 /**
  * Adds one connected point from an existing vertex. An unambiguous open

@@ -49,7 +49,7 @@ export const canvasMessages = {
   "canvas.vectorBendHint":
     "Click a point or path to add handles, or drag a path to bend it",
   "canvas.vectorPenHint":
-    "Click a path to insert a point; continue from a selected point or click another point to finish",
+    "Click a path to insert a point; continue from a selected point, finish on another point, or start a new contour on empty canvas",
   "canvas.vectorLassoHint":
     "Draw around vector points and paths · Hold Shift to toggle enclosed content",
   "canvas.vectorCutUnavailable": "Vector cut result is unavailable",

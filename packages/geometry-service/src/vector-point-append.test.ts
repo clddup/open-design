@@ -1,6 +1,57 @@
 import type { VectorNetwork } from "@opendesign/design-contracts";
 import { describe, expect, it } from "vitest";
-import { appendVectorPoint } from "./vector-point-append.js";
+import {
+  appendVectorContour,
+  appendVectorPoint,
+} from "./vector-point-append.js";
+
+describe("appendVectorContour", () => {
+  it("adds one stable open contour to an existing Vector network", () => {
+    const network = openNetwork();
+
+    const result = appendVectorContour(
+      network,
+      { x: 20, y: 50 },
+      { x: 80, y: 90 },
+    );
+
+    expect(result).toMatchObject({
+      endVertexId: "vertex_edit_2",
+      ok: true,
+      pathId: "path_edit_1",
+      segmentId: "segment_edit_1",
+      startVertexId: "vertex_edit_1",
+    });
+    if (!result.ok) return;
+    expect(result.network.paths.at(-1)).toEqual({
+      id: "path_edit_1",
+      closed: false,
+      segments: [{ segmentId: "segment_edit_1", reversed: false }],
+    });
+    expect(result.network.segments.at(-1)).toEqual({
+      id: "segment_edit_1",
+      startVertexId: "vertex_edit_1",
+      endVertexId: "vertex_edit_2",
+    });
+    expect(network).toEqual(openNetwork());
+  });
+
+  it("rejects overlapping, non-finite, and invalid input without mutation", () => {
+    const network = openNetwork();
+    expect(
+      appendVectorContour(network, { x: 20, y: 20 }, { x: 20, y: 20 }),
+    ).toMatchObject({ ok: false, code: "no-op" });
+    expect(
+      appendVectorContour(network, { x: Number.NaN, y: 20 }, { x: 40, y: 40 }),
+    ).toMatchObject({ ok: false, code: "invalid-network" });
+    const invalid = openNetwork();
+    invalid.paths[0]!.segments[0]!.segmentId = "missing";
+    expect(
+      appendVectorContour(invalid, { x: 20, y: 20 }, { x: 40, y: 40 }),
+    ).toMatchObject({ ok: false, code: "invalid-network" });
+    expect(network).toEqual(openNetwork());
+  });
+});
 
 describe("appendVectorPoint", () => {
   it("extends an open endpoint and transfers its cap to the new endpoint", () => {

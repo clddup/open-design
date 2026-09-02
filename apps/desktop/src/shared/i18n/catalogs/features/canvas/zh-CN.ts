@@ -48,7 +48,7 @@ export const canvasMessages = {
     "点击分支 segment 创建断点 · 分支几何暂不支持拖拽切割",
   "canvas.vectorBendHint": "点击节点或路径添加手柄，或拖动路径直接弯曲",
   "canvas.vectorPenHint":
-    "点击路径无损插入节点；从选中节点继续绘制或点击另一节点完成路径",
+    "点击路径无损插点；从选中节点续画、点击另一节点完成路径，或在空白处开始新轮廓",
   "canvas.vectorLassoHint": "圈选矢量节点与路径 · 按住 Shift 切换圈内内容",
   "canvas.vectorCutUnavailable": "路径切断结果不可用",
   "canvas.vectorCutApplyMissing": "应用切断操作后找不到对应矢量",

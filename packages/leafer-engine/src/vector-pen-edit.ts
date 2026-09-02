@@ -1,6 +1,9 @@
 import type { Point, VectorNetwork } from "@opendesign/design-contracts";
 import { validateVectorNetwork } from "@opendesign/geometry-service/editable-vector";
-import { appendVectorPoint } from "@opendesign/geometry-service/vector-point-append";
+import {
+  appendVectorContour,
+  appendVectorPoint,
+} from "@opendesign/geometry-service/vector-point-append";
 import { insertVectorPoint } from "@opendesign/geometry-service/vector-point-insert";
 import type {
   VectorEditFailureCode,
@@ -16,6 +19,11 @@ export interface VectorPenPointEdit {
   vertexId: string;
 }
 
+export interface VectorPenContourStart {
+  point: Point;
+  tangentOut?: Point;
+}
+
 interface VectorPenDragHandle {
   direction: -1 | 1;
   reference: VectorHandleReference;
@@ -24,6 +32,98 @@ interface VectorPenDragHandle {
 export type VectorPenPointResult =
   | { edit: VectorPenPointEdit; ok: true }
   | { code: VectorEditFailureCode; message: string; ok: false };
+
+const HANDLE_EPSILON = 0.5;
+
+export function createVectorPenContourStart(
+  point: Point,
+): VectorPenContourStart {
+  return { point: { ...point } };
+}
+
+export function dragVectorPenContourStart(
+  start: VectorPenContourStart,
+  pointer: Point,
+): VectorPenContourStart {
+  const tangentOut = {
+    x: pointer.x - start.point.x,
+    y: pointer.y - start.point.y,
+  };
+  return Math.hypot(tangentOut.x, tangentOut.y) < HANDLE_EPSILON
+    ? { point: { ...start.point } }
+    : { point: { ...start.point }, tangentOut };
+}
+
+export function beginVectorPenContour(
+  network: VectorNetwork,
+  start: VectorPenContourStart,
+  end: Point,
+): VectorPenPointResult {
+  const result = appendVectorContour(network, start.point, end);
+  if (!result.ok) return result;
+  const base = result.network;
+  const segment = base.segments.find(({ id }) => id === result.segmentId)!;
+  const startVertex = base.vertices.find(
+    ({ id }) => id === result.startVertexId,
+  )!;
+  if (start.tangentOut) {
+    startVertex.handleMode = "mirrored";
+    segment.tangentStart = { ...start.tangentOut };
+  }
+  const issues = validateVectorNetwork(base);
+  if (issues.length > 0) {
+    return {
+      code: "invalid-network",
+      message: issues.map(({ message }) => message).join("; "),
+      ok: false,
+    };
+  }
+  return {
+    edit: {
+      base,
+      handles: [
+        {
+          direction: -1,
+          reference: { segmentId: segment.id, side: "end" },
+        },
+      ],
+      network: base,
+      point: base.vertices.find(({ id }) => id === result.endVertexId)!,
+      vertexId: result.endVertexId,
+    },
+    ok: true,
+  };
+}
+
+export function finishVectorPenContourAtVertex(
+  network: VectorNetwork,
+  start: VectorPenContourStart,
+  targetVertexId: string,
+): VectorPenPointResult {
+  const result = appendVectorPoint(network, targetVertexId, start.point);
+  if (!result.ok) return result;
+  const base = result.network;
+  const segment = base.segments.find(({ id }) => id === result.segmentId)!;
+  applyContourStartHandle(base, result.vertexId, segment, start.tangentOut);
+  const issues = validateVectorNetwork(base);
+  if (issues.length > 0) {
+    return {
+      code: "invalid-network",
+      message: issues.map(({ message }) => message).join("; "),
+      ok: false,
+    };
+  }
+  return {
+    edit: {
+      base,
+      handles: [],
+      network: base,
+      point: base.vertices.find(({ id }) => id === result.vertexId)!,
+      vertexId: result.vertexId,
+    },
+    ok: true,
+  };
+}
 
 export function beginVectorPenInsert(
   network: VectorNetwork,
@@ -115,4 +215,17 @@ function setHandle(
   )!;
   if (reference.side === "start") segment.tangentStart = offset;
   else segment.tangentEnd = offset;
+}
+
+function applyContourStartHandle(
+  network: VectorNetwork,
+  vertexId: string,
+  segment: VectorNetwork["segments"][number],
+  tangent: Point | undefined,
+): void {
+  if (!tangent) return;
+  const vertex = network.vertices.find(({ id }) => id === vertexId)!;
+  vertex.handleMode = "mirrored";
+  if (segment.startVertexId === vertexId) segment.tangentStart = { ...tangent };
+  else segment.tangentEnd = { ...tangent };
 }

@@ -143,7 +143,9 @@ export {
   type VectorVertexStrokeAppearancePatch,
 } from "./vector-edit.js";
 export {
+  appendVectorContour,
   appendVectorPoint,
+  type VectorContourAppendResult,
   type VectorPointAppendResult,
 } from "./vector-point-append.js";
 export {

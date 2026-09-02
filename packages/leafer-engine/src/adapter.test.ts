@@ -7566,6 +7566,192 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
+  it("authors independent contours inside one Vector Edit Pen network", async () => {
+    const onVectorEdit = vi.fn<(request: LeaferVectorEditRequest) => boolean>(
+      () => true,
+    );
+    const onVectorEditExit = vi.fn();
+    const onVectorEditSelectionChange = vi.fn();
+    const input = withVectorEditFixture(createInput());
+    input.vectorEditScope = { ...input.vectorEditScope!, tool: "pen" };
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onVectorEdit,
+      onVectorEditExit,
+      onVectorEditSelectionChange,
+    });
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Missing Vector Pen contour fixture");
+
+    app.emit("pointer.down", pointerEvent(20, 60, app.tree));
+    app.emit("pointer.move", pointerEvent(35, 70, app.tree));
+    app.emit("pointer.up", pointerEvent(35, 70, app.tree));
+    app.emit("pointer.down", pointerEvent(100, 90, app.tree));
+    app.emit("pointer.move", pointerEvent(115, 75, app.tree));
+    app.emit("pointer.up", pointerEvent(115, 75, app.tree));
+
+    expect(onVectorEdit).toHaveBeenCalledOnce();
+    const first = onVectorEdit.mock.calls[0]?.[0];
+    if (!first || first.deleteNode) {
+      throw new Error("Missing independent Vector Pen contour edit");
+    }
+    expect(first.edits[0]!.network.paths.at(-1)).toEqual({
+      id: "path_edit_1",
+      closed: false,
+      segments: [{ segmentId: "segment_edit_1", reversed: false }],
+    });
+    expect(first.edits[0]!.network.segments.at(-1)).toEqual({
+      id: "segment_edit_1",
+      startVertexId: "vertex_edit_1",
+      endVertexId: "vertex_edit_2",
+      tangentStart: { x: 15, y: 10 },
+      tangentEnd: { x: -15, y: 15 },
+    });
+    expect(onVectorEditSelectionChange).toHaveBeenLastCalledWith(
+      "editable_curve",
+      { segmentIds: [], vertexIds: ["vertex_edit_2"] },
+    );
+
+    emitWindowKey("Escape");
+    expect(onVectorEditExit).not.toHaveBeenCalled();
+    expect(onVectorEditSelectionChange).toHaveBeenLastCalledWith(
+      "editable_curve",
+      { segmentIds: [], vertexIds: [] },
+    );
+    app.emit("pointer.down", pointerEvent(30, 120, app.tree));
+    app.emit("pointer.up", pointerEvent(30, 120, app.tree));
+    app.emit("pointer.down", pointerEvent(90, 140, app.tree));
+    app.emit("pointer.up", pointerEvent(90, 140, app.tree));
+
+    expect(onVectorEdit).toHaveBeenCalledTimes(2);
+    const second = onVectorEdit.mock.calls[1]?.[0];
+    if (!second || second.deleteNode) {
+      throw new Error("Missing second Vector Pen contour edit");
+    }
+    expect(second.edits[0]!.network.paths.at(-1)?.id).toBe("path_edit_2");
+    adapter.dispose();
+  });
+
+  it("finishes a new Vector Pen contour on an existing network point", async () => {
+    const onVectorEdit = vi.fn<(request: LeaferVectorEditRequest) => boolean>(
+      () => true,
+    );
+    const input = withVectorEditFixture(createInput());
+    input.vectorEditScope = { ...input.vectorEditScope!, tool: "pen" };
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onVectorEdit,
+    });
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    const path =
+      app && findElement(app.tree, vectorStrokeElementId("editable_curve"));
+    const overlay = path?.parent?.children.at(-1);
+    if (!app || !(overlay instanceof FakeGroup)) {
+      throw new Error("Missing Vector Pen existing-point fixture");
+    }
+
+    app.emit("pointer.down", pointerEvent(20, 60, app.tree));
+    app.emit("pointer.move", pointerEvent(30, 60, app.tree));
+    app.emit("pointer.up", pointerEvent(30, 60, app.tree));
+    const anchors = overlay.children.filter(
+      (child): child is FakeEllipse => child instanceof FakeEllipse,
+    );
+    app.emit("pointer.down", pointerEvent(60, 30, anchors[1]!));
+
+    const request = onVectorEdit.mock.calls[0]?.[0];
+    if (!request || request.deleteNode) {
+      throw new Error("Missing Vector Pen existing-point edit");
+    }
+    expect(request.edits[0]!.network.vertices).toHaveLength(4);
+    expect(request.edits[0]!.network.paths.at(-1)).toEqual({
+      id: "path_edit_1",
+      closed: false,
+      segments: [{ segmentId: "segment_edit_1", reversed: false }],
+    });
+    expect(request.edits[0]!.network.segments.at(-1)).toEqual({
+      id: "segment_edit_1",
+      startVertexId: "vertex_b",
+      endVertexId: "vertex_edit_1",
+      tangentEnd: { x: 10, y: 0 },
+    });
+    adapter.dispose();
+  });
+
+  it("keeps an independent Vector Pen contour pending after commit rejection", async () => {
+    const onVectorEdit = vi.fn<(request: LeaferVectorEditRequest) => boolean>(
+      () => false,
+    );
+    const onVectorEditSelectionChange = vi.fn();
+    const input = withVectorEditFixture(createInput());
+    input.vectorEditScope = { ...input.vectorEditScope!, tool: "pen" };
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onVectorEdit,
+      onVectorEditSelectionChange,
+    });
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Missing rejected Vector Pen contour fixture");
+
+    app.emit("pointer.down", pointerEvent(20, 60, app.tree));
+    app.emit("pointer.up", pointerEvent(20, 60, app.tree));
+    app.emit("pointer.down", pointerEvent(80, 90, app.tree));
+    app.emit("pointer.up", pointerEvent(80, 90, app.tree));
+    app.emit("pointer.down", pointerEvent(100, 110, app.tree));
+    app.emit("pointer.up", pointerEvent(100, 110, app.tree));
+
+    expect(onVectorEdit).toHaveBeenCalledTimes(2);
+    expect(onVectorEditSelectionChange).not.toHaveBeenCalled();
+    const retry = onVectorEdit.mock.calls[1]?.[0];
+    if (!retry || retry.deleteNode) throw new Error("Missing contour retry");
+    expect(retry.edits[0]!.network.vertices.at(-1)).toMatchObject({
+      x: 100,
+      y: 110,
+    });
+    emitWindowKey("Escape");
+    expect(onVectorEdit).toHaveBeenCalledTimes(2);
+    adapter.dispose();
+  });
+
+  it("cancels an incomplete Vector Pen contour before exiting or switching tools", async () => {
+    const onVectorEdit = vi.fn<(request: LeaferVectorEditRequest) => boolean>(
+      () => true,
+    );
+    const onVectorEditExit = vi.fn();
+    const input = withVectorEditFixture(createInput());
+    input.vectorEditScope = { ...input.vectorEditScope!, tool: "pen" };
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onVectorEdit,
+      onVectorEditExit,
+    });
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Missing cancelled Vector Pen contour fixture");
+
+    app.emit("pointer.down", pointerEvent(20, 60, app.tree));
+    app.emit("pointer.up", pointerEvent(20, 60, app.tree));
+    emitWindowKey("Escape");
+    expect(onVectorEdit).not.toHaveBeenCalled();
+    expect(onVectorEditExit).not.toHaveBeenCalled();
+    emitWindowKey("Escape");
+    expect(onVectorEditExit).toHaveBeenCalledOnce();
+
+    app.emit("pointer.down", pointerEvent(30, 70, app.tree));
+    app.emit("pointer.up", pointerEvent(30, 70, app.tree));
+    adapter.sync({
+      ...input,
+      vectorEditScope: { ...input.vectorEditScope, tool: "move" },
+    });
+    adapter.sync(input);
+    app.emit("pointer.down", pointerEvent(100, 120, app.tree));
+    app.emit("pointer.up", pointerEvent(100, 120, app.tree));
+    expect(onVectorEdit).not.toHaveBeenCalled();
+    adapter.dispose();
+  });
+
   it("finishes an open Vector Pen path by clicking its other endpoint", async () => {
     const onVectorEdit = vi.fn<(request: LeaferVectorEditRequest) => boolean>(
       () => true,

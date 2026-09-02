@@ -4812,7 +4812,7 @@ describe("App", () => {
     );
     expect(
       screen.getByText(
-        "Click a path to insert a point; continue from a selected point or click another point to finish",
+        "Click a path to insert a point; continue from a selected point, finish on another point, or start a new contour on empty canvas",
       ),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Pen" })).toHaveAttribute(

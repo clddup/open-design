@@ -63,11 +63,22 @@ import {
   type VectorAnchorMeasurementReference,
 } from "./vector-anchor-measurement-controller.js";
 import {
+  beginVectorPenContour,
   beginVectorPenAppend,
   beginVectorPenInsert,
+  createVectorPenContourStart,
+  dragVectorPenContourStart,
   dragVectorPenPoint,
+  finishVectorPenContourAtVertex,
+  type VectorPenContourStart,
   type VectorPenPointEdit,
 } from "./vector-pen-edit.js";
+import {
+  createVectorPenContourOverlay,
+  renderVectorPenContourOverlay,
+  type VectorPenContourDraft,
+  type VectorPenContourOverlay,
+} from "./vector-pen-contour-overlay.js";
 
 type LeaferModule = typeof LeaferEditorModule;
 type LeaferElement = InstanceType<LeaferModule["UI"]>;
@@ -144,11 +155,18 @@ type VectorEditDrag =
     }
   | {
       before: VectorNetwork;
+      beforeContour?: VectorPenContourDraft;
       beforeSegmentIds: readonly string[];
       beforeVertexIds: readonly string[];
       edit: VectorPenPointEdit;
       failed: boolean;
       kind: "pen";
+      moved: boolean;
+      startClient: Point;
+    }
+  | {
+      before: VectorPenContourStart;
+      kind: "pen-start";
       moved: boolean;
       startClient: Point;
     };
@@ -168,6 +186,8 @@ interface VectorEditSession {
   pathElement: LeaferElement;
   fillStyleId?: string;
   paint: NonNullable<LeaferVectorEditScope["paint"]>;
+  penContour?: VectorPenContourDraft;
+  penContourOverlay: VectorPenContourOverlay;
   penTargetVertexId?: string;
   readOnly: boolean;
   segmentSelectionPath: LeaferElement;
@@ -361,6 +381,9 @@ export class VectorEditController {
   handleKeyDown(event: KeyboardEvent): boolean {
     if (!this.active || isKeyboardInputTarget(event.target)) return false;
     this.#vectorAnchorMeasurements.handleKeyDown(event);
+    const pendingContour = [...this.#vectorEdits.values()].find(
+      (session) => session.penContour !== undefined,
+    );
     const selectionDrag = [...this.#vectorEdits.values()]
       .map((session) => session.drag)
       .find(
@@ -394,6 +417,24 @@ export class VectorEditController {
       this.#cancelVectorLasso();
       return true;
     }
+    if (event.code === "Escape") {
+      if (pendingContour) {
+        stopKey(event);
+        this.#cancelVectorPenContour(pendingContour);
+        return true;
+      }
+      const penSelection = [...this.#vectorEdits.values()].find(
+        (session) =>
+          session.tool === "pen" &&
+          (session.selectedVertexIds.length > 0 ||
+            session.selectedSegmentIds.length > 0),
+      );
+      if (penSelection) {
+        stopKey(event);
+        this.#setVectorSelection(penSelection, [], []);
+        return true;
+      }
+    }
     if (event.code === "Escape" || event.code === "Enter") {
       stopKey(event);
       const draggingSession = [...this.#vectorEdits.values()].find(
@@ -409,6 +450,10 @@ export class VectorEditController {
     }
     if (event.code === "Backspace" || event.code === "Delete") {
       stopKey(event);
+      if (pendingContour) {
+        this.#cancelVectorPenContour(pendingContour);
+        return true;
+      }
       this.#deleteSelectedVectorVertices();
       return true;
     }
@@ -508,7 +553,8 @@ export class VectorEditController {
             (scope.tool !== "cut" || item.readOnly)) ||
           (session.drag?.kind === "bend" &&
             (scope.tool !== "bend" || item.readOnly)) ||
-          (session.drag?.kind === "pen" &&
+          ((session.drag?.kind === "pen" ||
+            session.drag?.kind === "pen-start") &&
             (scope.tool !== "pen" || item.readOnly))
         ) {
           this.#cancelVectorEditDrag(session);
@@ -526,6 +572,13 @@ export class VectorEditController {
         session.selectedSegmentIds = selectedSegmentIds;
         session.selectedVertexIds = selectedVertexIds;
         session.tool = scope.tool;
+        if (
+          scope.tool !== "pen" ||
+          item.readOnly ||
+          selectedVertexIds.length > 0
+        ) {
+          delete session.penContour;
+        }
         const penTargetVertexId = session.penTargetVertexId;
         if (
           scope.tool !== "pen" ||
@@ -611,12 +664,16 @@ export class VectorEditController {
       hittable: false,
       stroke: LEAFER_EDITOR_SELECTION_COLOR,
     }) as LeaferElement;
+    const penContourOverlay = createVectorPenContourOverlay(
+      this.#options.leafer,
+    );
     overlayGroup.add(cutHitPath);
     overlayGroup.add(tracePath);
     overlayGroup.add(segmentSelectionPath);
     overlayGroup.add(handlePath);
     overlayGroup.add(lassoPath);
     overlayGroup.add(cutGuidePath);
+    overlayGroup.add(penContourOverlay.group);
     parent.add(overlayGroup);
     this.#vectorEditControls.set(cutHitPath, { kind: "path", nodeId });
     return {
@@ -634,6 +691,7 @@ export class VectorEditController {
       overlayGroup,
       pathElement,
       paint,
+      penContourOverlay,
       readOnly,
       segmentSelectionPath,
       selectedSegmentIds,
@@ -797,6 +855,12 @@ export class VectorEditController {
       path: handleParts.join(" "),
       strokeWidth: 1 / zoom,
     });
+    renderVectorPenContourOverlay(
+      session.penContourOverlay,
+      session.penContour,
+      zoom,
+      session.tool === "pen" && !session.readOnly,
+    );
     if (
       !this.#vectorLasso ||
       this.#vectorLasso.activeNodeId !== session.nodeId
@@ -1003,6 +1067,7 @@ export class VectorEditController {
       return;
     session.selectedSegmentIds = selectedSegments;
     session.selectedVertexIds = selected;
+    if (selected.length > 0) delete session.penContour;
     if (selected.length !== 1 || session.penTargetVertexId === selected[0]) {
       delete session.penTargetVertexId;
     }
@@ -1366,6 +1431,7 @@ export class VectorEditController {
       });
     }
     this.#syncVectorPenTarget(pointer);
+    this.#syncVectorPenContourCursor(pointer);
     const lasso = this.#vectorLasso;
     if (lasso && !this.#options.current().disposed) {
       if (pointer.isCancel) return;
@@ -1429,6 +1495,15 @@ export class VectorEditController {
       } else {
         session.network = result.network;
       }
+      this.#renderVectorEditOverlay(session);
+      return;
+    }
+    if (drag.kind === "pen-start") {
+      const contour = session.penContour;
+      if (!contour) return;
+      const local = pointer.getInnerPoint(session.pathElement);
+      contour.start = dragVectorPenContourStart(contour.start, local);
+      contour.cursor = local;
       this.#renderVectorEditOverlay(session);
       return;
     }
@@ -1657,10 +1732,18 @@ export class VectorEditController {
       this.#submitVectorEdit(session, result.network);
       return;
     }
+    if (drag.kind === "pen-start") {
+      session.drag = null;
+      this.#renderVectorEditOverlay(session);
+      return;
+    }
     if (drag.kind === "pen") {
       session.drag = null;
       if (drag.failed) {
         session.network = structuredClone(drag.before);
+        if (drag.beforeContour) {
+          session.penContour = structuredClone(drag.beforeContour);
+        }
         session.selectedSegmentIds = [...drag.beforeSegmentIds];
         session.selectedVertexIds = [...drag.beforeVertexIds];
         this.#renderVectorEditOverlays();
@@ -1673,6 +1756,9 @@ export class VectorEditController {
         this.#setVectorSelection(session, [], [drag.edit.vertexId]);
       } else {
         session.network = structuredClone(drag.before);
+        if (drag.beforeContour) {
+          session.penContour = structuredClone(drag.beforeContour);
+        }
         session.selectedSegmentIds = [...drag.beforeSegmentIds];
         session.selectedVertexIds = [...drag.beforeVertexIds];
         this.#renderVectorEditOverlays();
@@ -1770,16 +1856,27 @@ export class VectorEditController {
         const target = this.#vectorEdits.get(nodeId);
         if (target) target.network = structuredClone(before);
       }
-    } else if (drag.kind !== "cut") {
+    } else if (drag.kind !== "cut" && drag.kind !== "pen-start") {
       session.network = drag.before;
     }
     if (drag.kind === "pen") {
+      if (drag.beforeContour) {
+        session.penContour = structuredClone(drag.beforeContour);
+      }
       session.selectedSegmentIds = [...drag.beforeSegmentIds];
       session.selectedVertexIds = [...drag.beforeVertexIds];
+    } else if (drag.kind === "pen-start" && session.penContour) {
+      session.penContour.start = structuredClone(drag.before);
     }
     session.drag = null;
     this.#vectorGeometrySnap.finish();
     session.cutGuidePath.set({ path: "", visible: false });
+  }
+
+  #cancelVectorPenContour(session: VectorEditSession): void {
+    if (session.drag?.kind === "pen-start") session.drag = null;
+    delete session.penContour;
+    this.#renderVectorEditOverlay(session);
   }
 
   #submitVectorEdit(
@@ -2024,10 +2121,18 @@ export class VectorEditController {
   ): void {
     if (session.readOnly) return;
     if (control?.kind === "vertex") {
-      this.#finishVectorPenAtVertex(session, control.vertexId);
+      if (session.penContour) {
+        this.#finishVectorPenContourAtVertex(session, control.vertexId);
+      } else {
+        this.#finishVectorPenAtVertex(session, control.vertexId);
+      }
       return;
     }
     const local = pointer.getInnerPoint(session.pathElement);
+    if (session.penContour) {
+      this.#continueVectorPenContour(pointer, session, local);
+      return;
+    }
     const zoom = Math.max(
       MATRIX_EPSILON,
       Math.abs(this.#input?.viewport.zoom ?? 1),
@@ -2046,27 +2151,74 @@ export class VectorEditController {
         : sourceVertexId
           ? beginVectorPenAppend(session.network, sourceVertexId, local)
           : null;
-    if (!result) return;
+    if (!result) {
+      this.#startVectorPenContour(pointer, session, local);
+      return;
+    }
     if (!result.ok) {
       if (result.code !== "no-op") {
         this.#options.report(new Error(result.message));
       }
       return;
     }
-    const before = structuredClone(session.network);
+    this.#beginVectorPenEdit(pointer, session, result.edit);
+  }
+
+  #continueVectorPenContour(
+    pointer: ReturnType<typeof asLeaferEvent>,
+    session: VectorEditSession,
+    local: Point,
+  ): void {
+    const pending = session.penContour!;
+    const result = beginVectorPenContour(session.network, pending.start, local);
+    if (!result.ok) {
+      if (result.code !== "no-op") {
+        this.#options.report(new Error(result.message));
+      }
+      return;
+    }
+    delete session.penContour;
+    this.#beginVectorPenEdit(pointer, session, result.edit, pending);
+  }
+
+  #startVectorPenContour(
+    pointer: ReturnType<typeof asLeaferEvent>,
+    session: VectorEditSession,
+    local: Point,
+  ): void {
+    const start = createVectorPenContourStart(local);
+    session.penContour = { cursor: { ...local }, start };
     session.drag = {
-      before,
+      before: structuredClone(start),
+      kind: "pen-start",
+      moved: false,
+      startClient: eventClientPoint(pointer),
+    };
+    this.#renderVectorEditOverlay(session);
+  }
+
+  #beginVectorPenEdit(
+    pointer: ReturnType<typeof asLeaferEvent>,
+    session: VectorEditSession,
+    edit: VectorPenPointEdit,
+    beforeContour?: VectorPenContourDraft,
+  ): void {
+    session.drag = {
+      before: structuredClone(session.network),
+      ...(beforeContour
+        ? { beforeContour: structuredClone(beforeContour) }
+        : {}),
       beforeSegmentIds: [...session.selectedSegmentIds],
       beforeVertexIds: [...session.selectedVertexIds],
-      edit: result.edit,
+      edit,
       failed: false,
       kind: "pen",
       moved: false,
       startClient: eventClientPoint(pointer),
     };
-    session.network = result.edit.network;
+    session.network = edit.network;
     session.selectedSegmentIds = [];
-    session.selectedVertexIds = [result.edit.vertexId];
+    session.selectedVertexIds = [edit.vertexId];
     this.#renderVectorEditOverlay(session);
     this.#renderVectorSelectionOverlay();
   }
@@ -2099,6 +2251,31 @@ export class VectorEditController {
     }
   }
 
+  #finishVectorPenContourAtVertex(
+    session: VectorEditSession,
+    targetVertexId: string,
+  ): void {
+    const pending = session.penContour!;
+    const result = finishVectorPenContourAtVertex(
+      session.network,
+      pending.start,
+      targetVertexId,
+    );
+    if (!result.ok) {
+      if (result.code !== "no-op") {
+        this.#options.report(new Error(result.message));
+      }
+      return;
+    }
+    delete session.penContour;
+    if (this.#submitVectorEdit(session, result.edit.network)) {
+      this.#setVectorSelection(session, [], []);
+    } else {
+      session.penContour = pending;
+      this.#renderVectorEditOverlay(session);
+    }
+  }
+
   #syncVectorPenTarget(pointer: ReturnType<typeof asLeaferEvent>): void {
     const control = isElement(pointer.target)
       ? this.#vectorEditControls.get(pointer.target)
@@ -2119,6 +2296,24 @@ export class VectorEditController {
       else delete session.penTargetVertexId;
       this.#renderVectorEditOverlay(session);
     }
+  }
+
+  #syncVectorPenContourCursor(pointer: ReturnType<typeof asLeaferEvent>): void {
+    const session = this.#activeVectorEditSession();
+    if (!session?.penContour || session.tool !== "pen" || session.readOnly) {
+      return;
+    }
+    session.penContour.cursor = pointer.getInnerPoint(session.pathElement);
+    const zoom = Math.max(
+      MATRIX_EPSILON,
+      Math.abs(this.#input?.viewport.zoom ?? 1),
+    );
+    renderVectorPenContourOverlay(
+      session.penContourOverlay,
+      session.penContour,
+      zoom,
+      true,
+    );
   }
 
   #clearVectorPenTargets(): void {
