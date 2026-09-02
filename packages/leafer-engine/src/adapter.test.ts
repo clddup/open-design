@@ -7566,6 +7566,263 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
+  it("finishes an open Vector Pen path by clicking its other endpoint", async () => {
+    const onVectorEdit = vi.fn<(request: LeaferVectorEditRequest) => boolean>(
+      () => true,
+    );
+    const onVectorEditSelectionChange = vi.fn();
+    const input = withVectorEditFixture(createInput(), ["vertex_c"]);
+    input.vectorEditScope = { ...input.vectorEditScope!, tool: "pen" };
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onVectorEdit,
+      onVectorEditSelectionChange,
+    });
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    const path =
+      app && findElement(app.tree, vectorStrokeElementId("editable_curve"));
+    const overlay = path?.parent?.children.at(-1);
+    if (!app || !(overlay instanceof FakeGroup)) {
+      throw new Error("Missing Vector Pen closure fixture");
+    }
+    const anchors = overlay.children.filter(
+      (child): child is FakeEllipse => child instanceof FakeEllipse,
+    );
+
+    app.emit("pointer.move", pointerEvent(0, 0, anchors[0]!));
+    const hoveredAnchors = overlay.children.filter(
+      (child): child is FakeEllipse => child instanceof FakeEllipse,
+    );
+    expect(hoveredAnchors[0]!.width).toBeGreaterThan(hoveredAnchors[1]!.width);
+    app.emit("pointer.down", pointerEvent(0, 0, hoveredAnchors[0]!));
+
+    expect(onVectorEdit).toHaveBeenCalledOnce();
+    const request = onVectorEdit.mock.calls[0]?.[0];
+    if (!request || request.deleteNode) {
+      throw new Error("Missing Vector Pen closure edit");
+    }
+    expect(request.edits[0]!.network.paths[0]).toMatchObject({
+      closed: true,
+      id: "path_open",
+    });
+    expect(request.edits[0]!.network.regions).toEqual([
+      {
+        id: "region_edit_1",
+        loops: [{ pathId: "path_open", reversed: false }],
+        windingRule: "nonzero",
+      },
+    ]);
+    expect(onVectorEditSelectionChange).toHaveBeenLastCalledWith(
+      "editable_curve",
+      { segmentIds: [], vertexIds: [] },
+    );
+    adapter.dispose();
+  });
+
+  it("keeps the source selected when a Vector Pen point completion is rejected", async () => {
+    const onVectorEdit = vi.fn<(request: LeaferVectorEditRequest) => boolean>(
+      () => false,
+    );
+    const onVectorEditSelectionChange = vi.fn();
+    const input = withVectorEditFixture(createInput(), ["vertex_c"]);
+    input.vectorEditScope = { ...input.vectorEditScope!, tool: "pen" };
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onVectorEdit,
+      onVectorEditSelectionChange,
+    });
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    const path =
+      app && findElement(app.tree, vectorStrokeElementId("editable_curve"));
+    const overlay = path?.parent?.children.at(-1);
+    if (
+      !app ||
+      !(path instanceof FakePath) ||
+      !(overlay instanceof FakeGroup)
+    ) {
+      throw new Error("Missing rejected Vector Pen completion fixture");
+    }
+    const anchors = overlay.children.filter(
+      (child): child is FakeEllipse => child instanceof FakeEllipse,
+    );
+    const authoritativePath = path.path;
+
+    app.emit("pointer.down", pointerEvent(0, 0, anchors[0]!));
+
+    expect(onVectorEdit).toHaveBeenCalledOnce();
+    expect(onVectorEditSelectionChange).not.toHaveBeenCalled();
+    expect(path.path).toBe(authoritativePath);
+    const restoredAnchors = overlay.children.filter(
+      (child): child is FakeEllipse => child instanceof FakeEllipse,
+    );
+    app.emit("pointer.move", pointerEvent(0, 0, restoredAnchors[0]!));
+    const hoveredAnchors = overlay.children.filter(
+      (child): child is FakeEllipse => child instanceof FakeEllipse,
+    );
+    expect(hoveredAnchors[0]!.width).toBeGreaterThan(hoveredAnchors[1]!.width);
+    adapter.dispose();
+  });
+
+  it("selects a Vector Pen point without submitting when there is no source", async () => {
+    const onVectorEdit = vi.fn<(request: LeaferVectorEditRequest) => boolean>(
+      () => true,
+    );
+    const onVectorEditSelectionChange = vi.fn();
+    const input = withVectorEditFixture(createInput());
+    input.vectorEditScope = { ...input.vectorEditScope!, tool: "pen" };
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onVectorEdit,
+      onVectorEditSelectionChange,
+    });
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    const path =
+      app && findElement(app.tree, vectorStrokeElementId("editable_curve"));
+    const overlay = path?.parent?.children.at(-1);
+    if (!app || !(overlay instanceof FakeGroup)) {
+      throw new Error("Missing Vector Pen point selection fixture");
+    }
+    const anchors = overlay.children.filter(
+      (child): child is FakeEllipse => child instanceof FakeEllipse,
+    );
+
+    app.emit("pointer.down", pointerEvent(0, 0, anchors[0]!));
+
+    expect(onVectorEdit).not.toHaveBeenCalled();
+    expect(onVectorEditSelectionChange).toHaveBeenCalledWith("editable_curve", {
+      segmentIds: [],
+      vertexIds: ["vertex_a"],
+    });
+    adapter.dispose();
+  });
+
+  it("clears Vector Pen point-target feedback on leave, blur, and scope sync", async () => {
+    const input = withVectorEditFixture(createInput(), ["vertex_c"]);
+    input.vectorEditScope = { ...input.vectorEditScope!, tool: "pen" };
+    const host = createHost();
+    let pointerLeave: EventListener | undefined;
+    vi.spyOn(host, "addEventListener").mockImplementation((type, listener) => {
+      if (type === "pointerleave" && typeof listener === "function") {
+        pointerLeave = listener;
+      }
+    });
+    const adapter = await createLeaferEngineAdapter(host, {
+      ...createCallbacks(),
+    });
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    const path =
+      app && findElement(app.tree, vectorStrokeElementId("editable_curve"));
+    const overlay = path?.parent?.children.at(-1);
+    if (!app || !(overlay instanceof FakeGroup)) {
+      throw new Error("Missing Vector Pen target feedback fixture");
+    }
+    const anchors = () =>
+      overlay.children.filter(
+        (child): child is FakeEllipse => child instanceof FakeEllipse,
+      );
+
+    app.emit("pointer.move", pointerEvent(0, 0, anchors()[0]!));
+    expect(anchors()[0]!.width).toBeGreaterThan(anchors()[1]!.width);
+    if (!pointerLeave) throw new Error("Missing pointerleave listener");
+    pointerLeave(new Event("pointerleave"));
+    expect(anchors()[0]!.width).toBe(anchors()[1]!.width);
+
+    app.emit("pointer.move", pointerEvent(0, 0, anchors()[0]!));
+    emitWindowBlur();
+    expect(anchors()[0]!.width).toBe(anchors()[1]!.width);
+
+    app.emit("pointer.move", pointerEvent(0, 0, anchors()[0]!));
+    adapter.sync({
+      ...input,
+      vectorEditScope: { ...input.vectorEditScope, tool: "move" },
+    });
+    expect(anchors()[0]!.width).toBe(anchors()[1]!.width);
+    adapter.dispose();
+  });
+
+  it("finishes Vector Pen at a point on another path to create a branch", async () => {
+    const onVectorEdit = vi.fn<(request: LeaferVectorEditRequest) => boolean>(
+      () => true,
+    );
+    const input = withVectorEditFixture(createInput(), ["vertex_c"]);
+    const vector = input.document.nodesById.editable_curve;
+    if (
+      !vector ||
+      vector.kind !== "vector" ||
+      !("network" in vector.properties)
+    ) {
+      throw new Error("Missing Vector Pen branch fixture");
+    }
+    vector.properties.network.vertices.push(
+      { id: "vertex_d", x: 20, y: 80 },
+      { id: "vertex_e", x: 60, y: 100 },
+      { id: "vertex_f", x: 100, y: 80 },
+    );
+    vector.properties.network.segments.push(
+      {
+        id: "segment_de",
+        startVertexId: "vertex_d",
+        endVertexId: "vertex_e",
+      },
+      {
+        id: "segment_ef",
+        startVertexId: "vertex_e",
+        endVertexId: "vertex_f",
+      },
+    );
+    vector.properties.network.paths.push({
+      id: "path_second",
+      closed: false,
+      segments: [
+        { segmentId: "segment_de", reversed: false },
+        { segmentId: "segment_ef", reversed: false },
+      ],
+    });
+    input.vectorEditScope = { ...input.vectorEditScope!, tool: "pen" };
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onVectorEdit,
+    });
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    const path =
+      app && findElement(app.tree, vectorStrokeElementId("editable_curve"));
+    const overlay = path?.parent?.children.at(-1);
+    if (!app || !(overlay instanceof FakeGroup)) {
+      throw new Error("Missing Vector Pen branch overlay");
+    }
+    const anchors = overlay.children.filter(
+      (child): child is FakeEllipse => child instanceof FakeEllipse,
+    );
+
+    app.emit("pointer.down", pointerEvent(60, 100, anchors[4]!));
+
+    const request = onVectorEdit.mock.calls[0]?.[0];
+    if (!request || request.deleteNode) {
+      throw new Error("Missing Vector Pen branch edit");
+    }
+    expect(request.edits[0]!.network.paths[0]!.segments.at(-1)).toEqual({
+      segmentId: "segment_edit_1",
+      reversed: false,
+    });
+    expect(request.edits[0]!.network.segments.at(-1)).toEqual({
+      id: "segment_edit_1",
+      startVertexId: "vertex_c",
+      endVertexId: "vertex_e",
+    });
+    expect(request.edits[0]!.network.vertices).toContainEqual(
+      expect.objectContaining({
+        handleMode: "independent",
+        id: "vertex_e",
+      }),
+    );
+    adapter.dispose();
+  });
+
   it("restores Vector Pen previews when the authoritative commit is rejected", async () => {
     const onVectorEdit = vi.fn<(request: LeaferVectorEditRequest) => boolean>(
       () => false,

@@ -13,6 +13,7 @@ import type { SnapGuideLine } from "@opendesign/geometry-service/snapping";
 import { appendVectorPoint } from "@opendesign/geometry-service/vector-point-append";
 import {
   bendVectorSegment,
+  connectVectorEndpoints,
   deleteVectorSelection,
   findVectorPathIdForVertex,
   listVectorVertexHandles,
@@ -167,6 +168,7 @@ interface VectorEditSession {
   pathElement: LeaferElement;
   fillStyleId?: string;
   paint: NonNullable<LeaferVectorEditScope["paint"]>;
+  penTargetVertexId?: string;
   readOnly: boolean;
   segmentSelectionPath: LeaferElement;
   selectedSegmentIds: string[];
@@ -524,6 +526,17 @@ export class VectorEditController {
         session.selectedSegmentIds = selectedSegmentIds;
         session.selectedVertexIds = selectedVertexIds;
         session.tool = scope.tool;
+        const penTargetVertexId = session.penTargetVertexId;
+        if (
+          scope.tool !== "pen" ||
+          item.readOnly ||
+          selectedVertexIds.length !== 1 ||
+          penTargetVertexId === selectedVertexIds[0] ||
+          (penTargetVertexId !== undefined &&
+            !network.vertices.some(({ id }) => id === penTargetVertexId))
+        ) {
+          delete session.penTargetVertexId;
+        }
         if (!session.drag) session.network = structuredClone(network);
       }
       session.overlayGroup.setTransform({ ...pathElement.localTransform });
@@ -716,6 +729,8 @@ export class VectorEditController {
     const selected = new Set(session.selectedVertexIds);
     for (const vertex of session.network.vertices) {
       const isSelected = selected.has(vertex.id);
+      const isPenTarget = session.penTargetVertexId === vertex.id;
+      const renderedAnchorSize = isPenTarget ? 11 / zoom : anchorSize;
       const anchor = new this.#options.leafer.Ellipse({
         cursor: session.readOnly
           ? "default"
@@ -724,13 +739,13 @@ export class VectorEditController {
             : "pointer",
         editable: false,
         fill: isSelected ? LEAFER_EDITOR_SELECTION_COLOR : "#ffffff",
-        height: anchorSize,
+        height: renderedAnchorSize,
         hittable: true,
         stroke: LEAFER_EDITOR_SELECTION_COLOR,
-        strokeWidth: 1.5 / zoom,
-        width: anchorSize,
-        x: vertex.x - anchorSize / 2,
-        y: vertex.y - anchorSize / 2,
+        strokeWidth: (isPenTarget ? 2.5 : 1.5) / zoom,
+        width: renderedAnchorSize,
+        x: vertex.x - renderedAnchorSize / 2,
+        y: vertex.y - renderedAnchorSize / 2,
       }) as LeaferElement;
       session.anchorControls.push(anchor);
       this.#vectorEditControls.set(anchor, {
@@ -988,6 +1003,9 @@ export class VectorEditController {
       return;
     session.selectedSegmentIds = selectedSegments;
     session.selectedVertexIds = selected;
+    if (selected.length !== 1 || session.penTargetVertexId === selected[0]) {
+      delete session.penTargetVertexId;
+    }
     this.#vectorAnchorMeasurements.sync(this.#selectedVectorAnchor());
     this.#options.callbacks.onVectorEditSelectionChange?.(session.nodeId, {
       segmentIds: selectedSegments,
@@ -1347,6 +1365,7 @@ export class VectorEditController {
           this.#prospectiveVectorAnchor(pointer),
       });
     }
+    this.#syncVectorPenTarget(pointer);
     const lasso = this.#vectorLasso;
     if (lasso && !this.#options.current().disposed) {
       if (pointer.isCancel) return;
@@ -1920,10 +1939,12 @@ export class VectorEditController {
 
   handleWindowBlur(): void {
     this.#vectorAnchorMeasurements.handleWindowBlur();
+    this.#clearVectorPenTargets();
   }
 
   pointerLeave(): void {
     this.#vectorAnchorMeasurements.pointerLeave();
+    this.#clearVectorPenTargets();
   }
 
   #beginVectorGeometrySnap(moving: readonly VectorSnapSelection[]): void {
@@ -2003,7 +2024,7 @@ export class VectorEditController {
   ): void {
     if (session.readOnly) return;
     if (control?.kind === "vertex") {
-      this.#setVectorSelection(session, [], [control.vertexId]);
+      this.#finishVectorPenAtVertex(session, control.vertexId);
       return;
     }
     const local = pointer.getInnerPoint(session.pathElement);
@@ -2048,6 +2069,64 @@ export class VectorEditController {
     session.selectedVertexIds = [result.edit.vertexId];
     this.#renderVectorEditOverlay(session);
     this.#renderVectorSelectionOverlay();
+  }
+
+  #finishVectorPenAtVertex(
+    session: VectorEditSession,
+    targetVertexId: string,
+  ): void {
+    const sourceVertexId =
+      session.selectedVertexIds.length === 1
+        ? session.selectedVertexIds[0]
+        : undefined;
+    if (!sourceVertexId || sourceVertexId === targetVertexId) {
+      this.#setVectorSelection(session, [], [targetVertexId]);
+      return;
+    }
+    const result = connectVectorEndpoints(session.network, [
+      sourceVertexId,
+      targetVertexId,
+    ]);
+    if (!result.ok) {
+      if (result.code !== "no-op")
+        this.#options.report(new Error(result.message));
+      return;
+    }
+    delete session.penTargetVertexId;
+    if (this.#submitVectorEdit(session, result.network)) {
+      session.network = result.network;
+      this.#setVectorSelection(session, [], []);
+    }
+  }
+
+  #syncVectorPenTarget(pointer: ReturnType<typeof asLeaferEvent>): void {
+    const control = isElement(pointer.target)
+      ? this.#vectorEditControls.get(pointer.target)
+      : undefined;
+    for (const session of this.#vectorEdits.values()) {
+      const selected = session.selectedVertexIds[0];
+      const next =
+        session.tool === "pen" &&
+        !session.drag &&
+        session.selectedVertexIds.length === 1 &&
+        control?.kind === "vertex" &&
+        control.nodeId === session.nodeId &&
+        control.vertexId !== selected
+          ? control.vertexId
+          : undefined;
+      if (next === session.penTargetVertexId) continue;
+      if (next) session.penTargetVertexId = next;
+      else delete session.penTargetVertexId;
+      this.#renderVectorEditOverlay(session);
+    }
+  }
+
+  #clearVectorPenTargets(): void {
+    for (const session of this.#vectorEdits.values()) {
+      if (!session.penTargetVertexId) continue;
+      delete session.penTargetVertexId;
+      this.#renderVectorEditOverlay(session);
+    }
   }
 
   #selectedVectorAnchorSource(): {
