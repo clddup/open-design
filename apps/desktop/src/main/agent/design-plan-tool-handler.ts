@@ -30,8 +30,11 @@ export async function handleDesignPlanTool(
     );
   }
   const plan = parsed.value;
-  const registration = coordinator.registerDesignPlan(context, plan);
-  const allocation = coordinator.createDesignPlanAllocation(context.runId);
+  const preparation = coordinator.prepareDesignPlan(context, plan);
+  const allocation = coordinator.createDesignPlanAllocation(
+    context.runId,
+    preparation,
+  );
   const allocated = allocation
     ? await rendererHost.execute(
         {
@@ -45,6 +48,7 @@ export async function handleDesignPlanTool(
         reportProgress ? { reportProgress } : {},
       )
     : undefined;
+  const registration = coordinator.commitDesignPlan(context, preparation);
   if (allocation) {
     coordinator.recordDesignPlanAllocated(
       context.runId,

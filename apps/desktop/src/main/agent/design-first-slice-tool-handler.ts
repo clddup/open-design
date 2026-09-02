@@ -75,8 +75,11 @@ export async function handleDesignFirstSliceTool(
   }
   const normalizedApply = parsedApply.value;
 
-  const registration = coordinator.registerDesignPlan(context, compiled.plan);
-  const allocation = coordinator.createDesignPlanAllocation(context.runId);
+  const preparation = coordinator.prepareDesignPlan(context, compiled.plan);
+  const allocation = coordinator.createDesignPlanAllocation(
+    context.runId,
+    preparation,
+  );
   if (
     allocation &&
     allocation.targetIds.length !== compiled.plan.targets.length
@@ -92,8 +95,13 @@ export async function handleDesignFirstSliceTool(
         context,
         normalizedApply,
         allocation.targetIds,
+        preparation,
       )
-    : coordinator.assertDesignPlanForApply(context, normalizedApply);
+    : coordinator.assertDesignPlanForApply(
+        context,
+        normalizedApply,
+        preparation,
+      );
   if (!authorization) {
     throw designWorkflowError(
       "material_write_required",
@@ -148,6 +156,7 @@ export async function handleDesignFirstSliceTool(
     reportProgress ? { reportProgress } : {},
   );
   coordinator.assertDesignApplyResult(context, authorization, applied);
+  const registration = coordinator.commitDesignPlan(context, preparation);
   const allocationRevision = allocation
     ? committedStepRevision(applied.content, allocationStepId!)
     : coordinator

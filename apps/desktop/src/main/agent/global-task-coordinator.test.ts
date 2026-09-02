@@ -3438,6 +3438,52 @@ describe("GlobalTaskCoordinator", () => {
       prohibitedAdditions: reviewedScope.exclusions,
       assumptions: reviewedScope.assumptions,
     });
+    const boundTarget = registration.plan.targets[0];
+    const boundRegion = boundTarget?.composition.regions[0];
+    if (!boundTarget || !boundRegion) {
+      throw new Error("Bound delivery target is incomplete");
+    }
+    const materialTemplate = draftTargets(pageId, [
+      firstPlanTarget,
+    ]).commands.find(
+      (command) =>
+        command.type === "insert_element" &&
+        command.node.id.endsWith("_material"),
+    );
+    if (!materialTemplate || materialTemplate.type !== "insert_element") {
+      throw new Error("Material template is missing");
+    }
+    const materialNodeId = `${idAllocation.newNodeIdPrefix}scope_material`;
+    const authorization = coordinator.assertDesignPlanForApply(
+      contextAfterScope,
+      {
+        label: "Build the first confirmed target",
+        commands: [
+          {
+            ...materialTemplate,
+            commandId: "insert_scope_material",
+            parentId: boundRegion.nodeId,
+            node: {
+              ...materialTemplate.node,
+              id: materialNodeId,
+              parentId: boundRegion.nodeId,
+            },
+          },
+        ],
+      },
+    );
+    expect(authorization?.input.commands).toMatchObject([
+      {
+        commandId: `materialize_region_${boundRegion.nodeId}`,
+        parentId: boundTarget.artboard.frameId,
+        node: { id: boundRegion.nodeId, kind: "frame" },
+      },
+      {
+        commandId: "insert_scope_material",
+        parentId: boundRegion.nodeId,
+        node: { id: materialNodeId },
+      },
+    ]);
     const ledger = coordinator.getDeliveryLedger(context.runId);
     expect(ledger?.targets).toHaveLength(1);
     expect(ledger?.targets[0]).toMatchObject({

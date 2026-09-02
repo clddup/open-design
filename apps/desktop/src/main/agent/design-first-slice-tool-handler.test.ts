@@ -52,7 +52,7 @@ describe("handleDesignFirstSliceTool", () => {
           return value;
         },
       ),
-      registerDesignPlan: vi.fn(
+      prepareDesignPlan: vi.fn(
         (
           _context: unknown,
           plan: ReturnType<typeof compileDesignFirstSliceToolInput>["plan"],
@@ -63,8 +63,13 @@ describe("handleDesignFirstSliceTool", () => {
             planRevision: 1,
             changedTargetIds: ["home"],
             plan,
+            state: {},
           };
         },
+      ),
+      commitDesignPlan: vi.fn(
+        (_context: unknown, preparation: Record<string, unknown>) =>
+          preparation,
       ),
       createDesignPlanAllocation: vi.fn().mockReturnValue({
         targetIds: ["home"],
@@ -191,7 +196,7 @@ describe("handleDesignFirstSliceTool", () => {
         ],
       },
     );
-    expect(coordinator.registerDesignPlan).toHaveBeenCalledWith(
+    expect(coordinator.prepareDesignPlan).toHaveBeenCalledWith(
       context,
       expect.objectContaining({
         briefFidelity: {
@@ -222,12 +227,14 @@ describe("handleDesignFirstSliceTool", () => {
         .fn()
         .mockReturnValue("Create a focused home screen"),
       bindFirstSliceToDeliveryScope: vi.fn(passthroughFirstSlice),
-      registerDesignPlan: vi.fn().mockReturnValue({
+      prepareDesignPlan: vi.fn().mockReturnValue({
         status: "accepted",
         planRevision: 1,
         changedTargetIds: ["home"],
         plan: compiled.plan,
+        state: {},
       }),
+      commitDesignPlan: vi.fn(),
       createDesignPlanAllocation: vi.fn().mockReturnValue({
         targetIds: ["home"],
         input: {
@@ -265,6 +272,7 @@ describe("handleDesignFirstSliceTool", () => {
     ).rejects.toThrow("stage rejected");
     expect(coordinator.recordDesignPlanAllocated).not.toHaveBeenCalled();
     expect(coordinator.recordDesignApplyCompleted).not.toHaveBeenCalled();
+    expect(coordinator.commitDesignPlan).not.toHaveBeenCalled();
   });
 
   it("fills an allocated scope Frame without inserting the root again", async () => {
@@ -273,12 +281,17 @@ describe("handleDesignFirstSliceTool", () => {
     const coordinator = {
       authoritativeDesignPrompt: vi.fn(() => "Create a focused home screen"),
       bindFirstSliceToDeliveryScope: vi.fn(passthroughFirstSlice),
-      registerDesignPlan: vi.fn(() => ({
+      prepareDesignPlan: vi.fn(() => ({
         status: "accepted",
         planRevision: 1,
         changedTargetIds: ["home"],
         plan: compiled.plan,
+        state: {},
       })),
+      commitDesignPlan: vi.fn(
+        (_context: unknown, preparation: Record<string, unknown>) =>
+          preparation,
+      ),
       createDesignPlanAllocation: vi.fn(() => undefined),
       assertVisualReviewBeforeWrite: vi.fn(),
       assertDesignPlanForApply: vi.fn(() => ({
@@ -353,7 +366,7 @@ describe("handleDesignFirstSliceTool", () => {
         .fn()
         .mockReturnValue("Concept Exploration 提供 3 个真正不同的设计方向"),
       bindFirstSliceToDeliveryScope: vi.fn(passthroughFirstSlice),
-      registerDesignPlan: vi.fn(),
+      prepareDesignPlan: vi.fn(),
     };
     const rendererHost = { execute: vi.fn() };
 
@@ -371,7 +384,7 @@ describe("handleDesignFirstSliceTool", () => {
         new AbortController().signal,
       ),
     ).rejects.toThrow("design_workflow.logo_exploration_required");
-    expect(coordinator.registerDesignPlan).not.toHaveBeenCalled();
+    expect(coordinator.prepareDesignPlan).not.toHaveBeenCalled();
     expect(rendererHost.execute).not.toHaveBeenCalled();
   });
 
@@ -385,7 +398,7 @@ describe("handleDesignFirstSliceTool", () => {
       authoritativeDesignPrompt: vi
         .fn()
         .mockReturnValue("Create a focused home screen"),
-      registerDesignPlan: vi.fn(),
+      prepareDesignPlan: vi.fn(),
       createDesignPlanAllocation: vi.fn(),
     };
     const rendererHost = { execute: vi.fn() };
@@ -406,7 +419,7 @@ describe("handleDesignFirstSliceTool", () => {
     ).rejects.toThrow(
       "first_slice.parent_not_available at /firstSlice/stages/0/elements/0/parentId",
     );
-    expect(coordinator.registerDesignPlan).not.toHaveBeenCalled();
+    expect(coordinator.prepareDesignPlan).not.toHaveBeenCalled();
     expect(coordinator.createDesignPlanAllocation).not.toHaveBeenCalled();
     expect(rendererHost.execute).not.toHaveBeenCalled();
   });

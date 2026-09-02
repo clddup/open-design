@@ -93,12 +93,17 @@ describe("handleDesignPlanTool", () => {
       authoritativeDesignPrompt: vi
         .fn()
         .mockReturnValue("Design Home and Profile"),
-      registerDesignPlan: vi.fn().mockReturnValue({
+      prepareDesignPlan: vi.fn().mockReturnValue({
         status: "accepted",
         planRevision: 1,
         changedTargetIds: ["target_home", "target_profile"],
         plan,
+        state: {},
       }),
+      commitDesignPlan: vi.fn(
+        (_context: unknown, preparation: Record<string, unknown>) =>
+          preparation,
+      ),
       createDesignPlanAllocation: vi.fn().mockReturnValue({
         targetIds: ["target_home", "target_profile"],
         input: {
@@ -188,12 +193,14 @@ describe("handleDesignPlanTool", () => {
       authoritativeDesignPrompt: vi
         .fn()
         .mockReturnValue("Design Home and Profile"),
-      registerDesignPlan: vi.fn().mockReturnValue({
+      prepareDesignPlan: vi.fn().mockReturnValue({
         status: "accepted",
         planRevision: 1,
         changedTargetIds: ["target_home", "target_profile"],
         plan,
+        state: {},
       }),
+      commitDesignPlan: vi.fn(),
       createDesignPlanAllocation: vi.fn().mockReturnValue({
         targetIds: ["target_home", "target_profile"],
         input: {
@@ -224,6 +231,7 @@ describe("handleDesignPlanTool", () => {
       ),
     ).rejects.toThrow("revision conflict");
     expect(coordinator.recordDesignPlanAllocated).not.toHaveBeenCalled();
+    expect(coordinator.commitDesignPlan).not.toHaveBeenCalled();
   });
 
   it("returns structured Plan field issues before registration", async () => {
@@ -235,7 +243,7 @@ describe("handleDesignPlanTool", () => {
       authoritativeDesignPrompt: vi
         .fn()
         .mockReturnValue("Design Home and Profile"),
-      registerDesignPlan: vi.fn(),
+      prepareDesignPlan: vi.fn(),
     };
 
     await expect(
@@ -252,7 +260,7 @@ describe("handleDesignPlanTool", () => {
         new AbortController().signal,
       ),
     ).rejects.toThrow("design_plan.schema_invalid");
-    expect(coordinator.registerDesignPlan).not.toHaveBeenCalled();
+    expect(coordinator.prepareDesignPlan).not.toHaveBeenCalled();
   });
 });
 

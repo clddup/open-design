@@ -696,6 +696,16 @@ export class GlobalTaskCoordinator {
     context: TrustedToolContext,
     plan: DesignPlanToolInput,
   ): Omit<DesignPlanRegistration, "state"> {
+    return this.commitDesignPlan(
+      context,
+      this.prepareDesignPlan(context, plan),
+    );
+  }
+
+  prepareDesignPlan(
+    context: TrustedToolContext,
+    plan: DesignPlanToolInput,
+  ): DesignPlanRegistration {
     this.assertDesignToolContext(context);
     const inspection = this.#requireDocumentInspection(context);
     const existingPlan = this.#designPlansByRunId.get(context.runId);
@@ -755,7 +765,16 @@ export class GlobalTaskCoordinator {
       plan: executablePlan,
       recoverableDelivery,
     });
+    return registration;
+  }
+
+  commitDesignPlan(
+    context: TrustedToolContext,
+    registration: DesignPlanRegistration,
+  ): Omit<DesignPlanRegistration, "state"> {
+    this.assertDesignToolContext(context);
     this.#designPlansByRunId.set(context.runId, registration.state);
+    const executablePlan = registration.state.plan;
     const generatedRoles =
       this.#generatedRasterRolesByRunId.get(context.runId) ??
       new Map<string, RasterAssetRole>();
@@ -821,8 +840,11 @@ export class GlobalTaskCoordinator {
     return deliveryLedger(state);
   }
 
-  createDesignPlanAllocation(runId: string): DesignPlanAllocation | undefined {
-    const state = this.#designPlansByRunId.get(runId);
+  createDesignPlanAllocation(
+    runId: string,
+    prepared?: DesignPlanRegistration,
+  ): DesignPlanAllocation | undefined {
+    const state = prepared?.state ?? this.#designPlansByRunId.get(runId);
     if (!state) return undefined;
     const inspection = this.#inspectionsByRunId.get(runId);
     const targets = state.targetOrder.flatMap((targetId) => {
@@ -1649,8 +1671,10 @@ export class GlobalTaskCoordinator {
   assertDesignPlanForApply(
     context: TrustedToolContext,
     input: DesignApplyToolInput,
+    prepared?: DesignPlanRegistration,
   ): DesignPlanApplyAuthorization | undefined {
-    const state = this.#designPlansByRunId.get(context.runId);
+    const state =
+      prepared?.state ?? this.#designPlansByRunId.get(context.runId);
     const scopedInput = this.#bindApplyToRegisteredPage(context, input);
     if (!state) {
       assertApplyUsesNewNodeIdNamespace(
@@ -1735,8 +1759,9 @@ export class GlobalTaskCoordinator {
     context: TrustedToolContext,
     input: DesignApplyToolInput,
     allocationTargetIds: readonly string[],
+    prepared?: DesignPlanRegistration,
   ): DesignPlanApplyAuthorization {
-    const state = this.#requireDesignPlan(context);
+    const state = prepared?.state ?? this.#requireDesignPlan(context);
     const assumedAllocatedTargetIds = new Set(allocationTargetIds);
     if (assumedAllocatedTargetIds.size !== allocationTargetIds.length) {
       throw designWorkflowError(
@@ -2427,13 +2452,24 @@ function resolvePlannedStructureGeometry(
         target: DesignDeliveryTargetState;
       }
   >();
+  const materializableRegions = new Map<
+    string,
+    {
+      region: DesignPlanTarget["composition"]["regions"][number];
+      target: DesignDeliveryTargetState;
+    }
+  >();
   for (const target of state.targetsById.values()) {
-    if (target.planned.artboard.mode !== "create") continue;
     registerPlannedNode(plannedNodes, target.planned.artboard.frameId, {
       kind: "artboard",
       target,
     });
     for (const region of target.planned.composition.regions) {
+      registerPlannedNode(materializableRegions, region.nodeId, {
+        region,
+        target,
+      });
+      if (target.planned.artboard.mode !== "create") continue;
       registerPlannedNode(plannedNodes, region.nodeId, {
         kind: "region",
         region,
@@ -2474,8 +2510,8 @@ function resolvePlannedStructureGeometry(
   const hostOwnedRegionCommandIds = new Set<string>();
   const ensureRegion = (regionId: string, output: DesignOperation[]): void => {
     if (availableNodeIds.has(regionId)) return;
-    const planned = plannedNodes.get(regionId);
-    if (!planned || planned.kind !== "region") return;
+    const planned = materializableRegions.get(regionId);
+    if (!planned) return;
     const parentId =
       planned.region.parentId ?? planned.target.planned.artboard.frameId;
     ensureRegion(parentId, output);
