@@ -2,7 +2,7 @@ import type { Rect } from "@opendesign/design-contracts";
 
 export type SnapAxis = "x" | "y";
 export type SnapAnchor = "start" | "center" | "end";
-export type SnapTargetSource = "guide" | "object";
+export type SnapTargetSource = "geometry" | "guide" | "object";
 
 export interface SnapTarget {
   axis: SnapAxis;
@@ -446,7 +446,13 @@ function compareMatches(left: ResolvedAxis, right: ResolvedAxis): number {
 }
 
 function sourcePriority(source: SnapMatch["source"]): number {
-  return source === "guide" ? 0 : source === "object" ? 1 : 2;
+  return source === "guide"
+    ? 0
+    : source === "geometry"
+      ? 1
+      : source === "object"
+        ? 2
+        : 3;
 }
 
 function anchorPriority(anchor: SnapAnchor): number {

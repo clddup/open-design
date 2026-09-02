@@ -278,6 +278,8 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         this.#generationPresentation.finishNode(nodeId),
       leafer,
       nodeId: (element) => this.#nodeId(element),
+      onSnapGuideLines: (lines) =>
+        this.#editorOverlays.setSnapGuideLines(lines),
       presentationRoot: this.#generationPresentationRoot,
       regionElement: (nodeId, regionId) =>
         this.#scene.element(vectorRegionElementId(nodeId, regionId)),

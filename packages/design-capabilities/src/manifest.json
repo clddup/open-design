@@ -199,10 +199,10 @@
         "zh-CN": "精确排列"
       },
       "description": {
-        "en": "Align and arrange layers, edit Smart Selection spacing and reflow, flip layers, set a persistent rotation origin, author Figma-shaped Page/Frame ruler guides, move and resize ordinary objects with snapping, and inspect object or ruler-guide distances through the shared editor geometry path.",
-        "zh-CN": "通过共享编辑器几何链对齐与排列图层、编辑 Smart Selection 间距与回流、翻转图层、设置持久旋转原点、创建 Figma-shaped Page/Frame 标尺参考线、移动与 resize 吸附，并检查对象或参考线距离。"
+        "en": "Align and arrange layers, edit Smart Selection spacing and reflow, flip layers, set a persistent rotation origin, author Figma-shaped Page/Frame ruler guides, snap ordinary objects and editable Vector points, and inspect object or ruler-guide distances through the shared editor geometry path.",
+        "zh-CN": "通过共享编辑器几何链对齐与排列图层、编辑 Smart Selection 间距与回流、翻转图层、设置持久旋转原点、创建 Figma-shaped Page/Frame 标尺参考线、吸附普通对象与可编辑 Vector 锚点，并检查对象或参考线距离。"
       },
-      "provider": "DesignDocument 1.57.0 + Geometry Service contract 35 + EditorRuntime + Leafer editor projection + Canvas ruler/snap/measurement overlays",
+      "provider": "DesignDocument 1.57.0 + Geometry Service contract 36 + EditorRuntime + Leafer editor projection + Canvas ruler/snap/measurement overlays",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
       "surfaces": {
         "contract": "available",
@@ -214,12 +214,12 @@
       },
       "limitations": [
         {
-          "en": "Move and axis-aligned resize snapping support object outer edges and centers, Page guides, axis-aligned Frame-local guides, and pixel-grid rounding. Resize covers eight-way handles, Shift ratio locking, Option/Alt center resizing, and Control suppression without replacing Grid-span or Line-endpoint editing. Option/Alt hover measures inner object bounds, including nested exact targeting and container insets; Option/Alt guide drags measure a selected top-level Frame and nearby direct objects. Vector geometry snapping, rotated/skewed directional resize and Frame-guide snapping, Vector-anchor measurements, and packaged macOS/Windows interaction evidence remain incomplete.",
-          "zh-CN": "移动与轴对齐 resize 吸附已支持对象外边缘与中心、Page 参考线、轴对齐 Frame-local 参考线和像素网格取整；resize 覆盖八向手柄、Shift 等比、Option/Alt 中心缩放和 Control 临时关闭，且不替代 Grid span 或 Line endpoint 编辑。Option/Alt 悬停可按对象 inner bounds 测量，并支持精确嵌套目标与容器 inset；Option/Alt 拖出参考线可测量选中的顶层 Frame 与附近直属对象。Vector geometry 吸附、旋转/倾斜对象定向 resize 与 Frame 参考线吸附、Vector anchor 测量及 macOS/Windows 打包产品交互证据仍未补齐。"
+          "en": "Move and axis-aligned resize snapping support object outer edges and centers, Page guides, axis-aligned Frame-local guides, and pixel-grid rounding. Vector edit supports point-to-point geometry snapping for direct and multi-point moves, an independent persistent preference, Control suppression, and one existing Vector commit per gesture. Option/Alt object and ruler-guide measurements remain available. Rotated/skewed directional resize and Frame-guide snapping, Vector-anchor measurements, path/handle snapping, and packaged macOS/Windows interaction evidence remain incomplete.",
+          "zh-CN": "移动与轴对齐 resize 吸附已支持对象外边缘与中心、Page 参考线、轴对齐 Frame-local 参考线和像素网格取整。Vector edit 已支持直接及多点移动的 point-to-point geometry 吸附、独立持久偏好、Control 临时关闭和每次手势一次既有 Vector 提交；Option/Alt 对象与参考线测量保持可用。旋转/倾斜对象定向 resize 与 Frame 参考线吸附、Vector anchor 测量、path/handle 吸附及 macOS/Windows 打包产品交互证据仍未补齐。"
         },
         {
-          "en": "The arrangement product path remains intentionally separate from the isolated PathKit vector provider; no vector product capability is implied here.",
-          "zh-CN": "排列产品链与隔离的 PathKit 矢量 provider 保持明确分离；本能力不据此宣称任何矢量产品能力。"
+          "en": "Vector geometry snapping consumes editable network anchors and document transforms only; it does not depend on the isolated PathKit provider or treat ordinary object bounds as vector geometry.",
+          "zh-CN": "Vector geometry 吸附只消费可编辑 network 锚点与文档变换；它不依赖隔离的 PathKit provider，也不把普通对象 bounds 当作矢量几何。"
         }
       ],
       "evidence": {
@@ -248,7 +248,9 @@
           "apps/desktop/src/renderer/features/canvas/use-canvas-snap-settings.test.ts",
           "packages/geometry-service/src/measurements.test.ts",
           "packages/leafer-engine/src/distance-measurement-controller.test.ts",
-          "packages/leafer-engine/src/distance-measurement-overlay.test.ts"
+          "packages/leafer-engine/src/distance-measurement-overlay.test.ts",
+          "packages/geometry-service/src/vector-snapping.test.ts",
+          "packages/leafer-engine/src/vector-geometry-snap-controller.test.ts"
         ],
         "manual": []
       },
@@ -258,7 +260,8 @@
         "https://help.figma.com/hc/en-us/articles/360039956914-Adjust-alignment-rotation-position-and-dimensions",
         "https://help.figma.com/hc/en-us/articles/360039956974-Measure-distances-between-layers",
         "https://help.figma.com/hc/en-us/articles/41352588622615-Move-a-layer-s-anchor-point",
-        "https://help.figma.com/hc/en-us/articles/360040450233-Arrange-layers-with-Smart-selection"
+        "https://help.figma.com/hc/en-us/articles/360040450233-Arrange-layers-with-Smart-selection",
+        "https://help.figma.com/hc/en-us/articles/360039957634-Edit-vector-layers"
       ]
     },
     {
@@ -497,10 +500,10 @@
         "zh-CN": "Pen 与节点编辑"
       },
       "description": {
-        "en": "Create and refine open, closed, branching, and curved vector geometry using points and Bézier handles.",
-        "zh-CN": "通过节点和贝塞尔手柄创建、编辑开放、闭合、分支与曲线矢量几何。"
+        "en": "Create and refine open, closed, branching, and curved vector geometry using points and Bézier handles, with Figma-compatible point snapping in Vector edit mode.",
+        "zh-CN": "通过节点和贝塞尔手柄创建、编辑开放、闭合、分支与曲线矢量几何，并在 Vector edit mode 中使用 Figma-compatible 节点吸附。"
       },
-      "provider": "DesignDocument 1.57.0 Vector Network + Geometry Service contract 31 point/path selection-delete/transform/Bend/Connect/Disconnect/Cut/region Fill/region Paint Style/vertex stroke appearance/vertex corner radius/Outline Stroke/Flatten + EditorRuntime document-space multi-Vector transform/Cut/cross-layer Connect/branch junction/Frame-Group-Boolean-Component-Text-Image and root-shell/isolated-pixel-compositing Flatten planner + Leafer synthetic region/stroke/corner projection and native editing overlays",
+      "provider": "DesignDocument 1.57.0 Vector Network + Geometry Service contract 36 point/path selection-delete/transform/point-snapping/Bend/Connect/Disconnect/Cut/region Fill/region Paint Style/vertex stroke appearance/vertex corner radius/Outline Stroke/Flatten + EditorRuntime document-space multi-Vector transform/Cut/cross-layer Connect/branch junction/Frame-Group-Boolean-Component-Text-Image and root-shell/isolated-pixel-compositing Flatten planner + Leafer synthetic region/stroke/corner projection and native editing overlays",
       "requiredSurfaces": ["contract", "runtime", "human", "agent"],
       "surfaces": {
         "contract": "available",
@@ -512,8 +515,8 @@
       },
       "limitations": [
         {
-          "en": "Pen authors one non-branching contour. Existing-node editing supports multi-Vector collections, Open/Close/Reverse, same- or cross-layer Connect/Disconnect, endpoint-to-path-vertex branch creation, point/path Lasso and segment Delete, one shared document-space transform box across selected points, Space reposition during resize/rotation, click/document-space Cut, and region-local Paint or shared PAINT Style. Branch junction points remain selectable, transformable, and deletable; existing incident handles move independently, explicit branch segments support Bend, Cut, or Delete without changing other incident edges, an explicit path can be opened, closed, reversed, or cut at a shared junction, unique endpoints can merge inside an existing branch network, and one explicit open-path endpoint or incident edge can disconnect from an open or closed junction. Finite-line Cut partitions connected/branch networks by shared-vertex and region connectivity, so an uncut arm follows its actual junction component. Bend supports point/path handle creation and direct segment dragging. Vertex-local cap/join appearance, circular corner radius, node-level corner smoothing, and continuous custom dash phase are available through Inspector and Agent; nested or overlapping regions, direct hole-only cuts, exact shared-junction hits and mixed-side connected Cut components, self-contained multi-root or descendant opacity, ordinary effects, and complete mask stacks are pixel-composited into one exact-revision PNG-backed Vector transaction; backdrop-dependent blend/background effects and packaged evidence remain incomplete. Outline Stroke preserves the source and creates a filled editable Vector sibling; same-parent Frame, nested Group, Boolean, Component Instance current projection, Image, Rectangle, Ellipse, Line with endpoint decorations, sharp or rounded Polygon/Star, Path, and Vector layers can be replaced with one editable result.",
-          "zh-CN": "Pen 当前创建单条非分支轮廓；已有节点编辑支持多 Vector collection、Open/Close/Reverse、同层或跨层 Connect/Disconnect、endpoint 到另一 path vertex 的 branch 创建、point/path Lasso 与 segment Delete、跨所选节点的统一 document-space 变换框、缩放/旋转中 Space 平移、点击/document-space Cut 和 region-local Paint 或共享 PAINT Style；branch junction 节点仍可选择、变换和删除，已有入射 handle 可独立拖动，明确 branch segment 可 Bend/Cut/Delete 且不改变其他入射边，明确 path 可在 shared junction 执行 Open/Close/Reverse/Cut，已有 branch network 内的唯一 endpoint 可继续合并，显式开放 path endpoint 或明确 incident edge 也可从开放或闭合 junction 断开。有限线 Cut 会按 shared vertex 与 region connectivity 分配 connected/branch network，未切 branch 会跟随真实 junction component。Bend 已支持节点/路径添加手柄和直接拖动 segment；顶点级 cap/join 外观、circular corner radius、节点级 corner smoothing 与 custom dash 连续 phase 已通过 Inspector 与 Agent 支持；嵌套或重叠 region、只切孔洞、shared-junction 精确命中和切后仍跨两侧的 connected Cut component、self-contained 多根或后代 opacity、普通 effect 与完整 mask stack 已合成为一个 exact-revision PNG-backed Vector 单事务；依赖选择外 backdrop 的 blend/background effect 与打包证据仍未完成。Outline Stroke 会保留源层并创建 filled editable Vector sibling；同父级 Frame、nested Group、Boolean、Component Instance 当前投影、Image、Rectangle、Ellipse、含端点装饰的 Line、零圆角或圆角 Polygon/Star、Path 与 Vector 可用一个 editable 结果替换源层。"
+          "en": "Vector point drags and shared multi-point moves snap to other anchors in the current edit scope through an independent preference; Control temporarily suppresses geometry and pixel-grid snapping. Path-nearest-point, Bézier-handle and Pen auto-connect snapping remain incomplete. Pen authors one non-branching contour. Existing-node editing supports multi-Vector collections, Open/Close/Reverse, same- or cross-layer Connect/Disconnect, endpoint-to-path-vertex branch creation, point/path Lasso and segment Delete, one shared document-space transform box across selected points, Space reposition during resize/rotation, click/document-space Cut, and region-local Paint or shared PAINT Style. Branch junction points remain selectable, transformable, and deletable; existing incident handles move independently, explicit branch segments support Bend, Cut, or Delete without changing other incident edges, an explicit path can be opened, closed, reversed, or cut at a shared junction, unique endpoints can merge inside an existing branch network, and one explicit open-path endpoint or incident edge can disconnect from an open or closed junction. Finite-line Cut partitions connected/branch networks by shared-vertex and region connectivity, so an uncut arm follows its actual junction component. Bend supports point/path handle creation and direct segment dragging. Vertex-local cap/join appearance, circular corner radius, node-level corner smoothing, and continuous custom dash phase are available through Inspector and Agent; nested or overlapping regions, direct hole-only cuts, exact shared-junction hits and mixed-side connected Cut components, self-contained multi-root or descendant opacity, ordinary effects, and complete mask stacks are pixel-composited into one exact-revision PNG-backed Vector transaction; backdrop-dependent blend/background effects and packaged evidence remain incomplete. Outline Stroke preserves the source and creates a filled editable Vector sibling; same-parent Frame, nested Group, Boolean, Component Instance current projection, Image, Rectangle, Ellipse, Line with endpoint decorations, sharp or rounded Polygon/Star, Path, and Vector layers can be replaced with one editable result.",
+          "zh-CN": "Vector 节点拖动和共享多点移动可通过独立偏好吸附到当前 edit scope 的其他锚点，Control 会临时关闭 geometry 与 pixel-grid 吸附；path 最近点、Bézier handle 与 Pen 自动连接吸附仍未完成。Pen 当前创建单条非分支轮廓；已有节点编辑支持多 Vector collection、Open/Close/Reverse、同层或跨层 Connect/Disconnect、endpoint 到另一 path vertex 的 branch 创建、point/path Lasso 与 segment Delete、跨所选节点的统一 document-space 变换框、缩放/旋转中 Space 平移、点击/document-space Cut 和 region-local Paint 或共享 PAINT Style；branch junction 节点仍可选择、变换和删除，已有入射 handle 可独立拖动，明确 branch segment 可 Bend/Cut/Delete 且不改变其他入射边，明确 path 可在 shared junction 执行 Open/Close/Reverse/Cut，已有 branch network 内的唯一 endpoint 可继续合并，显式开放 path endpoint 或明确 incident edge 也可从开放或闭合 junction 断开。有限线 Cut 会按 shared vertex 与 region connectivity 分配 connected/branch network，未切 branch 会跟随真实 junction component。Bend 已支持节点/路径添加手柄和直接拖动 segment；顶点级 cap/join 外观、circular corner radius、节点级 corner smoothing 与 custom dash 连续 phase 已通过 Inspector 与 Agent 支持；嵌套或重叠 region、只切孔洞、shared-junction 精确命中和切后仍跨两侧的 connected Cut component、self-contained 多根或后代 opacity、普通 effect 与完整 mask stack 已合成为一个 exact-revision PNG-backed Vector 单事务；依赖选择外 backdrop 的 blend/background effect 与打包证据仍未完成。Outline Stroke 会保留源层并创建 filled editable Vector sibling；同父级 Frame、nested Group、Boolean、Component Instance 当前投影、Image、Rectangle、Ellipse、含端点装饰的 Line、零圆角或圆角 Polygon/Star、Path 与 Vector 可用一个 editable 结果替换源层。"
         }
       ],
       "evidence": {
@@ -536,7 +539,9 @@
           "packages/style-service/src/index.test.ts",
           "packages/editor-runtime/src/style-operations.test.ts",
           "packages/geometry-service/src/vector-stroke-appearance.test.ts",
-          "apps/desktop/src/renderer/features/editor-workbench/components/PropertiesPanel.test.tsx"
+          "apps/desktop/src/renderer/features/editor-workbench/components/PropertiesPanel.test.tsx",
+          "packages/geometry-service/src/vector-snapping.test.ts",
+          "packages/leafer-engine/src/vector-geometry-snap-controller.test.ts"
         ],
         "manual": []
       },

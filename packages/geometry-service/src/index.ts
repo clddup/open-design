@@ -70,6 +70,14 @@ export {
   type SnapTargetSource,
 } from "./snapping.js";
 export {
+  createVectorSnapTargetIndex,
+  resolveVectorPointSnapping,
+  type VectorSnapMatch,
+  type VectorSnapPoint,
+  type VectorSnapResolution,
+  type VectorSnapTargetIndex,
+} from "./vector-snapping.js";
+export {
   formatDistanceMeasurement,
   measureGuideToRect,
   measureRectDistances,

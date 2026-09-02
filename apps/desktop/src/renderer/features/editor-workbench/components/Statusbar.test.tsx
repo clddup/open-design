@@ -13,12 +13,14 @@ function renderStatusbar(
     onFitPage: vi.fn(),
     onFitSelection: vi.fn(),
     onToggleRulers: vi.fn(),
+    onToggleSnapGeometry: vi.fn(),
     onToggleSnapObjects: vi.fn(),
     onToggleSnapPixelGrid: vi.fn(),
     onZoomChange: vi.fn(),
     revision: 4,
     selection: { count: 0 },
     rulersVisible: false,
+    snapGeometry: true,
     snapObjects: true,
     snapPixelGrid: true,
     zoom: 1,
@@ -90,9 +92,15 @@ describe("Statusbar", () => {
     expect(props.onToggleRulers).toHaveBeenCalledOnce();
   });
 
-  it("exposes persistent object and pixel-grid snap settings", async () => {
+  it("exposes persistent geometry, object, and pixel-grid snap settings", async () => {
     const user = userEvent.setup();
     const props = renderStatusbar({ snapPixelGrid: false });
+
+    await user.click(screen.getByRole("button", { name: "View options" }));
+    await user.click(
+      screen.getByRole("menuitem", { name: /Snap to geometry/ }),
+    );
+    expect(props.onToggleSnapGeometry).toHaveBeenCalledOnce();
 
     await user.click(screen.getByRole("button", { name: "View options" }));
     await user.click(screen.getByRole("menuitem", { name: /Snap to objects/ }));

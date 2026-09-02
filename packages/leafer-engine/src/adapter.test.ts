@@ -7182,6 +7182,65 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
+  it("snaps a dragged Vector anchor to another visible anchor with one commit", async () => {
+    const onVectorEdit = vi.fn<(request: LeaferVectorEditRequest) => boolean>(
+      () => true,
+    );
+    const input = withVectorEditFixture(createInput());
+    input.snapSettings = {
+      geometry: true,
+      objects: false,
+      pixelGrid: false,
+    };
+    input.document.nodesById.frame_welcome!.transform = [1, 0, 0, 1, 0, 0];
+    input.document.nodesById.editable_curve!.transform = [
+      0, 1, -1, 0, 100, 100,
+    ];
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onVectorEdit,
+    });
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    const path =
+      app && findElement(app.tree, vectorStrokeElementId("editable_curve"));
+    const overlay = path?.parent?.children.at(-1);
+    const snapGuide = app?.sky.children
+      .flatMap((child) =>
+        child instanceof FakeGroup ? child.children : [child],
+      )
+      .find((child) => child instanceof FakePath && child.stroke === "#f24e8a");
+    if (
+      !app ||
+      !(overlay instanceof FakeGroup) ||
+      !(snapGuide instanceof FakePath)
+    ) {
+      throw new Error("Missing Vector geometry snap fixture");
+    }
+    const firstAnchor = overlay.children.find(
+      (child): child is FakeEllipse => child instanceof FakeEllipse,
+    );
+    if (!firstAnchor) throw new Error("Missing first Vector anchor");
+
+    app.emit("pointer.down", pointerEvent(0, 0, firstAnchor));
+    app.emit("pointer.move", pointerEvent(-28, 57, firstAnchor));
+    expect(snapGuide.visible).toBe(true);
+    expect(snapGuide.path).toContain("M 70 155 L 70 165");
+    expect(onVectorEdit).not.toHaveBeenCalled();
+    app.emit("pointer.up", pointerEvent(-28, 57, firstAnchor));
+
+    expect(onVectorEdit).toHaveBeenCalledTimes(1);
+    const request = onVectorEdit.mock.calls[0]?.[0];
+    if (!request || request.deleteNode) {
+      throw new Error("Expected a snapped Vector update");
+    }
+    expect(request.edits[0]!.network.vertices).toContainEqual(
+      expect.objectContaining({ id: "vertex_a", x: 60, y: 30 }),
+    );
+    expect(snapGuide.visible).toBe(false);
+    adapter.dispose();
+  });
+
   it("cancels stale Vector previews before rebuilding scope and disposes every overlay", async () => {
     const onVectorEdit = vi.fn<(request: LeaferVectorEditRequest) => boolean>(
       () => true,
@@ -8541,7 +8600,11 @@ describe("Leafer engine selection bounds synchronization", () => {
       { axis: "X", offset: 148 },
     ];
     input.rulerGuidesVisible = true;
-    input.snapSettings = { objects: false, pixelGrid: false };
+    input.snapSettings = {
+      geometry: false,
+      objects: false,
+      pixelGrid: false,
+    };
     adapter.sync(input);
     const app = leaferHarness.app;
     const title = app && findElement(app.tree, "title_welcome");
@@ -8625,7 +8688,11 @@ describe("Leafer engine selection bounds synchronization", () => {
       { axis: "X", offset: 860 },
     ];
     input.rulerGuidesVisible = true;
-    input.snapSettings = { objects: false, pixelGrid: false };
+    input.snapSettings = {
+      geometry: false,
+      objects: false,
+      pixelGrid: false,
+    };
     adapter.sync(input);
     const app = leaferHarness.app;
     const title = app && findElement(app.tree, "title_welcome");
@@ -8705,7 +8772,11 @@ describe("Leafer engine selection bounds synchronization", () => {
       { axis: "X", offset: 144 },
     ];
     input.rulerGuidesVisible = true;
-    input.snapSettings = { objects: false, pixelGrid: false };
+    input.snapSettings = {
+      geometry: false,
+      objects: false,
+      pixelGrid: false,
+    };
     adapter.sync(input);
     const app = leaferHarness.app;
     const title = app && findElement(app.tree, "title_welcome");
@@ -8744,7 +8815,11 @@ describe("Leafer engine selection bounds synchronization", () => {
     });
     const input = createInput();
     input.selection = { nodeIds: ["feature_one", "feature_two"] };
-    input.snapSettings = { objects: true, pixelGrid: false };
+    input.snapSettings = {
+      geometry: false,
+      objects: true,
+      pixelGrid: false,
+    };
     adapter.sync(input);
     const app = leaferHarness.app;
     const first = app && findElement(app.tree, "feature_one");
@@ -8794,7 +8869,11 @@ describe("Leafer engine selection bounds synchronization", () => {
     if (!frame || frame.kind !== "frame") throw new Error("Missing Frame");
     frame.properties.guides = [{ axis: "X", offset: 70 }];
     input.rulerGuidesVisible = true;
-    input.snapSettings = { objects: false, pixelGrid: true };
+    input.snapSettings = {
+      geometry: false,
+      objects: false,
+      pixelGrid: true,
+    };
     adapter.sync(input);
     const app = leaferHarness.app;
     const title = app && findElement(app.tree, "title_welcome");

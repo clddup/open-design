@@ -22,7 +22,7 @@ describe("DirectMoveSnapController", () => {
       nodeIds: ["title_welcome"],
       pageId: "page_welcome",
       rulerGuidesVisible: true,
-      settings: { objects: false, pixelGrid: false },
+      settings: { geometry: false, objects: false, pixelGrid: false },
       viewport: { panX: 0, panY: 0, zoom: 1, width: 800, height: 600 },
     });
 
@@ -45,7 +45,7 @@ describe("DirectMoveSnapController", () => {
       nodeIds: ["title_welcome"],
       pageId: "page_welcome",
       rulerGuidesVisible: true,
-      settings: { objects: false, pixelGrid: false },
+      settings: { geometry: false, objects: false, pixelGrid: false },
       viewport: { panX: 0, panY: 0, zoom: 1, width: 800, height: 600 },
     });
     expect(bounds.x).toBe(98);
@@ -72,7 +72,7 @@ describe("DirectMoveSnapController", () => {
       excludedNodeIds: new Set<string>(),
       pageId: "page_welcome",
       rulerGuidesVisible: true,
-      settings: { objects: false, pixelGrid: false },
+      settings: { geometry: false, objects: false, pixelGrid: false },
       viewport: { panX: 0, panY: 0, zoom: 1, width: 800, height: 600 },
     };
 
@@ -105,7 +105,7 @@ describe("DirectMoveSnapController", () => {
       nodeIds: ["title_welcome"],
       pageId: "page_welcome",
       rulerGuidesVisible: true,
-      settings: { objects: false, pixelGrid: false },
+      settings: { geometry: false, objects: false, pixelGrid: false },
       viewport: { panX: 0, panY: 0, zoom: 1, width: 800, height: 600 },
     });
 

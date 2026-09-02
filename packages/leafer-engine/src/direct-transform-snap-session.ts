@@ -287,7 +287,11 @@ function snapInput(
     nodeIds,
     pageId: input.pageId,
     rulerGuidesVisible: input.rulerGuidesVisible === true,
-    settings: input.snapSettings ?? { objects: false, pixelGrid: false },
+    settings: input.snapSettings ?? {
+      geometry: false,
+      objects: false,
+      pixelGrid: false,
+    },
     viewport: input.viewport,
   };
 }

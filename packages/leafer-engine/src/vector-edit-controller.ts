@@ -9,13 +9,13 @@ import {
   serializeVectorNetwork,
   serializeVectorRegion,
 } from "@opendesign/geometry-service/editable-vector";
+import type { SnapGuideLine } from "@opendesign/geometry-service/snapping";
 import {
   bendVectorSegment,
   deleteVectorSelection,
   findVectorPathIdForVertex,
   listVectorVertexHandles,
   moveVectorHandle,
-  moveVectorVertices,
   nearestVectorSegmentPoint,
   setVectorPointMode,
   setVectorRegionFillStyle,
@@ -51,6 +51,10 @@ import type {
   LeaferVectorEditScope,
   LeaferVectorEditTool,
 } from "./types.js";
+import {
+  VectorGeometrySnapController,
+  type VectorSnapSelection,
+} from "./vector-geometry-snap-controller.js";
 
 type LeaferModule = typeof LeaferEditorModule;
 type LeaferElement = InstanceType<LeaferModule["UI"]>;
@@ -76,8 +80,9 @@ type VectorEditDrag =
       kind: "vertices";
       moved: boolean;
       startClient: Point;
-      startLocal: Point;
+      startDocument: Point;
       vertexIds: readonly string[];
+      world: Transform;
     }
   | {
       beforeByNode: ReadonlyMap<string, VectorNetwork>;
@@ -182,6 +187,7 @@ interface VectorEditControllerOptions {
   finishNodePresentation(nodeId: string): void;
   leafer: LeaferModule;
   nodeId(element: LeaferElement): string | undefined;
+  onSnapGuideLines: (lines: readonly SnapGuideLine[]) => void;
   presentationRoot: LeaferGroup;
   report(error: unknown): void;
   restoreProjection(): void;
@@ -213,6 +219,7 @@ export class VectorEditController {
     VectorEditControl
   >();
   readonly #vectorEdits = new Map<string, VectorEditSession>();
+  readonly #vectorGeometrySnap: VectorGeometrySnapController;
   readonly #vectorSelectionOverlay: VectorSelectionOverlay;
   #activeVectorEditNodeId: string | null = null;
   #input: LeaferEngineSyncInput | null = null;
@@ -220,6 +227,9 @@ export class VectorEditController {
 
   constructor(options: VectorEditControllerOptions) {
     this.#options = options;
+    this.#vectorGeometrySnap = new VectorGeometrySnapController({
+      onLines: options.onSnapGuideLines,
+    });
     const group = new options.leafer.Group({
       editable: false,
       hitChildren: true,
@@ -287,7 +297,10 @@ export class VectorEditController {
   }
 
   syncViewport(): void {
-    if (this.active) this.#renderVectorEditOverlays();
+    if (!this.active) return;
+    if (this.#input)
+      this.#vectorGeometrySnap.syncViewport(this.#input.viewport);
+    this.#renderVectorEditOverlays();
   }
 
   setPointMode(mode: VectorPointMode): boolean {
@@ -1015,6 +1028,14 @@ export class VectorEditController {
           targets.map((item) => [item.session.nodeId, item.world]),
         ),
       };
+      if (holder.drag.mode === "move") {
+        this.#beginVectorGeometrySnap(
+          targets.map(({ session: target, vertexIds }) => ({
+            nodeId: target.nodeId,
+            vertexIds,
+          })),
+        );
+      }
       return;
     }
     const controlNodeId =
@@ -1232,14 +1253,23 @@ export class VectorEditController {
         [...current],
       );
       if (session.readOnly || !current.has(control.vertexId)) return;
+      const document = this.#input?.document;
+      const world = document
+        ? getVisibleWorldTransform(document.nodesById, session.nodeId)
+        : null;
+      if (!world) return;
       session.drag = {
         before: structuredClone(session.network),
         kind: "vertices",
         moved: false,
         startClient: eventClientPoint(pointer),
-        startLocal: pointer.getInnerPoint(session.pathElement),
+        startDocument: pointer.getInnerPoint(this.#options.root),
         vertexIds: [...current],
+        world,
       };
+      this.#beginVectorGeometrySnap([
+        { nodeId: session.nodeId, vertexIds: [...current] },
+      ]);
       return;
     }
 
@@ -1355,14 +1385,15 @@ export class VectorEditController {
           };
       const baseTransform: Transform =
         drag.mode === "move"
-          ? [
-              1,
-              0,
-              0,
-              1,
-              currentDocument.x - drag.startDocument.x,
-              currentDocument.y - drag.startDocument.y,
-            ]
+          ? translationTransform(
+              this.#vectorGeometrySnap.update(
+                {
+                  x: currentDocument.x - drag.startDocument.x,
+                  y: currentDocument.y - drag.startDocument.y,
+                },
+                Boolean(pointer.ctrlKey),
+              ),
+            )
           : drag.mode === "resize" && drag.handle
             ? vectorSelectionResizeTransform(
                 drag.bounds,
@@ -1427,10 +1458,25 @@ export class VectorEditController {
     const local = pointer.getInnerPoint(session.pathElement);
     const result = (() => {
       if (drag.kind === "vertices") {
-        return moveVectorVertices(drag.before, drag.vertexIds, {
-          x: local.x - drag.startLocal.x,
-          y: local.y - drag.startLocal.y,
-        });
+        const currentDocument = pointer.getInnerPoint(this.#options.root);
+        const documentDelta = this.#vectorGeometrySnap.update(
+          {
+            x: currentDocument.x - drag.startDocument.x,
+            y: currentDocument.y - drag.startDocument.y,
+          },
+          Boolean(pointer.ctrlKey),
+        );
+        const localTransform = documentTransformToLocal(
+          drag.world,
+          translationTransform(documentDelta),
+        );
+        return localTransform
+          ? transformVectorVertices(drag.before, drag.vertexIds, localTransform)
+          : {
+              ok: false as const,
+              code: "invalid-transform" as const,
+              message: `Vector layer ${session.nodeId} has a non-invertible transform`,
+            };
       }
       return (() => {
         const vertex = drag.before.vertices.find(
@@ -1483,6 +1529,7 @@ export class VectorEditController {
     }
     this.pointerMove(event);
     const moved = drag.moved;
+    this.#vectorGeometrySnap.finish();
     if (drag.kind === "cut") {
       const end = drag.currentDocument;
       const clickTarget = drag.clickTarget;
@@ -1613,6 +1660,7 @@ export class VectorEditController {
       session.network = drag.before;
     }
     session.drag = null;
+    this.#vectorGeometrySnap.finish();
     session.cutGuidePath.set({ path: "", visible: false });
   }
 
@@ -1761,12 +1809,43 @@ export class VectorEditController {
   }
 
   cancel(): void {
+    this.#vectorGeometrySnap.finish();
     this.#cancelVectorLasso();
     for (const session of [...this.#vectorEdits.values()]) {
       this.#cancelVectorEditSession(session);
     }
     this.#activeVectorEditNodeId = null;
     this.#renderVectorSelectionOverlay();
+  }
+
+  #beginVectorGeometrySnap(moving: readonly VectorSnapSelection[]): void {
+    const input = this.#input;
+    if (!input) return;
+    const layers = [...this.#vectorEdits.values()].flatMap((session) => {
+      const worldTransform = getVisibleWorldTransform(
+        input.document.nodesById,
+        session.nodeId,
+      );
+      return worldTransform
+        ? [
+            {
+              network: session.network,
+              nodeId: session.nodeId,
+              worldTransform,
+            },
+          ]
+        : [];
+    });
+    this.#vectorGeometrySnap.begin({
+      layers,
+      moving,
+      settings: input.snapSettings ?? {
+        geometry: false,
+        objects: false,
+        pixelGrid: false,
+      },
+      viewport: input.viewport,
+    });
   }
 
   #vectorCornerAppearance(nodeId: string): {
@@ -1783,6 +1862,10 @@ export class VectorEditController {
         }
       : { radius: 0, smoothing: 0 };
   }
+}
+
+function translationTransform(delta: Point): Transform {
+  return [1, 0, 0, 1, delta.x, delta.y];
 }
 
 function isLockedSpec(spec: { data: { data?: unknown } } | undefined): boolean {

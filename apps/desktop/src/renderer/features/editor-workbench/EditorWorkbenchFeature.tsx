@@ -114,6 +114,7 @@ export function EditorWorkbenchFeature({
   const message = useMessage();
   const {
     settings: snapSettings,
+    toggleGeometry: toggleSnapGeometry,
     toggleObjects: toggleSnapObjects,
     togglePixelGrid: toggleSnapPixelGrid,
   } = useCanvasSnapSettings();
@@ -1075,6 +1076,7 @@ export function EditorWorkbenchFeature({
           onFitSelection={() => fitCanvas("selection")}
           onZoomChange={changeZoom}
           onToggleRulers={toggleRulers}
+          onToggleSnapGeometry={toggleSnapGeometry}
           onToggleSnapObjects={toggleSnapObjects}
           onToggleSnapPixelGrid={toggleSnapPixelGrid}
           revision={designDocument.revision}
@@ -1085,6 +1087,7 @@ export function EditorWorkbenchFeature({
               : undefined,
           }}
           rulersVisible={rulersVisible}
+          snapGeometry={snapSettings.geometry}
           snapObjects={snapSettings.objects}
           snapPixelGrid={snapSettings.pixelGrid}
           zoom={state.viewport.zoom}

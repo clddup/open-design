@@ -26,6 +26,7 @@ describe("DirectResizeSnapController", () => {
     const controller = new DirectResizeSnapController({ onLines });
     controller.begin(
       resizeInput([{ axis: "X", offset: 120 }], {
+        geometry: false,
         objects: false,
         pixelGrid: false,
       }),
@@ -62,6 +63,7 @@ describe("DirectResizeSnapController", () => {
     const controller = new DirectResizeSnapController({ onLines: vi.fn() });
     controller.begin(
       resizeInput([{ axis: "X", offset: 20 }], {
+        geometry: false,
         objects: false,
         pixelGrid: false,
       }),
@@ -85,6 +87,7 @@ describe("DirectResizeSnapController", () => {
     const controller = new DirectResizeSnapController({ onLines: vi.fn() });
     controller.begin(
       resizeInput([{ axis: "X", offset: 120 }], {
+        geometry: false,
         objects: false,
         pixelGrid: true,
       }),
@@ -109,6 +112,7 @@ describe("DirectResizeSnapController", () => {
     const controller = new DirectResizeSnapController({ onLines: vi.fn() });
     controller.begin(
       resizeInput([{ axis: "X", offset: 120 }], {
+        geometry: false,
         objects: false,
         pixelGrid: false,
       }),
@@ -135,7 +139,7 @@ describe("DirectResizeSnapController", () => {
 
 function resizeInput(
   guides: Array<{ axis: "X" | "Y"; offset: number }>,
-  settings: { objects: boolean; pixelGrid: boolean },
+  settings: { geometry: boolean; objects: boolean; pixelGrid: boolean },
 ) {
   const document = structuredClone(createWelcomeDocument());
   document.pagesById.page_welcome!.guides = guides;

@@ -33,12 +33,14 @@ export function Statusbar({
   onFitPage,
   onFitSelection,
   onToggleRulers,
+  onToggleSnapGeometry,
   onToggleSnapObjects,
   onToggleSnapPixelGrid,
   onZoomChange,
   revision,
   selection,
   rulersVisible,
+  snapGeometry,
   snapObjects,
   snapPixelGrid,
   zoom,
@@ -48,12 +50,14 @@ export function Statusbar({
   onFitPage: () => void;
   onFitSelection: () => void;
   onToggleRulers: () => void;
+  onToggleSnapGeometry: () => void;
   onToggleSnapObjects: () => void;
   onToggleSnapPixelGrid: () => void;
   onZoomChange: (zoom: number) => void;
   revision: number;
   selection: StatusbarSelection;
   rulersVisible: boolean;
+  snapGeometry: boolean;
   snapObjects: boolean;
   snapPixelGrid: boolean;
   zoom: number;
@@ -87,6 +91,12 @@ export function Statusbar({
             shortcut="Shift+R"
           >
             {t("status.rulers")}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            icon={snapGeometry ? <Icon name="lucide:check" /> : undefined}
+            onSelect={onToggleSnapGeometry}
+          >
+            {t("status.snapToGeometry")}
           </DropdownMenuItem>
           <DropdownMenuItem
             icon={snapObjects ? <Icon name="lucide:check" /> : undefined}

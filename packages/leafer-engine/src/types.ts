@@ -56,6 +56,7 @@ export type LeaferOperationKind =
   | "image";
 
 export interface LeaferSnapSettings {
+  geometry: boolean;
   objects: boolean;
   pixelGrid: boolean;
 }

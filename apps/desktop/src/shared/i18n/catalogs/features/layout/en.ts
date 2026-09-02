@@ -21,6 +21,7 @@ export const layoutMessages = {
     "The document changed while the guide was being moved. Drag the current guide again.",
   "status.viewOptions": "View options",
   "status.rulers": "Rulers",
+  "status.snapToGeometry": "Snap to geometry",
   "status.snapToObjects": "Snap to objects",
   "status.snapToPixelGrid": "Snap to pixel grid",
   "canvas.autoLayoutSpacingStale":
