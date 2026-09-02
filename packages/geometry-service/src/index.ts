@@ -1,4 +1,4 @@
-export const GEOMETRY_SERVICE_CONTRACT_VERSION = 34 as const;
+export const GEOMETRY_SERVICE_CONTRACT_VERSION = 35 as const;
 export {
   LINE_ENDPOINT_MARKER_SIZE,
   LINE_ENDPOINT_MARKER_VIEW_BOX,
@@ -71,6 +71,7 @@ export {
 } from "./snapping.js";
 export {
   formatDistanceMeasurement,
+  measureGuideToRect,
   measureRectDistances,
   type DistanceMeasurementId,
   type DistanceMeasurementSegment,

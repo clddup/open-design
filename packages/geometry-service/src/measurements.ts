@@ -3,7 +3,11 @@ import type { Point, Rect } from "@opendesign/design-contracts";
 const EPSILON = 0.000_001;
 
 export type DistanceMeasurementId =
-  "x-before" | "x-after" | "y-before" | "y-after";
+  | "x-before"
+  | "x-after"
+  | "y-before"
+  | "y-after"
+  | `${"x" | "y"}-${"before" | "after"}:${string}`;
 
 export interface DistanceMeasurementSegment {
   axis: "x" | "y";
@@ -33,6 +37,42 @@ export function measureRectDistances(
   return measurements;
 }
 
+/**
+ * Measures from an axis-aligned ruler guide to the nearest edges of one
+ * axis-aligned object bound. A guide inside the bound exposes both insets.
+ */
+export function measureGuideToRect(input: {
+  axis: "x" | "y";
+  crossPosition?: number;
+  id: string;
+  position: number;
+  target: Rect;
+}): readonly DistanceMeasurementSegment[] {
+  if (!validRect(input.target) || !Number.isFinite(input.position)) return [];
+  const targetStart = axisStart(input.axis, input.target);
+  const targetEnd = targetStart + axisSize(input.axis, input.target);
+  const defaultCross =
+    axisStart(input.axis === "x" ? "y" : "x", input.target) +
+    axisSize(input.axis === "x" ? "y" : "x", input.target) / 2;
+  const cross = Number.isFinite(input.crossPosition)
+    ? input.crossPosition!
+    : defaultCross;
+  if (input.position <= targetStart + EPSILON) {
+    return compactSegments([
+      guideSegment(input, "after", input.position, targetStart, cross),
+    ]);
+  }
+  if (input.position >= targetEnd - EPSILON) {
+    return compactSegments([
+      guideSegment(input, "before", input.position, targetEnd, cross),
+    ]);
+  }
+  return compactSegments([
+    guideSegment(input, "before", input.position, targetStart, cross),
+    guideSegment(input, "after", input.position, targetEnd, cross),
+  ]);
+}
+
 export function formatDistanceMeasurement(value: number): string {
   const rounded = Math.round(value * 100) / 100;
   return Number.isInteger(rounded)
@@ -44,14 +84,26 @@ function containedDistances(inner: Rect, outer: Rect) {
   const centerX = inner.x + inner.width / 2;
   const centerY = inner.y + inner.height / 2;
   return [
-    segment("x-before", { x: inner.x, y: centerY }, { x: outer.x, y: centerY }),
     segment(
+      "x",
+      "x-before",
+      { x: inner.x, y: centerY },
+      { x: outer.x, y: centerY },
+    ),
+    segment(
+      "x",
       "x-after",
       { x: inner.x + inner.width, y: centerY },
       { x: outer.x + outer.width, y: centerY },
     ),
-    segment("y-before", { x: centerX, y: inner.y }, { x: centerX, y: outer.y }),
     segment(
+      "y",
+      "y-before",
+      { x: centerX, y: inner.y },
+      { x: centerX, y: outer.y },
+    ),
+    segment(
+      "y",
       "y-after",
       { x: centerX, y: inner.y + inner.height },
       { x: centerX, y: outer.y + outer.height },
@@ -86,6 +138,7 @@ function axisSegment(
   cross: number,
 ): DistanceMeasurementSegment | null {
   return segment(
+    axis,
     `${axis}-${side}`,
     axis === "x" ? { x: start, y: cross } : { x: cross, y: start },
     axis === "x" ? { x: end, y: cross } : { x: cross, y: end },
@@ -93,13 +146,40 @@ function axisSegment(
 }
 
 function segment(
+  axis: "x" | "y",
   id: DistanceMeasurementId,
   start: Point,
   end: Point,
 ): DistanceMeasurementSegment | null {
-  const axis = id.startsWith("x") ? "x" : "y";
   const value = Math.abs(axis === "x" ? end.x - start.x : end.y - start.y);
   return value <= EPSILON ? null : { axis, end, id, start, value };
+}
+
+function guideSegment(
+  input: { axis: "x" | "y"; id: string },
+  side: "before" | "after",
+  guidePosition: number,
+  targetPosition: number,
+  cross: number,
+): DistanceMeasurementSegment | null {
+  return segment(
+    input.axis,
+    `${input.axis}-${side}:${input.id}`,
+    input.axis === "x"
+      ? { x: guidePosition, y: cross }
+      : { x: cross, y: guidePosition },
+    input.axis === "x"
+      ? { x: targetPosition, y: cross }
+      : { x: cross, y: targetPosition },
+  );
+}
+
+function compactSegments(
+  segments: readonly (DistanceMeasurementSegment | null)[],
+): DistanceMeasurementSegment[] {
+  return segments.filter(
+    (segment): segment is DistanceMeasurementSegment => segment !== null,
+  );
 }
 
 function crossAxisAnchor(axis: "x" | "y", left: Rect, right: Rect): number {

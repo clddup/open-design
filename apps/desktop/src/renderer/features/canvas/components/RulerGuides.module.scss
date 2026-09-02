@@ -79,6 +79,28 @@
   stroke-dasharray: 3 2;
 }
 
+.measurementLine {
+  fill: none;
+  stroke: #f24822;
+  stroke-width: 1;
+  pointer-events: none;
+}
+
+.measurementLabelBackground {
+  fill: #f24822;
+  pointer-events: none;
+}
+
+.measurementLabel {
+  fill: #fff;
+  font-family: Inter, sans-serif;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  pointer-events: none;
+  user-select: none;
+}
+
 .guideHitTarget {
   fill: none;
   stroke: transparent;

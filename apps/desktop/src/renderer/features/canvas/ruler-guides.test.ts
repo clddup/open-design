@@ -11,6 +11,7 @@ import {
   rulerTicks,
   selectionRulerRanges,
 } from "./ruler-guides";
+import { collectRulerGuideDistanceMeasurements } from "./ruler-guide-measurements";
 
 const viewport = {
   panX: 10,
@@ -119,6 +120,118 @@ describe("ruler guide projection", () => {
     expect(multiRanges!.x[1] - multiRanges!.x[0]).toBeGreaterThan(
       childRanges!.x[1] - childRanges!.x[0],
     );
+  });
+
+  it("measures from an Alt-dragged guide to a selected top-level Frame and nearby objects", () => {
+    const document = createWelcomeDocument();
+    const selection = {
+      nodeIds: ["frame_welcome"],
+      anchorNodeId: "frame_welcome",
+    };
+    expect(
+      collectRulerGuideDistanceMeasurements(
+        document,
+        "page_welcome",
+        selection,
+        {
+          guide: { axis: "X", offset: 40 },
+          owner: { type: "page", pageId: "page_welcome" },
+        },
+        { x: 90, y: 400 },
+        viewport,
+      ).map(({ id, value }) => ({ id, value })),
+    ).toEqual([{ id: "x-after:frame:frame_welcome", value: 40 }]);
+
+    expect(
+      collectRulerGuideDistanceMeasurements(
+        document,
+        "page_welcome",
+        selection,
+        {
+          guide: { axis: "X", offset: 120 },
+          owner: {
+            type: "frame",
+            pageId: "page_welcome",
+            frameId: "frame_welcome",
+          },
+        },
+        { x: 410, y: 400 },
+        viewport,
+      ).map(({ id, value }) => ({ id, value })),
+    ).toEqual([
+      { id: "x-before:frame:frame_welcome", value: 120 },
+      { id: "x-after:frame:frame_welcome", value: 1_000 },
+      { id: "x-before:node:title_welcome", value: 56 },
+      { id: "x-after:node:title_welcome", value: 664 },
+    ]);
+  });
+
+  it("does not invent guide redlines without one selected top-level Frame", () => {
+    expect(
+      collectRulerGuideDistanceMeasurements(
+        createWelcomeDocument(),
+        "page_welcome",
+        { nodeIds: ["feature_one"], anchorNodeId: "feature_one" },
+        {
+          guide: { axis: "X", offset: 40 },
+          owner: { type: "page", pageId: "page_welcome" },
+        },
+        { x: 90, y: 400 },
+        viewport,
+      ),
+    ).toEqual([]);
+  });
+
+  it("fails open instead of measuring a rotated Frame through its world AABB", () => {
+    const document = structuredClone(createWelcomeDocument());
+    const frame = document.nodesById.frame_welcome;
+    if (frame?.kind !== "frame") throw new Error("Missing fixture Frame");
+    frame.transform = [0, 1, -1, 0, 80, 64];
+
+    expect(
+      collectRulerGuideDistanceMeasurements(
+        document,
+        "page_welcome",
+        { nodeIds: [frame.id], anchorNodeId: frame.id },
+        {
+          guide: { axis: "X", offset: 40 },
+          owner: { type: "page", pageId: "page_welcome" },
+        },
+        { x: 90, y: 400 },
+        viewport,
+      ),
+    ).toEqual([]);
+  });
+
+  it("omits a rotated nearby object instead of measuring its world AABB", () => {
+    const document = structuredClone(createWelcomeDocument());
+    const title = document.nodesById.title_welcome;
+    if (title?.kind !== "text") throw new Error("Missing fixture title");
+    title.transform = [0, 1, -1, 0, 64, 108];
+
+    expect(
+      collectRulerGuideDistanceMeasurements(
+        document,
+        "page_welcome",
+        {
+          nodeIds: ["frame_welcome"],
+          anchorNodeId: "frame_welcome",
+        },
+        {
+          guide: { axis: "X", offset: 120 },
+          owner: {
+            type: "frame",
+            pageId: "page_welcome",
+            frameId: "frame_welcome",
+          },
+        },
+        { x: 410, y: 400 },
+        viewport,
+      ).map(({ id, value }) => ({ id, value })),
+    ).toEqual([
+      { id: "x-before:frame:frame_welcome", value: 120 },
+      { id: "x-after:frame:frame_welcome", value: 1_000 },
+    ]);
   });
 
   it("rejects a stale guide edit without changing the document", () => {

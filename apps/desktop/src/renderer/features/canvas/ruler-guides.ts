@@ -3,6 +3,7 @@ import type {
   DesignNode,
   Guide,
   Point,
+  Rect,
   SelectionState,
   ViewportState,
 } from "@opendesign/design-contracts";
@@ -97,15 +98,12 @@ export function selectionRulerRanges(
 ): { x: readonly [number, number]; y: readonly [number, number] } | null {
   if (selection.componentTarget || selection.nodeIds.length === 0) return null;
   const points = selection.nodeIds.flatMap((nodeId) => {
-    const node = document.nodesById[nodeId];
-    const world = getWorldTransform(document, nodeId);
-    if (!node || !world) return [];
+    const bounds = nodeDocumentBounds(document, nodeId);
+    if (!bounds) return [];
     return [
-      { x: 0, y: 0 },
-      { x: node.size.width, y: 0 },
-      { x: node.size.width, y: node.size.height },
-      { x: 0, y: node.size.height },
-    ].map((point) => documentToScreen(transformPoint(point, world), viewport));
+      { x: bounds.x, y: bounds.y },
+      { x: bounds.x + bounds.width, y: bounds.y + bounds.height },
+    ].map((point) => documentToScreen(point, viewport));
   });
   if (points.length === 0) return null;
   const xs = points.map(({ x }) => x);
@@ -305,6 +303,30 @@ function frameGuideSegment(
     start: documentToScreen(transformPoint(localStart, world), viewport),
     end: documentToScreen(transformPoint(localEnd, world), viewport),
   };
+}
+
+export function nodeDocumentBounds(
+  document: DesignDocument,
+  nodeId: string,
+): Rect | null {
+  const node = document.nodesById[nodeId];
+  const world = getWorldTransform(document, nodeId);
+  if (!node || !world || node.size.width <= 0 || node.size.height <= 0) {
+    return null;
+  }
+  const points = [
+    { x: 0, y: 0 },
+    { x: node.size.width, y: 0 },
+    { x: node.size.width, y: node.size.height },
+    { x: 0, y: node.size.height },
+  ].map((point) => transformPoint(point, world));
+  const xs = points.map(({ x }) => x);
+  const ys = points.map(({ y }) => y);
+  const left = Math.min(...xs);
+  const top = Math.min(...ys);
+  const right = Math.max(...xs);
+  const bottom = Math.max(...ys);
+  return { x: left, y: top, width: right - left, height: bottom - top };
 }
 
 function majorDocumentStep(zoom: number): number {

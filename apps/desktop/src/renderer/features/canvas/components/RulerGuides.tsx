@@ -15,19 +15,21 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { useI18n } from "../../../i18n";
+import { collectRulerGuideDistanceMeasurements } from "../ruler-guide-measurements";
 import {
   collectRulerGuideSegments,
   guideOwnerKey,
   guidePlacementAtScreenPoint,
   guideSegmentForPlacement,
   resolveActiveGuideFrameId,
-  rulerTicks,
   selectionRulerRanges,
   RULER_SIZE,
   type RulerGuideOwner,
   type RulerGuideEdit,
   type RulerGuideReference,
 } from "../ruler-guides";
+import { RulerGuideMeasurements } from "./RulerGuideMeasurements";
+import { RulerScale } from "./RulerScale";
 import styles from "./RulerGuides.module.scss";
 
 interface DragState {
@@ -35,6 +37,7 @@ interface DragState {
   axis: Guide["axis"];
   duplicate: boolean;
   expectedRevision: number;
+  measure: boolean;
   point: { x: number; y: number };
   source?: RulerGuideReference;
 }
@@ -70,8 +73,6 @@ export function RulerGuides({
     () => collectRulerGuideSegments(document, pageId, viewport),
     [document, pageId, viewport],
   );
-  const xTicks = useMemo(() => rulerTicks("X", viewport), [viewport]);
-  const yTicks = useMemo(() => rulerTicks("Y", viewport), [viewport]);
 
   const localPoint = useCallback((clientX: number, clientY: number) => {
     const bounds = root.current?.getBoundingClientRect();
@@ -158,6 +159,7 @@ export function RulerGuides({
       const next = {
         ...current,
         duplicate: current.source ? event.altKey : false,
+        measure: event.altKey,
         point: localPoint(event.clientX, event.clientY),
       };
       dragRef.current = next;
@@ -169,6 +171,7 @@ export function RulerGuides({
         finishDrag({
           ...current,
           duplicate: current.source ? event.altKey : false,
+          measure: event.altKey,
           point: localPoint(event.clientX, event.clientY),
         });
       }
@@ -182,22 +185,41 @@ export function RulerGuides({
       onFocusCanvas();
     };
     const keyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      event.stopPropagation();
-      cancel();
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        cancel();
+        return;
+      }
+      if (event.key === "Alt") updateDragModifier(true);
+    };
+    const keyUp = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Alt") updateDragModifier(false);
+    };
+    const updateDragModifier = (altKey: boolean) => {
+      const current = dragRef.current;
+      if (!current) return;
+      const next = {
+        ...current,
+        duplicate: current.source ? altKey : false,
+        measure: altKey,
+      };
+      dragRef.current = next;
+      setDrag(next);
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up, { once: true });
     window.addEventListener("pointercancel", cancel, { once: true });
     window.addEventListener("blur", cancel, { once: true });
     window.addEventListener("keydown", keyDown, true);
+    window.addEventListener("keyup", keyUp, true);
     return () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
       window.removeEventListener("pointercancel", cancel);
       window.removeEventListener("blur", cancel);
       window.removeEventListener("keydown", keyDown, true);
+      window.removeEventListener("keyup", keyUp, true);
     };
   }, [dragActive, finishDrag, localPoint, onFocusCanvas]);
 
@@ -257,6 +279,7 @@ export function RulerGuides({
       axis,
       duplicate: source ? event.altKey : false,
       expectedRevision: document.revision,
+      measure: event.altKey,
       point: localPoint(event.clientX, event.clientY),
       ...(source ? { source: toReference(source) } : {}),
     };
@@ -277,6 +300,17 @@ export function RulerGuides({
   const draftSegment = draft
     ? guideSegmentForPlacement(document, draft.owner, draft.guide, viewport)
     : null;
+  const measurements =
+    drag?.measure && draft
+      ? collectRulerGuideDistanceMeasurements(
+          document,
+          pageId,
+          selection,
+          draft,
+          drag.point,
+          viewport,
+        )
+      : [];
 
   return (
     <div
@@ -284,85 +318,16 @@ export function RulerGuides({
       className={styles.root}
       ref={root}
     >
-      <svg aria-hidden="true" className={styles.rulers}>
-        <rect
-          className={styles.horizontalRuler}
-          data-ruler-axis="Y"
-          height={RULER_SIZE}
-          onPointerDown={(event) => beginDrag("Y", event)}
-          width="100%"
-          x={RULER_SIZE}
-          y={0}
-        />
-        <rect
-          className={styles.verticalRuler}
-          data-ruler-axis="X"
-          height="100%"
-          onPointerDown={(event) => beginDrag("X", event)}
-          width={RULER_SIZE}
-          x={0}
-          y={RULER_SIZE}
-        />
-        <rect
-          className={styles.corner}
-          height={RULER_SIZE}
-          width={RULER_SIZE}
-        />
-        {ranges && (
-          <>
-            <rect
-              className={styles.selectionRange}
-              height={RULER_SIZE}
-              width={Math.max(0, ranges.x[1] - ranges.x[0])}
-              x={ranges.x[0]}
-              y={0}
-            />
-            <rect
-              className={styles.selectionRange}
-              height={Math.max(0, ranges.y[1] - ranges.y[0])}
-              width={RULER_SIZE}
-              x={0}
-              y={ranges.y[0]}
-            />
-          </>
-        )}
-        {xTicks.map((tick) => (
-          <g key={`x:${tick.value}`}>
-            <line
-              className={styles.tick}
-              x1={tick.position}
-              x2={tick.position}
-              y1={tick.major ? 8 : 14}
-              y2={RULER_SIZE}
-            />
-            {tick.major && (
-              <text className={styles.tickLabel} x={tick.position + 3} y={8}>
-                {formatOffset(tick.value)}
-              </text>
-            )}
-          </g>
-        ))}
-        {yTicks.map((tick) => (
-          <g key={`y:${tick.value}`}>
-            <line
-              className={styles.tick}
-              x1={tick.major ? 8 : 14}
-              x2={RULER_SIZE}
-              y1={tick.position}
-              y2={tick.position}
-            />
-            {tick.major && (
-              <text
-                className={styles.verticalTickLabel}
-                transform={`translate(8 ${tick.position - 3}) rotate(-90)`}
-              >
-                {formatOffset(tick.value)}
-              </text>
-            )}
-          </g>
-        ))}
-      </svg>
+      <RulerScale
+        onPointerDown={(axis, event) => beginDrag(axis, event)}
+        ranges={ranges}
+        viewport={viewport}
+      />
       <svg className={styles.guides}>
+        <RulerGuideMeasurements
+          measurements={measurements}
+          viewport={viewport}
+        />
         {segments.map((segment) => {
           const selected = selectedKey === segment.key;
           const label = t("canvas.rulerGuideLabel", {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   formatDistanceMeasurement,
+  measureGuideToRect,
   measureRectDistances,
 } from "./measurements.js";
 
@@ -92,6 +93,61 @@ describe("measureRectDistances", () => {
         y: 0,
         width: 20,
         height: 20,
+      }),
+    ).toEqual([]);
+  });
+});
+
+describe("measureGuideToRect", () => {
+  it("measures one nearest edge outside and both insets inside a bound", () => {
+    const target = { x: 40, y: 20, width: 100, height: 60 };
+
+    expect(
+      measureGuideToRect({
+        axis: "x",
+        id: "frame",
+        position: 10,
+        target,
+      }),
+    ).toEqual([
+      {
+        axis: "x",
+        end: { x: 40, y: 50 },
+        id: "x-after:frame",
+        start: { x: 10, y: 50 },
+        value: 30,
+      },
+    ]);
+    expect(
+      measureGuideToRect({
+        axis: "y",
+        crossPosition: 70,
+        id: "frame",
+        position: 50,
+        target,
+      }).map(({ id, value }) => ({ id, value })),
+    ).toEqual([
+      { id: "y-before:frame", value: 30 },
+      { id: "y-after:frame", value: 30 },
+    ]);
+  });
+
+  it("omits zero-length and invalid guide measurements", () => {
+    const target = { x: 40, y: 20, width: 100, height: 60 };
+    expect(
+      measureGuideToRect({
+        axis: "x",
+        id: "frame",
+        position: 40,
+        target,
+      }),
+    ).toEqual([]);
+    expect(
+      measureGuideToRect({
+        axis: "x",
+        id: "frame",
+        position: Number.NaN,
+        target,
       }),
     ).toEqual([]);
   });

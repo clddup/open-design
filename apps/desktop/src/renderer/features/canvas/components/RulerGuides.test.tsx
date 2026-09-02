@@ -1,4 +1,5 @@
 import { createWelcomeDocument } from "@opendesign/editor-runtime";
+import type { SelectionState } from "@opendesign/design-contracts";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
@@ -81,6 +82,41 @@ describe("RulerGuides interaction", () => {
         owner: { type: "page", pageId: "page_welcome" },
       },
     });
+  });
+
+  it("shows disposable guide-to-Frame redlines only during an Alt drag", () => {
+    const onEdit = vi.fn<(edit: RulerGuideEdit) => boolean>(() => true);
+    const { container } = renderGuides(onEdit, createWelcomeDocument(), {
+      nodeIds: ["frame_welcome"],
+      anchorNodeId: "frame_welcome",
+    });
+    const verticalRuler = container.querySelector('[data-ruler-axis="X"]');
+    if (!verticalRuler) throw new Error("Missing vertical ruler");
+
+    fireEvent.pointerDown(verticalRuler, {
+      altKey: true,
+      button: 0,
+      clientX: 8,
+      clientY: 200,
+    });
+    fireEvent.pointerMove(window, {
+      altKey: true,
+      clientX: 40,
+      clientY: 200,
+    });
+    expect(container.querySelectorAll("[data-ruler-measurement]")).toHaveLength(
+      1,
+    );
+
+    fireEvent.keyUp(window, { key: "Alt" });
+    expect(container.querySelectorAll("[data-ruler-measurement]")).toHaveLength(
+      0,
+    );
+
+    fireEvent.pointerUp(window, { clientX: 40, clientY: 200 });
+    expect(container.querySelectorAll("[data-ruler-measurement]")).toHaveLength(
+      0,
+    );
   });
 
   it("deletes the selected guide from the canvas keyboard focus", () => {
@@ -190,13 +226,15 @@ describe("RulerGuides interaction", () => {
 function renderGuides(
   onEdit: (edit: RulerGuideEdit) => boolean,
   document = createWelcomeDocument(),
+  selection: SelectionState = { nodeIds: [] },
 ) {
-  return render(rulerGuides(onEdit, document));
+  return render(rulerGuides(onEdit, document, selection));
 }
 
 function rulerGuides(
   onEdit: (edit: RulerGuideEdit) => boolean,
   document = createWelcomeDocument(),
+  selection: SelectionState = { nodeIds: [] },
 ) {
   return (
     <RulerGuides
@@ -204,7 +242,7 @@ function rulerGuides(
       onEdit={onEdit}
       onFocusCanvas={vi.fn()}
       pageId="page_welcome"
-      selection={{ nodeIds: [] }}
+      selection={selection}
       viewport={viewport}
     />
   );

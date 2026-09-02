@@ -199,10 +199,10 @@
         "zh-CN": "精确排列"
       },
       "description": {
-        "en": "Align and arrange layers, edit Smart Selection spacing and reflow, flip layers, set a persistent rotation origin, author Figma-shaped Page/Frame ruler guides, move and resize ordinary objects with snapping, and inspect object distances through the shared editor geometry path.",
-        "zh-CN": "通过共享编辑器几何链对齐与排列图层、编辑 Smart Selection 间距与回流、翻转图层、设置持久旋转原点、创建 Figma-shaped Page/Frame 标尺参考线、移动与 resize 吸附并检查对象距离。"
+        "en": "Align and arrange layers, edit Smart Selection spacing and reflow, flip layers, set a persistent rotation origin, author Figma-shaped Page/Frame ruler guides, move and resize ordinary objects with snapping, and inspect object or ruler-guide distances through the shared editor geometry path.",
+        "zh-CN": "通过共享编辑器几何链对齐与排列图层、编辑 Smart Selection 间距与回流、翻转图层、设置持久旋转原点、创建 Figma-shaped Page/Frame 标尺参考线、移动与 resize 吸附，并检查对象或参考线距离。"
       },
-      "provider": "DesignDocument 1.57.0 + Geometry Service contract 34 + EditorRuntime + Leafer editor projection + Canvas ruler/snap/measurement overlays",
+      "provider": "DesignDocument 1.57.0 + Geometry Service contract 35 + EditorRuntime + Leafer editor projection + Canvas ruler/snap/measurement overlays",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
       "surfaces": {
         "contract": "available",
@@ -214,8 +214,8 @@
       },
       "limitations": [
         {
-          "en": "Move and axis-aligned resize snapping support object outer edges and centers, Page guides, axis-aligned Frame-local guides, and pixel-grid rounding. Resize covers eight-way handles, Shift ratio locking, Option/Alt center resizing, and Control suppression without replacing Grid-span or Line-endpoint editing. Option/Alt hover measures inner object bounds, including nested exact targeting and container insets. Vector geometry snapping, rotated/skewed directional resize and Frame-guide snapping, guide-to-object redlines, Vector-anchor measurements, and packaged macOS/Windows interaction evidence remain incomplete.",
-          "zh-CN": "移动与轴对齐 resize 吸附已支持对象外边缘与中心、Page 参考线、轴对齐 Frame-local 参考线和像素网格取整；resize 覆盖八向手柄、Shift 等比、Option/Alt 中心缩放和 Control 临时关闭，且不替代 Grid span 或 Line endpoint 编辑。Option/Alt 悬停可按对象 inner bounds 测量，并支持精确嵌套目标与容器 inset。Vector geometry 吸附、旋转/倾斜对象定向 resize 与 Frame 参考线吸附、参考线到对象 redline、Vector anchor 测量及 macOS/Windows 打包产品交互证据仍未补齐。"
+          "en": "Move and axis-aligned resize snapping support object outer edges and centers, Page guides, axis-aligned Frame-local guides, and pixel-grid rounding. Resize covers eight-way handles, Shift ratio locking, Option/Alt center resizing, and Control suppression without replacing Grid-span or Line-endpoint editing. Option/Alt hover measures inner object bounds, including nested exact targeting and container insets; Option/Alt guide drags measure a selected top-level Frame and nearby direct objects. Vector geometry snapping, rotated/skewed directional resize and Frame-guide snapping, Vector-anchor measurements, and packaged macOS/Windows interaction evidence remain incomplete.",
+          "zh-CN": "移动与轴对齐 resize 吸附已支持对象外边缘与中心、Page 参考线、轴对齐 Frame-local 参考线和像素网格取整；resize 覆盖八向手柄、Shift 等比、Option/Alt 中心缩放和 Control 临时关闭，且不替代 Grid span 或 Line endpoint 编辑。Option/Alt 悬停可按对象 inner bounds 测量，并支持精确嵌套目标与容器 inset；Option/Alt 拖出参考线可测量选中的顶层 Frame 与附近直属对象。Vector geometry 吸附、旋转/倾斜对象定向 resize 与 Frame 参考线吸附、Vector anchor 测量及 macOS/Windows 打包产品交互证据仍未补齐。"
         },
         {
           "en": "The arrangement product path remains intentionally separate from the isolated PathKit vector provider; no vector product capability is implied here.",
