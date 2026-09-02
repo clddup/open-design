@@ -20,6 +20,7 @@ OpenDesign 已能精确物化普通 Geometry，并能为单根结果保留合成
 6. `put_asset`、删除全部源根和插入结果 Vector 属于同一个 `DesignTransaction`。异步导出完成后仍使用开始时的 exact revision；期间文档变化返回 stale failure，PNG 不会成为孤立资产，也不会覆盖新内容。
 7. 人工快捷键和 Agent 既有 `flatten` action 共用同一个 Renderer orchestration、EditorRuntime planner、结果语义和一次 undo；不增加 Agent 工具、文档字段、产品版本、内容 hash 或独立可写状态。
 8. 固定 Leafer 2.2.9 的 `backgroundBlur` provider 虽为空实现，但 `@opendesign/leafer-engine` 在唯一 `UI.__draw` 适配边界补齐真实 backdrop effect：普通绘制读取当前 canvas，Leafer 已建立隔离 surface 时读取其 `originCanvas`；先复制已绘制 backdrop、按当前 world scale 应用 Chromium blur，再用真实节点 path 裁剪，最后由原绘制链叠加 fill/stroke/children。生产画布、exact-revision Capture/Export 与 Flatten 继续共用同一 Leafer 投影，不增加 DOM `backdrop-filter`、第二渲染器或 Flatten 私有算法。
+9. 固定 Leafer 2.2.9 虽提供 `Effect.blur`，但当前绘制链没有调用它。`@opendesign/leafer-engine` 因此在 `UI/Group/Box.__render` 的共同适配边界把存在 layer blur 的完整图层先画入单一透明 surface，再按 world scale 一次模糊，并在最终合成时恢复根 opacity 与 blend；Frame/Group 的 children、fill、stroke、shadow 和后代 effect 不得被分别模糊。普通无 blur 绘制与 shape/mask 提取继续走 Leafer 原路径。
 
 ## 影响
 
@@ -28,6 +29,7 @@ OpenDesign 已能精确物化普通 Geometry，并能为单根结果保留合成
 - 显式 `normal` 祖先内的后代 blend/effect blend/background blur，以及包含完整 sibling backdrop 前缀的多根 blend/background blur，可以烘焙；依赖未选 backdrop 的合成仍明确失败。
 - Chromium 中固定 Leafer 2.2.9 的实像素探针确认：红色 backdrop 与蓝色 `multiply` 输出 `[0,0,0,255]`；外部绿色 backdrop 上的 `normal` 隔离蓝色子层，与脱离外部 backdrop 后的选择导出均输出 `[0,0,255,255]`。这证明当前闭包判定与隔离导出一致，但不替代真实 Figma baseline。
 - Vite 8/Rolldown 构建后的 Chromium 实像素探针进一步确认：黑白分区 backdrop 上半透明红色圆角层的 blur 只进入真实 rounded path，圆角外像素保持 `[0,0,0,255]`；模糊区域左右采样分别为 `[157,29,29,255]` 与 `[227,99,99,255]`，后绘制 sibling 保持 `[0,255,0,255]`；同一场景的 live canvas 与 PNG Export 六个采样点逐项一致。这证明生产绘制顺序、path mask 与 Export 共用实现，但不替代真实 Figma baseline。
+- Layer blur 的适配测试覆盖叶子、Group、Frame/Box 共用单一 surface、根 opacity/blend 延后合成、world scale、shape/mask 旁路、幂等安装及异常回收。该结构证据证明不会只模糊容器背景或泄漏临时 surface，但不冒充尚未取得的 Figma/双平台像素证据。
 - 真实 Figma 像素 baseline 和 macOS/Windows 打包产品交互证据仍是后续缺口，因此总体 capability 继续为 `degraded`。
 
 ## 公开语义参照
@@ -37,4 +39,6 @@ OpenDesign 已能精确物化普通 Geometry，并能为单根结果保留合成
 - [Figma Plugin API：VectorNetwork](https://developers.figma.com/docs/plugins/api/VectorNetwork/)
 - [Figma Plugin API：Image](https://developers.figma.com/docs/plugins/api/Image/)
 - [Figma Plugin API：BlendMode](https://developers.figma.com/docs/plugins/api/BlendMode/)
+- [Figma：Apply effects to layers](https://help.figma.com/hc/en-us/articles/360041488473-Apply-effects-to-layers)
+- [Figma Plugin API：Effect](https://developers.figma.com/docs/plugins/api/Effect/)
 - [Figma Plugin API：isMask](https://developers.figma.com/docs/plugins/api/properties/nodes-ismask/)
