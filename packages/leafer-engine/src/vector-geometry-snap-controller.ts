@@ -10,6 +10,10 @@ import {
   type VectorSnapPoint,
   type VectorSnapTargetIndex,
 } from "@opendesign/geometry-service/vector-snapping";
+import {
+  listVectorVertexHandles,
+  type VectorHandleReference,
+} from "@opendesign/geometry-service/vector-edit";
 import type { SnapGuideLine } from "@opendesign/geometry-service/snapping";
 import { transformPoint } from "./scene-node-transform.js";
 import type { LeaferSnapSettings } from "./types.js";
@@ -17,12 +21,19 @@ import type { LeaferSnapSettings } from "./types.js";
 export interface VectorSnapLayer {
   network: VectorNetwork;
   nodeId: string;
+  visibleHandleVertexIds: readonly string[];
   worldTransform: Transform;
 }
 
 export interface VectorSnapSelection {
   nodeId: string;
   vertexIds: readonly string[];
+}
+
+export interface VectorSnapHandleSelection {
+  nodeId: string;
+  position: Point;
+  reference: VectorHandleReference;
 }
 
 interface VectorGeometrySnapSession {
@@ -47,17 +58,38 @@ export class VectorGeometrySnapController {
     viewport: ViewportState;
   }): void {
     const movingKeys = selectionKeys(input.moving);
-    const movingPoints = documentPoints(input.layers, movingKeys, true);
+    const movingPoints = documentVertexPoints(input.layers, movingKeys, true);
     const targetPoints = input.settings.geometry
-      ? documentPoints(input.layers, movingKeys, false)
+      ? documentVertexPoints(input.layers, movingKeys, false)
       : [];
-    this.#session = {
+    this.#start({
       movingPoints,
       pixelGrid: input.settings.pixelGrid,
-      targets: createVectorSnapTargetIndex(targetPoints),
+      targetPoints,
       threshold: snapThreshold(input.viewport),
-    };
-    this.#onLines([]);
+    });
+  }
+
+  beginHandle(input: {
+    layers: readonly VectorSnapLayer[];
+    moving: VectorSnapHandleSelection;
+    settings: LeaferSnapSettings;
+    viewport: ViewportState;
+  }): void {
+    const movingId = handleId(input.moving.nodeId, input.moving.reference);
+    const excluded = new Set([movingId]);
+    const targetPoints = input.settings.geometry
+      ? [
+          ...documentVertexPoints(input.layers, new Set(), false),
+          ...documentHandlePoints(input.layers, excluded),
+        ]
+      : [];
+    this.#start({
+      movingPoints: [{ id: movingId, ...input.moving.position }],
+      pixelGrid: input.settings.pixelGrid,
+      targetPoints,
+      threshold: snapThreshold(input.viewport),
+    });
   }
 
   update(rawDelta: Point, suppressed: boolean): Point {
@@ -85,9 +117,24 @@ export class VectorGeometrySnapController {
     this.#session = null;
     this.#onLines([]);
   }
+
+  #start(input: {
+    movingPoints: readonly VectorSnapPoint[];
+    pixelGrid: boolean;
+    targetPoints: readonly VectorSnapPoint[];
+    threshold: number;
+  }): void {
+    this.#session = {
+      movingPoints: input.movingPoints,
+      pixelGrid: input.pixelGrid,
+      targets: createVectorSnapTargetIndex(input.targetPoints),
+      threshold: input.threshold,
+    };
+    this.#onLines([]);
+  }
 }
 
-function documentPoints(
+function documentVertexPoints(
   layers: readonly VectorSnapLayer[],
   movingKeys: ReadonlySet<string>,
   moving: boolean,
@@ -106,6 +153,27 @@ function documentPoints(
   );
 }
 
+function documentHandlePoints(
+  layers: readonly VectorSnapLayer[],
+  excludedKeys: ReadonlySet<string>,
+): VectorSnapPoint[] {
+  return layers.flatMap((layer) =>
+    layer.visibleHandleVertexIds.flatMap((vertexId) =>
+      listVectorVertexHandles(layer.network, vertexId).flatMap((handle) => {
+        const id = handleId(layer.nodeId, handle);
+        return excludedKeys.has(id)
+          ? []
+          : [
+              {
+                id,
+                ...transformPoint(handle.position, layer.worldTransform),
+              },
+            ];
+      }),
+    ),
+  );
+}
+
 function selectionKeys(
   selections: readonly VectorSnapSelection[],
 ): ReadonlySet<string> {
@@ -118,6 +186,10 @@ function selectionKeys(
 
 function pointId(nodeId: string, vertexId: string): string {
   return `${nodeId}:${vertexId}`;
+}
+
+function handleId(nodeId: string, reference: VectorHandleReference): string {
+  return `${nodeId}:handle:${reference.segmentId}:${reference.side}`;
 }
 
 function snapThreshold(viewport: ViewportState): number {

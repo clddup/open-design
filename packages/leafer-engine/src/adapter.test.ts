@@ -9193,6 +9193,68 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
+  it("snaps a dragged Vector handle to visible geometry with one commit", async () => {
+    const onVectorEdit = vi.fn<(request: LeaferVectorEditRequest) => boolean>(
+      () => true,
+    );
+    const input = withVectorEditFixture(createInput(), ["vertex_b"], true);
+    input.snapSettings = {
+      geometry: true,
+      objects: false,
+      pixelGrid: false,
+    };
+    input.document.nodesById.frame_welcome!.transform = [1, 0, 0, 1, 0, 0];
+    input.document.nodesById.editable_curve!.transform = [1, 0, 0, 1, 0, 0];
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onVectorEdit,
+    });
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    const path =
+      app && findElement(app.tree, vectorStrokeElementId("editable_curve"));
+    const overlay = path?.parent?.children.at(-1);
+    const snapGuide = app?.sky.children
+      .flatMap((child) =>
+        child instanceof FakeGroup ? child.children : [child],
+      )
+      .find((child) => child instanceof FakePath && child.stroke === "#f24e8a");
+    if (
+      !app ||
+      !(overlay instanceof FakeGroup) ||
+      !(snapGuide instanceof FakePath)
+    ) {
+      throw new Error("Missing Vector handle snap fixture");
+    }
+    const controls = overlay.children.filter(
+      (child): child is FakeEllipse => child instanceof FakeEllipse,
+    );
+    const handle = controls[3];
+    if (!handle) throw new Error("Missing Vector handle");
+
+    app.emit("pointer.down", pointerEvent(40, 20, handle));
+    app.emit("pointer.move", pointerEvent(2, 2, handle));
+    expect(snapGuide.visible).toBe(true);
+    expect(onVectorEdit).not.toHaveBeenCalled();
+    app.emit("pointer.up", pointerEvent(2, 2, handle));
+
+    expect(onVectorEdit).toHaveBeenCalledTimes(1);
+    const request = onVectorEdit.mock.calls[0]?.[0];
+    if (!request || request.deleteNode) {
+      throw new Error("Expected a snapped Vector handle update");
+    }
+    expect(request.edits[0]!.network.segments[0]?.tangentEnd).toEqual({
+      x: -60,
+      y: -30,
+    });
+    expect(request.edits[0]!.network.segments[1]?.tangentStart).toEqual({
+      x: 60,
+      y: 30,
+    });
+    expect(snapGuide.visible).toBe(false);
+    adapter.dispose();
+  });
+
   it("deletes selected vector vertices and exits when the contour becomes invalid", async () => {
     const onVectorEdit = vi.fn<(request: LeaferVectorEditRequest) => boolean>(
       () => true,

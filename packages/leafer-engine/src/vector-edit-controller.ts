@@ -1,4 +1,5 @@
 import type {
+  DesignNode,
   Point,
   Rect,
   Transform,
@@ -57,6 +58,8 @@ import type {
 } from "./types.js";
 import {
   VectorGeometrySnapController,
+  type VectorSnapHandleSelection,
+  type VectorSnapLayer,
   type VectorSnapSelection,
 } from "./vector-geometry-snap-controller.js";
 import {
@@ -142,7 +145,9 @@ type VectorEditDrag =
       moved: boolean;
       reference: VectorHandleReference;
       startClient: Point;
+      startDocument: Point;
       vertexId: string;
+      world: Transform;
     }
   | {
       clickTarget?: { at: VectorCutLocation; pathId: string };
@@ -1406,14 +1411,27 @@ export class VectorEditController {
       this.#setVectorSelection(session, [], [control.vertexId]);
     }
     if (session.readOnly) return;
+    const document = this.#input?.document;
+    const world = document
+      ? getVisibleWorldTransform(document.nodesById, session.nodeId)
+      : null;
+    if (!world) return;
+    const startDocument = pointer.getInnerPoint(this.#options.root);
     session.drag = {
       before: structuredClone(session.network),
       kind: "handle",
       moved: false,
       reference: control.reference,
       startClient: eventClientPoint(pointer),
+      startDocument,
       vertexId: control.vertexId,
+      world,
     };
+    this.#beginVectorHandleSnap({
+      nodeId: session.nodeId,
+      position: startDocument,
+      reference: control.reference,
+    });
   }
 
   pointerMove(event: unknown): void {
@@ -1656,11 +1674,33 @@ export class VectorEditController {
         const vertex = drag.before.vertices.find(
           (candidate) => candidate.id === drag.vertexId,
         );
+        const currentDocument = pointer.getInnerPoint(this.#options.root);
+        const rawDelta = {
+          x: currentDocument.x - drag.startDocument.x,
+          y: currentDocument.y - drag.startDocument.y,
+        };
+        const snappedDelta = this.#vectorGeometrySnap.update(
+          rawDelta,
+          Boolean(pointer.ctrlKey),
+        );
+        const adjustment = documentTransformToLocal(
+          drag.world,
+          translationTransform({
+            x: snappedDelta.x - rawDelta.x,
+            y: snappedDelta.y - rawDelta.y,
+          }),
+        );
         return vertex
-          ? moveVectorHandle(drag.before, drag.reference, {
-              x: local.x - vertex.x,
-              y: local.y - vertex.y,
-            })
+          ? adjustment
+            ? moveVectorHandle(drag.before, drag.reference, {
+                x: local.x - vertex.x + adjustment[4],
+                y: local.y - vertex.y + adjustment[5],
+              })
+            : {
+                ok: false as const,
+                code: "invalid-transform" as const,
+                message: `Vector layer ${session.nodeId} has a non-invertible transform`,
+              }
           : {
               ok: false as const,
               code: "missing-vertex" as const,
@@ -2054,23 +2094,8 @@ export class VectorEditController {
   #beginVectorGeometrySnap(moving: readonly VectorSnapSelection[]): void {
     const input = this.#input;
     if (!input) return;
-    const layers = [...this.#vectorEdits.values()].flatMap((session) => {
-      const worldTransform = getVisibleWorldTransform(
-        input.document.nodesById,
-        session.nodeId,
-      );
-      return worldTransform
-        ? [
-            {
-              network: session.network,
-              nodeId: session.nodeId,
-              worldTransform,
-            },
-          ]
-        : [];
-    });
     this.#vectorGeometrySnap.begin({
-      layers,
+      layers: this.#vectorSnapLayers(input.document.nodesById),
       moving,
       settings: input.snapSettings ?? {
         geometry: false,
@@ -2078,6 +2103,42 @@ export class VectorEditController {
         pixelGrid: false,
       },
       viewport: input.viewport,
+    });
+  }
+
+  #beginVectorHandleSnap(moving: VectorSnapHandleSelection): void {
+    const input = this.#input;
+    if (!input) return;
+    this.#vectorGeometrySnap.beginHandle({
+      layers: this.#vectorSnapLayers(input.document.nodesById),
+      moving,
+      settings: input.snapSettings ?? {
+        geometry: false,
+        objects: false,
+        pixelGrid: false,
+      },
+      viewport: input.viewport,
+    });
+  }
+
+  #vectorSnapLayers(
+    nodesById: Readonly<Record<string, DesignNode>>,
+  ): VectorSnapLayer[] {
+    return [...this.#vectorEdits.values()].flatMap((session) => {
+      const worldTransform = getVisibleWorldTransform(
+        nodesById,
+        session.nodeId,
+      );
+      return worldTransform
+        ? [
+            {
+              network: session.network,
+              nodeId: session.nodeId,
+              visibleHandleVertexIds: session.selectedVertexIds,
+              worldTransform,
+            },
+          ]
+        : [];
     });
   }
 

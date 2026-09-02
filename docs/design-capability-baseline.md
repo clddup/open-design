@@ -63,7 +63,7 @@ OpenDesign DesignDocument / DesignTransaction / revision / history
 
 当前 Agent 执行与 Logo 范围事实：Composer 不再暴露快速/精细选择，统一以 interactive 自适应路径优先提交首个真实可用 revision。支持 reasoning 的新建设计首轮有界为 `minimal/low`；普通明确编辑可由 exact-revision 布局、inspection、结构和组件检查直接 verified，Logo/品牌识别必须再执行一次有界独立 Critic 与证据驱动 refinement。Logo 通过 `logoOutputs` 按请求交付，单个 Logo/Icon 不强制三方向；明确 exploration 的每个 concept 在同一次 Critic 中独立非补偿。固定 `OD-MARK-01` 已定义 `T1<=60s / T_all<=5min` 评测预算，但没有真实 macOS/Windows 达标证据。见 ADR-0121、ADR-0123 与 ADR-0127。
 
-当前人工 Pen 范围事实：顶层 Pen 草稿直接持有一个完整 Vector Network，可在一次提交内创建开放/闭合 path、独立 contour 与 shared-vertex branch；第一次 `Escape` 结束当前 path，第二次才提交一个 Vector node。Vector Edit Pen 继续负责在既有文档节点中插点、续画、闭合、合并与分支。两条路径复用同一 Geometry topology primitive、EditorRuntime 事务入口和 Leafer session overlay，不新增文档字段或第二套状态；path/handle 吸附、测量及双平台实机证据仍待完成。见 ADR-0292。
+当前人工 Pen 范围事实：顶层 Pen 草稿直接持有一个完整 Vector Network，可在一次提交内创建开放/闭合 path、独立 contour 与 shared-vertex branch；第一次 `Escape` 结束当前 path，第二次才提交一个 Vector node。Vector Edit Pen 继续负责在既有文档节点中插点、续画、闭合、合并与分支。两条路径复用同一 Geometry topology primitive、EditorRuntime 事务入口和 Leafer session overlay，不新增文档字段或第二套状态；Bézier handle 吸附已由 ADR-0294 完成，path 最近点吸附、path/handle 测量及双平台实机证据仍待完成。见 ADR-0292、ADR-0294。
 
 当前 Split vector 范围事实：单个 multi-path Vector 可从统一右键菜单或 Agent 既有 Vector tool 按 authored path order 拆为相邻 sibling；宿主拥有结果 ID、tight bounds、transform 补偿和单 revision/undo。shared junction 拆为各层局部同坐标 vertex，单 path region 保留；跨 path compound region 失败关闭。未新增顶部工具栏、文档字段或第二套状态。见 ADR-0293。
 
