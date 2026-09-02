@@ -413,10 +413,24 @@ describe("current Design Plan amendments", () => {
 
   it("advances to a bounded next Plan while retaining verified target state", () => {
     const firstPlan = plan();
+    firstPlan.targets[0]?.implementationSteps.push({
+      stepId: "polish_visual_system",
+      label: "Polish visual system",
+    });
     const first = registerDesignWorkflowPlan({
       inspection: inspectedExistingDesign(),
       plan: firstPlan,
     });
+    const completedExecution = first.state.planExecution.targets[0];
+    if (!completedExecution || completedExecution.steps.length !== 4) {
+      throw new Error("Home Plan execution is incomplete");
+    }
+    completedExecution.steps.forEach((step, index) => {
+      step.status = "completed";
+      step.startedRevision = index + 3;
+      step.completedRevision = index + 4;
+    });
+    const historicalSteps = structuredClone(completedExecution.steps);
     markVerified(first.state.targetsById.get("target_home"));
     const home = firstPlan.targets[0];
     if (!home || home.qualityProfile.kind !== "ui") {
@@ -474,6 +488,9 @@ describe("current Design Plan amendments", () => {
     expect(
       advanced.state.targetsById.get("target_profile")?.delivery.status,
     ).toBe("pending");
+    expect(advanced.state.planExecution.targets[0]?.steps).toEqual(
+      historicalSteps,
+    );
     expect(advanced.changedTargetIds).toEqual(["target_profile"]);
   });
 });

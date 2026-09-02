@@ -167,6 +167,42 @@ describe("AgentRunCoordinator", () => {
     );
   });
 
+  it("contains an invalid Global Task projection to the current Run", async () => {
+    const fixture = setup();
+    await fixture.coordinator.handleRequest(source);
+    fixture.globalTaskCoordinator.handleAgentEvent.mockImplementationOnce(
+      () => {
+        throw new TypeError("Invalid Global Task projection");
+      },
+    );
+
+    expect(() =>
+      fixture.coordinator.handleEvent({
+        type: "tool.completed",
+        runId: source.runId,
+        toolCallId: "tool_1",
+        result: {},
+        revision: 5,
+      }),
+    ).not.toThrow();
+
+    expect(fixture.send).toHaveBeenLastCalledWith({
+      type: "run.cancel",
+      runId: source.runId,
+    });
+    expect(fixture.referenceHost.releaseRun).toHaveBeenCalledWith(source.runId);
+    expect(fixture.forgetRun).toHaveBeenCalledWith(source.runId);
+    expect(fixture.coordinator.hasActiveConversationRun(source.sessionId)).toBe(
+      false,
+    );
+    expect(fixture.publish).toHaveBeenCalledWith({
+      type: "agent.error",
+      code: "global_task_event_failed",
+      message: "Invalid Global Task projection",
+      runId: source.runId,
+    });
+  });
+
   it("releases every Run lease after a process-level Agent failure", async () => {
     const fixture = setup();
     const second = {

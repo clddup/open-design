@@ -84,6 +84,17 @@ export class AgentRunCoordinator {
 
   handleEvent(event: AgentEvent): void {
     const services = this.#options.getServices();
+    try {
+      this.#processEvent(event, services);
+    } catch (error) {
+      this.#handleEventFailure(event, error, services.referenceHost);
+    }
+  }
+
+  #processEvent(
+    event: AgentEvent,
+    services: AgentRunCoordinatorServices,
+  ): void {
     const continuationEpoch = this.#continuationEpoch;
     prepareAgentContinuation(event, {
       canStart: () =>
@@ -202,4 +213,41 @@ export class AgentRunCoordinator {
       this.#continuations.forgetRun(runId);
     }
   }
+
+  #handleEventFailure(
+    event: AgentEvent,
+    error: unknown,
+    referenceHost: AgentReferenceHost | null,
+  ): void {
+    const runId = "runId" in event ? event.runId : undefined;
+    if (!runId) {
+      this.#releaseAllRunLeases(referenceHost);
+      this.#options.publish(taskEventFailure(error));
+      return;
+    }
+    if (event.type !== "run.completed" && event.type !== "agent.error") {
+      try {
+        this.#options.agentHost.send({ type: "run.cancel", runId });
+      } catch {
+        // The Agent process may already be unavailable; local cleanup still
+        // prevents a corrupt task projection from retaining the Run lease.
+      }
+    }
+    referenceHost?.releaseRun(runId);
+    this.#options.forgetRun(runId);
+    this.#continuations.forgetRun(runId);
+    this.#conversationIdByRunId.delete(runId);
+    this.#initialInspectionControllers.delete(runId);
+    this.#options.publish(taskEventFailure(error, runId));
+  }
+}
+
+function taskEventFailure(error: unknown, runId?: string): AgentEvent {
+  return {
+    type: "agent.error",
+    code: "global_task_event_failed",
+    message:
+      error instanceof Error ? error.message : "Invalid Global Task projection",
+    ...(runId ? { runId } : {}),
+  };
 }

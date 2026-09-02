@@ -249,8 +249,15 @@ function normalizePlanExecution(
     if (delivery?.status === "verified") {
       const revision = delivery.verifiedRevision ?? currentRevision;
       execution.steps.forEach((step) => {
+        if (
+          step.status === "completed" &&
+          step.startedRevision !== undefined &&
+          step.completedRevision !== undefined
+        ) {
+          return;
+        }
         step.status = "completed";
-        step.startedRevision ??= revision;
+        step.startedRevision = revision;
         step.completedRevision = revision;
       });
       continue;
