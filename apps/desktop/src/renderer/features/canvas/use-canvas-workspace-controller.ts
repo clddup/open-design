@@ -22,6 +22,7 @@ import type { MessageKey, MessageParameters } from "@/shared/i18n/messages";
 import type { LayerHoverTarget } from "./layer-hover-target";
 import type { Tool } from "../../state/editor";
 import type { WorkspaceRuntime } from "../../state/workspace-runtime";
+import { fitViewportToBounds } from "./canvas-viewport";
 
 type Translate = (key: MessageKey, parameters?: MessageParameters) => string;
 type CanvasFitTarget = "page" | "selection";
@@ -117,6 +118,7 @@ export function useCanvasWorkspaceController({
   const [smartSelectionMarkState, setSmartSelectionMarkState] =
     useState<LeaferSmartSelectionMarkState | null>(null);
   const [rulersVisible, setRulersVisible] = useState(false);
+  const [viewportInteractionEpoch, setViewportInteractionEpoch] = useState(0);
   const toggleRulers = useCallback(
     () => setRulersVisible((visible) => !visible),
     [],
@@ -136,6 +138,7 @@ export function useCanvasWorkspaceController({
 
   const changeZoom = useCallback(
     (zoom: number) => {
+      setViewportInteractionEpoch((current) => current + 1);
       const viewport = runtime.getSnapshot().state.viewport;
       const nextZoom = Math.min(8, Math.max(0.1, zoom));
       const anchor = { x: viewport.width / 2, y: viewport.height / 2 };
@@ -160,24 +163,11 @@ export function useCanvasWorkspaceController({
             )
           : pageBounds(current.document, activePageId);
       if (!bounds) return;
-      const { width, height } = current.state.viewport;
-      if (width <= 0 || height <= 0) return;
-      const padding = 64;
-      const zoom = Math.min(
-        8,
-        Math.max(
-          0.1,
-          Math.min(
-            (width - padding * 2) / Math.max(bounds.width, 1),
-            (height - padding * 2) / Math.max(bounds.height, 1),
-          ),
-        ),
-      );
-      runtime.setViewport({
-        zoom,
-        panX: width / 2 - (bounds.x + bounds.width / 2) * zoom,
-        panY: height / 2 - (bounds.y + bounds.height / 2) * zoom,
-      });
+      const viewport = fitViewportToBounds(current.state.viewport, bounds);
+      if (viewport) {
+        setViewportInteractionEpoch((value) => value + 1);
+        runtime.setViewport(viewport);
+      }
     },
     [activePageId, runtime],
   );
@@ -329,6 +319,7 @@ export function useCanvasWorkspaceController({
     smartSelectionMarkState,
     toggleRulers,
     updateTextEditingStyle,
+    viewportInteractionEpoch,
   };
 }
 

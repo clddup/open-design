@@ -461,6 +461,7 @@ export function EditorWorkbenchFeature({
     smartSelectionMarkState,
     toggleRulers,
     updateTextEditingStyle,
+    viewportInteractionEpoch,
   } = useCanvasWorkspaceController({
     activePageId,
     applyBooleanOperation,
@@ -785,6 +786,7 @@ export function EditorWorkbenchFeature({
               rulersVisible={rulersVisible}
               snapSettings={snapSettings}
               smartSelectionMarkState={smartSelectionMarkState}
+              viewportInteractionEpoch={viewportInteractionEpoch}
               selectionActions={
                 state.selection.nodeIds.length > 0 ? (
                   <CanvasSelectionActions

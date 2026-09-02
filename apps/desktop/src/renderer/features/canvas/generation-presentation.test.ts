@@ -19,6 +19,7 @@ import {
   EMPTY_GENERATION_PLAN_PRESENTATION_STATE,
   generationActivityFromAcceptedPlan,
   generationActivityMessageKey,
+  generatedArtboardBoundsFromEditorEvent,
   generationRevealFromEditorEvent,
   generationSkeletonFromAcceptedPlan,
   projectGenerationPlanPresentationEvent,
@@ -131,6 +132,48 @@ const generationPlan = {
 const generationTarget = generationPlan.targets[0];
 
 describe("Renderer Agent generation presentation", () => {
+  it("derives newly committed root artboards for viewport reveal", () => {
+    const runtime = new EditorRuntime(createWelcomeDocument(), {
+      createId: (prefix) => `${prefix}_agent_artboard`,
+    });
+    let changed: EditorEvent | undefined;
+    runtime.subscribe((event) => {
+      if (event.type === "document.changed") changed = event;
+    });
+    const artboard = frameNode();
+    expect(
+      runtime.apply({
+        transactionId: "transaction_agent_artboard",
+        documentId: "document_welcome",
+        baseRevision: 0,
+        actor: { type: "agent", id: "agent_conversation" },
+        label: "Create artboard",
+        commands: [
+          {
+            commandId: "insert_agent_artboard",
+            type: "insert_element",
+            pageId: "page_welcome",
+            parentId: null,
+            index: 1,
+            node: artboard,
+          },
+        ],
+      }).ok,
+    ).toBe(true);
+    if (!changed) throw new Error("Agent artboard event is missing");
+
+    expect(
+      generatedArtboardBoundsFromEditorEvent(
+        changed,
+        runtime.getSnapshot().document,
+        "page_welcome",
+      ),
+    ).toEqual({
+      bounds: { x: 1_240, y: 80, width: 800, height: 1_000 },
+      nodeIds: ["poster_artboard"],
+    });
+  });
+
   it("derives parent-first reveal order from committed Agent additions", () => {
     const runtime = new EditorRuntime(createWelcomeDocument(), {
       createId: (prefix) => `${prefix}_agent_additions`,

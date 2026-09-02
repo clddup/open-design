@@ -25,6 +25,7 @@ import type {
 import {
   navigateBooleanSelection,
   navigateLayerSelection,
+  getNodeBounds,
   planImageNodeUpdate,
   planDeleteVectorNode,
   planVectorLayersEndpointConnect,
@@ -94,7 +95,11 @@ import {
 } from "react";
 import type { MessageKey, MessageParameters } from "@/shared/i18n/messages";
 import { useI18n } from "../../../i18n";
-import { generationRevealFromEditorEvent } from "../generation-presentation";
+import {
+  generatedArtboardBoundsFromEditorEvent,
+  generationRevealFromEditorEvent,
+} from "../generation-presentation";
+import { fitViewportToBounds, generationFitPadding } from "../canvas-viewport";
 import { commitCanvasOperation } from "../canvas-operation-commit";
 import type { ResizeFrameHandler } from "../canvas-responsive-resize";
 import { isTool } from "../../../state/editor";
@@ -155,6 +160,7 @@ export function Canvas({
   rulersVisible,
   snapSettings,
   smartSelectionMarkState,
+  viewportInteractionEpoch,
 }: {
   activeAgentRunId: string | null;
   activePageId: string;
@@ -254,6 +260,7 @@ export function Canvas({
   rulersVisible: boolean;
   snapSettings: LeaferSnapSettings;
   smartSelectionMarkState: LeaferSmartSelectionMarkState | null;
+  viewportInteractionEpoch: number;
 }) {
   const { t } = useI18n();
   const host = useRef<HTMLElement>(null);
@@ -265,6 +272,21 @@ export function Canvas({
   const generationRevealByRevision = useRef(
     new Map<number, NonNullable<LeaferEngineSyncInput["generationReveal"]>>(),
   );
+  const generationViewportRunId = useRef<string | null>(null);
+  const generatedArtboardIds = useRef(new Set<string>());
+  const generationViewportWasAdjusted = useRef(false);
+  const observedViewportInteractionEpoch = useRef(viewportInteractionEpoch);
+  if (generationViewportRunId.current !== activeAgentRunId) {
+    generationViewportRunId.current = activeAgentRunId;
+    generatedArtboardIds.current.clear();
+    generationViewportWasAdjusted.current = false;
+    observedViewportInteractionEpoch.current = viewportInteractionEpoch;
+  } else if (
+    observedViewportInteractionEpoch.current !== viewportInteractionEpoch
+  ) {
+    observedViewportInteractionEpoch.current = viewportInteractionEpoch;
+    generationViewportWasAdjusted.current = true;
+  }
   const [renderError, setRenderError] = useState<string | null>(null);
   const [assetDropActive, setAssetDropActive] = useState(false);
   const [imageCropState, setImageCropState] =
@@ -1285,6 +1307,13 @@ export function Canvas({
     (viewport: ViewportState) => {
       const current = runtime.getSnapshot().state.viewport;
       if (sameViewport(current, viewport)) return;
+      if (
+        current.zoom !== viewport.zoom ||
+        current.panX !== viewport.panX ||
+        current.panY !== viewport.panY
+      ) {
+        generationViewportWasAdjusted.current = true;
+      }
       runtime.setViewport(viewport);
     },
     [runtime],
@@ -1311,6 +1340,31 @@ export function Canvas({
           reveal,
         );
       }
+      const artboards = generatedArtboardBoundsFromEditorEvent(
+        event,
+        nextSnapshot.document,
+        activePageId,
+      );
+      if (
+        artboards &&
+        activeAgentRunId &&
+        !generationViewportWasAdjusted.current
+      ) {
+        artboards.nodeIds.forEach((nodeId) =>
+          generatedArtboardIds.current.add(nodeId),
+        );
+        const bounds = getCombinedNodeBounds(nextSnapshot.document, [
+          ...generatedArtboardIds.current,
+        ]);
+        const currentViewport = nextSnapshot.state.viewport;
+        const fitted =
+          bounds &&
+          fitViewportToBounds(currentViewport, bounds, {
+            maxZoom: 1,
+            padding: generationFitPadding(currentViewport),
+          });
+        if (fitted) runtime.setViewport(fitted);
+      }
       if (changesByRevision.current.size <= 8) return;
       const oldest = [...changesByRevision.current.keys()].sort(
         (left, right) => left - right,
@@ -1320,7 +1374,7 @@ export function Canvas({
         generationRevealByRevision.current.delete(oldest);
       }
     });
-  }, [activePageId, runtime]);
+  }, [activeAgentRunId, activePageId, runtime]);
 
   useEffect(() => {
     const element = host.current;
@@ -2441,6 +2495,22 @@ function sameViewport(left: ViewportState, right: ViewportState) {
     Math.abs(left.width - right.width) < 0.000_001 &&
     Math.abs(left.height - right.height) < 0.000_001
   );
+}
+
+function getCombinedNodeBounds(
+  document: DesignDocument,
+  nodeIds: readonly string[],
+) {
+  const bounds = nodeIds.flatMap((nodeId) => {
+    const value = getNodeBounds(document, nodeId);
+    return value ? [value] : [];
+  });
+  if (bounds.length === 0) return null;
+  const left = Math.min(...bounds.map(({ x }) => x));
+  const top = Math.min(...bounds.map(({ y }) => y));
+  const right = Math.max(...bounds.map(({ x, width }) => x + width));
+  const bottom = Math.max(...bounds.map(({ y, height }) => y + height));
+  return { x: left, y: top, width: right - left, height: bottom - top };
 }
 
 function solidPaintColor(paints: readonly Paint[]): string {

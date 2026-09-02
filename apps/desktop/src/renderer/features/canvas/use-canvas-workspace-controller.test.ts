@@ -27,6 +27,8 @@ describe("useCanvasWorkspaceController", () => {
       result.current.changeZoom(4);
     });
 
+    expect(result.current.viewportInteractionEpoch).toBe(1);
+
     expect(runtime.getSnapshot().state.viewport).toEqual({
       width: 1000,
       height: 800,
@@ -40,6 +42,7 @@ describe("useCanvasWorkspaceController", () => {
     expect(runtime.getSnapshot().state.viewport.zoom).toBe(8);
     act(() => result.current.changeZoom(0));
     expect(runtime.getSnapshot().state.viewport.zoom).toBe(0.1);
+    expect(result.current.viewportInteractionEpoch).toBe(3);
     unmount();
   });
 
@@ -52,6 +55,7 @@ describe("useCanvasWorkspaceController", () => {
     );
 
     act(() => result.current.fitCanvas("page"));
+    expect(result.current.viewportInteractionEpoch).toBe(1);
     const pageBounds = getNodeBounds(
       runtime.getSnapshot().document,
       "frame_welcome",
@@ -63,6 +67,7 @@ describe("useCanvasWorkspaceController", () => {
       runtime.setSelection(["title_welcome"]);
       result.current.fitCanvas("selection");
     });
+    expect(result.current.viewportInteractionEpoch).toBe(2);
     const selectionBounds = getSelectionBounds(runtime.getSnapshot().document, [
       "title_welcome",
     ]);

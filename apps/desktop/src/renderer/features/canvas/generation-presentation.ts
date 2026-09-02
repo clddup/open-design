@@ -584,6 +584,44 @@ export function generationRevealFromEditorEvent(
   };
 }
 
+export function generatedArtboardBoundsFromEditorEvent(
+  event: EditorEvent,
+  document: DesignDocument,
+  pageId: string,
+):
+  | {
+      bounds: { x: number; y: number; width: number; height: number };
+      nodeIds: string[];
+    }
+  | undefined {
+  if (
+    event.type !== "document.changed" ||
+    event.result.revision.actor?.type !== "agent"
+  ) {
+    return undefined;
+  }
+  const page = document.pagesById[pageId];
+  if (!page) return undefined;
+  const added = new Set(event.result.changes.addedNodeIds);
+  const nodeIds = page.rootNodeIds.filter((nodeId) => {
+    const node = document.nodesById[nodeId];
+    return added.has(nodeId) && node !== undefined && isFrameLikeNode(node);
+  });
+  const bounds = nodeIds.flatMap((nodeId) => {
+    const value = getNodeBounds(document, nodeId);
+    return value ? [value] : [];
+  });
+  if (bounds.length === 0) return undefined;
+  const left = Math.min(...bounds.map(({ x }) => x));
+  const top = Math.min(...bounds.map(({ y }) => y));
+  const right = Math.max(...bounds.map(({ x, width }) => x + width));
+  const bottom = Math.max(...bounds.map(({ y, height }) => y + height));
+  return {
+    bounds: { x: left, y: top, width: right - left, height: bottom - top },
+    nodeIds,
+  };
+}
+
 const GENERATION_TWEEN_NODE_FIELDS = new Set([
   "blendMode",
   "effects",

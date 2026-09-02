@@ -6421,6 +6421,112 @@ describe("App", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("fits a newly generated artboard with canvas breathing room", async () => {
+    const { user, conversation } = await openProjectConversation();
+    await user.type(
+      screen.getByLabelText("Continue the task"),
+      "Create an editorial poster",
+    );
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    const request = runRequests(conversation.conversationId).at(-1);
+    if (!request) throw new Error("Agent run request is missing");
+    act(() => {
+      emitAgentEvent?.({
+        type: "run.started",
+        runId: request.runId,
+        startedAt: now,
+      });
+      runtime().setViewport({
+        width: 1_000,
+        height: 800,
+        zoom: 1,
+        panX: 0,
+        panY: 0,
+      });
+      const result = runtime().apply({
+        transactionId: "transaction_generated_artboard",
+        documentId: "document_mobile",
+        baseRevision: 0,
+        actor: { type: "agent", id: conversation.conversationId },
+        label: "Create poster artboard",
+        commands: [
+          {
+            commandId: "insert_generated_artboard",
+            type: "insert_element",
+            pageId: "page_welcome",
+            parentId: null,
+            index: 1,
+            node: {
+              id: "generated_artboard",
+              kind: "frame",
+              name: "Generated poster",
+              parentId: null,
+              childIds: [],
+              visible: true,
+              locked: false,
+              transform: [1, 0, 0, 1, 1_240, 80],
+              size: { width: 800, height: 1_000 },
+              exportSettings: [],
+              opacity: 1,
+              properties: {
+                fills: [{ type: "solid", color: "#ffffff", opacity: 1 }],
+                strokes: [],
+                strokeWidth: 0,
+                cornerRadius: 0,
+                clipsContent: true,
+              },
+              extensions: {},
+            },
+          },
+        ],
+      });
+      expect(result.ok).toBe(true);
+    });
+
+    await waitFor(() => {
+      const viewport = runtime().getSnapshot().state.viewport;
+      expect(viewport.zoom).toBeCloseTo(0.672);
+      expect(viewport.panX).toBeCloseTo(-602.08);
+      expect(viewport.panY).toBeCloseTo(10.24);
+    });
+
+    fireEvent.keyDown(window, {
+      code: "Equal",
+      key: "+",
+      metaKey: true,
+    });
+    await waitFor(() =>
+      expect(runtime().getSnapshot().state.viewport.zoom).toBeCloseTo(0.7392),
+    );
+    const manualViewport = runtime().getSnapshot().state.viewport;
+    act(() => {
+      const result = runtime().apply({
+        transactionId: "transaction_second_generated_artboard",
+        documentId: "document_mobile",
+        baseRevision: 1,
+        actor: { type: "agent", id: conversation.conversationId },
+        label: "Create second poster artboard",
+        commands: [
+          {
+            commandId: "insert_second_generated_artboard",
+            type: "insert_element",
+            pageId: "page_welcome",
+            parentId: null,
+            index: 2,
+            node: {
+              ...runtime().getSnapshot().document.nodesById.generated_artboard,
+              id: "second_generated_artboard",
+              name: "Second generated poster",
+              transform: [1, 0, 0, 1, 2_120, 80],
+            },
+          },
+        ],
+      });
+      expect(result.ok).toBe(true);
+    });
+    expect(runtime().getSnapshot().state.viewport).toEqual(manualViewport);
+  });
+
   it("keeps plan-only canvas presentation absent when the user stops", async () => {
     const { user, conversation } = await openProjectConversation();
     await user.type(
