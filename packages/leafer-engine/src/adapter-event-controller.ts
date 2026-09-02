@@ -46,6 +46,7 @@ export type LeaferAdapterEventCallbacks = {
   onRenderChildStart: () => void;
   onKeyDown: (event: KeyboardEvent) => void;
   onKeyUp: (event: KeyboardEvent) => void;
+  onWindowBlur: () => void;
   onContextLost: (event: Event) => void;
 };
 
@@ -167,6 +168,9 @@ export class LeaferAdapterEventController {
     );
     this.#bindDom(options.keyboardTarget, "keyup", (event) =>
       callbacks.onKeyUp(event as KeyboardEvent),
+    );
+    this.#bindDom(options.keyboardTarget, "blur", () =>
+      callbacks.onWindowBlur(),
     );
     this.#bindDom(options.host, "contextlost", (event) =>
       callbacks.onContextLost(event),

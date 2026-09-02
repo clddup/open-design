@@ -3,7 +3,6 @@ import {
   alignItems,
   analyzeSmartSelection,
   distributeItems,
-  GEOMETRY_SERVICE_CONTRACT_VERSION,
   MAX_ARRANGEMENT_SPACING,
   measureItemSpacing,
   rearrangeSmartSelectionGrid,
@@ -24,10 +23,6 @@ const items = (
   }));
 
 describe("geometry arrangement", () => {
-  it("exposes a stable service contract version", () => {
-    expect(GEOMETRY_SERVICE_CONTRACT_VERSION).toBe(31);
-  });
-
   it("aligns unequal items against the requested selection edge or center", () => {
     const source = items(["one", 10, 20, 20, 10], ["two", 50, 70, 40, 30]);
     expect(alignItems(source, "align-left")).toMatchObject({

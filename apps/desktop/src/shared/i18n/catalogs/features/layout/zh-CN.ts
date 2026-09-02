@@ -22,6 +22,8 @@ export const layoutMessages = {
   "canvas.rulerGuideStale": "移动参考线时文档已变化，请重新拖动当前参考线。",
   "status.viewOptions": "视图选项",
   "status.rulers": "标尺",
+  "status.snapToObjects": "吸附到对象",
+  "status.snapToPixelGrid": "吸附到像素网格",
   "canvas.autoLayoutSpacingStale":
     "调整间距时所选 Auto Layout 已发生变化，请重新拖动当前画布手柄。",
   "canvas.gridTrackStale":

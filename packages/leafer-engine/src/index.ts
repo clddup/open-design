@@ -35,6 +35,8 @@ export type {
   LeaferImageCropState,
   LeaferOperationKind,
   LeaferOperationRequest,
+  LeaferSnapGuideLine,
+  LeaferSnapSettings,
   LeaferRasterExportResult,
   LeaferSmartSelectionSpacingRequest,
   LeaferSmartSelectionMarkState,

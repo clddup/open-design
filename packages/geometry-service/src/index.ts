@@ -1,4 +1,4 @@
-export const GEOMETRY_SERVICE_CONTRACT_VERSION = 31 as const;
+export const GEOMETRY_SERVICE_CONTRACT_VERSION = 32 as const;
 export {
   LINE_ENDPOINT_MARKER_SIZE,
   LINE_ENDPOINT_MARKER_VIEW_BOX,
@@ -55,6 +55,18 @@ export {
   type SmartSelectionReflowMutation,
   type SmartSelectionReflowPlan,
 } from "./smart-selection-reflow.js";
+export {
+  createSnapTargetIndex,
+  resolveMoveSnapping,
+  type SnapAnchor,
+  type SnapAxis,
+  type SnapGuideLine,
+  type SnapMatch,
+  type SnapResolution,
+  type SnapTarget,
+  type SnapTargetIndex,
+  type SnapTargetSource,
+} from "./snapping.js";
 export {
   connectVectorEndpoints,
   cutVectorNetworkByLine,

@@ -26,6 +26,7 @@ import type {
   TextLayoutProvider,
   TextRunLayoutProvider,
 } from "@opendesign/text-service";
+import type { SnapGuideLine } from "@opendesign/geometry-service/snapping";
 import type { LeaferTextRunStyle } from "./text-run-layout.js";
 import type { LeaferTextRunProjectionResolution } from "./text-run-projection.js";
 
@@ -53,6 +54,11 @@ export type LeaferOperationKind =
   | "text"
   | "vector"
   | "image";
+
+export interface LeaferSnapSettings {
+  objects: boolean;
+  pixelGrid: boolean;
+}
 
 export interface LeaferOperationRequest {
   kind: LeaferOperationKind;
@@ -464,12 +470,16 @@ export interface LeaferEngineSyncInput {
   layoutGuideFrameId?: string;
   pageId: string;
   reducedMotion?: boolean;
+  rulerGuidesVisible?: boolean;
   selection: SelectionState;
+  snapSettings?: LeaferSnapSettings;
   textRunProjection?: LeaferTextRunProjectionResolution;
   tool: LeaferCanvasTool;
   vectorEditScope?: LeaferVectorEditScope;
   viewport: ViewportState;
 }
+
+export type LeaferSnapGuideLine = SnapGuideLine;
 
 export interface LeaferFidelityWarning {
   code:

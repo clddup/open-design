@@ -59,6 +59,7 @@ describe("LeaferAdapterEventController", () => {
     app.emit(events.pointerMove, { x: 12, y: 20 });
     app.emit(events.viewportZoom, {});
     keyboardTarget.emit("keydown", keyboardEvent("keydown", "Q"));
+    keyboardTarget.emit("blur", new Event("blur"));
     host.emit("contextlost", new Event("contextlost"));
 
     expect(callbacks.onSelection).toHaveBeenCalledOnce();
@@ -70,6 +71,7 @@ describe("LeaferAdapterEventController", () => {
     expect(callbacks.onKeyDown).toHaveBeenCalledWith(
       expect.objectContaining({ code: "Q" }),
     );
+    expect(callbacks.onWindowBlur).toHaveBeenCalledOnce();
     expect(callbacks.onContextLost).toHaveBeenCalledWith(expect.any(Event));
   });
 
@@ -93,7 +95,7 @@ describe("LeaferAdapterEventController", () => {
     expect(
       app.listenerCount + editor.listenerCount + editBox.listenerCount,
     ).toBe(27);
-    expect(keyboardTarget.listenerCount + host.listenerCount).toBe(3);
+    expect(keyboardTarget.listenerCount + host.listenerCount).toBe(4);
 
     controller.dispose();
     controller.dispose();
@@ -103,7 +105,7 @@ describe("LeaferAdapterEventController", () => {
     ).toBe(0);
     expect(keyboardTarget.listenerCount + host.listenerCount).toBe(0);
     expect(app.offCalls + editor.offCalls + editBox.offCalls).toBe(27);
-    expect(keyboardTarget.removeCalls + host.removeCalls).toBe(3);
+    expect(keyboardTarget.removeCalls + host.removeCalls).toBe(4);
 
     editor.emit(events.editorSelect, {});
     app.emit(events.viewportMove, {});
@@ -197,6 +199,7 @@ function callbackSpies(): LeaferAdapterEventCallbacks {
     onRenderChildStart: vi.fn(),
     onKeyDown: vi.fn(),
     onKeyUp: vi.fn(),
+    onWindowBlur: vi.fn(),
     onContextLost: vi.fn(),
   };
 }

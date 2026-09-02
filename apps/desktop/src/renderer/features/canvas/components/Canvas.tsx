@@ -54,6 +54,7 @@ import {
   type LeaferCreateVectorRequest,
   type LeaferEngineAdapter,
   type LeaferEngineSyncInput,
+  type LeaferSnapSettings,
   type LeaferFidelityWarning,
   type LeaferGenerationActivity,
   type LeaferGridChildMoveRequest,
@@ -153,6 +154,7 @@ export function Canvas({
   selectionActions,
   renderSelectionContextMenu,
   rulersVisible,
+  snapSettings,
   showAgentRunStatus,
   smartSelectionMarkState,
 }: {
@@ -258,6 +260,7 @@ export function Canvas({
   selectionActions?: ReactNode;
   renderSelectionContextMenu?: (trigger: ReactElement) => ReactElement;
   rulersVisible: boolean;
+  snapSettings: LeaferSnapSettings;
   showAgentRunStatus: boolean;
   smartSelectionMarkState: LeaferSmartSelectionMarkState | null;
 }) {
@@ -1505,10 +1508,12 @@ export function Canvas({
         ? canvasGridEditorScope(snapshot.document, snapshot.state.selection)
         : {}),
       reducedMotion,
+      rulerGuidesVisible: rulersVisible,
       ...(richTextResolution
         ? { textRunProjection: richTextResolution.projection }
         : {}),
       selection: snapshot.state.selection,
+      snapSettings,
       tool,
       ...(vectorEditCollectionScope
         ? {
@@ -1548,6 +1553,8 @@ export function Canvas({
     richTextResolution,
     snapshot.state.selection,
     snapshot.state.viewport,
+    rulersVisible,
+    snapSettings,
     tool,
     vectorEditState?.tool,
     vectorEditCollectionScope,

@@ -21,6 +21,8 @@ export const layoutMessages = {
     "The document changed while the guide was being moved. Drag the current guide again.",
   "status.viewOptions": "View options",
   "status.rulers": "Rulers",
+  "status.snapToObjects": "Snap to objects",
+  "status.snapToPixelGrid": "Snap to pixel grid",
   "canvas.autoLayoutSpacingStale":
     "The selected Auto Layout changed while spacing was being adjusted. Drag the current canvas handle again.",
   "canvas.gridTrackStale":

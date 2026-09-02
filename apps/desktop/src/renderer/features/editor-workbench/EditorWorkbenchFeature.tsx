@@ -22,6 +22,7 @@ import {
 import {
   Canvas,
   CanvasSelectionActions,
+  useCanvasSnapSettings,
   useCanvasWorkspaceController,
 } from "@/renderer/features/canvas";
 import { DesignFileTabs } from "./components/DesignFileTabs";
@@ -115,6 +116,11 @@ export function EditorWorkbenchFeature({
 }: EditorWorkbenchFeatureProps) {
   const { t } = useI18n();
   const message = useMessage();
+  const {
+    settings: snapSettings,
+    toggleObjects: toggleSnapObjects,
+    togglePixelGrid: toggleSnapPixelGrid,
+  } = useCanvasSnapSettings();
   const { activePageId, activatePage, runtime, workspace, workspaceSnapshot } =
     useEditorRuntime();
   const snapshot = useEditorSnapshot();
@@ -797,6 +803,7 @@ export function EditorWorkbenchFeature({
                 />
               )}
               rulersVisible={rulersVisible}
+              snapSettings={snapSettings}
               smartSelectionMarkState={smartSelectionMarkState}
               showAgentRunStatus={
                 !utilityPanelVisible || utilityTab !== "agent"
@@ -1089,6 +1096,8 @@ export function EditorWorkbenchFeature({
           onFitSelection={() => fitCanvas("selection")}
           onZoomChange={changeZoom}
           onToggleRulers={toggleRulers}
+          onToggleSnapObjects={toggleSnapObjects}
+          onToggleSnapPixelGrid={toggleSnapPixelGrid}
           revision={designDocument.revision}
           selection={{
             count: state.selection.nodeIds.length,
@@ -1097,6 +1106,8 @@ export function EditorWorkbenchFeature({
               : undefined,
           }}
           rulersVisible={rulersVisible}
+          snapObjects={snapSettings.objects}
+          snapPixelGrid={snapSettings.pixelGrid}
           zoom={state.viewport.zoom}
         />
         {conversationDeleteDialog}

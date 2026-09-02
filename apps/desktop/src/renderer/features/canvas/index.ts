@@ -1,4 +1,5 @@
 export { Canvas } from "./components/Canvas";
+export { useCanvasSnapSettings } from "./use-canvas-snap-settings";
 export { CanvasSelectionActions } from "./components/CanvasSelectionActions";
 export { useCanvasWorkspaceController } from "./use-canvas-workspace-controller";
 export type { LayerHoverTarget } from "./layer-hover-target";

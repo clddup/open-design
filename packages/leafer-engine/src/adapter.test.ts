@@ -79,6 +79,7 @@ class FakeElement extends FakeEventTarget {
   x = 0;
   y = 0;
   setCalls = 0;
+  stroke?: string;
   strokeWidth = 0;
   transformCalls = 0;
   forceUpdate = vi.fn();
@@ -2371,6 +2372,7 @@ describe("Leafer engine selection bounds synchronization", () => {
       onContextMenuSelection,
     });
     const input = createInput();
+    input.document = structuredClone(input.document);
     input.selection = { nodeIds: ["title_welcome"] };
     adapter.sync(input);
     const app = leaferHarness.app;
@@ -8525,6 +8527,226 @@ describe("Leafer engine selection bounds synchronization", () => {
     });
     adapter.dispose();
   });
+
+  it("snaps object movement to visible ruler guides without accumulating corrections", async () => {
+    const onOperations = vi.fn(() => true);
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onOperations,
+    });
+    const input = createInput();
+    input.document = structuredClone(input.document);
+    input.selection = { nodeIds: ["title_welcome"] };
+    input.document.pagesById.page_welcome!.guides = [
+      { axis: "X", offset: 148 },
+    ];
+    input.rulerGuidesVisible = true;
+    input.snapSettings = { objects: false, pixelGrid: false };
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    const title = app && findElement(app.tree, "title_welcome");
+    const snapGuide = app?.sky.children
+      .flatMap((child) =>
+        child instanceof FakeGroup ? child.children : [child],
+      )
+      .find((child) => child instanceof FakePath && child.stroke === "#f24e8a");
+    if (!app || !title || !(snapGuide instanceof FakePath)) {
+      throw new Error("Missing snapping fixture");
+    }
+
+    app.editor.target = [title];
+    app.editor.moving = true;
+    app.editor.editBox.dragging = true;
+    app.editor.emit("editor.before-move");
+    title.localTransform.e = 66;
+    app.editor.emit("editor.move");
+    expect(title.localTransform.e).toBe(68);
+    expect(snapGuide.visible).toBe(true);
+    expect(snapGuide.path).toContain("M 148");
+    expect(snapGuide.strokeWidth).toBe(1);
+    app.tree.localTransform = {
+      a: 0.5,
+      b: 0,
+      c: 0,
+      d: 0.5,
+      e: 0,
+      f: 0,
+    };
+    app.emit("viewport.move");
+    expect(snapGuide.strokeWidth).toBe(2);
+    app.sky.localTransform = { ...app.tree.localTransform };
+    app.emit("render.child-start");
+    expect(snapGuide.strokeWidth).toBe(2);
+
+    emitWindowKey("ControlLeft");
+    expect(title.localTransform.e).toBe(66);
+    expect(snapGuide.visible).toBe(false);
+    emitWindowKey("ControlRight");
+    emitWindowKeyUp("ControlLeft");
+    expect(title.localTransform.e).toBe(66);
+    emitWindowKeyUp("ControlRight");
+    expect(title.localTransform.e).toBe(68);
+    emitWindowKey("ControlLeft");
+    expect(title.localTransform.e).toBe(66);
+    emitWindowBlur();
+    expect(title.localTransform.e).toBe(68);
+
+    title.localTransform.e = 67;
+    app.editor.emit("editor.move");
+    expect(title.localTransform.e).toBe(68);
+    app.editor.editBox.dragging = false;
+    app.editor.editBox.emit("drag.end");
+
+    expect(onOperations).toHaveBeenCalledWith({
+      kind: "move",
+      selectionNodeIds: ["title_welcome"],
+      operations: [
+        expect.objectContaining({
+          nodeId: "title_welcome",
+          transform: [1, 0, 0, 1, 68, 108],
+          type: "update_properties",
+        }),
+      ],
+    });
+    expect(snapGuide.visible).toBe(false);
+    adapter.dispose();
+  });
+
+  it("converts document snap deltas through a rotated and scaled parent", async () => {
+    const onOperations = vi.fn(() => true);
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onOperations,
+    });
+    const input = createInput();
+    input.document = structuredClone(input.document);
+    input.selection = { nodeIds: ["title_welcome"] };
+    input.document.nodesById.frame_welcome!.transform = [0, 2, -2, 0, 500, 100];
+    input.document.pagesById.page_welcome!.guides = [
+      { axis: "X", offset: 144 },
+    ];
+    input.rulerGuidesVisible = true;
+    input.snapSettings = { objects: false, pixelGrid: false };
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    const title = app && findElement(app.tree, "title_welcome");
+    if (!app || !title) throw new Error("Missing transformed snap fixture");
+
+    app.editor.target = [title];
+    app.editor.moving = true;
+    app.editor.editBox.dragging = true;
+    app.editor.emit("editor.before-move");
+    title.localTransform.f = 107;
+    app.editor.emit("editor.move");
+    expect(title.localTransform.f).toBe(106);
+    app.editor.editBox.dragging = false;
+    app.editor.editBox.emit("drag.end");
+
+    expect(onOperations).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operations: [
+          expect.objectContaining({
+            nodeId: "title_welcome",
+            transform: [1, 0, 0, 1, 64, 106],
+          }),
+        ],
+      }),
+    );
+    adapter.dispose();
+  });
+
+  it("moves a multi-selection as one object-snapped document-space unit", async () => {
+    const onOperations = vi.fn<LeaferEngineCallbacks["onOperations"]>(
+      () => true,
+    );
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onOperations,
+    });
+    const input = createInput();
+    input.selection = { nodeIds: ["feature_one", "feature_two"] };
+    input.snapSettings = { objects: true, pixelGrid: false };
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    const first = app && findElement(app.tree, "feature_one");
+    const second = app && findElement(app.tree, "feature_two");
+    if (!app || !first || !second) {
+      throw new Error("Missing multi-selection snap fixture");
+    }
+
+    app.editor.target = [first, second];
+    app.editor.moving = true;
+    app.editor.editBox.dragging = true;
+    app.editor.emit("editor.before-move");
+    first.localTransform.e = 76;
+    second.localTransform.e = 412;
+    app.editor.emit("editor.move");
+    expect(first.localTransform.e).toBe(80);
+    expect(second.localTransform.e).toBe(416);
+    app.editor.editBox.dragging = false;
+    app.editor.editBox.emit("drag.end");
+
+    expect(onOperations).toHaveBeenCalledTimes(1);
+    const request = onOperations.mock.calls[0]?.[0];
+    expect(request?.kind).toBe("move");
+    expect(request?.selectionNodeIds).toEqual(["feature_one", "feature_two"]);
+    expect(request?.operations).toHaveLength(2);
+    expect(request?.operations[0]).toMatchObject({
+      nodeId: "feature_one",
+      transform: [1, 0, 0, 1, 80, 0],
+    });
+    expect(request?.operations[1]).toMatchObject({
+      nodeId: "feature_two",
+      transform: [1, 0, 0, 1, 416, 0],
+    });
+    adapter.dispose();
+  });
+
+  it("snaps to Frame-local guides and falls back to the pixel grid", async () => {
+    const onOperations = vi.fn(() => true);
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onOperations,
+    });
+    const input = createInput();
+    input.document = structuredClone(input.document);
+    input.selection = { nodeIds: ["title_welcome"] };
+    const frame = input.document.nodesById.frame_welcome;
+    if (!frame || frame.kind !== "frame") throw new Error("Missing Frame");
+    frame.properties.guides = [{ axis: "X", offset: 70 }];
+    input.rulerGuidesVisible = true;
+    input.snapSettings = { objects: false, pixelGrid: true };
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    const title = app && findElement(app.tree, "title_welcome");
+    if (!app || !title) throw new Error("Missing Frame guide fixture");
+
+    app.editor.target = [title];
+    app.editor.moving = true;
+    app.editor.editBox.dragging = true;
+    app.editor.emit("editor.before-move");
+    title.localTransform.e = 68;
+    app.editor.emit("editor.move");
+    expect(title.localTransform.e).toBe(70);
+
+    emitWindowKey("ControlLeft");
+    title.localTransform.e = 70.4;
+    app.editor.emit("editor.move");
+    expect(title.localTransform.e).toBeCloseTo(70);
+    app.editor.editBox.dragging = false;
+    app.editor.editBox.emit("drag.end");
+    expect(onOperations).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operations: [
+          expect.objectContaining({
+            nodeId: "title_welcome",
+            transform: [1, 0, 0, 1, 70, 108],
+          }),
+        ],
+      }),
+    );
+    adapter.dispose();
+  });
 });
 
 function createInput(): LeaferEngineSyncInput {
@@ -9421,6 +9643,13 @@ function emitWindowKeyUp(code: string): {
     preventDefault: ReturnType<typeof vi.fn>;
     stopImmediatePropagation: ReturnType<typeof vi.fn>;
   };
+}
+
+function emitWindowBlur(): void {
+  const event = new Event("blur") as unknown as KeyboardEvent;
+  leaferHarness.windowListeners
+    .get("blur")
+    ?.forEach((listener) => listener(event));
 }
 
 function emitTextEditWindowKey(

@@ -432,6 +432,8 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         this.#callbacks.onGridChildSpan?.(request) ?? false,
       onOperations: (request) => this.#callbacks.onOperations(request),
       onPreviewBoolean: (states) => this.#previewBooleanTransform(states),
+      onSnapGuideLines: (lines) =>
+        this.#editorOverlays.setSnapGuideLines(lines),
       previewGridChildDrop: (frameId, point) =>
         this.#editorOverlays.previewGridChildDrop(frameId, point),
       previewGridChildSpan: (frameId, nodeId, before, next) =>
@@ -620,6 +622,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         },
         onKeyDown: (event) => this.#onWindowKeyDown(event),
         onKeyUp: (event) => this.#onWindowKeyUp(event),
+        onWindowBlur: () => this.#directTransformController.handleWindowBlur(),
         onContextLost: (event) => this.#onContextLost(event),
       },
     });
@@ -1028,7 +1031,9 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       nearlyEqual(current.b, 0) &&
       nearlyEqual(current.c, 0)
     ) {
-      if (!this.#synchronizing) this.#editorOverlays.syncViewport(viewport);
+      if (!this.#synchronizing) {
+        this.#editorOverlays.syncViewport(viewport);
+      }
       return;
     }
     this.#app.tree.setTransform({
@@ -1452,6 +1457,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   };
 
   #onWindowKeyUp = (event: KeyboardEvent) => {
+    this.#directTransformController.handleKeyUp(event);
     this.#vectorEditController.handleKeyUp(event);
   };
 

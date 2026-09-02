@@ -41,13 +41,13 @@
 
 ### 精确排列 — 降级可用
 
-通过人工 UI 与 Agent 共用的 planner 将单层对齐到显式父级、排列多层对象、编辑 Smart Selection 间距与回流、翻转图层、设置持久旋转原点，并创建 Figma-shaped Page/Frame 标尺参考线。
+通过共享编辑器几何链对齐与排列图层、编辑 Smart Selection 间距与回流、翻转图层、设置持久旋转原点、创建 Figma-shaped Page/Frame 标尺参考线，并在移动普通对象时使用对象、参考线或像素网格吸附。
 
 - ID：`transform.precise-arrangement`
-- 实现方：DesignDocument 1.57.0 + Geometry Service contract 31 + EditorRuntime + Leafer editor projection + Canvas ruler overlay
+- 实现方：DesignDocument 1.57.0 + Geometry Service contract 32 + EditorRuntime + Leafer editor projection + Canvas ruler/snap overlays
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=unavailable
-- 证据：自动化 17 项；实机 0 项
-- 限制：对象/几何吸附、对标尺参考线吸附、像素网格取整、参考线距离标注和 macOS/Windows 打包产品交互证据仍未补齐。
+- 证据：自动化 21 项；实机 0 项
+- 限制：移动吸附已支持对象外边缘与中心、Page 参考线、轴对齐 Frame-local 参考线和像素网格取整。Vector geometry 吸附、旋转/倾斜 Frame 参考线吸附、resize 吸附、参考线距离标注及 macOS/Windows 打包产品交互证据仍未补齐。
 - 限制：排列产品链与隔离的 PathKit 矢量 provider 保持明确分离；本能力不据此宣称任何矢量产品能力。
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360040449713-Add-guides-to-the-canvas-or-frames)
 - 专业参照：[官方说明](https://developers.figma.com/docs/plugins/api/Guide/)

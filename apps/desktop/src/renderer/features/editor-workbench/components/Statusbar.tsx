@@ -33,10 +33,14 @@ export function Statusbar({
   onFitPage,
   onFitSelection,
   onToggleRulers,
+  onToggleSnapObjects,
+  onToggleSnapPixelGrid,
   onZoomChange,
   revision,
   selection,
   rulersVisible,
+  snapObjects,
+  snapPixelGrid,
   zoom,
 }: {
   dirty: boolean;
@@ -44,10 +48,14 @@ export function Statusbar({
   onFitPage: () => void;
   onFitSelection: () => void;
   onToggleRulers: () => void;
+  onToggleSnapObjects: () => void;
+  onToggleSnapPixelGrid: () => void;
   onZoomChange: (zoom: number) => void;
   revision: number;
   selection: StatusbarSelection;
   rulersVisible: boolean;
+  snapObjects: boolean;
+  snapPixelGrid: boolean;
   zoom: number;
 }) {
   const { t } = useI18n();
@@ -79,6 +87,18 @@ export function Statusbar({
             shortcut="Shift+R"
           >
             {t("status.rulers")}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            icon={snapObjects ? <Icon name="lucide:check" /> : undefined}
+            onSelect={onToggleSnapObjects}
+          >
+            {t("status.snapToObjects")}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            icon={snapPixelGrid ? <Icon name="lucide:check" /> : undefined}
+            onSelect={onToggleSnapPixelGrid}
+          >
+            {t("status.snapToPixelGrid")}
           </DropdownMenuItem>
         </DropdownMenu>
         {t("status.canvas")}{" "}
