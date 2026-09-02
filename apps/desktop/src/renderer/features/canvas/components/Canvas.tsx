@@ -111,6 +111,8 @@ import { useCanvasInlineEditors } from "../use-canvas-inline-editors";
 import { canvasGridEditorScope } from "../canvas-grid-editor-scope";
 import { CanvasFrameLabels } from "./CanvasFrameLabels";
 import { RotationOriginOverlay } from "./RotationOriginOverlay";
+import { commitRulerGuideEdit, type RulerGuideEdit } from "../ruler-guides";
+import { RulerGuides } from "./RulerGuides";
 
 export function Canvas({
   activeAgentRunId,
@@ -150,6 +152,7 @@ export function Canvas({
   onSetRotationOrigin,
   selectionActions,
   renderSelectionContextMenu,
+  rulersVisible,
   showAgentRunStatus,
   smartSelectionMarkState,
 }: {
@@ -254,6 +257,7 @@ export function Canvas({
   ) => boolean;
   selectionActions?: ReactNode;
   renderSelectionContextMenu?: (trigger: ReactElement) => ReactElement;
+  rulersVisible: boolean;
   showAgentRunStatus: boolean;
   smartSelectionMarkState: LeaferSmartSelectionMarkState | null;
 }) {
@@ -902,6 +906,30 @@ export function Canvas({
       });
     },
     [onResizeFrame, onResizeSmartSelection, onTransactionError, runtime, t],
+  );
+
+  const editRulerGuide = useCallback(
+    (edit: RulerGuideEdit) => {
+      const result = commitRulerGuideEdit(
+        runtime,
+        edit,
+        `canvas_guide_${crypto.randomUUID().replaceAll("-", "")}`,
+        t("history.updateRulerGuides"),
+      );
+      onTransactionError(
+        result.ok
+          ? null
+          : result.code === "locked"
+            ? t("canvas.rulerGuideLocked")
+            : result.code === "stale" ||
+                result.code === "invalid-target" ||
+                result.code === "not-found"
+              ? t("canvas.rulerGuideStale")
+              : (result.message ?? t("canvas.rulerGuideStale")),
+      );
+      return result.ok;
+    },
+    [onTransactionError, runtime, t],
   );
 
   const applyImageCrop = useCallback(
@@ -1573,8 +1601,8 @@ export function Canvas({
     <main
       aria-label={t("canvas.label")}
       className={`${styles.root} ${styles.leafer}${
-        assetDropActive ? ` ${styles.assetDrop}` : ""
-      }`}
+        rulersVisible ? ` ${styles.rulersVisible}` : ""
+      }${assetDropActive ? ` ${styles.assetDrop}` : ""}`}
       onDragLeave={(event) => {
         const related = event.relatedTarget;
         if (!(
@@ -1601,6 +1629,16 @@ export function Canvas({
       ref={host}
       tabIndex={0}
     >
+      {rulersVisible && (
+        <RulerGuides
+          document={snapshot.document}
+          onEdit={editRulerGuide}
+          onFocusCanvas={() => host.current?.focus()}
+          pageId={activePageId}
+          selection={snapshot.state.selection}
+          viewport={snapshot.state.viewport}
+        />
+      )}
       {assetDropActive && (
         <div className={styles.assetDropHint} role="status">
           <Icon name="lucide:image" size={15} />

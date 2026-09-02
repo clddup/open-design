@@ -248,6 +248,7 @@ describe("design Agent tool aggregation", () => {
         "set-horizontal-spacing",
         "repair-overflow",
         "resize-frame",
+        "set-ruler-guides",
       ]),
     );
     expect(arrangeSchema.properties?.action?.enum).not.toContain(

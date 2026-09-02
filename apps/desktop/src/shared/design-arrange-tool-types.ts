@@ -1,6 +1,7 @@
 import type {
   AutoLayout,
   GridChildPlacement,
+  Guide,
   LayoutConstraints,
   LayoutGuide,
   LayoutLimits,
@@ -113,4 +114,10 @@ export type DesignArrangeToolInput =
       pageId: string;
       frameId: string;
       layoutGuides: LayoutGuide[];
-    };
+    }
+  | ({
+      action: "set-ruler-guides";
+      label: string;
+      pageId: string;
+      guides: Guide[];
+    } & ({ target: "page" } | { target: "frame"; frameId: string }));

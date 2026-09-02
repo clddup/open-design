@@ -7006,6 +7006,94 @@ describe("Renderer semantic hierarchy tool", () => {
     expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
   });
 
+  it("sets Page and Frame ruler guides through the shared Arrange transaction", async () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    const pageResponse = await executeDesignToolRequest(
+      {
+        requestId: "page_ruler_guides_set",
+        call: {
+          toolCallId: "tool_page_ruler_guides_set",
+          toolName: DESIGN_EDIT_TOOL_NAME,
+          input: {
+            label: "Add page alignment guides",
+            edits: [
+              {
+                kind: "arrange",
+                input: {
+                  action: "set-ruler-guides",
+                  label: "Add page alignment guides",
+                  pageId: "page_welcome",
+                  target: "page",
+                  guides: [{ axis: "X", offset: 120 }],
+                },
+              },
+            ],
+          },
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(pageResponse).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "edit-design",
+          revision: 1,
+          atomic: true,
+        },
+      },
+    });
+
+    const frameResponse = await executeDesignToolRequest(
+      {
+        requestId: "frame_ruler_guides_set",
+        call: {
+          toolCallId: "tool_frame_ruler_guides_set",
+          toolName: DESIGN_EDIT_TOOL_NAME,
+          input: {
+            label: "Add frame alignment guides",
+            edits: [
+              {
+                kind: "arrange",
+                input: {
+                  action: "set-ruler-guides",
+                  label: "Add frame alignment guides",
+                  pageId: "page_welcome",
+                  target: "frame",
+                  frameId: "frame_welcome",
+                  guides: [{ axis: "Y", offset: 64 }],
+                },
+              },
+            ],
+          },
+        },
+        context: { ...pageContext, revision: 1 },
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(frameResponse).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "edit-design",
+          revision: 2,
+          atomic: true,
+        },
+      },
+    });
+    expect(
+      runtime.getSnapshot().document.pagesById.page_welcome?.guides,
+    ).toEqual([{ axis: "X", offset: 120 }]);
+    const frame = runtime.getSnapshot().document.nodesById.frame_welcome;
+    expect(
+      frame?.kind === "frame" ? frame.properties.guides : undefined,
+    ).toEqual([{ axis: "Y", offset: 64 }]);
+    expect(runtime.getSnapshot().state.history.undo).toHaveLength(2);
+  });
+
   it("repairs trailing delivery overflow through one bounded Agent transaction", async () => {
     const document = structuredClone(createWelcomeDocument());
     const trailing = document.nodesById.feature_three;

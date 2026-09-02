@@ -166,5 +166,5 @@ function hierarchyCreatedNodeIds(input: DesignHierarchyToolInput): string[] {
 function arrangeTargetIds(input: DesignArrangeToolInput): string[] {
   if ("nodeId" in input) return [input.nodeId];
   if ("frameId" in input) return [input.frameId];
-  return [...input.nodeIds];
+  return "nodeIds" in input ? [...input.nodeIds] : [];
 }

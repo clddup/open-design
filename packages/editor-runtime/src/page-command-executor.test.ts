@@ -36,6 +36,20 @@ describe("page command executor", () => {
 
     expect(
       applyPageCommand(document, {
+        commandId: "update_page_name_and_guides",
+        type: "update_page",
+        pageId: "page_second",
+        name: "Measured page",
+        guides: [{ axis: "X", offset: 120 }],
+      }),
+    ).toBe(true);
+    expect(document.pagesById.page_second).toMatchObject({
+      name: "Measured page",
+      guides: [{ axis: "X", offset: 120 }],
+    });
+
+    expect(
+      applyPageCommand(document, {
         commandId: "move_page",
         type: "move_page",
         pageId: "page_second",

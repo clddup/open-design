@@ -1,0 +1,118 @@
+.root,
+.rulers,
+.guides {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.root {
+  z-index: 4;
+}
+
+.rulers {
+  z-index: 2;
+}
+
+.guides {
+  z-index: 1;
+}
+
+.horizontalRuler,
+.verticalRuler,
+.corner {
+  fill: color-mix(in srgb, var(--ui-surface-raised) 96%, transparent);
+  stroke: var(--ui-border);
+  stroke-width: 1;
+  pointer-events: auto;
+}
+
+.horizontalRuler {
+  cursor: ns-resize;
+}
+
+.verticalRuler {
+  cursor: ew-resize;
+}
+
+.corner {
+  cursor: default;
+}
+
+.selectionRange {
+  fill: color-mix(in srgb, var(--ui-accent) 18%, transparent);
+  pointer-events: none;
+}
+
+.tick {
+  stroke: var(--ui-text-faint);
+  stroke-width: 1;
+  pointer-events: none;
+}
+
+.tickLabel,
+.verticalTickLabel {
+  fill: var(--ui-text-muted);
+  font-size: 8px;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  user-select: none;
+}
+
+.guide,
+.selectedGuide,
+.draftGuide {
+  fill: none;
+  stroke: var(--ui-accent);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.selectedGuide {
+  stroke-width: 2;
+}
+
+.draftGuide {
+  stroke-dasharray: 3 2;
+}
+
+.guideHitTarget {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 10;
+  pointer-events: stroke;
+  cursor: grab;
+
+  &:active {
+    cursor: grabbing;
+  }
+
+  &:focus-visible {
+    outline: none;
+    stroke: color-mix(in srgb, var(--ui-focus) 28%, transparent);
+  }
+
+  &[data-locked="true"] {
+    cursor: default;
+  }
+}
+
+.value {
+  position: absolute;
+  z-index: 7;
+  min-width: 32px;
+  padding: 2px 5px;
+  border: 1px solid var(--ui-border-strong);
+  border-radius: 4px;
+  color: var(--ui-text-on-accent);
+  background: var(--ui-accent);
+  box-shadow: var(--ui-shadow-sm);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  line-height: 14px;
+  text-align: center;
+  pointer-events: none;
+}

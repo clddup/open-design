@@ -1,4 +1,5 @@
 import type { NodeKind } from "@opendesign/design-contracts";
+import { DropdownMenu, DropdownMenuItem, Icon } from "@opendesign/ui";
 import type { MessageKey } from "@/shared/i18n/messages";
 import { useI18n } from "../../../i18n";
 import styles from "./Statusbar.module.scss";
@@ -31,18 +32,22 @@ export function Statusbar({
   error,
   onFitPage,
   onFitSelection,
+  onToggleRulers,
   onZoomChange,
   revision,
   selection,
+  rulersVisible,
   zoom,
 }: {
   dirty: boolean;
   error: string | null;
   onFitPage: () => void;
   onFitSelection: () => void;
+  onToggleRulers: () => void;
   onZoomChange: (zoom: number) => void;
   revision: number;
   selection: StatusbarSelection;
+  rulersVisible: boolean;
   zoom: number;
 }) {
   const { t } = useI18n();
@@ -63,6 +68,19 @@ export function Statusbar({
       </span>
       <span className={styles.center}>{selectionSummary}</span>
       <span>
+        <DropdownMenu
+          contentProps={{ side: "top" }}
+          icon={<Icon name="lucide:sliders-horizontal" />}
+          label={t("status.viewOptions")}
+        >
+          <DropdownMenuItem
+            icon={rulersVisible ? <Icon name="lucide:check" /> : undefined}
+            onSelect={onToggleRulers}
+            shortcut="Shift+R"
+          >
+            {t("status.rulers")}
+          </DropdownMenuItem>
+        </DropdownMenu>
         {t("status.canvas")}{" "}
         <button aria-label={t("status.fitPage")} onClick={onFitPage}>
           {t("status.fit")}

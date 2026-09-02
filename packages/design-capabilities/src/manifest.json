@@ -1,7 +1,7 @@
 {
   "version": 1,
   "updatedAt": "2026-09-02",
-  "documentSchemaVersion": "1.56.0",
+  "documentSchemaVersion": "1.57.0",
   "engineBaseline": "leafer-editor@2.2.9",
   "categories": [
     {
@@ -199,10 +199,10 @@
         "zh-CN": "精确排列"
       },
       "description": {
-        "en": "Align one layer to its explicit parent or arrange multiple layers, edit Smart Selection spacing and reflow, flip layers, and set a persistent rotation origin through shared human and Agent planners.",
-        "zh-CN": "通过人工 UI 与 Agent 共用的 planner 将单层对齐到显式父级、排列多层对象、编辑 Smart Selection 间距与回流、翻转图层，并设置持久旋转原点。"
+        "en": "Align one layer to its explicit parent or arrange multiple layers, edit Smart Selection spacing and reflow, flip layers, set a persistent rotation origin, and author Figma-shaped Page/Frame ruler guides through shared human and Agent planners.",
+        "zh-CN": "通过人工 UI 与 Agent 共用的 planner 将单层对齐到显式父级、排列多层对象、编辑 Smart Selection 间距与回流、翻转图层、设置持久旋转原点，并创建 Figma-shaped Page/Frame 标尺参考线。"
       },
-      "provider": "DesignDocument 1.56.0 + Geometry Service contract 31 + EditorRuntime + Leafer editor projection",
+      "provider": "DesignDocument 1.57.0 + Geometry Service contract 31 + EditorRuntime + Leafer editor projection + Canvas ruler overlay",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
       "surfaces": {
         "contract": "available",
@@ -214,8 +214,8 @@
       },
       "limitations": [
         {
-          "en": "Snapping, rulers, manual guides, pixel-grid rounding, and packaged macOS/Windows interaction evidence remain incomplete.",
-          "zh-CN": "吸附、标尺、手工参考线、像素网格取整和 macOS/Windows 打包产品交互证据仍未补齐。"
+          "en": "Object/geometry snapping, snapping to ruler guides, pixel-grid rounding, guide distance redlines, and packaged macOS/Windows interaction evidence remain incomplete.",
+          "zh-CN": "对象/几何吸附、对标尺参考线吸附、像素网格取整、参考线距离标注和 macOS/Windows 打包产品交互证据仍未补齐。"
         },
         {
           "en": "The arrangement product path remains intentionally separate from the isolated PathKit vector provider; no vector product capability is implied here.",
@@ -232,11 +232,21 @@
           "apps/desktop/src/renderer/features/design-tools/design-tool-execution.test.ts",
           "apps/desktop/src/renderer/features/canvas/components/RotationOriginOverlay.test.tsx",
           "apps/desktop/src/renderer/App.test.tsx",
-          "apps/desktop/src/renderer/features/editor-workbench/components/PropertiesPanel.test.tsx"
+          "apps/desktop/src/renderer/features/editor-workbench/components/PropertiesPanel.test.tsx",
+          "packages/design-contracts/src/guides.test.ts",
+          "packages/editor-runtime/src/guide-operations.test.ts",
+          "packages/figma-interop/src/guides.test.ts",
+          "apps/desktop/src/renderer/features/canvas/ruler-guides.test.ts",
+          "apps/desktop/src/renderer/features/editor-workbench/components/Statusbar.test.tsx",
+          "apps/desktop/src/renderer/features/canvas/components/RulerGuides.test.tsx",
+          "apps/desktop/src/main/agent/design-edit-tool-handler.test.ts",
+          "apps/desktop/src/renderer/features/canvas/use-canvas-workspace-controller.test.ts"
         ],
         "manual": []
       },
       "references": [
+        "https://help.figma.com/hc/en-us/articles/360040449713-Add-guides-to-the-canvas-or-frames",
+        "https://developers.figma.com/docs/plugins/api/Guide/",
         "https://help.figma.com/hc/en-us/articles/360039956914-Adjust-alignment-rotation-position-and-dimensions",
         "https://help.figma.com/hc/en-us/articles/41352588622615-Move-a-layer-s-anchor-point",
         "https://help.figma.com/hc/en-us/articles/360040450233-Arrange-layers-with-Smart-selection"
@@ -254,7 +264,7 @@
         "en": "Create editable cubic contours with Pen, refine vertices and Bézier handles, connect endpoints within or across sibling Vector layers, override cap/join appearance and circular radius per vertex, apply direct Paint or shared Paint Styles to stable fill regions, convert visible strokes into filled editable Vector siblings, and flatten supported same-parent Frames, nested Groups, Booleans, Component Instance current projections, exact glyph-outline Text, Images, shapes, Paths, and Vectors into one editable Vector while preserving one authoritative Vector Network.",
         "zh-CN": "使用 Pen 创建可编辑三次曲线轮廓、继续调整节点与贝塞尔手柄、连接同层或 sibling Vector 图层的端点、按顶点覆盖端帽、转角与 circular 圆角、给稳定填充区域设置直接 Paint 或共享 Paint Style、把可见描边转换为新的 filled editable Vector sibling，并将同父级受支持的 Frame、nested Group、Boolean、Component Instance 当前投影、可信 glyph-outline Text、Image、图形、Path 与 Vector 拼合为一个 editable Vector，同时保持唯一权威 Vector Network。"
       },
-      "provider": "DesignDocument 1.56.0 + Geometry Service contract 31 point/path selection-delete/transform/Bend/Connect/Disconnect/Cut/region Fill/region Paint Style/vertex stroke appearance/vertex corner radius/regular-shape corner smoothing/Outline Stroke/Flatten + EditorRuntime document-space multi-Vector transform/Cut/cross-layer Connect/branch junction/Frame-Group-Boolean-Component-Text-Image and root-shell/isolated-pixel-compositing Flatten planner + Leafer exact regular-shape/Line-endpoint and synthetic region/stroke/corner projection + controlled SVG metadata",
+      "provider": "DesignDocument 1.57.0 + Geometry Service contract 31 point/path selection-delete/transform/Bend/Connect/Disconnect/Cut/region Fill/region Paint Style/vertex stroke appearance/vertex corner radius/regular-shape corner smoothing/Outline Stroke/Flatten + EditorRuntime document-space multi-Vector transform/Cut/cross-layer Connect/branch junction/Frame-Group-Boolean-Component-Text-Image and root-shell/isolated-pixel-compositing Flatten planner + Leafer exact regular-shape/Line-endpoint and synthetic region/stroke/corner projection + controlled SVG metadata",
       "requiredSurfaces": [
         "contract",
         "runtime",
@@ -346,7 +356,7 @@
         "en": "Create and directly edit directed straight lines with independent start and end decorations, professional stroke controls, and editable SVG interchange.",
         "zh-CN": "创建并直接编辑有方向的直线，独立设置起终点装饰和专业描边，并通过 SVG 保持可编辑交换。"
       },
-      "provider": "DesignDocument 1.56.0 + Geometry Service contract 31 shared Line endpoint geometry + Leafer Arrow / LineEditTool + EditorRuntime Flatten + SVG controlled markers",
+      "provider": "DesignDocument 1.57.0 + Geometry Service contract 31 shared Line endpoint geometry + Leafer Arrow / LineEditTool + EditorRuntime Flatten + SVG controlled markers",
       "requiredSurfaces": [
         "contract",
         "runtime",
@@ -412,7 +422,7 @@
         "en": "Create, resize, restyle, and exchange semantic regular Polygon and Star nodes without flattening them into generic paths.",
         "zh-CN": "创建、缩放、调整外观并交换语义化 Polygon 与 Star 节点，不将其扁平化为普通 Path。"
       },
-      "provider": "DesignDocument 1.56.0 + Geometry Service contract 31 + Leafer exact projection + controlled SVG regular-shape metadata 2",
+      "provider": "DesignDocument 1.57.0 + Geometry Service contract 31 + Leafer exact projection + controlled SVG regular-shape metadata 2",
       "requiredSurfaces": [
         "contract",
         "runtime",
@@ -481,7 +491,7 @@
         "en": "Create and refine open, closed, branching, and curved vector geometry using points and Bézier handles.",
         "zh-CN": "通过节点和贝塞尔手柄创建、编辑开放、闭合、分支与曲线矢量几何。"
       },
-      "provider": "DesignDocument 1.56.0 Vector Network + Geometry Service contract 31 point/path selection-delete/transform/Bend/Connect/Disconnect/Cut/region Fill/region Paint Style/vertex stroke appearance/vertex corner radius/Outline Stroke/Flatten + EditorRuntime document-space multi-Vector transform/Cut/cross-layer Connect/branch junction/Frame-Group-Boolean-Component-Text-Image and root-shell/isolated-pixel-compositing Flatten planner + Leafer synthetic region/stroke/corner projection and native editing overlays",
+      "provider": "DesignDocument 1.57.0 Vector Network + Geometry Service contract 31 point/path selection-delete/transform/Bend/Connect/Disconnect/Cut/region Fill/region Paint Style/vertex stroke appearance/vertex corner radius/Outline Stroke/Flatten + EditorRuntime document-space multi-Vector transform/Cut/cross-layer Connect/branch junction/Frame-Group-Boolean-Component-Text-Image and root-shell/isolated-pixel-compositing Flatten planner + Leafer synthetic region/stroke/corner projection and native editing overlays",
       "requiredSurfaces": ["contract", "runtime", "human", "agent"],
       "surfaces": {
         "contract": "available",
@@ -539,7 +549,7 @@
         "en": "Non-destructive union, subtract, intersect, and exclude groups whose source layers remain editable.",
         "zh-CN": "非破坏性的 union、subtract、intersect 与 exclude，且源图层保持可编辑。"
       },
-      "provider": "DesignDocument 1.56.0 + Geometry Service contract 31 + EditorRuntime Boolean planner + recursive Skia PathKit resolver + Leafer derived projection",
+      "provider": "DesignDocument 1.57.0 + Geometry Service contract 31 + EditorRuntime Boolean planner + recursive Skia PathKit resolver + Leafer derived projection",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
       "surfaces": {
         "contract": "available",
@@ -800,7 +810,7 @@
         "en": "Create, render, transform, and edit fixed, Auto Width, or Auto Height text with one shared font style, alignment, explicit wrapping, and fixed-box overflow controls.",
         "zh-CN": "创建、渲染、变换和编辑固定、自动宽度或自动高度文字，使用单一共享字体样式、对齐、明确换行以及固定框溢出控制。"
       },
-      "provider": "DesignDocument 1.56.0 + Text Layout Service v5 / Text Run Layout v7 + leafer-editor@2.2.9 Text/TextEditor + controlled SVG text metadata v9",
+      "provider": "DesignDocument 1.57.0 + Text Layout Service v5 / Text Run Layout v7 + leafer-editor@2.2.9 Text/TextEditor + controlled SVG text metadata v9",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
       "surfaces": {
         "contract": "available",
@@ -853,7 +863,7 @@
         "en": "Author Figma-compatible UTF-16 character and paragraph runs through one revisioned Runtime, live range Inspector, Agent tools, native/HarfBuzz projection, and structured Figma/SVG/raster interchange.",
         "zh-CN": "通过唯一版本化 Runtime、真实范围 Inspector、Agent 工具、native/HarfBuzz 投影及 Figma/SVG/位图结构往返创建 Figma-compatible UTF-16 字符与段落 runs。"
       },
-      "provider": "DesignDocument 1.56.0 + Text Paragraph Service v2 / Text List Service v1 / Text Editing Session Service v2 / Text Run Layout v7 + leafer-editor 2.2.9 + HarfBuzz provider 1.7.0 + SVG metadata v9",
+      "provider": "DesignDocument 1.57.0 + Text Paragraph Service v2 / Text List Service v1 / Text Editing Session Service v2 / Text Run Layout v7 + leafer-editor 2.2.9 + HarfBuzz provider 1.7.0 + SVG metadata v9",
       "requiredSurfaces": ["contract", "runtime", "human", "agent"],
       "surfaces": {
         "contract": "available",

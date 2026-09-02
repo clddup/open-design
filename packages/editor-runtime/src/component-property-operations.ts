@@ -593,10 +593,14 @@ function bindingForType(
     if (source.kind !== "frame") {
       return { ok: false, message: "SLOT properties require a Frame sublayer" };
     }
-    if (source.properties.layoutGuides?.length) {
+    if (
+      source.properties.guides?.length ||
+      source.properties.layoutGuides?.length
+    ) {
       return {
         ok: false,
-        message: "Frames with layout guides cannot be converted to Slots",
+        message:
+          "Frames with ruler or layout guides cannot be converted to Slots",
       };
     }
     return { ok: true };

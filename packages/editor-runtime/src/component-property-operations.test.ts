@@ -357,6 +357,43 @@ describe("Figma-compatible component property operations", () => {
     ).toMatchObject({ ok: false, code: "invalid" });
   });
 
+  it("does not silently discard ruler guides when converting a Frame to a Slot", () => {
+    const document = nestedSlotCandidateFixture();
+    const source = document.nodesById.slot_outer;
+    if (source?.kind !== "frame") throw new Error("Missing Slot candidate");
+    source.properties.guides = [{ axis: "X", offset: 24 }];
+
+    expect(
+      planAddComponentProperty(document, {
+        componentId: "component_button",
+        propertyId: "slot:guided",
+        name: "Guided content",
+        type: "SLOT",
+        sourceNodeId: source.id,
+        commandPrefix: "reject_guided_slot",
+      }),
+    ).toEqual({
+      ok: false,
+      code: "invalid",
+      message:
+        "Frames with ruler or layout guides cannot be converted to Slots",
+    });
+  });
+
+  it("converts a Frame with an empty ruler guide collection to a Slot", () => {
+    const document = nestedSlotCandidateFixture();
+    const source = document.nodesById.slot_outer;
+    if (source?.kind !== "frame") throw new Error("Missing Slot candidate");
+    source.properties.guides = [];
+    const runtime = new EditorRuntime(document);
+
+    addSlotProperty(runtime, source.id, "Empty guided content", "slot:empty");
+
+    const converted = runtime.getSnapshot().document.nodesById[source.id];
+    expect(converted?.kind).toBe("slot");
+    expect(converted?.properties).not.toHaveProperty("guides");
+  });
+
   it("rejects a malformed persisted source Slot nested inside another Slot", () => {
     const runtime = new EditorRuntime(nestedSlotCandidateFixture());
     addSlotProperty(runtime, "slot_outer", "Outer", "slot:outer");

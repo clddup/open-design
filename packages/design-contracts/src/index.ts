@@ -22,6 +22,7 @@ export {
   migrateAdvancedTextDecoration,
 } from "./text-decoration.js";
 export * from "./layout.js";
+export * from "./guides.js";
 export * from "./limits.js";
 export * from "./node-paints.js";
 export * from "./schema-registry.js";

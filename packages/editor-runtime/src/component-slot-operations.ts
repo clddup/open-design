@@ -80,7 +80,12 @@ export function replaceSlotContainerKindCommand(
     if (!node) return;
     if (node.id === root.id) {
       if (kind === "slot" && node.kind === "frame") {
-        const { layoutGuides: _layoutGuides, ...properties } = node.properties;
+        const {
+          guides: _guides,
+          layoutGuides: _layoutGuides,
+          ...properties
+        } = node.properties;
+        void _guides;
         void _layoutGuides;
         nodes.push({
           ...structuredClone(node),

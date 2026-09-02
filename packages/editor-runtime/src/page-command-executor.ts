@@ -1,6 +1,7 @@
 import type {
   DesignDocument,
   DesignOperation,
+  Guide,
 } from "@opendesign/design-contracts";
 import {
   assertComponentSourcesRemain,
@@ -79,15 +80,43 @@ function updatePage(
   command: Extract<DesignOperation, { type: "update_page" }>,
 ): void {
   const page = assertPage(document, command.pageId, command.commandId);
-  assertPageName(command.name, command.commandId);
-  if (page.name === command.name) {
+  let changed = false;
+  if (command.name !== undefined) {
+    assertPageName(command.name, command.commandId);
+    if (page.name !== command.name) {
+      page.name = command.name;
+      changed = true;
+    }
+  }
+  if (
+    command.guides !== undefined &&
+    !sameGuides(page.guides ?? [], command.guides)
+  ) {
+    page.guides = structuredClone(command.guides);
+    changed = true;
+  }
+  if (!changed) {
     throw new OperationError(
       command.commandId,
-      "design.page.name_unchanged",
-      "Page name is unchanged",
+      command.name !== undefined && command.guides === undefined
+        ? "design.page.name_unchanged"
+        : "design.page.update_unchanged",
+      command.name !== undefined && command.guides === undefined
+        ? "Page name is unchanged"
+        : "Page properties are unchanged",
     );
   }
-  page.name = command.name;
+}
+
+function sameGuides(left: readonly Guide[], right: readonly Guide[]): boolean {
+  return (
+    left.length === right.length &&
+    left.every(
+      (guide, index) =>
+        guide.axis === right[index]?.axis &&
+        guide.offset === right[index]?.offset,
+    )
+  );
 }
 
 function movePage(

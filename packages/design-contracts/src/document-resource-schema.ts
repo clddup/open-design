@@ -2,6 +2,7 @@ import { Type, type TSchema } from "@sinclair/typebox";
 
 interface DocumentResourceSchemaDependencies {
   explicitVariableModesSchema: TSchema;
+  guideCollectionSchema: TSchema;
   sizeSchema: TSchema;
   jsonObjectSchema: TSchema;
 }
@@ -13,6 +14,10 @@ export function createDocumentResourceSchemas<
     dependencies,
     "explicitVariableModesSchema",
   );
+  const guideCollectionSchema = dependency(
+    dependencies,
+    "guideCollectionSchema",
+  );
   const sizeSchema = dependency(dependencies, "sizeSchema");
   const jsonObjectSchema = dependency(dependencies, "jsonObjectSchema");
   const DesignPageSchema = Type.Object(
@@ -22,6 +27,7 @@ export function createDocumentResourceSchemas<
       rootNodeIds: Type.Array(Type.String({ minLength: 1 }), {
         uniqueItems: true,
       }),
+      guides: Type.Optional(guideCollectionSchema),
       explicitVariableModes: Type.Optional(explicitVariableModesSchema),
       extensions: jsonObjectSchema,
     },

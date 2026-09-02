@@ -3456,6 +3456,17 @@ describe("design Agent tool contract", () => {
         },
       ],
     };
+    const rulerGuides = {
+      action: "set-ruler-guides",
+      label: "Align the selected Frame to measured anchors",
+      pageId: "page_1",
+      target: "frame",
+      frameId: "navigation",
+      guides: [
+        { axis: "X", offset: 64 },
+        { axis: "Y", offset: 96 },
+      ],
+    };
     const columnStretchGuide = {
       ...layoutGuides,
       label: "Show 12-column layout",
@@ -3556,6 +3567,14 @@ describe("design Agent tool contract", () => {
     expect(DesignArrangeContract.parse(layoutLimits).ok).toBe(true);
     expect(DesignArrangeContract.parse(layoutPositioning).ok).toBe(true);
     expect(DesignArrangeContract.parse(layoutGuides).ok).toBe(true);
+    expect(DesignArrangeContract.parse(rulerGuides).ok).toBe(true);
+    expect(
+      DesignArrangeContract.parse({
+        ...rulerGuides,
+        target: "page",
+        frameId: "navigation",
+      }).ok,
+    ).toBe(false);
     expect(DesignArrangeContract.parse(columnStretchGuide).ok).toBe(true);
     expect(DesignArrangeContract.parse(rowEndGuide).ok).toBe(true);
     expect(

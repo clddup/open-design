@@ -102,6 +102,13 @@ describe("useCanvasWorkspaceController", () => {
     rerender({ editorActive: true });
     fireEvent.keyDown(window, { key: "r", code: "KeyR" });
     expect(runtime.getSnapshot().state.tool).toBe("rectangle");
+    expect(result.current.rulersVisible).toBe(false);
+    fireEvent.keyDown(window, {
+      key: "R",
+      code: "KeyR",
+      shiftKey: true,
+    });
+    expect(result.current.rulersVisible).toBe(true);
 
     const input = document.createElement("input");
     document.body.append(input);
@@ -111,9 +118,15 @@ describe("useCanvasWorkspaceController", () => {
       code: "KeyR",
       metaKey: true,
     });
+    fireEvent.keyDown(input, {
+      key: "R",
+      code: "KeyR",
+      shiftKey: true,
+    });
     input.remove();
     expect(runtime.getSnapshot().state.tool).toBe("rectangle");
     expect(openRenameLayers).not.toHaveBeenCalled();
+    expect(result.current.rulersVisible).toBe(true);
 
     act(() => runtime.setSelection(["title_welcome"]));
     fireEvent.keyDown(window, { key: "Escape", code: "Escape" });

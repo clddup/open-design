@@ -30,6 +30,7 @@ import {
   DesignAssetSchema,
   DesignNodeSchema,
   DesignPageSchema,
+  GuideCollectionSchema,
   ImageAssetDerivationSchema,
   LibraryComponentSourceSchema,
   LibraryStyleSourceSchema,
@@ -103,6 +104,7 @@ const resourceOperationSchemas = createResourceOperationSchemas({
   libraryVariableSourceSchema: LibraryVariableSourceSchema,
   designPageSchema: DesignPageSchema,
   designNodeSchema: DesignNodeSchema,
+  guideCollectionSchema: GuideCollectionSchema,
   maxPageTransactionNodes: limits.MAX_PAGE_TRANSACTION_NODES,
 });
 

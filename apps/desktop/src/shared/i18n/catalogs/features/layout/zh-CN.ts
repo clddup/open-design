@@ -14,6 +14,14 @@ export const layoutMessages = {
   "history.updateGridTrack": "更新网格轨道",
   "history.updateLayoutPositioning": "更新布局定位",
   "history.updateLayoutGuides": "更新布局参考线",
+  "history.updateRulerGuides": "更新标尺参考线",
+  "canvas.rulersAndGuides": "标尺与参考线",
+  "canvas.rulerGuideLabel": "{{axis}} 轴参考线，位置 {{offset}}",
+  "canvas.rulerGuideLocked": "请先解锁画框，再编辑其中的参考线。",
+  "canvas.removeGuide": "移除参考线",
+  "canvas.rulerGuideStale": "移动参考线时文档已变化，请重新拖动当前参考线。",
+  "status.viewOptions": "视图选项",
+  "status.rulers": "标尺",
   "canvas.autoLayoutSpacingStale":
     "调整间距时所选 Auto Layout 已发生变化，请重新拖动当前画布手柄。",
   "canvas.gridTrackStale":

@@ -47,6 +47,7 @@ interface CanvasShortcutContext {
   reorderSelection: (action: LayerOrderAction) => void;
   toggleLeftPanel: () => void;
   toggleMaskSelection: () => void;
+  toggleRulers: () => void;
   toggleSelectedLayerState: (field: "locked" | "visible") => void;
   toggleUtilityPanel: () => void;
   ungroupSelection: () => void;
@@ -115,6 +116,11 @@ export function useCanvasWorkspaceController({
   const [textLayoutProviderEpoch, setTextLayoutProviderEpoch] = useState(0);
   const [smartSelectionMarkState, setSmartSelectionMarkState] =
     useState<LeaferSmartSelectionMarkState | null>(null);
+  const [rulersVisible, setRulersVisible] = useState(false);
+  const toggleRulers = useCallback(
+    () => setRulersVisible((visible) => !visible),
+    [],
+  );
   const textEditingStyleController = useRef<
     ((style: LeaferTextStyleUpdate) => boolean) | null
   >(null);
@@ -197,6 +203,7 @@ export function useCanvasWorkspaceController({
     reorderSelection,
     toggleLeftPanel,
     toggleMaskSelection,
+    toggleRulers,
     toggleSelectedLayerState,
     toggleUtilityPanel,
     ungroupSelection,
@@ -223,6 +230,7 @@ export function useCanvasWorkspaceController({
     reorderSelection,
     toggleLeftPanel,
     toggleMaskSelection,
+    toggleRulers,
     toggleSelectedLayerState,
     toggleUtilityPanel,
     ungroupSelection,
@@ -309,6 +317,7 @@ export function useCanvasWorkspaceController({
     handleTextEditingStyleControllerChange,
     handleTextLayoutProviderReady,
     layerHoverTarget,
+    rulersVisible,
     setLayerHoverTarget,
     setSmartSelectionMarkState,
     setTextRangeSelection,
@@ -318,6 +327,7 @@ export function useCanvasWorkspaceController({
     textLayoutProviderEpoch,
     textRangeSelection,
     smartSelectionMarkState,
+    toggleRulers,
     updateTextEditingStyle,
   };
 }
@@ -339,6 +349,17 @@ function handleCanvasShortcut(
     return;
   }
   if (isEditableTarget(event.target)) return;
+  if (
+    event.shiftKey &&
+    !event.metaKey &&
+    !event.ctrlKey &&
+    !event.altKey &&
+    event.code === "KeyR"
+  ) {
+    event.preventDefault();
+    context.toggleRulers();
+    return;
+  }
   const selection = runtime.getSnapshot().state.selection.nodeIds;
   const marked = currentSmartSelectionMarkState(
     runtime,

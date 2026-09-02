@@ -12,9 +12,11 @@ function renderStatusbar(
     error: null,
     onFitPage: vi.fn(),
     onFitSelection: vi.fn(),
+    onToggleRulers: vi.fn(),
     onZoomChange: vi.fn(),
     revision: 4,
     selection: { count: 0 },
+    rulersVisible: false,
     zoom: 1,
     ...overrides,
   };
@@ -72,5 +74,15 @@ describe("Statusbar", () => {
     expect(props.onZoomChange).toHaveBeenNthCalledWith(1, 1.8);
     expect(props.onZoomChange).toHaveBeenNthCalledWith(2, 1);
     expect(props.onZoomChange).toHaveBeenNthCalledWith(3, 2.2);
+  });
+
+  it("toggles rulers from the canvas view menu", async () => {
+    const user = userEvent.setup();
+    const props = renderStatusbar();
+
+    await user.click(screen.getByRole("button", { name: "View options" }));
+    await user.click(screen.getByRole("menuitem", { name: /Rulers/ }));
+
+    expect(props.onToggleRulers).toHaveBeenCalledOnce();
   });
 });

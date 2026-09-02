@@ -130,6 +130,16 @@ const inputs: DesignArrangeToolInput[] = [
   },
   {
     ...common,
+    action: "set-ruler-guides",
+    target: "frame",
+    frameId: "responsive_frame",
+    guides: [
+      { axis: "X", offset: 80 },
+      { axis: "Y", offset: 120 },
+    ],
+  },
+  {
+    ...common,
     action: "set-grid-placement",
     nodeId: "hero",
     placement: {
@@ -197,6 +207,20 @@ describe("Arrange Agent contract", () => {
       }),
     ).toEqual(
       expect.arrayContaining([expect.objectContaining({ path: "/nodeIds" })]),
+    );
+    expect(
+      DesignArrangeContract.issues({
+        ...common,
+        action: "set-ruler-guides",
+        target: "page",
+        frameId: "foreign_frame",
+        guides: [{ axis: "Z", offset: 80 }],
+      }),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: "/frameId" }),
+        expect.objectContaining({ path: "/guides/0/axis" }),
+      ]),
     );
   });
 

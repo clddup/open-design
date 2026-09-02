@@ -132,6 +132,13 @@ export {
   type LayoutGuideOperationPlan,
 } from "./layout-guide-operations.js";
 export {
+  planEditGuide,
+  planSetGuides,
+  type GuideEdit,
+  type GuideOperationPlan,
+  type GuideOwner,
+} from "./guide-operations.js";
+export {
   planResizeFrameWithConstraints,
   planSetNodeConstraints,
   type FrameLayoutOperationFailureCode,

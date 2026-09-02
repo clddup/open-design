@@ -11,6 +11,7 @@ interface ResourceOperationSchemaDependencies {
   libraryVariableSourceSchema: TSchema;
   designPageSchema: TSchema;
   designNodeSchema: TSchema;
+  guideCollectionSchema: TSchema;
   maxPageTransactionNodes: number;
 }
 
@@ -48,6 +49,10 @@ export function createResourceOperationSchemas<
   );
   const designPageSchema = dependency(dependencies, "designPageSchema");
   const designNodeSchema = dependency(dependencies, "designNodeSchema");
+  const guideCollectionSchema = dependency(
+    dependencies,
+    "guideCollectionSchema",
+  );
   const maxPageTransactionNodes = dependency(
     dependencies,
     "maxPageTransactionNodes",
@@ -180,9 +185,10 @@ export function createResourceOperationSchemas<
       ...operationBaseProperties,
       type: Type.Literal("update_page"),
       pageId: Type.String({ minLength: 1 }),
-      name: Type.String({ minLength: 1, maxLength: 256 }),
+      name: Type.Optional(Type.String({ minLength: 1, maxLength: 256 })),
+      guides: Type.Optional(guideCollectionSchema),
     },
-    { additionalProperties: false },
+    { additionalProperties: false, minProperties: 4 },
   );
   const MovePageCommandSchema = Type.Object(
     {

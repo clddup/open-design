@@ -69,6 +69,16 @@
   }
 }
 
+.rulersVisible {
+  .agentRunStatus {
+    top: 30px;
+  }
+
+  .contextStack {
+    top: 30px;
+  }
+}
+
 .agentRunMark {
   width: 7px;
   height: 7px;

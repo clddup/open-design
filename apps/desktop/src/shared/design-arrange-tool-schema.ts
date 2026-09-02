@@ -3,6 +3,7 @@ import {
   executableJsonSchema,
   GridChildPlacementSchema,
   LayoutConstraintsSchema,
+  GuideCollectionSchema,
   LayoutGuideSchema,
   LayoutLimitsSchema,
   LayoutSizingSchema,
@@ -32,6 +33,7 @@ export const DESIGN_ARRANGE_ACTIONS = [
   "set-layout-positioning",
   "set-layout-limits",
   "set-layout-guides",
+  "set-ruler-guides",
   "set-grid-placement",
   "reorder-grid-tracks",
 ] as const;
@@ -209,6 +211,20 @@ const ARRANGE_ACTION_BRANCHES = [
     ["frameId", "layoutGuides"],
   ),
   arrangeBranch(
+    "set-ruler-guides",
+    { target: { const: "page" }, guides: GuideCollectionSchema },
+    ["target", "guides"],
+  ),
+  arrangeBranch(
+    "set-ruler-guides",
+    {
+      target: { const: "frame" },
+      frameId: ID_SCHEMA,
+      guides: GuideCollectionSchema,
+    },
+    ["target", "frameId", "guides"],
+  ),
+  arrangeBranch(
     "set-grid-placement",
     { nodeId: ID_SCHEMA, placement: GridChildPlacementSchema },
     ["nodeId", "placement"],
@@ -232,6 +248,7 @@ const CONTINUATION_ARRANGE_ACTIONS = [
   ...FLIP_ACTIONS,
   "repair-overflow",
   "resize-frame",
+  "set-ruler-guides",
 ] as const;
 
 const ARRANGE_TOOL_PROPERTIES = {
@@ -255,6 +272,8 @@ const ARRANGE_TOOL_PROPERTIES = {
   origin: { anyOf: [RelativePointSchema, { type: "null" }] },
   limits: { anyOf: [LayoutLimitsSchema, { type: "null" }] },
   layoutGuides: LAYOUT_GUIDES_SCHEMA,
+  target: { enum: ["page", "frame"] },
+  guides: GuideCollectionSchema,
 } as const;
 
 const ARRANGE_CONTINUATION_ACTION_BRANCHES = ARRANGE_ACTION_BRANCHES.filter(
@@ -272,6 +291,8 @@ const ARRANGE_CONTINUATION_TOOL_PROPERTIES = {
   nodeIds: nodeIdsSchema(1),
   spacing: SPACING_SCHEMA,
   frameId: ID_SCHEMA,
+  target: { enum: ["page", "frame"] },
+  guides: GuideCollectionSchema,
   width: FRAME_SIZE_SCHEMA,
   height: FRAME_SIZE_SCHEMA,
 } as const;
@@ -279,7 +300,7 @@ const ARRANGE_CONTINUATION_TOOL_PROPERTIES = {
 export const DESIGN_ARRANGE_TOOL_INPUT_SCHEMA = executableJsonSchema({
   type: "object",
   description:
-    "Arrange or transform explicit inspected layers with one closed action shape. Align accepts one or more unique layer IDs: one direct child aligns to its explicit Frame or Slot parent, while multiple layers align to their selection bounds. Flip mirrors persistent layers with the same matrix semantics as the editor, without changing hierarchy or component links. Rotation origin uses node-local relative coordinates, may sit outside the layer bounds, and null restores the default center. Distribute and tidy-up need at least three. Spacing may be negative, zero, or positive. Constraints, Frame resize, linear/wrapped Auto Layout, Auto Layout Grid, child sizing/positioning/limits, Grid placement/track reorder, Layout Guides, and bounded overflow repair use the same Figma-shaped document fields as the Runtime. Grid autoTracks is valid only for row-auto-flow. Layout Guide IDs must be unique. The host owns current Page/revision checks, geometry, preview, transaction, and undo.",
+    "Arrange or transform explicit inspected layers with one closed action shape. Align accepts one or more unique layer IDs: one direct child aligns to its explicit Frame or Slot parent, while multiple layers align to their selection bounds. Flip mirrors persistent layers with the same matrix semantics as the editor, without changing hierarchy or component links. Rotation origin uses node-local relative coordinates, may sit outside the layer bounds, and null restores the default center. Distribute and tidy-up need at least three. Spacing may be negative, zero, or positive. Constraints, Frame resize, linear/wrapped Auto Layout, Auto Layout Grid, child sizing/positioning/limits, Grid placement/track reorder, Layout Guides, Page/Frame ruler guides, and bounded overflow repair use the same Figma-shaped document fields as the Runtime. Guide axis X is vertical and Y is horizontal; offset is relative to its owning Page or Frame. Grid autoTracks is valid only for row-auto-flow. Layout Guide IDs must be unique. The host owns current Page/revision checks, geometry, preview, transaction, and undo.",
   properties: ARRANGE_TOOL_PROPERTIES,
   required: ["action", "label", "pageId"],
   anyOf: ARRANGE_ACTION_BRANCHES,
@@ -289,7 +310,7 @@ export const DESIGN_ARRANGE_TOOL_INPUT_SCHEMA = executableJsonSchema({
 export const DESIGN_ARRANGE_CONTINUATION_INPUT_SCHEMA = executableJsonSchema({
   type: "object",
   description:
-    "Repair and visually align explicit inspected layers inside the current design. Use align, distribute, spacing, repair-overflow, or resize-frame; the host owns geometry, preview, revision, and undo.",
+    "Repair and visually align explicit inspected layers inside the current design, or set inspected Page/Frame ruler guides using Figma-compatible owner-local offsets. Use align, distribute, spacing, repair-overflow, resize-frame, or set-ruler-guides; the host owns geometry, preview, revision, and undo.",
   properties: ARRANGE_CONTINUATION_TOOL_PROPERTIES,
   required: ["action", "label", "pageId"],
   anyOf: ARRANGE_CONTINUATION_ACTION_BRANCHES,

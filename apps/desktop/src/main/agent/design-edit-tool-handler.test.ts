@@ -220,6 +220,63 @@ describe("Edit Design Main boundary", () => {
     );
   });
 
+  it("keeps Page ruler guides in the current Page scope without inventing a node target", async () => {
+    const result: TrustedToolResult = {
+      content: { ok: true },
+      designRevision: {
+        previousRevision: 4,
+        revision: 5,
+        transactionId: "transaction_page_guides",
+      },
+    };
+    const execute = vi.fn().mockResolvedValue(result);
+    const coordinator = {
+      assertVisualReviewBeforeWrite: vi.fn(),
+      resolveMaterialTargetIds: vi.fn(() => []),
+      recordMaterialDesignWriteCompleted: vi.fn(),
+      assertDesignApplyResult: vi.fn(),
+      recordDesignApplyCompleted: vi.fn(),
+    };
+
+    await expect(
+      handleEditDesignTool({
+        call: {
+          toolCallId: "page_guides_call",
+          toolName: DESIGN_EDIT_TOOL_NAME,
+          input: {
+            label: "Add page guides",
+            edits: [
+              {
+                kind: "arrange",
+                input: {
+                  action: "set-ruler-guides",
+                  label: "Add page guides",
+                  pageId: "page_main",
+                  target: "page",
+                  guides: [{ axis: "X", offset: 120 }],
+                },
+              },
+            ],
+          },
+        },
+        context,
+        coordinator: coordinator as never,
+        execute,
+        withDelivery: (value) => value,
+      }),
+    ).resolves.toBe(result);
+    expect(coordinator.resolveMaterialTargetIds).toHaveBeenCalledWith(
+      context,
+      [],
+    );
+    expect(coordinator.recordMaterialDesignWriteCompleted).toHaveBeenCalledWith(
+      context.runId,
+      [],
+      5,
+      [],
+    );
+  });
+
   it("rejects an invalid nested edit before execution", async () => {
     const execute = vi.fn();
     await expect(

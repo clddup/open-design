@@ -985,6 +985,10 @@ async function executeDesignToolRequestUnsafe(
       document,
       plan.commands,
       request.context.mutationTarget,
+      {
+        allowPageGuideCommands:
+          input.action === "set-ruler-guides" && input.target === "page",
+      },
     );
     const transaction = {
       transactionId:
@@ -1062,6 +1066,13 @@ async function executeDesignToolRequestUnsafe(
           ...(input.action === "set-layout-guides"
             ? { frameId: input.frameId, layoutGuides: input.layoutGuides }
             : {}),
+          ...(input.action === "set-ruler-guides"
+            ? {
+                target: input.target,
+                ...(input.target === "frame" ? { frameId: input.frameId } : {}),
+                guides: input.guides,
+              }
+            : {}),
           ...(input.action === "set-grid-placement"
             ? { nodeId: input.nodeId, placement: input.placement }
             : {}),
@@ -1079,6 +1090,7 @@ async function executeDesignToolRequestUnsafe(
           input.action !== "set-layout-positioning" &&
           input.action !== "set-layout-limits" &&
           input.action !== "set-layout-guides" &&
+          input.action !== "set-ruler-guides" &&
           input.action !== "set-grid-placement" &&
           input.action !== "reorder-grid-tracks" &&
           "orderedNodeIds" in plan
@@ -1820,6 +1832,12 @@ function executeAtomicEditDesign(
       workingDocument,
       nextCommands,
       request.context.mutationTarget,
+      {
+        allowPageGuideCommands:
+          edit.kind === "arrange" &&
+          edit.input.action === "set-ruler-guides" &&
+          edit.input.target === "page",
+      },
     );
     commands.push(...nextCommands);
     const transaction = editDesignTransaction(
@@ -2646,6 +2664,7 @@ function assertCommandsWithinMutationTarget(
   mutationTarget: DesignMutationTarget,
   options: {
     allowComponentCommands?: boolean;
+    allowPageGuideCommands?: boolean;
   } = {},
 ): void {
   for (const command of commands) {
@@ -2752,6 +2771,15 @@ function assertCommandsWithinMutationTarget(
       command.type === "move_page" ||
       command.type === "delete_page"
     ) {
+      if (
+        options.allowPageGuideCommands &&
+        command.type === "update_page" &&
+        command.pageId === pageId &&
+        command.guides !== undefined &&
+        command.name === undefined
+      ) {
+        continue;
+      }
       throw new Error("Agent Page changes require the dedicated Page tool");
     }
     if (command.type === "insert_element") {

@@ -1,4 +1,5 @@
 import { Type, type TUnion } from "@sinclair/typebox";
+import { GuideCollectionSchema } from "./guides.js";
 import * as layout from "./layout.js";
 import { PathDataSchema } from "./path-schema.js";
 import { createComponentSchemas } from "./component-schema.js";
@@ -70,6 +71,7 @@ const shapeSchemas = createShapeSchemas({
   paintSchema: PaintSchema,
   normalizedPointSchema: NormalizedPointSchema,
   autoLayoutSchema: layout.AutoLayoutSchema,
+  guideCollectionSchema: GuideCollectionSchema,
   layoutGuideSchema: layout.LayoutGuideSchema,
 });
 const ShapeProperties = shapeSchemas.ShapeProperties;
@@ -145,6 +147,7 @@ export const {
 
 const documentResourceSchemas = createDocumentResourceSchemas({
   explicitVariableModesSchema: variables.ExplicitVariableModesSchema,
+  guideCollectionSchema: GuideCollectionSchema,
   sizeSchema: SizeSchema,
   jsonObjectSchema: JsonObjectSchema,
 });
@@ -155,6 +158,7 @@ export const {
   ImageLightingPresetSchema,
   ImageAssetDerivationSchema,
 } = documentResourceSchemas;
+export { GuideCollectionSchema, GuideSchema } from "./guides.js";
 
 const nodeSchemas = createNodeSchemas({
   transformSchema: TransformSchema,

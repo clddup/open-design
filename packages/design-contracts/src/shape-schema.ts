@@ -4,6 +4,7 @@ interface ShapeSchemaDependencies {
   paintSchema: TSchema;
   normalizedPointSchema: TSchema;
   autoLayoutSchema: TSchema;
+  guideCollectionSchema: TSchema;
   layoutGuideSchema: TSchema;
 }
 
@@ -16,6 +17,10 @@ export function createShapeSchemas<
     "normalizedPointSchema",
   );
   const autoLayoutSchema = dependency(dependencies, "autoLayoutSchema");
+  const guideCollectionSchema = dependency(
+    dependencies,
+    "guideCollectionSchema",
+  );
   const layoutGuideSchema = dependency(dependencies, "layoutGuideSchema");
   const ShapeProperties = {
     fills: Type.Array(paintSchema),
@@ -57,6 +62,7 @@ export function createShapeSchemas<
       cornerRadius: Type.Number({ minimum: 0 }),
       clipsContent: Type.Boolean(),
       autoLayout: Type.Optional(autoLayoutSchema),
+      guides: Type.Optional(guideCollectionSchema),
       layoutGuides: Type.Optional(
         Type.Array(layoutGuideSchema, { maxItems: 8 }),
       ),

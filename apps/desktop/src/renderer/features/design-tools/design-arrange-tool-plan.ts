@@ -12,6 +12,7 @@ import {
   planSetNodeLayoutSizing,
   planSetNodeRotationOrigin,
   planSetFrameLayoutGuides,
+  planSetGuides,
   planSetNodeGridPlacement,
 } from "@opendesign/editor-runtime";
 import type { DesignArrangeToolInput } from "@/shared/design-arrange-tool";
@@ -117,6 +118,19 @@ export function planDesignArrangeTool(
       input.pageId,
       input.frameId,
       input.layoutGuides,
+      commandPrefix,
+    );
+  if (input.action === "set-ruler-guides")
+    return planSetGuides(
+      document,
+      input.target === "page"
+        ? { type: "page", pageId: input.pageId }
+        : {
+            type: "frame",
+            pageId: input.pageId,
+            frameId: input.frameId,
+          },
+      input.guides,
       commandPrefix,
     );
   return planArrangeNodes(

@@ -448,6 +448,7 @@ export function EditorWorkbenchFeature({
     handleTextEditingStyleControllerChange,
     handleTextLayoutProviderReady,
     layerHoverTarget,
+    rulersVisible,
     setLayerHoverTarget,
     setSmartSelectionMarkState,
     setTextRangeSelection,
@@ -457,6 +458,7 @@ export function EditorWorkbenchFeature({
     textLayoutProviderEpoch,
     textRangeSelection,
     smartSelectionMarkState,
+    toggleRulers,
     updateTextEditingStyle,
   } = useCanvasWorkspaceController({
     activePageId,
@@ -794,6 +796,7 @@ export function EditorWorkbenchFeature({
                   trigger={trigger}
                 />
               )}
+              rulersVisible={rulersVisible}
               smartSelectionMarkState={smartSelectionMarkState}
               showAgentRunStatus={
                 !utilityPanelVisible || utilityTab !== "agent"
@@ -1085,6 +1088,7 @@ export function EditorWorkbenchFeature({
           onFitPage={() => fitCanvas("page")}
           onFitSelection={() => fitCanvas("selection")}
           onZoomChange={changeZoom}
+          onToggleRulers={toggleRulers}
           revision={designDocument.revision}
           selection={{
             count: state.selection.nodeIds.length,
@@ -1092,6 +1096,7 @@ export function EditorWorkbenchFeature({
               ? { kind: selectedNode.kind, name: selectedNode.name }
               : undefined,
           }}
+          rulersVisible={rulersVisible}
           zoom={state.viewport.zoom}
         />
         {conversationDeleteDialog}

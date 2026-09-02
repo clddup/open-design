@@ -172,6 +172,7 @@ export function planDuplicatePage(
     rootNodeIds: source.rootNodeIds.map((nodeId) =>
       requireMapped(idMap, nodeId),
     ),
+    ...(source.guides ? { guides: structuredClone(source.guides) } : {}),
     extensions: structuredClone(source.extensions),
   };
   return {
