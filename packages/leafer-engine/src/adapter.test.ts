@@ -8612,6 +8612,85 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
+  it("corrects ordinary resize scales before Leafer mutates the selection", async () => {
+    const onOperations = vi.fn(() => true);
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onOperations,
+    });
+    const input = createInput();
+    input.document = structuredClone(input.document);
+    input.selection = { nodeIds: ["title_welcome"] };
+    input.document.pagesById.page_welcome!.guides = [
+      { axis: "X", offset: 860 },
+    ];
+    input.rulerGuidesVisible = true;
+    input.snapSettings = { objects: false, pixelGrid: false };
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    const title = app && findElement(app.tree, "title_welcome");
+    const editorConfig = leaferHarness.appConfig?.editor as
+      | {
+          beforeScale?: (data: {
+            origin: { x: number; y: number };
+            scaleX: number;
+            scaleY: number;
+            target: FakeElement;
+          }) => { scaleX: number; scaleY: number };
+          rotateKey?: (event: unknown) => boolean;
+        }
+      | undefined;
+    if (!app || !(title instanceof FakeText) || !editorConfig?.beforeScale) {
+      throw new Error("Missing resize snap fixture");
+    }
+
+    app.editor.target = [title];
+    app.editor.resizing = true;
+    app.editor.editBox.dragging = true;
+    (
+      app.editor.editBox as typeof app.editor.editBox & {
+        dragPoint: { direction: number };
+      }
+    ).dragPoint = { direction: 3 };
+    const result = editorConfig.beforeScale({
+      origin: { x: 0, y: 36 },
+      scaleX: 713 / 720,
+      scaleY: 1,
+      target: title,
+    });
+
+    expect(result.scaleX).toBeCloseTo(716 / 720);
+    expect(result.scaleY).toBe(1);
+    expect(editorConfig.rotateKey?.({ ctrlKey: true })).toBe(false);
+    emitWindowKey("ControlLeft");
+    const suppressed = editorConfig.beforeScale({
+      origin: { x: 0, y: 36 },
+      scaleX: 713 / 720,
+      scaleY: 1,
+      target: title,
+    });
+    expect(suppressed.scaleX).toBeCloseTo(713 / 720);
+    emitWindowKeyUp("ControlLeft");
+    title.width = 720 * result.scaleX;
+    app.editor.emit("editor.before-scale");
+    app.editor.emit("editor.scale");
+    app.editor.editBox.dragging = false;
+    app.editor.editBox.emit("drag.end");
+    expect(onOperations).toHaveBeenCalledTimes(1);
+    expect(onOperations).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "resize",
+        operations: [
+          expect.objectContaining({
+            nodeId: "title_welcome",
+            size: { height: 72, width: 716 },
+          }),
+        ],
+      }),
+    );
+    adapter.dispose();
+  });
+
   it("converts document snap deltas through a rotated and scaled parent", async () => {
     const onOperations = vi.fn(() => true);
     const adapter = await createLeaferEngineAdapter(createHost(), {

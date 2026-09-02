@@ -6,8 +6,6 @@ import {
   gridChildMoveChanged,
   updateGridChildMoveSession,
   updateGridChildSpanSession,
-  type DirectGridChildMoveSession,
-  type DirectGridChildSpanSession,
 } from "./direct-grid-transform-session.js";
 import {
   createDirectTransformOperations,
@@ -15,7 +13,16 @@ import {
   type DirectTransformElementState,
 } from "./direct-transform-element-state.js";
 import { DirectTransformSnapSession } from "./direct-transform-snap-session.js";
-import type { LeaferElementSpec, LeaferSceneProjection } from "./mapping.js";
+import {
+  directOperationKind,
+  isCenterOrigin,
+  isLockedSpec,
+  sameStringList,
+  type DirectTransformProjectionSync,
+  type DirectTransformSession,
+  type LeaferBeforeScaleData,
+} from "./direct-transform-support.js";
+import type { LeaferSceneProjection } from "./mapping.js";
 import type {
   LeaferEngineSyncInput,
   LeaferGridChildMoveRequest,
@@ -33,18 +40,6 @@ export {
   directTransformElementBounds,
   type DirectTransformElementState,
 } from "./direct-transform-element-state.js";
-
-interface DirectTransformSession {
-  before: Map<string, DirectTransformElementState>;
-  changed: boolean;
-  documentId: string;
-  kind: LeaferOperationKind;
-  pageId: string;
-  revision: number;
-  selectionNodeIds: string[];
-  gridChildMove?: DirectGridChildMoveSession;
-  gridChildSpan?: DirectGridChildSpanSession;
-}
 
 interface DirectTransformControllerOptions {
   canPreviewBoolean: () => boolean;
@@ -88,22 +83,15 @@ interface DirectTransformControllerOptions {
   restoreProjection: () => void;
 }
 
-interface DirectTransformProjectionSync {
-  changedNodeIds: ReadonlySet<string>;
-  input: LeaferEngineSyncInput;
-  projection: LeaferSceneProjection;
-  projectionContinuityLost: boolean;
-}
-
 export class DirectTransformController {
-  readonly #moveSnap: DirectTransformSnapSession;
+  readonly #transformSnap: DirectTransformSnapSession;
   readonly #options: DirectTransformControllerOptions;
   #previewFrame: number | null = null;
   #session: DirectTransformSession | null = null;
 
   constructor(options: DirectTransformControllerOptions) {
     this.#options = options;
-    this.#moveSnap = new DirectTransformSnapSession({
+    this.#transformSnap = new DirectTransformSnapSession({
       currentDocument: () => this.#options.current().input?.document ?? null,
       element: options.element,
       onLines: options.onSnapGuideLines,
@@ -133,8 +121,11 @@ export class DirectTransformController {
       this.cancel(!identityChanged);
       return;
     }
-    if (session.kind === "move" && !session.gridChildMove) {
-      this.#moveSnap.syncViewport(input);
+    if (
+      (session.kind === "move" && !session.gridChildMove) ||
+      (session.kind === "resize" && !session.gridChildSpan)
+    ) {
+      this.#transformSnap.syncViewport(input);
     }
   }
 
@@ -165,10 +156,10 @@ export class DirectTransformController {
     }
     if (
       revisionChanged &&
-      session.kind === "move" &&
-      session.gridChildMove === undefined
+      ((session.kind === "move" && session.gridChildMove === undefined) ||
+        (session.kind === "resize" && session.gridChildSpan === undefined))
     ) {
-      this.#moveSnap.refresh({
+      this.#transformSnap.refresh({
         engineInput: sync.input,
         excludedNodeIds: new Set(session.before.keys()),
         selectedNodeIds: session.selectionNodeIds,
@@ -215,7 +206,7 @@ export class DirectTransformController {
       before,
       changed: false,
       documentId: input.document.documentId,
-      kind: kind ?? this.#currentKind(),
+      kind: kind ?? directOperationKind(this.#options.editor),
       pageId: input.pageId,
       revision: input.document.revision,
       selectionNodeIds,
@@ -250,7 +241,7 @@ export class DirectTransformController {
         session: session.gridChildSpan,
       });
     }
-    if (session.kind === "move") this.#moveSnap.update();
+    if (session.kind === "move") this.#transformSnap.update();
     this.#schedulePreview();
     if (
       !this.#options.editor.editBox.dragging &&
@@ -262,12 +253,57 @@ export class DirectTransformController {
     }
   }
 
+  resolveResizeScale(data: LeaferBeforeScaleData): {
+    scaleX: number;
+    scaleY: number;
+  } {
+    const original = { scaleX: data.scaleX, scaleY: data.scaleY };
+    if (
+      data.drag ||
+      !Number.isFinite(data.scaleX) ||
+      !Number.isFinite(data.scaleY)
+    ) {
+      return original;
+    }
+    this.begin("resize");
+    const current = this.#options.current();
+    const session = this.#session;
+    const direction = this.#options.editor.editBox.dragPoint?.direction;
+    if (
+      !session ||
+      session.kind !== "resize" ||
+      session.gridChildSpan ||
+      !current.input ||
+      typeof direction !== "number"
+    ) {
+      return original;
+    }
+    const started = this.#transformSnap.beginResize({
+      engineInput: current.input,
+      excludedNodeIds: new Set(session.before.keys()),
+      selectedNodeIds: session.selectionNodeIds,
+    });
+    if (!started) return original;
+    const target = data.target as {
+      boxBounds?: { height: number; width: number; x: number; y: number };
+      lockRatio?: boolean;
+    };
+    const aroundCenter = isCenterOrigin(data.origin, target.boxBounds);
+    return this.#transformSnap.resolveResize({
+      aroundCenter,
+      direction,
+      lockRatio: this.#transformSnap.ratioLocked || target.lockRatio === true,
+      scaleX: data.scaleX,
+      scaleY: data.scaleY,
+    });
+  }
+
   finish(): boolean {
     const current = this.#options.current();
     const session = this.#session;
     if (!session || current.synchronizing || current.disposed) return false;
     this.#session = null;
-    this.#moveSnap.finish();
+    this.#transformSnap.finish();
     this.cancelPreview();
     if (session.gridChildMove) {
       this.#options.previewGridChildDrop(session.gridChildMove.frameId, null);
@@ -326,7 +362,7 @@ export class DirectTransformController {
   }
 
   handleKeyDown(event: KeyboardEvent): boolean {
-    if (this.#moveSnap.handleKeyDown(event)) return false;
+    if (this.#transformSnap.handleKeyDown(event)) return false;
     if (!this.#session || event.code !== "Escape") return false;
     event.preventDefault();
     event.stopImmediatePropagation();
@@ -335,11 +371,11 @@ export class DirectTransformController {
   }
 
   handleKeyUp(event: KeyboardEvent): void {
-    this.#moveSnap.handleKeyUp(event);
+    this.#transformSnap.handleKeyUp(event);
   }
 
   handleWindowBlur(): void {
-    this.#moveSnap.resetModifiers();
+    this.#transformSnap.resetModifiers();
   }
 
   cancel(restore = false): boolean {
@@ -349,7 +385,7 @@ export class DirectTransformController {
     const gridChildMove = session.gridChildMove;
     const gridChildSpan = session.gridChildSpan;
     this.#session = null;
-    this.#moveSnap.cancel();
+    this.#transformSnap.cancel();
     if (gridChildMove) {
       this.#options.previewGridChildDrop(gridChildMove.frameId, null);
     }
@@ -387,7 +423,7 @@ export class DirectTransformController {
     if (!input || session.kind !== "move" || session.gridChildMove) {
       return;
     }
-    this.#moveSnap.begin({
+    this.#transformSnap.begin({
       engineInput: input,
       excludedNodeIds: new Set(session.before.keys()),
       selectedNodeIds: session.selectionNodeIds,
@@ -405,14 +441,6 @@ export class DirectTransformController {
       }
     });
     return captured;
-  }
-
-  #currentKind(): LeaferOperationKind {
-    if (this.#options.editor.resizing) return "resize";
-    if (this.#options.editor.rotating) return "rotate";
-    if (this.#options.editor.skewing) return "skew";
-    if (this.#options.editor.moving) return "move";
-    return "transform";
   }
 
   #schedulePreview(): void {
@@ -467,20 +495,4 @@ export class DirectTransformController {
       );
     });
   }
-}
-
-function isLockedSpec(spec: LeaferElementSpec | undefined): boolean {
-  const metadata = spec?.data.data;
-  return (
-    typeof metadata === "object" &&
-    metadata !== null &&
-    (metadata as Record<string, unknown>).opendesignLocked === true
-  );
-}
-
-function sameStringList(left: readonly string[], right: readonly string[]) {
-  return (
-    left.length === right.length &&
-    left.every((value, index) => value === right[index])
-  );
 }

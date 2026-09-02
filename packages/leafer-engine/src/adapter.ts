@@ -160,6 +160,8 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         max: MAX_VIEWPORT_ZOOM,
       },
       editor: {
+        beforeScale: (data) =>
+          this.#directTransformController.resolveResizeScale(data),
         beforeEditInner: ({ target }) =>
           this.#textRunEditor.beforeEditInner(
             this.#scene.projectionId(target as LeaferElement),
@@ -175,6 +177,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         hover: false,
         moveable: true,
         resizeable: true,
+        rotateKey: () => false,
         rotateable: true,
         selectedPathType: "box",
         selectedStyle: {

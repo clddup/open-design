@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   createSnapTargetIndex,
   resolveMoveSnapping,
+  resolveResizeSnapping,
   type SnapTarget,
 } from "./snapping.js";
 
@@ -91,6 +92,84 @@ describe("resolveMoveSnapping", () => {
 
     expect(result.delta).toEqual({ x: 0, y: 0 });
     expect(result.matches).toEqual([]);
+  });
+});
+
+describe("resolveResizeSnapping", () => {
+  it("snaps only the edges controlled by an eight-way resize handle", () => {
+    const result = resolveResizeSnapping({
+      aroundCenter: false,
+      horizontal: "end",
+      lockRatio: false,
+      pixelGrid: false,
+      selection: { x: 20, y: 30, width: 97, height: 68 },
+      targets: createSnapTargetIndex([
+        objectTarget("x", "right", 120, 0, 140),
+        objectTarget("y", "bottom", 100, 0, 160),
+        objectTarget("y", "uncontrolled-top", 30, 0, 160),
+      ]),
+      threshold: 5,
+      vertical: "end",
+    });
+
+    expect(result.bounds).toEqual({ x: 20, y: 30, width: 100, height: 70 });
+    expect(result.delta).toEqual({ x: 3, y: 2 });
+    expect(result.matches.map(({ targetId }) => targetId)).toEqual([
+      "right",
+      "bottom",
+    ]);
+  });
+
+  it("resizes symmetrically around the center", () => {
+    const result = resolveResizeSnapping({
+      aroundCenter: true,
+      horizontal: "start",
+      lockRatio: false,
+      pixelGrid: false,
+      selection: { x: 23, y: 30, width: 94, height: 70 },
+      targets: createSnapTargetIndex([guideTarget("x", "left-guide", 20)]),
+      threshold: 5,
+      vertical: null,
+    });
+
+    expect(result.bounds).toEqual({ x: 20, y: 30, width: 100, height: 70 });
+    expect(result.delta.x).toBe(-3);
+  });
+
+  it("keeps the raw ratio while snapping a corner", () => {
+    const result = resolveResizeSnapping({
+      aroundCenter: false,
+      horizontal: "end",
+      lockRatio: true,
+      pixelGrid: false,
+      selection: { x: 20, y: 30, width: 97, height: 48.5 },
+      targets: createSnapTargetIndex([objectTarget("x", "right", 120, 0, 140)]),
+      threshold: 5,
+      vertical: "end",
+    });
+
+    expect(result.bounds.x).toBeCloseTo(20);
+    expect(result.bounds.y).toBeCloseTo(30);
+    expect(result.bounds.width).toBeCloseTo(100);
+    expect(result.bounds.height).toBeCloseTo(50);
+    expect(result.matches).toMatchObject([{ targetId: "right" }]);
+  });
+
+  it("uses pixel-grid fallback without drawing guides", () => {
+    const result = resolveResizeSnapping({
+      aroundCenter: false,
+      horizontal: "start",
+      lockRatio: false,
+      pixelGrid: true,
+      selection: { x: 20.4, y: 30, width: 80, height: 50 },
+      targets: createSnapTargetIndex([]),
+      threshold: 1,
+      vertical: null,
+    });
+
+    expect(result.bounds).toEqual({ x: 20, y: 30, width: 80.4, height: 50 });
+    expect(result.matches[0]?.source).toBe("pixel-grid");
+    expect(result.lines).toEqual([]);
   });
 });
 
