@@ -44,10 +44,10 @@
 通过共享编辑器几何链对齐与排列图层、编辑 Smart Selection 间距与回流、翻转图层、设置持久旋转原点、创建 Figma-shaped Page/Frame 标尺参考线、吸附普通对象与可编辑 Vector 锚点，并检查对象、参考线或 Vector 锚点距离。
 
 - ID：`transform.precise-arrangement`
-- 实现方：DesignDocument 1.57.0 + Geometry Service contract 38 + EditorRuntime + Leafer editor projection + Canvas ruler/snap/measurement overlays
+- 实现方：DesignDocument 1.57.0 + Geometry Service contract 39 + EditorRuntime + Leafer editor projection + Canvas ruler/snap/measurement overlays
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=unavailable
-- 证据：自动化 30 项；实机 0 项
-- 限制：移动与 resize 吸附已支持对象外边缘与中心、Page 参考线、轴对齐 Frame-local 参考线和像素网格取整；单个旋转/倾斜对象会在完整 affine basis 中求解 resize，不同 orientation 多选则使用真实轴对齐 selection box。Vector edit 已支持直接及多点移动的 point-to-point geometry 吸附、独立持久偏好、Control 临时关闭和每次手势一次既有 Vector 提交；Option/Alt 对象、参考线与单选 Vector anchor 测量均已可用。旋转 Frame 参考线、path/handle 吸附及 macOS/Windows 打包产品交互证据仍未补齐。
+- 证据：自动化 32 项；实机 0 项
+- 限制：移动与 resize 吸附已支持对象外边缘与中心、Page 参考线、任意可逆 affine Frame-local 参考线和像素网格取整；单个旋转/倾斜对象会在完整 affine basis 中求解 resize，不同 orientation 多选则使用真实轴对齐 selection box。Vector edit 已支持直接及多点移动的 point-to-point geometry 吸附、独立持久偏好、Control 临时关闭和每次手势一次既有 Vector 提交；Option/Alt 对象、参考线与单选 Vector anchor 测量均已可用。path/handle 吸附及 macOS/Windows 打包产品交互证据仍未补齐。
 - 限制：Vector geometry 吸附只消费可编辑 network 锚点与文档变换；它不依赖隔离的 PathKit provider，也不把普通对象 bounds 当作矢量几何。
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360040449713-Add-guides-to-the-canvas-or-frames)
 - 专业参照：[官方说明](https://developers.figma.com/docs/plugins/api/Guide/)
@@ -118,7 +118,7 @@
 通过节点和贝塞尔手柄创建、编辑开放、闭合、分支与曲线矢量几何，并在 Vector edit mode 中使用 Figma-compatible 节点吸附与锚点测量。
 
 - ID：`vector.pen-node-editing`
-- 实现方：DesignDocument 1.57.0 Vector Network + Geometry Service contract 38 point/path selection-delete/transform/point-snapping/anchor-measurement/Bend/Connect/Disconnect/Cut/region Fill/region Paint Style/vertex stroke appearance/vertex corner radius/Outline Stroke/Flatten + EditorRuntime document-space multi-Vector transform/Cut/cross-layer Connect/branch junction/Frame-Group-Boolean-Component-Text-Image and root-shell/isolated-pixel-compositing Flatten planner + Leafer synthetic region/stroke/corner projection and native editing overlays
+- 实现方：DesignDocument 1.57.0 Vector Network + Geometry Service contract 39 point/path selection-delete/transform/point-snapping/anchor-measurement/Bend/Connect/Disconnect/Cut/region Fill/region Paint Style/vertex stroke appearance/vertex corner radius/Outline Stroke/Flatten + EditorRuntime document-space multi-Vector transform/Cut/cross-layer Connect/branch junction/Frame-Group-Boolean-Component-Text-Image and root-shell/isolated-pixel-compositing Flatten planner + Leafer synthetic region/stroke/corner projection and native editing overlays
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=degraded
 - 证据：自动化 23 项；实机 0 项
 - 限制：Vector 节点拖动和共享多点移动可通过独立偏好吸附到当前 edit scope 的其他锚点，Control 会临时关闭 geometry 与 pixel-grid 吸附；单选一个 anchor 后可用 Option/Alt 测量到另一个悬停 anchor 的 document-space 水平与垂直距离；path 最近点、Bézier handle 与 Pen 自动连接吸附仍未完成。Pen 当前创建单条非分支轮廓；已有节点编辑支持多 Vector collection、Open/Close/Reverse、同层或跨层 Connect/Disconnect、endpoint 到另一 path vertex 的 branch 创建、point/path Lasso 与 segment Delete、跨所选节点的统一 document-space 变换框、缩放/旋转中 Space 平移、点击/document-space Cut 和 region-local Paint 或共享 PAINT Style；branch junction 节点仍可选择、变换和删除，已有入射 handle 可独立拖动，明确 branch segment 可 Bend/Cut/Delete 且不改变其他入射边，明确 path 可在 shared junction 执行 Open/Close/Reverse/Cut，已有 branch network 内的唯一 endpoint 可继续合并，显式开放 path endpoint 或明确 incident edge 也可从开放或闭合 junction 断开。有限线 Cut 会按 shared vertex 与 region connectivity 分配 connected/branch network，未切 branch 会跟随真实 junction component。Bend 已支持节点/路径添加手柄和直接拖动 segment；顶点级 cap/join 外观、circular corner radius、节点级 corner smoothing 与 custom dash 连续 phase 已通过 Inspector 与 Agent 支持；嵌套或重叠 region、只切孔洞、shared-junction 精确命中和切后仍跨两侧的 connected Cut component、self-contained 多根或后代 opacity、普通 effect 与完整 mask stack 已合成为一个 exact-revision PNG-backed Vector 单事务；依赖选择外 backdrop 的 blend/background effect 与打包证据仍未完成。Outline Stroke 会保留源层并创建 filled editable Vector sibling；同父级 Frame、nested Group、Boolean、Component Instance 当前投影、Image、Rectangle、Ellipse、含端点装饰的 Line、零圆角或圆角 Polygon/Star、Path 与 Vector 可用一个 editable 结果替换源层。

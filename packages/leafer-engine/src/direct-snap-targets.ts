@@ -6,6 +6,7 @@ import type {
   ViewportState,
 } from "@opendesign/design-contracts";
 import type { SnapTarget } from "@opendesign/geometry-service/snapping";
+import type { DirectionalSnapTarget } from "@opendesign/geometry-service/directional-snapping";
 import { multiplyTransforms, transformPoint } from "./scene-node-transform.js";
 import type { LeaferSnapSettings } from "./types.js";
 
@@ -19,9 +20,14 @@ export interface DirectSnapTargetInput {
   viewport: ViewportState;
 }
 
+export interface DirectSnapTargets {
+  axisTargets: readonly SnapTarget[];
+  directionalGuides: readonly DirectionalSnapTarget[];
+}
+
 export function buildDirectSnapTargets(
   input: DirectSnapTargetInput,
-): SnapTarget[] {
+): DirectSnapTargets {
   const entries = visiblePageNodeEntries(input.document, input.pageId);
   const objectTargets = input.settings.objects
     ? entries.flatMap(({ node, worldTransform }) =>
@@ -40,8 +46,11 @@ export function buildDirectSnapTargets(
           entries.map(({ node, worldTransform }) => [node.id, worldTransform]),
         ),
       )
-    : [];
-  return [...guideTargets, ...objectTargets];
+    : { axisTargets: [], directionalGuides: [] };
+  return {
+    axisTargets: [...guideTargets.axisTargets, ...objectTargets],
+    directionalGuides: guideTargets.directionalGuides,
+  };
 }
 
 export function snapThreshold(viewport: ViewportState): number {
@@ -103,22 +112,24 @@ function targetsForGuides(
   movingNodeIds: readonly string[],
   viewport: ViewportState,
   worldTransforms: ReadonlyMap<string, Transform>,
-): SnapTarget[] {
+): DirectSnapTargets {
   const page = document.pagesById[pageId];
-  if (!page) return [];
+  if (!page) return { axisTargets: [], directionalGuides: [] };
   const view = viewportDocumentBounds(viewport);
   const pageTargets = (page.guides ?? []).map((guide, index) =>
     guide.axis === "X"
       ? guideTarget("x", `page:${index}`, guide.offset, view.top, view.bottom)
       : guideTarget("y", `page:${index}`, guide.offset, view.left, view.right),
   );
-  const frameTargets = commonAncestorFrameIds(document, movingNodeIds).flatMap(
-    (nodeId) => {
+  const frameTargets = commonAncestorFrameIds(document, movingNodeIds).map(
+    (nodeId): DirectSnapTargets => {
       const node = document.nodesById[nodeId];
-      if (!node || node.kind !== "frame") return [];
+      if (!node || node.kind !== "frame") {
+        return { axisTargets: [], directionalGuides: [] };
+      }
       const transform = worldTransforms.get(nodeId);
-      if (!transform) return [];
-      return (node.properties.guides ?? []).flatMap((guide, index) => {
+      if (!transform) return { axisTargets: [], directionalGuides: [] };
+      const targets = (node.properties.guides ?? []).map((guide, index) => {
         const start = transformPoint(
           guide.axis === "X"
             ? { x: guide.offset, y: 0 }
@@ -131,11 +142,27 @@ function targetsForGuides(
             : { x: node.size.width, y: guide.offset },
           transform,
         );
-        return orthogonalGuideTarget(`${nodeId}:${index}`, start, end);
+        return frameGuideTarget(`${nodeId}:${index}`, start, end);
       });
+      return {
+        axisTargets: targets.flatMap(({ axisTarget }) =>
+          axisTarget ? [axisTarget] : [],
+        ),
+        directionalGuides: targets.flatMap(({ directionalTarget }) =>
+          directionalTarget ? [directionalTarget] : [],
+        ),
+      };
     },
   );
-  return [...pageTargets, ...frameTargets];
+  return {
+    axisTargets: [
+      ...pageTargets,
+      ...frameTargets.flatMap(({ axisTargets }) => axisTargets),
+    ],
+    directionalGuides: frameTargets.flatMap(
+      ({ directionalGuides }) => directionalGuides,
+    ),
+  };
 }
 
 function commonAncestorFrameIds(
@@ -165,18 +192,23 @@ function ancestorFrameIds(document: DesignDocument, nodeId: string): string[] {
   return result;
 }
 
-function orthogonalGuideTarget(
+function frameGuideTarget(
   id: string,
   start: { x: number; y: number },
   end: { x: number; y: number },
-): SnapTarget[] {
+): {
+  axisTarget?: SnapTarget;
+  directionalTarget?: DirectionalSnapTarget;
+} {
   if (Math.abs(start.x - end.x) <= 0.000_001) {
-    return [guideTarget("x", id, start.x, start.y, end.y)];
+    return { axisTarget: guideTarget("x", id, start.x, start.y, end.y) };
   }
   if (Math.abs(start.y - end.y) <= 0.000_001) {
-    return [guideTarget("y", id, start.y, start.x, end.x)];
+    return { axisTarget: guideTarget("y", id, start.y, start.x, end.x) };
   }
-  return [];
+  return {
+    directionalTarget: { end, id, source: "guide", start },
+  };
 }
 
 function axisTarget(

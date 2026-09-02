@@ -11,6 +11,10 @@ describe("DirectMoveSnapController", () => {
     const controller = new DirectMoveSnapController({
       onLines,
       selectionBounds: () => bounds,
+      selectionFrame: () => ({
+        bounds,
+        transform: [1, 0, 0, 1, 0, 0],
+      }),
       translate: (_nodeIds, delta) => {
         bounds = { ...bounds, x: bounds.x + delta.x, y: bounds.y + delta.y };
         return true;
@@ -62,6 +66,10 @@ describe("DirectMoveSnapController", () => {
     const controller = new DirectMoveSnapController({
       onLines: vi.fn(),
       selectionBounds: () => bounds,
+      selectionFrame: () => ({
+        bounds,
+        transform: [1, 0, 0, 1, 0, 0],
+      }),
       translate: (_nodeIds, delta) => {
         bounds = { ...bounds, x: bounds.x + delta.x, y: bounds.y + delta.y };
         return true;
@@ -94,6 +102,10 @@ describe("DirectMoveSnapController", () => {
     const controller = new DirectMoveSnapController({
       onLines: vi.fn(),
       selectionBounds: () => bounds,
+      selectionFrame: () => ({
+        bounds,
+        transform: [1, 0, 0, 1, 0, 0],
+      }),
       translate: (_nodeIds, delta) => {
         bounds = { ...bounds, x: bounds.x + delta.x, y: bounds.y + delta.y };
         return true;
@@ -116,5 +128,53 @@ describe("DirectMoveSnapController", () => {
     });
 
     expect(actual).toEqual([94, 100, 100, 100, 100, 106, 100, 100]);
+  });
+
+  it("snaps inside a rotated Frame to its visible local guide", () => {
+    const document = structuredClone(createWelcomeDocument());
+    const frame = document.nodesById.frame_welcome;
+    if (!frame || frame.kind !== "frame") throw new Error("Missing Frame");
+    const c = Math.SQRT1_2;
+    frame.transform = [c, c, -c, c, 100, 100];
+    frame.properties.guides = [{ axis: "X", offset: 70 }];
+    let selectionFrame = {
+      bounds: { x: 68, y: 20, width: 20, height: 20 },
+      transform: [...frame.transform] as typeof frame.transform,
+    };
+    const translations: Array<{ x: number; y: number }> = [];
+    const onLines = vi.fn();
+    const controller = new DirectMoveSnapController({
+      onLines,
+      selectionBounds: () => ({ x: 120, y: 160, width: 30, height: 30 }),
+      selectionFrame: () => selectionFrame,
+      translate: (_nodeIds, delta) => {
+        translations.push(delta);
+        const transform = [
+          ...selectionFrame.transform,
+        ] as typeof frame.transform;
+        transform[4] += delta.x;
+        transform[5] += delta.y;
+        selectionFrame = { ...selectionFrame, transform };
+        return true;
+      },
+    });
+
+    controller.begin({
+      document,
+      excludedNodeIds: new Set(["title_welcome"]),
+      nodeIds: ["title_welcome"],
+      pageId: "page_welcome",
+      rulerGuidesVisible: true,
+      settings: { geometry: false, objects: false, pixelGrid: false },
+      viewport: { panX: 0, panY: 0, zoom: 1, width: 800, height: 600 },
+    });
+    controller.update();
+
+    expect(translations).toHaveLength(1);
+    expect(translations[0]!.x).toBeCloseTo(2 * c);
+    expect(translations[0]!.y).toBeCloseTo(2 * c);
+    expect(onLines).toHaveBeenLastCalledWith([
+      expect.objectContaining({ kind: "segment", source: "guide" }),
+    ]);
   });
 });

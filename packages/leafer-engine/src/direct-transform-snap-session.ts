@@ -50,6 +50,7 @@ export class DirectTransformSnapSession {
     this.#move = new DirectMoveSnapController({
       onLines: options.onLines,
       selectionBounds: (nodeIds) => this.#selectionBounds(nodeIds),
+      selectionFrame: (nodeIds) => this.#selectionFrame(nodeIds),
       translate: (nodeIds, delta) => this.#translate(nodeIds, delta),
     });
     this.#resize = new DirectResizeSnapController({
@@ -223,6 +224,15 @@ export class DirectTransformSnapSession {
     });
     if (bounds.length !== nodeIds.length || bounds.length === 0) return null;
     return unionBounds(bounds);
+  }
+
+  #selectionFrame(nodeIds: readonly string[]) {
+    if (nodeIds.length === 1) {
+      const oriented = this.#orientedFrame(nodeIds[0]!);
+      if (oriented) return oriented;
+    }
+    const bounds = this.#selectionBounds(nodeIds);
+    return bounds ? { bounds, transform: IDENTITY_TRANSFORM } : null;
   }
 
   #selectionIsAxisAligned(nodeIds: readonly string[]): boolean {

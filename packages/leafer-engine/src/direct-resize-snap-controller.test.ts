@@ -139,6 +139,46 @@ describe("DirectResizeSnapController", () => {
     ]);
   });
 
+  it("resizes to a rotated ancestor Frame guide", () => {
+    const c = Math.SQRT1_2;
+    const document = structuredClone(createWelcomeDocument());
+    const frame = document.nodesById.frame_welcome;
+    if (!frame || frame.kind !== "frame") throw new Error("Missing Frame");
+    frame.transform = [c, c, -c, c, 100, 100];
+    frame.properties.guides = [{ axis: "X", offset: 790 }];
+    const onLines = vi.fn();
+    const controller = new DirectResizeSnapController({ onLines });
+    controller.begin({
+      document,
+      excludedNodeIds: new Set(["title_welcome"]),
+      nodeIds: ["title_welcome"],
+      pageId: "page_welcome",
+      rulerGuidesVisible: true,
+      settings: { geometry: false, objects: false, pixelGrid: false },
+      viewport: { panX: 0, panY: 0, zoom: 1, width: 800, height: 600 },
+    });
+
+    const result = controller.resolve({
+      aroundCenter: false,
+      bounds: { x: -16, y: 222, width: 560, height: 560 },
+      direction: 3,
+      frame: {
+        bounds: { x: 0, y: 0, width: 720, height: 72 },
+        transform: [c, c, -c, c, 100 + 64 * c, 100 + 64 * c],
+      },
+      lockRatio: false,
+      origin: { x: -16, y: 222 },
+      scaleX: 1.003,
+      scaleY: 1,
+    });
+
+    expect(result.scaleX).toBeCloseTo(726 / 720);
+    expect(result.scaleY).toBe(1);
+    expect(onLines).toHaveBeenLastCalledWith([
+      expect.objectContaining({ kind: "segment", source: "guide" }),
+    ]);
+  });
+
   it("fails open for flips, invalid values, and unsupported directions", () => {
     const controller = new DirectResizeSnapController({ onLines: vi.fn() });
     controller.begin(

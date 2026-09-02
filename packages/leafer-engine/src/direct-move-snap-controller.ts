@@ -1,5 +1,13 @@
 import type { Rect, ViewportState } from "@opendesign/design-contracts";
 import {
+  createDirectionalSnapTargetIndex,
+  directionalTargetFromAxis,
+  resolveDirectionalMoveSnapping,
+  type DirectionalSnapFrame,
+  type DirectionalSnapTarget,
+  type DirectionalSnapTargetIndex,
+} from "@opendesign/geometry-service/directional-snapping";
+import {
   createSnapTargetIndex,
   resolveMoveSnapping,
   type SnapGuideLine,
@@ -15,9 +23,12 @@ import {
 
 interface MoveSnapSession {
   correction: { x: number; y: number };
+  directionalGuides: readonly DirectionalSnapTarget[];
+  directionalTargets: DirectionalSnapTargetIndex;
   nodeIds: readonly string[];
   pageGuides: readonly SnapTarget[];
   pixelGrid: boolean;
+  primaryTargetIds: ReadonlySet<string>;
   targets: SnapTargetIndex;
   threshold: number;
 }
@@ -26,6 +37,9 @@ export type DirectMoveSnapInput = DirectSnapTargetInput;
 
 export class DirectMoveSnapController {
   readonly #onLines: (lines: readonly SnapGuideLine[]) => void;
+  readonly #selectionFrame: (
+    nodeIds: readonly string[],
+  ) => DirectionalSnapFrame | null;
   readonly #selectionBounds: (nodeIds: readonly string[]) => Rect | null;
   #session: MoveSnapSession | null = null;
   #suppressed = false;
@@ -36,6 +50,7 @@ export class DirectMoveSnapController {
 
   constructor(options: {
     onLines: (lines: readonly SnapGuideLine[]) => void;
+    selectionFrame: (nodeIds: readonly string[]) => DirectionalSnapFrame | null;
     selectionBounds: (nodeIds: readonly string[]) => Rect | null;
     translate: (
       nodeIds: readonly string[],
@@ -43,6 +58,7 @@ export class DirectMoveSnapController {
     ) => boolean;
   }) {
     this.#onLines = options.onLines;
+    this.#selectionFrame = options.selectionFrame;
     this.#selectionBounds = options.selectionBounds;
     this.#translate = options.translate;
   }
@@ -51,10 +67,15 @@ export class DirectMoveSnapController {
     const targets = buildDirectSnapTargets(input);
     this.#session = {
       correction: { x: 0, y: 0 },
+      directionalGuides: targets.directionalGuides,
+      directionalTargets: directionalTargetIndex(targets),
       nodeIds: input.nodeIds,
-      pageGuides: targets.filter(({ id }) => id.startsWith("page:")),
+      pageGuides: targets.axisTargets.filter(({ id }) =>
+        id.startsWith("page:"),
+      ),
       pixelGrid: input.settings.pixelGrid,
-      targets: createSnapTargetIndex(targets),
+      primaryTargetIds: new Set(targets.directionalGuides.map(({ id }) => id)),
+      targets: createSnapTargetIndex(targets.axisTargets),
       threshold: snapThreshold(input.viewport),
     };
     this.#onLines([]);
@@ -81,9 +102,16 @@ export class DirectMoveSnapController {
     }
     const targets = buildDirectSnapTargets(input);
     session.nodeIds = input.nodeIds;
-    session.pageGuides = targets.filter(({ id }) => id.startsWith("page:"));
+    session.directionalGuides = targets.directionalGuides;
+    session.directionalTargets = directionalTargetIndex(targets);
+    session.pageGuides = targets.axisTargets.filter(({ id }) =>
+      id.startsWith("page:"),
+    );
     session.pixelGrid = input.settings.pixelGrid;
-    session.targets = createSnapTargetIndex(targets);
+    session.primaryTargetIds = new Set(
+      targets.directionalGuides.map(({ id }) => id),
+    );
+    session.targets = createSnapTargetIndex(targets.axisTargets);
     session.threshold = snapThreshold(input.viewport);
     this.#resolveCurrentRaw(session);
   }
@@ -99,13 +127,31 @@ export class DirectMoveSnapController {
           ? { start: view.top, end: view.bottom }
           : { start: view.left, end: view.right };
     });
+    session.directionalTargets = createDirectionalSnapTargetIndex([
+      ...session.directionalGuides,
+      ...session.targets.x.map(directionalTargetFromAxis),
+      ...session.targets.y.map(directionalTargetFromAxis),
+    ]);
   }
 
   #resolveCurrentRaw(session: MoveSnapSession): void {
     const selection = this.#selectionBounds(session.nodeIds);
-    if (!selection) {
+    const frame = this.#selectionFrame(session.nodeIds);
+    if (!selection || !frame) {
       this.#onLines([]);
       return;
+    }
+    if (!this.#suppressed && session.primaryTargetIds.size > 0) {
+      const directional = resolveDirectionalMoveSnapping({
+        frame,
+        primaryTargetIds: session.primaryTargetIds,
+        targets: session.directionalTargets,
+        threshold: session.threshold,
+      });
+      if (directional.matches.length > 0) {
+        this.#applyResolution(session, directional);
+        return;
+      }
     }
     const resolution = resolveMoveSnapping({
       pixelGrid: session.pixelGrid,
@@ -113,6 +159,16 @@ export class DirectMoveSnapController {
       targets: this.#suppressed ? { x: [], y: [] } : session.targets,
       threshold: session.threshold,
     });
+    this.#applyResolution(session, resolution);
+  }
+
+  #applyResolution(
+    session: MoveSnapSession,
+    resolution: {
+      delta: { x: number; y: number };
+      lines: readonly SnapGuideLine[];
+    },
+  ): void {
     if (
       (resolution.delta.x !== 0 || resolution.delta.y !== 0) &&
       !this.#translate(session.nodeIds, resolution.delta)
@@ -154,4 +210,13 @@ export class DirectMoveSnapController {
       y: -correction.y,
     });
   }
+}
+
+function directionalTargetIndex(
+  targets: ReturnType<typeof buildDirectSnapTargets>,
+) {
+  return createDirectionalSnapTargetIndex([
+    ...targets.directionalGuides,
+    ...targets.axisTargets.map(directionalTargetFromAxis),
+  ]);
 }

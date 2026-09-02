@@ -1,5 +1,12 @@
 import type { Rect, ViewportState } from "@opendesign/design-contracts";
 import {
+  createDirectionalSnapTargetIndex,
+  directionalTargetFromAxis,
+  resolveDirectionalResizeSnapping,
+  type DirectionalSnapTarget,
+  type DirectionalSnapTargetIndex,
+} from "@opendesign/geometry-service/directional-snapping";
+import {
   resolveOrientedResizeSnapping,
   type OrientedResizeFrame,
 } from "@opendesign/geometry-service/oriented-resize-snapping";
@@ -18,8 +25,11 @@ import {
 } from "./direct-snap-targets.js";
 
 interface ResizeSnapSession {
+  directionalGuides: readonly DirectionalSnapTarget[];
+  directionalTargets: DirectionalSnapTargetIndex;
   pageGuides: readonly SnapTarget[];
   pixelGrid: boolean;
+  primaryTargetIds: ReadonlySet<string>;
   targets: SnapTargetIndex;
   threshold: number;
 }
@@ -47,9 +57,17 @@ export class DirectResizeSnapController {
   begin(input: DirectSnapTargetInput): void {
     const targets = buildDirectSnapTargets(input);
     this.#session = {
-      pageGuides: targets.filter(({ id }) => id.startsWith("page:")),
+      directionalGuides: targets.directionalGuides,
+      directionalTargets: createDirectionalSnapTargetIndex([
+        ...targets.directionalGuides,
+        ...targets.axisTargets.map(directionalTargetFromAxis),
+      ]),
+      pageGuides: targets.axisTargets.filter(({ id }) =>
+        id.startsWith("page:"),
+      ),
       pixelGrid: input.settings.pixelGrid,
-      targets: createSnapTargetIndex(targets),
+      primaryTargetIds: new Set(targets.directionalGuides.map(({ id }) => id)),
+      targets: createSnapTargetIndex(targets.axisTargets),
       threshold: snapThreshold(input.viewport),
     };
     this.#onLines([]);
@@ -78,6 +96,27 @@ export class DirectResizeSnapController {
     if (raw.width <= 0 || raw.height <= 0) {
       this.#onLines([]);
       return originalScale(input);
+    }
+    if (!this.#suppressed && session.primaryTargetIds.size > 0) {
+      const directional = resolveDirectionalResizeSnapping({
+        aroundCenter: input.aroundCenter,
+        frame: input.frame ?? {
+          bounds: input.bounds,
+          transform: [1, 0, 0, 1, 0, 0],
+        },
+        horizontal: axes.horizontal,
+        lockRatio: input.lockRatio,
+        primaryTargetIds: session.primaryTargetIds,
+        scaleX: input.scaleX,
+        scaleY: input.scaleY,
+        targets: session.directionalTargets,
+        threshold: session.threshold,
+        vertical: axes.vertical,
+      });
+      if (directional.matches.length > 0) {
+        this.#onLines(directional.lines);
+        return { scaleX: directional.scaleX, scaleY: directional.scaleY };
+      }
     }
     if (input.frame) {
       const resolution = resolveOrientedResizeSnapping({
@@ -134,6 +173,11 @@ export class DirectResizeSnapController {
           ? { start: view.top, end: view.bottom }
           : { start: view.left, end: view.right };
     });
+    session.directionalTargets = createDirectionalSnapTargetIndex([
+      ...session.directionalGuides,
+      ...session.targets.x.map(directionalTargetFromAxis),
+      ...session.targets.y.map(directionalTargetFromAxis),
+    ]);
   }
 
   finish(): void {

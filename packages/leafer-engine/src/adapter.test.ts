@@ -9118,6 +9118,69 @@ describe("Leafer engine selection bounds synchronization", () => {
     );
     adapter.dispose();
   });
+
+  it("snaps inside a rotated Frame to its visible local guide with one commit", async () => {
+    const onOperations = vi.fn(() => true);
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onOperations,
+    });
+    const input = createInput();
+    input.document = structuredClone(input.document);
+    input.selection = { nodeIds: ["title_welcome"] };
+    const frame = input.document.nodesById.frame_welcome;
+    if (!frame || frame.kind !== "frame") throw new Error("Missing Frame");
+    const c = Math.SQRT1_2;
+    frame.transform = [c, c, -c, c, 100, 100];
+    frame.properties.guides = [{ axis: "X", offset: 70 }];
+    input.rulerGuidesVisible = true;
+    input.snapSettings = {
+      geometry: false,
+      objects: false,
+      pixelGrid: false,
+    };
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    const title = app && findElement(app.tree, "title_welcome");
+    const snapGuide = app?.sky.children
+      .flatMap((child) =>
+        child instanceof FakeGroup ? child.children : [child],
+      )
+      .find((child) => child instanceof FakePath && child.stroke === "#f24e8a");
+    if (!app || !title || !(snapGuide instanceof FakePath)) {
+      throw new Error("Missing rotated Frame guide fixture");
+    }
+
+    app.editor.target = [title];
+    app.editor.moving = true;
+    app.editor.editBox.dragging = true;
+    app.editor.emit("editor.before-move");
+    title.localTransform.e = 68;
+    app.editor.emit("editor.move");
+
+    expect(title.localTransform.e).toBeCloseTo(70);
+    expect(snapGuide.visible).toBe(true);
+    expect(snapGuide.path).toMatch(/^M .+ L .+$/);
+    expect(snapGuide.path).not.toContain("M 70 ");
+    expect(snapGuide.strokeWidth).toBe(1);
+
+    app.editor.editBox.dragging = false;
+    app.editor.editBox.emit("drag.end");
+    expect(onOperations).toHaveBeenCalledTimes(1);
+    expect(onOperations).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "move",
+        operations: [
+          expect.objectContaining({
+            nodeId: "title_welcome",
+            transform: [1, 0, 0, 1, 70, 108],
+          }),
+        ],
+      }),
+    );
+    expect(snapGuide.visible).toBe(false);
+    adapter.dispose();
+  });
 });
 
 function createInput(): LeaferEngineSyncInput {

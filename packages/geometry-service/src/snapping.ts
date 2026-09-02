@@ -12,12 +12,21 @@ export interface SnapTarget {
   source: SnapTargetSource;
 }
 
-export interface SnapGuideLine {
+export interface AxisSnapGuideLine {
   axis: SnapAxis;
   position: number;
   range: { end: number; start: number };
   source: SnapTargetSource;
 }
+
+export interface SegmentSnapGuideLine {
+  end: { x: number; y: number };
+  kind: "segment";
+  source: SnapTargetSource;
+  start: { x: number; y: number };
+}
+
+export type SnapGuideLine = AxisSnapGuideLine | SegmentSnapGuideLine;
 
 export interface SnapResolution {
   delta: { x: number; y: number };
@@ -110,7 +119,7 @@ export function resolveResizeSnapping(input: {
   return resizeResolution(input.selection, bounds, matches);
 }
 
-type ResolvedAxis = SnapMatch & { line?: SnapGuideLine };
+type ResolvedAxis = SnapMatch & { line?: AxisSnapGuideLine };
 
 function resolveResizeAxis(
   axis: SnapAxis,
@@ -420,7 +429,7 @@ function guideLine(
   axis: SnapAxis,
   selection: Rect,
   target: SnapTarget,
-): SnapGuideLine {
+): AxisSnapGuideLine {
   const selectionStart = axis === "x" ? selection.y : selection.x;
   const selectionSize = axis === "x" ? selection.height : selection.width;
   return {

@@ -45,7 +45,10 @@ export class SnapGuideOverlayController {
       this.#path.visible = false;
       return;
     }
-    this.#path.set({ path: lines.map(linePath).join(" "), visible: true });
+    this.#path.set({
+      path: lines.map(snapGuideLinePath).join(" "),
+      visible: true,
+    });
     this.syncViewport();
   }
 
@@ -85,7 +88,10 @@ export class SnapGuideOverlayController {
   }
 }
 
-function linePath(line: SnapGuideLine): string {
+export function snapGuideLinePath(line: SnapGuideLine): string {
+  if ("kind" in line) {
+    return `M ${line.start.x} ${line.start.y} L ${line.end.x} ${line.end.y}`;
+  }
   return line.axis === "x"
     ? `M ${line.position} ${line.range.start} L ${line.position} ${line.range.end}`
     : `M ${line.range.start} ${line.position} L ${line.range.end} ${line.position}`;

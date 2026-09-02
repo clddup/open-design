@@ -1,4 +1,4 @@
-export const GEOMETRY_SERVICE_CONTRACT_VERSION = 38 as const;
+export const GEOMETRY_SERVICE_CONTRACT_VERSION = 39 as const;
 export {
   LINE_ENDPOINT_MARKER_SIZE,
   LINE_ENDPOINT_MARKER_VIEW_BOX,
@@ -69,6 +69,18 @@ export {
   type SnapTargetIndex,
   type SnapTargetSource,
 } from "./snapping.js";
+export {
+  createDirectionalSnapTargetIndex,
+  directionalTargetFromAxis,
+  resolveDirectionalMoveSnapping,
+  resolveDirectionalResizeSnapping,
+  type DirectionalMoveSnapResolution,
+  type DirectionalResizeSnapResolution,
+  type DirectionalSnapFrame,
+  type DirectionalSnapMatch,
+  type DirectionalSnapTarget,
+  type DirectionalSnapTargetIndex,
+} from "./directional-snapping.js";
 export {
   resolveOrientedResizeSnapping,
   type OrientedResizeFrame,
