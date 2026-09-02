@@ -44,7 +44,9 @@ export async function handleDesignFirstSliceTool(
   if (
     input.deliverable === "logo" &&
     logoBriefRequiresExploration(authoritativePrompt) &&
-    input.logoExploration === undefined
+    input.logoExploration === undefined &&
+    (coordinator.getDeliveryStageContext(context.runId)?.plannedTargets ??
+      0) === 0
   ) {
     throw designWorkflowError(
       "logo_exploration_required",

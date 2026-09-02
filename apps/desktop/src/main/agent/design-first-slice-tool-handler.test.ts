@@ -347,25 +347,13 @@ describe("handleDesignFirstSliceTool", () => {
   });
 
   it("rejects a one-direction compact Logo call when the authoritative brief requests three", async () => {
-    const input = firstSliceInput();
-    input.deliverable = "logo";
-    input.designIntent.calibration.surfaceMode = "graphic";
-    input.logoColorStrategy = {
-      mode: "brand-color",
-      rationale:
-        "A vivid violet primary identifies the creative platform without relying on generic black geometry.",
-      lightDarkAdaptation:
-        "Use the primary violet on light surfaces and a brighter optical variant on dark surfaces.",
-    };
-    input.targets = input.targets.map((target) => ({
-      ...target,
-      qualityProfile: { kind: "graphic" },
-    }));
+    const input = logoFirstSliceInput();
     const coordinator = {
       authoritativeDesignPrompt: vi
         .fn()
         .mockReturnValue("Concept Exploration 提供 3 个真正不同的设计方向"),
       bindFirstSliceToDeliveryScope: vi.fn(passthroughFirstSlice),
+      getDeliveryStageContext: vi.fn(() => ({ plannedTargets: 0 })),
       prepareDesignPlan: vi.fn(),
     };
     const rendererHost = { execute: vi.fn() };
@@ -386,6 +374,38 @@ describe("handleDesignFirstSliceTool", () => {
     ).rejects.toThrow("design_workflow.logo_exploration_required");
     expect(coordinator.prepareDesignPlan).not.toHaveBeenCalled();
     expect(rendererHost.execute).not.toHaveBeenCalled();
+  });
+
+  it("does not repeat the exploration gate for the next verified Logo target", async () => {
+    const input = logoFirstSliceInput();
+    const coordinator = {
+      authoritativeDesignPrompt: vi
+        .fn()
+        .mockReturnValue("Concept Exploration 提供 3 个真正不同的设计方向"),
+      bindFirstSliceToDeliveryScope: vi.fn(passthroughFirstSlice),
+      getDeliveryStageContext: vi.fn(() => ({
+        plannedTargets: 1,
+        verifiedTargets: 1,
+      })),
+      prepareDesignPlan: vi.fn(() => {
+        throw new Error("next Logo target reached Plan registration");
+      }),
+    };
+
+    await expect(
+      handleDesignFirstSliceTool(
+        coordinator as never,
+        { execute: vi.fn() } as never,
+        {
+          toolCallId: "slice_logo_selected_system",
+          toolName: DESIGN_FIRST_SLICE_TOOL_NAME,
+          input: firstSliceModelInput(input),
+        },
+        context,
+        context,
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow("next Logo target reached Plan registration");
   });
 
   it("returns a field-level domain failure before any zero-revision write", async () => {
@@ -430,4 +450,22 @@ function passthroughFirstSlice(
   value: DesignFirstSliceToolInput,
 ): DesignFirstSliceToolInput {
   return value;
+}
+
+function logoFirstSliceInput(): DesignFirstSliceToolInput {
+  const input = firstSliceInput();
+  input.deliverable = "logo";
+  input.designIntent.calibration.surfaceMode = "graphic";
+  input.logoColorStrategy = {
+    mode: "brand-color",
+    rationale:
+      "A vivid violet primary identifies the creative platform without relying on generic black geometry.",
+    lightDarkAdaptation:
+      "Use the primary violet on light surfaces and a brighter optical variant on dark surfaces.",
+  };
+  input.targets = input.targets.map((target) => ({
+    ...target,
+    qualityProfile: { kind: "graphic" },
+  }));
+  return input;
 }
