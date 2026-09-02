@@ -41,6 +41,7 @@ export type LeaferAdapterEventCallbacks = {
   onDragEnd: (event: unknown) => void;
   onPointerDown: (event: unknown) => void;
   onPointerMove: (event: unknown) => void;
+  onPointerLeave: () => void;
   onPointerUp: (event: unknown) => void;
   onViewportChanged: () => void;
   onRenderChildStart: () => void;
@@ -149,6 +150,9 @@ export class LeaferAdapterEventController {
     );
     this.#bindLeafer(options.app, events.pointerUp, (event) =>
       callbacks.onPointerUp(event),
+    );
+    this.#bindDom(options.host, "pointerleave", () =>
+      callbacks.onPointerLeave(),
     );
     for (const type of [
       events.viewportMove,

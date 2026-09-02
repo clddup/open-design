@@ -296,6 +296,13 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       viewportRoot: this.#app.tree as unknown as LeaferGroup,
     });
     this.#editorOverlays = new EditorOverlayController({
+      canMeasure: () =>
+        !this.#directTransformController.active &&
+        !this.#editor.innerEditing &&
+        !this.#editor.moving &&
+        !this.#editor.resizing &&
+        !this.#editor.rotating &&
+        !this.#editor.skewing,
       element: (nodeId) => this.#scene.element(nodeId),
       finishNodePresentation: (nodeId) =>
         this.#generationPresentation.finishNode(nodeId),
@@ -322,7 +329,9 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         this.#callbacks.onSmartSelectionMarkChange?.(state);
       },
       presentationRoot: this.#generationPresentationRoot,
+      projectionId: (element) => this.#scene.projectionId(element),
       restoreProjection: () => this.#restoreProjection(),
+      selectedElements: () => this.#editor.list as LeaferElement[],
       viewportRoot: this.#app.tree as unknown as LeaferGroup,
     });
     this.#textRunEditor = new TextRunEditController({
@@ -559,8 +568,10 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
           }
           this.#directTransformController.finish();
         },
-        onBeforeTransform: (mode) =>
-          this.#directTransformController.begin(mode),
+        onBeforeTransform: (mode) => {
+          this.#editorOverlays.clearMeasurements();
+          this.#directTransformController.begin(mode);
+        },
         onTransformChanged: () => this.#directTransformController.markChanged(),
         onBeforeInnerOpen: (event) => {
           const element =
@@ -606,6 +617,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
           this.#penToolController.pointerMove(event);
           this.#vectorEditController.pointerMove(event);
         },
+        onPointerLeave: () => this.#editorOverlays.pointerLeave(),
         onPointerUp: (event) => {
           if (this.#editorOverlays.pointerUp(asLeaferEvent(event))) return;
           this.#imageCropController.pointerUp(event);
@@ -622,7 +634,10 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         },
         onKeyDown: (event) => this.#onWindowKeyDown(event),
         onKeyUp: (event) => this.#onWindowKeyUp(event),
-        onWindowBlur: () => this.#directTransformController.handleWindowBlur(),
+        onWindowBlur: () => {
+          this.#editorOverlays.handleWindowBlur();
+          this.#directTransformController.handleWindowBlur();
+        },
         onContextLost: (event) => this.#onContextLost(event),
       },
     });
@@ -822,7 +837,13 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         selectedElements: this.#editor.list as LeaferElement[],
       });
       this.#textRunEditor.syncPresentation();
-      this.#editorOverlays.sync(input);
+      this.#editorOverlays.sync({
+        ...input,
+        measurementBlocked:
+          input.tool !== "select" ||
+          input.vectorEditScope !== undefined ||
+          this.#imageCropController.active,
+      });
       this.#generationPresentation.syncSkeleton(input.generationSkeleton);
       this.#generationPresentation.syncActivity(
         input.generationActivity,
@@ -1457,6 +1478,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   };
 
   #onWindowKeyUp = (event: KeyboardEvent) => {
+    this.#editorOverlays.handleKeyUp(event);
     this.#directTransformController.handleKeyUp(event);
     this.#vectorEditController.handleKeyUp(event);
   };

@@ -1,4 +1,4 @@
-export const GEOMETRY_SERVICE_CONTRACT_VERSION = 32 as const;
+export const GEOMETRY_SERVICE_CONTRACT_VERSION = 33 as const;
 export {
   LINE_ENDPOINT_MARKER_SIZE,
   LINE_ENDPOINT_MARKER_VIEW_BOX,
@@ -67,6 +67,12 @@ export {
   type SnapTargetIndex,
   type SnapTargetSource,
 } from "./snapping.js";
+export {
+  formatDistanceMeasurement,
+  measureRectDistances,
+  type DistanceMeasurementId,
+  type DistanceMeasurementSegment,
+} from "./measurements.js";
 export {
   connectVectorEndpoints,
   cutVectorNetworkByLine,

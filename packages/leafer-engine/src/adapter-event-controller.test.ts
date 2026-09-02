@@ -57,6 +57,7 @@ describe("LeaferAdapterEventController", () => {
     editor.emit(events.scale, {});
     editBox.emit(events.dragEnd, { isCancel: true });
     app.emit(events.pointerMove, { x: 12, y: 20 });
+    host.emit("pointerleave", new Event("pointerleave"));
     app.emit(events.viewportZoom, {});
     keyboardTarget.emit("keydown", keyboardEvent("keydown", "Q"));
     keyboardTarget.emit("blur", new Event("blur"));
@@ -67,6 +68,7 @@ describe("LeaferAdapterEventController", () => {
     expect(callbacks.onTransformChanged).toHaveBeenCalledOnce();
     expect(callbacks.onEditBoxDragEnd).toHaveBeenCalledWith({ isCancel: true });
     expect(callbacks.onPointerMove).toHaveBeenCalledWith({ x: 12, y: 20 });
+    expect(callbacks.onPointerLeave).toHaveBeenCalledOnce();
     expect(callbacks.onViewportChanged).toHaveBeenCalledOnce();
     expect(callbacks.onKeyDown).toHaveBeenCalledWith(
       expect.objectContaining({ code: "Q" }),
@@ -95,7 +97,7 @@ describe("LeaferAdapterEventController", () => {
     expect(
       app.listenerCount + editor.listenerCount + editBox.listenerCount,
     ).toBe(27);
-    expect(keyboardTarget.listenerCount + host.listenerCount).toBe(4);
+    expect(keyboardTarget.listenerCount + host.listenerCount).toBe(5);
 
     controller.dispose();
     controller.dispose();
@@ -105,7 +107,7 @@ describe("LeaferAdapterEventController", () => {
     ).toBe(0);
     expect(keyboardTarget.listenerCount + host.listenerCount).toBe(0);
     expect(app.offCalls + editor.offCalls + editBox.offCalls).toBe(27);
-    expect(keyboardTarget.removeCalls + host.removeCalls).toBe(4);
+    expect(keyboardTarget.removeCalls + host.removeCalls).toBe(5);
 
     editor.emit(events.editorSelect, {});
     app.emit(events.viewportMove, {});
@@ -194,6 +196,7 @@ function callbackSpies(): LeaferAdapterEventCallbacks {
     onDragEnd: vi.fn(),
     onPointerDown: vi.fn(),
     onPointerMove: vi.fn(),
+    onPointerLeave: vi.fn(),
     onPointerUp: vi.fn(),
     onViewportChanged: vi.fn(),
     onRenderChildStart: vi.fn(),

@@ -199,10 +199,10 @@
         "zh-CN": "精确排列"
       },
       "description": {
-        "en": "Align and arrange layers, edit Smart Selection spacing and reflow, flip layers, set a persistent rotation origin, author Figma-shaped Page/Frame ruler guides, and move ordinary objects with object, guide, or pixel-grid snapping through the shared editor geometry path.",
-        "zh-CN": "通过共享编辑器几何链对齐与排列图层、编辑 Smart Selection 间距与回流、翻转图层、设置持久旋转原点、创建 Figma-shaped Page/Frame 标尺参考线，并在移动普通对象时使用对象、参考线或像素网格吸附。"
+        "en": "Align and arrange layers, edit Smart Selection spacing and reflow, flip layers, set a persistent rotation origin, author Figma-shaped Page/Frame ruler guides, move ordinary objects with snapping, and inspect object distances through the shared editor geometry path.",
+        "zh-CN": "通过共享编辑器几何链对齐与排列图层、编辑 Smart Selection 间距与回流、翻转图层、设置持久旋转原点、创建 Figma-shaped Page/Frame 标尺参考线、移动吸附并检查对象距离。"
       },
-      "provider": "DesignDocument 1.57.0 + Geometry Service contract 32 + EditorRuntime + Leafer editor projection + Canvas ruler/snap overlays",
+      "provider": "DesignDocument 1.57.0 + Geometry Service contract 33 + EditorRuntime + Leafer editor projection + Canvas ruler/snap/measurement overlays",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
       "surfaces": {
         "contract": "available",
@@ -214,8 +214,8 @@
       },
       "limitations": [
         {
-          "en": "Move snapping supports object outer edges and centers, Page guides, axis-aligned Frame-local guides, and pixel-grid rounding. Vector geometry snapping, rotated/skewed Frame-guide snapping, resize snapping, guide distance redlines, and packaged macOS/Windows interaction evidence remain incomplete.",
-          "zh-CN": "移动吸附已支持对象外边缘与中心、Page 参考线、轴对齐 Frame-local 参考线和像素网格取整。Vector geometry 吸附、旋转/倾斜 Frame 参考线吸附、resize 吸附、参考线距离标注及 macOS/Windows 打包产品交互证据仍未补齐。"
+          "en": "Move snapping supports object outer edges and centers, Page guides, axis-aligned Frame-local guides, and pixel-grid rounding. Option/Alt hover measures inner object bounds, including nested exact targeting and container insets. Vector geometry snapping, rotated/skewed Frame-guide snapping, resize snapping, guide-to-object redlines, Vector-anchor measurements, and packaged macOS/Windows interaction evidence remain incomplete.",
+          "zh-CN": "移动吸附已支持对象外边缘与中心、Page 参考线、轴对齐 Frame-local 参考线和像素网格取整；Option/Alt 悬停可按对象 inner bounds 测量，并支持精确嵌套目标与容器 inset。Vector geometry 吸附、旋转/倾斜 Frame 参考线吸附、resize 吸附、参考线到对象 redline、Vector anchor 测量及 macOS/Windows 打包产品交互证据仍未补齐。"
         },
         {
           "en": "The arrangement product path remains intentionally separate from the isolated PathKit vector provider; no vector product capability is implied here.",
@@ -244,7 +244,10 @@
           "packages/geometry-service/src/snapping.test.ts",
           "packages/leafer-engine/src/direct-move-snap-controller.test.ts",
           "packages/leafer-engine/src/adapter-event-controller.test.ts",
-          "apps/desktop/src/renderer/features/canvas/use-canvas-snap-settings.test.ts"
+          "apps/desktop/src/renderer/features/canvas/use-canvas-snap-settings.test.ts",
+          "packages/geometry-service/src/measurements.test.ts",
+          "packages/leafer-engine/src/distance-measurement-controller.test.ts",
+          "packages/leafer-engine/src/distance-measurement-overlay.test.ts"
         ],
         "manual": []
       },
@@ -252,6 +255,7 @@
         "https://help.figma.com/hc/en-us/articles/360040449713-Add-guides-to-the-canvas-or-frames",
         "https://developers.figma.com/docs/plugins/api/Guide/",
         "https://help.figma.com/hc/en-us/articles/360039956914-Adjust-alignment-rotation-position-and-dimensions",
+        "https://help.figma.com/hc/en-us/articles/360039956974-Measure-distances-between-layers",
         "https://help.figma.com/hc/en-us/articles/41352588622615-Move-a-layer-s-anchor-point",
         "https://help.figma.com/hc/en-us/articles/360040450233-Arrange-layers-with-Smart-selection"
       ]

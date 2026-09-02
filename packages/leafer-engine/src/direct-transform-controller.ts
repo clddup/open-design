@@ -110,6 +110,10 @@ export class DirectTransformController {
     });
   }
 
+  get active(): boolean {
+    return this.#session !== null;
+  }
+
   syncInput(input: LeaferEngineSyncInput): void {
     const session = this.#session;
     if (!session) return;

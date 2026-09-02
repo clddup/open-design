@@ -41,17 +41,18 @@
 
 ### 精确排列 — 降级可用
 
-通过共享编辑器几何链对齐与排列图层、编辑 Smart Selection 间距与回流、翻转图层、设置持久旋转原点、创建 Figma-shaped Page/Frame 标尺参考线，并在移动普通对象时使用对象、参考线或像素网格吸附。
+通过共享编辑器几何链对齐与排列图层、编辑 Smart Selection 间距与回流、翻转图层、设置持久旋转原点、创建 Figma-shaped Page/Frame 标尺参考线、移动吸附并检查对象距离。
 
 - ID：`transform.precise-arrangement`
-- 实现方：DesignDocument 1.57.0 + Geometry Service contract 32 + EditorRuntime + Leafer editor projection + Canvas ruler/snap overlays
+- 实现方：DesignDocument 1.57.0 + Geometry Service contract 33 + EditorRuntime + Leafer editor projection + Canvas ruler/snap/measurement overlays
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=unavailable
-- 证据：自动化 21 项；实机 0 项
-- 限制：移动吸附已支持对象外边缘与中心、Page 参考线、轴对齐 Frame-local 参考线和像素网格取整。Vector geometry 吸附、旋转/倾斜 Frame 参考线吸附、resize 吸附、参考线距离标注及 macOS/Windows 打包产品交互证据仍未补齐。
+- 证据：自动化 24 项；实机 0 项
+- 限制：移动吸附已支持对象外边缘与中心、Page 参考线、轴对齐 Frame-local 参考线和像素网格取整；Option/Alt 悬停可按对象 inner bounds 测量，并支持精确嵌套目标与容器 inset。Vector geometry 吸附、旋转/倾斜 Frame 参考线吸附、resize 吸附、参考线到对象 redline、Vector anchor 测量及 macOS/Windows 打包产品交互证据仍未补齐。
 - 限制：排列产品链与隔离的 PathKit 矢量 provider 保持明确分离；本能力不据此宣称任何矢量产品能力。
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360040449713-Add-guides-to-the-canvas-or-frames)
 - 专业参照：[官方说明](https://developers.figma.com/docs/plugins/api/Guide/)
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360039956914-Adjust-alignment-rotation-position-and-dimensions)
+- 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360039956974-Measure-distances-between-layers)
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/41352588622615-Move-a-layer-s-anchor-point)
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360040450233-Arrange-layers-with-Smart-selection)
 

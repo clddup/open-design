@@ -7,6 +7,7 @@ import {
 import type * as LeaferEditorModule from "leafer-editor";
 import type { SnapGuideLine } from "@opendesign/geometry-service/snapping";
 import { AutoLayoutSpacingOverlayController } from "./auto-layout-spacing-overlay-controller.js";
+import { DistanceMeasurementController } from "./distance-measurement-controller.js";
 import { GridEditorOverlayController } from "./grid-editor-overlay-controller.js";
 import type { GridEditorAxis } from "./grid-editor-overlay.js";
 import {
@@ -34,11 +35,13 @@ export class EditorOverlayController {
   readonly #autoLayoutSpacing: AutoLayoutSpacingOverlayController;
   #document: DesignDocument | null = null;
   readonly #gridEditor: GridEditorOverlayController;
+  readonly #measurements: DistanceMeasurementController;
   readonly #snapGuides: SnapGuideOverlayController;
   readonly #staticOverlays: StaticEditorOverlayController;
   readonly #smartSelection: SmartSelectionOverlayController;
 
   constructor(options: {
+    canMeasure: () => boolean;
     element: (nodeId: string) => LeaferElement | undefined;
     finishNodePresentation: (nodeId: string) => void;
     leafer: LeaferModule;
@@ -78,7 +81,9 @@ export class EditorOverlayController {
       state: LeaferSmartSelectionMarkState | null,
     ) => void;
     presentationRoot: LeaferGroup;
+    projectionId: (element: LeaferElement) => string | undefined;
     restoreProjection: () => void;
+    selectedElements: () => readonly LeaferElement[];
     viewportRoot: LeaferGroup;
   }) {
     this.#staticOverlays = new StaticEditorOverlayController({
@@ -122,6 +127,15 @@ export class EditorOverlayController {
       presentationRoot: options.presentationRoot,
       viewportRoot: options.viewportRoot,
     });
+    this.#measurements = new DistanceMeasurementController({
+      canMeasure: options.canMeasure,
+      layerIndex: 9,
+      leafer: options.leafer,
+      presentationRoot: options.presentationRoot,
+      projectionId: options.projectionId,
+      selectedElements: options.selectedElements,
+      viewportRoot: options.viewportRoot,
+    });
   }
 
   get active(): boolean {
@@ -129,7 +143,8 @@ export class EditorOverlayController {
       this.#staticOverlays.active ||
       this.#autoLayoutSpacing.active ||
       this.#gridEditor.active ||
-      this.#smartSelection.active
+      this.#smartSelection.active ||
+      this.#measurements.active
     );
   }
 
@@ -150,7 +165,24 @@ export class EditorOverlayController {
   }
 
   handleKeyDown(event: KeyboardEvent): boolean {
+    this.#measurements.handleKeyDown(event);
     return this.#gridEditor.handleKeyDown(event);
+  }
+
+  handleKeyUp(event: KeyboardEvent): void {
+    this.#measurements.handleKeyUp(event);
+  }
+
+  handleWindowBlur(): void {
+    this.#measurements.handleWindowBlur();
+  }
+
+  pointerLeave(): void {
+    this.#measurements.pointerLeave();
+  }
+
+  clearMeasurements(): void {
+    this.#measurements.clear();
   }
 
   previewGridChildDrop(
@@ -201,6 +233,7 @@ export class EditorOverlayController {
     this.#gridEditor.dispose();
     this.#smartSelection.dispose();
     this.#snapGuides.dispose();
+    this.#measurements.dispose();
   }
 
   sync(input: {
@@ -208,6 +241,7 @@ export class EditorOverlayController {
     document: DesignDocument;
     gridEditorFrameId?: string;
     layoutGuideFrameId?: string;
+    measurementBlocked: boolean;
     pageId: string;
     selection: SelectionState;
     tool: string;
@@ -239,6 +273,17 @@ export class EditorOverlayController {
       selectedNodeIds: input.selection.nodeIds,
       tool: input.tool,
     });
+    this.#measurements.sync({
+      blocked: input.measurementBlocked,
+      documentId: input.document.documentId,
+      pageId: input.pageId,
+      revision: input.document.revision,
+      selectionKey: JSON.stringify({
+        componentTarget: input.selection.componentTarget ?? null,
+        nodeIds: input.selection.nodeIds,
+      }),
+      tool: input.tool,
+    });
     this.syncViewport(input.viewport);
   }
 
@@ -255,6 +300,7 @@ export class EditorOverlayController {
   }
 
   pointerMove(event: LeaferEventLike): boolean {
+    this.#measurements.pointerMove(event);
     if (this.#autoLayoutSpacing.pointerMove(event)) return true;
     if (this.#gridEditor.pointerMove(event)) return true;
     return this.#smartSelection.pointerMove(event);
@@ -274,5 +320,6 @@ export class EditorOverlayController {
     this.#gridEditor.syncViewport(viewport);
     this.#smartSelection.syncViewport();
     this.#snapGuides.syncViewport();
+    this.#measurements.syncViewport();
   }
 }

@@ -1,0 +1,106 @@
+import { describe, expect, it } from "vitest";
+import {
+  formatDistanceMeasurement,
+  measureRectDistances,
+} from "./measurements.js";
+
+describe("measureRectDistances", () => {
+  it("measures both axes for diagonally separated objects", () => {
+    expect(
+      measureRectDistances(
+        { x: 10, y: 20, width: 40, height: 30 },
+        { x: 90, y: 80, width: 20, height: 20 },
+      ),
+    ).toEqual([
+      {
+        axis: "x",
+        end: { x: 90, y: 65 },
+        id: "x-after",
+        start: { x: 50, y: 65 },
+        value: 40,
+      },
+      {
+        axis: "y",
+        end: { x: 70, y: 80 },
+        id: "y-after",
+        start: { x: 70, y: 50 },
+        value: 30,
+      },
+    ]);
+  });
+
+  it("measures only the separated axis when bounds overlap", () => {
+    expect(
+      measureRectDistances(
+        { x: 100, y: 40, width: 30, height: 40 },
+        { x: 20, y: 50, width: 40, height: 20 },
+      ),
+    ).toEqual([
+      {
+        axis: "x",
+        end: { x: 60, y: 60 },
+        id: "x-before",
+        start: { x: 100, y: 60 },
+        value: 40,
+      },
+    ]);
+  });
+
+  it("shows all non-zero inset distances for contained bounds", () => {
+    expect(
+      measureRectDistances(
+        { x: 96, y: 242, width: 506, height: 624 },
+        { x: 0, y: 0, width: 1440, height: 1000 },
+      ).map(({ id, value }) => ({ id, value })),
+    ).toEqual([
+      { id: "x-before", value: 96 },
+      { id: "x-after", value: 838 },
+      { id: "y-before", value: 242 },
+      { id: "y-after", value: 134 },
+    ]);
+  });
+
+  it("uses the same containment semantics when the hover target is inside", () => {
+    expect(
+      measureRectDistances(
+        { x: 0, y: 0, width: 200, height: 160 },
+        { x: 20, y: 30, width: 80, height: 40 },
+      ).map(({ id, value }) => ({ id, value })),
+    ).toEqual([
+      { id: "x-before", value: 20 },
+      { id: "x-after", value: 100 },
+      { id: "y-before", value: 30 },
+      { id: "y-after", value: 90 },
+    ]);
+  });
+
+  it("omits touching, overlapping, identical, zero, and non-finite bounds", () => {
+    const selection = { x: 0, y: 0, width: 20, height: 20 };
+    expect(
+      measureRectDistances(selection, { x: 20, y: 0, width: 20, height: 20 }),
+    ).toEqual([]);
+    expect(
+      measureRectDistances(selection, { x: 10, y: 10, width: 20, height: 20 }),
+    ).toEqual([]);
+    expect(measureRectDistances(selection, selection)).toEqual([]);
+    expect(
+      measureRectDistances(selection, { x: 30, y: 0, width: 0, height: 20 }),
+    ).toEqual([]);
+    expect(
+      measureRectDistances(selection, {
+        x: Number.NaN,
+        y: 0,
+        width: 20,
+        height: 20,
+      }),
+    ).toEqual([]);
+  });
+});
+
+describe("formatDistanceMeasurement", () => {
+  it("keeps integers compact and trims fractional zeros", () => {
+    expect(formatDistanceMeasurement(96)).toBe("96");
+    expect(formatDistanceMeasurement(12.5)).toBe("12.5");
+    expect(formatDistanceMeasurement(1.236)).toBe("1.24");
+  });
+});
