@@ -43,6 +43,7 @@ import {
   exportLeaferFlattenRaster,
   exportLeaferRaster,
 } from "./raster-export.js";
+import { installLeaferBackgroundBlurEffect } from "./background-blur-effect.js";
 import { installLeaferImagePaintAdjustmentFilter } from "./image-paint-adjustment-filter.js";
 import { transformToAffine } from "./affine.js";
 import { EditorOverlayController } from "./editor-overlay-controller.js";
@@ -99,6 +100,7 @@ export async function createLeaferEngineAdapter(
   options: LeaferEngineOptions = {},
 ): Promise<LeaferEngineAdapter> {
   const leafer = await import("leafer-editor");
+  installLeaferBackgroundBlurEffect(leafer);
   installLeaferImagePaintAdjustmentFilter(leafer);
   return new WebLeaferEngineAdapter(host, callbacks, leafer, options);
 }

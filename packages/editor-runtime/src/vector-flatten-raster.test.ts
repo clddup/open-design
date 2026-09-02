@@ -114,7 +114,7 @@ describe("raster-composited Flatten", () => {
     ).not.toHaveProperty("maskMode");
   });
 
-  it("rejects a partial root mask scope and descendant background blur", () => {
+  it("rejects a partial root mask scope and preserves closed background blur", () => {
     const partial = multiRootDocument();
     partial.nodesById.tail = rectangle("tail", null, 140);
     partial.pagesById.page!.rootNodeIds.push("tail");
@@ -128,12 +128,33 @@ describe("raster-composited Flatten", () => {
     child.effects = [{ type: "background-blur", radius: 8 }];
     expect(
       prepareRasterFlattenNodes(background, "page", ["root"]),
+    ).toMatchObject({ kind: "ready" });
+    background.nodesById.root!.blendMode = "pass-through";
+    expect(
+      prepareRasterFlattenNodes(background, "page", ["root"]),
     ).toMatchObject({ kind: "failed" });
 
     const outlineMask = nestedOpacityDocument();
     outlineMask.nodesById.root!.maskMode = "outline";
     expect(
       prepareRasterFlattenNodes(outlineMask, "page", ["root"]),
+    ).toMatchObject({ kind: "failed" });
+  });
+
+  it("bakes root background blur only with the complete sibling backdrop", () => {
+    const document = multiRootBlendDocument();
+    document.nodesById.blend!.blendMode = "normal";
+    document.nodesById.blend!.effects = [
+      { type: "background-blur", radius: 12 },
+    ];
+    expect(
+      prepareRasterFlattenNodes(document, "page", ["backdrop", "blend"]),
+    ).toMatchObject({ kind: "ready" });
+
+    document.nodesById.unselected = rectangle("unselected", null, -70);
+    document.pagesById.page!.rootNodeIds.unshift("unselected");
+    expect(
+      prepareRasterFlattenNodes(document, "page", ["backdrop", "blend"]),
     ).toMatchObject({ kind: "failed" });
   });
 

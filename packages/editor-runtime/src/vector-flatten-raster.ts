@@ -171,9 +171,13 @@ function rasterIsolationIssue(
       ? `Flatten root ${roots[0]!.id} uses a geometry mask that cannot be preserved by a raster rectangle`
       : null;
   }
-  const rootBackgroundBlur = roots.find(hasBackgroundBlur);
+  const rootBackgroundBlur = roots.find(
+    (root) =>
+      hasBackgroundBlur(root) &&
+      !selectionContainsBackdrop(root.id, ordered, siblings),
+  );
   if (rootBackgroundBlur) {
-    return `Flatten layer ${rootBackgroundBlur.id} uses background blur, which the current pixel compositor cannot preserve`;
+    return `Flatten layer ${rootBackgroundBlur.id} blurs unselected backdrop content`;
   }
   const rootBlend = roots.find(
     (root) =>
@@ -204,8 +208,11 @@ function subtreeIsolationIssue(
     const nodeId = pending.pop();
     const node = nodeId ? document.nodesById[nodeId] : undefined;
     if (!node) return `Flatten subtree ${rootId} contains an invalid child`;
-    if (hasBackgroundBlur(node)) {
-      return `Flatten descendant ${node.id} uses background blur, which the current pixel compositor cannot preserve`;
+    if (
+      hasBackgroundBlur(node) &&
+      !hasIsolatingAncestor(document, node, rootId)
+    ) {
+      return `Flatten descendant ${node.id} blurs content outside an isolated ancestor`;
     }
     if (
       hasBackdropBlend(node) &&
