@@ -40,6 +40,7 @@ import {
   outlineVectorPath,
 } from "@opendesign/geometry-service/vector-materialization";
 import { type VectorGeometryProvider } from "@opendesign/geometry-service/vector-path";
+import { splitVectorNetwork } from "@opendesign/geometry-service/vector-split";
 import { styleDefinition } from "@opendesign/style-service";
 import {
   getWorldTransform,
@@ -195,6 +196,10 @@ export type VectorOperationPlan =
       flattenResult?: {
         resultNodeId: string;
         sourceNodeIds: readonly string[];
+      };
+      splitResult?: {
+        pathIds: readonly string[];
+        resultNodeIds: readonly string[];
       };
     }
   | {
@@ -755,6 +760,51 @@ export function planVectorSemanticEdit(
   return planVectorNetworkUpdate(document, pageId, nodeId, edited.network);
 }
 
+/** Splits one multi-path Vector into sibling layers in authored path order. */
+export function planSplitVector(
+  document: DesignDocument,
+  pageId: string,
+  nodeId: string,
+  resultNodeIds: readonly string[],
+): VectorOperationPlan {
+  const target = editableVectorTarget(document, pageId, nodeId);
+  if (!target.ok) return target;
+  const split = splitVectorNetwork(target.node.properties.network);
+  if (!split.ok) return vectorOperationFailure(split);
+  const resultIds = [nodeId, ...resultNodeIds];
+  const ids = new Set(resultIds);
+  if (
+    resultNodeIds.length !== split.networks.length - 1 ||
+    ids.size !== resultIds.length ||
+    resultNodeIds.some((id) => !id || document.nodesById[id])
+  ) {
+    return vectorPlanFailure(
+      "invalid-geometry",
+      `Split vector requires ${split.networks.length - 1} unique available result node IDs`,
+    );
+  }
+  const insertion = vectorSiblingInsertion(
+    document,
+    pageId,
+    target.node,
+    "Splitting",
+  );
+  if (!insertion.ok) return insertion;
+  const normalized = normalizeSplitNetworks(target.node, split.networks);
+  if (!normalized.ok) return normalized;
+  return {
+    ok: true,
+    operations: splitVectorOperations(
+      pageId,
+      target.node,
+      resultIds,
+      normalized.parts,
+      insertion.index,
+    ),
+    splitResult: { pathIds: split.pathIds, resultNodeIds: resultIds },
+  };
+}
+
 /** Creates a Figma-compatible editable Vector sibling while preserving source. */
 export function planVectorOutlineStroke(
   document: DesignDocument,
@@ -1207,6 +1257,83 @@ type EditableVectorNode = Extract<DesignNode, { kind: "path" | "vector" }> & {
   properties: VectorNetworkProperties;
 };
 
+type NormalizedSplitPart = {
+  bounds: { height: number; width: number };
+  network: VectorNetwork;
+  offset: Point;
+};
+
+function normalizeSplitNetworks(
+  node: EditableVectorNode,
+  networks: readonly VectorNetwork[],
+):
+  | { ok: true; parts: readonly NormalizedSplitPart[] }
+  | Extract<VectorOperationPlan, { ok: false }> {
+  const parts: NormalizedSplitPart[] = [];
+  for (const network of networks) {
+    const normalized = normalizeVectorNetwork(
+      network,
+      node.properties.cornerRadius ?? 0,
+      node.properties.cornerSmoothing ?? 0,
+    );
+    if (!normalized.ok || !normalized.offset) {
+      return vectorPlanFailure(
+        "invalid-geometry",
+        normalized.ok
+          ? "Split vector geometry could not be normalized"
+          : normalized.issues.map((issue) => issue.message).join("; "),
+      );
+    }
+    parts.push({
+      bounds: normalized.bounds,
+      network: normalized.network,
+      offset: normalized.offset,
+    });
+  }
+  return { ok: true, parts };
+}
+
+function splitVectorOperations(
+  pageId: string,
+  node: EditableVectorNode,
+  resultNodeIds: readonly string[],
+  parts: readonly NormalizedSplitPart[],
+  insertionIndex: number,
+): DesignOperation[] {
+  return parts.map((part, index) => {
+    const properties = {
+      ...structuredClone(node.properties),
+      network: part.network,
+    };
+    const transform = translateLocalTransform(node.transform, part.offset);
+    const size = { width: part.bounds.width, height: part.bounds.height };
+    if (index === 0) {
+      return {
+        commandId: `split_vector_${node.id}`,
+        type: "update_properties",
+        nodeId: node.id,
+        properties,
+        size,
+        transform,
+      };
+    }
+    const inserted = structuredClone(node);
+    inserted.id = resultNodeIds[index]!;
+    inserted.name = `${node.name || "Vector"} ${index + 1}`;
+    inserted.properties = properties;
+    inserted.size = size;
+    inserted.transform = transform;
+    return {
+      commandId: `insert_split_vector_${inserted.id}`,
+      type: "insert_element",
+      pageId,
+      parentId: node.parentId,
+      index: insertionIndex + index - 1,
+      node: inserted,
+    };
+  });
+}
+
 function isEditableVectorNode(
   node: DesignNode | undefined,
 ): node is EditableVectorNode {
@@ -1535,12 +1662,13 @@ function vectorSiblingInsertion(
   document: DesignDocument,
   pageId: string,
   node: Extract<DesignNode, { kind: "path" | "vector" }>,
+  operation = "Outlining",
 ): { ok: true; index: number } | Extract<VectorOperationPlan, { ok: false }> {
   const parent = node.parentId ? document.nodesById[node.parentId] : undefined;
   if (parent?.kind === "boolean") {
     return vectorPlanFailure(
       "unsupported-topology",
-      "Outlining a Boolean operand requires leaving Boolean edit scope",
+      `${operation} a Boolean operand requires leaving Boolean edit scope`,
     );
   }
   const siblings = node.parentId

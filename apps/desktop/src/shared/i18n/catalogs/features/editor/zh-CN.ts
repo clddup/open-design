@@ -35,6 +35,7 @@ export const editorMessages = {
   "history.deletePage": "删除页面",
   "history.outlineStroke": "轮廓化描边",
   "history.flattenSelection": "拼合所选图层",
+  "history.splitVector": "拆分矢量",
   "history.updateVectorVertexStrokeAppearance": "更新矢量顶点描边外观",
   "history.updateVectorVertexCornerRadius": "更新矢量顶点圆角",
   "editor.vectorGeometryUnavailable": "矢量几何服务不可用，请重试。",

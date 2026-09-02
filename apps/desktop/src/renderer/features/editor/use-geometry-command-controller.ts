@@ -4,6 +4,7 @@ import type {
   VectorVertexStrokeJoin,
 } from "@opendesign/design-contracts";
 import type { VectorGeometryProvider } from "@opendesign/geometry-service/vector-path";
+import { splitVectorNetwork } from "@opendesign/geometry-service/vector-split";
 import type { LeaferTextRunStyle } from "@opendesign/leafer-engine";
 import type { TextRunLayoutProvider } from "@opendesign/text-service";
 import {
@@ -11,6 +12,7 @@ import {
   isEffectivelyLocked,
   planVectorOutlineStroke,
   planVectorSemanticEdit,
+  planSplitVector,
   type EditorRuntime,
 } from "@opendesign/editor-runtime";
 import { useCallback, useMemo } from "react";
@@ -75,6 +77,30 @@ export function useGeometryCommandController({
       canFlattenNodes(document, activePageId, selectedNodeIds)
     );
   }, [activePageId, componentTargetActive, document, selectedNodeIds]);
+  const canSplitVector = useMemo(() => {
+    if (!selectedNodeId) return false;
+    const node = document.nodesById[selectedNodeId];
+    const parent = node?.parentId
+      ? document.nodesById[node.parentId]
+      : undefined;
+    return Boolean(
+      node &&
+      (node.kind === "path" || node.kind === "vector") &&
+      "network" in node.properties &&
+      parent?.kind !== "boolean" &&
+      !isEffectivelyLocked(document, node.id) &&
+      splitVectorNetwork(node.properties.network).ok,
+    );
+  }, [document, selectedNodeId]);
+  const splitVectorRelevant = useMemo(() => {
+    if (!selectedNodeId) return false;
+    const node = document.nodesById[selectedNodeId];
+    return Boolean(
+      node &&
+      (node.kind === "path" || node.kind === "vector") &&
+      "network" in node.properties,
+    );
+  }, [document, selectedNodeId]);
 
   const outlineSelectedStroke = useCallback(async () => {
     if (!selectedNodeId) return false;
@@ -180,6 +206,51 @@ export function useGeometryCommandController({
     vectorGeometryProvider,
   ]);
 
+  const splitSelectedVector = useCallback(() => {
+    if (!selectedNodeId) return false;
+    const current = runtime.getSnapshot();
+    const node = current.document.nodesById[selectedNodeId];
+    const pathCount =
+      node &&
+      (node.kind === "path" || node.kind === "vector") &&
+      "network" in node.properties
+        ? node.properties.network.paths.length
+        : 0;
+    const operationId = `split_vector_${Date.now()}_${++transactionCounter.current}`;
+    const resultNodeIds = Array.from(
+      { length: Math.max(0, pathCount - 1) },
+      (_, index) => `${operationId}_${index + 2}`,
+    );
+    const plan = planSplitVector(
+      current.document,
+      activePageId,
+      selectedNodeId,
+      resultNodeIds,
+    );
+    if (!plan.ok) {
+      setEditorError(plan.message);
+      return false;
+    }
+    const applied = applyCommands(t("history.splitVector"), [
+      ...plan.operations,
+    ]);
+    if (applied && plan.splitResult) {
+      runtime.setSelection(
+        plan.splitResult.resultNodeIds,
+        plan.splitResult.resultNodeIds[0] ?? null,
+      );
+    }
+    return applied;
+  }, [
+    activePageId,
+    applyCommands,
+    runtime,
+    selectedNodeId,
+    setEditorError,
+    t,
+    transactionCounter,
+  ]);
+
   const setVectorVertexAppearance = useCallback(
     (
       nodeId: string,
@@ -232,9 +303,12 @@ export function useGeometryCommandController({
   return {
     canFlattenSelection,
     canOutlineStroke,
+    canSplitVector,
     flattenSelection,
     outlineSelectedStroke,
     setVectorVertexAppearance,
+    splitSelectedVector,
+    splitVectorRelevant,
   };
 }
 

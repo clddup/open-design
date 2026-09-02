@@ -266,6 +266,74 @@ describe("useGeometryCommandController", () => {
     expect(setEditorError).toHaveBeenLastCalledWith(null);
   });
 
+  it("splits a selected multi-path Vector and selects every sibling result", () => {
+    const base = runtimeWithSelectedVector();
+    const document = structuredClone(base.getSnapshot().document);
+    const vector = document.nodesById.vector_stroked;
+    if (vector?.kind !== "vector" || !("network" in vector.properties)) {
+      throw new Error("Missing editable vector");
+    }
+    vector.properties.network.vertices.push({
+      id: "vertex_c",
+      x: 50,
+      y: 80,
+    });
+    vector.properties.network.segments.push({
+      id: "segment_ac",
+      startVertexId: "vertex_a",
+      endVertexId: "vertex_c",
+    });
+    vector.properties.network.paths.push({
+      id: "path_branch",
+      closed: false,
+      segments: [{ segmentId: "segment_ac", reversed: false }],
+    });
+    const runtime = new EditorRuntime(document);
+    runtime.setSelection([vector.id], vector.id);
+    const setEditorError = vi.fn<(message: string | null) => void>();
+    const transactionCounter = { current: 0 };
+    const { result } = renderHook(() => {
+      const editor = useEditorCommandController({
+        runtime,
+        setEditorError,
+        t,
+        transactionCounter,
+      });
+      const snapshot = runtime.getSnapshot();
+      return useGeometryCommandController({
+        activePageId: "page_welcome",
+        applyCommands: editor.applyCommands,
+        componentTargetActive: false,
+        document: snapshot.document,
+        runtime,
+        selectedNodeIds: snapshot.state.selection.nodeIds,
+        setEditorError,
+        t,
+        transactionCounter,
+      });
+    });
+
+    expect(result.current.canSplitVector).toBe(true);
+    act(() => expect(result.current.splitSelectedVector()).toBe(true));
+
+    const snapshot = runtime.getSnapshot();
+    expect(snapshot.state.selection.nodeIds).toHaveLength(2);
+    expect(
+      snapshot.state.selection.nodeIds.map((nodeId) => {
+        const resultNode = snapshot.document.nodesById[nodeId];
+        return resultNode?.kind === "vector" &&
+          "network" in resultNode.properties
+          ? resultNode.properties.network.paths[0]?.id
+          : undefined;
+      }),
+    ).toEqual(["path_open", "path_branch"]);
+    expect(snapshot.state.history.undo).toHaveLength(1);
+    expect(runtime.undo()).toMatchObject({ ok: true, mode: "undo" });
+    expect(runtime.getSnapshot().state.selection.nodeIds).toEqual([
+      "vector_stroked",
+    ]);
+  });
+
   it("flattens the authoritative selection through one transaction", async () => {
     const runtime = runtimeWithSelectedVector();
     const setEditorError = vi.fn<(message: string | null) => void>();

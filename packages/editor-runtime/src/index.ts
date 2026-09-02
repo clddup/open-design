@@ -183,6 +183,7 @@ export {
   planVectorNetworkUpdates,
   planVectorOutlineStroke,
   planVectorSemanticEdit,
+  planSplitVector,
   resolveVectorEditCollectionScope,
   resolveVectorEditScope,
   type VectorEditCollectionScope,

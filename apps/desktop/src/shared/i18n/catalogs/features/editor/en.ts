@@ -33,6 +33,7 @@ export const editorMessages = {
   "history.deletePage": "Delete Page",
   "history.outlineStroke": "Outline stroke",
   "history.flattenSelection": "Flatten selection",
+  "history.splitVector": "Split vector",
   "history.updateVectorVertexStrokeAppearance":
     "Update vector point stroke appearance",
   "history.updateVectorVertexCornerRadius": "Update vector point radius",

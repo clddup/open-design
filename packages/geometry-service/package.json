@@ -18,6 +18,7 @@
     "./vector-point-append": "./src/vector-point-append.ts",
     "./vector-point-insert": "./src/vector-point-insert.ts",
     "./vector-snapping": "./src/vector-snapping.ts",
+    "./vector-split": "./src/vector-split.ts",
     "./vector-edit": "./src/vector-edit.ts",
     "./vector-corner-radius": "./src/vector-corner-radius.ts",
     "./vector-path": "./src/vector-path.ts",

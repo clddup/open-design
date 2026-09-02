@@ -13,14 +13,17 @@ export type SelectionContextMenuActions = {
   canFlip: boolean;
   canGroup: boolean;
   canReorder: Readonly<Record<LayerOrderAction, boolean>>;
+  canSplitVector: boolean;
   canUngroup: boolean;
   onDelete: () => void;
   onDuplicate: () => void;
   onFlip: (axis: FlipAxis) => void;
   onGroup: () => void;
   onReorder: (action: LayerOrderAction) => void;
+  onSplitVector: () => void;
   onUngroup: () => void;
   platform: NodeJS.Platform;
+  splitVectorRelevant: boolean;
 };
 
 export function SelectionContextMenu({
@@ -54,6 +57,14 @@ export function SelectionContextMenu({
       >
         {t(actions.canUngroup ? "toolbar.ungroup" : "toolbar.group")}
       </DropdownMenuItem>
+      {actions.splitVectorRelevant ? (
+        <DropdownMenuItem
+          disabled={!actions.canSplitVector}
+          onSelect={actions.onSplitVector}
+        >
+          {t("toolbar.splitVector")}
+        </DropdownMenuItem>
+      ) : null}
       <DropdownMenuSeparator />
       <DropdownMenuItem
         disabled={!actions.canFlip}

@@ -21,14 +21,17 @@ function actions(
       "send-backward": true,
       "send-to-back": true,
     },
+    canSplitVector: true,
     canUngroup: false,
     onDelete: vi.fn(),
     onDuplicate: vi.fn(),
     onFlip: vi.fn(),
     onGroup: vi.fn(),
     onReorder: vi.fn(),
+    onSplitVector: vi.fn(),
     onUngroup: vi.fn(),
     platform: "darwin",
+    splitVectorRelevant: true,
     ...overrides,
   };
 }
@@ -58,6 +61,25 @@ describe("SelectionContextMenu", () => {
 
     expect(onOpen).toHaveBeenCalledTimes(1);
     expect(value.onFlip).toHaveBeenCalledWith("horizontal");
+  });
+
+  it("routes Split vector without adding canvas toolbar clutter", async () => {
+    const value = actions();
+    renderMenu(value);
+
+    await userEvent.click(
+      await screen.findByRole("menuitem", { name: "Split vector" }),
+    );
+
+    expect(value.onSplitVector).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not show Split vector for unrelated layer selections", () => {
+    renderMenu(actions({ splitVectorRelevant: false }));
+
+    expect(
+      screen.queryByRole("menuitem", { name: "Split vector" }),
+    ).not.toBeInTheDocument();
   });
 
   it("keeps unavailable mutations disabled and closes with Escape", async () => {

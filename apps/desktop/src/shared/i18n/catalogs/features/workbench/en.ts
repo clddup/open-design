@@ -16,6 +16,7 @@ export const workbenchMessages = {
   "toolbar.duplicate": "Duplicate selection",
   "toolbar.group": "Group selection",
   "toolbar.ungroup": "Ungroup selection",
+  "toolbar.splitVector": "Split vector",
   "toolbar.useAsMask": "Use as mask",
   "toolbar.removeMask": "Remove mask",
   "toolbar.booleanOperations": "Boolean operations",

@@ -5102,6 +5102,91 @@ describe("Renderer semantic hierarchy tool", () => {
     );
   });
 
+  it("splits an inspected multi-path Vector with host-owned result IDs", async () => {
+    const base = createEditableVectorRuntime();
+    const document = structuredClone(base.getSnapshot().document);
+    const vector = document.nodesById.editable_logo_contour;
+    if (
+      !vector ||
+      vector.kind !== "vector" ||
+      !("network" in vector.properties)
+    ) {
+      throw new Error("Missing split Vector fixture");
+    }
+    vector.properties.network.vertices.push({
+      id: "vertex_d",
+      x: 120,
+      y: 80,
+      handleMode: "corner",
+    });
+    vector.properties.network.segments.push({
+      id: "segment_bd",
+      startVertexId: "vertex_b",
+      endVertexId: "vertex_d",
+    });
+    vector.properties.network.paths.push({
+      id: "logo_branch",
+      closed: false,
+      segments: [{ segmentId: "segment_bd", reversed: false }],
+    });
+    const runtime = new EditorRuntime(document);
+    runtime.setSelection(["title_welcome"], "title_welcome");
+
+    const result = await executeDesignToolRequest(
+      {
+        requestId: "vector_split",
+        call: {
+          toolCallId: "tool_vector_split",
+          toolName: DESIGN_VECTOR_TOOL_NAME,
+          input: {
+            action: "split-vector",
+            label: "Split the logo paths",
+            nodeId: "editable_logo_contour",
+            pageId: "page_welcome",
+          },
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_welcome",
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "split-vector",
+          atomic: true,
+          nodeIds: [
+            "editable_logo_contour",
+            "vector_split_tool_vector_split_2_0",
+          ],
+          pathIds: ["logo_path", "logo_branch"],
+          resultNodeIds: [
+            "editable_logo_contour",
+            "vector_split_tool_vector_split_2_0",
+          ],
+          revision: 1,
+        },
+      },
+    });
+    expect(editableVectorNetwork(runtime).paths).toHaveLength(1);
+    expect(
+      editableVectorNetwork(runtime, "vector_split_tool_vector_split_2_0")
+        .paths[0]?.id,
+    ).toBe("logo_branch");
+    expect(runtime.getSnapshot().state.selection.nodeIds).toEqual([
+      "title_welcome",
+    ]);
+    expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
+    expect(runtime.undo()).toMatchObject({ ok: true, mode: "undo" });
+    expect(
+      runtime.getSnapshot().document.nodesById[
+        "vector_split_tool_vector_split_2_0"
+      ],
+    ).toBeUndefined();
+  });
+
   it("cuts an inspected vector segment atomically and returns trusted topology IDs", async () => {
     const runtime = createEditableVectorRuntime();
     runtime.setSelection(["title_welcome"], "title_welcome");

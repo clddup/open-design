@@ -95,6 +95,12 @@ export type DesignVectorToolInput =
       pageId: string;
     }
   | {
+      action: "split-vector";
+      label: string;
+      nodeId: string;
+      pageId: string;
+    }
+  | {
       action: "set-closed";
       closed: boolean;
       label: string;

@@ -27,6 +27,7 @@ import {
   planVectorNetworkUpdates,
   planVectorOutlineStroke,
   planVectorSemanticEdit,
+  planSplitVector,
   resolveVectorEditCollectionScope,
   resolveVectorEditScope,
   type VectorSemanticEdit,
@@ -453,6 +454,74 @@ describe("vector editing runtime plans", () => {
         ),
       ).toBe(false);
     }
+  });
+
+  it("splits a branching Vector into tight sibling layers in one revision", () => {
+    const document = documentWithVector();
+    const source = document.nodesById.vector_editable;
+    if (
+      !source ||
+      source.kind !== "vector" ||
+      !("network" in source.properties)
+    ) {
+      throw new Error("Missing split Vector fixture");
+    }
+    const branching = branchCandidateNetwork();
+    branching.vertices = branching.vertices.filter(
+      (vertex) => vertex.id !== "vertex_d",
+    );
+    branching.segments.find(
+      (segment) => segment.id === "segment_de",
+    )!.startVertexId = "vertex_b";
+    source.properties.network = branching;
+
+    const plan = planSplitVector(document, "page_welcome", source.id, [
+      "vector_split_2",
+    ]);
+    expect(plan).toMatchObject({
+      ok: true,
+      splitResult: {
+        pathIds: ["path_open", "path_branch_target"],
+        resultNodeIds: ["vector_editable", "vector_split_2"],
+      },
+      operations: [
+        { type: "update_properties", nodeId: "vector_editable" },
+        {
+          type: "insert_element",
+          node: { id: "vector_split_2", name: "Editable curve 2" },
+        },
+      ],
+    });
+    if (!plan.ok) throw new Error(plan.message);
+    const runtime = new EditorRuntime(document);
+    expect(
+      runtime.apply({
+        transactionId: "split_vector_paths",
+        documentId: document.documentId,
+        baseRevision: document.revision,
+        actor: { type: "user", id: "local-user" },
+        label: "Split vector",
+        commands: [...plan.operations],
+      }),
+    ).toMatchObject({ ok: true, revision: { revision: 1 } });
+    expect(vectorNetworkFrom(runtime).paths.map((path) => path.id)).toEqual([
+      "path_open",
+    ]);
+    expect(
+      vectorNetworkFrom(runtime, "vector_split_2").paths.map((path) => path.id),
+    ).toEqual(["path_branch_target"]);
+    expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
+    expect(runtime.undo()).toMatchObject({ ok: true, mode: "undo" });
+    expect(
+      runtime.getSnapshot().document.nodesById.vector_split_2,
+    ).toBeUndefined();
+    expect(runtime.redo()).toMatchObject({ ok: true, mode: "redo" });
+    const reopened = new EditorRuntime(
+      JSON.parse(JSON.stringify(runtime.getSnapshot().document)) as unknown,
+    );
+    expect(vectorNetworkFrom(reopened, "vector_split_2")).toEqual(
+      vectorNetworkFrom(runtime, "vector_split_2"),
+    );
   });
 
   it("creates a branch and keeps point editing writable", () => {

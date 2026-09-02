@@ -18,6 +18,7 @@ export const workbenchMessages = {
   "toolbar.duplicate": "复制选区",
   "toolbar.group": "编组选区",
   "toolbar.ungroup": "解组选区",
+  "toolbar.splitVector": "拆分矢量",
   "toolbar.useAsMask": "用作蒙版",
   "toolbar.removeMask": "移除蒙版",
   "toolbar.booleanOperations": "布尔运算",

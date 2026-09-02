@@ -292,9 +292,12 @@ export function EditorWorkbenchFeature({
   const {
     canFlattenSelection,
     canOutlineStroke,
+    canSplitVector,
     flattenSelection,
     outlineSelectedStroke,
     setVectorVertexAppearance,
+    splitSelectedVector,
+    splitVectorRelevant,
   } = useGeometryCommandController({
     activePageId,
     applyCommands,
@@ -515,12 +518,15 @@ export function EditorWorkbenchFeature({
     canFlip: canFlipSelection,
     canGroup: canGroupSelection,
     canReorder: layerOrderAvailability,
+    canSplitVector,
+    splitVectorRelevant,
     canUngroup: canUngroupBooleanSelection || canUngroupSelection,
     onDelete: () => deleteNodes(activeLayerMutationIds),
     onDuplicate: duplicateActiveSelection,
     onFlip: flipSelection,
     onGroup: groupSelection,
     onReorder: reorderSelection,
+    onSplitVector: splitSelectedVector,
     onUngroup: ungroupSelection,
     platform,
   };
