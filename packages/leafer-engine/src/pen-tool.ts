@@ -1,173 +1,273 @@
-import type {
-  Point,
-  VectorNetwork,
-  VectorPointMode,
-} from "@opendesign/design-contracts";
-import { serializeVectorNetwork } from "@opendesign/geometry-service/editable-vector";
-
-export interface PenDraftVertex extends Point {
-  handleMode: VectorPointMode;
-  id: string;
-  tangentIn?: Point;
-  tangentOut?: Point;
-}
+import type { Point, VectorNetwork } from "@opendesign/design-contracts";
+import {
+  serializeVectorNetwork,
+  validateVectorNetwork,
+} from "@opendesign/geometry-service/editable-vector";
+import {
+  connectVectorEndpoints,
+  inferVectorPointMode,
+  listVectorVertexHandles,
+  type VectorEditFailureCode,
+} from "@opendesign/geometry-service/vector-edit";
+import {
+  beginVectorPenAppend,
+  beginVectorPenContour,
+  createVectorPenContourStart,
+  dragVectorPenContourStart,
+  dragVectorPenPoint,
+  finishVectorPenContourAtVertex,
+  type VectorPenContourStart,
+  type VectorPenPointEdit,
+} from "./vector-pen-edit.js";
 
 export interface PenDraft {
-  vertices: PenDraftVertex[];
+  activeVertexId: string | null;
+  network: VectorNetwork;
+  pendingStart?: VectorPenContourStart;
+  sourceTangentOut?: Point;
 }
 
-const POINT_EPSILON = 0.000_001;
+export interface PenDraftAnchor extends Point {
+  id: string;
+}
+
+export type PenDraftMutationResult =
+  | { edit?: VectorPenPointEdit; ok: true }
+  | { code: VectorEditFailureCode; message: string; ok: false };
+
 const HANDLE_EPSILON = 0.5;
 
 export function createPenDraft(point: Point): PenDraft {
-  return { vertices: [penVertex(0, point)] };
+  return {
+    activeVertexId: null,
+    network: emptyVectorNetwork(),
+    pendingStart: createVectorPenContourStart(point),
+  };
 }
 
-export function appendPenVertex(draft: PenDraft, point: Point): boolean {
-  const previous = draft.vertices.at(-1);
-  if (previous && pointDistance(previous, point) <= POINT_EPSILON) return false;
-  draft.vertices.push(penVertex(draft.vertices.length, point));
+export function clonePenDraft(draft: PenDraft): PenDraft {
+  return structuredClone(draft);
+}
+
+export function penDraftHasMaterial(draft: PenDraft): boolean {
+  return draft.network.paths.length > 0;
+}
+
+export function penDraftAnchors(draft: PenDraft): PenDraftAnchor[] {
+  return draft.network.vertices.map(({ id, x, y }) => ({ id, x, y }));
+}
+
+export function penDraftActivePoint(draft: PenDraft): Point | null {
+  if (draft.pendingStart) return draft.pendingStart.point;
+  if (!draft.activeVertexId) return null;
+  return (
+    draft.network.vertices.find(({ id }) => id === draft.activeVertexId) ?? null
+  );
+}
+
+export function startPenPathAtVertex(
+  draft: PenDraft,
+  vertexId: string,
+): boolean {
+  if (!draft.network.vertices.some(({ id }) => id === vertexId)) return false;
+  draft.activeVertexId = vertexId;
+  delete draft.pendingStart;
+  delete draft.sourceTangentOut;
   return true;
 }
 
-export function removeLastPenVertex(draft: PenDraft): boolean {
-  return draft.vertices.pop() !== undefined;
+export function startIndependentPenPath(draft: PenDraft, point: Point): void {
+  draft.activeVertexId = null;
+  draft.pendingStart = createVectorPenContourStart(point);
+  delete draft.sourceTangentOut;
 }
 
-export function setPenVertexHandle(
-  draft: PenDraft,
-  vertexIndex: number,
-  outgoing: Point,
-): void {
-  const vertex = draft.vertices[vertexIndex];
-  if (!vertex) return;
-  if (Math.hypot(outgoing.x, outgoing.y) < HANDLE_EPSILON) {
-    delete vertex.tangentIn;
-    delete vertex.tangentOut;
-    vertex.handleMode = "corner";
+export function dragPenPathStart(draft: PenDraft, pointer: Point): void {
+  if (draft.pendingStart) {
+    draft.pendingStart = dragVectorPenContourStart(draft.pendingStart, pointer);
     return;
   }
-  vertex.tangentIn = { x: -outgoing.x, y: -outgoing.y };
-  vertex.tangentOut = { ...outgoing };
-  vertex.handleMode = "mirrored";
+  const point = penDraftActivePoint(draft);
+  if (!point) return;
+  const tangent = { x: pointer.x - point.x, y: pointer.y - point.y };
+  if (Math.hypot(tangent.x, tangent.y) < HANDLE_EPSILON) {
+    delete draft.sourceTangentOut;
+  } else {
+    draft.sourceTangentOut = tangent;
+  }
 }
 
-export function penDraftToVectorNetwork(
+export function appendPenPoint(
   draft: PenDraft,
-  closed: boolean,
-): VectorNetwork | null {
-  if (draft.vertices.length < 2) return null;
-  const vertices = draft.vertices.map(({ handleMode, id, x, y }) => ({
-    handleMode,
-    id,
-    x,
-    y,
-  }));
-  const segments = draft.vertices.slice(1).map((vertex, index) => {
-    const start = draft.vertices[index]!;
-    return {
-      id: `segment_${index + 1}`,
-      startVertexId: start.id,
-      endVertexId: vertex.id,
-      ...(start.tangentOut ? { tangentStart: { ...start.tangentOut } } : {}),
-      ...(vertex.tangentIn ? { tangentEnd: { ...vertex.tangentIn } } : {}),
-    };
-  });
-  if (closed) {
-    const start = draft.vertices.at(-1)!;
-    const end = draft.vertices[0]!;
-    segments.push({
-      id: `segment_${segments.length + 1}`,
-      startVertexId: start.id,
-      endVertexId: end.id,
-      ...(start.tangentOut ? { tangentStart: { ...start.tangentOut } } : {}),
-      ...(end.tangentIn ? { tangentEnd: { ...end.tangentIn } } : {}),
-    });
-  }
-  const pathId = "path_1";
-  return {
-    vertices,
-    segments,
-    paths: [
-      {
-        id: pathId,
-        closed,
-        segments: segments.map((segment) => ({
-          segmentId: segment.id,
-          reversed: false,
-        })),
-      },
-    ],
-    regions: closed
-      ? [
-          {
-            id: "region_1",
-            windingRule: "nonzero",
-            loops: [{ pathId, reversed: false }],
-          },
-        ]
-      : [],
+  point: Point,
+): PenDraftMutationResult {
+  const result = draft.pendingStart
+    ? beginVectorPenContour(draft.network, draft.pendingStart, point)
+    : draft.activeVertexId
+      ? beginVectorPenAppend(
+          draft.network,
+          draft.activeVertexId,
+          point,
+          draft.sourceTangentOut,
+        )
+      : null;
+  if (!result) return failure("no-op", "Pen path has no active start point");
+  if (!result.ok) return result;
+  draft.network = result.edit.network;
+  draft.activeVertexId = result.edit.vertexId;
+  delete draft.pendingStart;
+  delete draft.sourceTangentOut;
+  return { edit: result.edit, ok: true };
+}
+
+export function dragAppendedPenPoint(
+  draft: PenDraft,
+  edit: VectorPenPointEdit,
+  pointer: Point,
+): PenDraftMutationResult {
+  const delta = {
+    x: pointer.x - edit.point.x,
+    y: pointer.y - edit.point.y,
   };
+  if (Math.hypot(delta.x, delta.y) < HANDLE_EPSILON) {
+    draft.network = edit.base;
+    delete draft.sourceTangentOut;
+    return { edit: { ...edit, network: edit.base }, ok: true };
+  }
+  const result = dragVectorPenPoint(edit, pointer);
+  if (!result.ok) return result;
+  draft.network = result.edit.network;
+  draft.sourceTangentOut = delta;
+  return { edit: result.edit, ok: true };
+}
+
+export function finishPenPathAtVertex(
+  draft: PenDraft,
+  targetVertexId: string,
+): PenDraftMutationResult {
+  if (draft.pendingStart) {
+    const result = finishVectorPenContourAtVertex(
+      draft.network,
+      draft.pendingStart,
+      targetVertexId,
+    );
+    if (!result.ok) return result;
+    draft.network = result.edit.network;
+    finishPenPath(draft);
+    return { ok: true };
+  }
+  const sourceVertexId = draft.activeVertexId;
+  if (!sourceVertexId || sourceVertexId === targetVertexId) {
+    return failure("no-op", "Pen path cannot finish on its active endpoint");
+  }
+  const beforeSegmentIds = new Set(draft.network.segments.map(({ id }) => id));
+  const result = connectVectorEndpoints(draft.network, [
+    sourceVertexId,
+    targetVertexId,
+  ]);
+  if (!result.ok) return result;
+  if (draft.sourceTangentOut) {
+    applySourceTangent(
+      result.network,
+      beforeSegmentIds,
+      sourceVertexId,
+      draft.sourceTangentOut,
+    );
+  }
+  const issues = validateVectorNetwork(result.network);
+  if (issues.length > 0) {
+    return failure(
+      "invalid-network",
+      issues.map(({ message }) => message).join("; "),
+    );
+  }
+  draft.network = result.network;
+  finishPenPath(draft);
+  return { ok: true };
+}
+
+export function finishPenPath(draft: PenDraft): void {
+  draft.activeVertexId = null;
+  delete draft.pendingStart;
+  delete draft.sourceTangentOut;
 }
 
 export function penDraftPreviewPath(
   draft: PenDraft,
   cursor: Point | undefined,
-  closeCandidate: boolean,
+  targetVertexId: string | undefined,
 ): string | null {
-  const preview: PenDraft = {
-    vertices: draft.vertices.map((vertex) => ({
-      ...vertex,
-      ...(vertex.tangentIn ? { tangentIn: { ...vertex.tangentIn } } : {}),
-      ...(vertex.tangentOut ? { tangentOut: { ...vertex.tangentOut } } : {}),
-    })),
-  };
-  const closed = closeCandidate && preview.vertices.length >= 3;
-  if (
-    !closed &&
-    cursor &&
-    pointDistance(preview.vertices.at(-1)!, cursor) > POINT_EPSILON
-  ) {
-    appendPenVertex(preview, cursor);
+  const preview = clonePenDraft(draft);
+  if (targetVertexId && (preview.pendingStart || preview.activeVertexId)) {
+    finishPenPathAtVertex(preview, targetVertexId);
+  } else if (cursor && (preview.pendingStart || preview.activeVertexId)) {
+    appendPenPoint(preview, cursor);
   }
-  const network = penDraftToVectorNetwork(preview, closed);
-  if (!network) return null;
-  const serialized = serializeVectorNetwork(network);
+  if (!penDraftHasMaterial(preview)) return null;
+  const serialized = serializeVectorNetwork(preview.network);
   return serialized.ok ? serialized.path : null;
 }
 
 export function penDraftHandlePath(draft: PenDraft): string | null {
-  const parts: string[] = [];
-  for (const vertex of draft.vertices) {
-    if (vertex.tangentIn) {
-      parts.push(
-        `M ${number(vertex.x + vertex.tangentIn.x)} ${number(
-          vertex.y + vertex.tangentIn.y,
-        )} L ${number(vertex.x)} ${number(vertex.y)}`,
-      );
-    }
-    if (vertex.tangentOut) {
-      parts.push(
-        `M ${number(vertex.x)} ${number(vertex.y)} L ${number(
-          vertex.x + vertex.tangentOut.x,
-        )} ${number(vertex.y + vertex.tangentOut.y)}`,
-      );
-    }
+  const parts = draft.network.vertices.flatMap((vertex) =>
+    listVectorVertexHandles(draft.network, vertex.id).map(
+      ({ position }) =>
+        `M ${number(vertex.x)} ${number(vertex.y)} L ${number(position.x)} ${number(position.y)}`,
+    ),
+  );
+  const start = penDraftActivePoint(draft);
+  const tangent = draft.pendingStart?.tangentOut ?? draft.sourceTangentOut;
+  if (start && tangent) {
+    parts.push(
+      `M ${number(start.x - tangent.x)} ${number(start.y - tangent.y)} L ${number(start.x + tangent.x)} ${number(start.y + tangent.y)}`,
+    );
   }
   return parts.length > 0 ? parts.join(" ") : null;
 }
 
-function penVertex(index: number, point: Point): PenDraftVertex {
-  return {
-    handleMode: "corner",
-    id: `vertex_${index + 1}`,
-    x: point.x,
-    y: point.y,
-  };
+export function penDraftHasFillRegion(draft: PenDraft): boolean {
+  return draft.network.regions.length > 0;
 }
 
-function pointDistance(left: Point, right: Point): number {
-  return Math.hypot(left.x - right.x, left.y - right.y);
+export function penDraftPreviewHasFillRegion(
+  draft: PenDraft,
+  targetVertexId: string | undefined,
+): boolean {
+  if (penDraftHasFillRegion(draft)) return true;
+  if (!targetVertexId) return false;
+  const preview = clonePenDraft(draft);
+  const result = finishPenPathAtVertex(preview, targetVertexId);
+  return result.ok && penDraftHasFillRegion(preview);
+}
+
+function emptyVectorNetwork(): VectorNetwork {
+  return { paths: [], regions: [], segments: [], vertices: [] };
+}
+
+function applySourceTangent(
+  network: VectorNetwork,
+  beforeSegmentIds: ReadonlySet<string>,
+  sourceVertexId: string,
+  tangent: Point,
+): void {
+  const segment = network.segments.find(({ id }) => !beforeSegmentIds.has(id));
+  if (!segment) return;
+  if (segment.startVertexId === sourceVertexId) {
+    segment.tangentStart = { ...tangent };
+  } else if (segment.endVertexId === sourceVertexId) {
+    segment.tangentEnd = { ...tangent };
+  } else {
+    return;
+  }
+  const vertex = network.vertices.find(({ id }) => id === sourceVertexId);
+  if (vertex) vertex.handleMode = inferVectorPointMode(network, sourceVertexId);
+}
+
+function failure(
+  code: VectorEditFailureCode,
+  message: string,
+): Extract<PenDraftMutationResult, { ok: false }> {
+  return { code, message, ok: false };
 }
 
 function number(value: number): string {

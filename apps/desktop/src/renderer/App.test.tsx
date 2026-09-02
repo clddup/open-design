@@ -2700,6 +2700,90 @@ describe("App", () => {
     expect(snapshot.state.tool).toBe("pen");
   });
 
+  it("keeps Fill and Stroke when a Pen Network mixes a closed region and open branch", () => {
+    renderApp();
+    const before = new Set(
+      Object.keys(runtime().getSnapshot().document.nodesById),
+    );
+    act(() => {
+      leaferCallbacks().onCreateVector({
+        closed: false,
+        height: 100,
+        network: {
+          vertices: [
+            { id: "vertex_a", x: 0, y: 0 },
+            { id: "vertex_b", x: 100, y: 0 },
+            { id: "vertex_c", x: 50, y: 100 },
+            { id: "vertex_branch", x: 150, y: 60 },
+          ],
+          segments: [
+            {
+              id: "segment_ab",
+              startVertexId: "vertex_a",
+              endVertexId: "vertex_b",
+            },
+            {
+              id: "segment_bc",
+              startVertexId: "vertex_b",
+              endVertexId: "vertex_c",
+            },
+            {
+              id: "segment_ca",
+              startVertexId: "vertex_c",
+              endVertexId: "vertex_a",
+            },
+            {
+              id: "segment_branch",
+              startVertexId: "vertex_b",
+              endVertexId: "vertex_branch",
+            },
+          ],
+          paths: [
+            {
+              id: "path_closed",
+              closed: true,
+              segments: [
+                { segmentId: "segment_ab", reversed: false },
+                { segmentId: "segment_bc", reversed: false },
+                { segmentId: "segment_ca", reversed: false },
+              ],
+            },
+            {
+              id: "path_branch",
+              closed: false,
+              segments: [{ segmentId: "segment_branch", reversed: false }],
+            },
+          ],
+          regions: [
+            {
+              id: "region_closed",
+              windingRule: "nonzero",
+              loops: [{ pathId: "path_closed", reversed: false }],
+            },
+          ],
+        },
+        pageId: "page_welcome",
+        parentId: "frame_welcome",
+        width: 150,
+        x: 360,
+        y: 220,
+      });
+    });
+
+    const snapshot = runtime().getSnapshot();
+    const vectorId = Object.keys(snapshot.document.nodesById).find(
+      (nodeId) => !before.has(nodeId),
+    );
+    expect(snapshot.document.nodesById[vectorId ?? ""]).toMatchObject({
+      kind: "vector",
+      properties: {
+        fills: [{ type: "solid", color: "#4f7fff", opacity: 1 }],
+        strokes: [{ type: "solid", color: "#151515", opacity: 1 }],
+        strokeWidth: 2,
+      },
+    });
+  });
+
   it("creates semantic Polygon and Star nodes as undoable document transactions", async () => {
     const user = userEvent.setup();
     renderApp();

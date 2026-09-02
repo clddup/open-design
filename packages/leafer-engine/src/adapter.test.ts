@@ -6847,28 +6847,28 @@ describe("Leafer engine selection bounds synchronization", () => {
         y: 30,
         network: {
           vertices: [
-            { handleMode: "mirrored", id: "vertex_1", x: 0, y: 0 },
+            { handleMode: "mirrored", id: "vertex_edit_1", x: 0, y: 0 },
             {
               handleMode: "mirrored",
-              id: "vertex_2",
+              id: "vertex_edit_2",
               x: 100,
               y: 60,
             },
           ],
           segments: [
             {
-              id: "segment_1",
-              startVertexId: "vertex_1",
-              endVertexId: "vertex_2",
+              id: "segment_edit_1",
+              startVertexId: "vertex_edit_1",
+              endVertexId: "vertex_edit_2",
               tangentStart: { x: 30, y: 10 },
               tangentEnd: { x: -20, y: 30 },
             },
           ],
           paths: [
             {
-              id: "path_1",
+              id: "path_edit_1",
               closed: false,
-              segments: [{ segmentId: "segment_1", reversed: false }],
+              segments: [{ segmentId: "segment_edit_1", reversed: false }],
             },
           ],
           regions: [],
@@ -6932,6 +6932,7 @@ describe("Leafer engine selection bounds synchronization", () => {
     clickPenPoint(app, 50, 100);
     app.emit("pointer.move", boxDragEvent(2, 2));
     app.emit("pointer.down", boxDragEvent(2, 2));
+    emitWindowKey("Escape");
 
     expect(onCreateVector).toHaveBeenCalledTimes(1);
     const request = onCreateVector.mock.calls[0]?.[0];
@@ -6945,12 +6946,79 @@ describe("Leafer engine selection bounds synchronization", () => {
       y: 0,
     });
     expect(request?.network.segments).toContainEqual({
-      id: "segment_3",
-      startVertexId: "vertex_3",
-      endVertexId: "vertex_1",
+      id: "segment_edit_3",
+      startVertexId: "vertex_edit_3",
+      endVertexId: "vertex_edit_1",
     });
     expect(request?.network.paths[0]?.closed).toBe(true);
-    expect(request?.network.regions[0]?.id).toBe("region_1");
+    expect(request?.network.regions[0]?.id).toBe("region_edit_1");
+    adapter.dispose();
+  });
+
+  it("keeps closed contours, independent paths, and branches in one Pen commit", async () => {
+    const onCreateVector = vi.fn<
+      (request: LeaferCreateVectorRequest) => boolean
+    >(() => true);
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onCreateVector,
+    });
+    adapter.sync({
+      ...createInput(),
+      tool: "pen",
+      selection: { nodeIds: [] },
+    });
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Missing Pen network fixture");
+
+    clickPenPoint(app, 0, 0);
+    clickPenPoint(app, 100, 0);
+    clickPenPoint(app, 50, 100);
+    clickPenPoint(app, 0, 0);
+    expect(onCreateVector).not.toHaveBeenCalled();
+
+    clickPenPoint(app, 180, 20);
+    clickPenPoint(app, 240, 80);
+    emitWindowKey("Escape");
+    clickPenPoint(app, 100, 0);
+    clickPenPoint(app, 130, -80);
+    emitWindowKey("Escape");
+    emitWindowKey("Escape");
+
+    expect(onCreateVector).toHaveBeenCalledTimes(1);
+    const request = onCreateVector.mock.calls[0]?.[0];
+    expect(request?.closed).toBe(false);
+    expect(request?.network.paths).toHaveLength(3);
+    expect(request?.network.regions).toHaveLength(1);
+    const junction = request?.network.vertices.find(
+      ({ x, y }) => x === 100 && y === 80,
+    );
+    expect(junction?.handleMode).toBe("independent");
+    adapter.dispose();
+  });
+
+  it("finishes an open path before a second Escape commits its network", async () => {
+    const onCreateVector = vi.fn<
+      (request: LeaferCreateVectorRequest) => boolean
+    >(() => true);
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onCreateVector,
+    });
+    adapter.sync({
+      ...createInput(),
+      tool: "pen",
+      selection: { nodeIds: [] },
+    });
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Missing two-stage Escape fixture");
+    clickPenPoint(app, 10, 10);
+    clickPenPoint(app, 80, 40);
+
+    emitWindowKey("Escape");
+    expect(onCreateVector).not.toHaveBeenCalled();
+    emitWindowKey("Escape");
+    expect(onCreateVector).toHaveBeenCalledTimes(1);
     adapter.dispose();
   });
 
@@ -6974,6 +7042,31 @@ describe("Leafer engine selection bounds synchronization", () => {
     clickPenPoint(app, 80, 40);
     emitWindowKey("Backspace");
     emitWindowKey("Escape");
+
+    expect(onCreateVector).not.toHaveBeenCalled();
+    adapter.dispose();
+  });
+
+  it("restores the previous Pen draft when a pointer gesture is cancelled", async () => {
+    const onCreateVector = vi.fn<
+      (request: LeaferCreateVectorRequest) => boolean
+    >(() => true);
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onCreateVector,
+    });
+    adapter.sync({
+      ...createInput(),
+      tool: "pen",
+      selection: { nodeIds: [] },
+    });
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Missing cancelled Pen fixture");
+
+    clickPenPoint(app, 10, 10);
+    app.emit("pointer.down", boxDragEvent(80, 40));
+    app.emit("pointer.up", { ...boxDragEvent(80, 40), isCancel: true });
+    emitWindowKey("Enter");
 
     expect(onCreateVector).not.toHaveBeenCalled();
     adapter.dispose();
@@ -7129,6 +7222,7 @@ describe("Leafer engine selection bounds synchronization", () => {
     clickPenPoint(app, 10, 10);
     clickPenPoint(app, 80, 40);
 
+    emitWindowKey("Escape");
     emitWindowKey("Escape");
 
     expect(onCreateVector).toHaveBeenCalledTimes(1);

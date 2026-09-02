@@ -1,22 +1,30 @@
-import type { Point } from "@opendesign/design-contracts";
 import { normalizeVectorNetwork } from "@opendesign/geometry-service/editable-vector";
 import type * as LeaferEditorModule from "leafer-editor";
-import { constrainPointToOctant } from "./angle-constraint.js";
+import type { LeaferElementSpec, LeaferSceneProjection } from "./mapping.js";
 import {
-  LEAFER_EDITOR_SELECTION_COLOR,
-  type LeaferElementSpec,
-  type LeaferSceneProjection,
-} from "./mapping.js";
-import {
-  appendPenVertex,
   createPenDraft,
-  penDraftHandlePath,
-  penDraftPreviewPath,
-  penDraftToVectorNetwork,
-  removeLastPenVertex,
-  setPenVertexHandle,
-  type PenDraft,
+  penDraftActivePoint,
+  penDraftHasMaterial,
+  type PenDraftMutationResult,
 } from "./pen-tool.js";
+import {
+  appendPenPathPoint,
+  dragPenPointer,
+  escapePenPath,
+  finishPenPathOnTarget,
+  hoverPenPointer,
+  restorePreviousPenDraft,
+  startPenPath,
+  syncPenHoverTarget,
+  targetPenVertexId,
+  type PenInteractionSession,
+} from "./pen-tool-interaction.js";
+import {
+  createPenToolOverlay,
+  destroyPenToolOverlay,
+  updatePenToolOverlay,
+  type PenToolOverlay,
+} from "./pen-tool-overlay.js";
 import { asLeaferEvent, eventClientPoint } from "./pointer-event.js";
 import type {
   LeaferCreateVectorRequest,
@@ -27,20 +35,12 @@ type LeaferModule = typeof LeaferEditorModule;
 type LeaferElement = InstanceType<LeaferModule["UI"]>;
 type LeaferGroup = InstanceType<LeaferModule["Group"]>;
 
-interface PenToolSession {
-  activeVertexIndex: number | null;
-  anchors: LeaferElement[];
-  closeCandidate: boolean;
-  cursor: Point;
+interface PenToolSession extends PenInteractionSession {
   documentId: string;
-  draft: PenDraft;
-  handlePath: LeaferElement;
+  overlay: PenToolOverlay;
   pageId: string;
   parent: LeaferGroup;
   parentId: string | null;
-  pointerDownClient: Point | null;
-  previewGroup: LeaferGroup;
-  previewPath: LeaferElement;
   revision: number;
 }
 
@@ -73,11 +73,6 @@ interface PenToolProjectionSync {
   projectionContinuityLost: boolean;
 }
 
-const MATRIX_EPSILON = 0.000_001;
-const MIN_DRAW_DISTANCE = 4;
-const PEN_CLOSE_DISTANCE = 10;
-const PEN_HANDLE_COLOR = "#8aa4ff";
-
 export class PenToolController {
   readonly #options: PenToolControllerOptions;
   #finishAfterProjectionSync = false;
@@ -102,14 +97,11 @@ export class PenToolController {
       return;
     }
     if (input.tool === "pen") {
-      if (!projectionWillChange) this.#updatePreview(input.viewport.zoom);
+      if (!projectionWillChange) this.#render(input.viewport.zoom);
       return;
     }
-    if (projectionWillChange) {
-      this.#finishAfterProjectionSync = true;
-      return;
-    }
-    this.#queueOpenCommit();
+    if (projectionWillChange) this.#finishAfterProjectionSync = true;
+    else this.#queueCommit();
   }
 
   syncProjection(sync: PenToolProjectionSync): void {
@@ -124,32 +116,23 @@ export class PenToolController {
       sync.input.changes?.documentId === session.documentId &&
       sync.input.changes.fromRevision === session.revision &&
       sync.input.changes.toRevision === sync.input.document.revision;
-    const parentSpec = session.parentId
-      ? sync.projection.elementsById.get(session.parentId)
-      : undefined;
-    const parentInvalid =
-      session.parentId !== null &&
-      (sync.changedNodeIds.has(session.parentId) ||
-        !isCreationContainer(parentSpec) ||
-        isLockedSpec(parentSpec));
     if (
       sync.projectionContinuityLost ||
       (revisionChanged && !contiguousRevision) ||
-      parentInvalid
+      this.#parentInvalid(sync, session)
     ) {
       this.cancel();
       return;
     }
     session.revision = sync.input.document.revision;
-    this.#updatePreview(sync.input.viewport.zoom);
-    if (this.#finishAfterProjectionSync) this.#queueOpenCommit();
+    this.#render(sync.input.viewport.zoom);
+    if (this.#finishAfterProjectionSync) this.#queueCommit();
   }
 
   completeSync(): void {
     const pending = this.#pendingCommit;
     this.#pendingCommit = null;
-    if (!pending) return;
-    this.#submit(pending);
+    if (pending) this.#submit(pending);
   }
 
   abortSync(): void {
@@ -162,173 +145,71 @@ export class PenToolController {
     if (current.disposed || !input || input.tool !== "pen") return;
     const pointer = asLeaferEvent(event);
     if (pointer.isCancel || pointer.right || pointer.middle) return;
-    const existing = this.#session;
-    if (existing) {
-      const rawLocal = pointer.getInnerPoint(existing.parent);
-      if (this.#isCloseCandidate(existing, rawLocal, input.viewport.zoom)) {
-        this.finish(true);
-        return;
-      }
-      const previous = existing.draft.vertices.at(-1);
-      const local =
-        pointer.shiftKey && previous
-          ? constrainPointToOctant(previous, rawLocal)
-          : rawLocal;
-      const zoom = normalizedZoom(input.viewport.zoom);
-      if (
-        previous &&
-        pointDistance(previous, local) * zoom < MIN_DRAW_DISTANCE
-      ) {
-        return;
-      }
-      if (!appendPenVertex(existing.draft, local)) return;
-      existing.activeVertexIndex = existing.draft.vertices.length - 1;
-      existing.closeCandidate = false;
-      existing.cursor = local;
-      existing.pointerDownClient = eventClientPoint(pointer);
-      this.#updatePreview(input.viewport.zoom);
+    if (!this.#session) {
+      this.#beginSession(pointer, input);
       return;
     }
-
-    const parentId = this.#resolveParent(pointer.target);
-    if (parentId === undefined) return;
-    const parent = this.#parent(parentId);
-    if (!parent) return;
-    const local = pointer.getInnerPoint(parent);
-    const previewGroup = new this.#options.leafer.Group({
-      editable: false,
-      hittable: false,
-    }) as LeaferGroup;
-    const previewPath = new this.#options.leafer.Path({
-      editable: false,
-      fill: null,
-      hittable: false,
-      stroke: LEAFER_EDITOR_SELECTION_COLOR,
-      strokeCap: "round",
-      strokeJoin: "round",
-    }) as LeaferElement;
-    const handlePath = new this.#options.leafer.Path({
-      editable: false,
-      fill: null,
-      hittable: false,
-      stroke: PEN_HANDLE_COLOR,
-    }) as LeaferElement;
-    previewGroup.add(previewPath);
-    previewGroup.add(handlePath);
-    parent.add(previewGroup);
-    this.#session = {
-      activeVertexIndex: 0,
-      anchors: [],
-      closeCandidate: false,
-      cursor: local,
-      documentId: input.document.documentId,
-      draft: createPenDraft(local),
-      handlePath,
-      pageId: input.pageId,
-      parent,
-      parentId,
-      pointerDownClient: eventClientPoint(pointer),
-      previewGroup,
-      previewPath,
-      revision: input.document.revision,
-    };
-    this.#updatePreview(input.viewport.zoom);
+    this.#continueSession(pointer, input);
   }
 
   pointerMove(event: unknown): void {
     const session = this.#session;
     const current = this.#options.current();
     const input = current.input;
-    if (!session || current.disposed || !input || input.tool !== "pen") return;
+    if (current.disposed || !session || !input || input.tool !== "pen") return;
     const pointer = asLeaferEvent(event);
     if (pointer.isCancel) return;
     const rawLocal = pointer.getInnerPoint(session.parent);
-    if (
-      session.activeVertexIndex !== null &&
-      session.pointerDownClient !== null
-    ) {
-      const vertex = session.draft.vertices[session.activeVertexIndex];
-      const local =
-        pointer.shiftKey && vertex
-          ? constrainPointToOctant(vertex, rawLocal)
-          : rawLocal;
-      session.cursor = local;
-      const client = eventClientPoint(pointer);
-      const dragged =
-        pointDistance(session.pointerDownClient, client) >= MIN_DRAW_DISTANCE;
-      if (vertex) {
-        setPenVertexHandle(
-          session.draft,
-          session.activeVertexIndex,
-          dragged
-            ? { x: local.x - vertex.x, y: local.y - vertex.y }
-            : { x: 0, y: 0 },
-        );
-      }
-      session.closeCandidate = false;
-    } else {
-      session.closeCandidate = this.#isCloseCandidate(
-        session,
-        rawLocal,
-        input.viewport.zoom,
-      );
-      const previous = session.draft.vertices.at(-1);
-      session.cursor =
-        pointer.shiftKey && previous && !session.closeCandidate
-          ? constrainPointToOctant(previous, rawLocal)
-          : rawLocal;
-    }
-    this.#updatePreview(input.viewport.zoom);
+    const result = session.drag
+      ? dragPenPointer(
+          session,
+          rawLocal,
+          eventClientPoint(pointer),
+          pointer.shiftKey,
+        )
+      : (hoverPenPointer(
+          session,
+          rawLocal,
+          pointer.shiftKey,
+          input.viewport.zoom,
+        ),
+        null);
+    this.#reportMutationFailure(result);
+    this.#render(input.viewport.zoom);
   }
 
   pointerUp(event: unknown): void {
     const session = this.#session;
-    if (!session || session.activeVertexIndex === null) return;
+    if (!session?.drag) return;
+    if (asLeaferEvent(event).isCancel) {
+      this.#restorePreviousDraft(session);
+      return;
+    }
     this.pointerMove(event);
     const current = this.#session;
-    const zoom = this.#options.current().input?.viewport.zoom ?? 1;
     if (!current) return;
-    current.activeVertexIndex = null;
-    current.pointerDownClient = null;
-    current.closeCandidate = this.#isCloseCandidate(
-      current,
-      current.cursor,
-      zoom,
-    );
-    this.#updatePreview(zoom);
+    current.drag = null;
+    syncPenHoverTarget(current, current.cursor, this.#zoom());
+    this.#render(this.#zoom());
   }
 
   handleKeyDown(event: KeyboardEvent): boolean {
     const session = this.#session;
     if (!session) return false;
-    if (event.code === "Escape" || event.code === "Enter") {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      if (session.draft.vertices.length >= 2) this.finish(false);
-      else this.cancel();
+    if (event.code === "Enter") {
+      stopKeyEvent(event);
+      this.#commit();
+      return true;
+    }
+    if (event.code === "Escape") {
+      stopKeyEvent(event);
+      this.#escape(session);
       return true;
     }
     if (event.code !== "Backspace" && event.code !== "Delete") return false;
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    removeLastPenVertex(session.draft);
-    if (session.draft.vertices.length === 0) {
-      this.cancel();
-      return true;
-    }
-    session.activeVertexIndex = null;
-    session.pointerDownClient = null;
-    session.closeCandidate = false;
-    const last = session.draft.vertices.at(-1)!;
-    session.cursor = { x: last.x, y: last.y };
-    this.#updatePreview(this.#options.current().input?.viewport.zoom ?? 1);
+    stopKeyEvent(event);
+    this.#restorePreviousDraft(session);
     return true;
-  }
-
-  finish(closed: boolean): boolean {
-    const pending = this.#takeCommit(closed);
-    if (!pending) return false;
-    return this.#submit(pending);
   }
 
   cancel(): boolean {
@@ -341,50 +222,114 @@ export class PenToolController {
     this.cancel();
   }
 
-  #clearSession(): boolean {
-    const session = this.#session;
-    if (!session) return false;
-    this.#session = null;
-    session.previewGroup.remove();
-    session.previewGroup.destroy();
-    return true;
+  #beginSession(
+    pointer: ReturnType<typeof asLeaferEvent>,
+    input: LeaferEngineSyncInput,
+  ): void {
+    const parentId = this.#resolveParent(pointer.target);
+    if (parentId === undefined) return;
+    const parent = this.#parent(parentId);
+    if (!parent) return;
+    const local = pointer.getInnerPoint(parent);
+    this.#session = {
+      cursor: local,
+      documentId: input.document.documentId,
+      draft: createPenDraft(local),
+      drag: { kind: "start", startClient: eventClientPoint(pointer) },
+      history: [],
+      overlay: createPenToolOverlay(this.#options.leafer, parent),
+      pageId: input.pageId,
+      parent,
+      parentId,
+      revision: input.document.revision,
+    };
+    this.#render(input.viewport.zoom);
   }
 
-  #isCloseCandidate(
-    session: PenToolSession,
-    point: Point,
-    zoom: number,
-  ): boolean {
-    const first = session.draft.vertices[0];
-    return (
-      first !== undefined &&
-      session.draft.vertices.length >= 3 &&
-      pointDistance(first, point) * normalizedZoom(zoom) <= PEN_CLOSE_DISTANCE
+  #continueSession(
+    pointer: ReturnType<typeof asLeaferEvent>,
+    input: LeaferEngineSyncInput,
+  ): void {
+    const session = this.#session!;
+    const rawLocal = pointer.getInnerPoint(session.parent);
+    const targetVertexId = targetPenVertexId(
+      session,
+      rawLocal,
+      input.viewport.zoom,
     );
-  }
-
-  #parent(parentId: string | null): LeaferGroup | undefined {
-    return parentId
-      ? (this.#options.element(parentId) as LeaferGroup | undefined)
-      : this.#options.root;
-  }
-
-  #queueOpenCommit(): void {
-    this.#finishAfterProjectionSync = false;
-    this.#pendingCommit = this.#takeCommit(false);
-  }
-
-  #resolveParent(target: unknown): string | null | undefined {
-    const projection = this.#options.current().projection;
-    let element = isElement(target) ? target : undefined;
-    while (element) {
-      const nodeId = this.#options.nodeId(element);
-      const spec = nodeId ? projection?.elementsById.get(nodeId) : undefined;
-      if (isLockedSpec(spec)) return undefined;
-      if (isCreationContainer(spec)) return spec.id;
-      element = isElement(element.parent) ? element.parent : undefined;
+    if (penDraftActivePoint(session.draft)) {
+      const result = targetVertexId
+        ? finishPenPathOnTarget(session, targetVertexId)
+        : appendPenPathPoint(
+            session,
+            rawLocal,
+            eventClientPoint(pointer),
+            pointer.shiftKey,
+            input.viewport.zoom,
+          );
+      this.#reportMutationFailure(result);
+      this.#render(input.viewport.zoom);
+      return;
     }
-    return null;
+    startPenPath(session, rawLocal, targetVertexId, eventClientPoint(pointer));
+    this.#render(input.viewport.zoom);
+  }
+
+  #escape(session: PenToolSession): void {
+    const action = escapePenPath(session);
+    if (action === "cancel") this.cancel();
+    else if (action === "commit") this.#commit();
+    else this.#render(this.#zoom());
+  }
+
+  #restorePreviousDraft(session: PenToolSession): void {
+    if (!restorePreviousPenDraft(session)) this.cancel();
+    else this.#render(this.#zoom());
+  }
+
+  #commit(): boolean {
+    const pending = this.#takeCommit();
+    return pending ? this.#submit(pending) : false;
+  }
+
+  #queueCommit(): void {
+    this.#finishAfterProjectionSync = false;
+    this.#pendingCommit = this.#takeCommit();
+  }
+
+  #takeCommit(): PendingPenCommit | null {
+    const session = this.#session;
+    if (!session) return null;
+    const network = penDraftHasMaterial(session.draft)
+      ? session.draft.network
+      : null;
+    this.#clearSession();
+    if (!network) return null;
+    const normalized = normalizeVectorNetwork(network);
+    if (!normalized.ok || !normalized.offset) {
+      const message = normalized.ok
+        ? "Pen geometry could not be normalized"
+        : normalized.issues.map(({ message: issue }) => issue).join("; ");
+      this.#options.report(new Error(message));
+      return null;
+    }
+    return {
+      documentId: session.documentId,
+      pageId: session.pageId,
+      revision: session.revision,
+      request: {
+        closed:
+          normalized.network.paths.length > 0 &&
+          normalized.network.paths.every(({ closed }) => closed),
+        height: normalized.bounds.height,
+        network: normalized.network,
+        pageId: session.pageId,
+        parentId: session.parentId,
+        width: normalized.bounds.width,
+        x: normalized.offset.x,
+        y: normalized.offset.y,
+      },
+    };
   }
 
   #submit(pending: PendingPenCommit): boolean {
@@ -404,89 +349,67 @@ export class PenToolController {
     return accepted;
   }
 
-  #takeCommit(closed: boolean): PendingPenCommit | null {
-    const session = this.#session;
-    if (!session) return null;
-    const network = penDraftToVectorNetwork(session.draft, closed);
-    this.#clearSession();
-    if (!network) return null;
-    const normalized = normalizeVectorNetwork(network);
-    if (!normalized.ok || !normalized.offset) {
-      const message = normalized.ok
-        ? "Pen geometry could not be normalized"
-        : normalized.issues.map((issue) => issue.message).join("; ");
-      this.#options.report(new Error(message));
-      return null;
+  #reportMutationFailure(result: PenDraftMutationResult | null): void {
+    if (result && !result.ok && result.code !== "no-op") {
+      this.#options.report(new Error(result.message));
     }
-    return {
-      documentId: session.documentId,
-      pageId: session.pageId,
-      revision: session.revision,
-      request: {
-        closed,
-        height: normalized.bounds.height,
-        network: normalized.network,
-        pageId: session.pageId,
-        parentId: session.parentId,
-        width: normalized.bounds.width,
-        x: normalized.offset.x,
-        y: normalized.offset.y,
-      },
-    };
   }
 
-  #updatePreview(zoomValue: number): void {
+  #render(zoom: number): void {
     const session = this.#session;
     if (!session) return;
-    const zoom = normalizedZoom(zoomValue);
-    const anchorSize = 7 / zoom;
-    const path = penDraftPreviewPath(
+    updatePenToolOverlay(
+      this.#options.leafer,
+      session.overlay,
       session.draft,
-      session.cursor,
-      session.closeCandidate,
+      penDraftActivePoint(session.draft) ? session.cursor : undefined,
+      session.targetVertexId,
+      zoom,
     );
-    session.previewPath.set({
-      path: path ?? "",
-      fill: session.closeCandidate
-        ? {
-            type: "solid",
-            color: LEAFER_EDITOR_SELECTION_COLOR,
-            opacity: 0.08,
-          }
-        : "transparent",
-      strokeWidth: 1.5 / zoom,
-    });
-    session.handlePath.set({
-      path: penDraftHandlePath(session.draft) ?? "",
-      strokeWidth: 1 / zoom,
-    });
+  }
 
-    while (session.anchors.length > session.draft.vertices.length) {
-      const anchor = session.anchors.pop();
-      anchor?.remove();
-      anchor?.destroy();
+  #clearSession(): boolean {
+    const session = this.#session;
+    if (!session) return false;
+    this.#session = null;
+    destroyPenToolOverlay(session.overlay);
+    return true;
+  }
+
+  #parentInvalid(
+    sync: PenToolProjectionSync,
+    session: PenToolSession,
+  ): boolean {
+    if (session.parentId === null) return false;
+    const parent = sync.projection.elementsById.get(session.parentId);
+    return (
+      sync.changedNodeIds.has(session.parentId) ||
+      !isCreationContainer(parent) ||
+      isLockedSpec(parent)
+    );
+  }
+
+  #parent(parentId: string | null): LeaferGroup | undefined {
+    return parentId
+      ? (this.#options.element(parentId) as LeaferGroup | undefined)
+      : this.#options.root;
+  }
+
+  #resolveParent(target: unknown): string | null | undefined {
+    const projection = this.#options.current().projection;
+    let element = isElement(target) ? target : undefined;
+    while (element) {
+      const nodeId = this.#options.nodeId(element);
+      const spec = nodeId ? projection?.elementsById.get(nodeId) : undefined;
+      if (isLockedSpec(spec)) return undefined;
+      if (isCreationContainer(spec)) return spec.id;
+      element = isElement(element.parent) ? element.parent : undefined;
     }
-    session.draft.vertices.forEach((vertex, index) => {
-      let anchor = session.anchors[index];
-      if (!anchor) {
-        anchor = new this.#options.leafer.Ellipse({
-          editable: false,
-          hittable: false,
-        });
-        session.anchors.push(anchor);
-        session.previewGroup.add(anchor);
-      }
-      const closeTarget = index === 0 && session.closeCandidate;
-      anchor.set({
-        x: vertex.x - anchorSize / 2,
-        y: vertex.y - anchorSize / 2,
-        width: anchorSize,
-        height: anchorSize,
-        fill: closeTarget ? LEAFER_EDITOR_SELECTION_COLOR : "#ffffff",
-        stroke: LEAFER_EDITOR_SELECTION_COLOR,
-        strokeWidth: 1.25 / zoom,
-      });
-    });
+    return null;
+  }
+
+  #zoom(): number {
+    return this.#options.current().input?.viewport.zoom ?? 1;
   }
 }
 
@@ -513,10 +436,7 @@ function isLockedSpec(spec: LeaferElementSpec | undefined): boolean {
   );
 }
 
-function normalizedZoom(value: number): number {
-  return Math.max(MATRIX_EPSILON, Math.abs(value));
-}
-
-function pointDistance(left: Point, right: Point): number {
-  return Math.hypot(left.x - right.x, left.y - right.y);
+function stopKeyEvent(event: KeyboardEvent): void {
+  event.preventDefault();
+  event.stopImmediatePropagation();
 }

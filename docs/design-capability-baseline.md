@@ -63,6 +63,8 @@ OpenDesign DesignDocument / DesignTransaction / revision / history
 
 当前 Agent 执行与 Logo 范围事实：Composer 不再暴露快速/精细选择，统一以 interactive 自适应路径优先提交首个真实可用 revision。支持 reasoning 的新建设计首轮有界为 `minimal/low`；普通明确编辑可由 exact-revision 布局、inspection、结构和组件检查直接 verified，Logo/品牌识别必须再执行一次有界独立 Critic 与证据驱动 refinement。Logo 通过 `logoOutputs` 按请求交付，单个 Logo/Icon 不强制三方向；明确 exploration 的每个 concept 在同一次 Critic 中独立非补偿。固定 `OD-MARK-01` 已定义 `T1<=60s / T_all<=5min` 评测预算，但没有真实 macOS/Windows 达标证据。见 ADR-0121、ADR-0123 与 ADR-0127。
 
+当前人工 Pen 范围事实：顶层 Pen 草稿直接持有一个完整 Vector Network，可在一次提交内创建开放/闭合 path、独立 contour 与 shared-vertex branch；第一次 `Escape` 结束当前 path，第二次才提交一个 Vector node。Vector Edit Pen 继续负责在既有文档节点中插点、续画、闭合、合并与分支。两条路径复用同一 Geometry topology primitive、EditorRuntime 事务入口和 Leafer session overlay，不新增文档字段或第二套状态；path/handle 吸附、测量及双平台实机证据仍待完成。见 ADR-0292。
+
 ## 4. 协议演进要求
 
 `DesignDocument 1.57.0` 已用完整垂直切片加入正式 Line/Arrow、Polygon/Star、editable Vector Network / Pen 与 region-local Paint、Typography Core、Figma-compatible font face identity、rich-text character/paragraph/list runs 与高级 Text Decoration、Component/Instance/Override/Variant/Slot、Variables、Shared Styles、Slice 与有序 Export Settings、普通 Frame constraints、线性与 Grid Auto Layout、Horizontal Wrap 交叉轴自动分布、Fill child 与首行文字 baseline、Layout Guides、Figma-compatible 派生层 lock/visibility override、跨 Design File imported Component/Variant/Style/Variable source、Image 节点与 Image Paint 七项非破坏调整、可恢复图片来源谱系、独立背景替换、typed 重打光语义、Image Paint crop/Flatten、普通图层 rotation origin、Polygon/Star corner smoothing 与精确 rounded geometry，以及 Page/Frame 手工参考线，而不是为单个 UI 控件增加私有字段。后续文档协议升级仍必须围绕完整的专业语义切片，并至少统一设计和迁移以下剩余内容：

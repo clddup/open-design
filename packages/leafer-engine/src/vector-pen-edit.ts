@@ -150,12 +150,22 @@ export function beginVectorPenAppend(
   network: VectorNetwork,
   sourceVertexId: string,
   point: Point,
+  sourceTangentOut?: Point,
 ): VectorPenPointResult {
   const result = appendVectorPoint(network, sourceVertexId, point);
   if (!result.ok) return result;
   const segment = result.network.segments.find(
     ({ id }) => id === result.segmentId,
   )!;
+  applySourceHandle(result.network, sourceVertexId, segment, sourceTangentOut);
+  const issues = validateVectorNetwork(result.network);
+  if (issues.length > 0) {
+    return {
+      code: "invalid-network",
+      message: issues.map(({ message }) => message).join("; "),
+      ok: false,
+    };
+  }
   const reference: VectorHandleReference =
     segment.startVertexId === result.vertexId
       ? { segmentId: segment.id, side: "start" }
@@ -170,6 +180,19 @@ export function beginVectorPenAppend(
     },
     ok: true,
   };
+}
+
+function applySourceHandle(
+  network: VectorNetwork,
+  vertexId: string,
+  segment: VectorNetwork["segments"][number],
+  tangent: Point | undefined,
+): void {
+  if (!tangent) return;
+  const vertex = network.vertices.find(({ id }) => id === vertexId)!;
+  vertex.handleMode = "mirrored";
+  if (segment.startVertexId === vertexId) segment.tangentStart = { ...tangent };
+  else segment.tangentEnd = { ...tangent };
 }
 
 export function dragVectorPenPoint(

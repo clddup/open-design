@@ -1,110 +1,113 @@
 import { describe, expect, it } from "vitest";
 import {
-  appendPenVertex,
+  appendPenPoint,
   createPenDraft,
+  dragAppendedPenPoint,
+  dragPenPathStart,
+  finishPenPath,
+  finishPenPathAtVertex,
   penDraftHandlePath,
   penDraftPreviewPath,
-  penDraftToVectorNetwork,
-  removeLastPenVertex,
-  setPenVertexHandle,
+  startIndependentPenPath,
+  startPenPathAtVertex,
 } from "./pen-tool.js";
 
-describe("Pen draft state", () => {
-  it("builds a stable open contour from ordered clicks", () => {
+describe("Pen network draft", () => {
+  it("builds one stable open contour from ordered clicks", () => {
     const draft = createPenDraft({ x: 10, y: 20 });
-    expect(appendPenVertex(draft, { x: 110, y: 20 })).toBe(true);
-    expect(appendPenVertex(draft, { x: 80, y: 120 })).toBe(true);
+    expect(appendPenPoint(draft, { x: 110, y: 20 }).ok).toBe(true);
+    expect(appendPenPoint(draft, { x: 80, y: 120 }).ok).toBe(true);
 
-    expect(penDraftToVectorNetwork(draft, false)).toEqual({
-      vertices: [
-        { handleMode: "corner", id: "vertex_1", x: 10, y: 20 },
-        { handleMode: "corner", id: "vertex_2", x: 110, y: 20 },
-        { handleMode: "corner", id: "vertex_3", x: 80, y: 120 },
-      ],
-      segments: [
-        {
-          id: "segment_1",
-          startVertexId: "vertex_1",
-          endVertexId: "vertex_2",
-        },
-        {
-          id: "segment_2",
-          startVertexId: "vertex_2",
-          endVertexId: "vertex_3",
-        },
-      ],
-      paths: [
-        {
-          id: "path_1",
-          closed: false,
-          segments: [
-            { segmentId: "segment_1", reversed: false },
-            { segmentId: "segment_2", reversed: false },
-          ],
-        },
-      ],
-      regions: [],
-    });
+    expect(draft.network.vertices).toHaveLength(3);
+    expect(draft.network.segments).toHaveLength(2);
+    expect(draft.network.paths).toHaveLength(1);
+    expect(draft.network.paths[0]?.closed).toBe(false);
+    expect(draft.network.paths[0]?.segments).toHaveLength(2);
+    expect(draft.network.regions).toEqual([]);
   });
 
-  it("mirrors click-drag handles into the incoming and outgoing tangents", () => {
+  it("preserves click-drag handles across appended points", () => {
     const draft = createPenDraft({ x: 10, y: 20 });
-    setPenVertexHandle(draft, 0, { x: 30, y: 10 });
-    appendPenVertex(draft, { x: 100, y: 80 });
-    setPenVertexHandle(draft, 1, { x: 20, y: -25 });
+    dragPenPathStart(draft, { x: 40, y: 30 });
+    const appended = appendPenPoint(draft, { x: 100, y: 80 });
+    if (!appended.ok || !appended.edit) throw new Error("Missing Pen edit");
+    const dragged = dragAppendedPenPoint(draft, appended.edit, {
+      x: 120,
+      y: 55,
+    });
+    expect(dragged.ok).toBe(true);
 
-    expect(penDraftToVectorNetwork(draft, false)?.segments[0]).toEqual({
-      id: "segment_1",
-      startVertexId: "vertex_1",
-      endVertexId: "vertex_2",
+    expect(draft.network.segments[0]).toMatchObject({
       tangentStart: { x: 30, y: 10 },
       tangentEnd: { x: -20, y: 25 },
     });
-    expect(penDraftHandlePath(draft)).toContain("M -20 10 L 10 20");
+    expect(penDraftHandlePath(draft)).toContain("M 10 20 L 40 30");
     expect(penDraftHandlePath(draft)).toContain("L 120 55");
+    expect(appendPenPoint(draft, { x: 180, y: 90 }).ok).toBe(true);
+    expect(draft.network.segments[1]?.tangentStart).toEqual({ x: 20, y: -25 });
   });
 
-  it("closes through a final segment and creates one fill region", () => {
-    const draft = createPenDraft({ x: 0, y: 0 });
-    appendPenVertex(draft, { x: 100, y: 0 });
-    appendPenVertex(draft, { x: 50, y: 100 });
+  it("closes an active contour on its existing start vertex", () => {
+    const draft = triangleDraft();
+    const firstVertexId = draft.network.vertices[0]!.id;
 
-    const network = penDraftToVectorNetwork(draft, true);
-    expect(network?.segments.at(-1)).toEqual({
-      id: "segment_3",
-      startVertexId: "vertex_3",
-      endVertexId: "vertex_1",
-    });
-    expect(network?.paths[0]).toMatchObject({ closed: true });
-    expect(network?.regions).toEqual([
-      {
-        id: "region_1",
-        windingRule: "nonzero",
-        loops: [{ pathId: "path_1", reversed: false }],
-      },
+    expect(finishPenPathAtVertex(draft, firstVertexId).ok).toBe(true);
+    expect(draft.activeVertexId).toBeNull();
+    expect(draft.network.segments).toHaveLength(3);
+    expect(draft.network.paths[0]?.closed).toBe(true);
+    expect(draft.network.regions).toEqual([
+      expect.objectContaining({
+        loops: [
+          expect.objectContaining({ pathId: draft.network.paths[0]!.id }),
+        ],
+      }),
     ]);
   });
 
-  it("shows a rubber-band segment and a closed-path preview", () => {
-    const draft = createPenDraft({ x: 0, y: 0 });
-    appendPenVertex(draft, { x: 100, y: 0 });
-    appendPenVertex(draft, { x: 50, y: 100 });
+  it("previews a rubber band and an exact target closure", () => {
+    const draft = triangleDraft();
+    const firstVertexId = draft.network.vertices[0]!.id;
 
-    expect(penDraftPreviewPath(draft, { x: 120, y: 120 }, false)).toBe(
+    expect(penDraftPreviewPath(draft, { x: 120, y: 120 }, undefined)).toBe(
       "M 0 0 L 100 0 L 50 100 L 120 120",
     );
-    expect(penDraftPreviewPath(draft, { x: 0, y: 0 }, true)).toBe(
+    expect(penDraftPreviewPath(draft, undefined, firstVertexId)).toBe(
       "M 0 0 L 100 0 L 50 100 L 0 0 Z",
     );
   });
 
-  it("ignores coincident points and supports stepwise Backspace removal", () => {
-    const draft = createPenDraft({ x: 0, y: 0 });
-    expect(appendPenVertex(draft, { x: 0, y: 0 })).toBe(false);
-    expect(appendPenVertex(draft, { x: 20, y: 10 })).toBe(true);
-    expect(removeLastPenVertex(draft)).toBe(true);
-    expect(draft.vertices).toHaveLength(1);
-    expect(removeLastPenVertex(draft)).toBe(true);
-    expect(removeLastPenVertex(draft)).toBe(false);
+  it("creates independent contours and branches in one Vector Network", () => {
+    const draft = triangleDraft();
+    const junctionVertexId = draft.network.vertices[1]!.id;
+    finishPenPath(draft);
+
+    startIndependentPenPath(draft, { x: 180, y: 20 });
+    expect(appendPenPoint(draft, { x: 240, y: 80 }).ok).toBe(true);
+    finishPenPath(draft);
+    expect(startPenPathAtVertex(draft, junctionVertexId)).toBe(true);
+    expect(appendPenPoint(draft, { x: -60, y: 40 }).ok).toBe(true);
+
+    expect(draft.network.paths).toHaveLength(3);
+    expect(draft.network.vertices).toHaveLength(6);
+    expect(draft.network.paths.filter(({ closed }) => !closed)).toHaveLength(3);
+  });
+
+  it("connects a pending independent start to an existing vertex", () => {
+    const draft = triangleDraft();
+    finishPenPath(draft);
+    startIndependentPenPath(draft, { x: 200, y: 60 });
+    const targetVertexId = draft.network.vertices[1]!.id;
+
+    expect(finishPenPathAtVertex(draft, targetVertexId).ok).toBe(true);
+    expect(draft.network.paths).toHaveLength(2);
+    expect(draft.network.vertices).toHaveLength(4);
+    expect(draft.activeVertexId).toBeNull();
   });
 });
+
+function triangleDraft() {
+  const draft = createPenDraft({ x: 0, y: 0 });
+  appendPenPoint(draft, { x: 100, y: 0 });
+  appendPenPoint(draft, { x: 50, y: 100 });
+  return draft;
+}

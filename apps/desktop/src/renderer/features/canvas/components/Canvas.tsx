@@ -1258,6 +1258,9 @@ export function Canvas({
       if (!target) return false;
 
       const id = `vector_${Date.now()}_${current.document.revision}`;
+      const hasFill = request.network.regions.length > 0;
+      const hasStroke =
+        !hasFill || request.network.paths.some(({ closed }) => !closed);
       const node: VectorNode = {
         id,
         name: t("canvas.newNode", { kind: t("node.vector") }),
@@ -1274,13 +1277,13 @@ export function Canvas({
         properties: {
           network: request.network,
           fillRule: "nonzero",
-          fills: request.closed
+          fills: hasFill
             ? [{ type: "solid", color: "#4f7fff", opacity: 1 }]
             : [],
-          strokes: request.closed
-            ? []
-            : [{ type: "solid", color: "#151515", opacity: 1 }],
-          strokeWidth: request.closed ? 0 : 2,
+          strokes: hasStroke
+            ? [{ type: "solid", color: "#151515", opacity: 1 }]
+            : [],
+          strokeWidth: hasStroke ? 2 : 0,
           strokeAlign: "center",
           strokeCap: "round",
           strokeJoin: "round",

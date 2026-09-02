@@ -2,7 +2,7 @@
 
 # OpenDesign 专业设计能力
 
-能力清单版本：`1` · 更新日期：2026-09-02 · 文档协议：`1.57.0` · 画布基线：`leafer-editor@2.2.9`
+能力清单版本：`1` · 更新日期：2026-09-03 · 文档协议：`1.57.0` · 画布基线：`leafer-editor@2.2.9`
 
 当前状态：可用 0 项，降级可用 22 项，不可用 0 项。只有必需表面全部可用，并同时具备自动化与实机证据时，能力才允许标记为“可用”。
 
@@ -115,13 +115,13 @@
 
 ### Pen 与节点编辑 — 降级可用
 
-通过节点和贝塞尔手柄创建、编辑开放、闭合、分支与曲线矢量几何，并在 Vector edit mode 中使用 Figma-compatible 节点吸附、锚点测量、测量式连接点创建与 Pen 沿现有 segment 无损插点及同一 Network 独立多轮廓创作。
+通过节点和贝塞尔手柄创建、编辑开放、闭合、分支与曲线矢量几何，并在 Vector edit mode 中使用 Figma-compatible 节点吸附、锚点测量、测量式连接点创建与 Pen 沿现有 segment 无损插点，以及顶层 Pen 与 Vector edit mode 的同一 Network 独立多轮廓和分支创作。
 
 - ID：`vector.pen-node-editing`
 - 实现方：DesignDocument 1.57.0 Vector Network + Geometry Service contract 42 point/path selection-delete/transform/point-snapping/anchor-measurement/measured-point-append/segment-insertion/Bend/Connect/Disconnect/Cut/region Fill/region Paint Style/vertex stroke appearance/vertex corner radius/Outline Stroke/Flatten + EditorRuntime document-space multi-Vector transform/Cut/cross-layer Connect/branch junction/Frame-Group-Boolean-Component-Text-Image and root-shell/isolated-pixel-compositing Flatten planner + Leafer synthetic region/stroke/corner projection and native editing overlays
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=degraded
 - 证据：自动化 25 项；实机 0 项
-- 限制：Vector 节点拖动和共享多点移动可通过独立偏好吸附到当前 edit scope 的其他锚点，Control 会临时关闭 geometry 与 pixel-grid 吸附；单选一个 anchor 后可用 Option/Alt 测量到另一个悬停 anchor 或画布候选点的 document-space 水平与垂直距离，点击候选点会在一次既有 Vector 提交中延续唯一开放 path，或创建共享 source vertex 的真实 branch。path 最近点与 Bézier handle 测量仍未完成。Vector Edit Pen 已可沿现有 line/cubic segment 无损插点、拖拽创建 mirrored handles、用 Shift 约束新节点与手柄到 45° 增量、从选中点继续绘制、点击另一节点关闭/合并/分支同层 path，并在空白处为同一 Network 新建独立轮廓；顶层 Pen 共用 Shift 角度约束但当前仍创建单条非分支轮廓；已有节点编辑支持多 Vector collection、Open/Close/Reverse、同层或跨层 Connect/Disconnect、endpoint 到另一 path vertex 的 branch 创建、point/path Lasso 与 segment Delete、跨所选节点的统一 document-space 变换框、缩放/旋转中 Space 平移、点击/document-space Cut 和 region-local Paint 或共享 PAINT Style；branch junction 节点仍可选择、变换和删除，已有入射 handle 可独立拖动，明确 branch segment 可 Bend/Cut/Delete 且不改变其他入射边，明确 path 可在 shared junction 执行 Open/Close/Reverse/Cut，已有 branch network 内的唯一 endpoint 可继续合并，显式开放 path endpoint 或明确 incident edge 也可从开放或闭合 junction 断开。有限线 Cut 会按 shared vertex 与 region connectivity 分配 connected/branch network，未切 branch 会跟随真实 junction component。Bend 已支持节点/路径添加手柄和直接拖动 segment；顶点级 cap/join 外观、circular corner radius、节点级 corner smoothing 与 custom dash 连续 phase 已通过 Inspector 与 Agent 支持；嵌套或重叠 region、只切孔洞、shared-junction 精确命中和切后仍跨两侧的 connected Cut component、self-contained 多根或后代 opacity、普通 effect 与完整 mask stack 已合成为一个 exact-revision PNG-backed Vector 单事务；依赖选择外 backdrop 的 blend/background effect 与打包证据仍未完成。Outline Stroke 会保留源层并创建 filled editable Vector sibling；同父级 Frame、nested Group、Boolean、Component Instance 当前投影、Image、Rectangle、Ellipse、含端点装饰的 Line、零圆角或圆角 Polygon/Star、Path 与 Vector 可用一个 editable 结果替换源层。
+- 限制：Vector 节点拖动和共享多点移动可通过独立偏好吸附到当前 edit scope 的其他锚点，Control 会临时关闭 geometry 与 pixel-grid 吸附；单选一个 anchor 后可用 Option/Alt 测量到另一个悬停 anchor 或画布候选点的 document-space 水平与垂直距离，点击候选点会在一次既有 Vector 提交中延续唯一开放 path，或创建共享 source vertex 的真实 branch。path 最近点与 Bézier handle 测量仍未完成。Vector Edit Pen 已可沿现有 line/cubic segment 无损插点、拖拽创建 mirrored handles、用 Shift 约束新节点与手柄到 45° 增量、从选中点继续绘制、点击另一节点关闭/合并/分支同层 path，并在空白处为同一 Network 新建独立轮廓；顶层 Pen 也会跨闭合 path、独立 contour 与共享节点 branch 保持一个 Network 草稿，结束 active path 后一次提交一个 Vector 节点；已有节点编辑支持多 Vector collection、Open/Close/Reverse、同层或跨层 Connect/Disconnect、endpoint 到另一 path vertex 的 branch 创建、point/path Lasso 与 segment Delete、跨所选节点的统一 document-space 变换框、缩放/旋转中 Space 平移、点击/document-space Cut 和 region-local Paint 或共享 PAINT Style；branch junction 节点仍可选择、变换和删除，已有入射 handle 可独立拖动，明确 branch segment 可 Bend/Cut/Delete 且不改变其他入射边，明确 path 可在 shared junction 执行 Open/Close/Reverse/Cut，已有 branch network 内的唯一 endpoint 可继续合并，显式开放 path endpoint 或明确 incident edge 也可从开放或闭合 junction 断开。有限线 Cut 会按 shared vertex 与 region connectivity 分配 connected/branch network，未切 branch 会跟随真实 junction component。Bend 已支持节点/路径添加手柄和直接拖动 segment；顶点级 cap/join 外观、circular corner radius、节点级 corner smoothing 与 custom dash 连续 phase 已通过 Inspector 与 Agent 支持；嵌套或重叠 region、只切孔洞、shared-junction 精确命中和切后仍跨两侧的 connected Cut component、self-contained 多根或后代 opacity、普通 effect 与完整 mask stack 已合成为一个 exact-revision PNG-backed Vector 单事务；依赖选择外 backdrop 的 blend/background effect 与打包证据仍未完成。Outline Stroke 会保留源层并创建 filled editable Vector sibling；同父级 Frame、nested Group、Boolean、Component Instance 当前投影、Image、Rectangle、Ellipse、含端点装饰的 Line、零圆角或圆角 Polygon/Star、Path 与 Vector 可用一个 editable 结果替换源层。
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360039956974-Measure-distances-between-layers)
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360040450213-Vector-networks)
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360039957634-Edit-vector-layers)
