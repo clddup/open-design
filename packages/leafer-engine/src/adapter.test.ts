@@ -6879,6 +6879,38 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
+  it("constrains Pen points and dragged handles to 45-degree increments with Shift", async () => {
+    const onCreateVector = vi.fn<
+      (request: LeaferCreateVectorRequest) => boolean
+    >(() => true);
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onCreateVector,
+    });
+    adapter.sync({
+      ...createInput(),
+      tool: "pen",
+      selection: { nodeIds: [] },
+    });
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Missing constrained Pen fixture");
+
+    app.emit("pointer.down", boxDragEvent(20, 30));
+    app.emit("pointer.move", boxDragEvent(50, 40, { shiftKey: true }));
+    app.emit("pointer.up", boxDragEvent(50, 40, { shiftKey: true }));
+    app.emit("pointer.down", boxDragEvent(100, 50, { shiftKey: true }));
+    app.emit("pointer.up", boxDragEvent(100, 50, { shiftKey: true }));
+    emitWindowKey("Enter");
+
+    const request = onCreateVector.mock.calls[0]?.[0];
+    if (!request) throw new Error("Missing constrained Pen request");
+    const [start, end] = request.network.vertices;
+    expect(start?.y).toBeCloseTo(end?.y ?? Number.NaN, 6);
+    expect(request.network.segments[0]?.tangentStart?.y).toBeCloseTo(0, 6);
+    expect(request.network.segments[0]?.tangentStart?.x).toBeGreaterThan(30);
+    adapter.dispose();
+  });
+
   it("closes a Pen contour by clicking the first anchor", async () => {
     const onCreateVector = vi.fn<
       (request: LeaferCreateVectorRequest) => boolean
@@ -7527,6 +7559,44 @@ describe("Leafer engine selection bounds synchronization", () => {
       id: "vertex_pen_1",
     });
     expect(onVectorEdit).toHaveBeenCalledOnce();
+    adapter.dispose();
+  });
+
+  it("constrains Vector Pen points and handles to 45-degree increments with Shift", async () => {
+    const onVectorEdit = vi.fn<(request: LeaferVectorEditRequest) => boolean>(
+      () => true,
+    );
+    const input = withVectorEditFixture(createInput(), ["vertex_b"]);
+    input.vectorEditScope = { ...input.vectorEditScope!, tool: "pen" };
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onVectorEdit,
+    });
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Missing constrained Vector Pen fixture");
+
+    app.emit(
+      "pointer.down",
+      pointerEvent(100, 40, app.tree, { shiftKey: true }),
+    );
+    app.emit(
+      "pointer.move",
+      pointerEvent(112, 50, app.tree, { shiftKey: true }),
+    );
+    app.emit("pointer.up", pointerEvent(112, 50, app.tree, { shiftKey: true }));
+
+    const request = onVectorEdit.mock.calls[0]?.[0];
+    if (!request || request.deleteNode) {
+      throw new Error("Missing constrained Vector Pen edit");
+    }
+    const vertex = request.edits[0]!.network.vertices.at(-1);
+    const segment = request.edits[0]!.network.segments.at(-1);
+    expect(vertex?.y).toBeCloseTo(30, 6);
+    expect(Math.abs(segment?.tangentEnd?.x ?? Number.NaN)).toBeCloseTo(
+      Math.abs(segment?.tangentEnd?.y ?? Number.NaN),
+      6,
+    );
     adapter.dispose();
   });
 

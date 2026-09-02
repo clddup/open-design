@@ -3,6 +3,7 @@ import {
   type Point,
 } from "@opendesign/design-contracts";
 import type * as LeaferEditorModule from "leafer-editor";
+import { constrainPointToOctant } from "./angle-constraint.js";
 import type { LeaferElementSpec, LeaferSceneProjection } from "./mapping.js";
 import { asLeaferEvent, eventClientPoint } from "./pointer-event.js";
 import type {
@@ -374,10 +375,9 @@ function lineEndpointsFromDrag(
   let x = pointer.x - origin.x;
   let y = pointer.y - origin.y;
   if (constrain && (x !== 0 || y !== 0)) {
-    const distance = Math.hypot(x, y);
-    const angle = Math.round(Math.atan2(y, x) / (Math.PI / 4)) * (Math.PI / 4);
-    x = Math.cos(angle) * distance;
-    y = Math.sin(angle) * distance;
+    const constrained = constrainPointToOctant(origin, pointer);
+    x = constrained.x - origin.x;
+    y = constrained.y - origin.y;
   }
   return fromCenter
     ? {

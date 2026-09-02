@@ -1,6 +1,7 @@
 import type { Point } from "@opendesign/design-contracts";
 import { normalizeVectorNetwork } from "@opendesign/geometry-service/editable-vector";
 import type * as LeaferEditorModule from "leafer-editor";
+import { constrainPointToOctant } from "./angle-constraint.js";
 import {
   LEAFER_EDITOR_SELECTION_COLOR,
   type LeaferElementSpec,
@@ -163,12 +164,16 @@ export class PenToolController {
     if (pointer.isCancel || pointer.right || pointer.middle) return;
     const existing = this.#session;
     if (existing) {
-      const local = pointer.getInnerPoint(existing.parent);
-      if (this.#isCloseCandidate(existing, local, input.viewport.zoom)) {
+      const rawLocal = pointer.getInnerPoint(existing.parent);
+      if (this.#isCloseCandidate(existing, rawLocal, input.viewport.zoom)) {
         this.finish(true);
         return;
       }
       const previous = existing.draft.vertices.at(-1);
+      const local =
+        pointer.shiftKey && previous
+          ? constrainPointToOctant(previous, rawLocal)
+          : rawLocal;
       const zoom = normalizedZoom(input.viewport.zoom);
       if (
         previous &&
@@ -237,13 +242,17 @@ export class PenToolController {
     if (!session || current.disposed || !input || input.tool !== "pen") return;
     const pointer = asLeaferEvent(event);
     if (pointer.isCancel) return;
-    const local = pointer.getInnerPoint(session.parent);
-    session.cursor = local;
+    const rawLocal = pointer.getInnerPoint(session.parent);
     if (
       session.activeVertexIndex !== null &&
       session.pointerDownClient !== null
     ) {
       const vertex = session.draft.vertices[session.activeVertexIndex];
+      const local =
+        pointer.shiftKey && vertex
+          ? constrainPointToOctant(vertex, rawLocal)
+          : rawLocal;
+      session.cursor = local;
       const client = eventClientPoint(pointer);
       const dragged =
         pointDistance(session.pointerDownClient, client) >= MIN_DRAW_DISTANCE;
@@ -260,9 +269,14 @@ export class PenToolController {
     } else {
       session.closeCandidate = this.#isCloseCandidate(
         session,
-        local,
+        rawLocal,
         input.viewport.zoom,
       );
+      const previous = session.draft.vertices.at(-1);
+      session.cursor =
+        pointer.shiftKey && previous && !session.closeCandidate
+          ? constrainPointToOctant(previous, rawLocal)
+          : rawLocal;
     }
     this.#updatePreview(input.viewport.zoom);
   }

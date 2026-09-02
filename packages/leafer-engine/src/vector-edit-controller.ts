@@ -27,6 +27,7 @@ import {
   type VectorHandleReference,
 } from "@opendesign/geometry-service/vector-edit";
 import type * as LeaferEditorModule from "leafer-editor";
+import { constrainPointToOctant } from "./angle-constraint.js";
 import {
   LEAFER_EDITOR_SELECTION_COLOR,
   type LeaferSceneProjection,
@@ -1501,16 +1502,22 @@ export class VectorEditController {
     if (drag.kind === "pen-start") {
       const contour = session.penContour;
       if (!contour) return;
-      const local = pointer.getInnerPoint(session.pathElement);
+      const rawLocal = pointer.getInnerPoint(session.pathElement);
+      const local = pointer.shiftKey
+        ? constrainPointToOctant(contour.start.point, rawLocal)
+        : rawLocal;
       contour.start = dragVectorPenContourStart(contour.start, local);
       contour.cursor = local;
       this.#renderVectorEditOverlay(session);
       return;
     }
     if (drag.kind === "pen") {
+      const rawLocal = pointer.getInnerPoint(session.pathElement);
       const result = dragVectorPenPoint(
         drag.edit,
-        pointer.getInnerPoint(session.pathElement),
+        pointer.shiftKey
+          ? constrainPointToOctant(drag.edit.point, rawLocal)
+          : rawLocal,
       );
       if (!result.ok) {
         drag.failed = true;
@@ -2128,8 +2135,11 @@ export class VectorEditController {
       }
       return;
     }
-    const local = pointer.getInnerPoint(session.pathElement);
+    const rawLocal = pointer.getInnerPoint(session.pathElement);
     if (session.penContour) {
+      const local = pointer.shiftKey
+        ? constrainPointToOctant(session.penContour.start.point, rawLocal)
+        : rawLocal;
       this.#continueVectorPenContour(pointer, session, local);
       return;
     }
@@ -2139,7 +2149,7 @@ export class VectorEditController {
     );
     const hit =
       target === session.cutHitPath
-        ? nearestVectorSegmentPoint(session.network, local)
+        ? nearestVectorSegmentPoint(session.network, rawLocal)
         : null;
     const sourceVertexId =
       session.selectedVertexIds.length === 1
@@ -2149,10 +2159,21 @@ export class VectorEditController {
       hit && hit.distance <= 8 / zoom
         ? beginVectorPenInsert(session.network, hit)
         : sourceVertexId
-          ? beginVectorPenAppend(session.network, sourceVertexId, local)
+          ? beginVectorPenAppend(
+              session.network,
+              sourceVertexId,
+              pointer.shiftKey
+                ? constrainPointToOctant(
+                    session.network.vertices.find(
+                      ({ id }) => id === sourceVertexId,
+                    )!,
+                    rawLocal,
+                  )
+                : rawLocal,
+            )
           : null;
     if (!result) {
-      this.#startVectorPenContour(pointer, session, local);
+      this.#startVectorPenContour(pointer, session, rawLocal);
       return;
     }
     if (!result.ok) {
@@ -2303,7 +2324,10 @@ export class VectorEditController {
     if (!session?.penContour || session.tool !== "pen" || session.readOnly) {
       return;
     }
-    session.penContour.cursor = pointer.getInnerPoint(session.pathElement);
+    const rawLocal = pointer.getInnerPoint(session.pathElement);
+    session.penContour.cursor = pointer.shiftKey
+      ? constrainPointToOctant(session.penContour.start.point, rawLocal)
+      : rawLocal;
     const zoom = Math.max(
       MATRIX_EPSILON,
       Math.abs(this.#input?.viewport.zoom ?? 1),
