@@ -10,6 +10,7 @@ import {
   serializeVectorRegion,
 } from "@opendesign/geometry-service/editable-vector";
 import type { SnapGuideLine } from "@opendesign/geometry-service/snapping";
+import { appendVectorPoint } from "@opendesign/geometry-service/vector-point-append";
 import {
   bendVectorSegment,
   deleteVectorSelection,
@@ -1094,6 +1095,7 @@ export class VectorEditController {
       this.#activeVectorEditNodeId = session.nodeId;
       this.#options.callbacks.onVectorEditActiveNodeChange?.(session.nodeId);
     }
+    if (this.#appendMeasuredVectorPoint(pointer, session, control)) return;
     if (session.tool === "lasso") {
       const client = eventClientPoint(pointer);
       this.#vectorLasso = {
@@ -1315,7 +1317,9 @@ export class VectorEditController {
     } else {
       this.#vectorAnchorMeasurements.pointerMove({
         altKey: pointer.altKey,
-        target: this.#hoveredVectorAnchor(pointer.target),
+        target:
+          this.#hoveredVectorAnchor(pointer.target) ??
+          this.#prospectiveVectorAnchor(pointer),
       });
     }
     const lasso = this.#vectorLasso;
@@ -1885,13 +1889,83 @@ export class VectorEditController {
   }
 
   #selectedVectorAnchor(): VectorAnchorMeasurementReference | null {
+    return this.#selectedVectorAnchorSource()?.reference ?? null;
+  }
+
+  #appendMeasuredVectorPoint(
+    pointer: ReturnType<typeof asLeaferEvent>,
+    session: VectorEditSession,
+    control: VectorEditControl | undefined,
+  ): boolean {
+    const source = this.#selectedVectorAnchorSource();
+    if (
+      !pointer.altKey ||
+      pointer.metaKey ||
+      pointer.ctrlKey ||
+      pointer.shiftKey ||
+      session.tool !== "move" ||
+      session.readOnly ||
+      source?.session !== session ||
+      (control && control.kind !== "path" && control.kind !== "region")
+    ) {
+      return false;
+    }
+    const result = appendVectorPoint(
+      session.network,
+      source.vertexId,
+      pointer.getInnerPoint(session.pathElement),
+    );
+    if (!result.ok) {
+      if (result.code !== "no-op") {
+        this.#options.report(new Error(result.message));
+      }
+      return true;
+    }
+    if (this.#submitVectorEdit(session, result.network)) {
+      this.#setVectorSelection(session, [], [result.vertexId]);
+    }
+    return true;
+  }
+
+  #selectedVectorAnchorSource(): {
+    reference: VectorAnchorMeasurementReference;
+    session: VectorEditSession;
+    vertexId: string;
+  } | null {
     const selected = [...this.#vectorEdits.values()].flatMap((session) =>
       session.selectedVertexIds.flatMap((vertexId) => {
         const reference = this.#vectorAnchorReference(session.nodeId, vertexId);
-        return reference ? [reference] : [];
+        return reference ? [{ reference, session, vertexId }] : [];
       }),
     );
     return selected.length === 1 ? selected[0]! : null;
+  }
+
+  #prospectiveVectorAnchor(
+    pointer: ReturnType<typeof asLeaferEvent>,
+  ): VectorAnchorMeasurementReference | null {
+    const source = this.#selectedVectorAnchorSource();
+    if (
+      !source ||
+      source.session.readOnly ||
+      source.session.tool !== "move" ||
+      source.session.drag
+    ) {
+      return null;
+    }
+    const control = isElement(pointer.target)
+      ? this.#vectorEditControls.get(pointer.target)
+      : undefined;
+    if (control && control.kind !== "path" && control.kind !== "region") {
+      return null;
+    }
+    const position = pointer.getInnerPoint(this.#options.root);
+    return Number.isFinite(position.x) && Number.isFinite(position.y)
+      ? {
+          id: `${source.session.nodeId}:prospective-anchor`,
+          position,
+        }
+      : null;
   }
 
   #hoveredVectorAnchor(

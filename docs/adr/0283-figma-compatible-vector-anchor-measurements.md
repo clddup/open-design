@@ -2,7 +2,7 @@
 
 ## 状态
 
-Accepted
+Accepted（画布候选新锚点边界已由 ADR-0287 取代）
 
 ## 背景
 
@@ -35,7 +35,7 @@ Vector controller 使用独立短生命周期状态追踪 hover 和 Option/Alt�
 
 ### 5. 不改变设计事实与工具面
 
-测量不调用 EditorRuntime，不产生 revision/history/undo，不进入 capture/export，也不增加 Agent tool、DesignDocument 字段或 snap preference。Figma 文档中“点击画布创建新 anchor”属于 Pen authoring，继续由 Pen 路线单独实现，不混入只读测量反馈。
+测量本身不调用 EditorRuntime，不产生 revision/history/undo，不进入 capture/export，也不增加 Agent tool、DesignDocument 字段或 snap preference。本切片当时把“点击画布创建新 anchor”归入 Pen；Figma 当前公开文档的直接语义已由 ADR-0287 修正为测量候选点击后的单次权威 Vector edit。
 
 ## 验证
 
@@ -46,5 +46,5 @@ Vector controller 使用独立短生命周期状态追踪 hover 和 Option/Alt�
 ## 后续
 
 - path 最近点与 Bézier handle 吸附/测量。
-- Pen 新锚点创建与自动连接。
+- Pen 沿现有 line/cubic segment 插点与继续绘制。
 - macOS/Windows 打包产品的真实指针、键盘、HiDPI 与视觉证据。

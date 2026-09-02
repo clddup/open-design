@@ -7293,6 +7293,147 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
+  it("measures to a canvas position and appends one connected Vector point", async () => {
+    const onVectorEdit = vi.fn<(request: LeaferVectorEditRequest) => boolean>(
+      () => true,
+    );
+    const onVectorEditSelectionChange = vi.fn();
+    const input = withVectorEditFixture(createInput(), ["vertex_a"]);
+    input.document.nodesById.frame_welcome!.transform = [1, 0, 0, 1, 0, 0];
+    input.document.nodesById.editable_curve!.transform = [
+      0, 1, -1, 0, 100, 100,
+    ];
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onVectorEdit,
+      onVectorEditSelectionChange,
+    });
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    const path =
+      app && findElement(app.tree, vectorStrokeElementId("editable_curve"));
+    if (!app || !path) throw new Error("Missing Vector append fixture");
+    const canvasPointEvent = {
+      ...pointerEvent(80, 180, app.tree),
+      getInnerPoint: (coordinates?: unknown) =>
+        coordinates === path ? { x: 80, y: 20 } : { x: 80, y: 180 },
+    };
+
+    app.emit("pointer.move", canvasPointEvent);
+    emitWindowKey("AltLeft");
+    const redline = leaferHarness.elements.find(
+      (element): element is FakePath =>
+        element instanceof FakePath &&
+        element.stroke === "#f24822" &&
+        element.visible,
+    );
+    expect(redline?.path).toBe("M 100 100 L 80 100 M 80 100 L 80 180");
+    expect(onVectorEdit).not.toHaveBeenCalled();
+
+    app.emit("pointer.down", { ...canvasPointEvent, altKey: true });
+
+    expect(onVectorEdit).toHaveBeenCalledTimes(1);
+    const request = onVectorEdit.mock.calls[0]?.[0];
+    if (!request || request.deleteNode) {
+      throw new Error("Missing appended Vector point edit");
+    }
+    expect(request.edits[0]?.network.vertices.at(-1)).toEqual({
+      id: "vertex_edit_1",
+      x: 80,
+      y: 20,
+    });
+    expect(request.edits[0]?.network.paths[0]?.segments[0]).toEqual({
+      segmentId: "segment_edit_1",
+      reversed: false,
+    });
+    expect(request.edits[0]?.network.segments.at(-1)).toEqual({
+      id: "segment_edit_1",
+      startVertexId: "vertex_edit_1",
+      endVertexId: "vertex_a",
+    });
+    expect(onVectorEditSelectionChange).toHaveBeenLastCalledWith(
+      "editable_curve",
+      { segmentIds: [], vertexIds: ["vertex_edit_1"] },
+    );
+    expect(redline?.visible).toBe(false);
+    adapter.dispose();
+  });
+
+  it("does not offer measured point creation for read-only Vector layers", async () => {
+    const onVectorEdit = vi.fn<(request: LeaferVectorEditRequest) => boolean>(
+      () => true,
+    );
+    const input = withVectorEditFixture(createInput(), ["vertex_a"]);
+    input.vectorEditScope!.nodes[0]!.readOnly = true;
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onVectorEdit,
+    });
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Missing read-only Vector append fixture");
+
+    app.emit(
+      "pointer.move",
+      pointerEvent(180, 180, app.tree, { altKey: true }),
+    );
+    app.emit(
+      "pointer.down",
+      pointerEvent(180, 180, app.tree, { altKey: true }),
+    );
+
+    expect(onVectorEdit).not.toHaveBeenCalled();
+    expect(
+      leaferHarness.elements.some(
+        (element) =>
+          element instanceof FakePath &&
+          element.stroke === "#f24822" &&
+          element.visible,
+      ),
+    ).toBe(false);
+    adapter.dispose();
+  });
+
+  it("keeps the original Vector selection when measured point commit is rejected", async () => {
+    const onVectorEdit = vi.fn<(request: LeaferVectorEditRequest) => boolean>(
+      () => false,
+    );
+    const onVectorEditSelectionChange = vi.fn();
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onVectorEdit,
+      onVectorEditSelectionChange,
+    });
+    adapter.sync(withVectorEditFixture(createInput(), ["vertex_a"]));
+    const app = leaferHarness.app;
+    const path =
+      app && findElement(app.tree, vectorStrokeElementId("editable_curve"));
+    const overlay = path?.parent?.children.at(-1);
+    if (
+      !app ||
+      !(path instanceof FakePath) ||
+      !(overlay instanceof FakeGroup)
+    ) {
+      throw new Error("Missing rejected Vector append fixture");
+    }
+    const authoritativePath = path.path;
+
+    app.emit(
+      "pointer.down",
+      pointerEvent(180, 160, app.tree, { altKey: true }),
+    );
+
+    expect(onVectorEdit).toHaveBeenCalledOnce();
+    expect(onVectorEditSelectionChange).not.toHaveBeenCalled();
+    expect(path.path).toBe(authoritativePath);
+    expect(
+      overlay.children.filter(
+        (child): child is FakeEllipse => child instanceof FakeEllipse,
+      ),
+    ).toHaveLength(3);
+    adapter.dispose();
+  });
+
   it("cancels stale Vector previews before rebuilding scope and disposes every overlay", async () => {
     const onVectorEdit = vi.fn<(request: LeaferVectorEditRequest) => boolean>(
       () => true,

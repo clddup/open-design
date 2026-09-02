@@ -1,4 +1,4 @@
-export const GEOMETRY_SERVICE_CONTRACT_VERSION = 39 as const;
+export const GEOMETRY_SERVICE_CONTRACT_VERSION = 40 as const;
 export {
   LINE_ENDPOINT_MARKER_SIZE,
   LINE_ENDPOINT_MARKER_VIEW_BOX,
@@ -142,6 +142,10 @@ export {
   type VectorVertexHandle,
   type VectorVertexStrokeAppearancePatch,
 } from "./vector-edit.js";
+export {
+  appendVectorPoint,
+  type VectorPointAppendResult,
+} from "./vector-point-append.js";
 export {
   projectVectorNetworkStrokePaths,
   resolveVectorVertexStrokeAppearance,
