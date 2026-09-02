@@ -7,7 +7,8 @@ export type DistanceMeasurementId =
   | "x-after"
   | "y-before"
   | "y-after"
-  | `${"x" | "y"}-${"before" | "after"}:${string}`;
+  | `${"x" | "y"}-${"before" | "after"}:${string}`
+  | `vector-${"x" | "y"}:${string}`;
 
 export interface DistanceMeasurementSegment {
   axis: "x" | "y";
@@ -70,6 +71,22 @@ export function measureGuideToRect(input: {
   return compactSegments([
     guideSegment(input, "before", input.position, targetStart, cross),
     guideSegment(input, "after", input.position, targetEnd, cross),
+  ]);
+}
+
+/** Measures the horizontal and vertical deltas between two Vector anchors. */
+export function measureVectorAnchorDistances(input: {
+  source: Point;
+  sourceId: string;
+  target: Point;
+  targetId: string;
+}): readonly DistanceMeasurementSegment[] {
+  if (!validPoint(input.source) || !validPoint(input.target)) return [];
+  const corner = { x: input.target.x, y: input.source.y };
+  const identity = `${input.sourceId}:${input.targetId}`;
+  return compactSegments([
+    segment("x", `vector-x:${identity}`, input.source, corner),
+    segment("y", `vector-y:${identity}`, corner, input.target),
   ]);
 }
 
@@ -221,4 +238,8 @@ function validRect(rect: Rect): boolean {
     rect.width > 0 &&
     rect.height > 0
   );
+}
+
+function validPoint(point: Point): boolean {
+  return Number.isFinite(point.x) && Number.isFinite(point.y);
 }

@@ -622,7 +622,10 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
           this.#penToolController.pointerMove(event);
           this.#vectorEditController.pointerMove(event);
         },
-        onPointerLeave: () => this.#editorOverlays.pointerLeave(),
+        onPointerLeave: () => {
+          this.#editorOverlays.pointerLeave();
+          this.#vectorEditController.pointerLeave();
+        },
         onPointerUp: (event) => {
           if (this.#editorOverlays.pointerUp(asLeaferEvent(event))) return;
           this.#imageCropController.pointerUp(event);
@@ -642,6 +645,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         onWindowBlur: () => {
           this.#editorOverlays.handleWindowBlur();
           this.#directTransformController.handleWindowBlur();
+          this.#vectorEditController.handleWindowBlur();
         },
         onContextLost: (event) => this.#onContextLost(event),
       },

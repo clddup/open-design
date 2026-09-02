@@ -3,6 +3,7 @@ import {
   formatDistanceMeasurement,
   measureGuideToRect,
   measureRectDistances,
+  measureVectorAnchorDistances,
 } from "./measurements.js";
 
 describe("measureRectDistances", () => {
@@ -148,6 +149,53 @@ describe("measureGuideToRect", () => {
         id: "frame",
         position: Number.NaN,
         target,
+      }),
+    ).toEqual([]);
+  });
+});
+
+describe("measureVectorAnchorDistances", () => {
+  it("returns document-space horizontal and vertical anchor deltas", () => {
+    expect(
+      measureVectorAnchorDistances({
+        source: { x: 100, y: 100 },
+        sourceId: "first:vertex_a",
+        target: { x: 70, y: 160 },
+        targetId: "second:vertex_b",
+      }),
+    ).toEqual([
+      {
+        axis: "x",
+        end: { x: 70, y: 100 },
+        id: "vector-x:first:vertex_a:second:vertex_b",
+        start: { x: 100, y: 100 },
+        value: 30,
+      },
+      {
+        axis: "y",
+        end: { x: 70, y: 160 },
+        id: "vector-y:first:vertex_a:second:vertex_b",
+        start: { x: 70, y: 100 },
+        value: 60,
+      },
+    ]);
+  });
+
+  it("omits zero axes and invalid points", () => {
+    expect(
+      measureVectorAnchorDistances({
+        source: { x: 10, y: 20 },
+        sourceId: "source",
+        target: { x: 10, y: 50 },
+        targetId: "target",
+      }).map(({ axis, value }) => ({ axis, value })),
+    ).toEqual([{ axis: "y", value: 30 }]);
+    expect(
+      measureVectorAnchorDistances({
+        source: { x: Number.NaN, y: 20 },
+        sourceId: "source",
+        target: { x: 10, y: 50 },
+        targetId: "target",
       }),
     ).toEqual([]);
   });

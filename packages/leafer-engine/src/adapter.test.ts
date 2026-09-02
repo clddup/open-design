@@ -7241,6 +7241,58 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
+  it("measures between transformed Vector anchors on Option or Alt hover without a revision", async () => {
+    const onVectorEdit = vi.fn<(request: LeaferVectorEditRequest) => boolean>(
+      () => true,
+    );
+    const input = withVectorEditFixture(createInput(), ["vertex_a"]);
+    input.document.nodesById.frame_welcome!.transform = [1, 0, 0, 1, 0, 0];
+    input.document.nodesById.editable_curve!.transform = [
+      0, 1, -1, 0, 100, 100,
+    ];
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onVectorEdit,
+    });
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    const path =
+      app && findElement(app.tree, vectorStrokeElementId("editable_curve"));
+    const overlay = path?.parent?.children.at(-1);
+    if (!app || !(overlay instanceof FakeGroup)) {
+      throw new Error("Missing Vector measurement fixture");
+    }
+    const anchors = overlay.children.filter(
+      (child): child is FakeEllipse => child instanceof FakeEllipse,
+    );
+    expect(anchors).toHaveLength(3);
+
+    app.emit("pointer.move", pointerEvent(0, 0, anchors[1]!));
+    emitWindowKey("AltLeft");
+    const redline = leaferHarness.elements.find(
+      (element): element is FakePath =>
+        element instanceof FakePath &&
+        element.stroke === "#f24822" &&
+        element.visible,
+    );
+    expect(redline?.path).toBe("M 100 100 L 70 100 M 70 100 L 70 160");
+    expect(
+      leaferHarness.elements
+        .filter(
+          (element): element is FakeText =>
+            element instanceof FakeText &&
+            element.parent === redline?.parent &&
+            element.visible,
+        )
+        .map(({ text }) => text),
+    ).toEqual(["30", "60"]);
+    expect(onVectorEdit).not.toHaveBeenCalled();
+
+    emitWindowKeyUp("AltLeft");
+    expect(redline?.visible).toBe(false);
+    adapter.dispose();
+  });
+
   it("cancels stale Vector previews before rebuilding scope and disposes every overlay", async () => {
     const onVectorEdit = vi.fn<(request: LeaferVectorEditRequest) => boolean>(
       () => true,

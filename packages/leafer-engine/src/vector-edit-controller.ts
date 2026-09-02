@@ -33,6 +33,7 @@ import { asLeaferEvent, eventClientPoint } from "./pointer-event.js";
 import {
   documentTransformToLocal,
   getVisibleWorldTransform,
+  transformPoint,
 } from "./scene-node-transform.js";
 import {
   pointInPolygon,
@@ -55,6 +56,10 @@ import {
   VectorGeometrySnapController,
   type VectorSnapSelection,
 } from "./vector-geometry-snap-controller.js";
+import {
+  VectorAnchorMeasurementController,
+  type VectorAnchorMeasurementReference,
+} from "./vector-anchor-measurement-controller.js";
 
 type LeaferModule = typeof LeaferEditorModule;
 type LeaferElement = InstanceType<LeaferModule["UI"]>;
@@ -214,6 +219,7 @@ const MAX_VECTOR_LASSO_POINTS = 4_096;
  */
 export class VectorEditController {
   readonly #options: VectorEditControllerOptions;
+  readonly #vectorAnchorMeasurements: VectorAnchorMeasurementController;
   readonly #vectorEditControls = new WeakMap<
     LeaferElement,
     VectorEditControl
@@ -257,6 +263,12 @@ export class VectorEditController {
       hitArea,
     };
     this.#vectorEditControls.set(hitArea, { kind: "selection-box" });
+    this.#vectorAnchorMeasurements = new VectorAnchorMeasurementController({
+      layerIndex: 10,
+      leafer: options.leafer,
+      presentationRoot: options.presentationRoot,
+      viewportRoot: options.root,
+    });
   }
 
   get active(): boolean {
@@ -300,6 +312,7 @@ export class VectorEditController {
     if (!this.active) return;
     if (this.#input)
       this.#vectorGeometrySnap.syncViewport(this.#input.viewport);
+    this.#vectorAnchorMeasurements.syncViewport();
     this.#renderVectorEditOverlays();
   }
 
@@ -328,6 +341,7 @@ export class VectorEditController {
 
   handleKeyDown(event: KeyboardEvent): boolean {
     if (!this.active || isKeyboardInputTarget(event.target)) return false;
+    this.#vectorAnchorMeasurements.handleKeyDown(event);
     const selectionDrag = [...this.#vectorEdits.values()]
       .map((session) => session.drag)
       .find(
@@ -383,13 +397,11 @@ export class VectorEditController {
   }
 
   handleKeyUp(event: KeyboardEvent): boolean {
-    if (
-      event.code !== "Space" ||
-      !this.active ||
-      isKeyboardInputTarget(event.target)
-    ) {
+    if (!this.active || isKeyboardInputTarget(event.target)) {
       return false;
     }
+    this.#vectorAnchorMeasurements.handleKeyUp(event);
+    if (event.code !== "Space") return false;
     const selectionDrag = [...this.#vectorEdits.values()]
       .map((session) => session.drag)
       .find(
@@ -410,6 +422,7 @@ export class VectorEditController {
 
   dispose(): void {
     this.cancel();
+    this.#vectorAnchorMeasurements.dispose();
     this.#vectorSelectionOverlay.group.remove();
     this.#vectorSelectionOverlay.group.destroy();
     this.#input = null;
@@ -501,6 +514,7 @@ export class VectorEditController {
       : (scope.nodes.find((item) => this.#vectorEdits.has(item.nodeId))
           ?.nodeId ?? null);
     if (this.#vectorEdits.size === 0) this.#activeVectorEditNodeId = null;
+    this.#vectorAnchorMeasurements.sync(this.#selectedVectorAnchor());
     this.#renderVectorEditOverlays();
   }
 
@@ -952,6 +966,7 @@ export class VectorEditController {
       return;
     session.selectedSegmentIds = selectedSegments;
     session.selectedVertexIds = selected;
+    this.#vectorAnchorMeasurements.sync(this.#selectedVectorAnchor());
     this.#options.callbacks.onVectorEditSelectionChange?.(session.nodeId, {
       segmentIds: selectedSegments,
       vertexIds: selected,
@@ -969,6 +984,7 @@ export class VectorEditController {
     }
     const pointer = asLeaferEvent(event);
     if (pointer.isCancel || pointer.right || pointer.middle) return;
+    this.#vectorAnchorMeasurements.clear();
     const target = isElement(pointer.target) ? pointer.target : undefined;
     const control = target ? this.#vectorEditControls.get(target) : undefined;
     if (
@@ -1291,6 +1307,17 @@ export class VectorEditController {
 
   pointerMove(event: unknown): void {
     const pointer = asLeaferEvent(event);
+    const activeDrag = [...this.#vectorEdits.values()].some(
+      (candidate) => candidate.drag !== null,
+    );
+    if (this.#vectorLasso || activeDrag) {
+      this.#vectorAnchorMeasurements.clear();
+    } else {
+      this.#vectorAnchorMeasurements.pointerMove({
+        altKey: pointer.altKey,
+        target: this.#hoveredVectorAnchor(pointer.target),
+      });
+    }
     const lasso = this.#vectorLasso;
     if (lasso && !this.#options.current().disposed) {
       if (pointer.isCancel) return;
@@ -1810,12 +1837,21 @@ export class VectorEditController {
 
   cancel(): void {
     this.#vectorGeometrySnap.finish();
+    this.#vectorAnchorMeasurements.sync(null);
     this.#cancelVectorLasso();
     for (const session of [...this.#vectorEdits.values()]) {
       this.#cancelVectorEditSession(session);
     }
     this.#activeVectorEditNodeId = null;
     this.#renderVectorSelectionOverlay();
+  }
+
+  handleWindowBlur(): void {
+    this.#vectorAnchorMeasurements.handleWindowBlur();
+  }
+
+  pointerLeave(): void {
+    this.#vectorAnchorMeasurements.pointerLeave();
   }
 
   #beginVectorGeometrySnap(moving: readonly VectorSnapSelection[]): void {
@@ -1846,6 +1882,44 @@ export class VectorEditController {
       },
       viewport: input.viewport,
     });
+  }
+
+  #selectedVectorAnchor(): VectorAnchorMeasurementReference | null {
+    const selected = [...this.#vectorEdits.values()].flatMap((session) =>
+      session.selectedVertexIds.flatMap((vertexId) => {
+        const reference = this.#vectorAnchorReference(session.nodeId, vertexId);
+        return reference ? [reference] : [];
+      }),
+    );
+    return selected.length === 1 ? selected[0]! : null;
+  }
+
+  #hoveredVectorAnchor(
+    target: unknown,
+  ): VectorAnchorMeasurementReference | null {
+    if (!isElement(target)) return null;
+    const control = this.#vectorEditControls.get(target);
+    return control?.kind === "vertex"
+      ? this.#vectorAnchorReference(control.nodeId, control.vertexId)
+      : null;
+  }
+
+  #vectorAnchorReference(
+    nodeId: string,
+    vertexId: string,
+  ): VectorAnchorMeasurementReference | null {
+    const session = this.#vectorEdits.get(nodeId);
+    const document = this.#input?.document;
+    const vertex = session?.network.vertices.find(({ id }) => id === vertexId);
+    const world = document
+      ? getVisibleWorldTransform(document.nodesById, nodeId)
+      : null;
+    return vertex && world
+      ? {
+          id: `${nodeId}:${vertexId}`,
+          position: transformPoint(vertex, world),
+        }
+      : null;
   }
 
   #vectorCornerAppearance(nodeId: string): {

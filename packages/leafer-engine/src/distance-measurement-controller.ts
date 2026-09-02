@@ -23,6 +23,7 @@ export interface DistanceMeasurementPresenter {
 
 export class DistanceMeasurementController {
   readonly #altKeys = new Set<string>();
+  #blocked = false;
   readonly #canMeasure: () => boolean;
   #fingerprint = "";
   #lastTarget: unknown = null;
@@ -74,6 +75,7 @@ export class DistanceMeasurementController {
     ].join(":");
     if (fingerprint === this.#fingerprint) return;
     this.#fingerprint = fingerprint;
+    this.#blocked = input.blocked;
     this.#lastTarget = null;
     this.#pointerAlt = false;
     this.#pointerExact = false;
@@ -136,7 +138,7 @@ export class DistanceMeasurementController {
   }
 
   #refresh(): void {
-    if (!this.#activeModifier() || !this.#canMeasure()) {
+    if (this.#blocked || !this.#activeModifier() || !this.#canMeasure()) {
       this.#overlay.clear();
       return;
     }

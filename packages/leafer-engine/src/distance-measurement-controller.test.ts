@@ -79,6 +79,21 @@ describe("DistanceMeasurementController", () => {
     expect(setup.presenter.active).toBe(true);
   });
 
+  it("honors the explicit interaction block from the editor scope", () => {
+    const setup = createSetup();
+    setup.controller.sync({
+      blocked: true,
+      documentId: "document",
+      pageId: "page",
+      revision: 1,
+      selectionKey: "selection",
+      tool: "select",
+    });
+
+    setup.controller.pointerMove(pointerEvent(setup.target, { altKey: true }));
+    expect(setup.presenter.active).toBe(false);
+  });
+
   it("forwards viewport synchronization and disposes its presenter once", () => {
     const setup = createSetup();
 

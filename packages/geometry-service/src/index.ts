@@ -1,4 +1,4 @@
-export const GEOMETRY_SERVICE_CONTRACT_VERSION = 35 as const;
+export const GEOMETRY_SERVICE_CONTRACT_VERSION = 37 as const;
 export {
   LINE_ENDPOINT_MARKER_SIZE,
   LINE_ENDPOINT_MARKER_VIEW_BOX,
@@ -81,6 +81,7 @@ export {
   formatDistanceMeasurement,
   measureGuideToRect,
   measureRectDistances,
+  measureVectorAnchorDistances,
   type DistanceMeasurementId,
   type DistanceMeasurementSegment,
 } from "./measurements.js";
