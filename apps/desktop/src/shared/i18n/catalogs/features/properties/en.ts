@@ -198,6 +198,11 @@ export const propertyMessages = {
     "Variable width is unavailable for dashed strokes",
   "properties.variableWidthBranchUnavailable":
     "Split a branching vector before applying variable width",
+  "properties.vectorEraser": "Vector eraser",
+  "properties.vectorEraserWeight": "Weight",
+  "properties.vectorEraserShape": "Shape",
+  "properties.vectorEraserRound": "Round",
+  "properties.vectorEraserSquare": "Square",
   "properties.line": "Line endpoints",
   "properties.lineStart": "Start",
   "properties.lineEnd": "End",

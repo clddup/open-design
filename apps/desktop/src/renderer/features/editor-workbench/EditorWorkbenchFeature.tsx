@@ -18,6 +18,7 @@ import { AgentTimeline } from "../agent-conversation/components/AgentTimeline";
 import {
   Canvas,
   CanvasSelectionActions,
+  DEFAULT_VECTOR_ERASER_SETTINGS,
   useCanvasSnapSettings,
   useCanvasWorkspaceController,
 } from "@/renderer/features/canvas";
@@ -126,6 +127,10 @@ export function EditorWorkbenchFeature({
     nodeId: string;
     vertexIds: readonly string[];
   } | null>(null);
+  const [vectorEraserActive, setVectorEraserActive] = useState(false);
+  const [vectorEraserSettings, setVectorEraserSettings] = useState(
+    DEFAULT_VECTOR_ERASER_SETTINGS,
+  );
   const [rotationOriginNodeId, setRotationOriginNodeId] = useState<
     string | null
   >(null);
@@ -771,6 +776,9 @@ export function EditorWorkbenchFeature({
               }
               onTextRangeSelectionChange={setTextRangeSelection}
               onVectorVertexSelectionChange={setVectorVertexSelection}
+              onVectorEditToolChange={(vectorTool) =>
+                setVectorEraserActive(vectorTool === "eraser")
+              }
               harfBuzzTextRunLayoutProvider={fontBinaryRuntime.provider}
               onDeleteGridTracks={deleteCanvasGridTracks}
               onMoveGridChildren={editorCommands.moveGridChildren}
@@ -794,6 +802,7 @@ export function EditorWorkbenchFeature({
               snapSettings={snapSettings}
               smartSelectionMarkState={smartSelectionMarkState}
               viewportInteractionEpoch={viewportInteractionEpoch}
+              vectorEraserSettings={vectorEraserSettings}
               selectionActions={
                 state.selection.nodeIds.length > 0 ? (
                   <CanvasSelectionActions
@@ -1071,6 +1080,9 @@ export function EditorWorkbenchFeature({
                     ? vectorVertexSelection
                     : null
                 }
+                vectorEraserActive={vectorEraserActive}
+                vectorEraserSettings={vectorEraserSettings}
+                onVectorEraserSettingsChange={setVectorEraserSettings}
               />
             }
           />

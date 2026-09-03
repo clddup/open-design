@@ -56,6 +56,8 @@ import type {
 import { ExportSettingsEditor } from "./properties/ExportSettingsEditor";
 import { Field, formatNumber } from "./properties/controls";
 import { AlignmentControls } from "./properties/AlignmentControls";
+import { VectorEraserSection } from "./properties/VectorEraserSection";
+import type { VectorEraserSettings } from "@/renderer/features/canvas";
 import styles from "./PropertiesPanel.module.scss";
 
 export type { ComponentInspectorOption, ComponentInspectorSource };
@@ -157,6 +159,9 @@ export function PropertiesPanel({
   onRasterExportSettingsChange,
   fontContext,
   vectorVertexSelection,
+  vectorEraserActive,
+  vectorEraserSettings,
+  onVectorEraserSettingsChange,
 }: {
   node: DesignNode | undefined;
   activePageId: string;
@@ -317,6 +322,9 @@ export function PropertiesPanel({
   onRasterExportSettingsChange: (settings: RasterExportSettings) => void;
   fontContext?: FontInspectorContext;
   vectorVertexSelection: VectorVertexInspectorSelection | null;
+  vectorEraserActive: boolean;
+  vectorEraserSettings: VectorEraserSettings;
+  onVectorEraserSettingsChange: (settings: VectorEraserSettings) => void;
 }) {
   const { t } = useI18n();
   return (
@@ -335,104 +343,113 @@ export function PropertiesPanel({
           />
         )}
         {node ? (
-          <SelectedNodeProperties
-            activePageId={activePageId}
-            document={document}
-            key={node.id}
-            node={node}
-            componentContext={componentContext}
-            booleanOperationEditable={booleanOperationEditable}
-            booleanOperandParent={booleanOperandParent}
-            canDelete={canDelete}
-            canOutlineStroke={canOutlineStroke}
-            constraintsAvailable={
-              (layoutMode === "constraints" || layoutMode === "absolute") &&
-              node.kind !== "group" &&
-              node.kind !== "boolean"
-            }
-            canAlignToParent={canAlignSelection}
-            layoutPositioningAvailable={
-              layoutMode === "sizing" || layoutMode === "absolute"
-            }
-            layoutPositioningConstraintsAvailable={
-              node.kind !== "group" && node.kind !== "boolean"
-            }
-            layoutGuidesAvailable={node.kind === "frame"}
-            layoutSizingAvailable={layoutMode === "sizing"}
-            layoutLimitsAvailable={
-              layoutMode === "sizing" ||
-              ((node.kind === "frame" || node.kind === "slot") &&
-                node.properties.autoLayout !== undefined &&
-                node.properties.autoLayout.mode !== "none")
-            }
-            onBooleanOperationChange={onBooleanOperationChange}
-            onArrange={onArrange}
-            onCreateComponent={onCreateComponent}
-            onCreateComponentInstance={onCreateComponentInstance}
-            onDuplicateVariant={onDuplicateVariant}
-            onDissolveVariantSet={onDissolveVariantSet}
-            onDelete={onDelete}
-            onDetachComponentInstance={onDetachComponentInstance}
-            onDuplicate={onDuplicate}
-            onOutlineStroke={onOutlineStroke}
-            onSetVectorVertexAppearance={onSetVectorVertexAppearance}
-            onGoToComponentMain={onGoToComponentMain}
-            onCropImage={onCropImage}
-            onSelectImageArea={onSelectImageArea}
-            onExpandImage={onExpandImage}
-            onUpscaleImage={onUpscaleImage}
-            onReplaceImage={onReplaceImage}
-            imageEditStatus={imageEditStatus}
-            imageEditAction={imageEditAction}
-            onRemoveImageBackground={onRemoveImageBackground}
-            onReplaceImageBackground={onReplaceImageBackground}
-            onRelightImage={onRelightImage}
-            onEditImageWithPrompt={onEditImageWithPrompt}
-            onSelectImageEditReference={onSelectImageEditReference}
-            onCancelImageEdit={onCancelImageEdit}
-            onSwitchImageSource={onSwitchImageSource}
-            onUpdateImageFilters={onUpdateImageFilters}
-            onUpdateImagePaintFilters={onUpdateImagePaintFilters}
-            onUpdateImagePlacement={onUpdateImagePlacement}
-            onRemoveComponent={onRemoveComponent}
-            onRemoveVariant={onRemoveVariant}
-            onAddComponentProperty={onAddComponentProperty}
-            onAddVariantProperty={onAddVariantProperty}
-            onRemoveComponentProperty={onRemoveComponentProperty}
-            onRemoveVariantProperty={onRemoveVariantProperty}
-            onRenameComponentProperty={onRenameComponentProperty}
-            onReorderComponentProperties={onReorderComponentProperties}
-            onRenameVariantProperty={onRenameVariantProperty}
-            onRenameVariantValue={onRenameVariantValue}
-            onReorderVariantProperties={onReorderVariantProperties}
-            onReorderVariantValues={onReorderVariantValues}
-            onResetComponentInstance={onResetComponentInstance}
-            onResetComponentProperty={onResetComponentProperty}
-            onResetComponentSourceOverride={onResetComponentSourceOverride}
-            onSelectBooleanParent={onSelectBooleanParent}
-            onSetConstraints={onSetConstraints}
-            onSetLayoutPositioning={onSetLayoutPositioning}
-            onSetFrameLayoutGuides={onSetFrameLayoutGuides}
-            onDeleteGridTracks={onDeleteGridTracks}
-            onReorderGridTracks={onReorderGridTracks}
-            rotationOriginEditing={rotationOriginEditing}
-            onRotationOriginEditChange={onRotationOriginEditChange}
-            onSetRotationOrigin={onSetRotationOrigin}
-            onUpdate={onUpdate}
-            onUpdateComponentOverride={onUpdateComponentOverride}
-            onSetComponentProperty={onSetComponentProperty}
-            onClearComponentSlot={onClearComponentSlot}
-            onCreateComponentSlotOverride={onCreateComponentSlotOverride}
-            onResetComponentSlot={onResetComponentSlot}
-            onSetComponentSlotSettings={onSetComponentSlotSettings}
-            onSetVariantProperties={onSetVariantProperties}
-            onSetVariableBinding={onSetVariableBinding}
-            onSetVariableMode={onSetVariableMode}
-            styleActions={styleActions}
-            projectLibraries={projectLibraries}
-            fontContext={fontContext}
-            vectorVertexSelection={vectorVertexSelection}
-          />
+          <>
+            {vectorEraserActive &&
+              (node.kind === "path" || node.kind === "vector") && (
+                <VectorEraserSection
+                  onChange={onVectorEraserSettingsChange}
+                  settings={vectorEraserSettings}
+                />
+              )}
+            <SelectedNodeProperties
+              activePageId={activePageId}
+              document={document}
+              key={node.id}
+              node={node}
+              componentContext={componentContext}
+              booleanOperationEditable={booleanOperationEditable}
+              booleanOperandParent={booleanOperandParent}
+              canDelete={canDelete}
+              canOutlineStroke={canOutlineStroke}
+              constraintsAvailable={
+                (layoutMode === "constraints" || layoutMode === "absolute") &&
+                node.kind !== "group" &&
+                node.kind !== "boolean"
+              }
+              canAlignToParent={canAlignSelection}
+              layoutPositioningAvailable={
+                layoutMode === "sizing" || layoutMode === "absolute"
+              }
+              layoutPositioningConstraintsAvailable={
+                node.kind !== "group" && node.kind !== "boolean"
+              }
+              layoutGuidesAvailable={node.kind === "frame"}
+              layoutSizingAvailable={layoutMode === "sizing"}
+              layoutLimitsAvailable={
+                layoutMode === "sizing" ||
+                ((node.kind === "frame" || node.kind === "slot") &&
+                  node.properties.autoLayout !== undefined &&
+                  node.properties.autoLayout.mode !== "none")
+              }
+              onBooleanOperationChange={onBooleanOperationChange}
+              onArrange={onArrange}
+              onCreateComponent={onCreateComponent}
+              onCreateComponentInstance={onCreateComponentInstance}
+              onDuplicateVariant={onDuplicateVariant}
+              onDissolveVariantSet={onDissolveVariantSet}
+              onDelete={onDelete}
+              onDetachComponentInstance={onDetachComponentInstance}
+              onDuplicate={onDuplicate}
+              onOutlineStroke={onOutlineStroke}
+              onSetVectorVertexAppearance={onSetVectorVertexAppearance}
+              onGoToComponentMain={onGoToComponentMain}
+              onCropImage={onCropImage}
+              onSelectImageArea={onSelectImageArea}
+              onExpandImage={onExpandImage}
+              onUpscaleImage={onUpscaleImage}
+              onReplaceImage={onReplaceImage}
+              imageEditStatus={imageEditStatus}
+              imageEditAction={imageEditAction}
+              onRemoveImageBackground={onRemoveImageBackground}
+              onReplaceImageBackground={onReplaceImageBackground}
+              onRelightImage={onRelightImage}
+              onEditImageWithPrompt={onEditImageWithPrompt}
+              onSelectImageEditReference={onSelectImageEditReference}
+              onCancelImageEdit={onCancelImageEdit}
+              onSwitchImageSource={onSwitchImageSource}
+              onUpdateImageFilters={onUpdateImageFilters}
+              onUpdateImagePaintFilters={onUpdateImagePaintFilters}
+              onUpdateImagePlacement={onUpdateImagePlacement}
+              onRemoveComponent={onRemoveComponent}
+              onRemoveVariant={onRemoveVariant}
+              onAddComponentProperty={onAddComponentProperty}
+              onAddVariantProperty={onAddVariantProperty}
+              onRemoveComponentProperty={onRemoveComponentProperty}
+              onRemoveVariantProperty={onRemoveVariantProperty}
+              onRenameComponentProperty={onRenameComponentProperty}
+              onReorderComponentProperties={onReorderComponentProperties}
+              onRenameVariantProperty={onRenameVariantProperty}
+              onRenameVariantValue={onRenameVariantValue}
+              onReorderVariantProperties={onReorderVariantProperties}
+              onReorderVariantValues={onReorderVariantValues}
+              onResetComponentInstance={onResetComponentInstance}
+              onResetComponentProperty={onResetComponentProperty}
+              onResetComponentSourceOverride={onResetComponentSourceOverride}
+              onSelectBooleanParent={onSelectBooleanParent}
+              onSetConstraints={onSetConstraints}
+              onSetLayoutPositioning={onSetLayoutPositioning}
+              onSetFrameLayoutGuides={onSetFrameLayoutGuides}
+              onDeleteGridTracks={onDeleteGridTracks}
+              onReorderGridTracks={onReorderGridTracks}
+              rotationOriginEditing={rotationOriginEditing}
+              onRotationOriginEditChange={onRotationOriginEditChange}
+              onSetRotationOrigin={onSetRotationOrigin}
+              onUpdate={onUpdate}
+              onUpdateComponentOverride={onUpdateComponentOverride}
+              onSetComponentProperty={onSetComponentProperty}
+              onClearComponentSlot={onClearComponentSlot}
+              onCreateComponentSlotOverride={onCreateComponentSlotOverride}
+              onResetComponentSlot={onResetComponentSlot}
+              onSetComponentSlotSettings={onSetComponentSlotSettings}
+              onSetVariantProperties={onSetVariantProperties}
+              onSetVariableBinding={onSetVariableBinding}
+              onSetVariableMode={onSetVariableMode}
+              styleActions={styleActions}
+              projectLibraries={projectLibraries}
+              fontContext={fontContext}
+              vectorVertexSelection={vectorVertexSelection}
+            />
+          </>
         ) : selectionCount > 1 ? (
           <div className={styles.multiProperties}>
             <div className={styles.noSelection} role="status">

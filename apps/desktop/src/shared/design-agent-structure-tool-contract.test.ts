@@ -239,6 +239,18 @@ const vectorInputs: DesignVectorToolInput[] = [
     start: { x: 16, y: 240 },
     end: { x: 512, y: 240 },
   },
+  {
+    action: "erase",
+    label: "Erase logo contours",
+    pageId: "page_brand",
+    nodeIds: ["logo_path", "logo_shadow"],
+    points: [
+      { x: 160, y: 220 },
+      { x: 320, y: 220 },
+    ],
+    shape: "round",
+    weight: 24,
+  },
 ];
 
 describe("Hierarchy and Vector Agent contracts", () => {
@@ -420,6 +432,28 @@ describe("Hierarchy and Vector Agent contracts", () => {
       expect.arrayContaining([
         expect.objectContaining({ path: "/point/y" }),
         expect.objectContaining({ path: "/t" }),
+      ]),
+    );
+  });
+
+  it("reports exact Eraser fields and rejects foreign branch data", () => {
+    expect(
+      DesignVectorContract.issues({
+        action: "erase",
+        label: "Erase logo contours",
+        pageId: "page_brand",
+        nodeIds: ["logo_path"],
+        points: [],
+        shape: "circle",
+        weight: 0,
+        nodeId: "foreign_single_target",
+      }),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: "/points" }),
+        expect.objectContaining({ path: "/shape" }),
+        expect.objectContaining({ path: "/weight" }),
+        expect.objectContaining({ path: "/nodeId" }),
       ]),
     );
   });

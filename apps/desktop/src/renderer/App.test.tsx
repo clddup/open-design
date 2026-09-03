@@ -4869,6 +4869,10 @@ describe("App", () => {
     await waitFor(() =>
       expect(leaferHarness.input?.vectorEditScope).toEqual({
         activeNodeId: "editable_vector",
+        eraser: {
+          shape: "round",
+          weight: 24,
+        },
         nodes: [
           {
             activePathId: "path_open",

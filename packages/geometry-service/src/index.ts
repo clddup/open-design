@@ -108,6 +108,14 @@ export {
   type DistanceMeasurementSegment,
 } from "./measurements.js";
 export {
+  createVectorEraserPath,
+  erasePaintedVectorNetwork,
+  type VectorEraserFailure,
+  type VectorEraserPathResult,
+  type VectorEraserShape,
+  type VectorEraseResult,
+} from "./vector-eraser.js";
+export {
   connectVectorEndpoints,
   cutVectorNetworkByLine,
   cutVectorPath,

@@ -1,5 +1,10 @@
+import { readFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import type { DesignNode } from "@opendesign/design-contracts";
-import type { VectorGeometryProvider } from "@opendesign/geometry-service/vector-path";
+import {
+  createPathKitGeometryProvider,
+  type VectorGeometryProvider,
+} from "@opendesign/geometry-service/vector-path";
 import { resolveComponentInstance } from "@opendesign/component-service";
 import {
   createWelcomeDocument,
@@ -14,7 +19,7 @@ import type {
   TextLayoutProvider,
   TextRunLayoutProvider,
 } from "@opendesign/text-service";
-import { describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   DESIGN_ARRANGE_TOOL_NAME,
   INTERNAL_DESIGN_COMPONENT_TOOL_NAME as DESIGN_COMPONENT_TOOL_NAME,
@@ -64,6 +69,17 @@ const pageContext = {
     selectedNodeIds: [],
   },
 };
+
+const require = createRequire(import.meta.url);
+let pathKitGeometryProvider: VectorGeometryProvider;
+
+beforeAll(async () => {
+  pathKitGeometryProvider = await createPathKitGeometryProvider({
+    wasmBinary: await readFile(
+      require.resolve("pathkit-wasm/bin/pathkit.wasm"),
+    ),
+  });
+});
 
 function outlineGeometryProvider(): VectorGeometryProvider {
   const geometry = (path: string) => ({
@@ -5185,6 +5201,59 @@ describe("Renderer semantic hierarchy tool", () => {
         "vector_split_tool_vector_split_2_0"
       ],
     ).toBeUndefined();
+  });
+
+  it("erases explicit Vector layers through one atomic Agent transaction", async () => {
+    const runtime = createClosedEditableVectorRuntime();
+    runtime.setSelection(["title_welcome"], "title_welcome");
+
+    const result = await executeDesignToolRequest(
+      {
+        requestId: "vector_erase",
+        call: {
+          toolCallId: "tool_vector_erase",
+          toolName: DESIGN_VECTOR_TOOL_NAME,
+          input: {
+            action: "erase",
+            label: "Erase the logo center",
+            nodeIds: ["editable_logo_contour"],
+            pageId: "page_welcome",
+            points: [
+              { x: 180, y: 90 },
+              { x: 180, y: 220 },
+            ],
+            shape: "round",
+            weight: 20,
+          },
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_welcome",
+      {
+        vectorGeometryProvider: () => Promise.resolve(pathKitGeometryProvider),
+      },
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "erase",
+          atomic: true,
+          deletedNodeIds: [],
+          nodeIds: ["editable_logo_contour"],
+          remainingNodeIds: ["editable_logo_contour"],
+          revision: 1,
+        },
+        designRevision: { previousRevision: 0, revision: 1 },
+      },
+    });
+    expect(runtime.getSnapshot().state.selection.nodeIds).toEqual([
+      "title_welcome",
+    ]);
+    expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
+    expect(runtime.undo()).toMatchObject({ ok: true, mode: "undo" });
   });
 
   it("cuts an inspected vector segment atomically and returns trusted topology IDs", async () => {

@@ -94,6 +94,7 @@ import {
   type VectorPenContourDraft,
   type VectorPenContourOverlay,
 } from "./vector-pen-contour-overlay.js";
+import { VectorEraserOverlayController } from "./vector-eraser-overlay-controller.js";
 
 type LeaferModule = typeof LeaferEditorModule;
 type LeaferElement = InstanceType<LeaferModule["UI"]>;
@@ -175,6 +176,15 @@ type VectorEditDrag =
       startClient: Point;
       startDocument: Point;
       startLocal: Point;
+    }
+  | {
+      kind: "eraser";
+      lastClient: Point;
+      moved: boolean;
+      points: Point[];
+      shape: "round" | "square";
+      startClient: Point;
+      weight: number;
     }
   | {
       before: VectorNetwork;
@@ -259,6 +269,7 @@ interface VectorEditControllerOptions {
   callbacks: Pick<
     LeaferEngineCallbacks,
     | "onVectorCut"
+    | "onVectorErase"
     | "onVectorEdit"
     | "onVectorEditActiveNodeChange"
     | "onVectorEditExit"
@@ -300,6 +311,7 @@ const MAX_VECTOR_LASSO_POINTS = 4_096;
 export class VectorEditController {
   readonly #options: VectorEditControllerOptions;
   readonly #vectorAnchorMeasurements: VectorAnchorMeasurementController;
+  readonly #vectorEraserOverlay: VectorEraserOverlayController;
   readonly #vectorEditControls = new WeakMap<
     LeaferElement,
     VectorEditControl
@@ -308,6 +320,7 @@ export class VectorEditController {
   readonly #vectorGeometrySnap: VectorGeometrySnapController;
   readonly #vectorSelectionOverlay: VectorSelectionOverlay;
   #activeVectorEditNodeId: string | null = null;
+  #eraserPending = false;
   #input: LeaferEngineSyncInput | null = null;
   #vectorLasso: VectorLassoSession | null = null;
 
@@ -345,6 +358,12 @@ export class VectorEditController {
     this.#vectorEditControls.set(hitArea, { kind: "selection-box" });
     this.#vectorAnchorMeasurements = new VectorAnchorMeasurementController({
       layerIndex: 10,
+      leafer: options.leafer,
+      presentationRoot: options.presentationRoot,
+      viewportRoot: options.root,
+    });
+    this.#vectorEraserOverlay = new VectorEraserOverlayController({
+      layerIndex: 12,
       leafer: options.leafer,
       presentationRoot: options.presentationRoot,
       viewportRoot: options.root,
@@ -393,6 +412,7 @@ export class VectorEditController {
     if (this.#input)
       this.#vectorGeometrySnap.syncViewport(this.#input.viewport);
     this.#vectorAnchorMeasurements.syncViewport();
+    this.#vectorEraserOverlay.syncViewport();
     this.#renderVectorEditOverlays();
   }
 
@@ -529,6 +549,7 @@ export class VectorEditController {
   dispose(): void {
     this.cancel();
     this.#vectorAnchorMeasurements.dispose();
+    this.#vectorEraserOverlay.dispose();
     this.#vectorSelectionOverlay.group.remove();
     this.#vectorSelectionOverlay.group.destroy();
     this.#input = null;
@@ -604,7 +625,9 @@ export class VectorEditController {
           (session.drag?.kind === "variable-width" &&
             (scope.tool !== "variable-width" ||
               item.readOnly ||
-              !item.variableWidthEditable))
+              !item.variableWidthEditable)) ||
+          (session.drag?.kind === "eraser" &&
+            (scope.tool !== "eraser" || item.readOnly))
         ) {
           this.#cancelVectorEditDrag(session);
         }
@@ -817,6 +840,7 @@ export class VectorEditController {
           session.tool === "bend" ||
           (session.tool === "variable-width" &&
             session.variableWidthEditable) ||
+          session.tool === "eraser" ||
           session.tool === "pen"),
       path: serialized.path,
       strokeWidth: 14 / zoom,
@@ -873,7 +897,9 @@ export class VectorEditController {
       const anchor = new this.#options.leafer.Ellipse({
         cursor: session.readOnly
           ? "default"
-          : session.tool === "cut" || session.tool === "pen"
+          : session.tool === "cut" ||
+              session.tool === "eraser" ||
+              session.tool === "pen"
             ? "crosshair"
             : "pointer",
         editable: false,
@@ -1217,6 +1243,7 @@ export class VectorEditController {
   pointerDown(event: unknown): void {
     if (
       this.#options.current().disposed ||
+      this.#eraserPending ||
       [...this.#vectorEdits.values()].some((session) => session.drag)
     ) {
       return;
@@ -1358,6 +1385,36 @@ export class VectorEditController {
         toggle: pointer.shiftKey,
       };
       session.lassoPath.set({ path: "", visible: false });
+      return;
+    }
+    if (session.tool === "eraser") {
+      const holder = session.readOnly
+        ? [...this.#vectorEdits.values()].find(
+            (candidate) => !candidate.readOnly,
+          )
+        : session;
+      const input = this.#input;
+      if (!holder || !input) return;
+      const startClient = eventClientPoint(pointer);
+      const startDocument = pointer.getInnerPoint(this.#options.root);
+      const settings = input.vectorEditScope?.eraser ?? {
+        shape: "round" as const,
+        weight: 24,
+      };
+      holder.drag = {
+        kind: "eraser",
+        lastClient: startClient,
+        moved: false,
+        points: [startDocument],
+        shape: settings.shape,
+        startClient,
+        weight: settings.weight,
+      };
+      this.#vectorEraserOverlay.show(
+        holder.drag.points,
+        holder.drag.weight,
+        holder.drag.shape,
+      );
       return;
     }
     if (session.tool === "paint") {
@@ -1622,6 +1679,15 @@ export class VectorEditController {
     if (pointer.isCancel) return;
     const client = eventClientPoint(pointer);
     drag.moved ||= pointDistance(drag.startClient, client) >= MIN_DRAW_DISTANCE;
+    if (drag.kind === "eraser") {
+      if (pointDistance(drag.lastClient, client) < 2) return;
+      drag.lastClient = client;
+      const point = pointer.getInnerPoint(this.#options.root);
+      if (drag.points.length < MAX_VECTOR_LASSO_POINTS) drag.points.push(point);
+      else drag.points[MAX_VECTOR_LASSO_POINTS - 1] = point;
+      this.#vectorEraserOverlay.show(drag.points, drag.weight, drag.shape);
+      return;
+    }
     if (!drag.moved) return;
     if (drag.kind === "cut") {
       drag.currentDocument = pointer.getInnerPoint(this.#options.root);
@@ -1924,6 +1990,17 @@ export class VectorEditController {
     this.pointerMove(event);
     const moved = drag.moved;
     this.#vectorGeometrySnap.finish();
+    if (drag.kind === "eraser") {
+      const request = {
+        points: [...drag.points],
+        shape: drag.shape,
+        weight: drag.weight,
+      };
+      session.drag = null;
+      this.#vectorEraserOverlay.clear();
+      void this.#submitVectorErase(request);
+      return;
+    }
     if (drag.kind === "cut") {
       const end = drag.currentDocument;
       const clickTarget = drag.clickTarget;
@@ -2102,7 +2179,11 @@ export class VectorEditController {
       session.variableWidthStrokeProperties = structuredClone(
         drag.beforeProfile,
       );
-    } else if (drag.kind !== "cut" && drag.kind !== "pen-start") {
+    } else if (
+      drag.kind !== "cut" &&
+      drag.kind !== "eraser" &&
+      drag.kind !== "pen-start"
+    ) {
       session.network = drag.before;
     }
     if (drag.kind === "pen") {
@@ -2116,6 +2197,7 @@ export class VectorEditController {
     }
     session.drag = null;
     this.#vectorGeometrySnap.finish();
+    if (drag.kind === "eraser") this.#vectorEraserOverlay.clear();
     session.cutGuidePath.set({ path: "", visible: false });
   }
 
@@ -2361,6 +2443,39 @@ export class VectorEditController {
     return true;
   }
 
+  async #submitVectorErase(request: {
+    points: readonly Point[];
+    shape: "round" | "square";
+    weight: number;
+  }): Promise<void> {
+    const input = this.#input;
+    const callback = this.#options.callbacks.onVectorErase;
+    if (!input || !callback) {
+      this.#options.report(new Error("Vector eraser callback is unavailable"));
+      return;
+    }
+    this.#eraserPending = true;
+    try {
+      const response = await callback({
+        documentId: input.document.documentId,
+        expectedRevision: input.document.revision,
+        nodeIds: [...this.#vectorEdits.values()]
+          .filter((session) => !session.readOnly)
+          .map((session) => session.nodeId),
+        pageId: input.pageId,
+        points: request.points,
+        shape: request.shape,
+        weight: request.weight,
+      });
+      if (!response.ok) this.#options.restoreProjection();
+    } catch (error) {
+      this.#options.report(error);
+      this.#options.restoreProjection();
+    } finally {
+      this.#eraserPending = false;
+    }
+  }
+
   #submitVectorLineCut(start: Point, end: Point): boolean {
     if (!this.#options.callbacks.onVectorLineCut) {
       this.#options.report(
@@ -2450,6 +2565,7 @@ export class VectorEditController {
   cancel(): void {
     this.#vectorGeometrySnap.finish();
     this.#vectorAnchorMeasurements.sync(null);
+    this.#vectorEraserOverlay.clear();
     this.#cancelVectorLasso();
     for (const session of [...this.#vectorEdits.values()]) {
       this.#cancelVectorEditSession(session);
@@ -2460,6 +2576,10 @@ export class VectorEditController {
 
   handleWindowBlur(): void {
     this.#vectorAnchorMeasurements.handleWindowBlur();
+    const eraser = [...this.#vectorEdits.values()].find(
+      (session) => session.drag?.kind === "eraser",
+    );
+    if (eraser) this.#cancelVectorEditDrag(eraser);
     this.#clearVectorPenTargets();
   }
 

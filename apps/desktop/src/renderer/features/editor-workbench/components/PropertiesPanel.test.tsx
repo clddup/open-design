@@ -35,6 +35,7 @@ import type {
   VectorVertexInspectorSelection,
   VectorVertexAppearancePatch,
 } from "./properties/VectorVertexAppearanceSection";
+import type { VectorEraserSettings } from "@/renderer/features/canvas";
 
 function renderPanel(
   options: {
@@ -59,6 +60,9 @@ function renderPanel(
       patch: VectorVertexAppearancePatch,
     ) => void;
     vectorVertexSelection?: VectorVertexInspectorSelection | null;
+    vectorEraserActive?: boolean;
+    vectorEraserSettings?: VectorEraserSettings;
+    onVectorEraserSettingsChange?: (settings: VectorEraserSettings) => void;
     onDissolveVariantSet?: () => void;
     onDuplicateVariant?: () => void;
     onRemoveVariant?: () => void;
@@ -279,6 +283,13 @@ function renderPanel(
           svgExportSettings={{ includeLayerIds: false, padding: 0 }}
           svgFeedback={options.feedback ?? null}
           svgOperation={options.operation ?? null}
+          vectorEraserActive={options.vectorEraserActive ?? false}
+          vectorEraserSettings={
+            options.vectorEraserSettings ?? { shape: "round", weight: 24 }
+          }
+          onVectorEraserSettingsChange={
+            options.onVectorEraserSettingsChange ?? vi.fn()
+          }
           vectorVertexSelection={options.vectorVertexSelection ?? null}
         />
       </I18nProvider>
@@ -478,6 +489,33 @@ const componentInstanceNode: Extract<DesignNode, { kind: "instance" }> = {
 };
 
 describe("PropertiesPanel information architecture", () => {
+  it("shows and edits Vector Eraser settings only while the tool is active", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    renderPanel({
+      node: strokedVectorNode,
+      selectionCount: 1,
+      vectorEraserActive: true,
+      vectorEraserSettings: { shape: "round", weight: 24 },
+      onVectorEraserSettingsChange: onChange,
+    });
+
+    const weight = screen.getByRole("spinbutton", { name: "Weight" });
+    fireEvent.change(weight, { target: { value: "36" } });
+    fireEvent.blur(weight);
+    expect(onChange).toHaveBeenCalledWith({ shape: "round", weight: 36 });
+
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Shape" }),
+      "square",
+    );
+    expect(onChange).toHaveBeenCalledWith({ shape: "square", weight: 24 });
+
+    cleanup();
+    renderPanel({ node: strokedVectorNode, selectionCount: 1 });
+    expect(screen.queryByRole("spinbutton", { name: "Weight" })).toBeNull();
+  });
+
   it("edits the node fallback corner radius for an editable Vector", () => {
     const onUpdate = vi.fn();
     renderPanel({

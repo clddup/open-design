@@ -40,6 +40,7 @@ const VECTOR_ACTIONS = [
   "cut-path",
   "cut-with-line",
   "cut-layers-with-line",
+  "erase",
 ] as const;
 
 const ID_SCHEMA = {
@@ -301,6 +302,7 @@ const FULL_VECTOR_BRANCH_PROPERTIES = new Set([
   "fills",
   "nodeIds",
   "point",
+  "points",
   "segmentIds",
   "targets",
   "vertexIds",
@@ -485,12 +487,27 @@ const VECTOR_ACTION_BRANCHES = [
     },
     ["nodeIds", "start", "end"],
   ),
+  vectorBranch(
+    "erase",
+    {
+      nodeIds: nodeIdsSchema(1, 500),
+      points: {
+        type: "array",
+        minItems: 1,
+        maxItems: 4_096,
+        items: BOUNDED_POINT_SCHEMA,
+      },
+      shape: { enum: ["round", "square"] },
+      weight: { type: "number", minimum: 0.1, maximum: 10_000 },
+    },
+    ["nodeIds", "points", "shape", "weight"],
+  ),
 ] as const;
 
 export const DESIGN_VECTOR_TOOL_INPUT_SCHEMA = executableJsonSchema({
   type: "object",
   description:
-    "Edit explicit existing editable Vector Networks by stable Page, node, path, region, vertex, and segment IDs from current inspection. Every action has one closed field shape. The host derives local transforms, topology, result layer IDs, bounds, and one atomic transaction. outline-stroke creates a new editable Vector sibling from the visible stroke and preserves the source. split-vector separates one inspected multi-path Vector into host-created sibling layers in authored path order and rejects compound regions spanning paths. flatten destructively replaces supported same-parent Frame, Group, Boolean, Component Instance current projection, exact glyph-outline Text, Image, Rectangle, Ellipse, Line including start/end decorations, sharp or rounded Polygon/Star, Path, and Vector layers with one editable Vector while preserving nested child order, Frame/Slot clipping, and visible fill/stroke paint order. For exactly one selected root, current Component, Shared Style, and Variable appearance is projected and its opacity/effect/blend/mask shell is preserved on the result Vector; multi-root or descendant compositing remains rejected. set-region-fills applies typed paints and detaches any Style from one inspected closed region; set-region-fill-style links that region to one inspected PAINT Style. set-vertex-stroke-appearance changes point cap/join overrides; set-vertex-corner-radius applies a circular radius to inspected straight closed-contour vertices or clears an override with null. bend-segment moves one inspected point on a segment to a node-local point and derives its Bézier handles. connect-endpoints accepts two explicit point targets from one layer or two matching sibling layers; two endpoints join contours, while one endpoint plus another path vertex creates a shared branch junction. The host resolves transforms and atomically merges cross-layer geometry. transform-vertices uses one node-local affine matrix; transform-layers-vertices uses one document-space matrix across explicit layer targets, including valid branch junctions. Existing-branch unique endpoint merge, explicit-path Open/Close/Reverse, branch-segment Bend/Cut/Delete, branch-junction vertex Delete/Cut, and explicit incident-edge/open-path endpoint Disconnect are supported; topology-specific operations continue to reject ambiguous branch mutations.",
+    "Edit explicit existing editable Vector Networks by stable Page, node, path, region, vertex, and segment IDs from current inspection. Every action has one closed field shape. The host derives local transforms, topology, result layer IDs, bounds, and one atomic transaction. outline-stroke creates a new editable Vector sibling from the visible stroke and preserves the source. split-vector separates one inspected multi-path Vector into host-created sibling layers in authored path order and rejects compound regions spanning paths. flatten destructively replaces supported same-parent Frame, Group, Boolean, Component Instance current projection, exact glyph-outline Text, Image, Rectangle, Ellipse, Line including start/end decorations, sharp or rounded Polygon/Star, Path, and Vector layers with one editable Vector while preserving nested child order, Frame/Slot clipping, and visible fill/stroke paint order. erase subtracts one bounded document-space round or square gesture from explicit Vector layer IDs after materializing their visible Fill, Stroke, dash, and variable-width appearance; disconnected results remain contours in the original layer and fully erased targets are deleted. For exactly one selected root, current Component, Shared Style, and Variable appearance is projected and its opacity/effect/blend/mask shell is preserved on the result Vector; multi-root or descendant compositing remains rejected. set-region-fills applies typed paints and detaches any Style from one inspected closed region; set-region-fill-style links that region to one inspected PAINT Style. set-vertex-stroke-appearance changes point cap/join overrides; set-vertex-corner-radius applies a circular radius to inspected straight closed-contour vertices or clears an override with null. bend-segment moves one inspected point on a segment to a node-local point and derives its Bézier handles. connect-endpoints accepts two explicit point targets from one layer or two matching sibling layers; two endpoints join contours, while one endpoint plus another path vertex creates a shared branch junction. The host resolves transforms and atomically merges cross-layer geometry. transform-vertices uses one node-local affine matrix; transform-layers-vertices uses one document-space matrix across explicit layer targets, including valid branch junctions. Existing-branch unique endpoint merge, explicit-path Open/Close/Reverse, branch-segment Bend/Cut/Delete, branch-junction vertex Delete/Cut, and explicit incident-edge/open-path endpoint Disconnect are supported; topology-specific operations continue to reject ambiguous branch mutations.",
   properties: {
     action: { enum: VECTOR_ACTIONS },
     label: LABEL_SCHEMA,
@@ -499,6 +516,12 @@ export const DESIGN_VECTOR_TOOL_INPUT_SCHEMA = executableJsonSchema({
     nodeIds: nodeIdsSchema(1, 500),
     pathId: VECTOR_ID_SCHEMA,
     point: BOUNDED_POINT_SCHEMA,
+    points: {
+      type: "array",
+      minItems: 1,
+      maxItems: 4_096,
+      items: BOUNDED_POINT_SCHEMA,
+    },
     regionId: VECTOR_ID_SCHEMA,
     fills: { type: "array", maxItems: 4_096, items: PaintSchema },
     fillStyleId: ID_SCHEMA,
@@ -524,6 +547,8 @@ export const DESIGN_VECTOR_TOOL_INPUT_SCHEMA = executableJsonSchema({
     start: BOUNDED_POINT_SCHEMA,
     end: BOUNDED_POINT_SCHEMA,
     endpoints: VECTOR_ENDPOINTS_SCHEMA,
+    shape: { enum: ["round", "square"] },
+    weight: { type: "number", minimum: 0.1, maximum: 10_000 },
   },
   required: ["action", "label", "pageId"],
   anyOf: VECTOR_ACTION_BRANCHES,

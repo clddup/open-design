@@ -278,10 +278,10 @@
         "zh-CN": "可编辑 Path、Pen 与节点编辑"
       },
       "description": {
-        "en": "Create editable cubic contours with Pen, refine vertices and Bézier handles, connect endpoints within or across sibling Vector layers, override cap/join appearance and circular radius per vertex, apply direct Paint or shared Paint Styles to stable fill regions, convert visible strokes into filled editable Vector siblings, and flatten supported same-parent Frames, nested Groups, Booleans, Component Instance current projections, exact glyph-outline Text, Images, shapes, Paths, and Vectors into one editable Vector while preserving one authoritative Vector Network.",
-        "zh-CN": "使用 Pen 创建可编辑三次曲线轮廓、继续调整节点与贝塞尔手柄、连接同层或 sibling Vector 图层的端点、按顶点覆盖端帽、转角与 circular 圆角、给稳定填充区域设置直接 Paint 或共享 Paint Style、把可见描边转换为新的 filled editable Vector sibling，并将同父级受支持的 Frame、nested Group、Boolean、Component Instance 当前投影、可信 glyph-outline Text、Image、图形、Path 与 Vector 拼合为一个 editable Vector，同时保持唯一权威 Vector Network。"
+        "en": "Create editable cubic contours with Pen, refine vertices and Bézier handles, connect endpoints within or across sibling Vector layers, override cap/join appearance and circular radius per vertex, apply direct Paint or shared Paint Styles to stable fill regions, convert visible strokes into filled editable Vector siblings, and flatten supported same-parent Frames, nested Groups, Booleans, Component Instance current projections, exact glyph-outline Text, Images, shapes, Paths, and Vectors into one editable Vector while preserving one authoritative Vector Network. Vector edit mode also erases visible painted geometry with a round or square brush while keeping disconnected contours in the original editable layer.",
+        "zh-CN": "使用 Pen 创建可编辑三次曲线轮廓、继续调整节点与贝塞尔手柄、连接同层或 sibling Vector 图层的端点、按顶点覆盖端帽、转角与 circular 圆角、给稳定填充区域设置直接 Paint 或共享 Paint Style、把可见描边转换为新的 filled editable Vector sibling，并将同父级受支持的 Frame、nested Group、Boolean、Component Instance 当前投影、可信 glyph-outline Text、Image、图形、Path 与 Vector 拼合为一个 editable Vector，同时保持唯一权威 Vector Network。 Vector edit mode 还可用圆形或方形笔刷擦除可见 painted geometry，并把断开的轮廓保留在原可编辑图层。"
       },
-      "provider": "DesignDocument 1.57.0 + Geometry Service contract 31 point/path selection-delete/transform/Bend/Connect/Disconnect/Cut/region Fill/region Paint Style/vertex stroke appearance/vertex corner radius/regular-shape corner smoothing/Outline Stroke/Flatten + EditorRuntime document-space multi-Vector transform/Cut/cross-layer Connect/branch junction/Frame-Group-Boolean-Component-Text-Image and root-shell/isolated-pixel-compositing Flatten planner + Leafer exact regular-shape/Line-endpoint and synthetic region/stroke/corner projection + controlled SVG metadata",
+      "provider": "DesignDocument 1.57.0 + Geometry Service contract 31 point/path selection-delete/transform/Bend/Connect/Disconnect/Cut/region Fill/region Paint Style/vertex stroke appearance/vertex corner radius/regular-shape corner smoothing/Outline Stroke/Flatten/Vector Eraser + EditorRuntime document-space multi-Vector transform/Cut/cross-layer Connect/branch junction/Frame-Group-Boolean-Component-Text-Image and root-shell/isolated-pixel-compositing Flatten planner + Leafer exact regular-shape/Line-endpoint and synthetic region/stroke/corner projection + controlled SVG metadata",
       "requiredSurfaces": [
         "contract",
         "runtime",
@@ -348,7 +348,9 @@
           "packages/editor-runtime/src/style-operations.test.ts",
           "packages/geometry-service/src/vector-stroke-appearance.test.ts",
           "packages/geometry-service/src/regular-shape.test.ts",
-          "packages/geometry-service/src/line-endpoint.test.ts"
+          "packages/geometry-service/src/line-endpoint.test.ts",
+          "packages/geometry-service/src/vector-eraser.test.ts",
+          "packages/editor-runtime/src/vector-eraser-operations.test.ts"
         ],
         "manual": []
       },
@@ -505,10 +507,10 @@
         "zh-CN": "Pen 与节点编辑"
       },
       "description": {
-        "en": "Create and refine open, closed, branching, and curved vector geometry using points and Bézier handles, with Figma-compatible point and visible-handle snapping plus document-space path-nearest snapping, anchor measurements, measured connected-point creation, and lossless Pen insertion plus independent multi-contour and branching Network authoring in both top-level Pen and Vector edit mode.",
-        "zh-CN": "通过节点和贝塞尔手柄创建、编辑开放、闭合、分支与曲线矢量几何，并在 Vector edit mode 中使用 Figma-compatible 节点与可见 handle 吸附及 document-space path 最近点吸附、锚点测量、测量式连接点创建与 Pen 沿现有 segment 无损插点，以及顶层 Pen 与 Vector edit mode 的同一 Network 独立多轮廓和分支创作。"
+        "en": "Create and refine open, closed, branching, and curved vector geometry using points and Bézier handles, with Figma-compatible point and visible-handle snapping plus document-space path-nearest snapping, anchor measurements, measured connected-point creation, and lossless Pen insertion plus independent multi-contour and branching Network authoring in both top-level Pen and Vector edit mode. Vector edit mode also erases visible painted geometry with a round or square brush while keeping disconnected contours in the original editable layer.",
+        "zh-CN": "通过节点和贝塞尔手柄创建、编辑开放、闭合、分支与曲线矢量几何，并在 Vector edit mode 中使用 Figma-compatible 节点与可见 handle 吸附及 document-space path 最近点吸附、锚点测量、测量式连接点创建与 Pen 沿现有 segment 无损插点，以及顶层 Pen 与 Vector edit mode 的同一 Network 独立多轮廓和分支创作。 Vector edit mode 还可用圆形或方形笔刷擦除可见 painted geometry，并把断开的轮廓保留在原可编辑图层。"
       },
-      "provider": "DesignDocument 1.57.0 Vector Network + Geometry Service contract 42 point/path selection-delete/transform/point-and-path-snapping/anchor-measurement/measured-point-append/segment-insertion/Bend/Connect/Disconnect/Cut/region Fill/region Paint Style/vertex stroke appearance/vertex corner radius/Outline Stroke/Flatten + EditorRuntime document-space multi-Vector transform/Cut/cross-layer Connect/branch junction/Frame-Group-Boolean-Component-Text-Image and root-shell/isolated-pixel-compositing Flatten planner + Leafer synthetic region/stroke/corner projection and native editing overlays",
+      "provider": "DesignDocument 1.57.0 Vector Network + Geometry Service contract 42 point/path selection-delete/transform/point-and-path-snapping/anchor-measurement/measured-point-append/segment-insertion/Bend/Connect/Disconnect/Cut/region Fill/region Paint Style/vertex stroke appearance/vertex corner radius/Outline Stroke/Flatten/Vector Eraser + EditorRuntime document-space multi-Vector transform/Cut/cross-layer Connect/branch junction/Frame-Group-Boolean-Component-Text-Image and root-shell/isolated-pixel-compositing Flatten planner + Leafer synthetic region/stroke/corner projection and native editing overlays",
       "requiredSurfaces": ["contract", "runtime", "human", "agent"],
       "surfaces": {
         "contract": "available",
@@ -550,7 +552,9 @@
           "packages/geometry-service/src/measurements.test.ts",
           "packages/geometry-service/src/vector-snapping.test.ts",
           "packages/leafer-engine/src/vector-anchor-measurement-controller.test.ts",
-          "packages/leafer-engine/src/vector-geometry-snap-controller.test.ts"
+          "packages/leafer-engine/src/vector-geometry-snap-controller.test.ts",
+          "packages/geometry-service/src/vector-eraser.test.ts",
+          "packages/editor-runtime/src/vector-eraser-operations.test.ts"
         ],
         "manual": []
       },

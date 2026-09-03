@@ -8914,6 +8914,168 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
+  it("previews and submits one document-space Eraser gesture across editable Vector layers", async () => {
+    const onVectorErase = vi.fn<
+      NonNullable<LeaferEngineCallbacks["onVectorErase"]>
+    >((request) =>
+      Promise.resolve({
+        ok: true,
+        deletedNodeIds: [],
+        remainingNodeIds: [...request.nodeIds],
+      }),
+    );
+    const base = withMultiVectorEditFixture(createInput());
+    const input: LeaferEngineSyncInput = {
+      ...base,
+      vectorEditScope: {
+        ...base.vectorEditScope!,
+        eraser: { shape: "square", weight: 32 },
+        tool: "eraser",
+      },
+    };
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onVectorErase,
+    });
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Missing Leafer app");
+    const preview = app.sky.children
+      .filter((child): child is FakeGroup => child instanceof FakeGroup)
+      .flatMap((child) => child.children)
+      .find(
+        (child): child is FakePath =>
+          child instanceof FakePath && child.opacity === 0.3,
+      );
+    if (!preview) throw new Error("Missing Vector Eraser preview");
+
+    app.emit("pointer.down", pointerEvent(20, 30, app.tree));
+    expect(preview.visible).toBe(true);
+    app.emit("pointer.move", pointerEvent(80, 90, app.tree));
+    expect(preview.path).toBe("M 20 30 L 80 90");
+    expect(preview.strokeWidth).toBe(32);
+    expect(onVectorErase).not.toHaveBeenCalled();
+    app.emit("pointer.up", pointerEvent(80, 90, app.tree));
+    await flushMicrotasks();
+
+    expect(preview.visible).toBe(false);
+    expect(onVectorErase).toHaveBeenCalledTimes(1);
+    expect(onVectorErase).toHaveBeenCalledWith({
+      documentId: input.document.documentId,
+      expectedRevision: input.document.revision,
+      nodeIds: ["editable_curve", "editable_curve_second"],
+      pageId: input.pageId,
+      points: [
+        { x: 20, y: 30 },
+        { x: 80, y: 90 },
+      ],
+      shape: "square",
+      weight: 32,
+    });
+    adapter.dispose();
+  });
+
+  it("supports Eraser click dabs and cancels gestures on Escape, tool switch, and read-only scope", async () => {
+    const onVectorErase = vi.fn<
+      NonNullable<LeaferEngineCallbacks["onVectorErase"]>
+    >((request) =>
+      Promise.resolve({
+        ok: true,
+        deletedNodeIds: [],
+        remainingNodeIds: [...request.nodeIds],
+      }),
+    );
+    const base = withVectorEditFixture(createInput());
+    const eraserInput: LeaferEngineSyncInput = {
+      ...base,
+      vectorEditScope: {
+        ...base.vectorEditScope!,
+        eraser: { shape: "round", weight: 18 },
+        tool: "eraser",
+      },
+    };
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onVectorErase,
+    });
+    adapter.sync(eraserInput);
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Missing Leafer app");
+
+    app.emit("pointer.down", pointerEvent(40, 50, app.tree));
+    emitWindowKey("Escape");
+    app.emit("pointer.up", pointerEvent(40, 50, app.tree));
+    expect(onVectorErase).not.toHaveBeenCalled();
+
+    app.emit("pointer.down", pointerEvent(45, 55, app.tree));
+    adapter.sync({
+      ...eraserInput,
+      vectorEditScope: { ...eraserInput.vectorEditScope!, tool: "move" },
+    });
+    app.emit("pointer.up", pointerEvent(45, 55, app.tree));
+    expect(onVectorErase).not.toHaveBeenCalled();
+
+    adapter.sync(eraserInput);
+    app.emit("pointer.down", pointerEvent(50, 60, app.tree));
+    app.emit("pointer.up", pointerEvent(50, 60, app.tree));
+    await flushMicrotasks();
+    expect(onVectorErase).toHaveBeenCalledWith(
+      expect.objectContaining({ points: [{ x: 50, y: 60 }] }),
+    );
+
+    onVectorErase.mockClear();
+    adapter.sync({
+      ...eraserInput,
+      vectorEditScope: {
+        ...eraserInput.vectorEditScope!,
+        nodes: eraserInput.vectorEditScope!.nodes.map((node) => ({
+          ...node,
+          readOnly: true,
+        })),
+      },
+    });
+    app.emit("pointer.down", pointerEvent(60, 70, app.tree));
+    app.emit("pointer.up", pointerEvent(60, 70, app.tree));
+    await flushMicrotasks();
+    expect(onVectorErase).not.toHaveBeenCalled();
+    adapter.dispose();
+  });
+
+  it("blocks overlapping Eraser submissions and restores after a rejected edit", async () => {
+    let resolveErase!: (value: { ok: false }) => void;
+    const pending = new Promise<{ ok: false }>((resolve) => {
+      resolveErase = resolve;
+    });
+    const onVectorErase = vi.fn<
+      NonNullable<LeaferEngineCallbacks["onVectorErase"]>
+    >(() => pending);
+    const base = withVectorEditFixture(createInput());
+    const input: LeaferEngineSyncInput = {
+      ...base,
+      vectorEditScope: { ...base.vectorEditScope!, tool: "eraser" },
+    };
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onVectorErase,
+    });
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Missing Leafer app");
+
+    app.emit("pointer.down", pointerEvent(10, 10, app.tree));
+    app.emit("pointer.up", pointerEvent(10, 10, app.tree));
+    app.emit("pointer.down", pointerEvent(20, 20, app.tree));
+    app.emit("pointer.up", pointerEvent(20, 20, app.tree));
+    expect(onVectorErase).toHaveBeenCalledTimes(1);
+
+    resolveErase({ ok: false });
+    await flushMicrotasks();
+    app.emit("pointer.down", pointerEvent(30, 30, app.tree));
+    app.emit("pointer.up", pointerEvent(30, 30, app.tree));
+    expect(onVectorErase).toHaveBeenCalledTimes(2);
+    adapter.dispose();
+  });
+
   it("repositions a resize with Space and resumes without a preview jump", async () => {
     const onVectorEdit = vi.fn<(request: LeaferVectorEditRequest) => boolean>(
       () => true,

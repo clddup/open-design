@@ -121,6 +121,14 @@ import { CanvasFrameLabels } from "./CanvasFrameLabels";
 import { RotationOriginOverlay } from "./RotationOriginOverlay";
 import { commitRulerGuideEdit, type RulerGuideEdit } from "../ruler-guides";
 import { RulerGuides } from "./RulerGuides";
+import {
+  DEFAULT_VECTOR_ERASER_SETTINGS,
+  type VectorEraserSettings,
+} from "../vector-eraser-settings";
+import {
+  type CanvasVectorEditState,
+  useVectorEraserCommit,
+} from "../use-vector-eraser";
 
 export function Canvas({
   activeAgentRunId,
@@ -163,6 +171,8 @@ export function Canvas({
   snapSettings,
   smartSelectionMarkState,
   viewportInteractionEpoch,
+  vectorEraserSettings = DEFAULT_VECTOR_ERASER_SETTINGS,
+  onVectorEditToolChange,
 }: {
   activeAgentRunId: string | null;
   activePageId: string;
@@ -263,6 +273,8 @@ export function Canvas({
   snapSettings: LeaferSnapSettings;
   smartSelectionMarkState: LeaferSmartSelectionMarkState | null;
   viewportInteractionEpoch: number;
+  vectorEraserSettings?: VectorEraserSettings;
+  onVectorEditToolChange?: (tool: LeaferVectorEditTool | null) => void;
 }) {
   const { t } = useI18n();
   const host = useRef<HTMLElement>(null);
@@ -312,17 +324,17 @@ export function Canvas({
   const [textRunLayoutProvider, setTextRunLayoutProvider] = useState<
     TextRunLayoutProvider<LeaferTextRunStyle> | undefined
   >();
-  const [vectorEditState, setVectorEditState] = useState<{
-    activeNodeId: string;
-    nodeIds: readonly string[];
-    selectedSegmentIdsByNode: Readonly<Record<string, readonly string[]>>;
-    selectedVertexIdsByNode: Readonly<Record<string, readonly string[]>>;
-    tool: LeaferVectorEditTool;
-    fillStyleId: string | null;
-    paint: readonly Paint[];
-  } | null>(null);
+  const [vectorEditState, setVectorEditState] =
+    useState<CanvasVectorEditState | null>(null);
   const vectorEditStateRef = useRef(vectorEditState);
   vectorEditStateRef.current = vectorEditState;
+  useEffect(() => {
+    onVectorEditToolChange?.(vectorEditState?.tool ?? null);
+  }, [onVectorEditToolChange, vectorEditState?.tool]);
+  useEffect(
+    () => () => onVectorEditToolChange?.(null),
+    [onVectorEditToolChange],
+  );
   const tool = isTool(snapshot.state.tool) ? snapshot.state.tool : "select";
   const inlineEditors = useCanvasInlineEditors({
     revision: snapshot.document.revision,
@@ -762,6 +774,21 @@ export function Canvas({
       }
       if (
         vectorEditScope &&
+        event.shiftKey &&
+        !event.altKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        event.code === "KeyE"
+      ) {
+        setVectorEditState((current) =>
+          current ? { ...current, tool: "eraser" } : current,
+        );
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+      if (
+        vectorEditScope &&
         !event.altKey &&
         !event.ctrlKey &&
         !event.metaKey &&
@@ -1156,6 +1183,20 @@ export function Canvas({
     [activePageId, applyOperations, onTransactionError, runtime, t],
   );
 
+  const applyVectorErase = useVectorEraserCommit({
+    activePageId,
+    applyOperations,
+    messages: {
+      applyMissing: t("canvas.vectorEraseApplyMissing"),
+      stale: t("canvas.vectorEraseStale"),
+      unavailable: t("canvas.vectorEraseUnavailable"),
+    },
+    onTransactionError,
+    runtime,
+    setVectorEditState,
+    vectorEditStateRef,
+  });
+
   const applyVectorLineCut = useCallback(
     (request: LeaferVectorLineCutRequest): LeaferVectorLineCutResponse => {
       const current = runtime.getSnapshot();
@@ -1434,6 +1475,7 @@ export function Canvas({
       onSmartSelectionMarkChange,
       onTextRangeSelectionChange,
       onVectorCut: applyVectorCut,
+      onVectorErase: applyVectorErase,
       onVectorEdit: applyVectorEdit,
       onVectorEditActiveNodeChange: (nodeId) => {
         setVectorEditState((current) => {
@@ -1511,6 +1553,7 @@ export function Canvas({
     applyOperations,
     applyVectorCut,
     applyVectorEdit,
+    applyVectorErase,
     applyVectorLineCut,
     changeVectorEditScope,
     createNode,
@@ -1587,6 +1630,7 @@ export function Canvas({
               paint: vectorEditState?.paint ?? [
                 { type: "solid", color: "#4f7fff", opacity: 1 },
               ],
+              eraser: vectorEraserSettings,
               tool: vectorEditState?.tool ?? "move",
             },
           }
@@ -1609,6 +1653,7 @@ export function Canvas({
     snapSettings,
     tool,
     vectorEditState?.tool,
+    vectorEraserSettings,
     vectorEditCollectionScope,
   ]);
 
@@ -1964,18 +2009,22 @@ export function Canvas({
                           )
                         : vectorEditState?.tool === "bend"
                           ? t("canvas.vectorBendHint")
-                          : vectorEditState?.tool === "variable-width"
-                            ? t("canvas.vectorVariableWidthHint")
-                            : vectorEditState?.tool === "pen"
-                              ? t("canvas.vectorPenHint")
-                              : vectorEditState?.tool === "lasso"
-                                ? t("canvas.vectorLassoHint")
-                                : t("canvas.vectorEditingHint", {
-                                    pathCount:
-                                      vectorEditScope.selectedSegmentIds.length,
-                                    pointCount:
-                                      vectorEditScope.selectedVertexIds.length,
-                                  })}
+                          : vectorEditState?.tool === "eraser"
+                            ? t("canvas.vectorEraseHint")
+                            : vectorEditState?.tool === "variable-width"
+                              ? t("canvas.vectorVariableWidthHint")
+                              : vectorEditState?.tool === "pen"
+                                ? t("canvas.vectorPenHint")
+                                : vectorEditState?.tool === "lasso"
+                                  ? t("canvas.vectorLassoHint")
+                                  : t("canvas.vectorEditingHint", {
+                                      pathCount:
+                                        vectorEditScope.selectedSegmentIds
+                                          .length,
+                                      pointCount:
+                                        vectorEditScope.selectedVertexIds
+                                          .length,
+                                    })}
                   </small>
                 </span>
                 <span className={styles.vectorTools}>
@@ -1995,6 +2044,7 @@ export function Canvas({
                           null,
                         ],
                         ["paint", "canvas.vectorToolPaint", null],
+                        ["eraser", "canvas.vectorToolEraser", "Shift+E"],
                         ["cut", "canvas.vectorToolCut", "X"],
                         ["lasso", "canvas.vectorToolLasso", "Q"],
                       ] as const
@@ -2008,6 +2058,7 @@ export function Canvas({
                               mode === "pen" ||
                               mode === "variable-width" ||
                               mode === "paint" ||
+                              mode === "eraser" ||
                               mode === "cut")) ||
                           (!vectorEditScope.topologyEditable &&
                             mode === "paint") ||

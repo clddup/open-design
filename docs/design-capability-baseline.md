@@ -99,3 +99,5 @@ provider adapter → render/export → persistence → undo/redo → tests
 5. 导入导出、交付、原型与性能门禁。
 
 任何阶段都不得通过恢复旧引擎、建立第二份可写状态或让模型直接控制 Leafer 内存来缩短路径。
+
+当前 Vector Eraser 范围事实：Vector edit mode 使用 `Shift+E`，Inspector 配置 weight 与 round/square shape；document-space gesture 经 PathKit 从物化后的 Fill/Stroke/dash/variable-width 外观中 subtract。擦断结果保留在原 layer 的同一 Network，完全擦空才删除；多层人工操作与 Agent `edit_vector.erase` 共用一笔 EditorRuntime transaction。Image AI Erase 仍是独立像素工作流。真实 macOS/Windows 打包交互、笔压、HiDPI 与长路径性能仍待验证。见 ADR-0298。

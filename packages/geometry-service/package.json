@@ -21,6 +21,7 @@
     "./vector-segment-geometry": "./src/vector-segment-geometry.ts",
     "./vector-split": "./src/vector-split.ts",
     "./vector-edit": "./src/vector-edit.ts",
+    "./vector-eraser": "./src/vector-eraser.ts",
     "./vector-corner-radius": "./src/vector-corner-radius.ts",
     "./vector-path": "./src/vector-path.ts",
     "./vector-stroke-appearance": "./src/vector-stroke-appearance.ts",

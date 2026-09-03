@@ -175,6 +175,11 @@ export {
 } from "./vector-flatten-raster.js";
 export type { FlattenTextRunStyle } from "./vector-flatten-text.js";
 export {
+  planVectorLayersErase,
+  type VectorEraserOperationPlan,
+  type VectorEraserTarget,
+} from "./vector-eraser-operations.js";
+export {
   planDeleteVectorNode,
   planVectorLayersLineCut,
   planVectorLayersEndpointConnect,

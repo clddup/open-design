@@ -208,6 +208,10 @@ export type VectorOperationPlan =
         pathIds: readonly string[];
         resultNodeIds: readonly string[];
       };
+      eraserResult?: {
+        deletedNodeIds: readonly string[];
+        remainingNodeIds: readonly string[];
+      };
     }
   | {
       ok: false;

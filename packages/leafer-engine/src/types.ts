@@ -18,6 +18,7 @@ import type {
   ViewportState,
 } from "@opendesign/design-contracts";
 import type { VectorGeometryProvider } from "@opendesign/geometry-service/vector-path";
+import type { VectorEraserShape } from "@opendesign/geometry-service/vector-eraser";
 import type { VectorCutLocation } from "@opendesign/geometry-service/vector-edit";
 import type {
   RasterExportMimeType,
@@ -104,7 +105,32 @@ export type LeaferVectorEditRequest =
     };
 
 export type LeaferVectorEditTool =
-  "move" | "pen" | "bend" | "variable-width" | "cut" | "lasso" | "paint";
+  | "move"
+  | "pen"
+  | "bend"
+  | "variable-width"
+  | "eraser"
+  | "cut"
+  | "lasso"
+  | "paint";
+
+export interface LeaferVectorEraseRequest {
+  documentId: string;
+  expectedRevision: number;
+  nodeIds: readonly string[];
+  pageId: string;
+  points: readonly Point[];
+  shape: VectorEraserShape;
+  weight: number;
+}
+
+export type LeaferVectorEraseResponse =
+  | {
+      ok: true;
+      deletedNodeIds: readonly string[];
+      remainingNodeIds: readonly string[];
+    }
+  | { ok: false };
 
 export interface LeaferImageCropCommitRequest {
   nodeId: string;
@@ -311,6 +337,9 @@ export interface LeaferEngineCallbacks {
   ): boolean;
   onTextRangeSelectionChange?(selection: LeaferTextRangeSelection | null): void;
   onVectorCut?(request: LeaferVectorCutRequest): LeaferVectorCutResponse;
+  onVectorErase?(
+    request: LeaferVectorEraseRequest,
+  ): Promise<LeaferVectorEraseResponse>;
   onVectorLineCut?(
     request: LeaferVectorLineCutRequest,
   ): LeaferVectorLineCutResponse;
@@ -373,6 +402,7 @@ export interface LeaferVectorEditScope {
     variableWidthStrokeProperties?: VariableWidthStrokeProperties;
   }[];
   fillStyleId?: string;
+  eraser?: { shape: VectorEraserShape; weight: number };
   paint?: readonly Paint[];
   tool: LeaferVectorEditTool;
 }

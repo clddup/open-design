@@ -50,6 +50,8 @@ export const canvasMessages = {
     "Click a point or path to add handles, or drag a path to bend it",
   "canvas.vectorVariableWidthHint":
     "Click the path to add a width point · Drag along and across the path · Control disables snapping",
+  "canvas.vectorEraseHint":
+    "Drag across editable vector layers to remove painted regions · Shift+E",
   "canvas.vectorPenHint":
     "Click a path to insert a point; continue from a selected point, finish on another point, or start a new contour on empty canvas",
   "canvas.vectorLassoHint":
@@ -60,6 +62,11 @@ export const canvasMessages = {
   "canvas.vectorLineCutUnavailable": "Vector divide result is unavailable",
   "canvas.vectorLineCutApplyMissing":
     "Divided vector layers are unavailable after applying the edit",
+  "canvas.vectorEraseUnavailable": "Vector eraser is unavailable",
+  "canvas.vectorEraseStale":
+    "The document changed before the vector erase could be applied",
+  "canvas.vectorEraseApplyMissing":
+    "Erased vector layers are unavailable after applying the edit",
   "canvas.vectorEditingReadOnly":
     "Read-only · Locked or unsupported vector topology",
   "canvas.exitVectorEditing": "Finish editing vector points",
@@ -69,6 +76,7 @@ export const canvasMessages = {
   "canvas.vectorToolBend": "Bend",
   "canvas.vectorToolVariableWidth": "Variable width",
   "canvas.vectorToolPaint": "Paint",
+  "canvas.vectorToolEraser": "Eraser",
   "canvas.vectorPaintColor": "Region color",
   "canvas.vectorPaintStyle": "Region style",
   "canvas.vectorPaintDirect": "Direct paint",

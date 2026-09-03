@@ -238,4 +238,13 @@ export type DesignVectorToolInput =
       nodeIds: string[];
       pageId: string;
       start: Point;
+    }
+  | {
+      action: "erase";
+      label: string;
+      nodeIds: string[];
+      pageId: string;
+      points: Point[];
+      shape: "round" | "square";
+      weight: number;
     };

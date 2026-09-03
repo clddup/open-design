@@ -199,6 +199,11 @@ export const propertyMessages = {
   "properties.variableWidthDashedUnavailable": "虚线描边不支持可变宽度",
   "properties.variableWidthBranchUnavailable":
     "请先拆分分支矢量，再应用可变宽度",
+  "properties.vectorEraser": "矢量橡皮擦",
+  "properties.vectorEraserWeight": "粗细",
+  "properties.vectorEraserShape": "形状",
+  "properties.vectorEraserRound": "圆形",
+  "properties.vectorEraserSquare": "方形",
   "properties.line": "线段端点",
   "properties.lineStart": "起点",
   "properties.lineEnd": "终点",
