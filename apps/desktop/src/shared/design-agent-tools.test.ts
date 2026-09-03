@@ -472,16 +472,9 @@ describe("design Agent tool contract", () => {
     );
   });
 
-  it("accepts fill-only status primitives with semantic steps", () => {
+  it("accepts fill-only status primitives without exposing host Plan steps", () => {
     const input = {
       label: "Create runtime status bar",
-      steps: [
-        {
-          stepId: "status_bar",
-          label: "Runtime status",
-          commandIds: ["status_region", "status_dot", "status_separator"],
-        },
-      ],
       commands: [
         {
           commandId: "status_region",
@@ -578,7 +571,7 @@ describe("design Agent tool contract", () => {
     });
   });
 
-  it("requires semantic steps to cover commands exactly once in order", () => {
+  it("keeps semantic step validation on the trusted canonical contract", () => {
     const input = {
       label: "Build navigation and hero",
       steps: [
@@ -608,19 +601,26 @@ describe("design Agent tool contract", () => {
         },
       ],
     };
-    expect(DesignApplyContract.parse(input).ok).toBe(true);
-    expect(parsedApply(input).steps).toEqual(input.steps);
+    expect(DesignApplyContract.parse(input).ok).toBe(false);
+    const canonical = DesignApplyContract.parse(input, { canonical: true });
+    expect(canonical.ok && canonical.value.steps).toEqual(input.steps);
     expect(
-      DesignApplyContract.parse({
-        ...input,
-        steps: [input.steps[1], input.steps[0]],
-      }).ok,
+      DesignApplyContract.parse(
+        {
+          ...input,
+          steps: [input.steps[1], input.steps[0]],
+        },
+        { canonical: true },
+      ).ok,
     ).toBe(false);
     expect(
-      DesignApplyContract.parse({
-        ...input,
-        steps: [input.steps[0]],
-      }).ok,
+      DesignApplyContract.parse(
+        {
+          ...input,
+          steps: [input.steps[0]],
+        },
+        { canonical: true },
+      ).ok,
     ).toBe(false);
   });
 
@@ -1750,7 +1750,7 @@ describe("design Agent tool contract", () => {
     expect(schema).not.toContain('"$defs"');
   });
 
-  it("keeps the first visible design transaction compact and basic", () => {
+  it("keeps one focused edit tool without removing visual construction", () => {
     const apply = DESIGN_AGENT_TOOL_SPECS.find(
       (tool) => tool.name === DESIGN_EDIT_TOOL_NAME,
     );
@@ -1758,27 +1758,28 @@ describe("design Agent tool contract", () => {
     const complete = JSON.stringify(apply?.inputSchema);
 
     expect(apply?.modelDisclosure).toMatchObject({
-      bootstrap: "available",
-      beforePlan: "available",
+      bootstrap: "deferred",
+      afterInspection: "available",
+      beforePlan: "deferred",
       role: "material-write",
       bootstrapInputSchema: DESIGN_BOOTSTRAP_EDIT_TOOL_INPUT_SCHEMA,
     });
-    expect(bootstrap).toContain(
-      '"enum":["frame","group","rectangle","ellipse","text"]',
-    );
     expect(bootstrap).toContain('"const":"insert_element"');
     expect(bootstrap).toContain('"const":"update_properties"');
+    expect(bootstrap).not.toContain('"const":"replace_subtree"');
     expect(bootstrap).toContain('"paragraphIndent"');
     expect(bootstrap).toContain('"textCase"');
     expect(bootstrap).toContain('"textDecoration"');
-    expect(bootstrap).not.toContain('"textDecorationStyle"');
     expect(bootstrap).toContain('"textTruncation"');
     expect(bootstrap).toContain('"maxLines"');
     expect(bootstrap).not.toContain('"ellipsis"');
     expect(bootstrap).not.toContain('"network"');
-    expect(bootstrap).not.toContain('"path"');
-    expect(bootstrap).not.toContain('"assetId"');
-    expect(bootstrap).not.toContain('"effects"');
+    expect(bootstrap).toContain('"path"');
+    expect(bootstrap).toContain('"effects"');
+    expect(bootstrap).not.toContain('"const":"hierarchy"');
+    expect(bootstrap).not.toContain('"const":"arrange"');
+    expect(bootstrap).not.toContain('"steps"');
+    expect(bootstrap.length).toBeLessThanOrEqual(complete.length);
     expect(
       DESIGN_AGENT_TOOL_SPECS.find(
         (tool) => tool.name === DESIGN_SYSTEM_TOOL_NAME,

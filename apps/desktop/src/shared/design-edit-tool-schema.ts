@@ -1,12 +1,12 @@
 import { executableJsonSchema } from "@opendesign/design-contracts";
 import { INTERNAL_DESIGN_APPLY_TOOL_INPUT_SCHEMA } from "./design-apply-input";
-import { DESIGN_BOOTSTRAP_APPLY_INPUT_SCHEMA } from "./design-bootstrap-apply-schema";
 import {
   DESIGN_ARRANGE_CONTINUATION_INPUT_SCHEMA,
   DESIGN_ARRANGE_TOOL_INPUT_SCHEMA,
 } from "./design-arrange-tool-schema";
 import { DESIGN_HIERARCHY_TOOL_INPUT_SCHEMA } from "./design-agent-structure-tool-schema";
 import { DESIGN_APPLY_TOOL_INPUT_SCHEMA } from "./design-agent-operation-schemas";
+import { DESIGN_FOCUSED_VISUAL_APPLY_TOOL_INPUT_SCHEMA } from "./design-focused-apply-schema";
 
 const LABEL_SCHEMA = {
   type: "string",
@@ -79,12 +79,12 @@ function editDesignSchema(
 }
 
 export const DESIGN_BOOTSTRAP_EDIT_TOOL_INPUT_SCHEMA = editDesignSchema(
-  DESIGN_BOOTSTRAP_APPLY_INPUT_SCHEMA,
+  DESIGN_FOCUSED_VISUAL_APPLY_TOOL_INPUT_SCHEMA,
   { nodeOnly: true },
 );
 
 export const DESIGN_CONTINUATION_EDIT_TOOL_INPUT_SCHEMA = editDesignSchema(
-  DESIGN_BOOTSTRAP_APPLY_INPUT_SCHEMA,
+  DESIGN_FOCUSED_VISUAL_APPLY_TOOL_INPUT_SCHEMA,
   {
     arrangeInput: DESIGN_ARRANGE_CONTINUATION_INPUT_SCHEMA,
     hierarchyInput: null,

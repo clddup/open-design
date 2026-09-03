@@ -153,7 +153,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
       surfaces: ["general" as const, "new-design" as const],
     },
     description:
-      "Create exactly one current target's real artboard and meaningful editable content in one rollback-safe call. For reviewed multi-target scope, declare only deliveryStage.nextTarget and finish it before the next call. Include concise designIntent, layout/spacing, visualSystem, raster roles, and an actual named hierarchy; Main binds skills, fidelity, quality, and an initially empty component strategy. The content must visibly prove the thesis and signature motif, not retrofit reasons to generic primitives. Use canonical document fills/strokes, blend modes, shadows and blur only when they serve the chosen form; do not simulate every surface with stacks of flat rectangles. Complete the target within 48 model-authored elements or submit its smallest coherent portion. Use short call-local IDs for the target Frame, regions, elements, and their references; Main binds them to globally stable Run-scoped document IDs. Multi-direction Logo work uses a shared brand invariant but three independent form hypotheses, principles and color systems; establish each master as a readable black silhouette before color or presentation effects, keep cards/captions secondary, and materialize every declared monochrome/32/24/16 evidence descendant. Path commands use node-local coordinates and are not rescaled by width/height. Use 1-3 stages, 48 elements total, one inspected Page, parent-local geometry, and exact fonts. After success, inspect the real hierarchy and promote justified roots to Components through the disclosed design-system tool, matching Figma's create-component-from-node workflow; a new-design Run remains on its compact continuation surface.",
+      "Create exactly one current target's real artboard and meaningful editable content in one rollback-safe call. For reviewed multi-target scope, declare only deliveryStage.nextTarget and finish it before the next call. Include concise designIntent, layout/spacing, visualSystem, raster roles, and an actual named hierarchy; Main binds skills, fidelity, quality, and an initially empty component strategy. The content must visibly prove the thesis and signature motif, not retrofit reasons to generic primitives. Use canonical document fills/strokes, blend modes, shadows and blur only when they serve the chosen form; do not simulate every surface with stacks of flat rectangles. Complete the target within 48 model-authored elements or submit its smallest coherent portion. Use short call-local IDs for the target Frame, regions, elements, and their references; Main binds them to globally stable Run-scoped document IDs. Multi-direction Logo work uses a shared brand invariant but three independent form hypotheses, principles and color systems; make every primary master work as a monochrome silhouette while applying its brief-specific color treatment in the same slice, keep cards/captions secondary, and let Main derive monochrome/32/24/16 evidence. Path commands use node-local coordinates and are not rescaled by width/height. Use 1-3 stages, 48 elements total, one inspected Page, parent-local geometry, and exact fonts. After success, inspect the real hierarchy and promote justified roots to Components through the disclosed design-system tool, matching Figma's create-component-from-node workflow; a new-design Run remains on a focused continuation surface with complete node appearance and contour editing.",
     inputSchema: DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA,
     risk: "design_write" as const,
     approval: "never" as const,
@@ -355,15 +355,16 @@ export const DESIGN_AGENT_TOOL_SPECS = [
   {
     name: DESIGN_EDIT_TOOL_NAME,
     modelDisclosure: {
-      bootstrap: "available" as const,
-      beforePlan: "available" as const,
+      bootstrap: "deferred" as const,
+      afterInspection: "available" as const,
+      beforePlan: "deferred" as const,
       role: "material-write" as const,
       surfaces: ["general" as const, "new-design" as const],
       bootstrapDescription:
-        "Perform one basic inspected node edit inside an existing planned artboard. Use one node edit entry and the compact insert, property update, move, and delete command schema. New artboard roots still use opendesign_generate_first_slice. After a material revision, this same tool expands to hierarchy and layout edits without changing tool names.",
+        "Perform one coherent inspected node edit inside an existing planned artboard. Use one node edit entry; it supports editable Path contours, gradients and effects as well as insert, property update, move and delete. Main binds the edit to the active Plan step. New artboard roots still use opendesign_generate_first_slice. After a material revision, this same tool adds compact layout repair without changing tool names.",
       bootstrapInputSchema: DESIGN_BOOTSTRAP_EDIT_TOOL_INPUT_SCHEMA,
       continuationDescription:
-        "Continue the current design with basic node edits plus compact visual layout repair. Use align, distribute, spacing, repair-overflow, resize-frame, or Page/Frame ruler guides when the inspected document requires them; keep all targets inside the active delivery artboard.",
+        "Continue the current design with complete node appearance and contour edits plus compact visual layout repair. Rebuild weak silhouettes with editable Paths instead of falling back to generic circles and rectangles. Use align, distribute, spacing, repair-overflow, resize-frame, or Page/Frame ruler guides when the inspected document requires them; keep all targets inside the active delivery artboard. Main owns Plan-step binding.",
       continuationInputSchema: DESIGN_CONTINUATION_EDIT_TOOL_INPUT_SCHEMA,
     },
     description:

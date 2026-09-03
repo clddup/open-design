@@ -66,7 +66,7 @@ describe("production Pi design-tool catalog", () => {
     expect(adapter.tools.map((tool) => tool.name)).not.toContain(
       INTERNAL_IMPORT_SVG_TOOL_NAME,
     );
-    expect(adapter.modelTools.map((tool) => tool.name)).toContain(
+    expect(adapter.modelTools.map((tool) => tool.name)).not.toContain(
       DESIGN_EDIT_TOOL_NAME,
     );
     expect(adapter.modelTools.map((tool) => tool.name)).not.toContain(

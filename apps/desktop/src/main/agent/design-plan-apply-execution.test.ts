@@ -75,6 +75,29 @@ function applyInput(stepIds: readonly string[]): DesignApplyToolInput {
 }
 
 describe("design Plan Apply execution", () => {
+  it("binds a Provider edit without steps to the active host step", () => {
+    const state = executionState();
+    const input: DesignApplyToolInput = {
+      label: "Apply design",
+      commands: [
+        { commandId: "command_1", type: "delete_element", nodeId: "node_1" },
+      ],
+    };
+
+    const bound = bindApplyToActivePlanSteps(state, ["target_a"], input);
+
+    expect(bound.steps).toEqual([
+      {
+        stepId: "structure",
+        label: "Build structure",
+        commandIds: ["command_1"],
+      },
+    ]);
+    expect(() =>
+      assertApplyPlanSteps(state, ["target_a"], bound.steps),
+    ).not.toThrow();
+  });
+
   it("consolidates invented model steps into the current authoritative implementation step", () => {
     const state = executionState();
     const input = applyInput(["invented_structure", "invented_content"]);

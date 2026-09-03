@@ -1970,46 +1970,26 @@ export class GlobalTaskCoordinator {
     revision?: number,
     resultContent?: unknown,
   ): void {
-    if (!validRevision(revision) || !steps || steps.length === 0) return;
-    const allowedTargets = new Set(targetIds);
-    const committedRevisions = committedPlanStepRevisions(resultContent);
-    for (const committed of steps) {
+    const completions = resolveCommittedPlanStepEvidence(
+      state,
+      targetIds,
+      steps,
+      revision,
+      resultContent,
+    );
+    if (!completions) return;
+    for (const completed of completions) {
       const owner = state.planExecution.targets.find((target) =>
         target.steps.some((step) => step.status === "in_progress"),
       );
       const step = owner?.steps.find(
         (candidate) => candidate.status === "in_progress",
       );
-      if (
-        !owner ||
-        !allowedTargets.has(owner.targetId) ||
-        !step ||
-        step.stepId !== committed.stepId
-      ) {
-        throw designWorkflowError(
-          "plan_step_order_invalid",
-          `Committed step ${committed.stepId} does not match the current serial Plan step`,
-        );
-      }
-      const completedRevision =
-        committedRevisions.get(committed.stepId) ??
-        (steps.length === 1 ? revision : undefined);
-      if (
-        completedRevision === undefined ||
-        step.startedRevision === undefined ||
-        completedRevision <= step.startedRevision
-      ) {
-        throw designWorkflowError(
-          "plan_step_evidence_missing",
-          `Committed step ${committed.stepId} requires its real semantic revision after the step started`,
-        );
-      }
-      if (step.kind === "review-refine") {
-        continue;
-      }
+      if (!owner || !step || step.stepId !== completed.stepId) return;
+      if (step.kind === "review-refine") continue;
       step.status = "completed";
-      step.completedRevision = completedRevision;
-      activateNextPlanStep(state, completedRevision);
+      step.completedRevision = completed.revision;
+      activateNextPlanStep(state, completed.revision);
     }
     this.#persistDelivery(runId, state);
   }
@@ -3294,6 +3274,52 @@ function committedPlanStepRevisions(content: unknown): Map<string, number> {
     }
   }
   return revisions;
+}
+
+type CommittedPlanStep = { stepId: string; revision: number };
+
+function resolveCommittedPlanStepEvidence(
+  state: DesignWorkflowState,
+  targetIds: readonly string[],
+  steps: DesignApplyToolInput["steps"],
+  revision: number | undefined,
+  resultContent: unknown,
+): CommittedPlanStep[] | undefined {
+  if (!validRevision(revision) || !steps || steps.length === 0) return [];
+  const flattened = state.planExecution.targets.flatMap((target) =>
+    target.steps.map((step) => ({ ...step, targetId: target.targetId })),
+  );
+  const activeIndex = flattened.findIndex(
+    (step) => step.status === "in_progress",
+  );
+  const allowedTargets = new Set(targetIds);
+  const reported = committedPlanStepRevisions(resultContent);
+  const completions: CommittedPlanStep[] = [];
+  const initialRevision = flattened[activeIndex]?.startedRevision;
+  let previousRevision = initialRevision;
+  for (const [offset, submitted] of steps.entries()) {
+    const expected = flattened[activeIndex + offset];
+    const completedRevision = reported.get(submitted.stepId) ?? revision;
+    if (
+      !expected ||
+      !allowedTargets.has(expected.targetId) ||
+      expected.stepId !== submitted.stepId ||
+      (offset === 0
+        ? expected.status !== "in_progress"
+        : expected.status !== "pending") ||
+      (expected.kind === "review-refine" && steps.length > 1) ||
+      initialRevision === undefined ||
+      previousRevision === undefined ||
+      completedRevision <= initialRevision ||
+      completedRevision < previousRevision ||
+      completedRevision > revision
+    ) {
+      return undefined;
+    }
+    completions.push({ stepId: submitted.stepId, revision: completedRevision });
+    previousRevision = completedRevision;
+  }
+  return completions;
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {

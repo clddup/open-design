@@ -916,14 +916,6 @@ const MODEL_APPLY_TRANSACTION_SCHEMA = {
   properties: {
     label: { type: "string", minLength: 1, maxLength: 256 },
     summary: { type: "string", maxLength: 2_000 },
-    steps: {
-      type: "array",
-      minItems: 1,
-      maxItems: 32,
-      description:
-        "Ordered semantic steps. commandIds must cover commands once in order. Use navigation, hero, content, footer—not arbitrary batches.",
-      items: MODEL_APPLY_STEP_SCHEMA,
-    },
     commands: {
       type: "array",
       minItems: 1,

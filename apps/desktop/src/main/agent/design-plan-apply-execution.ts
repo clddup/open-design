@@ -18,7 +18,7 @@ export function bindApplyToActivePlanSteps(
   input: DesignApplyToolInput,
 ): DesignApplyToolInput {
   const active = activePlanStep(state);
-  if (!active || !input.steps || input.steps.length === 0) return input;
+  if (!active) return input;
 
   if (active.kind === "implementation") {
     return bindImplementationSteps(state, targetIds, input);
@@ -105,7 +105,6 @@ export function assertApplyPlanSteps(
   targetIds: readonly string[],
   steps: DesignApplyToolInput["steps"],
 ): void {
-  if (!steps || steps.length === 0) return;
   const flattened = flattenedPlanSteps(state);
   const activeIndex = flattened.findIndex(
     (step) => step.status === "in_progress",
@@ -114,6 +113,12 @@ export function assertApplyPlanSteps(
     throw designWorkflowError(
       "plan_step_state_invalid",
       "No executable Plan step is currently in progress",
+    );
+  }
+  if (!steps || steps.length === 0) {
+    throw designWorkflowError(
+      "plan_step_state_invalid",
+      "Main did not bind the design write to the current serial Plan step",
     );
   }
   const allowedTargets = new Set(targetIds);

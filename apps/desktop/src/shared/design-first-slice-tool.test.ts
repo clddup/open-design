@@ -192,14 +192,14 @@ describe("compact first-slice tool", () => {
     expect(result.value.targets[0]).toMatchObject({
       targetId: "home",
       pageId: "page_1",
-      frame: { frameId: "odr_run_slice_frame_home" },
+      frame: { frameId: "odr_run_slice_4_home_frame_home" },
       regions: [
         {
-          nodeId: "odr_run_slice_home_hero",
-          parentId: "odr_run_slice_frame_home",
+          nodeId: "odr_run_slice_4_home_home_hero",
+          parentId: "odr_run_slice_4_home_frame_home",
         },
       ],
-      qualityProfile: { safeNodeIds: ["odr_run_slice_home_hero"] },
+      qualityProfile: { safeNodeIds: ["odr_run_slice_4_home_home_hero"] },
     });
     expect(result.value.firstSlice).toMatchObject({
       targetId: "home",
@@ -208,17 +208,42 @@ describe("compact first-slice tool", () => {
           stageId: "hero_stage",
           elements: [
             {
-              id: "odr_run_slice_hero_panel",
-              parentId: "odr_run_slice_home_hero",
+              id: "odr_run_slice_4_home_hero_panel",
+              parentId: "odr_run_slice_4_home_home_hero",
             },
             {
-              id: "odr_run_slice_hero_title",
-              parentId: "odr_run_slice_home_hero",
+              id: "odr_run_slice_4_home_hero_title",
+              parentId: "odr_run_slice_4_home_home_hero",
             },
           ],
         },
       ],
     });
+  });
+
+  it("scopes repeated local IDs by target before global uniqueness checks", () => {
+    const input = fixture();
+    const profile = input.targets[1];
+    profile.frame.frameId = "frame_home";
+    profile.regions[0].nodeId = "home_hero";
+    profile.regions[0].parentId = "frame_home";
+
+    const result = FirstSliceContract.parse(providerInput(input), {
+      newNodeIdPrefix: "odr_run_slice_",
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("Expected target-scoped document IDs");
+    expect(result.value.targets.map((target) => target.frame.frameId)).toEqual([
+      "odr_run_slice_4_home_frame_home",
+      "odr_run_slice_7_profile_frame_home",
+    ]);
+    expect(
+      result.value.targets.map((target) => target.regions[0]?.nodeId),
+    ).toEqual([
+      "odr_run_slice_4_home_home_hero",
+      "odr_run_slice_7_profile_home_hero",
+    ]);
   });
 
   it("rejects stable or oversized document IDs from the compact Provider input", () => {
@@ -743,9 +768,9 @@ describe("compact first-slice tool", () => {
     });
     expect(hostBound?.logoExploration?.directions[0]).toMatchObject({
       conceptId: "concept_negative",
-      rootNodeId: "odr_run_logo_negative_root",
-      masterNodeId: "odr_run_logo_negative_master",
-      evidenceRootNodeId: "odr_run_logo_negative_evidence",
+      rootNodeId: "odr_run_logo_4_home_negative_root",
+      masterNodeId: "odr_run_logo_4_home_negative_master",
+      evidenceRootNodeId: "odr_run_logo_4_home_negative_evidence",
     });
 
     if (!normalized) throw new Error("Expected parsed Logo input");

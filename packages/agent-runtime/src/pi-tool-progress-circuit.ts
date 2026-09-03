@@ -18,6 +18,13 @@ export class PiToolProgressCircuit {
   ): TrustedToolFailure {
     if (!failure.recoverable || failure.runTerminal) return failure;
 
+    if (failure.code === "design_inspection_required") {
+      return terminalFailure(
+        "design_recovery_no_progress",
+        "The run ignored the required document inspection and attempted another design write. The run was stopped instead of continuing an invisible recovery loop. Already committed revisions are preserved.",
+      );
+    }
+
     if (failure.code === "invalid_tool_input") {
       const fingerprint = failureFingerprint(toolName, failure);
       const invalidInputs =
@@ -31,11 +38,6 @@ export class PiToolProgressCircuit {
       }
       return failure;
     }
-
-    // This is a host sequencing guard, not another occurrence of the
-    // underlying document failure. Counting it would terminate before the
-    // required inspection can run.
-    if (failure.code === "design_inspection_required") return failure;
 
     const fingerprint = failureFingerprint(toolName, failure);
     const recoverableFailures =

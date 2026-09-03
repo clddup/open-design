@@ -27,7 +27,6 @@ import { describe, expect, it } from "vitest";
 import {
   DESIGN_AGENT_TOOL_SPECS,
   DESIGN_EDIT_TOOL_NAME,
-  DESIGN_BOOTSTRAP_EDIT_TOOL_INPUT_SCHEMA,
   DESIGN_CAPABILITIES_TOOL_NAME,
   DESIGN_CAPTURE_TOOL_NAME,
   DESIGN_SYSTEM_TOOL_NAME,
@@ -223,7 +222,6 @@ describe("production Agent context budget", () => {
         DESIGN_FIRST_SLICE_TOOL_NAME,
         DESIGN_INSPECT_TOOL_NAME,
         READ_IMAGE_TOOL_NAME,
-        DESIGN_EDIT_TOOL_NAME,
       ]);
       expect(
         JSON.stringify(
@@ -312,7 +310,7 @@ describe("production Agent context budget", () => {
       expect(gateway.requests[0]?.tools).toContainEqual(
         expect.objectContaining({ name: DESIGN_INSPECT_TOOL_NAME }),
       );
-      expect(gateway.requests[0]?.tools).toContainEqual(
+      expect(gateway.requests[0]?.tools).not.toContainEqual(
         expect.objectContaining({ name: DESIGN_EDIT_TOOL_NAME }),
       );
       expect(gateway.requests[0]?.tools).not.toContainEqual(
@@ -329,11 +327,6 @@ describe("production Agent context budget", () => {
       expect(JSON.stringify(gateway.requests[0]?.tools).length).toBeLessThan(
         JSON.stringify(completeModelTools).length / 5,
       );
-      expect(
-        gateway.requests[0]?.tools.find(
-          (tool) => tool.name === DESIGN_EDIT_TOOL_NAME,
-        )?.inputSchema,
-      ).toEqual(DESIGN_BOOTSTRAP_EDIT_TOOL_INPUT_SCHEMA);
       expect(events).not.toContainEqual(
         expect.objectContaining({ type: "agent.error" }),
       );

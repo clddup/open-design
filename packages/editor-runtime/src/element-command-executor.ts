@@ -7,7 +7,6 @@ import {
 } from "@opendesign/design-contracts";
 import {
   assertComponentSourcesRemain,
-  assertIndex,
   assertPage,
   collectSubtreeIds,
   escapeJsonPointer,
@@ -72,7 +71,7 @@ function insertElement(
     command.parentId,
     command.commandId,
   );
-  assertIndex(target, command.index, command.commandId);
+  const insertionIndex = Math.min(command.index, target.length);
   document.nodesById[command.node.id] = structuredClone(command.node);
   const inserted = document.nodesById[command.node.id];
   if (inserted && command.parentId) {
@@ -81,7 +80,7 @@ function insertElement(
   if (inserted?.kind === "text") {
     prepareInsertedTextNode(inserted, command.commandId, context);
   }
-  target.splice(command.index, 0, command.node.id);
+  target.splice(insertionIndex, 0, command.node.id);
 }
 
 function updateProperties(
@@ -218,8 +217,7 @@ function moveElement(
     command.parentId,
     command.commandId,
   );
-  assertIndex(target, command.index, command.commandId);
-  target.splice(command.index, 0, command.nodeId);
+  target.splice(Math.min(command.index, target.length), 0, command.nodeId);
   node.parentId = command.parentId;
 }
 

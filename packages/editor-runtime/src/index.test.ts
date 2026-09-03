@@ -265,6 +265,43 @@ describe("document normalization", () => {
 });
 
 describe("EditorRuntime transactions", () => {
+  it("treats oversized element insert and move indices as front-most", () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    const inserted = runtime.apply(
+      transaction(runtime, "transaction_append_element", [
+        {
+          commandId: "append_element",
+          type: "insert_element",
+          pageId: "page_welcome",
+          parentId: "frame_welcome",
+          index: 20,
+          node: rectangle("appended", "frame_welcome"),
+        },
+      ]),
+    );
+    expect(inserted).toMatchObject({ ok: true });
+    expect(
+      runtime.getSnapshot().document.nodesById.frame_welcome?.childIds.at(-1),
+    ).toBe("appended");
+
+    const moved = runtime.apply(
+      transaction(runtime, "transaction_move_to_front", [
+        {
+          commandId: "move_to_front",
+          type: "move_element",
+          pageId: "page_welcome",
+          parentId: "frame_welcome",
+          nodeId: "title_welcome",
+          index: 10,
+        },
+      ]),
+    );
+    expect(moved).toMatchObject({ ok: true });
+    expect(
+      runtime.getSnapshot().document.nodesById.frame_welcome?.childIds.at(-1),
+    ).toBe("title_welcome");
+  });
+
   it("rejects kind-incompatible property patches at the responsible command", () => {
     const runtime = new EditorRuntime(createWelcomeDocument());
     const result = runtime.preview(

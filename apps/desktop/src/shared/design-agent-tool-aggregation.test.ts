@@ -186,7 +186,7 @@ describe("design Agent tool aggregation", () => {
       (tool) => tool.name === DESIGN_FIRST_SLICE_TOOL_NAME,
     );
     expect(firstSlice?.description).toContain(
-      "a new-design Run remains on its compact continuation surface",
+      "a new-design Run remains on a focused continuation surface",
     );
 
     const system = disclosedToolDefinitions(

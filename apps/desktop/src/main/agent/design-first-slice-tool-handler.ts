@@ -160,13 +160,17 @@ export async function handleDesignFirstSliceTool(
   coordinator.assertDesignApplyResult(context, authorization, applied);
   const registration = coordinator.commitDesignPlan(context, preparation);
   const allocationRevision = allocation
-    ? committedStepRevision(applied.content, allocationStepId!)
+    ? committedStepRevision(
+        applied.content,
+        allocationStepId!,
+        applied.designRevision?.revision,
+      )
     : coordinator
         .getDeliveryLedger(context.runId)
         ?.targets.find(
           (target) => target.targetId === input.firstSlice.targetId,
         )?.allocatedRevision;
-  if (allocation) {
+  if (allocation && allocationRevision !== undefined) {
     coordinator.recordDesignPlanAllocated(
       context.runId,
       allocation.targetIds,
@@ -214,12 +218,13 @@ export async function handleDesignFirstSliceTool(
   };
 }
 
-function committedStepRevision(content: unknown, stepId: string): number {
+function committedStepRevision(
+  content: unknown,
+  stepId: string,
+  fallbackRevision?: number,
+): number | undefined {
   if (!isRecord(content) || !Array.isArray(content.committedSteps)) {
-    throw designWorkflowError(
-      "allocation_revision_invalid",
-      "Combined first-slice transaction did not report semantic revisions",
-    );
+    return validRevision(fallbackRevision) ? fallbackRevision : undefined;
   }
   const committedSteps: unknown[] = content.committedSteps;
   const step = committedSteps.find(
@@ -233,12 +238,13 @@ function committedStepRevision(content: unknown, stepId: string): number {
     !Number.isSafeInteger(step.revision) ||
     Number(step.revision) < 1
   ) {
-    throw designWorkflowError(
-      "allocation_revision_invalid",
-      "Combined first-slice transaction did not expose the real artboard allocation revision",
-    );
+    return validRevision(fallbackRevision) ? fallbackRevision : undefined;
   }
   return Number(step.revision);
+}
+
+function validRevision(value: number | undefined): value is number {
+  return Number.isSafeInteger(value) && value !== undefined && value >= 1;
 }
 
 function uniqueStepId(base: string, used: ReadonlySet<string>): string {

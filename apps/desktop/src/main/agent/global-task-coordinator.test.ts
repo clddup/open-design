@@ -1099,7 +1099,7 @@ describe("GlobalTaskCoordinator", () => {
     store.close();
   });
 
-  it("records a staged Apply through real semantic revisions without skipping pending steps", async () => {
+  it("records a staged Apply through trusted final revision when semantic telemetry is absent", async () => {
     const { store, host, file, opened, pageId } = await setup();
     const coordinator = new GlobalTaskCoordinator(host, store);
     const runId = "run_staged_plan";
@@ -1144,23 +1144,15 @@ describe("GlobalTaskCoordinator", () => {
         { stepId: "add_states", label: "Add states", commandIds: [] },
       ],
     };
-    coordinator.recordDesignApplyCompleted(
-      runId,
-      input,
-      { input, plan, targetIds: ["workspace"] },
-      2,
-      {
-        committedSteps: [
-          {
-            stepIds: ["build_hierarchy"],
-            label: "Build hierarchy",
-            revision: 1,
-          },
-          { stepIds: ["add_states"], label: "Add states", revision: 2 },
-        ],
-      },
-    );
-
+    expect(() =>
+      coordinator.recordDesignApplyCompleted(
+        runId,
+        input,
+        { input, plan, targetIds: ["workspace"] },
+        2,
+        { ok: true },
+      ),
+    ).not.toThrow();
     expect(
       coordinator.getDeliveryLedger(runId)?.planExecution?.targets[0]?.steps,
     ).toMatchObject([
@@ -1168,12 +1160,12 @@ describe("GlobalTaskCoordinator", () => {
         stepId: "build_hierarchy",
         status: "completed",
         startedRevision: 0,
-        completedRevision: 1,
+        completedRevision: 2,
       },
       {
         stepId: "add_states",
         status: "completed",
-        startedRevision: 1,
+        startedRevision: 2,
         completedRevision: 2,
       },
       {

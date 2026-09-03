@@ -121,7 +121,7 @@ describe("PiToolProgressCircuit", () => {
     });
   });
 
-  it("does not count the required inspection guard as a repeated document failure", () => {
+  it("stops when the model ignores a required inspection and repeats the write", () => {
     const circuit = new PiToolProgressCircuit();
     const details: TrustedToolFailure["details"] = {
       kind: "design-transaction",
@@ -146,15 +146,9 @@ describe("PiToolProgressCircuit", () => {
       }),
     ).not.toHaveProperty("runTerminal");
     expect(
-      circuit.recordFailure("opendesign_apply_transaction", {
+      circuit.recordFailure("opendesign_edit_design", {
         ...recoverableFailure,
         code: "design_inspection_required",
-        details,
-      }),
-    ).not.toHaveProperty("runTerminal");
-    expect(
-      circuit.recordFailure("opendesign_apply_transaction", {
-        ...recoverableFailure,
         details,
       }),
     ).toMatchObject({

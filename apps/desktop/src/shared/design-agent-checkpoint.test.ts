@@ -262,21 +262,14 @@ describe("design checkpoint contract", () => {
       action: "refine-and-capture",
       refinement: {
         label: "Refine the title and badge",
-        steps: [
-          {
-            stepId: "cleanup",
-            label: "Remove obsolete badge",
-            commandIds: ["remove_badge"],
-          },
-        ],
         commands: [
           {
-            commandId: "remove_badge",
+            commandId: "remove_obsolete",
             type: "delete_element",
             nodeId: "obsolete_badge",
           },
           {
-            commandId: "remove_hint",
+            commandId: "remove_obsolete",
             type: "delete_element",
             nodeId: "obsolete_hint",
           },
@@ -287,8 +280,8 @@ describe("design checkpoint contract", () => {
     expect(issues).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          code: "design_apply.step_command_order_invalid",
-          path: "/refinement/steps",
+          code: "design.transaction_command_id_duplicate",
+          path: "/refinement/commands/1/commandId",
         }),
       ]),
     );

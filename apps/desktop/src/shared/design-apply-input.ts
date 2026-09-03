@@ -302,9 +302,6 @@ function compileModelApply(
   return {
     label: input.label,
     ...(input.summary === undefined ? {} : { summary: input.summary }),
-    ...(input.steps === undefined
-      ? {}
-      : { steps: structuredClone(input.steps) }),
     commands: input.commands.map((command) =>
       compileModelDesignOperation(command),
     ) as DesignOperation[],

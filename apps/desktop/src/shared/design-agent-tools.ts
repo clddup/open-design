@@ -16,7 +16,6 @@ export type {
   InternalDesignEditToolEdit,
   InternalDesignEditToolInput,
 } from "./design-edit-tool";
-export { DESIGN_BOOTSTRAP_APPLY_INPUT_SCHEMA } from "./design-bootstrap-apply-schema";
 export type { DesignBriefFidelity } from "./design-brief-fidelity";
 export {
   DeliveryScopeContract,

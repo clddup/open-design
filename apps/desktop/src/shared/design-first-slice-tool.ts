@@ -125,16 +125,21 @@ function bindFirstSliceLocalDocumentIds(
   input: DesignFirstSliceModelInput,
   prefix: string,
 ): DesignFirstSliceModelInput {
-  const stableId = (localId: string) => `${prefix}${localId}`;
+  const stableId = (targetId: string, localId: string) =>
+    `${prefix}${targetId.length}_${targetId}_${localId}`;
+  const logoExploration = input.logoExploration;
   return {
     ...input,
     targets: input.targets.map((target) => ({
       ...target,
-      frame: { ...target.frame, frameId: stableId(target.frame.frameId) },
+      frame: {
+        ...target.frame,
+        frameId: stableId(target.targetId, target.frame.frameId),
+      },
       regions: target.regions.map((region) => ({
         ...region,
-        nodeId: stableId(region.nodeId),
-        parentId: stableId(region.parentId),
+        nodeId: stableId(target.targetId, region.nodeId),
+        parentId: stableId(target.targetId, region.parentId),
       })),
     })),
     firstSlice: {
@@ -143,21 +148,30 @@ function bindFirstSliceLocalDocumentIds(
         ...stage,
         elements: stage.elements.map((element) => ({
           ...element,
-          id: stableId(element.id),
-          parentId: stableId(element.parentId),
+          id: stableId(input.firstSlice.targetId, element.id),
+          parentId: stableId(input.firstSlice.targetId, element.parentId),
         })),
       })),
     },
-    ...(input.logoExploration === undefined
+    ...(logoExploration === undefined
       ? {}
       : {
           logoExploration: {
-            ...input.logoExploration,
-            directions: input.logoExploration.directions.map((direction) => ({
+            ...logoExploration,
+            directions: logoExploration.directions.map((direction) => ({
               ...direction,
-              rootNodeId: stableId(direction.rootNodeId),
-              masterNodeId: stableId(direction.masterNodeId),
-              evidenceRootNodeId: stableId(direction.evidenceRootNodeId),
+              rootNodeId: stableId(
+                logoExploration.targetId,
+                direction.rootNodeId,
+              ),
+              masterNodeId: stableId(
+                logoExploration.targetId,
+                direction.masterNodeId,
+              ),
+              evidenceRootNodeId: stableId(
+                logoExploration.targetId,
+                direction.evidenceRootNodeId,
+              ),
             })),
           },
         }),

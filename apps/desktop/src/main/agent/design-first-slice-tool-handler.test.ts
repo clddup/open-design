@@ -167,17 +167,17 @@ describe("handleDesignFirstSliceTool", () => {
     if (!boundInput) throw new Error("Expected host-bound First Slice input");
     const stableCompiled = compileDesignFirstSliceToolInput(boundInput);
     expect(boundInput.targets[0]).toMatchObject({
-      frame: { frameId: "odr_run_slice_frame_home" },
+      frame: { frameId: "odr_run_slice_4_home_frame_home" },
       regions: [
         {
-          nodeId: "odr_run_slice_home_hero",
-          parentId: "odr_run_slice_frame_home",
+          nodeId: "odr_run_slice_4_home_home_hero",
+          parentId: "odr_run_slice_4_home_frame_home",
         },
       ],
     });
     expect(boundInput.firstSlice.stages[0].elements[0]).toMatchObject({
-      id: "odr_run_slice_hero_title",
-      parentId: "odr_run_slice_home_hero",
+      id: "odr_run_slice_4_home_hero_title",
+      parentId: "odr_run_slice_4_home_home_hero",
     });
     expect(coordinator.recordDesignApplyCompleted).toHaveBeenCalledWith(
       "run_slice",

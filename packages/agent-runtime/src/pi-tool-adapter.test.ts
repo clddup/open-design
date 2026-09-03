@@ -639,7 +639,7 @@ describe("OpenDesign Pi tool adapter", () => {
     ).toBe(true);
   });
 
-  it("requires inspection after a structured failure and keeps repeated failures bounded", async () => {
+  it("stops a Run when the model ignores required inspection", async () => {
     let moveExecutions = 0;
     let inspectExecutions = 0;
     const gateway = new RecordingGateway(
@@ -711,27 +711,22 @@ describe("OpenDesign Pi tool adapter", () => {
       },
     });
 
-    expect(moveExecutions).toBe(2);
-    expect(inspectExecutions).toBe(1);
+    expect(moveExecutions).toBe(1);
+    expect(inspectExecutions).toBe(0);
     const failures = result.events.filter(
       (event) => event.type === "tool.failed",
     );
-    expect(failures).toHaveLength(3);
+    expect(failures).toHaveLength(2);
     expect(failures[0]).toMatchObject({
       code: "design.invalid",
       recoverable: true,
       details: { attempt: 1, maxAttempts: 2 },
     });
     expect(failures[1]).toMatchObject({
-      code: "design_inspection_required",
-      recoverable: true,
-      details: { retrySuppressed: true },
-    });
-    expect(failures[2]).toMatchObject({
       code: "design_recovery_no_progress",
       recoverable: false,
     });
-    expect(failures[2]).not.toHaveProperty("details");
+    expect(failures[1]).not.toHaveProperty("details");
     for (const event of result.events) {
       expect(AgentEventContract.parse(event)).toMatchObject({ ok: true });
     }
@@ -746,11 +741,11 @@ describe("OpenDesign Pi tool adapter", () => {
       stopReason: "error",
     });
     expect(result.adapter.unresolvedDesignWriteFailure).toMatchObject({
-      toolCallId: "invalid_design_call_3",
+      toolCallId: "invalid_design_call_1",
       toolName: moveTool.name,
       code: "design.invalid",
       inspectionCompleted: false,
-      details: { attempt: 2, maxAttempts: 2, retrySuppressed: true },
+      details: { attempt: 1, maxAttempts: 2 },
     });
     expect(JSON.stringify(gateway.requests[1]?.messages)).toContain(
       "node_tool",

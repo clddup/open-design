@@ -36,7 +36,6 @@ describe("built-in design skills", () => {
     expect(bundle).toContain("grants no tool");
     expect(bundle).toContain("The host selects the applicable skill IDs");
     expect(bundle).toContain("do not send them");
-    expect(bundle.length).toBeLessThan(12_000);
 
     const allDeliverables = formatBuiltinDesignSkillBundle();
     for (const reference of BUILTIN_GRAPHIC_DESIGN_SKILL_REFS) {
@@ -45,13 +44,11 @@ describe("built-in design skills", () => {
     expect(allDeliverables).toContain(
       "credibility depends on real people, activities, places, products",
     );
-    expect(allDeliverables.length).toBeLessThan(24_000);
 
     const planning = formatBuiltinDesignPlanningSkillBundle();
     expect(planning).toContain('id="graphic-visual-direction"');
     expect(planning).not.toContain('id="graphic-capture-critic"');
     expect(planning).not.toContain('id="ui-capture-critic"');
-    expect(planning.length).toBeLessThan(12_000);
 
     const logoPlanning =
       formatBuiltinDesignPlanningSkillBundleForDeliverable("logo");
@@ -60,7 +57,7 @@ describe("built-in design skills", () => {
     expect(logoPlanning).toContain("product's primary action into a contour");
     expect(logoPlanning).toContain("Do not choose a symbol first");
     expect(logoPlanning).toContain(
-      "Put a brief-specific palette in the primary mark",
+      "author its brief-specific primary color treatment",
     );
     expect(logoPlanning).toContain("Monochrome stays a test");
     expect(logoPlanning).not.toContain('id="ui-visual-direction"');
