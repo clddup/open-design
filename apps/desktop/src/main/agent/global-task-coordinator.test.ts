@@ -2848,9 +2848,17 @@ describe("GlobalTaskCoordinator", () => {
     if (misidentifiedHomeDraft.steps?.[0]) {
       misidentifiedHomeDraft.steps[0].stepId = "invented-implementation-step";
     }
-    expect(() =>
-      coordinator.assertDesignPlanForApply(context, misidentifiedHomeDraft),
-    ).toThrow("design_workflow.plan_step_order_invalid");
+    const reboundDraft = coordinator.assertDesignPlanForApply(
+      context,
+      misidentifiedHomeDraft,
+    );
+    expect(reboundDraft?.input.steps?.[0]).toMatchObject({
+      stepId: "build_content",
+      label: "Build its content",
+    });
+    expect(reboundDraft?.input.steps?.[0]?.commandIds).toEqual(
+      reboundDraft?.input.commands.map((command) => command.commandId),
+    );
     const draftAuthorization = coordinator.assertDesignPlanForApply(
       context,
       homeDraft,
@@ -3376,7 +3384,47 @@ describe("GlobalTaskCoordinator", () => {
       contextAfterScope,
       {
         label: "Build the first recorded target",
+        steps: [
+          {
+            stepId: "brand-intro",
+            label: "Build brand introduction",
+            commandIds: ["insert_scope_region"],
+          },
+          {
+            stepId: "theme-tokens",
+            label: "Build theme tokens",
+            commandIds: ["insert_scope_material"],
+          },
+        ],
         commands: [
+          {
+            commandId: "insert_scope_region",
+            type: "insert_element",
+            pageId,
+            parentId: boundTarget.artboard.frameId,
+            index: 0,
+            node: {
+              id: boundRegion.nodeId,
+              kind: "frame",
+              name: "Authored region",
+              parentId: boundTarget.artboard.frameId,
+              childIds: [],
+              visible: true,
+              locked: false,
+              transform: [1, 0, 0, 1, 0, 0],
+              size: { width: 1, height: 1 },
+              exportSettings: [],
+              opacity: 0.9,
+              properties: {
+                fills: [{ type: "solid", color: "#173D36", opacity: 1 }],
+                strokes: [],
+                strokeWidth: 0,
+                cornerRadius: 24,
+                clipsContent: true,
+              },
+              extensions: {},
+            },
+          },
           {
             ...materialTemplate,
             commandId: "insert_scope_material",
@@ -3394,12 +3442,39 @@ describe("GlobalTaskCoordinator", () => {
       {
         commandId: `materialize_region_${boundRegion.nodeId}`,
         parentId: boundTarget.artboard.frameId,
-        node: { id: boundRegion.nodeId, kind: "frame" },
+        node: {
+          id: boundRegion.nodeId,
+          kind: "frame",
+          opacity: 0.9,
+          transform: [1, 0, 0, 1, boundRegion.x, boundRegion.y],
+          size: { width: boundRegion.width, height: boundRegion.height },
+          properties: {
+            fills: [{ type: "solid", color: "#173D36", opacity: 1 }],
+            cornerRadius: 24,
+            clipsContent: true,
+          },
+        },
       },
       {
         commandId: "insert_scope_material",
         parentId: boundRegion.nodeId,
         node: { id: materialNodeId },
+      },
+    ]);
+    expect(
+      authorization?.input.commands.filter(
+        (command) =>
+          command.type === "insert_element" &&
+          command.node.id === boundRegion.nodeId,
+      ),
+    ).toHaveLength(1);
+    expect(authorization?.input.steps).toEqual([
+      {
+        stepId: boundTarget.implementationSteps[0]?.stepId,
+        label: boundTarget.implementationSteps[0]?.label,
+        commandIds: authorization?.input.commands.map(
+          (command) => command.commandId,
+        ),
       },
     ]);
     const ledger = coordinator.getDeliveryLedger(context.runId);

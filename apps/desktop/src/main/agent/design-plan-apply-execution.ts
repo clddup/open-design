@@ -7,13 +7,22 @@ type ActivePlanStep =
     targetId: string;
   };
 
-export function bindApplyToActiveReviewStep(
-  state: DesignWorkflowState,
+type PlanExecutionState = Pick<
+  DesignWorkflowState,
+  "planExecution" | "targetsById"
+>;
+
+export function bindApplyToActivePlanSteps(
+  state: PlanExecutionState,
   targetIds: readonly string[],
   input: DesignApplyToolInput,
 ): DesignApplyToolInput {
   const active = activePlanStep(state);
-  if (active?.kind !== "review-refine") return input;
+  if (!active || !input.steps || input.steps.length === 0) return input;
+
+  if (active.kind === "implementation") {
+    return bindImplementationSteps(state, targetIds, input);
+  }
 
   const target = state.targetsById.get(active.targetId);
   if (
@@ -36,8 +45,63 @@ export function bindApplyToActiveReviewStep(
   };
 }
 
+function bindImplementationSteps(
+  state: PlanExecutionState,
+  targetIds: readonly string[],
+  input: DesignApplyToolInput,
+): DesignApplyToolInput {
+  const flattened = flattenedPlanSteps(state);
+  const activeIndex = flattened.findIndex(
+    (step) => step.status === "in_progress",
+  );
+  const active = flattened[activeIndex];
+  const allowedTargets = new Set(targetIds);
+  const submittedStepsAreAuthoritative = input.steps?.every(
+    (submitted, offset) => {
+      const expected = flattened[activeIndex + offset];
+      return (
+        expected?.kind === "implementation" &&
+        allowedTargets.has(expected.targetId) &&
+        expected.stepId === submitted.stepId &&
+        (offset === 0 || expected.status === "pending")
+      );
+    },
+  );
+  if (submittedStepsAreAuthoritative && input.steps) {
+    return {
+      ...input,
+      steps: input.steps.map((submitted, offset) => {
+        const expected = flattened[activeIndex + offset];
+        return {
+          stepId: expected?.stepId ?? submitted.stepId,
+          label: expected?.label ?? submitted.label,
+          commandIds: submitted.commandIds,
+        };
+      }),
+    };
+  }
+  if (
+    !active ||
+    active.kind !== "implementation" ||
+    targetIds.length !== 1 ||
+    targetIds[0] !== active.targetId
+  ) {
+    return input;
+  }
+  return {
+    ...input,
+    steps: [
+      {
+        stepId: active.stepId,
+        label: active.label,
+        commandIds: input.commands.map((command) => command.commandId),
+      },
+    ],
+  };
+}
+
 export function assertApplyPlanSteps(
-  state: DesignWorkflowState,
+  state: PlanExecutionState,
   targetIds: readonly string[],
   steps: DesignApplyToolInput["steps"],
 ): void {
@@ -61,22 +125,20 @@ export function assertApplyPlanSteps(
   assertImplementationSteps(allowedTargets, flattened, activeIndex, steps);
 }
 
-function activePlanStep(
-  state: DesignWorkflowState,
-): ActivePlanStep | undefined {
+function activePlanStep(state: PlanExecutionState): ActivePlanStep | undefined {
   return flattenedPlanSteps(state).find(
     (step) => step.status === "in_progress",
   );
 }
 
-function flattenedPlanSteps(state: DesignWorkflowState): ActivePlanStep[] {
+function flattenedPlanSteps(state: PlanExecutionState): ActivePlanStep[] {
   return state.planExecution.targets.flatMap((target) =>
     target.steps.map((step) => ({ ...step, targetId: target.targetId })),
   );
 }
 
 function assertReviewStep(
-  state: DesignWorkflowState,
+  state: PlanExecutionState,
   allowedTargets: ReadonlySet<string>,
   active: ActivePlanStep,
   steps: NonNullable<DesignApplyToolInput["steps"]>,

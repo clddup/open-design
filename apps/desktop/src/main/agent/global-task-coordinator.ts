@@ -86,7 +86,7 @@ import {
 } from "./delivery-scope-artboard-allocation.js";
 import {
   assertApplyPlanSteps,
-  bindApplyToActiveReviewStep,
+  bindApplyToActivePlanSteps,
 } from "./design-plan-apply-execution.js";
 
 type RunStartRequest = Extract<AgentRequest, { type: "run.start" }>;
@@ -1569,9 +1569,13 @@ export class GlobalTaskCoordinator {
       this.#requireDesignPlan(context);
       return undefined;
     }
-    const resolvedInput = resolvePlannedStructureGeometry(scopedInput, state);
+    const resolvedInput = resolvePlannedStructureGeometry(
+      scopedInput,
+      state,
+      this.#deliveryScopeAllocationsByRunId.get(context.runId),
+    );
     const targetIds = [...assertPlannedTargetWrites(resolvedInput, state)];
-    const boundInput = bindApplyToActiveReviewStep(
+    const boundInput = bindApplyToActivePlanSteps(
       state,
       targetIds,
       resolvedInput,
@@ -1672,7 +1676,11 @@ export class GlobalTaskCoordinator {
         );
       }
     }
-    const resolvedInput = resolvePlannedStructureGeometry(input, state);
+    const resolvedInput = resolvePlannedStructureGeometry(
+      input,
+      state,
+      this.#deliveryScopeAllocationsByRunId.get(context.runId),
+    );
     const targetIds = [
       ...assertPlannedTargetWrites(
         resolvedInput,
@@ -1680,7 +1688,7 @@ export class GlobalTaskCoordinator {
         assumedAllocatedTargetIds,
       ),
     ];
-    const boundInput = bindApplyToActiveReviewStep(
+    const boundInput = bindApplyToActivePlanSteps(
       state,
       targetIds,
       resolvedInput,
@@ -2335,6 +2343,7 @@ function assertNewNodeIdHasPrefix(nodeId: string, prefix: string): void {
 function resolvePlannedStructureGeometry(
   input: DesignApplyToolInput,
   state: DesignWorkflowState,
+  scopeAllocations?: ReadonlyMap<string, DeliveryScopeArtboardAllocation>,
 ): DesignApplyToolInput {
   const plannedNodes = new Map<
     string,
@@ -2362,7 +2371,12 @@ function resolvePlannedStructureGeometry(
         region,
         target,
       });
-      if (target.planned.artboard.mode !== "create") continue;
+      if (
+        target.planned.artboard.mode !== "create" &&
+        !scopeAllocations?.has(target.delivery.targetId)
+      ) {
+        continue;
+      }
       registerPlannedNode(plannedNodes, region.nodeId, {
         kind: "region",
         region,
@@ -2399,6 +2413,16 @@ function resolvePlannedStructureGeometry(
   const usedCommandIds = new Set(
     input.commands.map((command) => command.commandId),
   );
+  const authoredRegionsById = new Map(
+    input.commands.flatMap((command) => {
+      if (command.type !== "insert_element") return [];
+      const planned = plannedNodes.get(command.node.id);
+      return planned?.kind === "region" &&
+        (command.node.kind === "group" || command.node.kind === "frame")
+        ? [[command.node.id, command.node] as const]
+        : [];
+    }),
+  );
   const injectedBefore = new Map<string, DesignOperation[]>();
   const hostOwnedRegionCommandIds = new Set<string>();
   const ensureRegion = (regionId: string, output: DesignOperation[]): void => {
@@ -2421,7 +2445,11 @@ function resolvePlannedStructureGeometry(
       pageId: planned.target.planned.pageId,
       parentId,
       index,
-      node: plannedRegionFrame(planned.region, parentId),
+      node: plannedRegionFrame(
+        planned.region,
+        parentId,
+        authoredRegionsById.get(regionId),
+      ),
     });
     availableNodeIds.add(regionId);
     changed = true;
@@ -2561,27 +2589,32 @@ function uniqueGeneratedCommandId(
 function plannedRegionFrame(
   region: DesignPlanTarget["composition"]["regions"][number],
   parentId: string,
+  authored?: Extract<DesignOperation, { type: "insert_element" }>["node"],
 ): Extract<DesignOperation, { type: "insert_element" }>["node"] {
+  const authoredFrame = authored?.kind === "frame" ? authored : undefined;
   return {
     id: region.nodeId,
     name: region.name,
     kind: "frame",
     parentId,
     childIds: [],
-    visible: true,
-    locked: false,
+    visible: authored?.visible ?? true,
+    locked: authored?.locked ?? false,
     transform: [1, 0, 0, 1, region.x, region.y],
     size: { width: region.width, height: region.height },
-    exportSettings: [],
-    opacity: 1,
-    properties: {
+    exportSettings: authored?.exportSettings ?? [],
+    opacity: authored?.opacity ?? 1,
+    properties: authoredFrame?.properties ?? {
       fills: [],
       strokes: [],
       strokeWidth: 0,
       cornerRadius: 0,
       clipsContent: false,
     },
-    extensions: { generatedBy: "host-planned-region" },
+    extensions: {
+      ...authored?.extensions,
+      generatedBy: "host-planned-region",
+    },
   };
 }
 
