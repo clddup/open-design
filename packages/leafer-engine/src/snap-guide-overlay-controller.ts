@@ -89,8 +89,12 @@ export class SnapGuideOverlayController {
 }
 
 export function snapGuideLinePath(line: SnapGuideLine): string {
-  if ("kind" in line) {
+  if ("kind" in line && line.kind === "segment") {
     return `M ${line.start.x} ${line.start.y} L ${line.end.x} ${line.end.y}`;
+  }
+  if ("kind" in line) {
+    const { x, y } = line.position;
+    return `M ${x - line.radius} ${y} A ${line.radius} ${line.radius} 0 1 0 ${x + line.radius} ${y} A ${line.radius} ${line.radius} 0 1 0 ${x - line.radius} ${y}`;
   }
   return line.axis === "x"
     ? `M ${line.position} ${line.range.start} L ${line.position} ${line.range.end}`

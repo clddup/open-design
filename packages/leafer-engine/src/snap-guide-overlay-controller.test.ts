@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { snapGuideLinePath } from "./snap-guide-overlay-controller.js";
 
 describe("snapGuideLinePath", () => {
-  it("projects axis and arbitrary segment smart guides", () => {
+  it("projects axis, segment, and exact-point smart guides", () => {
     expect(
       snapGuideLinePath({
         axis: "x",
@@ -19,5 +19,13 @@ describe("snapGuideLinePath", () => {
         source: "guide",
       }),
     ).toBe("M 2 3 L 17 29");
+    expect(
+      snapGuideLinePath({
+        kind: "point",
+        position: { x: 20, y: 30 },
+        radius: 3,
+        source: "geometry",
+      }),
+    ).toBe("M 17 30 A 3 3 0 1 0 23 30 A 3 3 0 1 0 17 30");
   });
 });

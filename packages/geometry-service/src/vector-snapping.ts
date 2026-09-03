@@ -1,7 +1,18 @@
-import type { Point } from "@opendesign/design-contracts";
+import type { Point, Rect } from "@opendesign/design-contracts";
+import {
+  nearestPointOnDirectedVectorCurve,
+  type DirectedVectorCurve,
+} from "./vector-segment-geometry.js";
 import type { SnapAxis, SnapGuideLine } from "./snapping.js";
 
 export interface VectorSnapPoint extends Point {
+  excludedPathTargetIds?: readonly string[];
+  id: string;
+}
+
+export interface VectorSnapPathTarget {
+  bounds: Rect;
+  curve: DirectedVectorCurve;
   id: string;
 }
 
@@ -10,14 +21,28 @@ export interface VectorSnapTargetIndex {
   y: readonly VectorSnapPoint[];
 }
 
-export interface VectorSnapMatch {
+export interface VectorAxisSnapMatch {
   axis: SnapAxis;
   delta: number;
+  kind: "axis";
   movingPointId: string;
   source: "geometry" | "pixel-grid";
   targetPointId: string;
   targetPosition: number;
 }
+
+export interface VectorPathSnapMatch {
+  delta: Point;
+  distance: number;
+  kind: "path";
+  movingPointId: string;
+  source: "geometry";
+  t: number;
+  targetPathId: string;
+  targetPoint: Point;
+}
+
+export type VectorSnapMatch = VectorAxisSnapMatch | VectorPathSnapMatch;
 
 export interface VectorSnapResolution {
   delta: Point;
@@ -25,7 +50,7 @@ export interface VectorSnapResolution {
   matches: readonly VectorSnapMatch[];
 }
 
-type ResolvedVectorAxis = VectorSnapMatch & {
+type ResolvedVectorAxis = VectorAxisSnapMatch & {
   movingPoint: VectorSnapPoint;
   targetPoint?: VectorSnapPoint;
 };
@@ -39,8 +64,32 @@ export function createVectorSnapTargetIndex(
   };
 }
 
+export function createVectorSnapPathTarget(
+  id: string,
+  curve: DirectedVectorCurve,
+): VectorSnapPathTarget {
+  const controlStart = add(curve.start, curve.tangentStart ?? { x: 0, y: 0 });
+  const controlEnd = add(curve.end, curve.tangentEnd ?? { x: 0, y: 0 });
+  const points = [curve.start, controlStart, controlEnd, curve.end];
+  const x = points.map((point) => point.x);
+  const y = points.map((point) => point.y);
+  const minimumX = Math.min(...x);
+  const minimumY = Math.min(...y);
+  return {
+    bounds: {
+      height: Math.max(...y) - minimumY,
+      width: Math.max(...x) - minimumX,
+      x: minimumX,
+      y: minimumY,
+    },
+    curve,
+    id,
+  };
+}
+
 export function resolveVectorPointSnapping(input: {
   movingPoints: readonly VectorSnapPoint[];
+  paths?: readonly VectorSnapPathTarget[];
   pixelGrid: boolean;
   rawDelta: Point;
   targets: VectorSnapTargetIndex;
@@ -49,6 +98,23 @@ export function resolveVectorPointSnapping(input: {
   const x = resolveVectorAxis("x", input);
   const y = resolveVectorAxis("y", input);
   const matches = [x, y].flatMap((match) => (match ? [match] : []));
+  if (!matches.some(({ source }) => source === "geometry")) {
+    const path = resolveVectorPath(input);
+    if (path) {
+      return {
+        delta: add(input.rawDelta, path.delta),
+        lines: [
+          {
+            kind: "point",
+            position: path.targetPoint,
+            radius: Math.max(input.threshold * 0.6, 0.000_001),
+            source: "geometry",
+          },
+        ],
+        matches: [path],
+      };
+    }
+  }
   const delta = {
     x: input.rawDelta.x + (x?.delta ?? 0),
     y: input.rawDelta.y + (y?.delta ?? 0),
@@ -63,6 +129,7 @@ export function resolveVectorPointSnapping(input: {
       ({
         axis,
         delta: snapDelta,
+        kind,
         movingPointId,
         source,
         targetPointId,
@@ -70,6 +137,7 @@ export function resolveVectorPointSnapping(input: {
       }) => ({
         axis,
         delta: snapDelta,
+        kind,
         movingPointId,
         source,
         targetPointId,
@@ -101,6 +169,7 @@ function resolveVectorAxis(
       ).map((targetPoint) => ({
         axis,
         delta: targetPoint[axis] - position,
+        kind: "axis" as const,
         movingPoint,
         movingPointId: movingPoint.id,
         source: "geometry" as const,
@@ -130,6 +199,7 @@ function resolveVectorPixelAxis(
       return {
         axis,
         delta: targetPosition - position,
+        kind: "axis" as const,
         movingPoint,
         movingPointId: movingPoint.id,
         source: "pixel-grid" as const,
@@ -139,6 +209,64 @@ function resolveVectorPixelAxis(
     })
     .filter(({ delta }) => Math.abs(delta) <= input.threshold)
     .sort(compareVectorMatches)[0];
+}
+
+function resolveVectorPath(input: {
+  movingPoints: readonly VectorSnapPoint[];
+  paths?: readonly VectorSnapPathTarget[];
+  rawDelta: Point;
+  threshold: number;
+}): VectorPathSnapMatch | undefined {
+  return input.movingPoints
+    .flatMap((movingPoint) => {
+      const point = add(movingPoint, input.rawDelta);
+      const excluded = new Set(movingPoint.excludedPathTargetIds ?? []);
+      return (input.paths ?? []).flatMap((target) => {
+        if (
+          excluded.has(target.id) ||
+          !pointWithinBounds(point, target.bounds, input.threshold)
+        ) {
+          return [];
+        }
+        const hit = nearestPointOnDirectedVectorCurve(target.curve, point);
+        return hit.distance <= input.threshold
+          ? [
+              {
+                delta: subtract(hit.point, point),
+                distance: hit.distance,
+                kind: "path" as const,
+                movingPointId: movingPoint.id,
+                source: "geometry" as const,
+                t: hit.t,
+                targetPathId: target.id,
+                targetPoint: hit.point,
+              },
+            ]
+          : [];
+      });
+    })
+    .sort(comparePathMatches)[0];
+}
+
+function pointWithinBounds(point: Point, bounds: Rect, threshold: number) {
+  return (
+    point.x >= bounds.x - threshold &&
+    point.x <= bounds.x + bounds.width + threshold &&
+    point.y >= bounds.y - threshold &&
+    point.y <= bounds.y + bounds.height + threshold
+  );
+}
+
+function comparePathMatches(
+  left: VectorPathSnapMatch,
+  right: VectorPathSnapMatch,
+): number {
+  return (
+    left.distance - right.distance ||
+    left.movingPointId.localeCompare(right.movingPointId) ||
+    left.targetPathId.localeCompare(right.targetPathId) ||
+    left.t - right.t
+  );
 }
 
 function nearbyVectorPoints(
@@ -210,4 +338,12 @@ function compareVectorMatches(
 function pointComparator(axis: SnapAxis) {
   return (left: VectorSnapPoint, right: VectorSnapPoint) =>
     left[axis] - right[axis] || left.id.localeCompare(right.id);
+}
+
+function add(left: Point, right: Point): Point {
+  return { x: left.x + right.x, y: left.y + right.y };
+}
+
+function subtract(left: Point, right: Point): Point {
+  return { x: left.x - right.x, y: left.y - right.y };
 }

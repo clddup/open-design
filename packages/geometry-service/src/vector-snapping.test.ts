@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  createVectorSnapPathTarget,
   createVectorSnapTargetIndex,
   resolveVectorPointSnapping,
 } from "./vector-snapping.js";
@@ -94,6 +95,128 @@ describe("resolveVectorPointSnapping", () => {
     });
 
     expect(result.delta).toEqual({ x: 10, y: 10 });
+    expect(result.matches).toEqual([]);
+  });
+
+  it("snaps to the nearest point on a line as one two-dimensional match", () => {
+    const result = resolveVectorPointSnapping({
+      movingPoints: [{ id: "moving", x: 0, y: 0 }],
+      paths: [
+        createVectorSnapPathTarget("line", {
+          start: { x: 0, y: 50 },
+          startVertexId: "a",
+          end: { x: 100, y: 50 },
+          endVertexId: "b",
+        }),
+      ],
+      pixelGrid: false,
+      rawDelta: { x: 48, y: 47 },
+      targets: createVectorSnapTargetIndex([]),
+      threshold: 5,
+    });
+
+    expect(result.delta).toEqual({ x: 48, y: 50 });
+    expect(result.matches).toEqual([
+      expect.objectContaining({
+        kind: "path",
+        movingPointId: "moving",
+        targetPathId: "line",
+        targetPoint: { x: 48, y: 50 },
+      }),
+    ]);
+    expect(result.lines).toEqual([
+      {
+        kind: "point",
+        position: { x: 48, y: 50 },
+        radius: 3,
+        source: "geometry",
+      },
+    ]);
+  });
+
+  it("resolves a cubic nearest point instead of sampling a point cloud", () => {
+    const result = resolveVectorPointSnapping({
+      movingPoints: [{ id: "moving", x: 0, y: 0 }],
+      paths: [
+        createVectorSnapPathTarget("cubic", {
+          start: { x: 0, y: 0 },
+          startVertexId: "a",
+          tangentStart: { x: 0, y: 100 },
+          end: { x: 100, y: 0 },
+          endVertexId: "b",
+          tangentEnd: { x: 0, y: 100 },
+        }),
+      ],
+      pixelGrid: false,
+      rawDelta: { x: 50, y: 79 },
+      targets: createVectorSnapTargetIndex([]),
+      threshold: 5,
+    });
+
+    expect(result.delta.x).toBeCloseTo(50, 5);
+    expect(result.delta.y).toBeCloseTo(75, 5);
+    expect(result.matches[0]).toMatchObject({
+      kind: "path",
+      t: 0.5,
+      targetPathId: "cubic",
+    });
+  });
+
+  it("keeps point geometry ahead of paths and paths ahead of pixel grid", () => {
+    const path = createVectorSnapPathTarget("line", {
+      start: { x: 0, y: 50 },
+      startVertexId: "a",
+      end: { x: 100, y: 50 },
+      endVertexId: "b",
+    });
+    const point = resolveVectorPointSnapping({
+      movingPoints: [{ id: "moving", x: 0, y: 0 }],
+      paths: [path],
+      pixelGrid: true,
+      rawDelta: { x: 48.4, y: 49.2 },
+      targets: createVectorSnapTargetIndex([{ id: "point", x: 50, y: 200 }]),
+      threshold: 5,
+    });
+    expect(point.delta).toEqual({ x: 50, y: 49 });
+    expect(point.matches.map(({ kind }) => kind)).toEqual(["axis", "axis"]);
+
+    const pathBeforePixel = resolveVectorPointSnapping({
+      movingPoints: [{ id: "moving", x: 0, y: 0 }],
+      paths: [path],
+      pixelGrid: true,
+      rawDelta: { x: 48.4, y: 49.2 },
+      targets: createVectorSnapTargetIndex([]),
+      threshold: 5,
+    });
+    expect(pathBeforePixel.delta).toEqual({ x: 48.4, y: 50 });
+    expect(pathBeforePixel.matches[0]?.kind).toBe("path");
+  });
+
+  it("does not snap a moving anchor back to an excluded incident path", () => {
+    const result = resolveVectorPointSnapping({
+      movingPoints: [
+        {
+          excludedPathTargetIds: ["incident"],
+          id: "moving",
+          x: 0,
+          y: 0,
+        },
+      ],
+      paths: [
+        createVectorSnapPathTarget("incident", {
+          start: { x: 0, y: 0 },
+          startVertexId: "moving",
+          end: { x: 100, y: 100 },
+          endVertexId: "b",
+        }),
+      ],
+      pixelGrid: false,
+      rawDelta: { x: 50, y: 53 },
+      targets: createVectorSnapTargetIndex([]),
+      threshold: 5,
+    });
+
+    expect(result.delta).toEqual({ x: 50, y: 53 });
     expect(result.matches).toEqual([]);
   });
 });

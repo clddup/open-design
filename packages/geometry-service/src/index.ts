@@ -88,9 +88,13 @@ export {
   type OrientedResizeResolution,
 } from "./oriented-resize-snapping.js";
 export {
+  createVectorSnapPathTarget,
   createVectorSnapTargetIndex,
   resolveVectorPointSnapping,
+  type VectorAxisSnapMatch,
+  type VectorPathSnapMatch,
   type VectorSnapMatch,
+  type VectorSnapPathTarget,
   type VectorSnapPoint,
   type VectorSnapResolution,
   type VectorSnapTargetIndex,

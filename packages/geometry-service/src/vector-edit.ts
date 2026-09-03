@@ -27,6 +27,8 @@ import {
 } from "./vector-line-cut-connectivity.js";
 import {
   directedVectorCurve,
+  nearestPointOnDirectedVectorCurve,
+  pointOnDirectedVectorCurve,
   splitDirectedVectorCurve,
   storedSegmentFromDirectedVectorCurve,
   type DirectedVectorCurve,
@@ -988,10 +990,7 @@ export function nearestVectorSegmentPoint(
     for (const reference of path.segments) {
       const segment = segments.get(reference.segmentId)!;
       const curve = directedVectorCurve(segment, reference, vertices);
-      const candidate =
-        meaningful(curve.tangentStart) || meaningful(curve.tangentEnd)
-          ? nearestCubicPoint(curve, point)
-          : nearestLinePoint(curve.start, curve.end, point);
+      const candidate = nearestPointOnDirectedVectorCurve(curve, point);
       if (
         !nearest ||
         candidate.distance < nearest.distance - HANDLE_EPSILON ||
@@ -2254,9 +2253,7 @@ function contourPointAt(
 }
 
 function editableCurvePoint(curve: DirectedVectorCurve, t: number): Point {
-  return meaningful(curve.tangentStart) || meaningful(curve.tangentEnd)
-    ? directedCurvePoint(curve, t)
-    : lerp(curve.start, curve.end, t);
+  return pointOnDirectedVectorCurve(curve, t);
 }
 
 function lineParameter(start: Point, end: Point, point: Point): number {
@@ -3288,80 +3285,6 @@ function cutVectorPathAtSegment(
   return validatedCut(next, [firstCutVertexId, secondCutVertexId], pathIds);
 }
 
-function nearestLinePoint(
-  start: Point,
-  end: Point,
-  point: Point,
-): Pick<VectorSegmentHit, "distance" | "point" | "t"> {
-  const delta = subtract(end, start);
-  const denominator = delta.x * delta.x + delta.y * delta.y;
-  const t =
-    denominator <= HANDLE_EPSILON
-      ? 0
-      : Math.max(
-          0,
-          Math.min(
-            1,
-            ((point.x - start.x) * delta.x + (point.y - start.y) * delta.y) /
-              denominator,
-          ),
-        );
-  const nearest = normalizePoint(lerp(start, end, t));
-  return { distance: distance(nearest, point), point: nearest, t };
-}
-
-function nearestCubicPoint(
-  curve: DirectedVectorCurve,
-  point: Point,
-): Pick<VectorSegmentHit, "distance" | "point" | "t"> {
-  const sampleCount = 32;
-  let bestIndex = 0;
-  let bestDistance = Number.POSITIVE_INFINITY;
-  for (let index = 0; index <= sampleCount; index += 1) {
-    const sample = directedCurvePoint(curve, index / sampleCount);
-    const candidate = squaredDistance(sample, point);
-    if (candidate < bestDistance) {
-      bestDistance = candidate;
-      bestIndex = index;
-    }
-  }
-  let left = Math.max(0, (bestIndex - 1) / sampleCount);
-  let right = Math.min(1, (bestIndex + 1) / sampleCount);
-  for (let iteration = 0; iteration < 24; iteration += 1) {
-    const first = left + (right - left) / 3;
-    const second = right - (right - left) / 3;
-    if (
-      squaredDistance(directedCurvePoint(curve, first), point) <=
-      squaredDistance(directedCurvePoint(curve, second), point)
-    ) {
-      right = second;
-    } else {
-      left = first;
-    }
-  }
-  const t = normalizeNumber((left + right) / 2);
-  const nearest = normalizePoint(directedCurvePoint(curve, t));
-  return { distance: distance(nearest, point), point: nearest, t };
-}
-
-function directedCurvePoint(curve: DirectedVectorCurve, t: number): Point {
-  const controlStart = add(curve.start, curve.tangentStart ?? { x: 0, y: 0 });
-  const controlEnd = add(curve.end, curve.tangentEnd ?? { x: 0, y: 0 });
-  const mt = 1 - t;
-  return {
-    x:
-      mt ** 3 * curve.start.x +
-      3 * mt ** 2 * t * controlStart.x +
-      3 * mt * t ** 2 * controlEnd.x +
-      t ** 3 * curve.end.x,
-    y:
-      mt ** 3 * curve.start.y +
-      3 * mt ** 2 * t * controlStart.y +
-      3 * mt * t ** 2 * controlEnd.y +
-      t ** 3 * curve.end.y,
-  };
-}
-
 function setDirectedStartVertexId(
   segment: VectorSegment,
   reference: VectorSegmentReference,
@@ -3732,13 +3655,6 @@ function transformVectorPoint(point: Point, transform: Transform): Point {
   });
 }
 
-function lerp(start: Point, end: Point, t: number): Point {
-  return {
-    x: start.x + (end.x - start.x) * t,
-    y: start.y + (end.y - start.y) * t,
-  };
-}
-
 function cubicPoint(
   start: Point,
   controlStart: Point,
@@ -3784,10 +3700,6 @@ function length(point: Point): number {
 
 function distance(left: Point, right: Point): number {
   return Math.hypot(left.x - right.x, left.y - right.y);
-}
-
-function squaredDistance(left: Point, right: Point): number {
-  return (left.x - right.x) ** 2 + (left.y - right.y) ** 2;
 }
 
 function normalizePoint(point: Point): Point {

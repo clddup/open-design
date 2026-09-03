@@ -7614,6 +7614,85 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
+  it("snaps a dragged Vector anchor to a non-incident path with one commit", async () => {
+    const onVectorEdit = vi.fn<(request: LeaferVectorEditRequest) => boolean>(
+      () => true,
+    );
+    const input = withVectorEditFixture(createInput());
+    input.snapSettings = {
+      geometry: true,
+      objects: false,
+      pixelGrid: false,
+    };
+    input.document.nodesById.frame_welcome!.transform = [1, 0, 0, 1, 0, 0];
+    const vector = input.document.nodesById.editable_curve;
+    if (
+      !vector ||
+      vector.kind !== "vector" ||
+      !("network" in vector.properties)
+    ) {
+      throw new Error("Missing Vector path snap fixture");
+    }
+    vector.transform = [1, 0, 0, 1, 0, 0];
+    vector.properties.network.vertices.push(
+      { id: "target_start", x: 0, y: 50 },
+      { id: "target_end", x: 100, y: 150 },
+    );
+    vector.properties.network.segments.push({
+      id: "target_segment",
+      startVertexId: "target_start",
+      endVertexId: "target_end",
+    });
+    vector.properties.network.paths.push({
+      id: "target_path",
+      closed: false,
+      segments: [{ segmentId: "target_segment", reversed: false }],
+    });
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onVectorEdit,
+    });
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    const path =
+      app && findElement(app.tree, vectorStrokeElementId("editable_curve"));
+    const overlay = path?.parent?.children.at(-1);
+    const snapGuide = app?.sky.children
+      .flatMap((child) =>
+        child instanceof FakeGroup ? child.children : [child],
+      )
+      .find((child) => child instanceof FakePath && child.stroke === "#f24e8a");
+    if (
+      !app ||
+      !(overlay instanceof FakeGroup) ||
+      !(snapGuide instanceof FakePath)
+    ) {
+      throw new Error("Missing Vector path snap controls");
+    }
+    const firstAnchor = overlay.children.find(
+      (child): child is FakeEllipse => child instanceof FakeEllipse,
+    );
+    if (!firstAnchor) throw new Error("Missing Vector path snap anchor");
+
+    app.emit("pointer.down", pointerEvent(0, 0, firstAnchor));
+    app.emit("pointer.move", pointerEvent(50, 103, firstAnchor));
+    expect(snapGuide.visible).toBe(true);
+    expect(snapGuide.path).toContain("A 3 3");
+    expect(onVectorEdit).not.toHaveBeenCalled();
+    app.emit("pointer.up", pointerEvent(50, 103, firstAnchor));
+
+    expect(onVectorEdit).toHaveBeenCalledTimes(1);
+    const request = onVectorEdit.mock.calls[0]?.[0];
+    if (!request || request.deleteNode) {
+      throw new Error("Expected a path-snapped Vector update");
+    }
+    expect(request.edits[0]!.network.vertices).toContainEqual(
+      expect.objectContaining({ id: "vertex_a", x: 51.5, y: 101.5 }),
+    );
+    expect(snapGuide.visible).toBe(false);
+    adapter.dispose();
+  });
+
   it("measures between transformed Vector anchors on Option or Alt hover without a revision", async () => {
     const onVectorEdit = vi.fn<(request: LeaferVectorEditRequest) => boolean>(
       () => true,

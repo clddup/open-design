@@ -1,4 +1,4 @@
-import type { Rect } from "@opendesign/design-contracts";
+import type { Point, Rect } from "@opendesign/design-contracts";
 
 export type SnapAxis = "x" | "y";
 export type SnapAnchor = "start" | "center" | "end";
@@ -26,7 +26,15 @@ export interface SegmentSnapGuideLine {
   start: { x: number; y: number };
 }
 
-export type SnapGuideLine = AxisSnapGuideLine | SegmentSnapGuideLine;
+export interface PointSnapGuideMarker {
+  kind: "point";
+  position: Point;
+  radius: number;
+  source: SnapTargetSource;
+}
+
+export type SnapGuideLine =
+  AxisSnapGuideLine | PointSnapGuideMarker | SegmentSnapGuideLine;
 
 export interface SnapResolution {
   delta: { x: number; y: number };
