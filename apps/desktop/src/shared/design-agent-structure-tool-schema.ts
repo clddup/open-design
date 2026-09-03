@@ -2,6 +2,7 @@ import {
   BooleanOperationSchema,
   executableJsonSchema,
   PaintSchema,
+  VariableWidthStrokePropertiesSchema,
   VectorGeometryIdSchema,
 } from "@opendesign/design-contracts";
 
@@ -23,6 +24,7 @@ const VECTOR_ACTIONS = [
   "flatten",
   "split-vector",
   "set-closed",
+  "set-variable-width",
   "bend-segment",
   "set-region-fills",
   "set-region-fill-style",
@@ -302,6 +304,7 @@ const FULL_VECTOR_BRANCH_PROPERTIES = new Set([
   "segmentIds",
   "targets",
   "vertexIds",
+  "variableWidthStrokeProperties",
 ]);
 
 function compactVectorBranchProperty(
@@ -354,6 +357,14 @@ const VECTOR_ACTION_BRANCHES = [
       closed: { type: "boolean" },
     },
     ["nodeId", "closed"],
+  ),
+  vectorBranch(
+    "set-variable-width",
+    {
+      nodeId: ID_SCHEMA,
+      variableWidthStrokeProperties: VariableWidthStrokePropertiesSchema,
+    },
+    ["nodeId", "variableWidthStrokeProperties"],
   ),
   vectorBranch(
     "bend-segment",
@@ -508,6 +519,7 @@ export const DESIGN_VECTOR_TOOL_INPUT_SCHEMA = executableJsonSchema({
     transform: BOUNDED_TRANSFORM_SCHEMA,
     targets: VECTOR_TARGETS_SCHEMA,
     closed: { type: "boolean" },
+    variableWidthStrokeProperties: VariableWidthStrokePropertiesSchema,
     at: VECTOR_CUT_AT_SCHEMA,
     start: BOUNDED_POINT_SCHEMA,
     end: BOUNDED_POINT_SCHEMA,

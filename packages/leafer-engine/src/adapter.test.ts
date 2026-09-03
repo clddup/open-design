@@ -8,6 +8,7 @@ import type {
   DesignChangeSet,
   DesignDocument,
   DesignNode,
+  VariableWidthStrokeProperties,
 } from "@opendesign/design-contracts";
 import { DESIGN_SCHEMA_VERSION } from "@opendesign/design-contracts";
 import { componentProjectionId } from "@opendesign/component-service";
@@ -7308,6 +7309,252 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
+  it("adds a variable-width point and commits one editable profile on pointer up", async () => {
+    const onVectorEdit = vi.fn<(request: LeaferVectorEditRequest) => boolean>(
+      () => true,
+    );
+    const input = withVariableWidthEditFixture(createInput(), {
+      widthProfile: "EYE",
+    });
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onVectorEdit,
+    });
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    const path =
+      app && findElement(app.tree, vectorStrokeElementId("editable_curve"));
+    const overlay = path?.parent?.children.at(-1);
+    if (!app || !(overlay instanceof FakeGroup)) {
+      throw new Error("Missing variable-width edit fixture");
+    }
+    const hitPath = overlay.children.find(
+      (child): child is FakePath => child instanceof FakePath && child.hittable,
+    );
+    if (!hitPath) throw new Error("Missing variable-width hit path");
+
+    expect(variableWidthControls(overlay)).toHaveLength(3);
+    app.emit("pointer.down", pointerEvent(30, 15, hitPath));
+    expect(onVectorEdit).not.toHaveBeenCalled();
+    app.emit("pointer.up", pointerEvent(30, 15, hitPath));
+
+    expect(onVectorEdit).toHaveBeenCalledTimes(1);
+    const request = onVectorEdit.mock.calls[0]?.[0];
+    if (!request || request.deleteNode) {
+      throw new Error("Missing variable-width profile update");
+    }
+    expect(request.edits[0]).toMatchObject({
+      nodeId: "editable_curve",
+      variableWidthStrokeProperties: {
+        widthProfile: "CUSTOM",
+        variableWidthPoints: [
+          { position: 0, width: 0 },
+          { position: 0.25, width: 0.5 },
+          { position: 0.5, width: 1 },
+          { position: 1, width: 0 },
+        ],
+      },
+    });
+    expect(variableWidthControls(overlay)).toHaveLength(4);
+    adapter.dispose();
+  });
+
+  it("moves a multi-selection of variable-width points and keeps controls screen-sized", async () => {
+    const onVectorEdit = vi.fn<(request: LeaferVectorEditRequest) => boolean>(
+      () => true,
+    );
+    const input = withVariableWidthEditFixture(createInput(), {
+      widthProfile: "CUSTOM",
+      variableWidthPoints: [
+        { position: 0, width: 1 },
+        { position: 0.25, width: 1 },
+        { position: 0.5, width: 1 },
+        { position: 1, width: 1 },
+      ],
+    });
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onVectorEdit,
+    });
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    const path =
+      app && findElement(app.tree, vectorStrokeElementId("editable_curve"));
+    const overlay = path?.parent?.children.at(-1);
+    if (!app || !(overlay instanceof FakeGroup)) {
+      throw new Error("Missing variable-width multi-selection fixture");
+    }
+
+    let controls = variableWidthControls(overlay);
+    expect(controls[0]?.width).toBe(7);
+    app.emit("pointer.down", pointerEvent(0, 0, controls[0]!));
+    app.emit("pointer.up", pointerEvent(0, 0, controls[0]!));
+    controls = variableWidthControls(overlay);
+    app.emit(
+      "pointer.down",
+      pointerEvent(30, 15, controls[1]!, { shiftKey: true }),
+    );
+    app.emit(
+      "pointer.up",
+      pointerEvent(30, 15, controls[1]!, { shiftKey: true }),
+    );
+    expect(onVectorEdit).not.toHaveBeenCalled();
+
+    controls = variableWidthControls(overlay);
+    app.emit("pointer.down", pointerEvent(30, 15, controls[1]!));
+    app.emit(
+      "pointer.move",
+      pointerEvent(45, 22.5, controls[1]!, { ctrlKey: true }),
+    );
+    app.emit(
+      "pointer.up",
+      pointerEvent(45, 22.5, controls[1]!, { ctrlKey: true }),
+    );
+    expect(onVectorEdit).toHaveBeenCalledTimes(1);
+    const request = onVectorEdit.mock.calls[0]?.[0];
+    if (!request || request.deleteNode) {
+      throw new Error("Missing variable-width multi-point update");
+    }
+    const profile = request.edits[0]?.variableWidthStrokeProperties;
+    if (!profile || profile.widthProfile !== "CUSTOM") {
+      throw new Error("Missing custom variable-width profile");
+    }
+    expect(profile.variableWidthPoints[0]?.position).toBeCloseTo(0.125);
+    expect(profile.variableWidthPoints[1]?.position).toBeCloseTo(0.375);
+    expect(profile.variableWidthPoints[0]?.width).toBe(0);
+    expect(profile.variableWidthPoints[1]?.width).toBe(0);
+
+    adapter.sync({
+      ...input,
+      vectorEditScope: {
+        ...input.vectorEditScope!,
+        nodes: input.vectorEditScope!.nodes.map((node) => ({
+          ...node,
+          variableWidthStrokeProperties: profile,
+        })),
+      },
+      viewport: { ...input.viewport, zoom: 2 },
+    });
+    expect(variableWidthControls(overlay)[0]?.width).toBe(4.5);
+    expect(variableWidthControls(overlay)[2]?.width).toBe(3.5);
+    adapter.dispose();
+  });
+
+  it("cancels variable-width previews and deletes points without violating the two-point minimum", async () => {
+    const onVectorEdit = vi.fn<(request: LeaferVectorEditRequest) => boolean>(
+      () => true,
+    );
+    const input = withVariableWidthEditFixture(createInput(), {
+      widthProfile: "CUSTOM",
+      variableWidthPoints: [
+        { position: 0, width: 1 },
+        { position: 0.5, width: 1 },
+        { position: 1, width: 1 },
+      ],
+    });
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onVectorEdit,
+    });
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    const path =
+      app && findElement(app.tree, vectorStrokeElementId("editable_curve"));
+    const overlay = path?.parent?.children.at(-1);
+    if (!app || !(overlay instanceof FakeGroup)) {
+      throw new Error("Missing variable-width cancellation fixture");
+    }
+
+    let controls = variableWidthControls(overlay);
+    const originalCenterX = controls[1]!.x + controls[1]!.width / 2;
+    app.emit("pointer.down", pointerEvent(60, 30, controls[1]!));
+    app.emit(
+      "pointer.move",
+      pointerEvent(45, 22.5, controls[1]!, { ctrlKey: true }),
+    );
+    const previewControl = variableWidthControls(overlay)[1]!;
+    expect(previewControl.x + previewControl.width / 2).not.toBe(
+      originalCenterX,
+    );
+    emitWindowKey("Escape");
+    expect(onVectorEdit).not.toHaveBeenCalled();
+    const restoredControl = variableWidthControls(overlay)[1]!;
+    expect(restoredControl.x + restoredControl.width / 2).toBe(originalCenterX);
+
+    controls = variableWidthControls(overlay);
+    app.emit("pointer.down", pointerEvent(60, 30, controls[1]!));
+    app.emit("pointer.up", pointerEvent(60, 30, controls[1]!));
+    emitWindowKey("Delete");
+    expect(onVectorEdit).toHaveBeenCalledTimes(1);
+    const deletion = onVectorEdit.mock.calls[0]?.[0];
+    if (!deletion || deletion.deleteNode) {
+      throw new Error("Missing variable-width deletion");
+    }
+    expect(deletion.edits[0]?.variableWidthStrokeProperties).toMatchObject({
+      widthProfile: "CUSTOM",
+      variableWidthPoints: [
+        { position: 0, width: 1 },
+        { position: 1, width: 1 },
+      ],
+    });
+
+    emitWindowKey("Delete");
+    expect(onVectorEdit).toHaveBeenCalledTimes(1);
+    adapter.dispose();
+  });
+
+  it("does not expose variable-width editing for read-only, branching, dashed, or zero-width vectors", async () => {
+    const cases = [
+      { readOnly: true, topologyEditable: true, variableWidthEditable: true },
+      {
+        readOnly: false,
+        topologyEditable: false,
+        variableWidthEditable: false,
+      },
+      { readOnly: false, topologyEditable: true, variableWidthEditable: false },
+    ];
+    for (const state of cases) {
+      const onVectorEdit = vi.fn<(request: LeaferVectorEditRequest) => boolean>(
+        () => true,
+      );
+      const fixture = withVariableWidthEditFixture(createInput(), {
+        widthProfile: "UNIFORM",
+      });
+      const input = {
+        ...fixture,
+        vectorEditScope: {
+          ...fixture.vectorEditScope!,
+          nodes: fixture.vectorEditScope!.nodes.map((node, index) =>
+            index === 0 ? { ...node, ...state } : node,
+          ),
+        },
+      };
+      const adapter = await createLeaferEngineAdapter(createHost(), {
+        ...createCallbacks(),
+        onVectorEdit,
+      });
+      adapter.sync(input);
+      const app = leaferHarness.app;
+      const path =
+        app && findElement(app.tree, vectorStrokeElementId("editable_curve"));
+      const overlay = path?.parent?.children.at(-1);
+      if (!app || !(overlay instanceof FakeGroup)) {
+        throw new Error("Missing unavailable variable-width fixture");
+      }
+      const hitPath = overlay.children.find(
+        (child): child is FakePath => child instanceof FakePath,
+      );
+      expect(variableWidthControls(overlay)).toHaveLength(0);
+      expect(hitPath?.hittable).toBe(false);
+      if (hitPath) {
+        app.emit("pointer.down", pointerEvent(30, 15, hitPath));
+        app.emit("pointer.up", pointerEvent(30, 15, hitPath));
+      }
+      expect(onVectorEdit).not.toHaveBeenCalled();
+      adapter.dispose();
+    }
+  });
+
   it("snaps a dragged Vector anchor to another visible anchor with one commit", async () => {
     const onVectorEdit = vi.fn<(request: LeaferVectorEditRequest) => boolean>(
       () => true,
@@ -10862,12 +11109,49 @@ function withVectorEditFixture(
           readOnly: false,
           selectedSegmentIds,
           selectedVertexIds,
+          strokeWidth: 2,
           topologyEditable: true,
+          variableWidthEditable: true,
         },
       ],
       tool: "move",
     },
   };
+}
+
+function withVariableWidthEditFixture(
+  input: LeaferEngineSyncInput,
+  profile: VariableWidthStrokeProperties,
+): LeaferEngineSyncInput {
+  const fixture = withVectorEditFixture(input);
+  const vector = fixture.document.nodesById.editable_curve;
+  if (
+    !vector ||
+    vector.kind !== "vector" ||
+    !("network" in vector.properties)
+  ) {
+    throw new Error("Missing editable Vector fixture");
+  }
+  vector.properties.variableWidthStrokeProperties = structuredClone(profile);
+  return {
+    ...fixture,
+    vectorEditScope: {
+      ...fixture.vectorEditScope!,
+      nodes: fixture.vectorEditScope!.nodes.map((node) => ({
+        ...node,
+        variableWidthStrokeProperties: structuredClone(profile),
+      })),
+      tool: "variable-width",
+    },
+  };
+}
+
+function variableWidthControls(overlay: FakeGroup): FakeEllipse[] {
+  return overlay.children.filter(
+    (child): child is FakeEllipse =>
+      child instanceof FakeEllipse &&
+      (child as FakeEllipse & { cursor?: string }).cursor === "move",
+  );
 }
 
 function withClosedVectorEditFixture(
@@ -10933,14 +11217,18 @@ function withMultiVectorEditFixture(
           readOnly: false,
           selectedSegmentIds: [],
           selectedVertexIds: [],
+          strokeWidth: 2,
           topologyEditable: true,
+          variableWidthEditable: true,
         },
         {
           nodeId: second.id,
           readOnly: false,
           selectedSegmentIds: [],
           selectedVertexIds: [],
+          strokeWidth: 2,
           topologyEditable: true,
+          variableWidthEditable: true,
         },
       ],
       tool: "move",

@@ -88,6 +88,38 @@ export function createVectorSchemas<
     },
     { additionalProperties: false },
   );
+  const VariableWidthPointSchema = Type.Object(
+    {
+      position: Type.Number({ minimum: 0, maximum: 1 }),
+      width: Type.Number({ minimum: 0 }),
+    },
+    { additionalProperties: false },
+  );
+  const VariableWidthStrokePropertiesSchema = Type.Union([
+    Type.Object(
+      {
+        widthProfile: Type.Union([
+          Type.Literal("UNIFORM"),
+          Type.Literal("WEDGE"),
+          Type.Literal("TAPER"),
+          Type.Literal("QUARTER_TAPER"),
+          Type.Literal("EYE"),
+          Type.Literal("MIRRORED_TAPER"),
+        ]),
+      },
+      { additionalProperties: false },
+    ),
+    Type.Object(
+      {
+        widthProfile: Type.Literal("CUSTOM"),
+        variableWidthPoints: Type.Array(VariableWidthPointSchema, {
+          minItems: 2,
+          maxItems: 256,
+        }),
+      },
+      { additionalProperties: false },
+    ),
+  ]);
   const VectorNetworkSchema = Type.Object(
     {
       vertices: Type.Array(VectorVertexSchema, {
@@ -121,6 +153,9 @@ export function createVectorSchemas<
       fillRule: Type.Optional(fillRuleSchema()),
       cornerRadius: Type.Optional(Type.Number({ minimum: 0 })),
       cornerSmoothing: Type.Optional(Type.Number({ minimum: 0, maximum: 1 })),
+      variableWidthStrokeProperties: Type.Optional(
+        VariableWidthStrokePropertiesSchema,
+      ),
     },
     { additionalProperties: false },
   );
@@ -139,6 +174,8 @@ export function createVectorSchemas<
     VectorPathRunSchema,
     VectorRegionSchema,
     VectorNetworkSchema,
+    VariableWidthPointSchema,
+    VariableWidthStrokePropertiesSchema,
     PathDataPropertiesSchema,
     VectorNetworkPropertiesSchema,
     PathPropertiesSchema,

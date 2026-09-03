@@ -4,7 +4,6 @@ import type {
   AgentEvent,
   AgentImageAttachment,
   AgentRequest,
-  DesignGenerationMode,
   DesignMutationTarget,
   SelectionScope,
   TrustedToolContext,
@@ -139,7 +138,6 @@ export class GlobalTaskCoordinator {
       scope: SelectionScope;
       mutationTarget: DesignMutationTarget;
       prompt: string;
-      generationMode: DesignGenerationMode;
       modelSelection: ModelSelection;
       attachments: AgentAttachment[];
       imageAttachments: AgentImageAttachment[];
@@ -298,7 +296,6 @@ export class GlobalTaskCoordinator {
       revision: request.revision,
       scope: structuredClone(request.scope),
       mutationTarget: structuredClone(request.mutationTarget),
-      generationMode: request.generationMode ?? "thorough",
       deliveryScopeReview: request.deliveryScopeReview ?? "direct",
       prompt: request.prompt,
       modelSelection: structuredClone(request.modelSelection),
@@ -1135,64 +1132,6 @@ export class GlobalTaskCoordinator {
         reviewEligible: false,
       };
     }
-    const generationMode = this.#toolBindingsByRunId.get(
-      context.runId,
-    )?.generationMode;
-    const fastVisualCriticRequired =
-      generationMode === "fast" && requiresFastDraftVisualCritic(state, target);
-    if (fastVisualCriticRequired && visualCritic === undefined) {
-      throw designWorkflowError(
-        "visual_critic_unavailable",
-        "This initial material capture requires one independent exact-revision visual critic before evidence-based refinement",
-      );
-    }
-    if (
-      generationMode === "fast" &&
-      visualCritic === undefined &&
-      (target.delivery.status === "drafted" ||
-        target.delivery.status === "captured" ||
-        target.delivery.status === "refined")
-    ) {
-      const inspection = this.#inspectionsByRunId.get(context.runId);
-      if (!inspection || inspection.revision !== observedRevision) {
-        throw designWorkflowError(
-          "delivery_verification_required",
-          "Fast delivery requires an authoritative document inspection from the exact captured revision; inspect and capture the current target again",
-        );
-      }
-      const componentStrategy = assertDeliveryTargetStructure(
-        inspection,
-        target,
-        state.plan,
-      );
-      target.captureCount = captureSequence;
-      target.lastCaptureRevision = observedRevision;
-      target.reviewedCaptureCount = captureSequence;
-      target.reviewedCaptureRevision = observedRevision;
-      completeReviewPlanStep(state, target.delivery.targetId, observedRevision);
-      target.delivery = {
-        ...target.delivery,
-        status: "verified",
-        captureRevision: observedRevision,
-        reviewRevision: observedRevision,
-        verifiedRevision: observedRevision,
-      };
-      this.#persistDelivery(context.runId, state);
-      return {
-        captureSequence,
-        capturedRevision: observedRevision,
-        deliveryTargetId: target.delivery.targetId,
-        nextAction: nextIncompleteTarget(state)
-          ? "continue-next-target"
-          : this.#nextUnplannedScopeTarget(context.runId, state)
-            ? "define-next-plan"
-            : "complete-delivery",
-        reviewEligible: false,
-        verified: true,
-        verification: "deterministic-fast-delivery",
-        ...(componentStrategy.issueCount === 0 ? {} : { componentStrategy }),
-      };
-    }
     if (
       visualCritic?.passed === true &&
       (target.delivery.status === "drafted" ||
@@ -1405,8 +1344,6 @@ export class GlobalTaskCoordinator {
       !state ||
       !target ||
       !binding ||
-      (binding.generationMode === "fast" &&
-        !requiresFastDraftVisualCritic(state, target)) ||
       target.delivery.status === "pending" ||
       target.delivery.status === "allocated" ||
       target.delivery.status === "verified"
@@ -1425,7 +1362,6 @@ export class GlobalTaskCoordinator {
     }
     return {
       runId: context.runId,
-      generationMode: binding.generationMode,
       modelSelection: structuredClone(binding.modelSelection),
       userRequest: binding.prompt,
       plan: structuredClone(state.plan),
@@ -2082,7 +2018,6 @@ export class GlobalTaskCoordinator {
         !owner ||
         !allowedTargets.has(owner.targetId) ||
         !step ||
-        step.kind !== "implementation" ||
         step.stepId !== committed.stepId
       ) {
         throw designWorkflowError(
@@ -2102,6 +2037,9 @@ export class GlobalTaskCoordinator {
           "plan_step_evidence_missing",
           `Committed step ${committed.stepId} requires its real semantic revision after the step started`,
         );
+      }
+      if (step.kind === "review-refine") {
+        continue;
       }
       step.status = "completed";
       step.completedRevision = completedRevision;
@@ -3188,29 +3126,6 @@ function nextIncompleteTarget(
     .find((target) => target?.delivery.status !== "verified");
 }
 
-function requiresFastVisualCritic(
-  state: DesignWorkflowState,
-  target: DesignDeliveryTargetState,
-): boolean {
-  if (state.plan.deliverable === "logo") return true;
-  return (
-    state.plan.deliverable === "ui" &&
-    state.targetOrder[0] === target.delivery.targetId &&
-    target.planned.artboard.mode === "create"
-  );
-}
-
-function requiresFastDraftVisualCritic(
-  state: DesignWorkflowState,
-  target: DesignDeliveryTargetState,
-): boolean {
-  return (
-    requiresFastVisualCritic(state, target) &&
-    (target.delivery.status === "drafted" ||
-      target.delivery.status === "captured")
-  );
-}
-
 function pendingPlaceableRasterRoles(
   state: DesignWorkflowState,
   target: DesignDeliveryTargetState,
@@ -3429,6 +3344,25 @@ function assertApplyPlanSteps(
     );
   }
   const allowedTargets = new Set(targetIds);
+  const active = flattened[activeIndex];
+  if (active?.kind === "review-refine") {
+    const target = state.targetsById.get(active.targetId);
+    const submitted = steps[0];
+    if (
+      steps.length !== 1 ||
+      !submitted ||
+      !allowedTargets.has(active.targetId) ||
+      submitted.stepId !== active.stepId ||
+      (target?.delivery.status !== "reviewed" &&
+        target?.delivery.status !== "refined")
+    ) {
+      throw designWorkflowError(
+        "plan_step_order_invalid",
+        `Design Apply step ${submitted?.stepId ?? "missing"} must match the active reviewed target`,
+      );
+    }
+    return;
+  }
   steps.forEach((step, offset) => {
     const expected = flattened[activeIndex + offset];
     if (
@@ -3436,7 +3370,6 @@ function assertApplyPlanSteps(
       expected.kind !== "implementation" ||
       !allowedTargets.has(expected.targetId) ||
       expected.stepId !== step.stepId ||
-      expected.label !== step.label ||
       (offset > 0 && expected.status !== "pending")
     ) {
       throw designWorkflowError(

@@ -32,6 +32,10 @@ const criterionIds = [
   "logo-concept-open-contour-quality",
   "logo-concept-modular-path-quality",
   "logo-concept-spatial-link-quality",
+] as const;
+
+const identitySystemCriterionIds = [
+  ...criterionIds.slice(0, 15),
   "symbol-wordmark-relationship",
   "app-icon-optical-redraw",
   "app-icon-ecosystem-distinction",
@@ -132,10 +136,13 @@ describe("independent design visual critic", () => {
       failedCriteria: [],
       observedRevision: 8,
     });
+    expect(result.criteria).not.toHaveProperty("symbol-wordmark-relationship");
+    expect(result.criteria).not.toHaveProperty("app-icon-optical-redraw");
+    expect(result.criteria).not.toHaveProperty("component-system-integrity");
     expect(result.review).toBeNull();
   });
 
-  it("treats primary brand color, exploration color divergence, and desktop icon distinction as critical", async () => {
+  it("treats primary brand color and exploration color divergence as critical", async () => {
     const weakColor = scorecard(4);
     weakColor.criteria["brand-color-system"] = {
       score: 2,
@@ -151,14 +158,6 @@ describe("independent design visual critic", () => {
       refinement:
         "Give each concept a materially different color system tied to its own thesis.",
     };
-    weakColor.criteria["app-icon-ecosystem-distinction"] = {
-      score: 3,
-      evidence:
-        "The icon reads as a generic monochrome tile among other desktop application icons.",
-      refinement:
-        "Rebalance color mass and negative space for recognizable macOS and Windows icon contexts.",
-    };
-
     const result = await runIndependentDesignVisualCritic(
       {
         complete: (request) =>
@@ -170,13 +169,33 @@ describe("independent design visual critic", () => {
 
     expect(result.passed).toBe(false);
     expect(result.failedCriteria).toEqual(
-      expect.arrayContaining([
-        "brand-color-system",
-        "color-system-divergence",
-        "app-icon-ecosystem-distinction",
-      ]),
+      expect.arrayContaining(["brand-color-system", "color-system-divergence"]),
     );
     expect(result.review?.failedCriteria).toHaveLength(2);
+  });
+
+  it("judges App Icon criteria only on the current identity-system target", async () => {
+    const context = criticContext("final");
+    delete context.plan.logoExploration;
+    const weakIcon = scorecardFor(identitySystemCriterionIds, 4);
+    weakIcon.criteria["app-icon-ecosystem-distinction"] = {
+      score: 3,
+      evidence:
+        "The icon reads as a generic monochrome tile among desktop applications.",
+      refinement:
+        "Rebalance color mass and negative space for recognizable macOS and Windows contexts.",
+    };
+
+    const result = await runIndependentDesignVisualCritic(
+      {
+        complete: (request) =>
+          Promise.resolve(responseEvents(request.attemptId, weakIcon)),
+      },
+      context,
+      new AbortController().signal,
+    );
+
+    expect(result.failedCriteria).toEqual(["app-icon-ecosystem-distinction"]);
   });
 
   it("reviews one requested Logo/Icon without invented exploration or system criteria", async () => {

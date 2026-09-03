@@ -124,6 +124,8 @@ export const {
   VectorPathRunSchema,
   VectorRegionSchema,
   VectorNetworkSchema,
+  VariableWidthPointSchema,
+  VariableWidthStrokePropertiesSchema,
   PathDataPropertiesSchema,
   VectorNetworkPropertiesSchema,
   PathPropertiesSchema,

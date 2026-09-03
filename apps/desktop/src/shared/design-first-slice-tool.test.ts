@@ -744,18 +744,34 @@ describe("compact first-slice tool", () => {
     expect(hostBound?.logoExploration?.directions[0]).toMatchObject({
       conceptId: "concept_negative",
       rootNodeId: "odr_run_logo_negative_root",
-      evidenceNodeIds: [
-        "odr_run_logo_negative_mono",
-        "odr_run_logo_negative_32",
-        "odr_run_logo_negative_24",
-        "odr_run_logo_negative_16",
-      ],
+      masterNodeId: "odr_run_logo_negative_master",
+      evidenceRootNodeId: "odr_run_logo_negative_evidence",
     });
 
     if (!normalized) throw new Error("Expected parsed Logo input");
     const aliasedPlan = compileDesignFirstSliceToolInput(normalized).plan;
     const firstDirection = aliasedPlan.logoExploration?.directions[0];
     if (!firstDirection) throw new Error("Expected compiled Logo exploration");
+    expect(firstDirection).toMatchObject({
+      monochromeNodeId: "negative_master__evidence_mono",
+      smallSizeNodeIds: [
+        "negative_master__evidence_32",
+        "negative_master__evidence_24",
+        "negative_master__evidence_16",
+      ],
+    });
+    const compiledEvidence = compileDesignFirstSliceToolInput(normalized);
+    expect(
+      compiledEvidence.apply.commands.find(
+        (command) =>
+          command.type === "insert_element" &&
+          command.node.id === "negative_master__evidence_16",
+      ),
+    ).toMatchObject({
+      type: "insert_element",
+      parentId: "negative_evidence",
+      node: { transform: [1 / 6, 0, 0, 1 / 6, 156, 24] },
+    });
     firstDirection.monochromeNodeId = firstDirection.smallSizeNodeIds[0];
     expect(DesignPlanContract.parse(aliasedPlan, { canonical: true }).ok).toBe(
       false,
@@ -1377,12 +1393,8 @@ function logoDirection(
       rationale: `${prefix} uses a distinct chromatic hierarchy tied to its construction rather than a cosmetic hue swap.`,
     },
     rootNodeId: `${prefix}_root`,
-    evidenceNodeIds: [
-      `${prefix}_mono`,
-      `${prefix}_32`,
-      `${prefix}_24`,
-      `${prefix}_16`,
-    ] as [string, string, string, string],
+    masterNodeId: `${prefix}_master`,
+    evidenceRootNodeId: `${prefix}_evidence`,
   };
 }
 
@@ -1404,29 +1416,29 @@ function logoDirectionElements(
       ...solidAppearance("#FFF7F2"),
     },
     {
-      id: `${prefix}_mono`,
+      id: `${prefix}_master`,
       kind: "path",
-      name: `${prefix} monochrome master`,
+      name: `${prefix} master symbol`,
       parentId: `${prefix}_root`,
       x: 24,
       y: 24,
       width: 96,
       height: 96,
       path: "M 0 0 H 96 V 28 H 28 V 96 H 0 Z",
-      ...solidAppearance("#111827"),
-    },
-    ...[32, 24, 16].map((size) => ({
-      id: `${prefix}_${size}`,
-      kind: "rectangle" as const,
-      name: `${prefix} ${size}px test`,
-      parentId: `${prefix}_root`,
-      x: 152 + (32 - size) * 3,
-      y: 40,
-      width: size,
-      height: size,
       ...solidAppearance(color),
-      cornerRadius: Math.max(2, size / 6),
-    })),
+    },
+    {
+      id: `${prefix}_evidence`,
+      kind: "frame",
+      name: `${prefix} scale evidence`,
+      parentId: `${prefix}_root`,
+      x: 146,
+      y: 40,
+      width: 172,
+      height: 64,
+      ...solidAppearance("#FFF7F2"),
+      cornerRadius: 0,
+    },
   ];
 }
 

@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { beforeAll, describe, expect, it } from "vitest";
+import type { VectorNetwork } from "@opendesign/design-contracts";
 import { serializeVectorNetwork } from "./editable-vector.js";
 import {
   outlineVectorNetworkStroke,
@@ -273,4 +274,218 @@ describe("editable stroke outline", () => {
         ok: true,
       });
   });
+
+  it.each(["WEDGE", "EYE", "TAPER"] as const)(
+    "materializes an open %s profile as one closed editable region",
+    (widthProfile) => {
+      const result = outlineVectorNetworkStroke(
+        lineNetwork(),
+        { path: "M0 0L100 0" },
+        {
+          align: "center",
+          cap: "round",
+          join: "round",
+          miterLimit: 4,
+          variableWidthStrokeProperties: { widthProfile },
+          width: 16,
+        },
+        provider,
+        `variable_${widthProfile.toLowerCase()}`,
+      );
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.network.paths.every((path) => path.closed)).toBe(true);
+      expect(result.network.regions).toHaveLength(1);
+      expect(serializeVectorNetwork(result.network)).toMatchObject({
+        ok: true,
+      });
+    },
+  );
+
+  it("materializes custom cubic width points by arc length", () => {
+    const network = lineNetwork();
+    network.segments[0]!.tangentStart = { x: 0, y: 100 };
+    network.segments[0]!.tangentEnd = { x: 0, y: 100 };
+    const result = outlineVectorNetworkStroke(
+      network,
+      { path: "M0 0C0 100 100 -100 100 0" },
+      {
+        align: "center",
+        cap: "butt",
+        join: "miter",
+        miterLimit: 4,
+        variableWidthStrokeProperties: {
+          widthProfile: "CUSTOM",
+          variableWidthPoints: [
+            { position: 0, width: 0.2 },
+            { position: 0.35, width: 1.4 },
+            { position: 1, width: 0.4 },
+          ],
+        },
+        width: 12,
+      },
+      provider,
+      "variable_custom_cubic",
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const serialized = serializeVectorNetwork(result.network);
+    expect(serialized.ok).toBe(true);
+    if (!serialized.ok) return;
+    expect(serialized.bounds.height).toBeGreaterThan(50);
+    expect(result.network.paths.every((path) => path.closed)).toBe(true);
+  });
+
+  it.each(["inside", "outside"] as const)(
+    "materializes a closed variable-width %s stroke",
+    (align) => {
+      const result = outlineVectorNetworkStroke(
+        rectangleNetwork(),
+        { path: "M0 0L100 0L100 100L0 100Z" },
+        {
+          align,
+          cap: "butt",
+          join: "miter",
+          miterLimit: 4,
+          variableWidthStrokeProperties: {
+            widthProfile: "MIRRORED_TAPER",
+          },
+          width: 10,
+        },
+        provider,
+        `variable_closed_${align}`,
+      );
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      const serialized = serializeVectorNetwork(result.network);
+      expect(serialized.ok).toBe(true);
+      if (!serialized.ok) return;
+      if (align === "inside") {
+        expect(serialized.bounds.x).toBeGreaterThanOrEqual(0);
+        expect(serialized.bounds.y).toBeGreaterThanOrEqual(0);
+        expect(serialized.bounds.width).toBeLessThanOrEqual(100);
+        expect(serialized.bounds.height).toBeLessThanOrEqual(100);
+      } else {
+        expect(serialized.bounds.x).toBeLessThanOrEqual(0);
+        expect(serialized.bounds.y).toBeLessThanOrEqual(0);
+        expect(serialized.bounds.width).toBeGreaterThanOrEqual(100);
+        expect(serialized.bounds.height).toBeGreaterThanOrEqual(100);
+      }
+    },
+  );
+
+  it("rejects dashed and branching variable-width outlines", () => {
+    const dashed = outlineVectorNetworkStroke(
+      lineNetwork(),
+      { path: "M0 0L100 0" },
+      {
+        align: "center",
+        cap: "butt",
+        dashPattern: [4, 2],
+        join: "miter",
+        miterLimit: 4,
+        variableWidthStrokeProperties: { widthProfile: "TAPER" },
+        width: 10,
+      },
+      provider,
+      "variable_dashed",
+    );
+    expect(dashed).toMatchObject({
+      ok: false,
+      code: "invalid-input",
+      message: "Variable width strokes do not support dash patterns",
+    });
+
+    const network = lineNetwork();
+    network.vertices.push(
+      { id: "c", x: 100, y: 50 },
+      { id: "d", x: 100, y: -50 },
+    );
+    network.segments.push({
+      id: "bc",
+      startVertexId: "b",
+      endVertexId: "c",
+    });
+    network.paths.push({
+      id: "branch",
+      closed: false,
+      segments: [{ segmentId: "bc", reversed: false }],
+    });
+    network.segments.push({
+      id: "bd",
+      startVertexId: "b",
+      endVertexId: "d",
+    });
+    network.paths.push({
+      id: "branch_two",
+      closed: false,
+      segments: [{ segmentId: "bd", reversed: false }],
+    });
+    const branching = outlineVectorNetworkStroke(
+      network,
+      { path: "M0 0L100 0M100 0L100 50M100 0L100 -50" },
+      {
+        align: "center",
+        cap: "butt",
+        join: "miter",
+        miterLimit: 4,
+        variableWidthStrokeProperties: { widthProfile: "TAPER" },
+        width: 10,
+      },
+      provider,
+      "variable_branching",
+    );
+    expect(branching).toMatchObject({
+      ok: false,
+      code: "invalid-input",
+      message:
+        "Variable width strokes do not support branching Vector Networks",
+    });
+  });
 });
+
+function lineNetwork(): VectorNetwork {
+  return {
+    vertices: [
+      { id: "a", x: 0, y: 0 },
+      { id: "b", x: 100, y: 0 },
+    ],
+    segments: [{ id: "ab", startVertexId: "a", endVertexId: "b" }],
+    paths: [
+      {
+        id: "line",
+        closed: false,
+        segments: [{ segmentId: "ab", reversed: false }],
+      },
+    ],
+    regions: [],
+  };
+}
+
+function rectangleNetwork(): VectorNetwork {
+  return {
+    vertices: [
+      { id: "a", x: 0, y: 0 },
+      { id: "b", x: 100, y: 0 },
+      { id: "c", x: 100, y: 100 },
+      { id: "d", x: 0, y: 100 },
+    ],
+    segments: [
+      { id: "ab", startVertexId: "a", endVertexId: "b" },
+      { id: "bc", startVertexId: "b", endVertexId: "c" },
+      { id: "cd", startVertexId: "c", endVertexId: "d" },
+      { id: "da", startVertexId: "d", endVertexId: "a" },
+    ],
+    paths: [
+      {
+        id: "rectangle",
+        closed: true,
+        segments: ["ab", "bc", "cd", "da"].map((segmentId) => ({
+          segmentId,
+          reversed: false,
+        })),
+      },
+    ],
+    regions: [],
+  };
+}

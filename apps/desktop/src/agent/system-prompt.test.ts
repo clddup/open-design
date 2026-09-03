@@ -27,26 +27,26 @@ describe("OpenDesign Agent system prompt", () => {
       "graphic-capture-critic",
     );
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
-      "first not-yet-planned target",
+      "first unplanned target",
     );
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).not.toContain("briefFidelity");
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).not.toContain(
       "semanticObjects decision",
     );
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
-      "Each executable Plan is a one-target rolling stage",
+      "each Plan is one target",
     );
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
-      "stages are real semantic commits",
+      "stages are semantic commits",
     );
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
-      "no more than 48 model-authored content elements",
+      "at most 48 authored elements",
     );
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
       "Main owns and creates the real region Frames",
     );
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
-      "one or more declared planned regions",
+      "one or more planned regions",
     );
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
       "surfaceMode/expressiveness/density",
@@ -55,7 +55,7 @@ describe("OpenDesign Agent system prompt", () => {
       "three different visual mechanisms",
     );
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
-      "logoExploration is mandatory in this call",
+      "every logoExploration direction owns a different form hypothesis",
     );
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
       "deliveryStage.nextTarget",
@@ -68,14 +68,17 @@ describe("OpenDesign Agent system prompt", () => {
       "canonical fills/strokes, gradients",
     );
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
-      "instead of flat rectangle stacks",
+      "only when they serve the chosen form",
+    );
+    expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
+      "width/height do not rescale path commands",
     );
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
       "inspection.document.componentCatalog",
     );
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain("linked Instances");
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
-      "never use a fixed acknowledgement",
+      "Never use a fixed acknowledgement",
     );
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT.length).toBeLessThan(17_000);
   });
@@ -100,23 +103,21 @@ describe("OpenDesign Agent system prompt", () => {
     expect(inferNewDesignDeliverable("创造一个新的视觉方向")).toBeUndefined();
   });
 
-  it("binds explicit fast and thorough execution depth without changing scope", () => {
-    const fast = newDesignSystemPromptForRequest({
+  it("uses one quality execution policy without a fast-mode bypass", () => {
+    const newDesign = newDesignSystemPromptForRequest({
       prompt: "设计一个 OpenDesign 应用图标",
-      generationMode: "fast",
     });
-    const thorough = agentSystemPromptForRequest({
+    const refinement = agentSystemPromptForRequest({
       prompt: "继续精修当前设计",
-      generationMode: "thorough",
     });
 
-    expect(fast).toContain("execution policy: ADAPTIVE");
-    expect(fast).toContain("one requested Logo/Icon focused");
-    expect(fast).not.toContain("logoOutputs is optional");
-    expect(fast).toContain("may complete ordinary explicit edits directly");
-    expect(fast).toContain("Logo and identity targets");
-    expect(thorough).toContain("execution depth: THOROUGH");
-    expect(thorough).toContain("first meaningful real revision immediately");
+    expect(newDesign).toContain("execution policy: produce a strong first");
+    expect(newDesign).toContain("one requested Logo/Icon focused");
+    expect(newDesign).not.toContain("logoOutputs is optional");
+    expect(newDesign).toContain("exact-revision independent visual review");
+    expect(refinement).toContain("first meaningful revision immediately");
+    expect(refinement).not.toContain("Fast mode");
+    expect(refinement).not.toContain("THOROUGH");
   });
 
   it("requires user-confirmed Delivery Plans only for host-selected broad briefs", () => {
@@ -150,7 +151,6 @@ describe("OpenDesign Agent system prompt", () => {
     const chinese = newDesignSystemPromptForRequest({
       prompt:
         "为 OpenDesign 设计品牌 Logo，配套英文 Wordmark，其他说明使用中文。",
-      generationMode: "fast",
     });
     expect(chinese).toContain(
       "trusted design-content language: Simplified Chinese",
@@ -160,27 +160,16 @@ describe("OpenDesign Agent system prompt", () => {
 
     const english = agentSystemPromptForRequest({
       prompt: "Refine the current desktop dashboard",
-      generationMode: "fast",
     });
     expect(english).toContain("trusted design-content language: English");
   });
 
-  it("keeps bounded reasoning for the first usable design instead of revealing a thoughtless placeholder", () => {
+  it("honors the user's selected reasoning effort on every design surface", () => {
     const request = {
-      generationMode: "fast" as const,
       modelSelection: { reasoningEffort: "high" as const },
     };
-    expect(designThinkingLevelForRequest(request, "new-design")).toBe("low");
-    expect(designThinkingLevelForRequest(request, "general")).toBe("off");
-    expect(
-      designThinkingLevelForRequest(
-        {
-          generationMode: "thorough",
-          modelSelection: { reasoningEffort: "high" },
-        },
-        "new-design",
-      ),
-    ).toBe("high");
+    expect(designThinkingLevelForRequest(request, "new-design")).toBe("high");
+    expect(designThinkingLevelForRequest(request, "general")).toBe("high");
   });
 
   it("fixes the product role to visual design instead of coding or files", () => {
@@ -296,7 +285,7 @@ describe("OpenDesign Agent system prompt", () => {
       "General Runs may use opendesign_design_checkpoint action apply-and-capture",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
-      "thorough mode also returns independent critic findings",
+      "Every delivery target uses exact-revision independent visual review",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).not.toContain(
       "review-refine-and-capture",

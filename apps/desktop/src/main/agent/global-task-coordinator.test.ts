@@ -2128,23 +2128,22 @@ describe("GlobalTaskCoordinator", () => {
     store.close();
   });
 
-  it("lets fast mode complete a clean first draft without an elective refinement round", async () => {
+  it("keeps a captured draft unverified until exact-revision visual review", async () => {
     const { store, host, file, opened, pageId } = await setup();
     const coordinator = new GlobalTaskCoordinator(host, store);
     await coordinator.registerRun({
       type: "run.start",
-      runId: "run_fast_delivery",
+      runId: "run_reviewed_delivery",
       sessionId: "conversation_mobile",
       prompt: "Design one focused logo",
       documentId: file.documentId,
       revision: opened.document.revision,
       modelSelection,
-      generationMode: "fast",
       scope: { kind: "page", pageId, selectedNodeIds: [] },
       mutationTarget: { kind: "page", pageId },
     });
     const context = {
-      runId: "run_fast_delivery",
+      runId: "run_reviewed_delivery",
       sessionId: "conversation_mobile",
       documentId: file.documentId,
       revision: opened.document.revision,
@@ -2179,7 +2178,7 @@ describe("GlobalTaskCoordinator", () => {
       })),
     };
     const target = plan.targets[0];
-    if (!target) throw new Error("Fast delivery target is missing");
+    if (!target) throw new Error("Delivery target is missing");
     coordinator.registerDesignPlan(context, plan);
     const allocation = coordinator.createDesignPlanAllocation(context.runId);
     coordinator.recordDesignPlanAllocated(
@@ -2218,154 +2217,47 @@ describe("GlobalTaskCoordinator", () => {
         ),
       ),
     ).toMatchObject({
-      nextAction: "complete-delivery",
-      verified: true,
-      verification: "deterministic-fast-delivery",
+      nextAction: "record-visual-review",
+      reviewEligible: true,
     });
     expect(
       coordinator.getDeliveryLedger(context.runId)?.targets[0],
     ).toMatchObject({
-      status: "verified",
+      status: "captured",
       captureRevision: 2,
-      reviewRevision: 2,
-      verifiedRevision: 2,
     });
-    store.close();
-  });
-
-  it("verifies fast delivery without a Provider critic or forced refinement", async () => {
-    const { store, host, file, opened, pageId } = await setup();
-    const coordinator = new GlobalTaskCoordinator(host, store);
-    await coordinator.registerRun({
-      type: "run.start",
-      runId: "run_fast_bounded_review",
-      sessionId: "conversation_mobile",
-      prompt: "Design one focused logo",
-      documentId: file.documentId,
-      revision: opened.document.revision,
-      modelSelection,
-      generationMode: "fast",
-      scope: { kind: "page", pageId, selectedNodeIds: [] },
-      mutationTarget: { kind: "page", pageId },
-    });
-    const context = {
-      runId: "run_fast_bounded_review",
-      sessionId: "conversation_mobile",
-      documentId: file.documentId,
-      revision: opened.document.revision,
-      scope: { kind: "page" as const, pageId, selectedNodeIds: [] },
-      mutationTarget: { kind: "page" as const, pageId },
-    };
-    coordinator.recordDocumentInspection(
-      context,
-      inspectionResult(opened.document, pageId),
-    );
-    const plan: DesignPlanToolInput = {
-      ...designPlanForPage(pageId),
-      deliverable: "brand-asset",
-      designIntent: {
-        ...designPlanForPage(pageId).designIntent,
-        calibration: {
-          ...designPlanForPage(pageId).designIntent.calibration,
-          surfaceMode: "graphic",
-        },
-      },
-      rasterAssetRoles: [],
-      skillRefs: BUILTIN_GRAPHIC_DESIGN_SKILL_REFS.map((reference) => ({
-        ...reference,
-      })),
-      targets: designPlanForPage(pageId).targets.map((target) => ({
-        ...target,
-        composition: {
-          ...target.composition,
-          regions: target.composition.regions.slice(0, 1),
-        },
-        qualityProfile: { kind: "graphic" },
-      })),
-    };
-    const target = plan.targets[0];
-    if (!target) throw new Error("Fast delivery target is missing");
-    coordinator.registerDesignPlan(context, plan);
-    const allocation = coordinator.createDesignPlanAllocation(context.runId);
-    coordinator.recordDesignPlanAllocated(
-      context.runId,
-      allocation?.targetIds ?? [],
-      1,
-    );
-    const draft = draftTargets(pageId, plan.targets);
-    const draftAuthorization = coordinator.assertDesignPlanForApply(
-      context,
-      draft,
-    );
-    coordinator.recordDesignApplyCompleted(
-      context.runId,
-      draftAuthorization?.input ?? draft,
-      draftAuthorization,
-      2,
-    );
-    const draftedDocument = withDraftedTargets(
-      opened.document,
-      pageId,
-      plan.targets,
-      2,
-    );
-    coordinator.recordDocumentInspection(
-      context,
-      inspectionResult(draftedDocument, pageId),
-    );
     expect(
       coordinator.resolveVisualCriticContext(context, 2, {
-        attachmentId: "capture_fast",
+        attachmentId: "capture",
         byteSize: 12_000,
         mimeType: "image/jpeg",
-        name: "fast.jpg",
+        name: "capture.jpg",
       }),
-    ).toBeNull();
-    expect(
-      coordinator.recordCanvasCapture(
-        context,
-        2,
-        diagnoseDesignTargetLayout(
-          draftedDocument,
-          pageId,
-          target.artboard.frameId,
-          target.qualityProfile,
-        ),
-      ),
     ).toMatchObject({
-      nextAction: "complete-delivery",
-      verified: true,
-      verification: "deterministic-fast-delivery",
-    });
-    expect(
-      coordinator.getDeliveryLedger(context.runId)?.targets[0],
-    ).toMatchObject({
-      status: "verified",
-      captureRevision: 2,
-      reviewRevision: 2,
-      verifiedRevision: 2,
+      observedRevision: 2,
+      phase: "draft",
+      target: { targetId: target.targetId },
     });
     store.close();
   });
 
-  it("reviews the first new fast UI target once before reusing its visual system", async () => {
+  it("reviews every UI target without a lower-quality fast-mode bypass", async () => {
     const { store, host, file, opened, pageId } = await setup();
     const coordinator = new GlobalTaskCoordinator(host, store);
     await coordinator.registerRun({
       type: "run.start",
-      runId: "run_fast_ui_visual_system",
+      runId: "run_ui_visual_system",
       sessionId: "conversation_mobile",
       prompt:
         "Design the Home and Profile screens with a distinctive visual system",
       documentId: file.documentId,
       revision: opened.document.revision,
       modelSelection,
-      generationMode: "fast",
       scope: { kind: "page", pageId, selectedNodeIds: [] },
       mutationTarget: { kind: "page", pageId },
     });
     const context = {
-      runId: "run_fast_ui_visual_system",
+      runId: "run_ui_visual_system",
       sessionId: "conversation_mobile",
       documentId: file.documentId,
       revision: opened.document.revision,
@@ -2379,7 +2271,7 @@ describe("GlobalTaskCoordinator", () => {
     const plan = multiTargetPlan(pageId);
     const home = plan.targets[0];
     const profile = plan.targets[1];
-    if (!home || !profile) throw new Error("Fast UI fixture is incomplete");
+    if (!home || !profile) throw new Error("UI fixture is incomplete");
     coordinator.registerDesignPlan(context, plan);
     const allocation = coordinator.createDesignPlanAllocation(context.runId);
     coordinator.recordDesignPlanAllocated(
@@ -2412,19 +2304,15 @@ describe("GlobalTaskCoordinator", () => {
     );
     expect(
       coordinator.resolveVisualCriticContext(context, 2, {
-        attachmentId: "capture_fast_ui_home",
+        attachmentId: "capture_ui_home",
         byteSize: 12_000,
         mimeType: "image/jpeg",
         name: "home.jpg",
       }),
     ).toMatchObject({
-      generationMode: "fast",
       phase: "draft",
       target: { targetId: home.targetId },
     });
-    expect(() =>
-      coordinator.recordCanvasCapture(context, 2, homeLayout),
-    ).toThrow("design_workflow.visual_critic_unavailable");
     expect(
       coordinator.recordCanvasCapture(
         context,
@@ -2442,7 +2330,7 @@ describe("GlobalTaskCoordinator", () => {
       label: "Refine the reviewed Home visual system",
       commands: [
         {
-          commandId: "refine_fast_ui_home",
+          commandId: "refine_ui_home",
           type: "update_properties",
           nodeId: `${home.artboard.frameId}_content_material`,
           opacity: 0.98,
@@ -2467,12 +2355,16 @@ describe("GlobalTaskCoordinator", () => {
     );
     expect(
       coordinator.resolveVisualCriticContext(context, 3, {
-        attachmentId: "capture_fast_ui_home_refined",
+        attachmentId: "capture_ui_home_refined",
         byteSize: 12_000,
         mimeType: "image/jpeg",
         name: "home-refined.jpg",
       }),
-    ).toBeNull();
+    ).toMatchObject({
+      observedRevision: 3,
+      phase: "final",
+      target: { targetId: home.targetId },
+    });
     expect(
       coordinator.recordCanvasCapture(
         context,
@@ -2483,11 +2375,11 @@ describe("GlobalTaskCoordinator", () => {
           home.artboard.frameId,
           home.qualityProfile,
         ),
+        independentCritic(3, true),
       ),
     ).toMatchObject({
       deliveryTargetId: home.targetId,
       nextAction: "continue-next-target",
-      verification: "deterministic-fast-delivery",
       verified: true,
     });
 
@@ -2514,12 +2406,16 @@ describe("GlobalTaskCoordinator", () => {
     );
     expect(
       coordinator.resolveVisualCriticContext(context, 4, {
-        attachmentId: "capture_fast_ui_profile",
+        attachmentId: "capture_ui_profile",
         byteSize: 12_000,
         mimeType: "image/jpeg",
         name: "profile.jpg",
       }),
-    ).toBeNull();
+    ).toMatchObject({
+      observedRevision: 4,
+      phase: "draft",
+      target: { targetId: profile.targetId },
+    });
     expect(
       coordinator.recordCanvasCapture(
         context,
@@ -2530,11 +2426,12 @@ describe("GlobalTaskCoordinator", () => {
           profile.artboard.frameId,
           profile.qualityProfile,
         ),
+        independentCritic(4, true),
       ),
     ).toMatchObject({
       deliveryTargetId: profile.targetId,
       nextAction: "complete-delivery",
-      verification: "deterministic-fast-delivery",
+      verification: "independent-visual-critic",
       verified: true,
     });
     store.close();
@@ -2552,7 +2449,6 @@ describe("GlobalTaskCoordinator", () => {
       documentId: file.documentId,
       revision: opened.document.revision,
       modelSelection,
-      generationMode: "fast",
       scope: { kind: "page", pageId, selectedNodeIds: [] },
       mutationTarget: { kind: "page", pageId },
     });
@@ -2686,7 +2582,6 @@ describe("GlobalTaskCoordinator", () => {
       documentId: file.documentId,
       revision: opened.document.revision,
       modelSelection,
-      generationMode: "fast",
       scope: { kind: "page", pageId, selectedNodeIds: [] },
       mutationTarget: { kind: "page", pageId },
     });
@@ -2754,23 +2649,22 @@ describe("GlobalTaskCoordinator", () => {
     store.close();
   });
 
-  it("keeps a bounded visual critic for fast Logo work and binds repeated command Pages to the registered Run", async () => {
+  it("keeps an exact-revision visual critic for Logo work and binds repeated command Pages to the registered Run", async () => {
     const { store, host, file, opened, pageId } = await setup();
     const coordinator = new GlobalTaskCoordinator(host, store);
     await coordinator.registerRun({
       type: "run.start",
-      runId: "run_fast_logo_review",
+      runId: "run_logo_review",
       sessionId: "conversation_mobile",
       prompt: "为 OpenDesign 设计一个有独立识别度的 Logo",
       documentId: file.documentId,
       revision: opened.document.revision,
       modelSelection,
-      generationMode: "fast",
       scope: { kind: "page", pageId, selectedNodeIds: [] },
       mutationTarget: { kind: "page", pageId },
     });
     const context = {
-      runId: "run_fast_logo_review",
+      runId: "run_logo_review",
       sessionId: "conversation_mobile",
       documentId: file.documentId,
       revision: opened.document.revision,
@@ -2840,13 +2734,12 @@ describe("GlobalTaskCoordinator", () => {
 
     expect(
       coordinator.resolveVisualCriticContext(context, 2, {
-        attachmentId: "capture_fast_logo",
+        attachmentId: "capture_reviewed_logo",
         byteSize: 12_000,
         mimeType: "image/jpeg",
-        name: "fast-logo.jpg",
+        name: "logo.jpg",
       }),
     ).toMatchObject({
-      generationMode: "fast",
       plan: { deliverable: "logo" },
       observedRevision: 2,
       phase: "draft",
@@ -3053,6 +2946,13 @@ describe("GlobalTaskCoordinator", () => {
     ).not.toThrow();
     const refineHome: DesignApplyToolInput = {
       label: "Refine Home hierarchy",
+      steps: [
+        {
+          stepId: "target_home.review-refine",
+          label: "复核并精修首页",
+          commandIds: ["refine_home"],
+        },
+      ],
       commands: [
         {
           commandId: "refine_home",
@@ -3072,6 +2972,24 @@ describe("GlobalTaskCoordinator", () => {
       homeAuthorization,
       3,
     );
+    expect(
+      coordinator.getDeliveryLedger(context.runId)?.planExecution?.targets,
+    ).toMatchObject([
+      {
+        targetId: "target_home",
+        steps: [
+          { kind: "implementation", status: "completed" },
+          { kind: "review-refine", status: "in_progress" },
+        ],
+      },
+      {
+        targetId: "target_profile",
+        steps: [
+          { kind: "implementation", status: "pending" },
+          { kind: "review-refine", status: "pending" },
+        ],
+      },
+    ]);
     const homeRefinedDocument = structuredClone(draftedDocument);
     homeRefinedDocument.revision = 3;
     coordinator.recordDocumentInspection(
@@ -3288,7 +3206,6 @@ describe("GlobalTaskCoordinator", () => {
       documentId: file.documentId,
       revision: opened.document.revision,
       modelSelection,
-      generationMode: "fast",
       deliveryScopeReview: "required",
       scope: { kind: "page", pageId, selectedNodeIds: [] },
       mutationTarget: { kind: "page", pageId },
@@ -3531,7 +3448,6 @@ describe("GlobalTaskCoordinator", () => {
       documentId: context.documentId,
       revision: scopeRevision,
       modelSelection,
-      generationMode: "fast",
       deliveryScopeReview: "required",
       scope: { kind: "page", pageId, selectedNodeIds: [] },
       mutationTarget: { kind: "page", pageId },

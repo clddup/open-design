@@ -71,6 +71,10 @@ export type VectorSegmentReference = Static<
 export type VectorPathRun = Static<typeof schema.VectorPathRunSchema>;
 export type VectorRegion = Static<typeof schema.VectorRegionSchema>;
 export type VectorNetwork = Static<typeof schema.VectorNetworkSchema>;
+export type VariableWidthPoint = Static<typeof schema.VariableWidthPointSchema>;
+export type VariableWidthStrokeProperties = Static<
+  typeof schema.VariableWidthStrokePropertiesSchema
+>;
 export type PathDataProperties = Static<typeof schema.PathDataPropertiesSchema>;
 export type VectorNetworkProperties = Static<
   typeof schema.VectorNetworkPropertiesSchema

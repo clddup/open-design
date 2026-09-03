@@ -14,6 +14,7 @@ import type {
   Transform,
   VectorNetwork,
   VectorPointMode,
+  VariableWidthStrokeProperties,
   ViewportState,
 } from "@opendesign/design-contracts";
 import type { VectorGeometryProvider } from "@opendesign/geometry-service/vector-path";
@@ -95,11 +96,15 @@ export type LeaferVectorEditRequest =
   | { deleteNode: true; nodeId: string }
   | {
       deleteNode: false;
-      edits: readonly { network: VectorNetwork; nodeId: string }[];
+      edits: readonly {
+        network: VectorNetwork;
+        nodeId: string;
+        variableWidthStrokeProperties?: VariableWidthStrokeProperties;
+      }[];
     };
 
 export type LeaferVectorEditTool =
-  "move" | "pen" | "bend" | "cut" | "lasso" | "paint";
+  "move" | "pen" | "bend" | "variable-width" | "cut" | "lasso" | "paint";
 
 export interface LeaferImageCropCommitRequest {
   nodeId: string;
@@ -362,7 +367,10 @@ export interface LeaferVectorEditScope {
     readOnly: boolean;
     selectedSegmentIds: readonly string[];
     selectedVertexIds: readonly string[];
+    strokeWidth: number;
     topologyEditable: boolean;
+    variableWidthEditable: boolean;
+    variableWidthStrokeProperties?: VariableWidthStrokeProperties;
   }[];
   fillStyleId?: string;
   paint?: readonly Paint[];

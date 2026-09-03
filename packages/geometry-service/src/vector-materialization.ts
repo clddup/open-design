@@ -5,6 +5,7 @@ import type {
   VectorPathRun,
   VectorSegment,
   VectorVertex,
+  VariableWidthStrokeProperties,
 } from "@opendesign/design-contracts";
 import {
   serializeVectorNetwork,
@@ -22,6 +23,7 @@ import type {
   VectorStrokeCap,
   VectorStrokeJoin,
 } from "./vector-path.js";
+import { projectVariableWidthStrokePaths } from "./vector-variable-width.js";
 
 const MAX_PATH_CHARACTERS = 200_000;
 const MAX_GEOMETRY_ITEMS = 16_384;
@@ -47,6 +49,7 @@ export interface VectorOutlineOptions {
   dashPattern?: readonly number[];
   join: VectorStrokeJoin;
   miterLimit: number;
+  variableWidthStrokeProperties?: VariableWidthStrokeProperties;
   width: number;
 }
 
@@ -190,6 +193,18 @@ export function outlineVectorNetworkStroke(
   }
   const roundedSource = { ...source, path: rounded.path };
   if (
+    options.variableWidthStrokeProperties &&
+    options.variableWidthStrokeProperties.widthProfile !== "UNIFORM"
+  ) {
+    return outlineVariableWidthStroke(
+      network,
+      options,
+      options.variableWidthStrokeProperties,
+      provider,
+      idPrefix,
+    );
+  }
+  if (
     !vectorNetworkHasVertexStrokeOverrides(network) &&
     !options.dashPattern?.length
   ) {
@@ -228,6 +243,38 @@ export function outlineVectorNetworkStroke(
     visible.geometry.fillRule,
     idPrefix,
   );
+}
+
+function outlineVariableWidthStroke(
+  network: VectorNetwork,
+  options: VectorOutlineOptions,
+  profile: VariableWidthStrokeProperties,
+  provider: VectorGeometryProvider,
+  idPrefix: string,
+): VectorMaterializationResult {
+  const projected = projectVariableWidthStrokePaths(network, profile, {
+    align: options.align,
+    cap: options.cap,
+    join: options.join,
+    strokeWidth: options.width,
+    ...(options.cornerRadius === undefined
+      ? {}
+      : { cornerRadius: options.cornerRadius }),
+    ...(options.cornerSmoothing === undefined
+      ? {}
+      : { cornerSmoothing: options.cornerSmoothing }),
+    ...(options.dashPattern === undefined
+      ? {}
+      : { dashPattern: options.dashPattern }),
+  });
+  if (!projected.ok) return geometryFailure(projected.message);
+  const combined = unionGeometry(
+    projected.paths.map((path) => ({ path, fillRule: "nonzero" })),
+    provider,
+  );
+  if (!combined.ok) return geometryFailure(combined.message);
+  if (combined.empty) return geometryFailure("Outlined stroke is empty");
+  return materializeVectorNetwork(combined.path, combined.fillRule, idPrefix);
 }
 
 function buildVertexStrokePieces(

@@ -1294,6 +1294,29 @@ describe("Leafer scene projection", () => {
         }),
       ]),
     );
+
+    editable.properties.network = opened.network;
+    editable.properties.dashPattern = [];
+    editable.properties.variableWidthStrokeProperties = {
+      widthProfile: "EYE",
+    };
+    const variableProjection = projectDesignPage(document, "page_welcome");
+    const variableStroke = variableProjection.elementsById.get(strokeId)?.data;
+    expect(variableStroke).toMatchObject({
+      fill: [{ type: "solid", color: "#151515", opacity: 1, visible: true }],
+      hitFill: "all",
+      stroke: null,
+      strokeWidth: 0,
+      windingRule: "nonzero",
+    });
+    expect(variableStroke?.path).toContain(" Z");
+    expect(variableProjection.warnings).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "vector-stroke-appearance-unsupported",
+        }),
+      ]),
+    );
   });
 
   it("projects directed Line semantics through Leafer Arrow without flattening endpoints", () => {

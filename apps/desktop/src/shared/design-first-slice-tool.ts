@@ -56,7 +56,8 @@ export type DesignFirstSliceToolInput = Omit<
         rationale: string;
       };
       rootNodeId: string;
-      evidenceNodeIds: [string, string, string, string];
+      masterNodeId: string;
+      evidenceRootNodeId: string;
     }>;
   };
 };
@@ -155,12 +156,8 @@ function bindFirstSliceLocalDocumentIds(
             directions: input.logoExploration.directions.map((direction) => ({
               ...direction,
               rootNodeId: stableId(direction.rootNodeId),
-              evidenceNodeIds: direction.evidenceNodeIds.map(stableId) as [
-                string,
-                string,
-                string,
-                string,
-              ],
+              masterNodeId: stableId(direction.masterNodeId),
+              evidenceRootNodeId: stableId(direction.evidenceRootNodeId),
             })),
           },
         }),
@@ -692,10 +689,8 @@ function refineLogoExploration(
     for (const [id, idPath] of [
       [direction.conceptId, `${path}/conceptId`],
       [direction.rootNodeId, `${path}/rootNodeId`],
-      ...direction.evidenceNodeIds.map(
-        (nodeId, evidenceIndex) =>
-          [nodeId, `${path}/evidenceNodeIds/${evidenceIndex}`] as const,
-      ),
+      [direction.masterNodeId, `${path}/masterNodeId`],
+      [direction.evidenceRootNodeId, `${path}/evidenceRootNodeId`],
     ] as const) {
       registerUniqueId(
         identities,
@@ -706,39 +701,67 @@ function refineLogoExploration(
         issues,
       );
     }
-    for (const [
-      evidenceIndex,
-      evidenceNodeId,
-    ] of direction.evidenceNodeIds.entries()) {
-      if (
-        !elementsById.has(evidenceNodeId) ||
-        !parentChainReaches(evidenceNodeId, direction.rootNodeId, parentById)
-      ) {
-        issues.push(
-          issue(
-            "first_slice.logo_evidence_not_materialized",
-            `${path}/evidenceNodeIds/${evidenceIndex}`,
-            "Logo evidence must be an actual descendant of the declared concept root",
-            `firstSlice descendant of ${direction.rootNodeId}`,
-            evidenceNodeId,
-          ),
-        );
-      }
+    const master = elementsById.get(direction.masterNodeId);
+    if (
+      !master ||
+      !parentChainReaches(master.id, direction.rootNodeId, parentById)
+    ) {
+      issues.push(
+        issue(
+          "first_slice.logo_master_not_materialized",
+          `${path}/masterNodeId`,
+          "Logo master must be an actual descendant of the concept root",
+          `firstSlice descendant of ${direction.rootNodeId}`,
+          direction.masterNodeId,
+        ),
+      );
     }
-    const hasMaterial = [...elementsById.values()].some(
-      (element) =>
-        element.id !== direction.rootNodeId &&
-        isMaterialElement(element) &&
-        parentChainReaches(element.parentId, direction.rootNodeId, parentById),
-    );
+    const evidenceRoot = elementsById.get(direction.evidenceRootNodeId);
+    if (
+      !evidenceRoot ||
+      (evidenceRoot.kind !== "frame" && evidenceRoot.kind !== "group") ||
+      !parentChainReaches(evidenceRoot.id, direction.rootNodeId, parentById)
+    ) {
+      issues.push(
+        issue(
+          "first_slice.logo_evidence_root_not_materialized",
+          `${path}/evidenceRootNodeId`,
+          "Logo evidence root must be an actual Frame or Group beneath the concept root",
+          `firstSlice Frame/Group descendant of ${direction.rootNodeId}`,
+          direction.evidenceRootNodeId,
+        ),
+      );
+    } else if (evidenceRoot.width < 172 || evidenceRoot.height < 64) {
+      issues.push(
+        issue(
+          "first_slice.logo_evidence_root_too_small",
+          `${path}/evidenceRootNodeId`,
+          "Logo evidence root must fit host-derived monochrome and 32/24/16 px specimens",
+          { width: 172, height: 64 },
+          { width: evidenceRoot.width, height: evidenceRoot.height },
+        ),
+      );
+    }
+    const hasMaterial =
+      (master ? isMaterialElement(master) : false) ||
+      [...elementsById.values()].some(
+        (element) =>
+          element.id !== direction.masterNodeId &&
+          isMaterialElement(element) &&
+          parentChainReaches(
+            element.parentId,
+            direction.masterNodeId,
+            parentById,
+          ),
+      );
     if (!hasMaterial) {
       issues.push(
         issue(
           "first_slice.logo_direction_material_required",
-          `${path}/rootNodeId`,
-          "Logo direction root must contain editable material in this first slice",
-          "visible editable descendant",
-          direction.rootNodeId,
+          `${path}/masterNodeId`,
+          "Logo master must contain editable material in this first slice",
+          "visible editable master geometry",
+          direction.masterNodeId,
         ),
       );
     }

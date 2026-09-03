@@ -250,6 +250,34 @@ describe("vector design contracts", () => {
     expect(
       Value.Check(DesignNodeSchema, {
         ...vectorNode,
+        properties: {
+          ...vectorNode.properties,
+          variableWidthStrokeProperties: {
+            widthProfile: "CUSTOM",
+            variableWidthPoints: [
+              { position: 0, width: 0.25 },
+              { position: 0.5, width: 1 },
+              { position: 1, width: 0.25 },
+            ],
+          },
+        },
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(DesignNodeSchema, {
+        ...vectorNode,
+        properties: {
+          ...vectorNode.properties,
+          variableWidthStrokeProperties: {
+            widthProfile: "CUSTOM",
+            variableWidthPoints: [{ position: 0.5, width: -1 }],
+          },
+        },
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(DesignNodeSchema, {
+        ...vectorNode,
         properties: { ...vectorNode.properties, unsupportedGeometry: true },
       }),
     ).toBe(false);
@@ -269,6 +297,26 @@ describe("vector design contracts", () => {
     };
     document.styleOrderByType.PAINT.push("brand-accent");
     expect(DesignDocumentContract.parse(document)).toMatchObject({ ok: true });
+
+    document.nodesById.vector_mark = {
+      ...vectorNode,
+      properties: {
+        ...vectorNode.properties,
+        dashPattern: [8, 4],
+        variableWidthStrokeProperties: { widthProfile: "EYE" },
+      },
+    } as unknown as DesignNode;
+    expect(DesignDocumentContract.parse(document)).toEqual({
+      ok: false,
+      issues: [
+        expect.objectContaining({
+          code: "design.document_variable_width_dashed_stroke_unsupported",
+          path: "/nodesById/vector_mark/properties/dashPattern",
+        }),
+      ],
+    });
+
+    document.nodesById.vector_mark = vectorNode as unknown as DesignNode;
 
     delete document.stylesById["brand-accent"];
     document.styleOrderByType.PAINT = [];

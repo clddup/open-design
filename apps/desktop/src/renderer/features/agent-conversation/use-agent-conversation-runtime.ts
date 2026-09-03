@@ -438,7 +438,6 @@ export function useAgentConversationRuntime({
         scope: selectionScope(current, activePageId),
         mutationTarget: { kind: "page", pageId: activePageId },
         modelSelection,
-        generationMode: "fast",
       };
       conversationIdByRunId.current.set(runId, conversationId);
       workspace.retainFileForRun(

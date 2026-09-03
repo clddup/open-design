@@ -9,6 +9,7 @@ import type {
   VectorSegmentReference,
   VectorVertex,
 } from "@opendesign/design-contracts";
+export { vectorNetworkHasBranches } from "@opendesign/design-contracts";
 import { projectVectorNetworkCornerRadii } from "./vector-corner-radius.js";
 
 export interface VectorNetworkIssue {
@@ -409,21 +410,6 @@ function validateFinitePoint(
   if (!Number.isFinite(point.y)) {
     issues.push({ path: `${path}/y`, message: "coordinate must be finite" });
   }
-}
-
-export function vectorNetworkHasBranches(network: VectorNetwork): boolean {
-  const degrees = new Map<string, number>();
-  for (const segment of network.segments) {
-    degrees.set(
-      segment.startVertexId,
-      (degrees.get(segment.startVertexId) ?? 0) + 1,
-    );
-    degrees.set(
-      segment.endVertexId,
-      (degrees.get(segment.endVertexId) ?? 0) + 1,
-    );
-  }
-  return [...degrees.values()].some((degree) => degree > 2);
 }
 
 function validatePathRun(

@@ -21,6 +21,7 @@ import {
   ROTATION_ORIGIN_DESIGN_SCHEMA_VERSION,
   REGULAR_SHAPE_CORNER_SMOOTHING_DESIGN_SCHEMA_VERSION,
   RULER_GUIDES_DESIGN_SCHEMA_VERSION,
+  VARIABLE_WIDTH_STROKE_DESIGN_SCHEMA_VERSION,
   IMAGE_ASSET_DERIVATIONS_DESIGN_SCHEMA_VERSION,
   IMAGE_BACKGROUND_REPLACEMENT_DESIGN_SCHEMA_VERSION,
   IMAGE_RELIGHTING_DESIGN_SCHEMA_VERSION,
@@ -314,7 +315,19 @@ it("keeps Auto Layout and Layout Guide schema milestones distinct", () => {
   expect(ROTATION_ORIGIN_DESIGN_SCHEMA_VERSION).toBe("1.55.0");
   expect(REGULAR_SHAPE_CORNER_SMOOTHING_DESIGN_SCHEMA_VERSION).toBe("1.56.0");
   expect(RULER_GUIDES_DESIGN_SCHEMA_VERSION).toBe("1.57.0");
-  expect(DESIGN_SCHEMA_VERSION).toBe(RULER_GUIDES_DESIGN_SCHEMA_VERSION);
+  expect(VARIABLE_WIDTH_STROKE_DESIGN_SCHEMA_VERSION).toBe("1.58.0");
+  expect(DESIGN_SCHEMA_VERSION).toBe(
+    VARIABLE_WIDTH_STROKE_DESIGN_SCHEMA_VERSION,
+  );
+});
+
+it("migrates 1.57 documents without inventing a variable width profile", () => {
+  const source = textDocumentFixture();
+  source.schemaVersion =
+    RULER_GUIDES_DESIGN_SCHEMA_VERSION as typeof source.schemaVersion;
+  const migrated = migrateDesignDocument(source);
+  expect(migrated?.schemaVersion).toBe(DESIGN_SCHEMA_VERSION);
+  expect(migrated?.nodesById).toEqual(source.nodesById);
 });
 
 it("migrates 1.56 documents without inventing ruler guides", () => {

@@ -2415,6 +2415,7 @@ describe("vector editing runtime plans", () => {
       selectedSegmentIds: ["segment_ab"],
       selectedVertexIds: ["vertex_b"],
       topologyEditable: true,
+      variableWidthEditable: true,
     });
 
     document.nodesById.frame_welcome!.locked = true;

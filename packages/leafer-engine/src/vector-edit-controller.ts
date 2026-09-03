@@ -5,6 +5,7 @@ import type {
   Transform,
   VectorNetwork,
   VectorPointMode,
+  VariableWidthStrokeProperties,
 } from "@opendesign/design-contracts";
 import {
   serializeVectorNetwork,
@@ -27,6 +28,16 @@ import {
   type VectorCutLocation,
   type VectorHandleReference,
 } from "@opendesign/geometry-service/vector-edit";
+import {
+  deleteVariableWidthPoints,
+  insertVariableWidthPoint,
+  updateVariableWidthPoints,
+} from "@opendesign/geometry-service/vector-variable-width-edit";
+import {
+  variableWidthHitPosition,
+  variableWidthPathLocation,
+  variableWidthProfilePoints,
+} from "@opendesign/geometry-service/vector-variable-width";
 import type * as LeaferEditorModule from "leafer-editor";
 import { constrainPointToOctant } from "./angle-constraint.js";
 import {
@@ -92,6 +103,12 @@ type VectorEditControl =
   | { kind: "path"; nodeId: string }
   | { kind: "region"; nodeId: string; regionId: string }
   | { kind: "vertex"; nodeId: string; vertexId: string }
+  | {
+      index: number;
+      kind: "width-point";
+      nodeId: string;
+      pathId: string;
+    }
   | { kind: "selection-box" }
   | { handle: VectorResizeHandle; kind: "resize" }
   | { kind: "rotate" }
@@ -175,6 +192,19 @@ type VectorEditDrag =
       kind: "pen-start";
       moved: boolean;
       startClient: Point;
+    }
+  | {
+      anchorIndex: number;
+      beforeProfile: VariableWidthStrokeProperties;
+      created: boolean;
+      kind: "variable-width";
+      moved: boolean;
+      pathId: string;
+      startClient: Point;
+      workingProfile: Extract<
+        VariableWidthStrokeProperties,
+        { widthProfile: "CUSTOM" }
+      >;
     };
 
 interface VectorEditSession {
@@ -202,6 +232,11 @@ interface VectorEditSession {
   topologyEditable: boolean;
   tool: LeaferVectorEditTool;
   tracePath: LeaferElement;
+  variableWidthEditable: boolean;
+  selectedWidthPointIndexes: number[];
+  strokeWidth: number;
+  variableWidthStrokeProperties: VariableWidthStrokeProperties;
+  widthPointControls: LeaferElement[];
 }
 
 interface VectorSelectionOverlay {
@@ -460,6 +495,7 @@ export class VectorEditController {
         this.#cancelVectorPenContour(pendingContour);
         return true;
       }
+      if (this.#deleteSelectedVariableWidthPoints()) return true;
       this.#deleteSelectedVectorVertices();
       return true;
     }
@@ -547,6 +583,9 @@ export class VectorEditController {
           selectedVertexIds,
           item.readOnly,
           item.topologyEditable,
+          item.strokeWidth,
+          item.variableWidthEditable,
+          item.variableWidthStrokeProperties ?? { widthProfile: "UNIFORM" },
           scope.fillStyleId,
           scope.paint ?? [{ type: "solid", color: "#4f7fff", opacity: 1 }],
           scope.tool,
@@ -561,7 +600,11 @@ export class VectorEditController {
             (scope.tool !== "bend" || item.readOnly)) ||
           ((session.drag?.kind === "pen" ||
             session.drag?.kind === "pen-start") &&
-            (scope.tool !== "pen" || item.readOnly))
+            (scope.tool !== "pen" || item.readOnly)) ||
+          (session.drag?.kind === "variable-width" &&
+            (scope.tool !== "variable-width" ||
+              item.readOnly ||
+              !item.variableWidthEditable))
         ) {
           this.#cancelVectorEditDrag(session);
         }
@@ -570,6 +613,13 @@ export class VectorEditController {
         else delete session.activePathId;
         session.readOnly = item.readOnly;
         session.topologyEditable = item.topologyEditable;
+        session.strokeWidth = item.strokeWidth;
+        session.variableWidthEditable = item.variableWidthEditable;
+        if (!session.drag) {
+          session.variableWidthStrokeProperties = structuredClone(
+            item.variableWidthStrokeProperties ?? { widthProfile: "UNIFORM" },
+          );
+        }
         if (scope.fillStyleId) session.fillStyleId = scope.fillStyleId;
         else delete session.fillStyleId;
         session.paint = scope.paint ?? [
@@ -618,6 +668,9 @@ export class VectorEditController {
     selectedVertexIds: string[],
     readOnly: boolean,
     topologyEditable: boolean,
+    strokeWidth: number,
+    variableWidthEditable: boolean,
+    variableWidthStrokeProperties: VariableWidthStrokeProperties,
     fillStyleId: string | undefined,
     paint: NonNullable<LeaferVectorEditScope["paint"]>,
     tool: LeaferVectorEditTool,
@@ -636,11 +689,16 @@ export class VectorEditController {
       stroke: LEAFER_EDITOR_SELECTION_COLOR,
     }) as LeaferElement;
     const cutHitPath = new this.#options.leafer.Path({
-      cursor: tool === "bend" ? "pointer" : "crosshair",
+      cursor:
+        tool === "bend" || tool === "variable-width" ? "pointer" : "crosshair",
       editable: false,
       fill: null,
       hittable:
-        !readOnly && (tool === "bend" || tool === "cut" || tool === "pen"),
+        !readOnly &&
+        (tool === "bend" ||
+          (tool === "variable-width" && variableWidthEditable) ||
+          tool === "cut" ||
+          tool === "pen"),
       stroke: "rgba(0, 0, 0, 0.001)",
     }) as LeaferElement;
     const cutGuidePath = new this.#options.leafer.Path({
@@ -702,9 +760,16 @@ export class VectorEditController {
       segmentSelectionPath,
       selectedSegmentIds,
       selectedVertexIds,
+      selectedWidthPointIndexes: [],
+      strokeWidth,
       tool,
       topologyEditable,
       tracePath,
+      variableWidthEditable,
+      variableWidthStrokeProperties: structuredClone(
+        variableWidthStrokeProperties,
+      ),
+      widthPointControls: [],
     };
   }
 
@@ -742,12 +807,17 @@ export class VectorEditController {
     const handleSize = 6 / zoom;
     session.pathElement.set({ path: serialized.path });
     session.cutHitPath.set({
-      cursor: session.tool === "bend" ? "pointer" : "crosshair",
+      cursor:
+        session.tool === "bend" || session.tool === "variable-width"
+          ? "pointer"
+          : "crosshair",
       hittable:
+        !session.readOnly &&
         (session.tool === "cut" ||
           session.tool === "bend" ||
-          session.tool === "pen") &&
-        !session.readOnly,
+          (session.tool === "variable-width" &&
+            session.variableWidthEditable) ||
+          session.tool === "pen"),
       path: serialized.path,
       strokeWidth: 14 / zoom,
     });
@@ -788,8 +858,13 @@ export class VectorEditController {
       control.remove();
       control.destroy();
     });
+    session.widthPointControls.forEach((control) => {
+      control.remove();
+      control.destroy();
+    });
     session.anchorControls = [];
     session.handleControls = [];
+    session.widthPointControls = [];
     const selected = new Set(session.selectedVertexIds);
     for (const vertex of session.network.vertices) {
       const isSelected = selected.has(vertex.id);
@@ -861,6 +936,7 @@ export class VectorEditController {
       path: handleParts.join(" "),
       strokeWidth: 1 / zoom,
     });
+    this.#renderVariableWidthControls(session, zoom);
     renderVectorPenContourOverlay(
       session.penContourOverlay,
       session.penContour,
@@ -872,6 +948,58 @@ export class VectorEditController {
       this.#vectorLasso.activeNodeId !== session.nodeId
     ) {
       session.lassoPath.set({ path: "", visible: false });
+    }
+  }
+
+  #renderVariableWidthControls(session: VectorEditSession, zoom: number): void {
+    if (
+      session.tool !== "variable-width" ||
+      session.readOnly ||
+      !session.topologyEditable ||
+      !session.variableWidthEditable ||
+      session.strokeWidth <= 0
+    ) {
+      return;
+    }
+    const pathId = session.activePathId ?? session.network.paths[0]?.id;
+    if (!pathId) return;
+    const selected = new Set(session.selectedWidthPointIndexes);
+    for (const [index, widthPoint] of variableWidthProfilePoints(
+      session.variableWidthStrokeProperties,
+    ).entries()) {
+      const location = variableWidthPathLocation(
+        session.network,
+        pathId,
+        widthPoint.position,
+      );
+      if (!location) continue;
+      const normal = { x: -location.tangent.y, y: location.tangent.x };
+      const offset = (session.strokeWidth * widthPoint.width) / 2;
+      const point = {
+        x: location.point.x + normal.x * offset,
+        y: location.point.y + normal.y * offset,
+      };
+      const size = (selected.has(index) ? 9 : 7) / zoom;
+      const control = new this.#options.leafer.Ellipse({
+        cursor: "move",
+        editable: false,
+        fill: selected.has(index) ? LEAFER_EDITOR_SELECTION_COLOR : "#ffffff",
+        height: size,
+        hittable: true,
+        stroke: LEAFER_EDITOR_SELECTION_COLOR,
+        strokeWidth: 1.5 / zoom,
+        width: size,
+        x: point.x - size / 2,
+        y: point.y - size / 2,
+      }) as LeaferElement;
+      session.widthPointControls.push(control);
+      this.#vectorEditControls.set(control, {
+        index,
+        kind: "width-point",
+        nodeId: session.nodeId,
+        pathId,
+      });
+      session.overlayGroup.add(control);
     }
   }
 
@@ -1206,6 +1334,10 @@ export class VectorEditController {
       this.#options.callbacks.onVectorEditActiveNodeChange?.(session.nodeId);
     }
     if (this.#appendMeasuredVectorPoint(pointer, session, control)) return;
+    if (session.tool === "variable-width") {
+      this.#beginVariableWidthEdit(pointer, session, control, target);
+      return;
+    }
     if (session.tool === "pen") {
       this.#beginVectorPenPoint(pointer, session, control, target);
       return;
@@ -1405,7 +1537,7 @@ export class VectorEditController {
       return;
     }
 
-    if (control.kind === "region") return;
+    if (control.kind === "region" || control.kind === "width-point") return;
 
     if (!session.selectedVertexIds.includes(control.vertexId)) {
       this.#setVectorSelection(session, [], [control.vertexId]);
@@ -1514,6 +1646,54 @@ export class VectorEditController {
       } else {
         session.network = result.network;
       }
+      this.#renderVectorEditOverlay(session);
+      return;
+    }
+    if (drag.kind === "variable-width") {
+      const local = pointer.getInnerPoint(session.pathElement);
+      const hit = nearestVectorSegmentPoint(session.network, local);
+      if (!hit || hit.pathId !== drag.pathId) return;
+      const location = variableWidthHitPosition(
+        session.network,
+        hit.pathId,
+        hit.segmentId,
+        hit.t,
+      );
+      if (!location || session.strokeWidth <= 0) return;
+      const position = pointer.ctrlKey
+        ? location.position
+        : this.#snapVariableWidthPosition(
+            session,
+            drag.pathId,
+            location.position,
+            7 /
+              Math.max(
+                MATRIX_EPSILON,
+                Math.abs(this.#input?.viewport.zoom ?? 1),
+              ),
+          );
+      const snapped = variableWidthPathLocation(
+        session.network,
+        drag.pathId,
+        position,
+      );
+      if (!snapped) return;
+      const normal = { x: -snapped.tangent.y, y: snapped.tangent.x };
+      const offset = {
+        x: local.x - snapped.point.x,
+        y: local.y - snapped.point.y,
+      };
+      const width =
+        (2 * Math.abs(offset.x * normal.x + offset.y * normal.y)) /
+        session.strokeWidth;
+      const profile = updateVariableWidthPoints(
+        drag.workingProfile,
+        session.selectedWidthPointIndexes,
+        drag.anchorIndex,
+        { position, width },
+      );
+      if (!profile) return;
+      session.variableWidthStrokeProperties = profile;
       this.#renderVectorEditOverlay(session);
       return;
     }
@@ -1779,6 +1959,21 @@ export class VectorEditController {
       this.#submitVectorEdit(session, result.network);
       return;
     }
+    if (drag.kind === "variable-width") {
+      session.drag = null;
+      if (moved || drag.created) {
+        const profile = session.variableWidthStrokeProperties;
+        if (!this.#submitVariableWidthProfile(session, profile)) {
+          session.variableWidthStrokeProperties = structuredClone(
+            drag.beforeProfile,
+          );
+          this.#renderVectorEditOverlays();
+        }
+      } else {
+        this.#renderVectorEditOverlays();
+      }
+      return;
+    }
     if (drag.kind === "pen-start") {
       session.drag = null;
       this.#renderVectorEditOverlay(session);
@@ -1903,6 +2098,10 @@ export class VectorEditController {
         const target = this.#vectorEdits.get(nodeId);
         if (target) target.network = structuredClone(before);
       }
+    } else if (drag.kind === "variable-width") {
+      session.variableWidthStrokeProperties = structuredClone(
+        drag.beforeProfile,
+      );
     } else if (drag.kind !== "cut" && drag.kind !== "pen-start") {
       session.network = drag.before;
     }
@@ -1926,6 +2125,173 @@ export class VectorEditController {
     this.#renderVectorEditOverlay(session);
   }
 
+  #beginVariableWidthEdit(
+    pointer: ReturnType<typeof asLeaferEvent>,
+    session: VectorEditSession,
+    control: VectorEditControl | undefined,
+    target: LeaferElement | undefined,
+  ): void {
+    if (
+      session.readOnly ||
+      !session.topologyEditable ||
+      !session.variableWidthEditable ||
+      session.strokeWidth <= 0
+    ) {
+      return;
+    }
+    const beforeProfile = structuredClone(
+      session.variableWidthStrokeProperties,
+    );
+    let pathId: string;
+    let insertion: ReturnType<typeof insertVariableWidthPoint>;
+    let created = false;
+    if (control?.kind === "width-point") {
+      pathId = control.pathId;
+      const point = variableWidthProfilePoints(beforeProfile)[control.index];
+      insertion = point
+        ? insertVariableWidthPoint(beforeProfile, point.position)
+        : null;
+    } else if (target === session.cutHitPath) {
+      const hit = nearestVectorSegmentPoint(
+        session.network,
+        pointer.getInnerPoint(session.pathElement),
+      );
+      const location = hit
+        ? variableWidthHitPosition(
+            session.network,
+            hit.pathId,
+            hit.segmentId,
+            hit.t,
+          )
+        : null;
+      if (!hit || !location) return;
+      pathId = hit.pathId;
+      insertion = insertVariableWidthPoint(beforeProfile, location.position);
+      created = insertion !== null;
+    } else {
+      return;
+    }
+    if (!insertion) return;
+    const selected = new Set(
+      session.selectedWidthPointIndexes.map((index) =>
+        created && index >= insertion.index ? index + 1 : index,
+      ),
+    );
+    if (pointer.shiftKey) {
+      if (selected.has(insertion.index)) selected.delete(insertion.index);
+      else selected.add(insertion.index);
+    } else if (!selected.has(insertion.index)) {
+      selected.clear();
+      selected.add(insertion.index);
+    }
+    session.activePathId = pathId;
+    session.selectedWidthPointIndexes = [...selected].sort(
+      (left, right) => left - right,
+    );
+    session.variableWidthStrokeProperties = insertion.profile;
+    if (!selected.has(insertion.index)) {
+      this.#renderVectorEditOverlay(session);
+      return;
+    }
+    session.drag = {
+      anchorIndex: insertion.index,
+      beforeProfile,
+      created,
+      kind: "variable-width",
+      moved: false,
+      pathId,
+      startClient: eventClientPoint(pointer),
+      workingProfile: insertion.profile,
+    };
+    this.#renderVectorEditOverlay(session);
+  }
+
+  #snapVariableWidthPosition(
+    session: VectorEditSession,
+    pathId: string,
+    position: number,
+    threshold: number,
+  ): number {
+    const source = variableWidthPathLocation(session.network, pathId, position);
+    if (!source) return position;
+    const candidates = new Set<number>();
+    const path = session.network.paths.find((item) => item.id === pathId);
+    for (const reference of path?.segments ?? []) {
+      for (const parameter of [0, 0.5, 1]) {
+        const location = variableWidthHitPosition(
+          session.network,
+          pathId,
+          reference.segmentId,
+          parameter,
+        );
+        if (location) candidates.add(location.position);
+      }
+    }
+    const points = variableWidthProfilePoints(
+      session.variableWidthStrokeProperties,
+    );
+    for (let index = 0; index < points.length - 1; index += 1) {
+      candidates.add(
+        (points[index]!.position + points[index + 1]!.position) / 2,
+      );
+    }
+    let nearest = position;
+    let nearestDistance = threshold;
+    for (const candidate of candidates) {
+      const location = variableWidthPathLocation(
+        session.network,
+        pathId,
+        candidate,
+      );
+      if (!location) continue;
+      const distance = pointDistance(source.point, location.point);
+      if (distance < nearestDistance) {
+        nearest = candidate;
+        nearestDistance = distance;
+      }
+    }
+    return nearest;
+  }
+
+  #deleteSelectedVariableWidthPoints(): boolean {
+    const session = this.#activeVectorEditSession();
+    if (
+      !session ||
+      session.tool !== "variable-width" ||
+      session.selectedWidthPointIndexes.length === 0
+    ) {
+      return false;
+    }
+    if (session.readOnly) return true;
+    const insertion = insertVariableWidthPoint(
+      session.variableWidthStrokeProperties,
+      variableWidthProfilePoints(session.variableWidthStrokeProperties)[0]
+        ?.position ?? 0,
+    );
+    if (!insertion) return true;
+    const profile = deleteVariableWidthPoints(
+      insertion.profile,
+      session.selectedWidthPointIndexes,
+    );
+    if (!profile) return true;
+    session.selectedWidthPointIndexes = [];
+    this.#submitVariableWidthProfile(session, profile);
+    return true;
+  }
+
+  #submitVariableWidthProfile(
+    session: VectorEditSession,
+    profile: VariableWidthStrokeProperties,
+  ): boolean {
+    return this.#submitVectorEdits([
+      {
+        network: session.network,
+        nodeId: session.nodeId,
+        variableWidthStrokeProperties: profile,
+      },
+    ]);
+  }
+
   #submitVectorEdit(
     session: VectorEditSession,
     network: VectorNetwork,
@@ -1934,7 +2300,11 @@ export class VectorEditController {
   }
 
   #submitVectorEdits(
-    edits: readonly { network: VectorNetwork; nodeId: string }[],
+    edits: readonly {
+      network: VectorNetwork;
+      nodeId: string;
+      variableWidthStrokeProperties?: VariableWidthStrokeProperties;
+    }[],
   ): boolean {
     if (!this.#options.callbacks.onVectorEdit) {
       this.#options.report(new Error("Vector editing callback is unavailable"));
@@ -1950,7 +2320,14 @@ export class VectorEditController {
     }
     for (const edit of edits) {
       const session = this.#vectorEdits.get(edit.nodeId);
-      if (session) session.network = structuredClone(edit.network);
+      if (session) {
+        session.network = structuredClone(edit.network);
+        if (edit.variableWidthStrokeProperties) {
+          session.variableWidthStrokeProperties = structuredClone(
+            edit.variableWidthStrokeProperties,
+          );
+        }
+      }
     }
     this.#renderVectorEditOverlays();
     return true;

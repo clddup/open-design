@@ -2240,7 +2240,6 @@ describe("App", () => {
         selectedNodeIds: ["feature_one"],
       },
       mutationTarget: { kind: "page", pageId: "page_welcome" },
-      generationMode: "fast",
     });
   });
 
@@ -4877,7 +4876,9 @@ describe("App", () => {
             readOnly: false,
             selectedSegmentIds: [],
             selectedVertexIds: [],
+            strokeWidth: 2,
             topologyEditable: true,
+            variableWidthEditable: true,
           },
         ],
         paint: [{ type: "solid", color: "#4f7fff", opacity: 1 }],

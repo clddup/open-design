@@ -170,7 +170,12 @@ const PATH_ELEMENT_SCHEMA = Type.Object(
   {
     ...ELEMENT_BASE_PROPERTIES,
     kind: Type.Literal("path"),
-    path: Type.String({ minLength: 1, maxLength: 20_000 }),
+    path: Type.String({
+      minLength: 1,
+      maxLength: 20_000,
+      description:
+        "Editable SVG path commands in node-local coordinates. width and height do not rescale these coordinates; keep the authored path inside the declared local bounds or provide the matching transform.",
+    }),
   },
   CLOSED,
 );
@@ -232,7 +237,7 @@ function executableElementSchema(
         Type.Number({ minimum: 0, maximum: 100_000 }),
       ),
       clipsContent: Type.Optional(Type.Boolean()),
-      path: Type.Optional(Type.String({ minLength: 1, maxLength: 20_000 })),
+      path: Type.Optional(PATH_ELEMENT_SCHEMA.properties.path),
       text: Type.Optional(TEXT_ELEMENT_SCHEMA.properties.text),
     },
     required: [
@@ -472,6 +477,8 @@ const LOGO_OUTPUTS_SCHEMA = Type.Array(
     minItems: 1,
     maxItems: DESIGN_LOGO_OUTPUTS.length,
     uniqueItems: true,
+    description:
+      "Logo outputs materially present in this current one-target stage only. The reviewed Delivery Scope, not this array, retains outputs assigned to later targets.",
   },
 );
 
@@ -526,12 +533,13 @@ function logoExplorationSchema<TDocumentId extends TSchema>(
               description:
                 "ID of this direction's actual Frame/Group element in firstSlice, not a planned region ID.",
             }),
-            evidenceNodeIds: Type.Array(documentIdSchema, {
-              minItems: 4,
-              maxItems: 4,
-              uniqueItems: true,
+            masterNodeId: Type.Intersect([documentIdSchema], {
               description:
-                "Four distinct firstSlice descendant node IDs under rootNodeId, ordered as monochrome, 32 px, 24 px, and 16 px evidence. Do not repeat rootNodeId.",
+                "ID of the direction's editable master symbol root beneath rootNodeId. Author this mark once; the host derives visual scale evidence from it.",
+            }),
+            evidenceRootNodeId: Type.Intersect([documentIdSchema], {
+              description:
+                "ID of an empty Frame/Group beneath rootNodeId reserved for host-derived monochrome and 32/24/16 px scale evidence. Give it at least 172 x 64 px.",
             }),
           },
           CLOSED,

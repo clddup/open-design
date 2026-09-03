@@ -20,6 +20,7 @@ import {
 import type {
   EditorRuntime,
   EditorSnapshot,
+  VectorEditScope,
   VectorLayerEndpointTarget,
 } from "@opendesign/editor-runtime";
 import {
@@ -71,6 +72,7 @@ import {
   type LeaferTextStyleUpdate,
   type LeaferTextRunStyle,
   type LeaferVectorEditRequest,
+  type LeaferVectorEditScope,
   type LeaferVectorCutRequest,
   type LeaferVectorCutResponse,
   type LeaferVectorEditTool,
@@ -419,15 +421,21 @@ export function Canvas({
   }, [vectorEditCollectionScope, vectorEditState]);
 
   useEffect(() => {
-    if (
-      vectorEditScope?.topologyEditable === false &&
-      vectorEditState?.tool === "paint"
-    ) {
+    const invalidTool =
+      (vectorEditState?.tool === "paint" &&
+        vectorEditScope?.topologyEditable === false) ||
+      (vectorEditState?.tool === "variable-width" &&
+        vectorEditScope?.variableWidthEditable === false);
+    if (invalidTool) {
       setVectorEditState((current) =>
         current ? { ...current, tool: "move" } : current,
       );
     }
-  }, [vectorEditScope?.topologyEditable, vectorEditState?.tool]);
+  }, [
+    vectorEditScope?.topologyEditable,
+    vectorEditScope?.variableWidthEditable,
+    vectorEditState?.tool,
+  ]);
 
   useEffect(() => {
     if (activeAgentRunId === null) {
@@ -1570,16 +1578,9 @@ export function Canvas({
         ? {
             vectorEditScope: {
               activeNodeId: vectorEditCollectionScope.activeNodeId,
-              nodes: vectorEditCollectionScope.nodes.map((scope) => ({
-                ...(scope.activePathId
-                  ? { activePathId: scope.activePathId }
-                  : {}),
-                nodeId: scope.nodeId,
-                readOnly: scope.readOnly,
-                selectedSegmentIds: scope.selectedSegmentIds,
-                selectedVertexIds: scope.selectedVertexIds,
-                topologyEditable: scope.topologyEditable,
-              })),
+              nodes: vectorEditCollectionScope.nodes.map((scope) =>
+                projectVectorEditNodeScope(snapshot.document, scope),
+              ),
               ...(vectorEditState?.fillStyleId
                 ? { fillStyleId: vectorEditState.fillStyleId }
                 : {}),
@@ -1963,16 +1964,18 @@ export function Canvas({
                           )
                         : vectorEditState?.tool === "bend"
                           ? t("canvas.vectorBendHint")
-                          : vectorEditState?.tool === "pen"
-                            ? t("canvas.vectorPenHint")
-                            : vectorEditState?.tool === "lasso"
-                              ? t("canvas.vectorLassoHint")
-                              : t("canvas.vectorEditingHint", {
-                                  pathCount:
-                                    vectorEditScope.selectedSegmentIds.length,
-                                  pointCount:
-                                    vectorEditScope.selectedVertexIds.length,
-                                })}
+                          : vectorEditState?.tool === "variable-width"
+                            ? t("canvas.vectorVariableWidthHint")
+                            : vectorEditState?.tool === "pen"
+                              ? t("canvas.vectorPenHint")
+                              : vectorEditState?.tool === "lasso"
+                                ? t("canvas.vectorLassoHint")
+                                : t("canvas.vectorEditingHint", {
+                                    pathCount:
+                                      vectorEditScope.selectedSegmentIds.length,
+                                    pointCount:
+                                      vectorEditScope.selectedVertexIds.length,
+                                  })}
                   </small>
                 </span>
                 <span className={styles.vectorTools}>
@@ -1986,6 +1989,11 @@ export function Canvas({
                         ["move", "canvas.vectorToolMove", "V"],
                         ["pen", "canvas.vectorToolPen", "P"],
                         ["bend", "canvas.vectorToolBend", null],
+                        [
+                          "variable-width",
+                          "canvas.vectorToolVariableWidth",
+                          null,
+                        ],
                         ["paint", "canvas.vectorToolPaint", null],
                         ["cut", "canvas.vectorToolCut", "X"],
                         ["lasso", "canvas.vectorToolLasso", "Q"],
@@ -1998,10 +2006,13 @@ export function Canvas({
                           (vectorEditScope.readOnly &&
                             (mode === "bend" ||
                               mode === "pen" ||
+                              mode === "variable-width" ||
                               mode === "paint" ||
                               mode === "cut")) ||
                           (!vectorEditScope.topologyEditable &&
-                            mode === "paint")
+                            mode === "paint") ||
+                          (!vectorEditScope.variableWidthEditable &&
+                            mode === "variable-width")
                         }
                         key={mode}
                         onClick={() => {
@@ -2526,6 +2537,35 @@ function getCombinedNodeBounds(
 function solidPaintColor(paints: readonly Paint[]): string {
   const solid = paints.find((paint) => paint.type === "solid");
   return solid?.color.match(/^#[0-9a-f]{6}$/i) ? solid.color : "#4f7fff";
+}
+
+function projectVectorEditNodeScope(
+  document: DesignDocument,
+  scope: VectorEditScope,
+): LeaferVectorEditScope["nodes"][number] {
+  const node = document.nodesById[scope.nodeId];
+  const properties =
+    node &&
+    (node.kind === "path" || node.kind === "vector") &&
+    "network" in node.properties
+      ? node.properties
+      : null;
+  return {
+    ...(scope.activePathId ? { activePathId: scope.activePathId } : {}),
+    nodeId: scope.nodeId,
+    readOnly: scope.readOnly,
+    selectedSegmentIds: scope.selectedSegmentIds,
+    selectedVertexIds: scope.selectedVertexIds,
+    strokeWidth: properties?.strokeWidth ?? 0,
+    topologyEditable: scope.topologyEditable,
+    variableWidthEditable: scope.variableWidthEditable,
+    ...(properties?.variableWidthStrokeProperties
+      ? {
+          variableWidthStrokeProperties:
+            properties.variableWidthStrokeProperties,
+        }
+      : {}),
+  };
 }
 
 function paintStyleOptions(document: DesignDocument) {

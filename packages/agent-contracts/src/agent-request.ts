@@ -111,11 +111,6 @@ export const AgentModelContextSchema = Type.Object(
   { additionalProperties: false },
 );
 
-export const DesignGenerationModeSchema = Type.Union([
-  Type.Literal("fast"),
-  Type.Literal("thorough"),
-]);
-
 export const DeliveryScopeReviewSchema = Type.Union([
   Type.Literal("direct"),
   Type.Literal("required"),
@@ -142,7 +137,6 @@ export const AgentRequestSchema = Type.Union([
       scope: SelectionScopeSchema,
       mutationTarget: DesignMutationTargetSchema,
       modelSelection: ModelSelectionSchema,
-      generationMode: Type.Optional(DesignGenerationModeSchema),
       deliveryScopeReview: Type.Optional(DeliveryScopeReviewSchema),
       modelContext: Type.Optional(AgentModelContextSchema),
       initialDesignInspection: Type.Optional(
@@ -184,7 +178,6 @@ export type AgentDocumentAttachment = Static<
 export type AgentSvgAttachment = Static<typeof AgentSvgAttachmentSchema>;
 export type AgentModelSelection = ModelSelection;
 export type AgentModelContext = Static<typeof AgentModelContextSchema>;
-export type DesignGenerationMode = Static<typeof DesignGenerationModeSchema>;
 export type DeliveryScopeReview = Static<typeof DeliveryScopeReviewSchema>;
 export type AgentRequest = Static<typeof AgentRequestSchema>;
 

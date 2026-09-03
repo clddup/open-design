@@ -71,7 +71,7 @@ export function projectVectorNetworkStrokePaths(
   const renderedNetwork = rounded.network;
   const paths: ProjectedVectorStrokePath[] = [];
   for (const path of renderedNetwork.paths) {
-    const traversal = traversalSegments(renderedNetwork, path);
+    const traversal = vectorPathTraversalSegments(renderedNetwork, path);
     if (!traversal.ok) return traversal;
     if (dashPattern.length > 0) {
       const dashed = dashedPathProjections(
@@ -247,7 +247,7 @@ function globalCapProjection(
   );
 }
 
-function traversalSegments(
+export function vectorPathTraversalSegments(
   network: VectorNetwork,
   path: VectorPathRun,
 ): { ok: true; segments: TraversalSegment[] } | { ok: false; message: string } {

@@ -1223,88 +1223,95 @@ async function executeDesignToolRequestUnsafe(
                             closed: input.closed,
                             ...(input.pathId ? { pathId: input.pathId } : {}),
                           }
-                        : input.action === "bend-segment"
+                        : input.action === "set-variable-width"
                           ? {
                               action: input.action,
-                              pathId: input.pathId,
-                              point: input.point,
-                              segmentId: input.segmentId,
-                              t: input.t,
+                              variableWidthStrokeProperties:
+                                input.variableWidthStrokeProperties,
                             }
-                          : input.action === "set-region-fills"
+                          : input.action === "bend-segment"
                             ? {
                                 action: input.action,
-                                fills: input.fills,
-                                regionId: input.regionId,
+                                pathId: input.pathId,
+                                point: input.point,
+                                segmentId: input.segmentId,
+                                t: input.t,
                               }
-                            : input.action === "set-region-fill-style"
+                            : input.action === "set-region-fills"
                               ? {
                                   action: input.action,
-                                  fillStyleId: input.fillStyleId,
+                                  fills: input.fills,
                                   regionId: input.regionId,
                                 }
-                              : input.action === "set-vertex-stroke-appearance"
+                              : input.action === "set-region-fill-style"
                                 ? {
                                     action: input.action,
-                                    vertexIds: input.vertexIds,
-                                    ...(input.strokeCap === undefined
-                                      ? {}
-                                      : { strokeCap: input.strokeCap }),
-                                    ...(input.strokeJoin === undefined
-                                      ? {}
-                                      : { strokeJoin: input.strokeJoin }),
+                                    fillStyleId: input.fillStyleId,
+                                    regionId: input.regionId,
                                   }
-                                : input.action === "set-vertex-corner-radius"
+                                : input.action ===
+                                    "set-vertex-stroke-appearance"
                                   ? {
                                       action: input.action,
-                                      cornerRadius: input.cornerRadius,
                                       vertexIds: input.vertexIds,
+                                      ...(input.strokeCap === undefined
+                                        ? {}
+                                        : { strokeCap: input.strokeCap }),
+                                      ...(input.strokeJoin === undefined
+                                        ? {}
+                                        : { strokeJoin: input.strokeJoin }),
                                     }
-                                  : input.action === "reverse-path"
+                                  : input.action === "set-vertex-corner-radius"
                                     ? {
                                         action: input.action,
-                                        ...(input.pathId
-                                          ? { pathId: input.pathId }
-                                          : {}),
+                                        cornerRadius: input.cornerRadius,
+                                        vertexIds: input.vertexIds,
                                       }
-                                    : input.action === "disconnect-vertex"
+                                    : input.action === "reverse-path"
                                       ? {
                                           action: input.action,
-                                          pathId: input.pathId,
-                                          ...(input.segmentId
-                                            ? { segmentId: input.segmentId }
+                                          ...(input.pathId
+                                            ? { pathId: input.pathId }
                                             : {}),
-                                          vertexId: input.vertexId,
                                         }
-                                      : input.action === "delete-segments"
+                                      : input.action === "disconnect-vertex"
                                         ? {
                                             action: input.action,
-                                            segmentIds: input.segmentIds,
+                                            pathId: input.pathId,
+                                            ...(input.segmentId
+                                              ? { segmentId: input.segmentId }
+                                              : {}),
+                                            vertexId: input.vertexId,
                                           }
-                                        : input.action === "delete-vertices"
+                                        : input.action === "delete-segments"
                                           ? {
                                               action: input.action,
-                                              vertexIds: input.vertexIds,
+                                              segmentIds: input.segmentIds,
                                             }
-                                          : input.action ===
-                                              "transform-vertices"
+                                          : input.action === "delete-vertices"
                                             ? {
                                                 action: input.action,
-                                                transform: input.transform,
                                                 vertexIds: input.vertexIds,
                                               }
-                                            : input.action === "cut-path"
+                                            : input.action ===
+                                                "transform-vertices"
                                               ? {
                                                   action: input.action,
-                                                  at: input.at,
-                                                  pathId: input.pathId,
+                                                  transform: input.transform,
+                                                  vertexIds: input.vertexIds,
                                                 }
-                                              : {
-                                                  action: input.action,
-                                                  end: input.end,
-                                                  resultNodeId: `vector_cut_${safeToolCallId}_${document.revision}`,
-                                                  start: input.start,
-                                                },
+                                              : input.action === "cut-path"
+                                                ? {
+                                                    action: input.action,
+                                                    at: input.at,
+                                                    pathId: input.pathId,
+                                                  }
+                                                : {
+                                                    action: input.action,
+                                                    end: input.end,
+                                                    resultNodeId: `vector_cut_${safeToolCallId}_${document.revision}`,
+                                                    start: input.start,
+                                                  },
                     );
     if (!plan.ok) {
       throw new Error(`vector-edit.${plan.code}: ${plan.message}`);
@@ -1401,6 +1408,12 @@ async function executeDesignToolRequestUnsafe(
                 }
               : { nodeId: input.nodeId }),
           ...(pathId ? { pathId, closed: path?.closed } : {}),
+          ...(input.action === "set-variable-width"
+            ? {
+                variableWidthStrokeProperties:
+                  input.variableWidthStrokeProperties,
+              }
+            : {}),
           ...(plan.cutResult
             ? {
                 cutVertexIds: plan.cutResult.cutVertexIds,

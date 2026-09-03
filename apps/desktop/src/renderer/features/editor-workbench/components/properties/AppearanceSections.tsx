@@ -28,6 +28,7 @@ import {
   type VectorVertexInspectorSelection,
   type VectorVertexAppearancePatch,
 } from "./VectorVertexAppearanceSection";
+import { VariableWidthStrokeSection } from "./VariableWidthStrokeSection";
 
 export function AppearanceBasicsSection({
   appearanceControlled,
@@ -346,6 +347,12 @@ export function PaintAndEffectsSections({
             </label>
             <Field
               accessibleLabel={t("properties.dashPattern")}
+              disabled={
+                isEditableVectorNode(node) &&
+                node.properties.variableWidthStrokeProperties !== undefined &&
+                node.properties.variableWidthStrokeProperties.widthProfile !==
+                  "UNIFORM"
+              }
               label={t("properties.dash")}
               onCommit={(draft) => {
                 const values = draft
@@ -366,6 +373,12 @@ export function PaintAndEffectsSections({
               value={(node.properties.dashPattern ?? []).join(", ")}
             />
           </div>
+          {isEditableVectorNode(node) && (
+            <VariableWidthStrokeSection
+              onUpdate={onUpdate}
+              properties={node.properties}
+            />
+          )}
           <button
             className={styles.addPaint}
             onClick={() =>

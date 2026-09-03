@@ -186,6 +186,18 @@ export const propertyMessages = {
   "properties.inherit": "Inherit",
   "properties.dash": "Dash",
   "properties.dashPattern": "Dash pattern",
+  "properties.variableWidth": "Variable width",
+  "properties.variableWidthUniform": "Uniform",
+  "properties.variableWidthWedge": "Wedge",
+  "properties.variableWidthTaper": "Taper",
+  "properties.variableWidthQuarterTaper": "Quarter taper",
+  "properties.variableWidthEye": "Eye",
+  "properties.variableWidthMirroredTaper": "Mirrored taper",
+  "properties.variableWidthCustom": "Custom",
+  "properties.variableWidthDashedUnavailable":
+    "Variable width is unavailable for dashed strokes",
+  "properties.variableWidthBranchUnavailable":
+    "Split a branching vector before applying variable width",
   "properties.line": "Line endpoints",
   "properties.lineStart": "Start",
   "properties.lineEnd": "End",

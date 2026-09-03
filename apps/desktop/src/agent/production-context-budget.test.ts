@@ -216,9 +216,9 @@ describe("production Agent context budget", () => {
       expect(gateway.requests[0]?.system).not.toContain(
         'id="graphic-visual-direction"',
       );
-      expect(
-        gateway.requests[0]?.modelSelection.reasoningEffort,
-      ).toBeUndefined();
+      expect(gateway.requests[0]?.modelSelection.reasoningEffort).toBe(
+        "medium",
+      );
       expect(gateway.requests[0]?.tools.map((tool) => tool.name)).toEqual([
         DESIGN_FIRST_SLICE_TOOL_NAME,
         DESIGN_INSPECT_TOOL_NAME,
@@ -342,7 +342,7 @@ describe("production Agent context budget", () => {
     }
   });
 
-  it("keeps fast existing-document work interactive even when the selected model preference is high reasoning", async () => {
+  it("preserves high reasoning for existing-document work", async () => {
     const directory = await mkdtemp(join(tmpdir(), "opendesign-fast-general-"));
     try {
       const gateway = new RecordingGateway(
@@ -367,14 +367,13 @@ describe("production Agent context budget", () => {
 
       const events: AgentEvent[] = [];
       for await (const event of runtime.run({
-        runId: "run_fast_general",
-        sessionId: "conversation_fast_general",
+        runId: "run_general_reasoning",
+        sessionId: "conversation_general_reasoning",
         prompt: "继续优化当前 dashboard",
         documentId: "document_1",
         revision: 3,
         scope: { kind: "page", pageId: "page_1", selectedNodeIds: [] },
         mutationTarget: { kind: "page", pageId: "page_1" },
-        generationMode: "fast",
         modelSelection: {
           providerId: "configured",
           modelId: "design-model",
@@ -413,9 +412,7 @@ describe("production Agent context budget", () => {
       );
       expect(gateway.requests).toHaveLength(1);
       expect(gateway.requests[0]?.system).toBe(OPENDESIGN_AGENT_SYSTEM_PROMPT);
-      expect(
-        gateway.requests[0]?.modelSelection.reasoningEffort,
-      ).toBeUndefined();
+      expect(gateway.requests[0]?.modelSelection.reasoningEffort).toBe("high");
     } finally {
       await rm(directory, { recursive: true, force: true });
     }

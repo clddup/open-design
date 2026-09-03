@@ -8,6 +8,7 @@ import type {
   VectorNetwork,
   VectorNetworkProperties,
   VectorPointMode,
+  VariableWidthStrokeProperties,
 } from "@opendesign/design-contracts";
 import {
   bendVectorSegment,
@@ -61,6 +62,10 @@ export type VectorOperationFailureCode =
 
 export type VectorSemanticEdit =
   | { action: "set-closed"; closed: boolean; pathId?: string }
+  | {
+      action: "set-variable-width";
+      variableWidthStrokeProperties: VariableWidthStrokeProperties;
+    }
   | { action: "reverse-path"; pathId?: string }
   | {
       action: "bend-segment";
@@ -133,6 +138,7 @@ export interface VectorEditScope {
   selectedSegmentIds: readonly string[];
   selectedVertexIds: readonly string[];
   topologyEditable: boolean;
+  variableWidthEditable: boolean;
 }
 
 export interface VectorEditCollectionScope {
@@ -154,6 +160,7 @@ export interface VectorLayerEndpointTarget {
 export interface VectorNetworkUpdateTarget {
   network: VectorNetwork;
   nodeId: string;
+  variableWidthStrokeProperties?: VariableWidthStrokeProperties;
 }
 
 export interface VectorLayerVertexTransformTarget {
@@ -335,6 +342,10 @@ function resolveVectorNodeEditScope(
     selectedSegmentIds: selectedSegments,
     selectedVertexIds: selected,
     topologyEditable: editability.editable,
+    variableWidthEditable:
+      editability.editable &&
+      (node.properties.dashPattern?.length ?? 0) === 0 &&
+      node.properties.strokeWidth > 0,
   };
 }
 
@@ -354,6 +365,18 @@ export function planVectorNetworkUpdate(
   nodeId: string,
   network: VectorNetwork,
 ): VectorOperationPlan {
+  return planVectorNetworkTargetUpdate(document, pageId, {
+    network,
+    nodeId,
+  });
+}
+
+function planVectorNetworkTargetUpdate(
+  document: DesignDocument,
+  pageId: string,
+  target: VectorNetworkUpdateTarget,
+): VectorOperationPlan {
+  const { network, nodeId } = target;
   const node = document.nodesById[nodeId];
   if (
     !node ||
@@ -411,6 +434,13 @@ export function planVectorNetworkUpdate(
         properties: {
           ...structuredClone(node.properties),
           network: normalized.network,
+          ...(target.variableWidthStrokeProperties === undefined
+            ? {}
+            : {
+                variableWidthStrokeProperties: structuredClone(
+                  target.variableWidthStrokeProperties,
+                ),
+              }),
         },
       },
     ],
@@ -445,12 +475,7 @@ export function planVectorNetworkUpdates(
       };
     }
     nodeIds.add(target.nodeId);
-    const plan = planVectorNetworkUpdate(
-      document,
-      pageId,
-      target.nodeId,
-      target.network,
-    );
+    const plan = planVectorNetworkTargetUpdate(document, pageId, target);
     if (!plan.ok) return plan;
     operations.push(...plan.operations);
   }
@@ -626,6 +651,13 @@ export function planVectorSemanticEdit(
   }
   if (edit.action === "cut-with-line") {
     return planVectorLineCut(document, pageId, nodeId, edit);
+  }
+  if (edit.action === "set-variable-width") {
+    return planVectorNetworkTargetUpdate(document, pageId, {
+      network: node.properties.network,
+      nodeId,
+      variableWidthStrokeProperties: edit.variableWidthStrokeProperties,
+    });
   }
   if (edit.action === "cut-path" || edit.action === "disconnect-vertex") {
     const cut =
@@ -868,6 +900,13 @@ export function planVectorOutlineStroke(
     ...(node.properties.dashPattern === undefined
       ? {}
       : { dashPattern: node.properties.dashPattern }),
+    ...(!("network" in node.properties) ||
+    node.properties.variableWidthStrokeProperties === undefined
+      ? {}
+      : {
+          variableWidthStrokeProperties:
+            node.properties.variableWidthStrokeProperties,
+        }),
     join: node.properties.strokeJoin ?? "miter",
     miterLimit: 4,
     width: node.properties.strokeWidth,
@@ -912,6 +951,7 @@ export function planVectorOutlineStroke(
     cornerRadius: 0,
     cornerSmoothing: 0,
     dashPattern: [],
+    variableWidthStrokeProperties: { widthProfile: "UNIFORM" },
     fillRule: normalized.network.regions[0]?.windingRule ?? "nonzero",
     fills: structuredClone(visibleStrokes),
     network: normalized.network,

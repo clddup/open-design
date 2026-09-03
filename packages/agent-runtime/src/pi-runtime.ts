@@ -200,17 +200,14 @@ export class OpenDesignPiRuntime {
               request,
               initialModelToolSurface,
             ) ??
-            (initialModelToolSurface === "new-design" ||
-            request.generationMode === "fast"
-              ? "off"
-              : (request.modelSelection.reasoningEffort ?? "off")),
+            request.modelSelection.reasoningEffort ??
+            "off",
           tools: [...adapter.modelTools],
         },
         sessionId: request.sessionId,
         streamFn: createPiModelGatewayStreamFn({
           modelGateway: this.options.modelGateway,
-          latencyProfile:
-            request.generationMode === "fast" ? "interactive" : "extended",
+          latencyProfile: "extended",
           contextProjection: prepared.context,
           failurePort: modelFailurePort,
           nextAttemptId: () => `${request.runId}_attempt_${++attempt}`,

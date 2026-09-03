@@ -80,7 +80,6 @@ export type DesignVisualCriticResult = {
 
 export type DesignVisualCriticContext = {
   runId: string;
-  generationMode?: "fast" | "thorough";
   modelSelection: ModelSelection;
   userRequest: string;
   plan: DesignPlanToolInput;
@@ -98,17 +97,19 @@ export async function runIndependentDesignVisualCritic(
   context: DesignVisualCriticContext,
   signal: AbortSignal,
 ): Promise<DesignVisualCriticResult> {
-  const criterionIds = criticCriteria(context.plan);
+  const criterionIds = criticCriteria(context.plan, context.target);
   const verdictContract = createDesignVisualCriticVerdictContract(criterionIds);
-  const logoDirectionCriteria = logoDirectionCriterionContracts(context.plan);
+  const logoDirectionCriteria = logoDirectionCriterionContracts(
+    context.plan,
+    context.target,
+  );
   const attemptId =
     `visual_critic_${context.runId}_${context.observedRevision}`.slice(0, 220);
   const events = await modelProviderHost.complete(
     {
       attemptId,
       sessionId: `${context.runId}:visual-critic`,
-      latencyProfile:
-        context.generationMode === "fast" ? "interactive" : "extended",
+      latencyProfile: "extended",
       modelSelection: {
         providerId: context.modelSelection.providerId,
         modelId: context.modelSelection.modelId,
@@ -238,7 +239,10 @@ function criticEvidenceContract(
   const logoEvidence =
     context.plan.deliverable === "logo"
       ? {
-          logoExploration: context.plan.logoExploration,
+          logoExploration:
+            context.plan.logoExploration?.targetId === context.target.targetId
+              ? context.plan.logoExploration
+              : undefined,
           logoDirectionCriteria,
         }
       : {};
@@ -266,30 +270,35 @@ function criticEvidenceContract(
   };
 }
 
-function criticCriteria(plan: DesignPlanToolInput): CriticCriterionId[] {
+function criticCriteria(
+  plan: DesignPlanToolInput,
+  target: DesignPlanTarget,
+): CriticCriterionId[] {
   const logoOutputs = new Set(plan.logoOutputs ?? []);
-  const directionCriteria = logoDirectionCriterionContracts(plan).map(
+  const directionCriteria = logoDirectionCriterionContracts(plan, target).map(
     (direction) => direction.criterionId,
   );
+  const reviewingExploration = directionCriteria.length > 0;
   const logoCriteria: CriticCriterionId[] =
     plan.deliverable !== "logo"
       ? []
       : [
           ...LOGO_BASE_CRITERIA,
-          ...(plan.logoExploration === undefined
+          ...(!reviewingExploration
             ? []
             : (["concept-divergence", "color-system-divergence"] as const)),
           ...directionCriteria,
-          ...(logoOutputs.has("wordmark") || logoOutputs.has("lockups")
+          ...(!reviewingExploration &&
+          (logoOutputs.has("wordmark") || logoOutputs.has("lockups"))
             ? (["symbol-wordmark-relationship"] as const)
             : []),
-          ...(logoOutputs.has("app-icon")
+          ...(!reviewingExploration && logoOutputs.has("app-icon")
             ? ([
                 "app-icon-optical-redraw",
                 "app-icon-ecosystem-distinction",
               ] as const)
             : []),
-          ...(logoOutputs.size > 1
+          ...(!reviewingExploration && logoOutputs.size > 1
             ? (["component-system-integrity"] as const)
             : []),
         ];
@@ -302,7 +311,10 @@ function criticCriteria(plan: DesignPlanToolInput): CriticCriterionId[] {
   ];
 }
 
-function logoDirectionCriterionContracts(plan: DesignPlanToolInput): Array<{
+function logoDirectionCriterionContracts(
+  plan: DesignPlanToolInput,
+  target: DesignPlanTarget,
+): Array<{
   criterionId: LogoDirectionCriterionId;
   conceptId: string;
   label: string;
@@ -313,7 +325,11 @@ function logoDirectionCriterionContracts(plan: DesignPlanToolInput): Array<{
   requiredEvidenceNodeIds: [string, string, string, string];
   rubric: readonly string[];
 }> {
-  return (plan.logoExploration?.directions ?? []).map((direction) => ({
+  const directions =
+    plan.logoExploration?.targetId === target.targetId
+      ? plan.logoExploration.directions
+      : [];
+  return directions.map((direction) => ({
     criterionId: `logo-concept-${direction.conceptId}-quality`,
     conceptId: direction.conceptId,
     label: direction.label,

@@ -6,6 +6,7 @@ import type {
   Effect,
   ImageNode,
   Paint,
+  VariableWidthStrokeProperties,
   VectorNetwork,
 } from "@opendesign/design-contracts";
 import { resolveLineEndpointPoint } from "@opendesign/design-contracts";
@@ -34,6 +35,10 @@ import {
   projectVectorNetworkStrokePaths,
   vectorNetworkHasVertexStrokeOverrides,
 } from "@opendesign/geometry-service/vector-stroke-appearance";
+import {
+  projectVariableWidthStrokePaths,
+  variableWidthProfileIsUniform,
+} from "@opendesign/geometry-service/vector-variable-width";
 import type {
   BooleanEditProjectionOptions,
   BooleanProjectionOptions,
@@ -790,6 +795,7 @@ function projectEditableVectorNetworkChildren(
       shape,
       node.properties.cornerRadius ?? 0,
       node.properties.cornerSmoothing ?? 0,
+      node.properties.variableWidthStrokeProperties,
     );
     if (!strokePaths.ok) {
       warnings.push({
@@ -812,17 +818,19 @@ function projectEditableVectorNetworkChildren(
             },
             dashPattern: strokePath.dashPattern,
             editable: false,
-            fill: null,
-            hitStroke: "all",
+            fill: strokePath.filled ? shape.stroke : null,
+            hitFill: strokePath.filled ? "all" : undefined,
+            hitStroke: strokePath.filled ? undefined : "all",
             hittable: true,
             id: strokeId,
             name: `${node.name} · stroke`,
             path: strokePath.path,
-            stroke: shape.stroke,
-            strokeAlign: shape.strokeAlign,
+            stroke: strokePath.filled ? null : shape.stroke,
+            strokeAlign: strokePath.filled ? "center" : shape.strokeAlign,
             strokeCap: strokePath.strokeCap,
             strokeJoin: strokePath.strokeJoin,
-            strokeWidth: shape.strokeWidth,
+            strokeWidth: strokePath.filled ? 0 : shape.strokeWidth,
+            windingRule: "nonzero",
           },
           id: strokeId,
           kind: "path",
@@ -852,17 +860,20 @@ function projectedVectorStrokePaths(
   fallbackPath: string,
   shape: {
     dashPattern: readonly number[];
+    strokeAlign: "inside" | "center" | "outside";
     strokeCap: "none" | "round" | "square";
     strokeJoin: "miter" | "round" | "bevel";
     strokeWidth: number;
   },
   cornerRadius: number,
   cornerSmoothing: number,
+  variableWidthStrokeProperties?: VariableWidthStrokeProperties,
 ):
   | {
       ok: true;
       paths: Array<{
         dashPattern: readonly number[];
+        filled: boolean;
         path: string;
         strokeCap: "none" | "round" | "square";
         strokeJoin: "miter" | "round" | "bevel";
@@ -872,6 +883,7 @@ function projectedVectorStrokePaths(
       ok: false;
       fallback: Array<{
         dashPattern: readonly number[];
+        filled: boolean;
         path: string;
         strokeCap: "none" | "round" | "square";
         strokeJoin: "miter" | "round" | "bevel";
@@ -881,11 +893,42 @@ function projectedVectorStrokePaths(
   const fallback = [
     {
       dashPattern: shape.dashPattern,
+      filled: false,
       path: fallbackPath,
       strokeCap: shape.strokeCap,
       strokeJoin: shape.strokeJoin,
     },
   ];
+  if (
+    variableWidthStrokeProperties &&
+    !variableWidthProfileIsUniform(variableWidthStrokeProperties)
+  ) {
+    const projected = projectVariableWidthStrokePaths(
+      network,
+      variableWidthStrokeProperties,
+      {
+        align: shape.strokeAlign,
+        cap: shape.strokeCap === "none" ? "butt" : shape.strokeCap,
+        cornerRadius,
+        cornerSmoothing,
+        dashPattern: shape.dashPattern,
+        join: shape.strokeJoin,
+        strokeWidth: shape.strokeWidth,
+      },
+    );
+    return projected.ok
+      ? {
+          ok: true,
+          paths: projected.paths.map((path) => ({
+            dashPattern: [],
+            filled: true,
+            path,
+            strokeCap: "none",
+            strokeJoin: "miter",
+          })),
+        }
+      : { ok: false, fallback, message: projected.message };
+  }
   if (!vectorNetworkHasVertexStrokeOverrides(network)) {
     return { ok: true, paths: fallback };
   }
@@ -902,6 +945,7 @@ function projectedVectorStrokePaths(
         ok: true,
         paths: projected.paths.map((path) => ({
           dashPattern: [],
+          filled: false,
           path: path.path,
           strokeCap: path.cap === "butt" ? "none" : path.cap,
           strokeJoin: path.join,

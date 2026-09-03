@@ -155,12 +155,29 @@ export {
 export {
   projectVectorNetworkStrokePaths,
   resolveVectorVertexStrokeAppearance,
+  vectorPathTraversalSegments,
   vectorNetworkHasVertexStrokeOverrides,
   type EffectiveVectorVertexStrokeAppearance,
   type ProjectedVectorStrokePath,
   type VectorStrokeAppearanceFallback,
   type VectorStrokePathProjectionResult,
 } from "./vector-stroke-appearance.js";
+export {
+  projectVariableWidthStrokePaths,
+  variableWidthHitPosition,
+  variableWidthPathLocation,
+  variableWidthProfilePoints,
+  variableWidthProfileIsUniform,
+  type VariableWidthPathLocation,
+  type VariableWidthStrokeProjectionOptions,
+  type VariableWidthStrokeProjectionResult,
+} from "./vector-variable-width.js";
+export {
+  deleteVariableWidthPoints,
+  insertVariableWidthPoint,
+  updateVariableWidthPoints,
+  type VariableWidthPointInsertion,
+} from "./vector-variable-width-edit.js";
 export {
   materializeTransformedVectorNetwork,
   materializeVectorNetwork,

@@ -25,7 +25,7 @@ export type DesignCheckpointToolInput =
 export const DESIGN_CHECKPOINT_TOOL_INPUT_SCHEMA = executableJsonSchema({
   type: "object",
   description:
-    "A host-conditional design checkpoint. apply-and-capture commits one material transaction and captures only its successful revision; fast mode returns deterministic verification while thorough mode may return independent critic findings. refine-and-capture consumes those thorough-mode findings, commits one refinement, then captures only the successful refined revision.",
+    "A design checkpoint. apply-and-capture commits one material transaction, captures only its successful revision, and returns exact-revision independent critic findings. refine-and-capture consumes those findings, commits one refinement, and captures only the successful refined revision.",
   properties: {
     version: { const: 1 },
     action: { enum: ["apply-and-capture", "refine-and-capture"] },

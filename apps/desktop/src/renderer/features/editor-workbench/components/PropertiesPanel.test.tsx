@@ -618,6 +618,91 @@ describe("PropertiesPanel information architecture", () => {
     expect(onOutlineStroke).toHaveBeenCalledOnce();
   });
 
+  it("selects a Figma-compatible variable-width profile for an editable Vector", async () => {
+    const user = userEvent.setup();
+    const onUpdate = vi.fn();
+    renderPanel({
+      node: strokedVectorNode,
+      onUpdate,
+      selectionCount: 1,
+    });
+
+    const profile = screen.getByRole("combobox", { name: "Variable width" });
+    expect(profile).toHaveValue("UNIFORM");
+    await user.selectOptions(profile, "EYE");
+    expect(onUpdate).toHaveBeenCalledWith({
+      properties: {
+        variableWidthStrokeProperties: { widthProfile: "EYE" },
+      },
+    });
+  });
+
+  it("keeps dash and variable-width controls mutually exclusive", () => {
+    const variable = structuredClone(strokedVectorNode);
+    if (!("network" in variable.properties)) throw new Error("Missing network");
+    variable.properties.variableWidthStrokeProperties = {
+      widthProfile: "TAPER",
+    };
+    renderPanel({ node: variable, selectionCount: 1 });
+    expect(screen.getByLabelText("Dash pattern")).toBeDisabled();
+
+    cleanup();
+    const dashed = structuredClone(strokedVectorNode);
+    if (!("network" in dashed.properties)) throw new Error("Missing network");
+    dashed.properties.dashPattern = [8, 4];
+    renderPanel({ node: dashed, selectionCount: 1 });
+    expect(
+      screen.getByRole("combobox", { name: "Variable width" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByText("Variable width is unavailable for dashed strokes"),
+    ).toBeVisible();
+  });
+
+  it("requires a branching Vector to be split before applying variable width", () => {
+    const branching = structuredClone(strokedVectorNode);
+    if (!("network" in branching.properties))
+      throw new Error("Missing network");
+    branching.properties.network.vertices.push(
+      { id: "vertex_c", x: 100, y: 50 },
+      { id: "vertex_d", x: 100, y: -50 },
+    );
+    branching.properties.network.segments.push(
+      {
+        id: "segment_bc",
+        startVertexId: "vertex_b",
+        endVertexId: "vertex_c",
+      },
+      {
+        id: "segment_bd",
+        startVertexId: "vertex_b",
+        endVertexId: "vertex_d",
+      },
+    );
+    branching.properties.network.paths.push(
+      {
+        id: "path_branch_c",
+        closed: false,
+        segments: [{ segmentId: "segment_bc", reversed: false }],
+      },
+      {
+        id: "path_branch_d",
+        closed: false,
+        segments: [{ segmentId: "segment_bd", reversed: false }],
+      },
+    );
+    renderPanel({ node: branching, selectionCount: 1 });
+
+    expect(
+      screen.getByRole("combobox", { name: "Variable width" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByText(
+        "Split a branching vector before applying variable width",
+      ),
+    ).toBeVisible();
+  });
+
   it("prioritizes real design controls and progressively discloses advanced sections", async () => {
     const user = userEvent.setup();
     renderPanel({ node: lineNode, selectionCount: 1 });

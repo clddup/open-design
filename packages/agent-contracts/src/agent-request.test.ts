@@ -147,14 +147,8 @@ describe("Agent request contract", () => {
     ).toBe(false);
   });
 
-  it("accepts only explicit fast or thorough generation depth", () => {
+  it("rejects the removed generation-mode switch", () => {
     expect(isAgentRequest({ ...validStart, generationMode: "fast" })).toBe(
-      true,
-    );
-    expect(isAgentRequest({ ...validStart, generationMode: "thorough" })).toBe(
-      true,
-    );
-    expect(isAgentRequest({ ...validStart, generationMode: "slow" })).toBe(
       false,
     );
   });

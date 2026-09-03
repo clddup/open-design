@@ -27,6 +27,7 @@ export * from "./limits.js";
 export * from "./node-paints.js";
 export * from "./schema-registry.js";
 export * from "./public-types.js";
+export * from "./vector-topology.js";
 export * from "./contract-facade.js";
 export * from "./design-quality.js";
 export { designDocumentDomainIssues } from "./document-domain.js";

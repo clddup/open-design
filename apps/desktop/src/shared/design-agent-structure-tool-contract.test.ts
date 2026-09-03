@@ -110,6 +110,13 @@ const vectorInputs: DesignVectorToolInput[] = [
     closed: true,
   },
   {
+    action: "set-variable-width",
+    label: "Taper the logo contour",
+    pageId: "page_brand",
+    nodeId: "logo_path",
+    variableWidthStrokeProperties: { widthProfile: "TAPER" },
+  },
+  {
     action: "bend-segment",
     label: "Bend logo contour",
     pageId: "page_brand",
@@ -315,6 +322,28 @@ describe("Hierarchy and Vector Agent contracts", () => {
       expect.arrayContaining([expect.objectContaining({ path: "/at/kind" })]),
     );
     expect(unknown.every((issue) => issue.path === "/at/kind")).toBe(true);
+  });
+
+  it("uses the document variable-width schema and reports an exact point path", () => {
+    expect(
+      DesignVectorContract.issues({
+        action: "set-variable-width",
+        label: "Shape a custom logo stroke",
+        pageId: "page_brand",
+        nodeId: "logo_path",
+        variableWidthStrokeProperties: {
+          widthProfile: "CUSTOM",
+          variableWidthPoints: [
+            { position: 0, width: 1 },
+            { position: 0.5, width: -1 },
+          ],
+        },
+      }),
+    ).toContainEqual(
+      expect.objectContaining({
+        path: "/variableWidthStrokeProperties/variableWidthPoints/1/width",
+      }),
+    );
   });
 
   it("requires at least one vertex stroke appearance field", () => {

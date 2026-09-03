@@ -676,7 +676,7 @@ const DESIGN_PLAN_MODEL_INPUT_JSON_SCHEMA = {
       maxItems: 5,
       uniqueItems: true,
       description:
-        "Optional Logo scope hint. When present, list only the concrete Logo/Icon outputs requested by the user; omission must not block drawing.",
+        "Optional current-stage Logo scope. List only outputs materially present in this one-target Plan; the reviewed Delivery Scope retains outputs assigned to later targets. Omission must not block drawing.",
       items: { enum: [...DESIGN_LOGO_OUTPUTS] },
     },
     logoColorStrategy: DESIGN_LOGO_COLOR_STRATEGY_SCHEMA,

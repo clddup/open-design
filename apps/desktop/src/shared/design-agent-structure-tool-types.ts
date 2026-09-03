@@ -3,6 +3,7 @@ import type {
   Paint,
   Point,
   Transform,
+  VariableWidthStrokeProperties,
 } from "@opendesign/design-contracts";
 
 export type DesignHierarchyToolInput =
@@ -107,6 +108,13 @@ export type DesignVectorToolInput =
       nodeId: string;
       pageId: string;
       pathId?: string;
+    }
+  | {
+      action: "set-variable-width";
+      label: string;
+      nodeId: string;
+      pageId: string;
+      variableWidthStrokeProperties: VariableWidthStrokeProperties;
     }
   | {
       action: "bend-segment";

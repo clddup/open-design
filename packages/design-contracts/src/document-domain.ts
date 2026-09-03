@@ -1,7 +1,12 @@
 import type { ValidationIssue } from "@opendesign/contract-runtime";
 import { isValidLayoutLimits } from "./layout.js";
-import type { DesignDocument, TextNode } from "./public-types.js";
+import type {
+  DesignDocument,
+  TextNode,
+  VectorNetworkProperties,
+} from "./public-types.js";
 import { advancedTextDecorationIssue } from "./text-decoration.js";
+import { vectorNetworkHasBranches } from "./vector-topology.js";
 
 export function designDocumentDomainIssues(
   document: DesignDocument,
@@ -40,6 +45,13 @@ export function designDocumentDomainIssues(
         }
       }
     }
+    if (
+      (node.kind === "path" || node.kind === "vector") &&
+      "network" in node.properties &&
+      node.properties.variableWidthStrokeProperties !== undefined
+    ) {
+      issues.push(...variableWidthStrokeIssues(node.properties, nodePath));
+    }
     if (node.kind !== "text") continue;
     const decorationIssue = advancedTextDecorationIssue(node.properties);
     if (decorationIssue) {
@@ -69,6 +81,48 @@ export function designDocumentDomainIssues(
     );
   }
   return issues;
+}
+
+function variableWidthStrokeIssues(
+  properties: VectorNetworkProperties,
+  nodePath: string,
+): ValidationIssue[] {
+  const profile = properties.variableWidthStrokeProperties;
+  if (!profile || profile.widthProfile === "UNIFORM") return [];
+  if ((properties.dashPattern?.length ?? 0) > 0) {
+    return [
+      issue(
+        "design.document_variable_width_dashed_stroke_unsupported",
+        `${nodePath}/properties/dashPattern`,
+        "Variable width strokes cannot use a dash pattern",
+      ),
+    ];
+  }
+  if (vectorNetworkHasBranches(properties.network)) {
+    return [
+      issue(
+        "design.document_variable_width_branching_network_unsupported",
+        `${nodePath}/properties/network`,
+        "Variable width strokes cannot be applied to a branching Vector Network",
+      ),
+    ];
+  }
+  if (profile.widthProfile !== "CUSTOM") return [];
+  for (let index = 1; index < profile.variableWidthPoints.length; index += 1) {
+    if (
+      profile.variableWidthPoints[index]!.position <=
+      profile.variableWidthPoints[index - 1]!.position
+    ) {
+      return [
+        issue(
+          "design.document_variable_width_points_unordered",
+          `${nodePath}/properties/variableWidthStrokeProperties/variableWidthPoints/${index}/position`,
+          "Variable width point positions must be strictly increasing",
+        ),
+      ];
+    }
+  }
+  return [];
 }
 
 function validateTextRuns(
