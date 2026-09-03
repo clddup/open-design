@@ -12,33 +12,46 @@ export type DesignVisualCriticVerdict<CriterionId extends string = string> = {
     CriterionId,
     { score: number; evidence: string; refinement?: string }
   >;
-  refinements: string[];
 };
 
 export function createDesignVisualCriticVerdictContract<
   CriterionId extends string,
 >(criterionIds: readonly CriterionId[]) {
+  const evidenceSchema = {
+    type: "string",
+    minLength: 12,
+    maxLength: 1_000,
+    pattern: "\\S",
+  } as const;
+  const refinementSchema = {
+    type: "string",
+    minLength: 8,
+    maxLength: 500,
+    pattern: "\\S",
+    description: "The material change required to reach delivery readiness.",
+  } as const;
   const criterionSchema = {
-    type: "object",
-    properties: {
-      score: { type: "integer", minimum: 1, maximum: 5 },
-      evidence: {
-        type: "string",
-        minLength: 12,
-        maxLength: 1_000,
-        pattern: "\\S",
+    anyOf: [
+      {
+        type: "object",
+        properties: {
+          score: { type: "integer", minimum: 1, maximum: 3 },
+          evidence: evidenceSchema,
+          refinement: refinementSchema,
+        },
+        required: ["score", "evidence", "refinement"],
+        additionalProperties: false,
       },
-      refinement: {
-        type: "string",
-        minLength: 8,
-        maxLength: 500,
-        pattern: "\\S",
-        description:
-          "A required material change. Omit when this criterion is already delivery-ready.",
+      {
+        type: "object",
+        properties: {
+          score: { type: "integer", minimum: 4, maximum: 5 },
+          evidence: evidenceSchema,
+        },
+        required: ["score", "evidence"],
+        additionalProperties: false,
       },
-    },
-    required: ["score", "evidence"],
-    additionalProperties: false,
+    ],
   } as const;
   const schema = executableJsonSchema({
     type: "object",
@@ -57,19 +70,8 @@ export function createDesignVisualCriticVerdictContract<
         required: [...criterionIds],
         additionalProperties: false,
       },
-      refinements: {
-        type: "array",
-        minItems: 0,
-        maxItems: 12,
-        items: {
-          type: "string",
-          minLength: 8,
-          maxLength: 500,
-          pattern: "\\S",
-        },
-      },
     },
-    required: ["summary", "criteria", "refinements"],
+    required: ["summary", "criteria"],
     additionalProperties: false,
   });
   return defineContract<DesignVisualCriticVerdict<CriterionId>>({
@@ -78,7 +80,7 @@ export function createDesignVisualCriticVerdictContract<
     subject: "independent visual critic verdict",
     maximum: 64,
     recovery:
-      "Submit one complete scorecard containing exactly every required criterion and only material refinements that block delivery readiness.",
+      "Submit one complete scorecard containing exactly every required criterion; scores below 4 require one material refinement and delivery-ready scores must omit it.",
   });
 }
 

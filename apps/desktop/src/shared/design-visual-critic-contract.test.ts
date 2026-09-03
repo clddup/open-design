@@ -29,10 +29,6 @@ describe("independent visual critic contracts", () => {
               "Edges and spacing remain controlled at the captured scale.",
           },
         },
-        refinements: [
-          "Tighten the dominant spacing relationship.",
-          "Clarify the signature visual detail.",
-        ],
       }),
     ).toContainEqual(
       expect.objectContaining({
@@ -40,6 +36,47 @@ describe("independent visual critic contracts", () => {
         path: "/criteria/visual-thesis/score",
       }),
     );
+  });
+
+  it("keeps delivery scores and material refinements mutually consistent", () => {
+    const contract = createDesignVisualCriticVerdictContract([
+      "template-avoidance",
+    ] as const);
+    const verdict = (criterion: {
+      score: number;
+      evidence: string;
+      refinement?: string;
+    }) => ({
+      summary: "The captured result has enough evidence for one verdict.",
+      criteria: { "template-avoidance": criterion },
+    });
+    const evidence =
+      "The captured composition shows a specific and intentional visual system.";
+
+    expect(
+      contract.issues(
+        verdict({
+          score: 4,
+          evidence,
+          refinement: "Replace the generic ring with a specific motif.",
+        }),
+      ),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "design_visual_critic.schema_invalid",
+        path: "/criteria/template-avoidance/refinement",
+      }),
+    );
+    expect(
+      contract.issues(
+        verdict({
+          score: 3,
+          evidence,
+          refinement: "Replace the generic ring with a specific motif.",
+        }),
+      ),
+    ).toEqual([]);
+    expect(contract.issues(verdict({ score: 4, evidence }))).toEqual([]);
   });
 
   it("locates invalid capture attachment fields without accepting extras", () => {

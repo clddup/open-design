@@ -769,14 +769,14 @@ const DESIGN_VISUAL_REVIEW_MODEL_INPUT_JSON_SCHEMA = {
     },
     failedCriteria: {
       type: "array",
-      minItems: 2,
+      minItems: 1,
       maxItems: DESIGN_VISUAL_CRITERIA.length,
       uniqueItems: true,
       items: { enum: [...DESIGN_VISUAL_CRITERIA] },
     },
     refinements: {
       type: "array",
-      minItems: 2,
+      minItems: 1,
       maxItems: 12,
       items: {
         type: "string",
@@ -1627,7 +1627,7 @@ function refineDesignVisualReview(
     }
   }
   input.refinements.forEach((refinement, index) => {
-    if (refinement.trim().length < 8) {
+    if (!substantiveReviewText(refinement)) {
       issues.push(
         visualReviewIssue(
           "design_visual_review.refinement_not_actionable",

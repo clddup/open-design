@@ -171,7 +171,11 @@ describe("independent design visual critic", () => {
     expect(result.failedCriteria).toEqual(
       expect.arrayContaining(["brand-color-system", "color-system-divergence"]),
     );
-    expect(result.review?.failedCriteria).toHaveLength(2);
+    expect(result.review?.failedCriteria).toEqual(["material-coherence"]);
+    expect(result.review?.refinements).toEqual([
+      "Apply one brief-specific brand color to the primary mark and show its light/dark adaptations.",
+      "Give each concept a materially different color system tied to its own thesis.",
+    ]);
   });
 
   it("judges App Icon criteria only on the current identity-system target", async () => {
@@ -196,6 +200,12 @@ describe("independent design visual critic", () => {
     );
 
     expect(result.failedCriteria).toEqual(["app-icon-ecosystem-distinction"]);
+    expect(result.review).toMatchObject({
+      failedCriteria: ["template-avoidance"],
+      refinements: [
+        "Rebalance color mass and negative space for recognizable macOS and Windows contexts.",
+      ],
+    });
   });
 
   it("reviews one requested Logo/Icon without invented exploration or system criteria", async () => {
@@ -367,19 +377,15 @@ describe("independent design visual critic", () => {
     );
   });
 
-  it("does not pass a scorecard that still requests material refinements", async () => {
+  it("does not pass a scorecard that still requires material refinements", async () => {
     const unresolved = scorecard(4);
     unresolved.criteria["template-avoidance"] = {
-      score: 4,
+      score: 3,
       evidence:
         "The layout is coherent but the dominant light beam remains a generic technology template device.",
       refinement:
         "Replace the generic light beam with a product-specific spatial relationship.",
     };
-    unresolved.refinements = [
-      "Replace the generic light beam with a product-specific spatial relationship.",
-    ];
-
     const result = await runIndependentDesignVisualCritic(
       {
         complete: (request) =>
@@ -391,7 +397,6 @@ describe("independent design visual critic", () => {
 
     expect(result).toMatchObject({
       passed: false,
-      averageScore: 4,
       failedCriteria: ["template-avoidance"],
     });
   });
@@ -512,7 +517,6 @@ function scorecard(score: number): {
     string,
     { score: number; evidence: string; refinement?: string }
   >;
-  refinements: string[];
 } {
   return scorecardFor(criterionIds, score);
 }
@@ -533,7 +537,6 @@ function scorecardFor(
         },
       ]),
     ),
-    refinements: [],
   };
 }
 

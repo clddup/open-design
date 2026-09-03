@@ -197,14 +197,10 @@ export async function runIndependentDesignVisualCritic(
         scoreValues.length) *
         100,
     ) / 100;
-  const failedCriteria = criterionIds.filter((id) => {
-    const criterion = verdict.criteria[id];
-    return criterion.score < 4 || criterion.refinement !== undefined;
-  });
-  const passed =
-    failedCriteria.length === 0 &&
-    verdict.refinements.length === 0 &&
-    averageScore >= 4;
+  const failedCriteria = criterionIds.filter(
+    (id) => verdict.criteria[id].score < 4,
+  );
+  const passed = failedCriteria.length === 0 && averageScore >= 4;
   const refinements = uniqueText([
     ...failedCriteria.map(
       (id) =>
@@ -214,7 +210,6 @@ export async function runIndependentDesignVisualCritic(
           500,
         ),
     ),
-    ...verdict.refinements,
   ]).slice(0, 12);
   return {
     version: 1,
@@ -374,27 +369,19 @@ function toLedgerVisualReview(
       CriticCriterionId,
       { score: number; evidence: string; refinement?: string }
     >;
-    refinements: string[];
   },
   refinements: readonly string[],
 ): DesignVisualReviewToolInput {
   const generic = Object.fromEntries(
     GENERIC_CRITERIA.map((id) => [id, critic.criteria[id].evidence]),
   ) as Record<DesignVisualCriterion, string>;
-  const lowest = [...GENERIC_CRITERIA]
-    .sort(
-      (left, right) =>
-        critic.criteria[left].score - critic.criteria[right].score,
-    )
-    .slice(0, 2);
-  const reviewRefinements = uniqueText([
-    ...refinements,
-    ...lowest.map(
-      (id) =>
-        critic.criteria[id].refinement ??
-        `Strengthen ${id} using the visible critic evidence`,
+  const reviewFailedCriteria = [
+    ...new Set(
+      Object.entries(critic.criteria)
+        .filter(([, criterion]) => criterion.score < 4)
+        .map(([criterionId]) => closestGenericCriterion(criterionId)),
     ),
-  ]).slice(0, 12);
+  ];
   const candidate: DesignVisualReviewToolInput = {
     version: 1,
     skillRefs: structuredClone(plan.skillRefs),
@@ -409,8 +396,8 @@ function toLedgerVisualReview(
     effects: generic["craft-precision"],
     antiTemplate: generic["template-avoidance"],
     criteria: generic,
-    failedCriteria: lowest,
-    refinements: reviewRefinements,
+    failedCriteria: reviewFailedCriteria,
+    refinements: [...refinements],
   };
   const parsed = DesignVisualReviewContract.parse(candidate, {
     canonical: true,
@@ -421,6 +408,27 @@ function toLedgerVisualReview(
     );
   }
   return parsed.value;
+}
+
+function closestGenericCriterion(failed: string): DesignVisualCriterion {
+  const generic = GENERIC_CRITERIA.find((criterion) => criterion === failed);
+  if (generic) return generic;
+  if (failed === "brand-color-system" || failed === "color-system-divergence") {
+    return "material-coherence";
+  }
+  if (failed === "small-size-recognition") return "glance-legibility";
+  if (failed === "symbol-wordmark-relationship") {
+    return "typography-character";
+  }
+  if (failed === "reference-adherence") return "subject-specificity";
+  if (
+    failed === "concept-divergence" ||
+    failed === "app-icon-ecosystem-distinction"
+  ) {
+    return "template-avoidance";
+  }
+  if (failed.startsWith("logo-concept-")) return "signature-motif";
+  return "craft-precision";
 }
 
 function uniqueText(values: readonly string[]): string[] {

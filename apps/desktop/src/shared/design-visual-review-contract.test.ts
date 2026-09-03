@@ -117,6 +117,17 @@ describe("Visual Review contract", () => {
     );
   });
 
+  it("accepts one concrete failed criterion without inventing a second defect", () => {
+    const input = review();
+    expect(
+      DesignVisualReviewContract.issues({
+        ...input,
+        failedCriteria: ["craft-precision"],
+        refinements: ["Normalize the inconsistent control spacing."],
+      }),
+    ).toEqual([]);
+  });
+
   it("wires Pi validation to the same model contract", () => {
     const tool = DESIGN_AGENT_TOOL_SPECS.find(
       (candidate) => candidate.name === DESIGN_REVIEW_TOOL_NAME,
