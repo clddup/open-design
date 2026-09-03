@@ -20,7 +20,7 @@ const context: TrustedToolContext = {
 };
 
 describe("handleDeliveryScopeTool", () => {
-  it("allocates every confirmed target atomically before executable planning", async () => {
+  it("records and allocates every target atomically before executable planning", async () => {
     const scope: DesignDeliveryScope = {
       version: 1,
       deliverable: "ui",
@@ -47,7 +47,7 @@ describe("handleDeliveryScopeTool", () => {
         height: target.artboard.height,
       })),
       input: {
-        label: "Allocate 24 confirmed artboards",
+        label: "Allocate 24 planned artboards",
         commands: scope.targets.map((_, index) => ({
           commandId: `allocate_scope_${index + 1}`,
         })),
@@ -105,7 +105,7 @@ describe("handleDeliveryScopeTool", () => {
     ).resolves.toMatchObject({
       content: {
         ok: true,
-        status: "confirmed",
+        status: "recorded",
         nextAction: "define-executable-plan",
       },
     });

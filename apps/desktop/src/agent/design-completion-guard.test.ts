@@ -343,7 +343,7 @@ describe("design completion guard", () => {
     expect(result.message).toContain("do not skip pending steps");
   });
 
-  it("requires and enforces a user-confirmed scope for a broad brief", () => {
+  it("requires and enforces a host-recorded scope for a broad brief", () => {
     const missing = reviewDesignCompletion(
       context([], undefined, { deliveryScopeReview: "required" }),
     );

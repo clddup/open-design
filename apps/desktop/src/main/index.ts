@@ -102,7 +102,6 @@ import {
   DESIGN_PLAN_UPDATE_TOOL_NAME,
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
   DesignApplyContract,
-  DeliveryScopeContract,
   type DesignApplyToolInput,
 } from "@/shared/design-agent-tools";
 
@@ -1032,24 +1031,9 @@ async function startDesktopApplication(
       }
       return result;
     },
-    isPreauthorized: (call, context) => {
-      if (call.toolName === DESIGN_DELIVERY_SCOPE_TOOL_NAME) {
-        const parsed = DeliveryScopeContract.parse(call.input);
-        return (
-          parsed.ok &&
-          (globalTaskCoordinator?.hasDeliveryScopeAuthorization(
-            context.runId,
-            call.toolCallId,
-            parsed.value,
-          ) ??
-            false)
-        );
-      }
-      return (
-        designPageToolPreauthorization(call, context, globalTaskCoordinator) ??
-        true
-      );
-    },
+    isPreauthorized: (call, context) =>
+      designPageToolPreauthorization(call, context, globalTaskCoordinator) ??
+      true,
     recordAudit: (event) =>
       diagnosticHost.publish(mainDesignToolAuditDiagnostic(event)),
   });

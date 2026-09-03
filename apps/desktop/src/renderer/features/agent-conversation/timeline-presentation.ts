@@ -339,7 +339,7 @@ export function toolTitle(
   }
   if (toolName === DESIGN_DELIVERY_SCOPE_TOOL_NAME) {
     return state === "done"
-      ? t("agent.deliveryPlanConfirmed")
+      ? t("agent.deliveryPlanReady")
       : t("agent.preparingDeliveryPlan");
   }
   if (

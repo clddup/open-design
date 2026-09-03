@@ -159,14 +159,6 @@ export class GlobalTaskCoordinator {
       completedActions: Set<string>;
     }
   >();
-  readonly #deliveryScopeAuthorizationsByRunId = new Map<
-    string,
-    {
-      approvalId: string;
-      toolCallId: string;
-      scope: DesignDeliveryScope;
-    }
-  >();
   readonly #deliveryScopesByRunId = new Map<string, DesignDeliveryScope>();
   readonly #deliveryScopeAllocationsByRunId = new Map<
     string,
@@ -391,50 +383,13 @@ export class GlobalTaskCoordinator {
     );
   }
 
-  grantDeliveryScopeAuthorization(
-    runId: string,
-    approvalId: string,
-    toolCallId: string,
-    scope: DesignDeliveryScope,
-  ): void {
-    if (!this.#toolBindingsByRunId.has(runId)) {
-      throw new Error("Delivery scope approval requires an active Run");
-    }
-    this.#deliveryScopeAuthorizationsByRunId.set(runId, {
-      approvalId,
-      toolCallId,
-      scope: structuredClone(scope),
-    });
-  }
-
-  revokeDeliveryScopeAuthorization(runId: string, approvalId: string): void {
-    if (
-      this.#deliveryScopeAuthorizationsByRunId.get(runId)?.approvalId ===
-      approvalId
-    ) {
-      this.#deliveryScopeAuthorizationsByRunId.delete(runId);
-    }
-  }
-
-  hasDeliveryScopeAuthorization(
-    runId: string,
-    toolCallId: string,
-    scope: DesignDeliveryScope,
-  ): boolean {
-    const authorization = this.#deliveryScopeAuthorizationsByRunId.get(runId);
-    return (
-      authorization?.toolCallId === toolCallId &&
-      sameValue(authorization.scope, scope)
-    );
-  }
-
   createDeliveryScopeAllocation(
     context: TrustedToolContext,
     toolCallId: string,
     scope: DesignDeliveryScope,
   ): DeliveryScopeAllocation {
     this.assertDesignToolContext(context);
-    this.#assertDeliveryScopeCanBeReviewed(context, toolCallId, scope);
+    this.#assertDeliveryScopeCanBeReviewed(context);
     const inspection = this.#requireDocumentInspection(context);
     const binding = this.#toolBindingsByRunId.get(context.runId);
     const pageId =
@@ -467,7 +422,7 @@ export class GlobalTaskCoordinator {
     artboards: DeliveryScopeArtboardAllocation[];
   } {
     this.assertDesignToolContext(context);
-    this.#assertDeliveryScopeCanBeReviewed(context, toolCallId, scope);
+    this.#assertDeliveryScopeCanBeReviewed(context);
     if (!validRevision(revision)) {
       throw designWorkflowError(
         "allocation_revision_invalid",
@@ -481,7 +436,6 @@ export class GlobalTaskCoordinator {
       context.runId,
       new Map(artboards.map((artboard) => [artboard.targetId, artboard])),
     );
-    this.#deliveryScopeAuthorizationsByRunId.delete(context.runId);
     projectScopeAllocationIntoInspection(
       this.#inspectionsByRunId.get(context.runId),
       artboards,
@@ -494,21 +448,11 @@ export class GlobalTaskCoordinator {
     };
   }
 
-  #assertDeliveryScopeCanBeReviewed(
-    context: TrustedToolContext,
-    toolCallId: string,
-    scope: DesignDeliveryScope,
-  ): void {
+  #assertDeliveryScopeCanBeReviewed(context: TrustedToolContext): void {
     if (this.#deliveryScopesByRunId.has(context.runId)) {
       throw designWorkflowError(
         "delivery_scope_already_reviewed",
-        "Delivery scope is already confirmed for this Run; start a new user-directed Run to revise it",
-      );
-    }
-    if (!this.hasDeliveryScopeAuthorization(context.runId, toolCallId, scope)) {
-      throw designWorkflowError(
-        "delivery_scope_approval_required",
-        "The delivery plan must be approved by the user before execution",
+        "Delivery scope is already recorded for this Run; start a new user-directed Run to revise it",
       );
     }
     if (this.#designPlansByRunId.has(context.runId)) {
@@ -528,7 +472,7 @@ export class GlobalTaskCoordinator {
     ) {
       throw designWorkflowError(
         "delivery_scope_review_required",
-        "This broad brief requires a user-confirmed delivery plan before Page creation, executable planning, or canvas writes",
+        "This broad brief requires a host-recorded delivery plan before Page creation, executable planning, or canvas writes",
       );
     }
   }
@@ -2170,7 +2114,6 @@ export class GlobalTaskCoordinator {
         this.#generatedRasterRolesByRunId.delete(runId);
         this.#inspectionsByRunId.delete(runId);
         this.#pageStructureAccessByRunId.delete(runId);
-        this.#deliveryScopeAuthorizationsByRunId.delete(runId);
         this.#deliveryScopesByRunId.delete(runId);
         this.#deliveryScopeAllocationsByRunId.delete(runId);
       }
@@ -2197,7 +2140,6 @@ export class GlobalTaskCoordinator {
       this.#generatedRasterRolesByRunId.delete(runId);
       this.#inspectionsByRunId.delete(runId);
       this.#pageStructureAccessByRunId.delete(runId);
-      this.#deliveryScopeAuthorizationsByRunId.delete(runId);
       this.#deliveryScopesByRunId.delete(runId);
       this.#deliveryScopeAllocationsByRunId.delete(runId);
     }
@@ -2217,7 +2159,6 @@ export class GlobalTaskCoordinator {
       this.#generatedRasterRolesByRunId.delete(runId);
       this.#inspectionsByRunId.delete(runId);
       this.#pageStructureAccessByRunId.delete(runId);
-      this.#deliveryScopeAuthorizationsByRunId.delete(runId);
       this.#deliveryScopesByRunId.delete(runId);
       this.#deliveryScopeAllocationsByRunId.delete(runId);
       this.#touchConversation(task.conversationId, timestamp);
@@ -3474,7 +3415,7 @@ function bindPlanToReviewedScope(
     if (reviewMode === "required") {
       throw designWorkflowError(
         "delivery_scope_review_required",
-        "This broad brief requires a user-confirmed delivery plan before Page creation, executable planning, or canvas writes",
+        "This broad brief requires a host-recorded delivery plan before Page creation, executable planning, or canvas writes",
       );
     }
     return plan;
@@ -3482,7 +3423,7 @@ function bindPlanToReviewedScope(
   const mismatch = (message: string): never => {
     throw designWorkflowError(
       "delivery_scope_mismatch",
-      `${message}. Preserve the user-confirmed delivery targets exactly; ask for a revised confirmation instead of silently shrinking or expanding scope`,
+      `${message}. Preserve the recorded delivery targets exactly instead of silently shrinking or expanding scope`,
     );
   };
   if (plan.deliverable !== scope.deliverable) {
@@ -3509,7 +3450,7 @@ function bindPlanToReviewedScope(
         ),
       ];
   if (expectedTargets.some((target) => target === undefined)) {
-    mismatch("The confirmed delivery scope has no remaining executable target");
+    mismatch("The recorded delivery scope has no remaining executable target");
   }
   const confirmedTargets = expectedTargets.filter(
     (target): target is DesignDeliveryScope["targets"][number] =>
@@ -3519,7 +3460,7 @@ function bindPlanToReviewedScope(
     mismatch(
       previousStageIncomplete
         ? `The current stage has ${confirmedTargets.length} target(s) and must be amended in place before advancing`
-        : `The next executable stage must contain only ${confirmedTargets[0]?.label ?? "the next confirmed target"}`,
+        : `The next executable stage must contain only ${confirmedTargets[0]?.label ?? "the next recorded target"}`,
     );
   }
   for (const [index, confirmed] of confirmedTargets.entries()) {

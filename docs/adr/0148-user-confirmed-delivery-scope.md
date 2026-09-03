@@ -1,6 +1,6 @@
 # ADR-0148：长 brief 的用户确认交付范围
 
-状态：Accepted；其中 Delivery target 与 Page strategy 的绑定已由 ADR-0151 取代。其余范围确认、Plan/ledger 绑定与完成门禁继续有效。
+状态：部分被 ADR-0297 取代；人工范围确认与 Scope approval 已删除，完整范围、Plan/ledger 绑定与完成门禁继续有效。Delivery target 与 Page strategy 的绑定已由 ADR-0151 取代。
 
 ## 背景
 

@@ -45,7 +45,7 @@ export const DESIGN_DELIVERY_SCOPE_TOOL_INPUT_SCHEMA = Type.Object(
             {
               ...CLOSED,
               description:
-                "The real editable artboard size to allocate immediately after the user confirms this delivery scope.",
+                "The real editable artboard size to allocate when the host records this delivery scope.",
             },
           ),
           requiredContent: Type.Array(text(2, 240), {
@@ -85,42 +85,6 @@ export const DeliveryScopeContract = defineContract<DesignDeliveryScope>({
   maximum: 32,
   refine: refineDeliveryScope,
 });
-
-export function deliveryScopeApprovalPrompt(
-  input: unknown,
-  request: Readonly<{ prompt: string }>,
-): { title: string; summary: string } {
-  const parsed = DeliveryScopeContract.parse(input);
-  if (!parsed.ok) {
-    return {
-      title: "Review delivery plan",
-      summary: "Review the proposed delivery scope before design begins.",
-    };
-  }
-  const scope = parsed.value;
-  const chinese = /[\u3400-\u9fff]/u.test(request.prompt);
-  const targets = scope.targets
-    .map(
-      (target, index) =>
-        `${index + 1}. ${target.label} · ${target.artboard.width}×${target.artboard.height} — ${target.objective}`,
-    )
-    .join("\n");
-  const boundary =
-    scope.exclusions.length === 0
-      ? ""
-      : `\n\n${chinese ? "本次不包含" : "Not included"}: ${scope.exclusions.join(
-          chinese ? "；" : "; ",
-        )}`;
-  const organization = chinese
-    ? `将在当前 Page 创建 ${scope.targets.length} 个画板。`
-    : `${scope.targets.length} artboard${scope.targets.length === 1 ? "" : "s"} will be created on the current Page.`;
-  return {
-    title: chinese
-      ? `确认交付计划（${scope.targets.length} 项）`
-      : `Confirm delivery plan (${scope.targets.length})`,
-    summary: `${organization}\n\n${targets}${boundary}`.slice(0, 20_000),
-  };
-}
 
 function refineDeliveryScope(scope: DesignDeliveryScope): ValidationIssue[] {
   const issues: ValidationIssue[] = [];

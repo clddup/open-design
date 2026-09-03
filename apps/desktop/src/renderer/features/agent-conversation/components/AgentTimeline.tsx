@@ -7,10 +7,7 @@ import type { ModelSelection } from "@opendesign/model-gateway";
 import type { ConversationDescriptor } from "@opendesign/workspace-contracts";
 import { Button, DesktopSelect, Icon, IconButton } from "@opendesign/ui";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import {
-  DESIGN_DELIVERY_SCOPE_TOOL_NAME,
-  PAGE_STRUCTURE_ACCESS_TOOL_NAME,
-} from "@/shared/design-agent-tools";
+import { PAGE_STRUCTURE_ACCESS_TOOL_NAME } from "@/shared/design-agent-tools";
 import { formatBytes, isImageAttachment } from "../attachment-format";
 import {
   projectAgentTimelineView,
@@ -230,21 +227,13 @@ function ApprovalCard({
   t: Translate;
 }) {
   const pageStructure = item.toolName === PAGE_STRUCTURE_ACCESS_TOOL_NAME;
-  const deliveryScope = item.toolName === DESIGN_DELIVERY_SCOPE_TOOL_NAME;
   const title = pageStructure
     ? t("agent.pageStructureApprovalTitle", {
         file: approvalResourceName ?? t("agent.currentDesignFile"),
       })
     : item.title;
   return (
-    <div
-      aria-label={title}
-      className={cx(
-        styles.approval,
-        deliveryScope && styles.deliveryScopeApproval,
-      )}
-      role="group"
-    >
+    <div aria-label={title} className={styles.approval} role="group">
       <span aria-hidden="true" className={styles.activityIndicator} />
       <span className={styles.approvalCopy}>
         <strong>{title}</strong>
@@ -258,18 +247,14 @@ function ApprovalCard({
           onClick={() => onResolve("deny")}
           tone="quiet"
         >
-          {t(deliveryScope ? "agent.deliveryPlanRevise" : "agent.approvalDeny")}
+          {t("agent.approvalDeny")}
         </Button>
         <Button
           disabled={resolving}
           onClick={() => onResolve("allow_once")}
           tone="primary"
         >
-          {t(
-            deliveryScope
-              ? "agent.deliveryPlanConfirm"
-              : "agent.approvalAllowTask",
-          )}
+          {t("agent.approvalAllowTask")}
         </Button>
       </span>
     </div>

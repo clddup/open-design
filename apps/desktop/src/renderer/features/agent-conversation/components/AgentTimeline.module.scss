@@ -536,15 +536,6 @@
   background: color-mix(in srgb, var(--ui-warning-soft) 55%, transparent);
 }
 
-.deliveryScopeApproval {
-  border-color: var(--ui-border);
-  background: var(--ui-surface-raised);
-
-  .activityIndicator {
-    background: var(--ui-accent);
-  }
-}
-
 .approvalCopy {
   display: block;
   min-width: 0;

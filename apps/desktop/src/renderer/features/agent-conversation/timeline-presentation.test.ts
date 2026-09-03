@@ -44,7 +44,7 @@ describe("Agent design-system timeline presentation", () => {
       "agent.preparingDeliveryPlan",
     );
     expect(toolTitle(DESIGN_DELIVERY_SCOPE_TOOL_NAME, "done", t)).toBe(
-      "agent.deliveryPlanConfirmed",
+      "agent.deliveryPlanReady",
     );
   });
 

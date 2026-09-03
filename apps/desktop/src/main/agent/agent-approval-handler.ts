@@ -1,7 +1,5 @@
 import type { AgentRequest } from "@opendesign/agent-contracts";
 import {
-  DeliveryScopeContract,
-  DESIGN_DELIVERY_SCOPE_TOOL_NAME,
   PageStructureAccessContract,
   PAGE_STRUCTURE_ACCESS_TOOL_NAME,
 } from "@/shared/design-agent-tools.js";
@@ -23,12 +21,6 @@ export function handleAgentApprovalRequest(
       : undefined;
   const pageStructureInput =
     pageStructureResult?.ok === true ? pageStructureResult.value : undefined;
-  const deliveryScopeResult =
-    pending.toolName === DESIGN_DELIVERY_SCOPE_TOOL_NAME
-      ? DeliveryScopeContract.parse(pending.input)
-      : undefined;
-  const deliveryScopeInput =
-    deliveryScopeResult?.ok === true ? deliveryScopeResult.value : undefined;
   if (pending.toolName === PAGE_STRUCTURE_ACCESS_TOOL_NAME) {
     if (pending.risk !== "design_write" || !pageStructureInput) {
       agentHost.rollbackApprovalResolution(request.approvalId);
@@ -38,18 +30,6 @@ export function handleAgentApprovalRequest(
       agentHost.rollbackApprovalResolution(request.approvalId);
       throw new TypeError(
         "Page structure access can only be allowed for the current task",
-      );
-    }
-  }
-  if (pending.toolName === DESIGN_DELIVERY_SCOPE_TOOL_NAME) {
-    if (
-      pending.risk !== "design_write" ||
-      !deliveryScopeInput ||
-      request.decision === "allow_session"
-    ) {
-      agentHost.rollbackApprovalResolution(request.approvalId);
-      throw new TypeError(
-        "Delivery scope can only be approved once for the current task",
       );
     }
   }
@@ -63,28 +43,12 @@ export function handleAgentApprovalRequest(
       pageStructureInput?.actions ?? [],
     );
   }
-  const grantDeliveryScope =
-    deliveryScopeInput !== undefined && request.decision === "allow_once";
-  if (grantDeliveryScope) {
-    globalTaskCoordinator.grantDeliveryScopeAuthorization(
-      request.runId,
-      request.approvalId,
-      request.toolCallId,
-      deliveryScopeInput,
-    );
-  }
   try {
     agentHost.send(request);
   } catch (error) {
     agentHost.rollbackApprovalResolution(request.approvalId);
     if (grantPageStructure) {
       globalTaskCoordinator.revokePageStructureAccess(
-        request.runId,
-        request.approvalId,
-      );
-    }
-    if (grantDeliveryScope) {
-      globalTaskCoordinator.revokeDeliveryScopeAuthorization(
         request.runId,
         request.approvalId,
       );

@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  DeliveryScopeContract,
-  deliveryScopeApprovalPrompt,
-} from "./design-delivery-scope";
+import { DeliveryScopeContract } from "./design-delivery-scope";
 
 const scope = () => ({
   version: 1 as const,
@@ -65,18 +62,6 @@ describe("delivery scope contract", () => {
     );
   });
 
-  it("projects the actual target list into the approval card", () => {
-    expect(
-      deliveryScopeApprovalPrompt(scope(), {
-        prompt: "根据 PRD 设计完整产品",
-      }),
-    ).toEqual({
-      title: "确认交付计划（2 项）",
-      summary:
-        "将在当前 Page 创建 2 个画板。\n\n1. 登录与注册 · 390×844 — 完成账户进入与注册流程\n2. 首页 · 390×844 — 呈现核心入口与当前状态\n\n本次不包含: 后台管理",
-    });
-  });
-
   it("treats 24 delivery targets as artboards instead of Page requests", () => {
     const broadScope = scope();
     broadScope.targets = Array.from({ length: 24 }, (_, index) => ({
@@ -89,11 +74,10 @@ describe("delivery scope contract", () => {
 
     const parsed = DeliveryScopeContract.parse(broadScope);
     expect(parsed.ok).toBe(true);
-    expect(
-      deliveryScopeApprovalPrompt(broadScope, {
-        prompt: "根据完整 PRD 设计 24 个界面",
-      }).summary,
-    ).toContain("将在当前 Page 创建 24 个画板。");
+    expect(DeliveryScopeContract.parse(broadScope)).toEqual({
+      ok: true,
+      value: broadScope,
+    });
   });
 
   it("keeps the complete reviewed scope independent from one Plan budget", () => {

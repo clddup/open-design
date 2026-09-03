@@ -120,14 +120,15 @@ describe("OpenDesign Agent system prompt", () => {
     expect(refinement).not.toContain("THOROUGH");
   });
 
-  it("requires user-confirmed Delivery Plans only for host-selected broad briefs", () => {
+  it("defines broad Delivery Plans without adding an approval pause", () => {
     const reviewed = agentSystemPromptForRequest({
       prompt: "根据 PRD 设计完整产品",
       deliveryScopeReview: "required",
     });
-    expect(reviewed).toContain("REVIEW REQUIRED");
+    expect(reviewed).toContain("DEFINITION REQUIRED");
     expect(reviewed).toContain("opendesign_review_delivery_scope");
     expect(reviewed).toContain("Do not replace requested product areas");
+    expect(reviewed).toContain("without pausing for user confirmation");
 
     const direct = newDesignSystemPromptForRequest({
       prompt: "设计一个登录页面",

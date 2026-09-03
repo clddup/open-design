@@ -55,7 +55,7 @@ export async function handleDeliveryScopeTool(
     content: {
       ...rendererContent,
       ok: true,
-      status: "confirmed",
+      status: "recorded",
       deliveryScope: completed.scope,
       allocation: {
         artboards: completed.artboards,

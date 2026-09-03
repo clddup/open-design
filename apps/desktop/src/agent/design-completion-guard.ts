@@ -51,7 +51,7 @@ export function reviewDesignCompletion(
     return {
       allow: false,
       message:
-        "This broad brief requires a user-confirmed Delivery Plan before execution. Call opendesign_review_delivery_scope with every independently verifiable deliverable from the full brief and attachments. Do not finish, create representative-only targets, or write the canvas before the user confirms the scope.",
+        "This broad brief requires a complete Delivery Plan before execution. Call opendesign_review_delivery_scope with every independently verifiable deliverable from the full brief and attachments; the host records it automatically. Do not finish, create representative-only targets, or write the canvas before the scope is defined.",
     };
   }
   const unresolvedFailure = context.unresolvedDesignWriteFailure;
@@ -79,7 +79,7 @@ export function reviewDesignCompletion(
       return {
         allow: false,
         message:
-          "The host delivery ledger is not an ordered prefix of the user-confirmed Delivery Plan. Preserve completed target IDs and plan only the next confirmed target instead of skipping, replacing, or reordering scope.",
+          "The host delivery ledger is not an ordered prefix of the recorded Delivery Plan. Preserve completed target IDs and plan only the next target instead of skipping, replacing, or reordering scope.",
       };
     }
     if (
@@ -90,7 +90,7 @@ export function reviewDesignCompletion(
       const nextTarget = deliveryStage.nextTarget ?? reviewedScope.targets[0];
       return {
         allow: false,
-        message: `The confirmed delivery artboards are allocated but no executable target Plan exists yet. Define the first bounded Plan for ${nextTarget?.targetId ?? "the first confirmed target"} using its host-owned existing artboard, then create its first meaningful editable slice. Empty allocated Frames are not completed design.`,
+        message: `The delivery artboards are allocated but no executable target Plan exists yet. Define the first bounded Plan for ${nextTarget?.targetId ?? "the first target"} using its host-owned existing artboard, then create its first meaningful editable slice. Empty allocated Frames are not completed design.`,
       };
     }
     if (
@@ -125,7 +125,7 @@ export function reviewDesignCompletion(
       const nextTarget = reviewedScope.targets[delivery.targets.length];
       return {
         allow: false,
-        message: `The current executable Plan is verified, but the confirmed delivery scope still has ${reviewedScope.targets.length - delivery.targets.length} unplanned target(s). Define the next Plan for confirmed target ${nextTarget?.targetId ?? "at the next scope position"}, create its first real editable slice, and continue. Do not repeat completed targets or claim total completion yet.`,
+        message: `The current executable Plan is verified, but the recorded delivery scope still has ${reviewedScope.targets.length - delivery.targets.length} unplanned target(s). Define the next Plan for target ${nextTarget?.targetId ?? "at the next scope position"}, create its first real editable slice, and continue. Do not repeat completed targets or claim total completion yet.`,
       };
     }
     if (
@@ -135,7 +135,7 @@ export function reviewDesignCompletion(
     ) {
       return {
         allow: false,
-        message: `The current executable Plan is verified, but the trusted delivery scope still has ${deliveryStage.totalTargets - deliveryStage.plannedTargets} unplanned target(s). Define the next Plan${deliveryStage.nextTarget ? ` for confirmed target ${deliveryStage.nextTarget.targetId}` : " from deliveryStage.nextTarget"}, create its first real editable slice, and continue without repeating completed targets.`,
+        message: `The current executable Plan is verified, but the trusted delivery scope still has ${deliveryStage.totalTargets - deliveryStage.plannedTargets} unplanned target(s). Define the next Plan${deliveryStage.nextTarget ? ` for target ${deliveryStage.nextTarget.targetId}` : " from deliveryStage.nextTarget"}, create its first real editable slice, and continue without repeating completed targets.`,
       };
     }
     return { allow: true };
@@ -291,7 +291,7 @@ function incompleteDeliveryDecision(
               : `Capture ${target.label} again to verify the refined revision.`;
   return {
     allow: false,
-    message: `The current executable Plan is ${progress} verified. ${action} Finish this stage before defining the next confirmed target Plan. Do not stop or ask the user to send “continue”.`,
+    message: `The current executable Plan is ${progress} verified. ${action} Finish this stage before defining the next target Plan. Do not stop or ask the user to send “continue”.`,
   };
 }
 

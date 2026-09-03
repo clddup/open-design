@@ -1,55 +1,38 @@
 import { describe, expect, it, vi } from "vitest";
-import {
-  DESIGN_DELIVERY_SCOPE_TOOL_NAME,
-  type DesignDeliveryScope,
-} from "@/shared/design-agent-tools.js";
+import { PAGE_STRUCTURE_ACCESS_TOOL_NAME } from "@/shared/design-agent-tools.js";
 import type { AgentHost } from "./agent-host.js";
 import type { GlobalTaskCoordinator } from "./global-task-coordinator.js";
 import { handleAgentApprovalRequest } from "./agent-approval-handler.js";
 
-const scope: DesignDeliveryScope = {
-  version: 1,
-  deliverable: "ui",
-  objective: "Design the complete product",
-  targets: [
-    {
-      targetId: "home",
-      label: "Home",
-      objective: "Present the core product entry",
-      artboard: { width: 1440, height: 900 },
-      requiredContent: ["Core entry"],
-    },
-  ],
-  exclusions: [],
-  assumptions: [],
-};
-
 describe("Agent approval handler", () => {
-  it("preauthorizes the exact confirmed delivery scope before utility execution", () => {
+  it("preauthorizes approved Page structure access before utility execution", () => {
     const send = vi.fn();
     const rollbackApprovalResolution = vi.fn();
     const agentHost = {
       prepareApprovalResolution: vi.fn(() => ({
-        approvalId: "approval_scope",
-        input: scope,
-        runId: "run_scope",
-        toolCallId: "scope_call",
-        toolName: DESIGN_DELIVERY_SCOPE_TOOL_NAME,
+        approvalId: "approval_pages",
+        input: {
+          actions: ["create-page"],
+          reason: "Create the requested research Page",
+        },
+        runId: "run_pages",
+        toolCallId: "pages_call",
+        toolName: PAGE_STRUCTURE_ACCESS_TOOL_NAME,
         risk: "design_write" as const,
       })),
       rollbackApprovalResolution,
       send,
     } as unknown as AgentHost;
-    const grantDeliveryScopeAuthorization = vi.fn();
+    const grantPageStructureAccess = vi.fn();
     const coordinator = {
-      grantDeliveryScopeAuthorization,
-      revokeDeliveryScopeAuthorization: vi.fn(),
+      grantPageStructureAccess,
+      revokePageStructureAccess: vi.fn(),
     } as unknown as GlobalTaskCoordinator;
     const request = {
       type: "approval.resolve" as const,
-      runId: "run_scope",
-      toolCallId: "scope_call",
-      approvalId: "approval_scope",
+      runId: "run_pages",
+      toolCallId: "pages_call",
+      approvalId: "approval_pages",
       decision: "allow_once" as const,
     };
 
@@ -58,11 +41,11 @@ describe("Agent approval handler", () => {
       globalTaskCoordinator: coordinator,
     });
 
-    expect(grantDeliveryScopeAuthorization).toHaveBeenCalledWith(
-      "run_scope",
-      "approval_scope",
-      "scope_call",
-      scope,
+    expect(grantPageStructureAccess).toHaveBeenCalledWith(
+      "run_pages",
+      "approval_pages",
+      "pages_call",
+      ["create-page"],
     );
     expect(send).toHaveBeenCalledWith(request);
     expect(rollbackApprovalResolution).not.toHaveBeenCalled();

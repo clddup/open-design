@@ -1,6 +1,6 @@
 # ADR-0234：确认完整交付范围时一次分配全部真实画板
 
-- 状态：Accepted
+- 状态：部分被 ADR-0297 取代；真实画板原子分配保留，人工确认与 Scope approval 已删除
 - 日期：2026-08-31
 - DesignDocument：不变
 - 关联：ADR-0050、ADR-0148、ADR-0151、ADR-0160、ADR-0230

@@ -3282,12 +3282,6 @@ describe("GlobalTaskCoordinator", () => {
       exclusions: ["No unrequested product capability"],
       assumptions: ["Use an iOS safe area"],
     };
-    coordinator.grantDeliveryScopeAuthorization(
-      context.runId,
-      "approval_scope",
-      "scope_call",
-      reviewedScope,
-    );
     const scopeAllocation = coordinator.createDeliveryScopeAllocation(
       context,
       "scope_call",
@@ -3309,13 +3303,6 @@ describe("GlobalTaskCoordinator", () => {
       revision: scopeRevision,
     });
     const contextAfterScope = { ...context, revision: scopeRevision };
-    expect(
-      coordinator.hasDeliveryScopeAuthorization(
-        context.runId,
-        "scope_call",
-        reviewedScope,
-      ),
-    ).toBe(false);
     expect(() =>
       coordinator.recordDeliveryScopeCompleted(
         contextAfterScope,
@@ -3374,7 +3361,7 @@ describe("GlobalTaskCoordinator", () => {
     const authorization = coordinator.assertDesignPlanForApply(
       contextAfterScope,
       {
-        label: "Build the first confirmed target",
+        label: "Build the first recorded target",
         commands: [
           {
             ...materialTemplate,
@@ -3444,7 +3431,7 @@ describe("GlobalTaskCoordinator", () => {
       type: "run.start",
       runId: nextRunId,
       sessionId: context.sessionId,
-      prompt: "Continue the confirmed delivery scope",
+      prompt: "Continue the recorded delivery scope",
       documentId: context.documentId,
       revision: scopeRevision,
       modelSelection,

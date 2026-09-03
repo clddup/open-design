@@ -42,7 +42,7 @@ export function createScopeArtboardAllocation(
           ? `Allocate ${artboards[0]?.label ?? "delivery"} artboard`
           : `Allocate ${artboards.length} confirmed artboards`,
       summary:
-        "Create every confirmed delivery root as a real editable Frame before detailed rolling plans begin",
+        "Create every recorded delivery root as a real editable Frame before detailed rolling plans begin",
       commands: artboards.map((artboard, index) => ({
         commandId: `allocate_scope_${index + 1}`,
         type: "insert_element" as const,
@@ -112,13 +112,13 @@ export function finalizeScopeAllocation(
 ): DeliveryScopeArtboardAllocation[] {
   if (allocation.artboards.length !== scope.targets.length) {
     throw new TypeError(
-      "Delivery scope allocation must contain every confirmed target exactly once",
+      "Delivery scope allocation must contain every recorded target exactly once",
     );
   }
   return allocation.artboards.map((artboard, index) => {
     if (scope.targets[index]?.targetId !== artboard.targetId) {
       throw new TypeError(
-        "Delivery scope allocation order must match the confirmed target order",
+        "Delivery scope allocation order must match the recorded target order",
       );
     }
     return { ...structuredClone(artboard), allocatedRevision: revision };
