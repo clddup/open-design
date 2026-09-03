@@ -166,7 +166,7 @@ pnpm build
 
 Node.js 在涉及 `node:sqlite` 的测试中输出 experimental warning；测试仍通过。该 API 的 Electron 长期兼容策略尚未最终确定。
 
-Composer 已取消用户可见的快速/精细模式，统一采用自适应执行：新建设计首轮使用有界 reasoning，优先提交视觉成立、真实可编辑且能继续精修的首屏，不用低质稿或 skeleton 换取“已变化”假象；确定性可验收修改在结构、布局和组件检查通过后直接交付，Logo/品牌等主观质量任务在首屏后继续独立 Critic 与 evidence-based refinement。Provider watchdog 仍按任务风险使用可信内部 profile，utilityProcess 不能提交任意毫秒值。`OD-MARK-01` 保留 `T1<=60s / T_all<=5min` 评测预算，但当前没有真实双平台达标样本。见 ADR-0121、ADR-0123 与 ADR-0127。
+Composer 已取消用户可见的快速/精细模式，统一采用自适应执行：Runtime 原样使用用户选择的 reasoning effort，优先提交视觉成立、真实可编辑且能继续精修的首屏，不用低质稿或 skeleton 换取“已变化”假象；Provider 明确返回的 Assistant text 与 reasoning summary 会按原顺序实时进入 Timeline，reasoning 默认折叠，未完成工具参数仍保持原子发布。确定性可验收修改在结构、布局和组件检查通过后直接交付，Logo/品牌等主观质量任务在首屏后继续独立 Critic 与 evidence-based refinement。Provider watchdog 仍按任务风险使用可信内部 profile，utilityProcess 不能提交任意毫秒值。`OD-MARK-01` 保留 `T1<=60s / T_all<=5min` 评测预算，但当前没有真实双平台达标样本。见 ADR-0127 与 ADR-0295。
 
 ## 已配置模型 API 烟测
 

@@ -2,6 +2,7 @@
 
 - 状态：Accepted
 - 扩展：ADR-0147 将新建 UI 首个代表 target 纳入一次有界独立 Critic 闭环；本 ADR 的单一自适应入口、内容语言、Page binding 与 Logo 构造逻辑继续有效
+- 部分取代：ADR-0295 保留单一自适应入口，但不再把用户选择的 reasoning effort 强制降为 `minimal/low`
 - 日期：2026-08-22
 - DesignDocument / transaction / revision：不变
 - 关联：ADR-0110、ADR-0117、ADR-0121、ADR-0122、ADR-0123、ADR-0125

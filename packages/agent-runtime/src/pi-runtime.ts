@@ -207,7 +207,7 @@ export class OpenDesignPiRuntime {
         sessionId: request.sessionId,
         streamFn: createPiModelGatewayStreamFn({
           modelGateway: this.options.modelGateway,
-          latencyProfile: "extended",
+          latencyProfile: "interactive",
           contextProjection: prepared.context,
           failurePort: modelFailurePort,
           nextAttemptId: () => `${request.runId}_attempt_${++attempt}`,

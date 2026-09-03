@@ -98,6 +98,27 @@ class MemorySessionStore implements SessionStore {
 }
 
 describe("OpenDesign Pi production runtime", () => {
+  it("uses one interactive Provider profile without lowering the selected reasoning effort", async () => {
+    const gateway = new RecordingGateway(
+      new MockModelGateway(textResponse("Ready.")),
+    );
+    const runtime = new OpenDesignPiRuntime({
+      modelGateway: gateway,
+      sessionStore: new MemorySessionStore(),
+    });
+
+    await collect(runtime, {
+      ...request,
+      runId: "run_pi_interactive_reasoning",
+    });
+
+    expect(gateway.requests).toHaveLength(1);
+    expect(gateway.requests[0]).toMatchObject({
+      latencyProfile: "interactive",
+      modelSelection: { reasoningEffort: "medium" },
+    });
+  });
+
   it("owns the complete run, tool and journal lifecycle behind the request-handler port", async () => {
     const store = new MemorySessionStore();
     const runtime = new OpenDesignPiRuntime({

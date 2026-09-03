@@ -228,7 +228,7 @@ export async function* streamModelProvider(
           }
           if (event.type === "block.delta") {
             if (event.delta.length === 0) continue;
-            if (blockKinds.get(event.blockId) !== "text") {
+            if (blockKinds.get(event.blockId) === "tool_call") {
               const pending = pendingBlockDeltas.get(event.blockId) ?? [];
               pending.push(event);
               pendingBlockDeltas.set(event.blockId, pending);

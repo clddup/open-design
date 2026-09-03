@@ -1,6 +1,7 @@
 # ADR-0238：Provider 流式可见性与语义提交边界
 
 - 状态：Accepted
+- 部分取代：ADR-0295 将 Provider 明确返回的非空 reasoning summary delta 改为实时发布；工具参数仍保持完整后原子发布
 - 日期：2026-08-31
 - 取代：ADR-0043 的“完整 attempt 才能进入 Agent”决策，以及 ADR-0047 对错误终态自动创建 continuation Run 的决策
 - 保留：ADR-0043 的 Main-owned watchdog、有界重连、取消与 retry lifecycle

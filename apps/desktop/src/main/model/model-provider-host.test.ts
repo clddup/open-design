@@ -677,6 +677,74 @@ describe("ModelProviderHost", () => {
     }
   });
 
+  it("forwards a reasoning summary delta before the Provider attempt completes", async () => {
+    const store = new WorkspaceStore(":memory:");
+    let releaseCompletion!: () => void;
+    const completionGate = new Promise<void>((resolve) => {
+      releaseCompletion = resolve;
+    });
+    const host = new ModelProviderHost(
+      store,
+      cipher,
+      globalThis.fetch,
+      undefined,
+      undefined,
+      () => ({
+        async *stream(request): AsyncIterable<CanonicalStreamEvent> {
+          yield startedEvent(request.attemptId);
+          yield {
+            type: "block.started",
+            attemptId: request.attemptId,
+            blockId: "reasoning",
+            kind: "reasoning_summary",
+          };
+          yield {
+            type: "block.delta",
+            attemptId: request.attemptId,
+            blockId: "reasoning",
+            delta: "正在分析画布结构",
+          };
+          await completionGate;
+          yield {
+            type: "block.completed",
+            attemptId: request.attemptId,
+            block: {
+              id: "reasoning",
+              type: "reasoning_summary",
+              status: "completed",
+              summary: "正在分析画布结构",
+            },
+          };
+          yield completedEvent(request.attemptId, "resp_live_reasoning");
+        },
+      }),
+    );
+    host.saveProfile({ ...profile, apiKey: "provider-secret" });
+
+    try {
+      const stream = host.stream(
+        baseRequest("attempt_live_reasoning"),
+        new AbortController().signal,
+      );
+      const iterator = stream[Symbol.asyncIterator]();
+      await expect(iterator.next()).resolves.toMatchObject({
+        value: { type: "attempt.started" },
+      });
+      await expect(iterator.next()).resolves.toMatchObject({
+        value: { type: "block.started", kind: "reasoning_summary" },
+      });
+      await expect(iterator.next()).resolves.toMatchObject({
+        value: { type: "block.delta", delta: "正在分析画布结构" },
+      });
+      releaseCompletion();
+      while (!(await iterator.next()).done) {
+        // Drain the completed block and terminal event.
+      }
+    } finally {
+      store.close();
+    }
+  });
+
   it("reconnects when an HTTP stream ends without a terminal event", async () => {
     vi.useFakeTimers();
     const store = new WorkspaceStore(":memory:");
