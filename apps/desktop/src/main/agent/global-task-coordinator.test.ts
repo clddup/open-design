@@ -2844,6 +2844,13 @@ describe("GlobalTaskCoordinator", () => {
       ),
     ).toThrow("design_workflow.ui_draft_structure_incomplete");
     const homeDraft = draftTargets(pageId, [homeTarget]);
+    const misidentifiedHomeDraft = structuredClone(homeDraft);
+    if (misidentifiedHomeDraft.steps?.[0]) {
+      misidentifiedHomeDraft.steps[0].stepId = "invented-implementation-step";
+    }
+    expect(() =>
+      coordinator.assertDesignPlanForApply(context, misidentifiedHomeDraft),
+    ).toThrow("design_workflow.plan_step_order_invalid");
     const draftAuthorization = coordinator.assertDesignPlanForApply(
       context,
       homeDraft,
@@ -2948,8 +2955,8 @@ describe("GlobalTaskCoordinator", () => {
       label: "Refine Home hierarchy",
       steps: [
         {
-          stepId: "target_home.review-refine",
-          label: "复核并精修首页",
+          stepId: "review-refine-focus",
+          label: "Refine the active target",
           commandIds: ["refine_home"],
         },
       ],
@@ -2966,9 +2973,16 @@ describe("GlobalTaskCoordinator", () => {
       context,
       refineHome,
     );
+    expect(homeAuthorization?.input.steps).toEqual([
+      {
+        stepId: "target_home.review-refine",
+        label: "Review and refine the rendered target",
+        commandIds: ["refine_home"],
+      },
+    ]);
     coordinator.recordDesignApplyCompleted(
       context.runId,
-      refineHome,
+      homeAuthorization?.input ?? refineHome,
       homeAuthorization,
       3,
     );

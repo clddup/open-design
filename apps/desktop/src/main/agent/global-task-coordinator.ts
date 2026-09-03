@@ -84,6 +84,10 @@ import {
   type DeliveryScopeAllocation,
   type DeliveryScopeArtboardAllocation,
 } from "./delivery-scope-artboard-allocation.js";
+import {
+  assertApplyPlanSteps,
+  bindApplyToActiveReviewStep,
+} from "./design-plan-apply-execution.js";
 
 type RunStartRequest = Extract<AgentRequest, { type: "run.start" }>;
 
@@ -1567,20 +1571,25 @@ export class GlobalTaskCoordinator {
     }
     const resolvedInput = resolvePlannedStructureGeometry(scopedInput, state);
     const targetIds = [...assertPlannedTargetWrites(resolvedInput, state)];
-    if (designApplyRequiresPlan(resolvedInput) && targetIds.length === 0) {
+    const boundInput = bindApplyToActiveReviewStep(
+      state,
+      targetIds,
+      resolvedInput,
+    );
+    if (designApplyRequiresPlan(boundInput) && targetIds.length === 0) {
       throw new Error(
         "Material design commands must target a declared delivery artboard",
       );
     }
     assertFocusedUiTargetWrites(state, targetIds);
-    assertUiDraftIsNotFlattened(resolvedInput, state, targetIds);
+    assertUiDraftIsNotFlattened(boundInput, state, targetIds);
     assertApplyUsesNewNodeIdNamespace(
-      resolvedInput,
+      boundInput,
       this.#inspectionsByRunId.get(context.runId),
       reservedNodeIdsForTargets(state, targetIds),
     );
     assertDeliveryAcceptsMaterialWrites(state);
-    assertApplyPlanSteps(state, targetIds, resolvedInput.steps);
+    assertApplyPlanSteps(state, targetIds, boundInput.steps);
     const rebaseTargets = targetIds.flatMap((targetId) => {
       const target = state.targetsById.get(targetId);
       if (!target?.artboardEstablished) return [];
@@ -1594,7 +1603,7 @@ export class GlobalTaskCoordinator {
       ];
     });
     return {
-      input: resolvedInput,
+      input: boundInput,
       plan: state.plan,
       ...(rebaseTargets.length === targetIds.length && rebaseTargets.length > 0
         ? {
@@ -1671,6 +1680,11 @@ export class GlobalTaskCoordinator {
         assumedAllocatedTargetIds,
       ),
     ];
+    const boundInput = bindApplyToActiveReviewStep(
+      state,
+      targetIds,
+      resolvedInput,
+    );
     if (targetIds.length === 0) {
       throw designWorkflowError(
         "material_write_required",
@@ -1678,16 +1692,16 @@ export class GlobalTaskCoordinator {
       );
     }
     assertFocusedUiTargetWrites(state, targetIds);
-    assertUiDraftIsNotFlattened(resolvedInput, state, targetIds);
+    assertUiDraftIsNotFlattened(boundInput, state, targetIds);
     assertApplyUsesNewNodeIdNamespace(
-      resolvedInput,
+      boundInput,
       this.#inspectionsByRunId.get(context.runId),
       reservedNodeIdsForTargets(state, targetIds),
     );
     assertDeliveryAcceptsMaterialWrites(state);
-    assertApplyPlanSteps(state, targetIds, resolvedInput.steps);
+    assertApplyPlanSteps(state, targetIds, boundInput.steps);
     return {
-      input: resolvedInput,
+      input: boundInput,
       plan: state.plan,
       targetIds,
     };
@@ -3264,61 +3278,6 @@ function designDeliveryCanComplete(
       target.steps.every((step) => step.status === "completed"),
     )
   );
-}
-
-function assertApplyPlanSteps(
-  state: DesignWorkflowState,
-  targetIds: readonly string[],
-  steps: DesignApplyToolInput["steps"],
-): void {
-  if (!steps || steps.length === 0) return;
-  const flattened = state.planExecution.targets.flatMap((target) =>
-    target.steps.map((step) => ({ ...step, targetId: target.targetId })),
-  );
-  const activeIndex = flattened.findIndex(
-    (step) => step.status === "in_progress",
-  );
-  if (activeIndex < 0) {
-    throw designWorkflowError(
-      "plan_step_state_invalid",
-      "No executable Plan step is currently in progress",
-    );
-  }
-  const allowedTargets = new Set(targetIds);
-  const active = flattened[activeIndex];
-  if (active?.kind === "review-refine") {
-    const target = state.targetsById.get(active.targetId);
-    const submitted = steps[0];
-    if (
-      steps.length !== 1 ||
-      !submitted ||
-      !allowedTargets.has(active.targetId) ||
-      submitted.stepId !== active.stepId ||
-      (target?.delivery.status !== "reviewed" &&
-        target?.delivery.status !== "refined")
-    ) {
-      throw designWorkflowError(
-        "plan_step_order_invalid",
-        `Design Apply step ${submitted?.stepId ?? "missing"} must match the active reviewed target`,
-      );
-    }
-    return;
-  }
-  steps.forEach((step, offset) => {
-    const expected = flattened[activeIndex + offset];
-    if (
-      !expected ||
-      expected.kind !== "implementation" ||
-      !allowedTargets.has(expected.targetId) ||
-      expected.stepId !== step.stepId ||
-      (offset > 0 && expected.status !== "pending")
-    ) {
-      throw designWorkflowError(
-        "plan_step_order_invalid",
-        `Design Apply step ${step.stepId} must match the current serial Plan step`,
-      );
-    }
-  });
 }
 
 function activateNextPlanStep(
