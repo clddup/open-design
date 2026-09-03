@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { TrustedToolFailure } from "@opendesign/agent-contracts";
+import {
+  TrustedToolFailureContract,
+  type TrustedToolFailure,
+} from "@opendesign/agent-contracts";
 import { PiToolProgressCircuit } from "./pi-tool-progress-circuit.js";
 
 const invalidInput: TrustedToolFailure = {
@@ -79,6 +82,42 @@ describe("PiToolProgressCircuit", () => {
       code: "design_recovery_no_progress",
       recoverable: false,
       runTerminal: true,
+    });
+  });
+
+  it("does not attach stale workflow details to a circuit terminal failure", () => {
+    const circuit = new PiToolProgressCircuit();
+    const failure: TrustedToolFailure = {
+      code: "design_visual_review_required",
+      message: "Capture and review the current material revision",
+      retryable: false,
+      recoverable: true,
+      details: {
+        kind: "design-workflow",
+        fingerprint: "workflow_visual_review",
+        workflowCode: "visual_review_required",
+        phase: "capture",
+        requiresInspection: false,
+        issues: [
+          {
+            code: "design_workflow.visual_review_required",
+            path: "/designWorkflow",
+            message: "Capture and review the current material revision",
+          },
+        ],
+        recovery: { action: "follow-workflow", required: true },
+      },
+    };
+
+    circuit.recordFailure("opendesign_design_checkpoint", failure);
+    const terminal = circuit.recordFailure(
+      "opendesign_design_checkpoint",
+      failure,
+    );
+
+    expect(terminal).not.toHaveProperty("details");
+    expect(TrustedToolFailureContract.parse(terminal)).toMatchObject({
+      ok: true,
     });
   });
 

@@ -1,7 +1,8 @@
-import type {
-  AgentEvent,
-  ToolExecutionEvent,
-  TrustedToolContext,
+import {
+  AgentEventContract,
+  type AgentEvent,
+  type ToolExecutionEvent,
+  type TrustedToolContext,
 } from "@opendesign/agent-contracts";
 import {
   MockModelGateway,
@@ -729,8 +730,11 @@ describe("OpenDesign Pi tool adapter", () => {
     expect(failures[2]).toMatchObject({
       code: "design_recovery_no_progress",
       recoverable: false,
-      details: { attempt: 2, maxAttempts: 2, retrySuppressed: true },
     });
+    expect(failures[2]).not.toHaveProperty("details");
+    for (const event of result.events) {
+      expect(AgentEventContract.parse(event)).toMatchObject({ ok: true });
+    }
     expect(result.events).toContainEqual(
       expect.objectContaining({
         type: "agent.error",

@@ -27,7 +27,6 @@ export class PiToolProgressCircuit {
         return terminalFailure(
           "tool_protocol_no_progress",
           `${toolName} repeated the same invalid tool input ${invalidInputs} times without a successful document revision. The run was stopped instead of continuing an invisible retry loop.`,
-          failure,
         );
       }
       return failure;
@@ -50,7 +49,6 @@ export class PiToolProgressCircuit {
       return terminalFailure(
         "design_recovery_no_progress",
         `The run repeated the same recoverable design failure ${recoverableFailures} times without advancing the design document. The run was stopped instead of continuing an invisible recovery loop. Already committed revisions are preserved.`,
-        failure,
       );
     }
     return failure;
@@ -75,17 +73,12 @@ function failureFingerprint(
   return `${toolName}:${failure.code}:${workflowCode ?? failure.message}`;
 }
 
-function terminalFailure(
-  code: string,
-  message: string,
-  source: TrustedToolFailure,
-): TrustedToolFailure {
+function terminalFailure(code: string, message: string): TrustedToolFailure {
   return {
     code,
     message,
     retryable: false,
     recoverable: false,
     runTerminal: true,
-    ...(source.details ? { details: source.details } : {}),
   };
 }

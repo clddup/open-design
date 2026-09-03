@@ -412,6 +412,55 @@ describe("session journal recovery", () => {
     );
   });
 
+  it("recovers a persisted circuit failure with stale workflow details", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "opendesign-session-"));
+    const path = join(directory, "events.jsonl");
+    const requested = event(1, "tool.requested", {
+      toolCallId: "tool_stale_workflow_failure",
+      toolName: "opendesign_design_checkpoint",
+      input: {},
+      risk: "design_write",
+    });
+    const failed = event(2, "tool.failed", {
+      toolCallId: "tool_stale_workflow_failure",
+      code: "design_recovery_no_progress",
+      message: "Recovery made no progress",
+      retryable: false,
+      recoverable: false,
+      details: {
+        kind: "design-workflow",
+        fingerprint: "workflow_visual_review",
+        workflowCode: "visual_review_required",
+        phase: "capture",
+        requiresInspection: false,
+        issues: [
+          {
+            code: "design_workflow.visual_review_required",
+            path: "/designWorkflow",
+            message: "Capture and review the current material revision",
+          },
+        ],
+        recovery: { action: "follow-workflow", required: true },
+      },
+    });
+    await appendFile(
+      path,
+      `${JSON.stringify(requested)}\n${JSON.stringify(failed)}\n`,
+      "utf8",
+    );
+
+    const store = new JsonlSessionStore(path);
+    const raw = await store.read("session_1");
+    expect(raw[1]?.payload).not.toHaveProperty("details");
+    const timeline = await store.readTimeline("session_1");
+    const tool = timeline.find((item) => item.type === "tool");
+    expect(tool).toMatchObject({
+      type: "tool",
+      status: "failed",
+      error: { code: "design_recovery_no_progress" },
+    });
+  });
+
   it("splits persisted oversized reasoning without hiding the assistant message", async () => {
     const directory = await mkdtemp(join(tmpdir(), "opendesign-session-"));
     const path = join(directory, "events.jsonl");

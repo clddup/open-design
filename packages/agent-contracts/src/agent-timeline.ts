@@ -90,6 +90,9 @@ function durableTimelineEventDomainIssues(
       "Persist failure details only with error status and error stop reason.",
     );
   }
+  if (value.type === "tool.failed") {
+    return designWorkflowFailureDomainIssues(value.payload, "/payload");
+  }
   if (
     value.type === "context.compacted" &&
     value.payload.toSequence < value.payload.fromSequence

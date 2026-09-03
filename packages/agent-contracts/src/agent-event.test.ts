@@ -84,6 +84,44 @@ describe("Agent event and timeline contracts", () => {
       ],
     });
     expect(isDurableTimelineEvent(durableRun)).toBe(false);
+
+    const durableToolFailure = {
+      ...durableEventBase,
+      type: "tool.failed",
+      payload: {
+        toolCallId: "tool_1",
+        code: "design_recovery_no_progress",
+        message: "Recovery made no progress",
+        retryable: false,
+        recoverable: false,
+        details: {
+          kind: "design-workflow",
+          fingerprint: "workflow_visual_review",
+          workflowCode: "visual_review_required",
+          phase: "capture",
+          requiresInspection: false,
+          issues: [
+            {
+              code: "design_workflow.visual_review_required",
+              path: "/designWorkflow",
+              message: "Capture and review the current material revision",
+            },
+          ],
+          recovery: { action: "follow-workflow", required: true },
+        },
+      },
+    } as const;
+    expect(
+      DurableTimelineEventContract.parse(durableToolFailure),
+    ).toMatchObject({
+      ok: false,
+      issues: [
+        {
+          code: "trusted_tool_failure.workflow_code_mismatch",
+          path: "/payload/code",
+        },
+      ],
+    });
   });
 
   it("preserves the compacted sequence range relationship", () => {

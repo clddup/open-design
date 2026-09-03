@@ -6,6 +6,7 @@ import {
   AgentToolFailureDetailsContract,
   DurableTimelineEventContract,
   SessionTimelineItemContract,
+  TrustedToolFailureContract,
   formatRuntimeContractFailure,
   type AssistantTimelineBlock,
   type DurableTimelineEvent,
@@ -840,6 +841,18 @@ function recoverPersistedEvent(value: unknown): unknown {
   if (
     payload.details !== undefined &&
     !AgentToolFailureDetailsContract.parse(payload.details).ok
+  ) {
+    delete payload.details;
+  }
+  if (
+    payload.details !== undefined &&
+    !TrustedToolFailureContract.parse({
+      code: payload.code,
+      message: payload.message,
+      retryable: payload.retryable ?? false,
+      recoverable: payload.recoverable ?? false,
+      details: payload.details,
+    }).ok
   ) {
     delete payload.details;
   }
