@@ -101,3 +101,5 @@ provider adapter → render/export → persistence → undo/redo → tests
 任何阶段都不得通过恢复旧引擎、建立第二份可写状态或让模型直接控制 Leafer 内存来缩短路径。
 
 当前 Vector Eraser 范围事实：Vector edit mode 使用 `Shift+E`，Inspector 配置 weight 与 round/square shape；document-space gesture 经 PathKit 从物化后的 Fill/Stroke/dash/variable-width 外观中 subtract。擦断结果保留在原 layer 的同一 Network，完全擦空才删除；多层人工操作与 Agent `edit_vector.erase` 共用一笔 EditorRuntime transaction。Image AI Erase 仍是独立像素工作流。真实 macOS/Windows 打包交互、笔压、HiDPI 与长路径性能仍待验证。见 ADR-0298。
+
+当前 Shape Builder 范围事实：Vector edit mode 点击提取连通原子区域，`Option/Alt` 点击减去，拖过多个区域合并；Geometry Service 在 document space 分割同父级 editable Vector 的 painted regions。混合 Paint 的 Merge、锁定目标、不可逆 transform 和不支持的合成语义在写入前失败；源层更新/删除与结果 sibling 只形成一次 EditorRuntime transaction。人工与 Agent `edit_vector.shape-builder` 共用同一 planner。真实 macOS/Windows HiDPI 命中与复杂长路径性能仍待验证。见 ADR-0299。

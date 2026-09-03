@@ -507,10 +507,10 @@
         "zh-CN": "Pen 与节点编辑"
       },
       "description": {
-        "en": "Create and refine open, closed, branching, and curved vector geometry using points and Bézier handles, with Figma-compatible point and visible-handle snapping plus document-space path-nearest snapping, anchor measurements, measured connected-point creation, and lossless Pen insertion plus independent multi-contour and branching Network authoring in both top-level Pen and Vector edit mode. Vector edit mode also erases visible painted geometry with a round or square brush while keeping disconnected contours in the original editable layer.",
-        "zh-CN": "通过节点和贝塞尔手柄创建、编辑开放、闭合、分支与曲线矢量几何，并在 Vector edit mode 中使用 Figma-compatible 节点与可见 handle 吸附及 document-space path 最近点吸附、锚点测量、测量式连接点创建与 Pen 沿现有 segment 无损插点，以及顶层 Pen 与 Vector edit mode 的同一 Network 独立多轮廓和分支创作。 Vector edit mode 还可用圆形或方形笔刷擦除可见 painted geometry，并把断开的轮廓保留在原可编辑图层。"
+        "en": "Create and refine open, closed, branching, and curved vector geometry using points and Bézier handles, with Figma-compatible point and visible-handle snapping plus document-space path-nearest snapping, anchor measurements, measured connected-point creation, and lossless Pen insertion plus independent multi-contour and branching Network authoring in both top-level Pen and Vector edit mode. Vector edit mode also erases visible painted geometry with a round or square brush while keeping disconnected contours in the original editable layer. Shape Builder extracts, subtracts, or merges connected atomic painted regions while preserving editable Vector output.",
+        "zh-CN": "通过节点和贝塞尔手柄创建、编辑开放、闭合、分支与曲线矢量几何，并在 Vector edit mode 中使用 Figma-compatible 节点与可见 handle 吸附及 document-space path 最近点吸附、锚点测量、测量式连接点创建与 Pen 沿现有 segment 无损插点，以及顶层 Pen 与 Vector edit mode 的同一 Network 独立多轮廓和分支创作。 Vector edit mode 还可用圆形或方形笔刷擦除可见 painted geometry，并把断开的轮廓保留在原可编辑图层。 Shape Builder 可提取、减去或合并连通的 painted 原子区域，并保持结果为可编辑 Vector。"
       },
-      "provider": "DesignDocument 1.57.0 Vector Network + Geometry Service contract 42 point/path selection-delete/transform/point-and-path-snapping/anchor-measurement/measured-point-append/segment-insertion/Bend/Connect/Disconnect/Cut/region Fill/region Paint Style/vertex stroke appearance/vertex corner radius/Outline Stroke/Flatten/Vector Eraser + EditorRuntime document-space multi-Vector transform/Cut/cross-layer Connect/branch junction/Frame-Group-Boolean-Component-Text-Image and root-shell/isolated-pixel-compositing Flatten planner + Leafer synthetic region/stroke/corner projection and native editing overlays",
+      "provider": "DesignDocument 1.57.0 Vector Network + Geometry Service contract 42 point/path selection-delete/transform/point-and-path-snapping/anchor-measurement/measured-point-append/segment-insertion/Bend/Connect/Disconnect/Cut/region Fill/region Paint Style/vertex stroke appearance/vertex corner radius/Outline Stroke/Flatten/Vector Eraser/Shape Builder + EditorRuntime document-space multi-Vector transform/Cut/cross-layer Connect/branch junction/Frame-Group-Boolean-Component-Text-Image and root-shell/isolated-pixel-compositing Flatten planner + Leafer synthetic region/stroke/corner projection and native editing overlays",
       "requiredSurfaces": ["contract", "runtime", "human", "agent"],
       "surfaces": {
         "contract": "available",
@@ -554,7 +554,9 @@
           "packages/leafer-engine/src/vector-anchor-measurement-controller.test.ts",
           "packages/leafer-engine/src/vector-geometry-snap-controller.test.ts",
           "packages/geometry-service/src/vector-eraser.test.ts",
-          "packages/editor-runtime/src/vector-eraser-operations.test.ts"
+          "packages/editor-runtime/src/vector-eraser-operations.test.ts",
+          "packages/geometry-service/src/vector-shape-builder.test.ts",
+          "packages/editor-runtime/src/vector-shape-builder-operations.test.ts"
         ],
         "manual": []
       },
@@ -562,7 +564,8 @@
         "https://help.figma.com/hc/en-us/articles/360039956974-Measure-distances-between-layers",
         "https://help.figma.com/hc/en-us/articles/360040450213-Vector-networks",
         "https://help.figma.com/hc/en-us/articles/360039957634-Edit-vector-layers",
-        "https://github.com/ZSeven-W/openpencil/blob/449f31dd8b7df12965f65d9da774597332fc153d/crates/op-editor-core/src/path_edit.rs"
+        "https://github.com/ZSeven-W/openpencil/blob/449f31dd8b7df12965f65d9da774597332fc153d/crates/op-editor-core/src/path_edit.rs",
+        "https://help.figma.com/hc/en-us/articles/31616004109847-Create-custom-shapes-with-the-shape-builder-tool"
       ]
     },
     {

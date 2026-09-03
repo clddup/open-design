@@ -1,4 +1,3 @@
-import type { Paint } from "@opendesign/design-contracts";
 import {
   planVectorLayersErase,
   type EditorRuntime,
@@ -7,7 +6,6 @@ import {
 import type { VectorGeometryProvider } from "@opendesign/geometry-service/vector-path";
 import type {
   LeaferOperationRequest,
-  LeaferVectorEditTool,
   LeaferVectorEraseRequest,
   LeaferVectorEraseResponse,
 } from "@opendesign/leafer-engine";
@@ -18,16 +16,10 @@ import {
   type MutableRefObject,
   type SetStateAction,
 } from "react";
-
-export interface CanvasVectorEditState {
-  activeNodeId: string;
-  nodeIds: readonly string[];
-  selectedSegmentIdsByNode: Readonly<Record<string, readonly string[]>>;
-  selectedVertexIdsByNode: Readonly<Record<string, readonly string[]>>;
-  tool: LeaferVectorEditTool;
-  fillStyleId: string | null;
-  paint: readonly Paint[];
-}
+import {
+  resetVectorPointSelection,
+  type CanvasVectorEditState,
+} from "./vector-edit-state";
 
 interface VectorEraserCommitOptions {
   activePageId: string;
@@ -192,22 +184,6 @@ function updateVectorEditState(
     options.runtime.setSelection(remainingNodeIds, activeNodeId);
   }
   return true;
-}
-
-function resetVectorPointSelection(
-  state: CanvasVectorEditState,
-  nodeIds: readonly string[],
-  activeNodeId: string,
-): CanvasVectorEditState {
-  const emptyByNode = () =>
-    Object.fromEntries(nodeIds.map((nodeId) => [nodeId, []]));
-  return {
-    ...state,
-    activeNodeId,
-    nodeIds,
-    selectedSegmentIdsByNode: emptyByNode(),
-    selectedVertexIdsByNode: emptyByNode(),
-  };
 }
 
 function staleFailure(

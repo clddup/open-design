@@ -125,10 +125,9 @@ import {
   DEFAULT_VECTOR_ERASER_SETTINGS,
   type VectorEraserSettings,
 } from "../vector-eraser-settings";
-import {
-  type CanvasVectorEditState,
-  useVectorEraserCommit,
-} from "../use-vector-eraser";
+import { useVectorEraserCommit } from "../use-vector-eraser";
+import { useVectorShapeBuilder } from "../use-vector-shape-builder";
+import type { CanvasVectorEditState } from "../vector-edit-state";
 
 export function Canvas({
   activeAgentRunId,
@@ -1197,6 +1196,20 @@ export function Canvas({
     vectorEditStateRef,
   });
 
+  const applyVectorShapeBuild = useVectorShapeBuilder({
+    activePageId,
+    applyOperations,
+    messages: {
+      applyMissing: t("canvas.vectorShapeBuilderApplyMissing"),
+      stale: t("canvas.vectorShapeBuilderStale"),
+      unavailable: t("canvas.vectorShapeBuilderUnavailable"),
+    },
+    onTransactionError,
+    runtime,
+    setVectorEditState,
+    vectorEditStateRef,
+  });
+
   const applyVectorLineCut = useCallback(
     (request: LeaferVectorLineCutRequest): LeaferVectorLineCutResponse => {
       const current = runtime.getSnapshot();
@@ -1476,6 +1489,7 @@ export function Canvas({
       onTextRangeSelectionChange,
       onVectorCut: applyVectorCut,
       onVectorErase: applyVectorErase,
+      onVectorShapeBuild: applyVectorShapeBuild,
       onVectorEdit: applyVectorEdit,
       onVectorEditActiveNodeChange: (nodeId) => {
         setVectorEditState((current) => {
@@ -1554,6 +1568,7 @@ export function Canvas({
     applyVectorCut,
     applyVectorEdit,
     applyVectorErase,
+    applyVectorShapeBuild,
     applyVectorLineCut,
     changeVectorEditScope,
     createNode,
@@ -2011,20 +2026,22 @@ export function Canvas({
                           ? t("canvas.vectorBendHint")
                           : vectorEditState?.tool === "eraser"
                             ? t("canvas.vectorEraseHint")
-                            : vectorEditState?.tool === "variable-width"
-                              ? t("canvas.vectorVariableWidthHint")
-                              : vectorEditState?.tool === "pen"
-                                ? t("canvas.vectorPenHint")
-                                : vectorEditState?.tool === "lasso"
-                                  ? t("canvas.vectorLassoHint")
-                                  : t("canvas.vectorEditingHint", {
-                                      pathCount:
-                                        vectorEditScope.selectedSegmentIds
-                                          .length,
-                                      pointCount:
-                                        vectorEditScope.selectedVertexIds
-                                          .length,
-                                    })}
+                            : vectorEditState?.tool === "shape-builder"
+                              ? t("canvas.vectorShapeBuilderHint")
+                              : vectorEditState?.tool === "variable-width"
+                                ? t("canvas.vectorVariableWidthHint")
+                                : vectorEditState?.tool === "pen"
+                                  ? t("canvas.vectorPenHint")
+                                  : vectorEditState?.tool === "lasso"
+                                    ? t("canvas.vectorLassoHint")
+                                    : t("canvas.vectorEditingHint", {
+                                        pathCount:
+                                          vectorEditScope.selectedSegmentIds
+                                            .length,
+                                        pointCount:
+                                          vectorEditScope.selectedVertexIds
+                                            .length,
+                                      })}
                   </small>
                 </span>
                 <span className={styles.vectorTools}>
@@ -2043,6 +2060,11 @@ export function Canvas({
                           "canvas.vectorToolVariableWidth",
                           null,
                         ],
+                        [
+                          "shape-builder",
+                          "canvas.vectorToolShapeBuilder",
+                          null,
+                        ],
                         ["paint", "canvas.vectorToolPaint", null],
                         ["eraser", "canvas.vectorToolEraser", "Shift+E"],
                         ["cut", "canvas.vectorToolCut", "X"],
@@ -2057,6 +2079,7 @@ export function Canvas({
                             (mode === "bend" ||
                               mode === "pen" ||
                               mode === "variable-width" ||
+                              mode === "shape-builder" ||
                               mode === "paint" ||
                               mode === "eraser" ||
                               mode === "cut")) ||

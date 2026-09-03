@@ -9076,6 +9076,120 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
+  it("submits Figma-compatible Shape Builder click, Alt-click, and drag gestures", async () => {
+    const onVectorShapeBuild = vi.fn<
+      NonNullable<LeaferEngineCallbacks["onVectorShapeBuild"]>
+    >((request) =>
+      Promise.resolve({ ok: true, nodeIds: [...request.nodeIds] }),
+    );
+    const base = withMultiVectorEditFixture(createInput());
+    const input: LeaferEngineSyncInput = {
+      ...base,
+      vectorEditScope: { ...base.vectorEditScope!, tool: "shape-builder" },
+    };
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onVectorShapeBuild,
+    });
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    const path =
+      app && findElement(app.tree, vectorStrokeElementId("editable_curve"));
+    if (!app || !(path instanceof FakePath)) {
+      throw new Error("Missing editable Vector path");
+    }
+
+    app.emit("pointer.down", pointerEvent(20, 30, path));
+    app.emit("pointer.up", pointerEvent(20, 30, path));
+    await flushMicrotasks();
+    expect(onVectorShapeBuild).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        mode: "extract",
+        nodeIds: ["editable_curve", "editable_curve_second"],
+        points: [{ x: 20, y: 30 }],
+      }),
+    );
+
+    app.emit("pointer.down", pointerEvent(40, 50, path, { altKey: true }));
+    app.emit("pointer.up", pointerEvent(40, 50, path, { altKey: true }));
+    await flushMicrotasks();
+    expect(onVectorShapeBuild).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        mode: "subtract",
+        points: [{ x: 40, y: 50 }],
+      }),
+    );
+
+    app.emit("pointer.down", pointerEvent(60, 70, path));
+    app.emit("pointer.move", pointerEvent(100, 110, path));
+    app.emit("pointer.up", pointerEvent(100, 110, path));
+    await flushMicrotasks();
+    expect(onVectorShapeBuild).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        mode: "merge",
+        points: [
+          { x: 60, y: 70 },
+          { x: 100, y: 110 },
+        ],
+      }),
+    );
+    adapter.dispose();
+  });
+
+  it("cancels Shape Builder gestures and blocks overlapping submissions", async () => {
+    let resolveShapeBuild!: (value: { ok: false }) => void;
+    const pending = new Promise<{ ok: false }>((resolve) => {
+      resolveShapeBuild = resolve;
+    });
+    const onVectorShapeBuild = vi.fn<
+      NonNullable<LeaferEngineCallbacks["onVectorShapeBuild"]>
+    >(() => pending);
+    const base = withVectorEditFixture(createInput());
+    const input: LeaferEngineSyncInput = {
+      ...base,
+      vectorEditScope: { ...base.vectorEditScope!, tool: "shape-builder" },
+    };
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onVectorShapeBuild,
+    });
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    const path =
+      app && findElement(app.tree, vectorStrokeElementId("editable_curve"));
+    if (!app || !(path instanceof FakePath)) {
+      throw new Error("Missing editable Vector path");
+    }
+
+    app.emit("pointer.down", pointerEvent(20, 30, path));
+    emitWindowKey("Escape");
+    app.emit("pointer.up", pointerEvent(20, 30, path));
+    expect(onVectorShapeBuild).not.toHaveBeenCalled();
+
+    app.emit("pointer.down", pointerEvent(30, 40, path));
+    app.emit("pointer.up", pointerEvent(30, 40, path));
+    app.emit("pointer.down", pointerEvent(40, 50, path));
+    app.emit("pointer.up", pointerEvent(40, 50, path));
+    expect(onVectorShapeBuild).toHaveBeenCalledTimes(1);
+
+    resolveShapeBuild({ ok: false });
+    await flushMicrotasks();
+    adapter.sync({
+      ...input,
+      vectorEditScope: {
+        ...input.vectorEditScope!,
+        nodes: input.vectorEditScope!.nodes.map((node) => ({
+          ...node,
+          readOnly: true,
+        })),
+      },
+    });
+    app.emit("pointer.down", pointerEvent(50, 60, path));
+    app.emit("pointer.up", pointerEvent(50, 60, path));
+    expect(onVectorShapeBuild).toHaveBeenCalledTimes(1);
+    adapter.dispose();
+  });
+
   it("repositions a resize with Space and resumes without a preview jump", async () => {
     const onVectorEdit = vi.fn<(request: LeaferVectorEditRequest) => boolean>(
       () => true,

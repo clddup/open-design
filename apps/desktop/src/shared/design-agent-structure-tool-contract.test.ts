@@ -240,6 +240,17 @@ const vectorInputs: DesignVectorToolInput[] = [
     end: { x: 512, y: 240 },
   },
   {
+    action: "shape-builder",
+    label: "Merge logo regions",
+    mode: "merge",
+    pageId: "page_brand",
+    nodeIds: ["logo_path", "logo_shadow"],
+    points: [
+      { x: 160, y: 220 },
+      { x: 320, y: 220 },
+    ],
+  },
+  {
     action: "erase",
     label: "Erase logo contours",
     pageId: "page_brand",
@@ -455,6 +466,24 @@ describe("Hierarchy and Vector Agent contracts", () => {
         expect.objectContaining({ path: "/weight" }),
         expect.objectContaining({ path: "/nodeId" }),
       ]),
+    );
+  });
+
+  it("reports Shape Builder gesture semantics at the points field", () => {
+    expect(
+      DesignVectorContract.issues({
+        action: "shape-builder",
+        label: "Merge logo regions",
+        mode: "merge",
+        pageId: "page_brand",
+        nodeIds: ["logo_path", "logo_shadow"],
+        points: [{ x: 160, y: 220 }],
+      }),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "design_vector.shape_builder_gesture_invalid",
+        path: "/points",
+      }),
     );
   });
 

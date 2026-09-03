@@ -36,6 +36,27 @@ export const DesignVectorContract = defineContract<DesignVectorToolInput>({
 
 function refineDesignVector(input: DesignVectorToolInput): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
+  if (input.action === "shape-builder") {
+    const expected = input.mode === "merge" ? "at least 2" : "exactly 1";
+    const valid =
+      input.mode === "merge"
+        ? input.points.length >= 2
+        : input.points.length === 1;
+    if (!valid) {
+      issues.push({
+        code: "design_vector.shape_builder_gesture_invalid",
+        path: "/points",
+        message: `Shape Builder ${input.mode} requires ${expected} document-space point${input.mode === "merge" ? "s" : ""}`,
+        expected,
+        actual: input.points.length,
+        recovery:
+          input.mode === "merge"
+            ? "Provide the ordered drag gesture with at least its start and end points."
+            : "Provide only the single document-space click point that identifies the region.",
+      });
+    }
+    return issues;
+  }
   if (input.action === "set-vertex-stroke-appearance") {
     if (input.strokeCap === undefined && input.strokeJoin === undefined) {
       issues.push({

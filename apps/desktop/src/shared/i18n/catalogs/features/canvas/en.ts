@@ -52,6 +52,8 @@ export const canvasMessages = {
     "Click the path to add a width point · Drag along and across the path · Control disables snapping",
   "canvas.vectorEraseHint":
     "Drag across editable vector layers to remove painted regions · Shift+E",
+  "canvas.vectorShapeBuilderHint":
+    "Click to extract · Option/Alt-click to subtract · Drag across regions to merge",
   "canvas.vectorPenHint":
     "Click a path to insert a point; continue from a selected point, finish on another point, or start a new contour on empty canvas",
   "canvas.vectorLassoHint":
@@ -67,6 +69,11 @@ export const canvasMessages = {
     "The document changed before the vector erase could be applied",
   "canvas.vectorEraseApplyMissing":
     "Erased vector layers are unavailable after applying the edit",
+  "canvas.vectorShapeBuilderUnavailable": "Shape Builder is unavailable",
+  "canvas.vectorShapeBuilderStale":
+    "The document changed before Shape Builder could be applied",
+  "canvas.vectorShapeBuilderApplyMissing":
+    "Shape Builder result layers are unavailable after applying the edit",
   "canvas.vectorEditingReadOnly":
     "Read-only · Locked or unsupported vector topology",
   "canvas.exitVectorEditing": "Finish editing vector points",
@@ -75,6 +82,7 @@ export const canvasMessages = {
   "canvas.vectorToolPen": "Pen",
   "canvas.vectorToolBend": "Bend",
   "canvas.vectorToolVariableWidth": "Variable width",
+  "canvas.vectorToolShapeBuilder": "Shape builder",
   "canvas.vectorToolPaint": "Paint",
   "canvas.vectorToolEraser": "Eraser",
   "canvas.vectorPaintColor": "Region color",

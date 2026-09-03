@@ -240,6 +240,14 @@ export type DesignVectorToolInput =
       start: Point;
     }
   | {
+      action: "shape-builder";
+      label: string;
+      mode: "extract" | "merge" | "subtract";
+      nodeIds: string[];
+      pageId: string;
+      points: Point[];
+    }
+  | {
       action: "erase";
       label: string;
       nodeIds: string[];

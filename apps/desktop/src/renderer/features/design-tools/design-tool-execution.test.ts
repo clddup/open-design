@@ -5256,6 +5256,59 @@ describe("Renderer semantic hierarchy tool", () => {
     expect(runtime.undo()).toMatchObject({ ok: true, mode: "undo" });
   });
 
+  it("extracts a Shape Builder region through one atomic Agent transaction", async () => {
+    const runtime = createClosedEditableVectorRuntime();
+    runtime.setSelection(["title_welcome"], "title_welcome");
+
+    const result = await executeDesignToolRequest(
+      {
+        requestId: "vector_shape_builder",
+        call: {
+          toolCallId: "tool_vector_shape_builder",
+          toolName: DESIGN_VECTOR_TOOL_NAME,
+          input: {
+            action: "shape-builder",
+            label: "Extract the logo face",
+            mode: "extract",
+            nodeIds: ["editable_logo_contour"],
+            pageId: "page_welcome",
+            points: [{ x: 180, y: 130 }],
+          },
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_welcome",
+      {
+        vectorGeometryProvider: () => Promise.resolve(pathKitGeometryProvider),
+      },
+    );
+
+    const resultNodeId = "shape_builder_result_tool_vector_shape_builder_0";
+    expect(result).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "shape-builder",
+          atomic: true,
+          mode: "extract",
+          nodeIds: [resultNodeId],
+          resultNodeIds: [resultNodeId],
+          revision: 1,
+        },
+        designRevision: { previousRevision: 0, revision: 1 },
+      },
+    });
+    expect(
+      runtime.getSnapshot().document.nodesById[resultNodeId],
+    ).toMatchObject({ kind: "vector" });
+    expect(runtime.getSnapshot().state.selection.nodeIds).toEqual([
+      "title_welcome",
+    ]);
+    expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
+    expect(runtime.undo()).toMatchObject({ ok: true, mode: "undo" });
+  });
+
   it("cuts an inspected vector segment atomically and returns trusted topology IDs", async () => {
     const runtime = createEditableVectorRuntime();
     runtime.setSelection(["title_welcome"], "title_welcome");

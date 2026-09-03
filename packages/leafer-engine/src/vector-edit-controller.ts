@@ -95,6 +95,7 @@ import {
   type VectorPenContourOverlay,
 } from "./vector-pen-contour-overlay.js";
 import { VectorEraserOverlayController } from "./vector-eraser-overlay-controller.js";
+import { VectorShapeBuilderOverlayController } from "./vector-shape-builder-overlay-controller.js";
 
 type LeaferModule = typeof LeaferEditorModule;
 type LeaferElement = InstanceType<LeaferModule["UI"]>;
@@ -187,6 +188,14 @@ type VectorEditDrag =
       weight: number;
     }
   | {
+      altKey: boolean;
+      kind: "shape-builder";
+      lastClient: Point;
+      moved: boolean;
+      points: Point[];
+      startClient: Point;
+    }
+  | {
       before: VectorNetwork;
       beforeContour?: VectorPenContourDraft;
       beforeSegmentIds: readonly string[];
@@ -276,6 +285,7 @@ interface VectorEditControllerOptions {
     | "onVectorEditScopeChange"
     | "onVectorEditSelectionChange"
     | "onVectorLineCut"
+    | "onVectorShapeBuild"
   >;
   current(): { disposed: boolean };
   element(nodeId: string): LeaferElement | undefined;
@@ -312,6 +322,7 @@ export class VectorEditController {
   readonly #options: VectorEditControllerOptions;
   readonly #vectorAnchorMeasurements: VectorAnchorMeasurementController;
   readonly #vectorEraserOverlay: VectorEraserOverlayController;
+  readonly #vectorShapeBuilderOverlay: VectorShapeBuilderOverlayController;
   readonly #vectorEditControls = new WeakMap<
     LeaferElement,
     VectorEditControl
@@ -321,6 +332,7 @@ export class VectorEditController {
   readonly #vectorSelectionOverlay: VectorSelectionOverlay;
   #activeVectorEditNodeId: string | null = null;
   #eraserPending = false;
+  #shapeBuilderPending = false;
   #input: LeaferEngineSyncInput | null = null;
   #vectorLasso: VectorLassoSession | null = null;
 
@@ -364,6 +376,12 @@ export class VectorEditController {
     });
     this.#vectorEraserOverlay = new VectorEraserOverlayController({
       layerIndex: 12,
+      leafer: options.leafer,
+      presentationRoot: options.presentationRoot,
+      viewportRoot: options.root,
+    });
+    this.#vectorShapeBuilderOverlay = new VectorShapeBuilderOverlayController({
+      layerIndex: 13,
       leafer: options.leafer,
       presentationRoot: options.presentationRoot,
       viewportRoot: options.root,
@@ -413,6 +431,7 @@ export class VectorEditController {
       this.#vectorGeometrySnap.syncViewport(this.#input.viewport);
     this.#vectorAnchorMeasurements.syncViewport();
     this.#vectorEraserOverlay.syncViewport();
+    this.#vectorShapeBuilderOverlay.syncViewport();
     this.#renderVectorEditOverlays();
   }
 
@@ -550,6 +569,7 @@ export class VectorEditController {
     this.cancel();
     this.#vectorAnchorMeasurements.dispose();
     this.#vectorEraserOverlay.dispose();
+    this.#vectorShapeBuilderOverlay.dispose();
     this.#vectorSelectionOverlay.group.remove();
     this.#vectorSelectionOverlay.group.destroy();
     this.#input = null;
@@ -627,7 +647,9 @@ export class VectorEditController {
               item.readOnly ||
               !item.variableWidthEditable)) ||
           (session.drag?.kind === "eraser" &&
-            (scope.tool !== "eraser" || item.readOnly))
+            (scope.tool !== "eraser" || item.readOnly)) ||
+          (session.drag?.kind === "shape-builder" &&
+            (scope.tool !== "shape-builder" || item.readOnly))
         ) {
           this.#cancelVectorEditDrag(session);
         }
@@ -720,6 +742,7 @@ export class VectorEditController {
         !readOnly &&
         (tool === "bend" ||
           (tool === "variable-width" && variableWidthEditable) ||
+          tool === "shape-builder" ||
           tool === "cut" ||
           tool === "pen"),
       stroke: "rgba(0, 0, 0, 0.001)",
@@ -840,6 +863,7 @@ export class VectorEditController {
           session.tool === "bend" ||
           (session.tool === "variable-width" &&
             session.variableWidthEditable) ||
+          session.tool === "shape-builder" ||
           session.tool === "eraser" ||
           session.tool === "pen"),
       path: serialized.path,
@@ -855,7 +879,10 @@ export class VectorEditController {
       );
       if (!element || !serializedRegion.ok) continue;
       element.set({
-        cursor: session.tool === "paint" ? "crosshair" : "pointer",
+        cursor:
+          session.tool === "paint" || session.tool === "shape-builder"
+            ? "crosshair"
+            : "pointer",
         path: serializedRegion.path,
       });
       this.#vectorEditControls.set(element, {
@@ -899,6 +926,7 @@ export class VectorEditController {
           ? "default"
           : session.tool === "cut" ||
               session.tool === "eraser" ||
+              session.tool === "shape-builder" ||
               session.tool === "pen"
             ? "crosshair"
             : "pointer",
@@ -1240,10 +1268,36 @@ export class VectorEditController {
     this.#renderVectorSelectionOverlay();
   }
 
+  #shapeBuilderStartSession(
+    target: LeaferElement | undefined,
+    control: VectorEditControl | undefined,
+  ): VectorEditSession | null {
+    const active = this.#activeVectorEditSession();
+    if (!active || active.tool !== "shape-builder") return null;
+    const controlNodeId =
+      control && "nodeId" in control ? control.nodeId : undefined;
+    const targetNodeId =
+      controlNodeId ?? (target ? this.#options.nodeId(target) : undefined);
+    const withinScope =
+      control?.kind === "selection-box" ||
+      (targetNodeId !== undefined && this.#vectorEdits.has(targetNodeId));
+    if (!withinScope) return null;
+    const targetSession = targetNodeId
+      ? this.#vectorEdits.get(targetNodeId)
+      : undefined;
+    if (targetSession && !targetSession.readOnly) return targetSession;
+    if (!active.readOnly) return active;
+    return (
+      [...this.#vectorEdits.values()].find((session) => !session.readOnly) ??
+      null
+    );
+  }
+
   pointerDown(event: unknown): void {
     if (
       this.#options.current().disposed ||
       this.#eraserPending ||
+      this.#shapeBuilderPending ||
       [...this.#vectorEdits.values()].some((session) => session.drag)
     ) {
       return;
@@ -1253,6 +1307,19 @@ export class VectorEditController {
     this.#vectorAnchorMeasurements.clear();
     const target = isElement(pointer.target) ? pointer.target : undefined;
     const control = target ? this.#vectorEditControls.get(target) : undefined;
+    const shapeBuilderSession = this.#shapeBuilderStartSession(target, control);
+    if (shapeBuilderSession) {
+      const startClient = eventClientPoint(pointer);
+      shapeBuilderSession.drag = {
+        altKey: pointer.altKey,
+        kind: "shape-builder",
+        lastClient: startClient,
+        moved: false,
+        points: [pointer.getInnerPoint(this.#options.root)],
+        startClient,
+      };
+      return;
+    }
     if (
       control?.kind === "selection-box" ||
       control?.kind === "resize" ||
@@ -1688,6 +1755,18 @@ export class VectorEditController {
       this.#vectorEraserOverlay.show(drag.points, drag.weight, drag.shape);
       return;
     }
+    if (drag.kind === "shape-builder") {
+      if (pointDistance(drag.lastClient, client) < 2) return;
+      drag.lastClient = client;
+      const point = pointer.getInnerPoint(this.#options.root);
+      if (drag.points.length < MAX_VECTOR_LASSO_POINTS) drag.points.push(point);
+      else drag.points[MAX_VECTOR_LASSO_POINTS - 1] = point;
+      this.#vectorShapeBuilderOverlay.show(
+        drag.points,
+        this.#input?.viewport.zoom ?? 1,
+      );
+      return;
+    }
     if (!drag.moved) return;
     if (drag.kind === "cut") {
       drag.currentDocument = pointer.getInnerPoint(this.#options.root);
@@ -2001,6 +2080,17 @@ export class VectorEditController {
       void this.#submitVectorErase(request);
       return;
     }
+    if (drag.kind === "shape-builder") {
+      const firstPoint = drag.points[0];
+      session.drag = null;
+      this.#vectorShapeBuilderOverlay.clear();
+      if (!firstPoint) return;
+      void this.#submitVectorShapeBuild({
+        mode: moved ? "merge" : drag.altKey ? "subtract" : "extract",
+        points: moved ? [...drag.points] : [firstPoint],
+      });
+      return;
+    }
     if (drag.kind === "cut") {
       const end = drag.currentDocument;
       const clickTarget = drag.clickTarget;
@@ -2182,6 +2272,7 @@ export class VectorEditController {
     } else if (
       drag.kind !== "cut" &&
       drag.kind !== "eraser" &&
+      drag.kind !== "shape-builder" &&
       drag.kind !== "pen-start"
     ) {
       session.network = drag.before;
@@ -2198,6 +2289,7 @@ export class VectorEditController {
     session.drag = null;
     this.#vectorGeometrySnap.finish();
     if (drag.kind === "eraser") this.#vectorEraserOverlay.clear();
+    if (drag.kind === "shape-builder") this.#vectorShapeBuilderOverlay.clear();
     session.cutGuidePath.set({ path: "", visible: false });
   }
 
@@ -2476,6 +2568,39 @@ export class VectorEditController {
     }
   }
 
+  async #submitVectorShapeBuild(request: {
+    mode: "extract" | "merge" | "subtract";
+    points: readonly Point[];
+  }): Promise<void> {
+    const input = this.#input;
+    const callback = this.#options.callbacks.onVectorShapeBuild;
+    if (!input || !callback) {
+      this.#options.report(
+        new Error("Vector Shape Builder callback is unavailable"),
+      );
+      return;
+    }
+    this.#shapeBuilderPending = true;
+    try {
+      const response = await callback({
+        documentId: input.document.documentId,
+        expectedRevision: input.document.revision,
+        mode: request.mode,
+        nodeIds: [...this.#vectorEdits.values()]
+          .filter((session) => !session.readOnly)
+          .map((session) => session.nodeId),
+        pageId: input.pageId,
+        points: request.points,
+      });
+      if (!response.ok) this.#options.restoreProjection();
+    } catch (error) {
+      this.#options.report(error);
+      this.#options.restoreProjection();
+    } finally {
+      this.#shapeBuilderPending = false;
+    }
+  }
+
   #submitVectorLineCut(start: Point, end: Point): boolean {
     if (!this.#options.callbacks.onVectorLineCut) {
       this.#options.report(
@@ -2566,6 +2691,7 @@ export class VectorEditController {
     this.#vectorGeometrySnap.finish();
     this.#vectorAnchorMeasurements.sync(null);
     this.#vectorEraserOverlay.clear();
+    this.#vectorShapeBuilderOverlay.clear();
     this.#cancelVectorLasso();
     for (const session of [...this.#vectorEdits.values()]) {
       this.#cancelVectorEditSession(session);
@@ -2580,6 +2706,10 @@ export class VectorEditController {
       (session) => session.drag?.kind === "eraser",
     );
     if (eraser) this.#cancelVectorEditDrag(eraser);
+    const shapeBuilder = [...this.#vectorEdits.values()].find(
+      (session) => session.drag?.kind === "shape-builder",
+    );
+    if (shapeBuilder) this.#cancelVectorEditDrag(shapeBuilder);
     this.#clearVectorPenTargets();
   }
 

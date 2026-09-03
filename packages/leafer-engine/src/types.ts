@@ -109,6 +109,7 @@ export type LeaferVectorEditTool =
   | "pen"
   | "bend"
   | "variable-width"
+  | "shape-builder"
   | "eraser"
   | "cut"
   | "lasso"
@@ -131,6 +132,18 @@ export type LeaferVectorEraseResponse =
       remainingNodeIds: readonly string[];
     }
   | { ok: false };
+
+export interface LeaferVectorShapeBuildRequest {
+  documentId: string;
+  expectedRevision: number;
+  mode: "extract" | "merge" | "subtract";
+  nodeIds: readonly string[];
+  pageId: string;
+  points: readonly Point[];
+}
+
+export type LeaferVectorShapeBuildResponse =
+  { ok: true; nodeIds: readonly string[] } | { ok: false };
 
 export interface LeaferImageCropCommitRequest {
   nodeId: string;
@@ -343,6 +356,9 @@ export interface LeaferEngineCallbacks {
   onVectorLineCut?(
     request: LeaferVectorLineCutRequest,
   ): LeaferVectorLineCutResponse;
+  onVectorShapeBuild?(
+    request: LeaferVectorShapeBuildRequest,
+  ): Promise<LeaferVectorShapeBuildResponse>;
   onVectorEdit?(request: LeaferVectorEditRequest): boolean;
   onVectorEditActiveNodeChange?(nodeId: string): void;
   onVectorEditScopeChange?(request: {

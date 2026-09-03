@@ -50,6 +50,8 @@ export type {
   LeaferVectorCutResponse,
   LeaferVectorEraseRequest,
   LeaferVectorEraseResponse,
+  LeaferVectorShapeBuildRequest,
+  LeaferVectorShapeBuildResponse,
   LeaferVectorLineCutRequest,
   LeaferVectorLineCutResponse,
 } from "./types.js";

@@ -52,11 +52,15 @@ import {
 import { isEffectivelyLocked } from "./layer-operations.js";
 
 export type VectorOperationFailureCode =
+  | "conflict"
   | "invalid-geometry"
+  | "invalid-selection"
   | "locked"
+  | "mixed-parent"
   | "non-invertible"
   | "no-op"
   | "not-found"
+  | "operation-limit"
   | "requires-raster-compositing"
   | "unsupported-topology";
 
@@ -211,6 +215,9 @@ export type VectorOperationPlan =
       eraserResult?: {
         deletedNodeIds: readonly string[];
         remainingNodeIds: readonly string[];
+      };
+      shapeBuilderResult?: {
+        selectionNodeIds: readonly string[];
       };
     }
   | {

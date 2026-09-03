@@ -404,6 +404,8 @@ OpenPencil vendor/runtime、旧 Canvas2D 产品包、手写 React 画布交互�
 
 Vector edit mode 的 Eraser 与 Pen/Cut/Split 共用唯一 Vector Network 和 EditorRuntime：`Shift+E` 进入后，Leafer 只持有 document-space gesture 与 preview overlay，Geometry Service 将当前 Fill、Stroke、dash 和 variable-width 外观物化后执行 PathKit subtract；擦断保留为原 layer 的多个 contour，完全擦空才删除。人工和 Agent `opendesign_edit_vector.erase` 共用同一多目标原子 planner，不栅格化、不复用图片 AI Erase、不增加细碎工具。见 [ADR-0298](adr/0298-figma-compatible-vector-eraser.md)。
 
+Shape Builder 同样复用该 Vector Network 与事务入口：点击提取一个 document-space 连通原子区域，`Option/Alt` 点击减去，拖过多个区域合并。Geometry Service 通过固定 PathKit provider 分割重叠 painted regions；混合 Paint Merge、跨父级、锁定、不可逆 transform 和不支持的合成语义在写入前失败，不由宿主猜测。源层更新/删除和宿主生成的结果 sibling 组成一个 revision/undo；Leafer gesture/overlay 可丢弃，人工与 Agent `opendesign_edit_vector.shape-builder` 共用 planner，不新增 Agent 工具。见 [ADR-0299](adr/0299-figma-compatible-shape-builder.md)。
+
 ### 可恢复性
 
 Renderer、Agent 或引擎子系统异常后，主进程应隔离故障并尽可能恢复最近的持久状态。单个 Design File 的事务要么完整提交，要么不产生可见修改；跨文件多目标计划可能部分完成，必须保留逐目标状态、冲突与撤销或补偿信息。

@@ -50,6 +50,8 @@ export const canvasMessages = {
   "canvas.vectorVariableWidthHint":
     "点击路径添加宽度点 · 沿路径及法线拖动 · Control 暂停吸附",
   "canvas.vectorEraseHint": "拖过可编辑矢量图层以擦除绘制区域 · Shift+E",
+  "canvas.vectorShapeBuilderHint":
+    "点击提取区域 · Option/Alt 点击减去区域 · 拖过多个区域进行合并",
   "canvas.vectorPenHint":
     "点击路径无损插点；从选中节点续画、点击另一节点完成路径，或在空白处开始新轮廓",
   "canvas.vectorLassoHint": "圈选矢量节点与路径 · 按住 Shift 切换圈内内容",
@@ -60,6 +62,10 @@ export const canvasMessages = {
   "canvas.vectorEraseUnavailable": "矢量橡皮擦暂不可用",
   "canvas.vectorEraseStale": "文档已发生变化，无法应用本次矢量擦除",
   "canvas.vectorEraseApplyMissing": "应用擦除操作后找不到对应矢量图层",
+  "canvas.vectorShapeBuilderUnavailable": "形状生成器暂不可用",
+  "canvas.vectorShapeBuilderStale": "文档已发生变化，无法应用本次形状生成",
+  "canvas.vectorShapeBuilderApplyMissing":
+    "应用形状生成操作后找不到结果矢量图层",
   "canvas.vectorEditingReadOnly": "只读 · 图层已锁定或矢量拓扑暂不支持",
   "canvas.exitVectorEditing": "完成矢量节点编辑",
   "canvas.vectorEditTool": "矢量编辑工具",
@@ -67,6 +73,7 @@ export const canvasMessages = {
   "canvas.vectorToolPen": "钢笔",
   "canvas.vectorToolBend": "弯曲",
   "canvas.vectorToolVariableWidth": "可变宽度",
+  "canvas.vectorToolShapeBuilder": "形状生成器",
   "canvas.vectorToolPaint": "上色",
   "canvas.vectorToolEraser": "橡皮擦",
   "canvas.vectorPaintColor": "区域颜色",

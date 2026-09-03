@@ -367,3 +367,8 @@ export {
   type ReorderPageInput,
 } from "./page-operations.js";
 export { defaultPageName } from "./page-naming.js";
+export {
+  planVectorShapeBuilderEdit,
+  type VectorShapeBuilderOperationPlan,
+  type VectorShapeBuilderPlanInput,
+} from "./vector-shape-builder-operations.js";

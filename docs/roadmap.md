@@ -469,3 +469,4 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 - 文档只描述当前事实或明确目标；未验证能力不得宣传为完成。
 
 - [x] 完成 Figma-compatible 可编辑 Vector Eraser：Vector edit mode 使用 `Shift+E` 进入，Inspector 配置 weight 与 round/square shape；document-space gesture 经 PathKit 从物化后的 Fill/Stroke/dash/variable-width 外观中 subtract。擦断结果保留在原 layer 的同一 Network，完全擦空才删除；多层只提交一次 transaction/revision/undo。Leafer overlay 不进入文档、capture/export，Escape、工具切换、只读、stale 与 callback rejection 均恢复权威投影。Agent 不新增工具，只扩展统一 Vector action 并复用同一 Runtime planner。真实双平台打包产品笔压、HiDPI 与长路径性能仍待验证。见 ADR-0298。
+- [x] 完成 Figma-compatible Shape Builder：Vector edit mode 点击提取一个连通原子区域，`Option/Alt` 点击减去，拖过多个区域合并；PathKit 在 document space 分割同父级 painted Vector，混合 Paint 合并失败关闭，不猜测外观。源层更新/删除与宿主生成结果 sibling 形成一次 transaction/revision/undo；overlay 不进入文档、history、capture/export。人工与 Agent 共用统一 Geometry/EditorRuntime planner，`opendesign_edit_vector` 仅增加一个 action。真实双平台 HiDPI 命中与复杂长路径性能仍待验证。见 ADR-0299。

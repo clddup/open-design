@@ -199,3 +199,11 @@ export {
   type VectorMaterializationResult,
   type VectorOutlineOptions,
 } from "./vector-materialization.js";
+export {
+  buildVectorShapeBuilderEdit,
+  type VectorShapeBuilderAction,
+  type VectorShapeBuilderFailureCode,
+  type VectorShapeBuilderResult,
+  type VectorShapeBuilderSource,
+  type VectorShapeBuilderSourceResult,
+} from "./vector-shape-builder.js";
