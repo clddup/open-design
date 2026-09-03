@@ -20,6 +20,7 @@ import {
   pumpModelGateway,
   snapshotMessage,
 } from "./pi-model-stream-bridge.js";
+import { streamWithContextOverflowRecovery } from "./pi-context-overflow-recovery.js";
 import type {
   PiContextFailure,
   PiModelContextProjectionPort,
@@ -86,7 +87,11 @@ export function createPiModelGatewayStreamFn(
       return stream;
     }
     void pumpModelGateway(
-      options.modelGateway,
+      contextRecoveryGateway(
+        options.modelGateway,
+        options.contextProjection,
+        nextAttemptId,
+      ),
       request,
       output,
       stream,
@@ -95,6 +100,23 @@ export function createPiModelGatewayStreamFn(
       options.onRetryEvent,
     );
     return stream;
+  };
+}
+
+function contextRecoveryGateway(
+  gateway: PiModelGatewayAdapterOptions["modelGateway"],
+  projection: PiModelGatewayAdapterOptions["contextProjection"],
+  nextAttemptId: () => string,
+): PiModelGatewayAdapterOptions["modelGateway"] {
+  if (projection?.recoverProviderContextOverflow === undefined) return gateway;
+  return {
+    stream: (request) =>
+      streamWithContextOverflowRecovery(
+        gateway,
+        request,
+        projection,
+        nextAttemptId,
+      ),
   };
 }
 

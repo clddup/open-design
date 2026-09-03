@@ -7,6 +7,8 @@ import type { Api, Message, Model, UserMessage } from "@earendil-works/pi-ai";
 import type {
   CanonicalMessage,
   CanonicalTool,
+  ModelError,
+  ModelRequest,
 } from "@opendesign/model-gateway";
 import type { SessionStore } from "@opendesign/session-store";
 import {
@@ -15,6 +17,7 @@ import {
   createContextBudget,
   modelContextCompatibilityMessage,
   modelContextFits,
+  tightenContextBudgetAfterProviderOverflow,
   type ContextBudget,
 } from "./context-budget.js";
 import { planContextCompaction } from "./context-checkpoint.js";
@@ -185,6 +188,7 @@ export class OpenDesignPiContextAdapter
   #tools: readonly CanonicalTool[];
   #currentPrompt: UserMessage | undefined;
   #pendingFailure: PiContextFailure | undefined;
+  #providerAnchorIndex: number | undefined;
   #reportedFailure: PiContextFailure | undefined;
   #providerTurn = 0;
 
@@ -207,6 +211,7 @@ export class OpenDesignPiContextAdapter
     signal?: AbortSignal,
   ): AgentMessage[] {
     if (signal?.aborted || this.#pendingFailure !== undefined) return messages;
+    this.#providerAnchorIndex = undefined;
     this.#providerTurn += 1;
     try {
       if (!this.#budget.fixedProtocolFits) {
@@ -231,23 +236,23 @@ export class OpenDesignPiContextAdapter
         }
         projected.push(...messageProjection);
       }
-      if (
-        modelContextFits(projected, this.#system, this.#tools, this.#budget)
-      ) {
-        return messages;
-      }
-
       const currentPrompt = this.#currentPrompt;
       if (currentPrompt === undefined) {
         throw new Error("Pi context does not have a current prompt anchor");
       }
-      const currentIndex = llmMessages.indexOf(currentPrompt);
-      if (currentIndex < 0) {
+      if (llmMessages.indexOf(currentPrompt) < 0) {
         throw new Error("Pi context lost the current prompt anchor");
       }
       if (currentCanonical === undefined) {
         throw new Error("Pi current prompt projection is empty");
       }
+      if (
+        modelContextFits(projected, this.#system, this.#tools, this.#budget)
+      ) {
+        this.#providerAnchorIndex = projected.indexOf(currentCanonical);
+        return messages;
+      }
+
       const compacted = compactInRunMessagesForProvider(
         projected,
         currentCanonical,
@@ -266,6 +271,7 @@ export class OpenDesignPiContextAdapter
         );
         return messages;
       }
+      this.#providerAnchorIndex = compacted.indexOf(currentCanonical);
       return this.projectCanonicalMessages(compacted);
     } catch (error) {
       const failure = toContextFailure(error);
@@ -277,6 +283,39 @@ export class OpenDesignPiContextAdapter
   attachmentsFor(message: Message): readonly AgentAttachment[] {
     this.#captureToolAttachments(message);
     return this.#attachments.get(message) ?? [];
+  }
+
+  recoverProviderContextOverflow(
+    request: ModelRequest,
+    failure: ModelError,
+  ): ModelRequest | undefined {
+    if (failure.code !== "context_too_large") return undefined;
+    const anchorIndex = this.#providerAnchorIndex;
+    const currentMessage =
+      anchorIndex === undefined ? undefined : request.messages[anchorIndex];
+    if (currentMessage?.role !== "user") return undefined;
+
+    const tighterBudget = tightenContextBudgetAfterProviderOverflow(
+      this.#budget,
+    );
+    const compacted = compactInRunMessagesForProvider(
+      request.messages,
+      currentMessage,
+      request.system,
+      request.tools,
+      tighterBudget,
+    );
+    if (
+      compacted === undefined ||
+      JSON.stringify(compacted).length >=
+        JSON.stringify(request.messages).length
+    ) {
+      return undefined;
+    }
+
+    this.#budget = tighterBudget;
+    this.#providerAnchorIndex = compacted.indexOf(currentMessage);
+    return { ...request, messages: compacted };
   }
 
   beforeProviderTurn(): PiContextFailure | undefined {

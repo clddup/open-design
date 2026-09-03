@@ -14,11 +14,16 @@ import {
 
 describe("multi-protocol model gateway", () => {
   it.each([
-    ["transport termination", "terminated", true],
-    ["HTTP 400 invalid request", "invalid", false],
-    ["wrapped context overflow", "context", false],
-    ["HTTP 504 upstream first-byte timeout", "upstream-timeout", true],
-  ])("classifies %s retryability", async (_name, kind, retryable) => {
+    ["transport termination", "terminated", "provider_error", true],
+    ["HTTP 400 invalid request", "invalid", "provider_error", false],
+    ["wrapped context overflow", "context", "context_too_large", false],
+    [
+      "HTTP 504 upstream first-byte timeout",
+      "upstream-timeout",
+      "provider_error",
+      true,
+    ],
+  ])("classifies %s", async (_name, kind, code, retryable) => {
     const fetch: typeof globalThis.fetch =
       kind === "terminated"
         ? () => Promise.reject(new Error("terminated"))
@@ -58,7 +63,7 @@ describe("multi-protocol model gateway", () => {
 
     expect(events.at(-1)).toMatchObject({
       type: "attempt.failed",
-      error: { retryable },
+      error: { code, retryable },
     });
   });
 

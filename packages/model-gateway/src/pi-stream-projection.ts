@@ -99,18 +99,18 @@ export function mapPiEvent(
       },
     ];
   }
+  const message = event.error.errorMessage ?? "Model provider request failed";
+  const failure = classifyProviderFailure(
+    message,
+    "provider_error",
+    event.reason === "aborted",
+  );
   return [
     {
       type: "attempt.failed",
       attemptId,
       error: {
-        code: event.reason === "aborted" ? "cancelled" : "provider_error",
-        message: event.error.errorMessage ?? "Model provider request failed",
-        retryable:
-          event.reason !== "aborted" &&
-          isRetryableProviderFailureMessage(
-            event.error.errorMessage ?? "Model provider request failed",
-          ),
+        ...failure,
         provider: event.error.provider,
         ...(event.error.responseId
           ? { providerRequestId: event.error.responseId }
@@ -150,15 +150,35 @@ export function modelError(
   const message =
     error instanceof Error ? error.message : "Model request failed";
   return {
-    code: aborted ? "cancelled" : "provider_request_failed",
-    message,
-    retryable: !aborted && isRetryableProviderFailureMessage(message),
+    ...classifyProviderFailure(message, "provider_request_failed", aborted),
     provider,
   };
 }
 
+const contextTooLargePattern =
+  /context[_ -]?(?:too[_ -]?large|length[_ -]?exceeded|window)|maximum context length|prompt (?:is )?too long|input (?:tokens? )?(?:exceeds?|too large)|too many input tokens/i;
 const deterministicProviderFailurePattern =
-  /context[_ -]?(?:too[_ -]?large|length|window)|input exceeds|invalid[_ -]?request|authentication|unauthorized|forbidden|permission denied|api[_ -]?key|content[_ -]?filter|moderation|unsupported|schema|validation/i;
+  /invalid[_ -]?request|authentication|unauthorized|forbidden|permission denied|api[_ -]?key|content[_ -]?filter|moderation|unsupported|schema|validation/i;
+
+function isContextTooLargeMessage(message: string): boolean {
+  return contextTooLargePattern.test(message);
+}
+
+function classifyProviderFailure(
+  message: string,
+  fallbackCode: string,
+  aborted: boolean,
+): Pick<ModelError, "code" | "message" | "retryable"> {
+  if (aborted) return { code: "cancelled", message, retryable: false };
+  if (isContextTooLargeMessage(message)) {
+    return { code: "context_too_large", message, retryable: false };
+  }
+  return {
+    code: fallbackCode,
+    message,
+    retryable: isRetryableProviderFailureMessage(message),
+  };
+}
 
 function isRetryableProviderFailureMessage(message: string): boolean {
   const status = message.match(
@@ -170,7 +190,12 @@ function isRetryableProviderFailureMessage(message: string): boolean {
     if ([408, 409, 425, 429].includes(value)) return true;
     if (value >= 400 && value < 500) return false;
   }
-  if (deterministicProviderFailurePattern.test(message)) return false;
+  if (
+    isContextTooLargeMessage(message) ||
+    deterministicProviderFailurePattern.test(message)
+  ) {
+    return false;
+  }
   return isRetryableAssistantError({
     stopReason: "error",
     errorMessage: message,

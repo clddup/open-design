@@ -215,7 +215,9 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 - [x] 将固定 system/tool 协议与可压缩 Conversation 投影分账；Main 按所选 Model Profile 注入 `contextWindow/maxOutputTokens`，Agent 对文字、图片、文档、工具与输出预留执行启发式 token 预算，并用 `model_context_incompatible` 区分“模型装不下协议”和用户上下文过长。模型可见 `apply_transaction` Schema 从 314,159 字符压至 25,222 字符，完整运行时校验保持不变。
 - [x] 在同一 Run 的每个 Provider turn 前重新预算；旧 assistant/tool 段超限时生成临时有界 checkpoint，保留当前用户原文和最近完整 tool call/result 段。完整工具 catalog、200K Model Profile 与八轮多模态工具循环已证明第八轮会压缩后继续；bootstrap→完整工具切换也会重算 fixed protocol，结构化工具结果同时具有单字段和整体投影上限，原始 journal 不删除。
 - [x] 将通用 Agent loop 迁移到固定 `@earendil-works/pi-agent-core` 的 headless `Agent`，通过 OpenDesign adapter 保留 Main 模型/凭据代理、typed design tools、Conversation journal、revision 和 plan/review 门禁；阶段 0—3 已完成核心、三种 API identity、`AgentEvent 3.8`、唯一 journal、完整生产工具目录、completion guard、取消/结构化失败分流、累计 checkpoint、逐轮压缩、内容寻址多模态/资源句柄和重启恢复。utilityProcess 唯一入口已切为 `OpenDesignPiRuntime`，旧自研通用循环与旧测试已删除，历史 tool-call ID 会从 journal 预加载以阻止重放执行。2026-08-24 当前 main 已连续通过 macOS/Windows protected package、package contents 与 packaged Agent smoke，剩余发布级 GUI smoke 继续由桌面跨平台总门禁跟踪；不得重新引入双循环/fallback。固定 `0.84.1` 的 `AgentHarness.prompt()` 仍抛出 `HarnessNotImplemented`，不得把未实现的 durable harness 接入生产或建立第二份 session 状态。
-- [ ] 接入服务端 Model metadata 探测、Provider/tokenizer/image 精确预算和可选语义 compactor；上游仍返回 `context_too_large` 时只允许重新预算和紧急压缩后自动重试一次。
+- [ ] 接入服务端 Model metadata 探测、Provider/tokenizer/image 精确预算和可选语义 compactor。
+  - [x] 将 Provider 上下文溢出统一为稳定 `context_too_large`，并在 Agent Runtime 的单次 Provider turn 内增加纯内存紧急压缩。只有尚未发布 Assistant text、reasoning summary 或 tool call 时才使用新的物理 attempt 自动重试一次；首次失败不进入 failure port，原始 journal 与当前消息/附件保持不变，第二次失败直接结束当前 Run，不进入循环，也不与 Main 的断流重连混用。
+  - [ ] 对支持可信元数据的 Provider 探测真实上下文与输出上限，并按协议接入 tokenizer/image 精确预算；无标准元数据的自定义兼容端继续以用户配置为权威，不猜测私有接口。
 - [ ] 补万级节点、连续 Agent revision、效果/图片节点、选区/editBox、pan/zoom 的真实 Electron 帧时间与内存基准，并据此继续压缩结构 ID 遍历和资源失效成本。
 
 完成条件：全仓 `pnpm verify` 通过，关键 Electron 交互写入 `verification.md`，ADR-0009/0010 的验证项有实际证据。

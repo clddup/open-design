@@ -24,6 +24,7 @@ export type ContextBudget = {
 
 const MODEL_REQUEST_FRAMING_TOKENS = 256;
 const MINIMUM_CONTEXT_SAFETY_RESERVE_TOKENS = 2_048;
+const EMERGENCY_INPUT_BUDGET_RATIO = 0.75;
 
 export function createContextBudget(
   modelContext: AgentModelContext | undefined,
@@ -110,6 +111,31 @@ export function compactInRunMessagesForProvider(
     if (modelContextFits(candidate, system, tools, budget)) return candidate;
   }
   return undefined;
+}
+
+export function tightenContextBudgetAfterProviderOverflow(
+  budget: ContextBudget,
+): ContextBudget {
+  if (budget.maxInputTokens === undefined) {
+    return {
+      ...budget,
+      maxConversationCharacters: Math.max(
+        1,
+        Math.floor(
+          budget.maxConversationCharacters * EMERGENCY_INPUT_BUDGET_RATIO,
+        ),
+      ),
+    };
+  }
+  const maxInputTokens = Math.max(
+    budget.fixedInputTokens + 1,
+    Math.floor(budget.maxInputTokens * EMERGENCY_INPUT_BUDGET_RATIO),
+  );
+  return {
+    ...budget,
+    fixedProtocolFits: budget.fixedInputTokens < maxInputTokens,
+    maxInputTokens,
+  };
 }
 
 function assistantTurnSegments(messages: readonly CanonicalMessage[]): {

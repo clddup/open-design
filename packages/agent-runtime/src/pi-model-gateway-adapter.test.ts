@@ -397,6 +397,97 @@ describe("Pi ModelGateway adapter", () => {
     expect(result).toMatchObject({ stopReason: "stop", content: [] });
   });
 
+  it("recovers one empty context overflow without retaining the first failure", async () => {
+    const requests: ModelRequest[] = [];
+    const failurePort = createPiModelFailurePort();
+    const attemptIds = ["logical_attempt", "physical_retry"];
+    const gateway: ModelGateway = {
+      async *stream(request): AsyncIterable<CanonicalStreamEvent> {
+        await Promise.resolve();
+        requests.push(request);
+        yield {
+          type: "attempt.started",
+          attemptId: request.attemptId,
+          model: request.modelSelection.modelId,
+          identity: {
+            ...request.modelSelection,
+            apiFormat: "openai-responses",
+          },
+        };
+        if (requests.length === 1) {
+          yield {
+            type: "attempt.failed",
+            attemptId: request.attemptId,
+            error: {
+              code: "context_too_large",
+              message: "Maximum context length exceeded",
+              retryable: false,
+            },
+          };
+          return;
+        }
+        yield {
+          type: "block.started",
+          attemptId: request.attemptId,
+          blockId: "recovered_text",
+          kind: "text",
+        };
+        yield {
+          type: "block.completed",
+          attemptId: request.attemptId,
+          block: {
+            id: "recovered_text",
+            type: "text",
+            text: "Recovered after compaction",
+          },
+        };
+        yield {
+          type: "attempt.completed",
+          attemptId: request.attemptId,
+          stopReason: "complete",
+          usage: {
+            inputTokens: 10,
+            outputTokens: 3,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+            reasoningTokens: 0,
+          },
+        };
+      },
+    };
+    const result = await createPiModelGatewayStreamFn({
+      modelGateway: gateway,
+      failurePort,
+      nextAttemptId: () => attemptIds.shift()!,
+      contextProjection: {
+        beforeProviderTurn: () => undefined,
+        attachmentsFor: () => [],
+        recoverProviderContextOverflow: (request) => ({
+          ...request,
+          messages: request.messages.slice(-1),
+        }),
+      },
+    })(model, {
+      messages: [
+        { role: "user", content: "Old context", timestamp: 1 },
+        { role: "user", content: "Current request", timestamp: 2 },
+      ],
+    }).result();
+
+    expect(requests.map((request) => request.attemptId)).toEqual([
+      "logical_attempt",
+      "physical_retry",
+    ]);
+    expect(requests[1]?.messages).toEqual([
+      { role: "user", content: "Current request" },
+    ]);
+    expect(result).toMatchObject({
+      stopReason: "stop",
+      content: [{ type: "text", text: "Recovered after compaction" }],
+    });
+    expect(failurePort.consumeFailure()).toBeUndefined();
+  });
+
   it("encodes gateway failures and forbidden inline images as Pi error events", async () => {
     const failurePort = createPiModelFailurePort();
     const failedGateway: ModelGateway = {

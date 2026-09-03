@@ -294,6 +294,75 @@ describe("OpenDesign Pi context adapter", () => {
     });
   });
 
+  it("creates a smaller run-local projection after an upstream context overflow", async () => {
+    const store = new MemorySessionStore();
+    store.events.push(
+      journalEvent(1, "message.user", {
+        messageId: "prior_user",
+        content: "Build the earlier screen. ".repeat(2_000),
+      }),
+      journalEvent(2, "message.assistant", {
+        messageId: "prior_assistant",
+        blocks: [
+          {
+            blockId: "prior_text",
+            type: "text",
+            text: "The earlier screen is complete. ".repeat(2_000),
+          },
+        ],
+      }),
+      journalEvent(3, "run.state", {
+        status: "completed",
+        startedAt: new Date(1).toISOString(),
+        finishedAt: new Date(2).toISOString(),
+        stopReason: "complete",
+      }),
+    );
+    const prepared = await prepareOpenDesignPiContext({
+      request,
+      sessionStore: store,
+      systemPrompt: "OpenDesign context overflow recovery",
+      toolDefinitions: [],
+      model,
+    });
+    const transformed = await prepared.context.transformContext([
+      ...prepared.initialMessages,
+      prepared.promptMessage,
+    ]);
+    const modelRequest: ModelRequest = {
+      attemptId: "overflow_attempt",
+      modelSelection: request.modelSelection,
+      system: prepared.systemPrompt,
+      messages: projectPiMessagesToCanonical(
+        transformed as Parameters<typeof projectPiMessagesToCanonical>[0],
+        prepared.context,
+      ),
+      tools: [],
+      signal: new AbortController().signal,
+    };
+
+    const recovered = prepared.context.recoverProviderContextOverflow(
+      modelRequest,
+      {
+        code: "context_too_large",
+        message: "Maximum context length exceeded",
+        retryable: true,
+      },
+    );
+
+    expect(recovered).toBeDefined();
+    expect(JSON.stringify(recovered?.messages)).toContain(request.prompt);
+    expect(JSON.stringify(recovered?.messages)).toContain(
+      "OpenDesign in-run context checkpoint",
+    );
+    expect(JSON.stringify(recovered?.messages).length).toBeLessThan(
+      JSON.stringify(modelRequest.messages).length,
+    );
+    expect(
+      store.events.filter((event) => event.type === "context.compacted"),
+    ).toHaveLength(0);
+  });
+
   it("projects user and tool images as Main-resolved references without inline bytes", async () => {
     const store = new MemorySessionStore();
     const promptAttachment = {

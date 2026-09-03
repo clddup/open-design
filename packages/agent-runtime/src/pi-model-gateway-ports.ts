@@ -4,6 +4,7 @@ import type {
   ModelError,
   ModelGateway,
   ModelLatencyProfile,
+  ModelRequest,
 } from "@opendesign/model-gateway";
 import type { Message } from "@earendil-works/pi-ai";
 
@@ -49,4 +50,8 @@ export interface PiContextFailure {
 export interface PiModelContextProjectionPort {
   beforeProviderTurn(): PiContextFailure | undefined;
   attachmentsFor(message: Message): readonly AgentAttachment[];
+  recoverProviderContextOverflow?(
+    request: ModelRequest,
+    failure: ModelError,
+  ): ModelRequest | undefined;
 }
