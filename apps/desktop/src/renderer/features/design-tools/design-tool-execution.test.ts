@@ -21,7 +21,6 @@ import type {
 } from "@opendesign/text-service";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
-  DESIGN_ARRANGE_TOOL_NAME,
   INTERNAL_DESIGN_COMPONENT_TOOL_NAME as DESIGN_COMPONENT_TOOL_NAME,
   DESIGN_EDIT_TOOL_NAME,
   DESIGN_FONT_TOOL_NAME,
@@ -29,7 +28,6 @@ import {
   INTERNAL_DESIGN_VARIABLE_TOOL_NAME as DESIGN_VARIABLE_TOOL_NAME,
   EXPORT_RASTER_TOOL_NAME,
   EXPORT_SVG_TOOL_NAME,
-  DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_PAGE_TOOL_NAME,
   INTERNAL_DESIGN_STYLE_TOOL_NAME as DESIGN_STYLE_TOOL_NAME,
   DESIGN_TEXT_RANGE_TOOL_NAME,
@@ -39,7 +37,10 @@ import {
   INTERNAL_READ_IMAGE_SOURCE_TOOL_NAME,
   INTERNAL_UPDATE_IMAGE_TOOL_NAME,
 } from "@/shared/design-agent-tools";
-import type { RendererDesignToolRequest } from "@/shared/design-tool-bridge";
+import {
+  RendererDesignToolRequestContract,
+  type RendererDesignToolRequest,
+} from "@/shared/design-tool-bridge";
 import { decodeAgentTextLineBreaks } from "./agent-text-normalization";
 import { executeDesignToolRequest } from "./design-tool-execution";
 import type {
@@ -325,8 +326,7 @@ describe("Renderer design tool scope", () => {
     expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
   });
 
-  it("fails closed on invalid canonical design-system and structure bridge inputs", async () => {
-    const runtime = new EditorRuntime(createWelcomeDocument());
+  it("fails closed at the bridge boundary for invalid canonical inputs", () => {
     const request = (
       toolName: string,
       input: Record<string, unknown>,
@@ -336,20 +336,18 @@ describe("Renderer design tool scope", () => {
       context: pageContext,
     });
 
-    await expect(
-      executeDesignToolRequest(
+    expect(
+      RendererDesignToolRequestContract.parse(
         request(DESIGN_STYLE_TOOL_NAME, {
           action: "update-metadata",
           label: "No metadata update",
           pageId: "page_welcome",
           styleId: "brand-primary",
         }),
-        runtime,
-        "page_welcome",
       ),
-    ).rejects.toThrow("invalid canonical Style input");
-    await expect(
-      executeDesignToolRequest(
+    ).toMatchObject({ ok: false });
+    expect(
+      RendererDesignToolRequestContract.parse(
         request(DESIGN_VARIABLE_TOOL_NAME, {
           action: "set-mode",
           label: "Invalid target",
@@ -358,24 +356,28 @@ describe("Renderer design tool scope", () => {
           collectionId: "theme",
           modeId: "dark",
         }),
-        runtime,
-        "page_welcome",
       ),
-    ).rejects.toThrow("invalid canonical Variable input");
-    await expect(
-      executeDesignToolRequest(
-        request(DESIGN_HIERARCHY_TOOL_NAME, {
-          action: "group",
-          label: "Invalid group",
-          pageId: "page_welcome",
-          nodeIds: ["feature_one", "feature_two"],
+    ).toMatchObject({ ok: false });
+    expect(
+      RendererDesignToolRequestContract.parse(
+        request(DESIGN_EDIT_TOOL_NAME, {
+          label: "Invalid hierarchy edit",
+          edits: [
+            {
+              kind: "hierarchy",
+              input: {
+                action: "group",
+                label: "Invalid group",
+                pageId: "page_welcome",
+                nodeIds: ["feature_one", "feature_two"],
+              },
+            },
+          ],
         }),
-        runtime,
-        "page_welcome",
       ),
-    ).rejects.toThrow("invalid canonical Hierarchy input");
-    await expect(
-      executeDesignToolRequest(
+    ).toMatchObject({ ok: false });
+    expect(
+      RendererDesignToolRequestContract.parse(
         request(DESIGN_VECTOR_TOOL_NAME, {
           action: "cut-path",
           label: "Invalid cut",
@@ -384,11 +386,8 @@ describe("Renderer design tool scope", () => {
           pathId: "path_one",
           at: { kind: "segment", segmentId: "segment_one" },
         }),
-        runtime,
-        "page_welcome",
       ),
-    ).rejects.toThrow("invalid canonical Vector input");
-    expect(runtime.getSnapshot().document.revision).toBe(0);
+    ).toMatchObject({ ok: false });
   });
 
   it("applies scoped Agent font replacement through the shared reflow transaction", async () => {
@@ -860,7 +859,7 @@ describe("Renderer design tool scope", () => {
         requestId: "apply_escaped_text",
         call: {
           toolCallId: "tool_escaped_text",
-          toolName: "opendesign_apply_transaction",
+          toolName: INTERNAL_DESIGN_APPLY_TOOL_NAME,
           input: {
             label: "Add multiline copy",
             summary: String.raw`Preserve C:\new\reference.png`,
@@ -1915,7 +1914,7 @@ describe("Renderer design tool scope", () => {
         requestId: "apply_after_zoom",
         call: {
           toolCallId: "tool_apply_after_zoom",
-          toolName: "opendesign_apply_transaction",
+          toolName: INTERNAL_DESIGN_APPLY_TOOL_NAME,
           input: {
             label: "Refine after viewport zoom",
             commands: [
@@ -1962,7 +1961,7 @@ describe("Renderer design tool scope", () => {
         requestId: "apply_auto_width_text",
         call: {
           toolCallId: "tool_auto_width_text",
-          toolName: "opendesign_apply_transaction",
+          toolName: INTERNAL_DESIGN_APPLY_TOOL_NAME,
           input: {
             label: "Add Auto Width heading",
             commands: [
@@ -2085,7 +2084,7 @@ describe("Renderer design tool scope", () => {
           requestId: "apply_stale",
           call: {
             toolCallId: "tool_apply_stale",
-            toolName: "opendesign_apply_transaction",
+            toolName: INTERNAL_DESIGN_APPLY_TOOL_NAME,
             input: {
               label: "Stale write",
               commands: [
@@ -2800,7 +2799,7 @@ describe("Renderer design tool scope", () => {
       requestId: "apply_1",
       call: {
         toolCallId: "tool_1",
-        toolName: "opendesign_apply_transaction",
+        toolName: INTERNAL_DESIGN_APPLY_TOOL_NAME,
         input: {
           label: "Rename an unrelated node",
           commands: [
@@ -2832,7 +2831,7 @@ describe("Renderer design tool scope", () => {
         requestId: "apply_invalid_invariant",
         call: {
           toolCallId: "tool_invalid_invariant",
-          toolName: "opendesign_apply_transaction",
+          toolName: INTERNAL_DESIGN_APPLY_TOOL_NAME,
           input: {
             label: "Break a stroke invariant",
             commands: [
@@ -2881,7 +2880,9 @@ describe("Renderer design tool scope", () => {
     });
     if (response.ok) throw new Error("Invalid transaction unexpectedly passed");
     const details = response.error.details;
-    expect(details?.fingerprint).toMatch(/^design_[a-f0-9]{8}$/);
+    expect(details?.fingerprint).toBe(
+      "design:invalid:design.node.schema_invalid:/nodesById/feature_one/properties/strokeWidth",
+    );
     expect(details?.issues[0]).toMatchObject({
       code: "design.node.schema_invalid",
       commandId: "break_feature_stroke",
@@ -2907,7 +2908,7 @@ describe("Renderer design tool scope", () => {
         requestId: "apply_composite",
         call: {
           toolCallId: "tool_apply_composite",
-          toolName: "opendesign_apply_transaction",
+          toolName: INTERNAL_DESIGN_APPLY_TOOL_NAME,
           input: {
             label: "Create a grouped mascot",
             commands: [
@@ -2992,7 +2993,7 @@ describe("Renderer design tool scope", () => {
         requestId: "apply_unmatched_children",
         call: {
           toolCallId: "tool_apply_unmatched_children",
-          toolName: "opendesign_apply_transaction",
+          toolName: INTERNAL_DESIGN_APPLY_TOOL_NAME,
           input: {
             label: "Create incomplete group",
             commands: [
@@ -3060,7 +3061,7 @@ describe("Renderer design tool scope", () => {
           requestId: "apply_missing_parent",
           call: {
             toolCallId: "tool_apply_missing_parent",
-            toolName: "opendesign_apply_transaction",
+            toolName: INTERNAL_DESIGN_APPLY_TOOL_NAME,
             input: {
               label: "Invalid composite",
               commands: [
@@ -3104,7 +3105,7 @@ describe("Renderer design tool scope", () => {
         requestId: "apply_1",
         call: {
           toolCallId: "tool_1",
-          toolName: "opendesign_apply_transaction",
+          toolName: INTERNAL_DESIGN_APPLY_TOOL_NAME,
           input: {
             label: "Rename selected card",
             commands: [
@@ -4147,7 +4148,7 @@ describe("Renderer design tool scope", () => {
         requestId: "apply_progressive",
         call: {
           toolCallId: "tool_progressive",
-          toolName: "opendesign_apply_transaction",
+          toolName: INTERNAL_DESIGN_APPLY_TOOL_NAME,
           input: {
             label: "Refine selected card progressively",
             steps: [
@@ -4351,7 +4352,7 @@ describe("Renderer design tool scope", () => {
         requestId: "apply_invariant_dependent",
         call: {
           toolCallId: "tool_invariant_dependent",
-          toolName: "opendesign_apply_transaction",
+          toolName: INTERNAL_DESIGN_APPLY_TOOL_NAME,
           input: {
             label: "Create a valid Boolean",
             commands: plan.commands,
@@ -4388,7 +4389,7 @@ describe("Renderer design tool scope", () => {
         requestId: "apply_cancelled",
         call: {
           toolCallId: "tool_cancelled",
-          toolName: "opendesign_apply_transaction",
+          toolName: INTERNAL_DESIGN_APPLY_TOOL_NAME,
           input: {
             label: "Cancelled card refinement",
             steps: [
@@ -4470,14 +4471,22 @@ describe("Renderer semantic hierarchy tool", () => {
         requestId: "hierarchy_group",
         call: {
           toolCallId: "tool_hierarchy_group",
-          toolName: DESIGN_HIERARCHY_TOOL_NAME,
+          toolName: DESIGN_EDIT_TOOL_NAME,
           input: {
-            action: "group",
-            label: "Group welcome copy",
-            pageId: "page_welcome",
-            nodeIds: ["subtitle_welcome", "title_welcome"],
-            groupId: "welcome_copy_group",
-            name: "Welcome copy",
+            label: "Apply hierarchy edit",
+            edits: [
+              {
+                kind: "hierarchy",
+                input: {
+                  action: "group",
+                  label: "Group welcome copy",
+                  pageId: "page_welcome",
+                  nodeIds: ["subtitle_welcome", "title_welcome"],
+                  groupId: "welcome_copy_group",
+                  name: "Welcome copy",
+                },
+              },
+            ],
           },
         },
         // This send-time selection points somewhere else. It is context, not
@@ -4491,13 +4500,7 @@ describe("Renderer semantic hierarchy tool", () => {
     expect(response).toMatchObject({
       ok: true,
       result: {
-        content: {
-          action: "group",
-          atomic: true,
-          groupId: "welcome_copy_group",
-          childNodeIds: ["title_welcome", "subtitle_welcome"],
-          revision: 1,
-        },
+        content: { action: "edit-design", atomic: true, revision: 1 },
         designRevision: { previousRevision: 0, revision: 1 },
       },
     });
@@ -4544,12 +4547,20 @@ describe("Renderer semantic hierarchy tool", () => {
         requestId: "hierarchy_ungroup",
         call: {
           toolCallId: "tool_hierarchy_ungroup",
-          toolName: DESIGN_HIERARCHY_TOOL_NAME,
+          toolName: DESIGN_EDIT_TOOL_NAME,
           input: {
-            action: "ungroup",
-            label: "Ungroup capability cards",
-            pageId: "page_welcome",
-            groupId: "feature_group",
+            label: "Apply hierarchy edit",
+            edits: [
+              {
+                kind: "hierarchy",
+                input: {
+                  action: "ungroup",
+                  label: "Ungroup capability cards",
+                  pageId: "page_welcome",
+                  groupId: "feature_group",
+                },
+              },
+            ],
           },
         },
         context: selectionContext,
@@ -4561,12 +4572,7 @@ describe("Renderer semantic hierarchy tool", () => {
     expect(response).toMatchObject({
       ok: true,
       result: {
-        content: {
-          action: "ungroup",
-          atomic: true,
-          childNodeIds: childIds,
-          revision: 1,
-        },
+        content: { action: "edit-design", atomic: true, revision: 1 },
       },
     });
     const ungrouped = runtime.getSnapshot();
@@ -4598,15 +4604,23 @@ describe("Renderer semantic hierarchy tool", () => {
         requestId: "hierarchy_create_mask",
         call: {
           toolCallId: "tool_hierarchy_create_mask",
-          toolName: DESIGN_HIERARCHY_TOOL_NAME,
+          toolName: DESIGN_EDIT_TOOL_NAME,
           input: {
-            action: "create-mask",
-            label: "Mask welcome subtitle",
-            pageId: "page_welcome",
-            nodeIds: ["subtitle_welcome", "title_welcome"],
-            groupId: "welcome_mask_group",
-            name: "Welcome mask",
-            maskType: "alpha",
+            label: "Apply hierarchy edit",
+            edits: [
+              {
+                kind: "hierarchy",
+                input: {
+                  action: "create-mask",
+                  label: "Mask welcome subtitle",
+                  pageId: "page_welcome",
+                  nodeIds: ["subtitle_welcome", "title_welcome"],
+                  groupId: "welcome_mask_group",
+                  name: "Welcome mask",
+                  maskType: "alpha",
+                },
+              },
+            ],
           },
         },
         context: selectionContext,
@@ -4618,15 +4632,7 @@ describe("Renderer semantic hierarchy tool", () => {
     expect(created).toMatchObject({
       ok: true,
       result: {
-        content: {
-          action: "create-mask",
-          atomic: true,
-          groupId: "welcome_mask_group",
-          maskNodeId: "title_welcome",
-          maskType: "alpha",
-          childNodeIds: ["title_welcome", "subtitle_welcome"],
-          revision: 1,
-        },
+        content: { action: "edit-design", atomic: true, revision: 1 },
       },
     });
     expect(
@@ -4644,13 +4650,21 @@ describe("Renderer semantic hierarchy tool", () => {
         requestId: "hierarchy_set_mask_type",
         call: {
           toolCallId: "tool_hierarchy_set_mask_type",
-          toolName: DESIGN_HIERARCHY_TOOL_NAME,
+          toolName: DESIGN_EDIT_TOOL_NAME,
           input: {
-            action: "set-mask-type",
-            label: "Use vector welcome mask",
-            pageId: "page_welcome",
-            maskNodeId: "title_welcome",
-            maskType: "vector",
+            label: "Apply hierarchy edit",
+            edits: [
+              {
+                kind: "hierarchy",
+                input: {
+                  action: "set-mask-type",
+                  label: "Use vector welcome mask",
+                  pageId: "page_welcome",
+                  maskNodeId: "title_welcome",
+                  maskType: "vector",
+                },
+              },
+            ],
           },
         },
         context: { ...selectionContext, revision: 1 },
@@ -4661,12 +4675,7 @@ describe("Renderer semantic hierarchy tool", () => {
     expect(changed).toMatchObject({
       ok: true,
       result: {
-        content: {
-          action: "set-mask-type",
-          maskNodeId: "title_welcome",
-          maskType: "vector",
-          revision: 2,
-        },
+        content: { action: "edit-design", revision: 2 },
       },
     });
     expect(
@@ -4678,12 +4687,20 @@ describe("Renderer semantic hierarchy tool", () => {
         requestId: "hierarchy_remove_mask",
         call: {
           toolCallId: "tool_hierarchy_remove_mask",
-          toolName: DESIGN_HIERARCHY_TOOL_NAME,
+          toolName: DESIGN_EDIT_TOOL_NAME,
           input: {
-            action: "remove-mask",
-            label: "Remove welcome mask",
-            pageId: "page_welcome",
-            maskNodeId: "title_welcome",
+            label: "Apply hierarchy edit",
+            edits: [
+              {
+                kind: "hierarchy",
+                input: {
+                  action: "remove-mask",
+                  label: "Remove welcome mask",
+                  pageId: "page_welcome",
+                  maskNodeId: "title_welcome",
+                },
+              },
+            ],
           },
         },
         context: { ...selectionContext, revision: 2 },
@@ -4694,11 +4711,7 @@ describe("Renderer semantic hierarchy tool", () => {
     expect(removed).toMatchObject({
       ok: true,
       result: {
-        content: {
-          action: "remove-mask",
-          maskNodeId: "title_welcome",
-          revision: 3,
-        },
+        content: { action: "edit-design", revision: 3 },
       },
     });
     expect(
@@ -4728,15 +4741,23 @@ describe("Renderer semantic hierarchy tool", () => {
         requestId: "hierarchy_create_boolean",
         call: {
           toolCallId: "tool_hierarchy_create_boolean",
-          toolName: DESIGN_HIERARCHY_TOOL_NAME,
+          toolName: DESIGN_EDIT_TOOL_NAME,
           input: {
-            action: "create-boolean",
-            label: "Subtract capability shapes",
-            pageId: "page_welcome",
-            nodeIds: sourceIds,
-            booleanId: "capability_boolean",
-            name: "Capability mark",
-            operation: "subtract",
+            label: "Apply hierarchy edit",
+            edits: [
+              {
+                kind: "hierarchy",
+                input: {
+                  action: "create-boolean",
+                  label: "Subtract capability shapes",
+                  pageId: "page_welcome",
+                  nodeIds: sourceIds,
+                  booleanId: "capability_boolean",
+                  name: "Capability mark",
+                  operation: "subtract",
+                },
+              },
+            ],
           },
         },
         context: selectionContext,
@@ -4748,14 +4769,7 @@ describe("Renderer semantic hierarchy tool", () => {
     expect(created).toMatchObject({
       ok: true,
       result: {
-        content: {
-          action: "create-boolean",
-          atomic: true,
-          booleanId: "capability_boolean",
-          operation: "subtract",
-          childNodeIds: sourceIds,
-          revision: 1,
-        },
+        content: { action: "edit-design", atomic: true, revision: 1 },
       },
     });
     expect(
@@ -4771,13 +4785,21 @@ describe("Renderer semantic hierarchy tool", () => {
         requestId: "hierarchy_set_boolean",
         call: {
           toolCallId: "tool_hierarchy_set_boolean",
-          toolName: DESIGN_HIERARCHY_TOOL_NAME,
+          toolName: DESIGN_EDIT_TOOL_NAME,
           input: {
-            action: "set-boolean-operation",
-            label: "Intersect capability shapes",
-            pageId: "page_welcome",
-            booleanId: "capability_boolean",
-            operation: "intersect",
+            label: "Apply hierarchy edit",
+            edits: [
+              {
+                kind: "hierarchy",
+                input: {
+                  action: "set-boolean-operation",
+                  label: "Intersect capability shapes",
+                  pageId: "page_welcome",
+                  booleanId: "capability_boolean",
+                  operation: "intersect",
+                },
+              },
+            ],
           },
         },
         context: { ...selectionContext, revision: 1 },
@@ -4788,12 +4810,7 @@ describe("Renderer semantic hierarchy tool", () => {
     expect(changed).toMatchObject({
       ok: true,
       result: {
-        content: {
-          action: "set-boolean-operation",
-          booleanId: "capability_boolean",
-          operation: "intersect",
-          revision: 2,
-        },
+        content: { action: "edit-design", revision: 2 },
       },
     });
 
@@ -4802,12 +4819,20 @@ describe("Renderer semantic hierarchy tool", () => {
         requestId: "hierarchy_ungroup_boolean",
         call: {
           toolCallId: "tool_hierarchy_ungroup_boolean",
-          toolName: DESIGN_HIERARCHY_TOOL_NAME,
+          toolName: DESIGN_EDIT_TOOL_NAME,
           input: {
-            action: "ungroup-boolean",
-            label: "Release capability shapes",
-            pageId: "page_welcome",
-            booleanId: "capability_boolean",
+            label: "Apply hierarchy edit",
+            edits: [
+              {
+                kind: "hierarchy",
+                input: {
+                  action: "ungroup-boolean",
+                  label: "Release capability shapes",
+                  pageId: "page_welcome",
+                  booleanId: "capability_boolean",
+                },
+              },
+            ],
           },
         },
         context: { ...selectionContext, revision: 2 },
@@ -4818,12 +4843,7 @@ describe("Renderer semantic hierarchy tool", () => {
     expect(ungrouped).toMatchObject({
       ok: true,
       result: {
-        content: {
-          action: "ungroup-boolean",
-          booleanId: "capability_boolean",
-          childNodeIds: sourceIds,
-          revision: 3,
-        },
+        content: { action: "edit-design", revision: 3 },
       },
     });
     const after = runtime.getSnapshot();
@@ -4848,13 +4868,21 @@ describe("Renderer semantic hierarchy tool", () => {
         requestId: "hierarchy_reorder",
         call: {
           toolCallId: "tool_hierarchy_reorder",
-          toolName: DESIGN_HIERARCHY_TOOL_NAME,
+          toolName: DESIGN_EDIT_TOOL_NAME,
           input: {
-            action: "reorder",
-            label: "Bring welcome copy to front",
-            pageId: "page_welcome",
-            nodeIds: ["title_welcome", "subtitle_welcome"],
-            order: "bring-to-front",
+            label: "Apply hierarchy edit",
+            edits: [
+              {
+                kind: "hierarchy",
+                input: {
+                  action: "reorder",
+                  label: "Bring welcome copy to front",
+                  pageId: "page_welcome",
+                  nodeIds: ["title_welcome", "subtitle_welcome"],
+                  order: "bring-to-front",
+                },
+              },
+            ],
           },
         },
         context: selectionContext,
@@ -4866,19 +4894,7 @@ describe("Renderer semantic hierarchy tool", () => {
     expect(response).toMatchObject({
       ok: true,
       result: {
-        content: {
-          action: "reorder",
-          order: "bring-to-front",
-          nodeIds: ["title_welcome", "subtitle_welcome"],
-          siblingOrder: [
-            "shape_accent",
-            "feature_group",
-            "title_welcome",
-            "subtitle_welcome",
-          ],
-          revision: 1,
-          atomic: true,
-        },
+        content: { action: "edit-design", revision: 1, atomic: true },
         designRevision: { previousRevision: 0, revision: 1 },
       },
     });
@@ -4910,14 +4926,22 @@ describe("Renderer semantic hierarchy tool", () => {
         requestId: "hierarchy_reparent",
         call: {
           toolCallId: "tool_hierarchy_reparent",
-          toolName: DESIGN_HIERARCHY_TOOL_NAME,
+          toolName: DESIGN_EDIT_TOOL_NAME,
           input: {
-            action: "reparent",
-            label: "Move first capability out of its Group",
-            pageId: "page_welcome",
-            nodeIds: ["feature_one"],
-            parentId: "frame_welcome",
-            index: 1,
+            label: "Apply hierarchy edit",
+            edits: [
+              {
+                kind: "hierarchy",
+                input: {
+                  action: "reparent",
+                  label: "Move first capability out of its Group",
+                  pageId: "page_welcome",
+                  nodeIds: ["feature_one"],
+                  parentId: "frame_welcome",
+                  index: 1,
+                },
+              },
+            ],
           },
         },
         context: selectionContext,
@@ -4930,17 +4954,7 @@ describe("Renderer semantic hierarchy tool", () => {
       ok: true,
       result: {
         content: {
-          action: "reparent",
-          nodeIds: ["feature_one"],
-          parentId: "frame_welcome",
-          index: 1,
-          siblingOrder: [
-            "shape_accent",
-            "feature_one",
-            "title_welcome",
-            "subtitle_welcome",
-            "feature_group",
-          ],
+          action: "edit-design",
           atomic: true,
           revision: 1,
           warnings: [],
@@ -4976,14 +4990,22 @@ describe("Renderer semantic hierarchy tool", () => {
           requestId: "hierarchy_reparent_cycle",
           call: {
             toolCallId: "tool_hierarchy_reparent_cycle",
-            toolName: DESIGN_HIERARCHY_TOOL_NAME,
+            toolName: DESIGN_EDIT_TOOL_NAME,
             input: {
-              action: "reparent",
-              label: "Invalid cycle",
-              pageId: "page_welcome",
-              nodeIds: ["frame_welcome"],
-              parentId: "feature_group",
-              index: 0,
+              label: "Apply hierarchy edit",
+              edits: [
+                {
+                  kind: "hierarchy",
+                  input: {
+                    action: "reparent",
+                    label: "Invalid cycle",
+                    pageId: "page_welcome",
+                    nodeIds: ["frame_welcome"],
+                    parentId: "feature_group",
+                    index: 0,
+                  },
+                },
+              ],
             },
           },
           context: pageContext,
@@ -5004,14 +5026,22 @@ describe("Renderer semantic hierarchy tool", () => {
         requestId: "hierarchy_reparent_warning",
         call: {
           toolCallId: "tool_hierarchy_reparent_warning",
-          toolName: DESIGN_HIERARCHY_TOOL_NAME,
+          toolName: DESIGN_EDIT_TOOL_NAME,
           input: {
-            action: "reparent",
-            label: "Move title into styled Group",
-            pageId: "page_welcome",
-            nodeIds: ["title_welcome"],
-            parentId: "feature_group",
-            index: 0,
+            label: "Apply hierarchy edit",
+            edits: [
+              {
+                kind: "hierarchy",
+                input: {
+                  action: "reparent",
+                  label: "Move title into styled Group",
+                  pageId: "page_welcome",
+                  nodeIds: ["title_welcome"],
+                  parentId: "feature_group",
+                  index: 0,
+                },
+              },
+            ],
           },
         },
         context: pageContext,
@@ -6943,12 +6973,20 @@ describe("Renderer semantic hierarchy tool", () => {
         requestId: "arrange_distribute",
         call: {
           toolCallId: "tool_arrange_distribute",
-          toolName: DESIGN_ARRANGE_TOOL_NAME,
+          toolName: DESIGN_EDIT_TOOL_NAME,
           input: {
-            action: "distribute-horizontal",
-            label: "Distribute capability cards",
-            pageId: "page_welcome",
-            nodeIds: ["feature_one", "feature_two", "feature_three"],
+            label: "Apply arrange edit",
+            edits: [
+              {
+                kind: "arrange",
+                input: {
+                  action: "distribute-horizontal",
+                  label: "Distribute capability cards",
+                  pageId: "page_welcome",
+                  nodeIds: ["feature_one", "feature_two", "feature_three"],
+                },
+              },
+            ],
           },
         },
         context: selectionContext,
@@ -6961,10 +6999,7 @@ describe("Renderer semantic hierarchy tool", () => {
       ok: true,
       result: {
         content: {
-          action: "distribute-horizontal",
-          nodeIds: ["feature_one", "feature_two", "feature_three"],
-          orderedNodeIds: ["feature_one", "feature_two", "feature_three"],
-          resolvedSpacing: 56,
+          action: "edit-design",
           revision: 1,
           atomic: true,
           warnings: [],
@@ -6998,12 +7033,20 @@ describe("Renderer semantic hierarchy tool", () => {
         requestId: "arrange_parent_align",
         call: {
           toolCallId: "tool_arrange_parent_align",
-          toolName: DESIGN_ARRANGE_TOOL_NAME,
+          toolName: DESIGN_EDIT_TOOL_NAME,
           input: {
-            action: "align-right",
-            label: "Align title to parent",
-            pageId: "page_welcome",
-            nodeIds: ["title_welcome"],
+            label: "Apply arrange edit",
+            edits: [
+              {
+                kind: "arrange",
+                input: {
+                  action: "align-right",
+                  label: "Align title to parent",
+                  pageId: "page_welcome",
+                  nodeIds: ["title_welcome"],
+                },
+              },
+            ],
           },
         },
         context: pageContext,
@@ -7015,12 +7058,7 @@ describe("Renderer semantic hierarchy tool", () => {
     expect(response).toMatchObject({
       ok: true,
       result: {
-        content: {
-          action: "align-right",
-          nodeIds: ["title_welcome"],
-          revision: 1,
-          atomic: true,
-        },
+        content: { action: "edit-design", revision: 1, atomic: true },
         designRevision: { previousRevision: 0, revision: 1 },
       },
     });
@@ -7037,12 +7075,20 @@ describe("Renderer semantic hierarchy tool", () => {
         requestId: "arrange_tidy",
         call: {
           toolCallId: "tool_arrange_tidy",
-          toolName: DESIGN_ARRANGE_TOOL_NAME,
+          toolName: DESIGN_EDIT_TOOL_NAME,
           input: {
-            action: "tidy-up",
-            label: "Tidy capability cards",
-            pageId: "page_welcome",
-            nodeIds: ["feature_one", "feature_two", "feature_three"],
+            label: "Apply arrange edit",
+            edits: [
+              {
+                kind: "arrange",
+                input: {
+                  action: "tidy-up",
+                  label: "Tidy capability cards",
+                  pageId: "page_welcome",
+                  nodeIds: ["feature_one", "feature_two", "feature_three"],
+                },
+              },
+            ],
           },
         },
         context: pageContext,
@@ -7054,14 +7100,7 @@ describe("Renderer semantic hierarchy tool", () => {
     expect(response).toMatchObject({
       ok: true,
       result: {
-        content: {
-          action: "tidy-up",
-          tidyUpDimension: "horizontal",
-          resolvedHorizontalSpacing: 32,
-          orderedNodeIds: ["feature_one", "feature_two", "feature_three"],
-          revision: 1,
-          atomic: true,
-        },
+        content: { action: "edit-design", revision: 1, atomic: true },
       },
     });
     expect(
@@ -7077,13 +7116,21 @@ describe("Renderer semantic hierarchy tool", () => {
         requestId: "constraints_set",
         call: {
           toolCallId: "tool_constraints_set",
-          toolName: DESIGN_ARRANGE_TOOL_NAME,
+          toolName: DESIGN_EDIT_TOOL_NAME,
           input: {
-            action: "set-constraints",
-            label: "Stretch title with screen",
-            pageId: "page_welcome",
-            nodeId: "title_welcome",
-            constraints: { horizontal: "left-right", vertical: "top" },
+            label: "Apply arrange edit",
+            edits: [
+              {
+                kind: "arrange",
+                input: {
+                  action: "set-constraints",
+                  label: "Stretch title with screen",
+                  pageId: "page_welcome",
+                  nodeId: "title_welcome",
+                  constraints: { horizontal: "left-right", vertical: "top" },
+                },
+              },
+            ],
           },
         },
         context: pageContext,
@@ -7094,13 +7141,7 @@ describe("Renderer semantic hierarchy tool", () => {
     expect(constrained).toMatchObject({
       ok: true,
       result: {
-        content: {
-          action: "set-constraints",
-          nodeId: "title_welcome",
-          constraints: { horizontal: "left-right", vertical: "top" },
-          atomic: true,
-          revision: 1,
-        },
+        content: { action: "edit-design", atomic: true, revision: 1 },
       },
     });
     const resized = await executeDesignToolRequest(
@@ -7108,14 +7149,22 @@ describe("Renderer semantic hierarchy tool", () => {
         requestId: "constraints_resize",
         call: {
           toolCallId: "tool_constraints_resize",
-          toolName: DESIGN_ARRANGE_TOOL_NAME,
+          toolName: DESIGN_EDIT_TOOL_NAME,
           input: {
-            action: "resize-frame",
-            label: "Resize responsive screen",
-            pageId: "page_welcome",
-            frameId: "frame_welcome",
-            width: 1600,
-            height: 900,
+            label: "Apply arrange edit",
+            edits: [
+              {
+                kind: "arrange",
+                input: {
+                  action: "resize-frame",
+                  label: "Resize responsive screen",
+                  pageId: "page_welcome",
+                  frameId: "frame_welcome",
+                  width: 1600,
+                  height: 900,
+                },
+              },
+            ],
           },
         },
         context: { ...pageContext, revision: 1 },
@@ -7126,14 +7175,7 @@ describe("Renderer semantic hierarchy tool", () => {
     expect(resized).toMatchObject({
       ok: true,
       result: {
-        content: {
-          action: "resize-frame",
-          frameId: "frame_welcome",
-          width: 1600,
-          height: 900,
-          atomic: true,
-          revision: 2,
-        },
+        content: { action: "edit-design", atomic: true, revision: 2 },
       },
     });
     expect(
@@ -7179,13 +7221,21 @@ describe("Renderer semantic hierarchy tool", () => {
         requestId: "rotation_origin_set",
         call: {
           toolCallId: "tool_rotation_origin_set",
-          toolName: DESIGN_ARRANGE_TOOL_NAME,
+          toolName: DESIGN_EDIT_TOOL_NAME,
           input: {
-            action: "set-rotation-origin",
-            label: "Move title rotation origin",
-            pageId: "page_welcome",
-            nodeId: "title_welcome",
-            origin: { x: -0.25, y: 1.5 },
+            label: "Apply arrange edit",
+            edits: [
+              {
+                kind: "arrange",
+                input: {
+                  action: "set-rotation-origin",
+                  label: "Move title rotation origin",
+                  pageId: "page_welcome",
+                  nodeId: "title_welcome",
+                  origin: { x: -0.25, y: 1.5 },
+                },
+              },
+            ],
           },
         },
         context: pageContext,
@@ -7197,14 +7247,7 @@ describe("Renderer semantic hierarchy tool", () => {
     expect(response).toMatchObject({
       ok: true,
       result: {
-        content: {
-          action: "set-rotation-origin",
-          nodeId: "title_welcome",
-          nodeIds: ["title_welcome"],
-          origin: { x: -0.25, y: 1.5 },
-          revision: 1,
-          atomic: true,
-        },
+        content: { action: "edit-design", revision: 1, atomic: true },
       },
     });
     expect(
@@ -7313,12 +7356,20 @@ describe("Renderer semantic hierarchy tool", () => {
         requestId: "repair_delivery_overflow",
         call: {
           toolCallId: "tool_repair_delivery_overflow",
-          toolName: DESIGN_ARRANGE_TOOL_NAME,
+          toolName: DESIGN_EDIT_TOOL_NAME,
           input: {
-            action: "repair-overflow",
-            label: "Reveal complete delivery",
-            pageId: "page_welcome",
-            frameId: "frame_welcome",
+            label: "Apply arrange edit",
+            edits: [
+              {
+                kind: "arrange",
+                input: {
+                  action: "repair-overflow",
+                  label: "Reveal complete delivery",
+                  pageId: "page_welcome",
+                  frameId: "frame_welcome",
+                },
+              },
+            ],
           },
         },
         context: pageContext,
@@ -7330,12 +7381,7 @@ describe("Renderer semantic hierarchy tool", () => {
     expect(repaired).toMatchObject({
       ok: true,
       result: {
-        content: {
-          action: "repair-overflow",
-          nodeIds: ["frame_welcome"],
-          atomic: true,
-          revision: 1,
-        },
+        content: { action: "edit-design", atomic: true, revision: 1 },
       },
     });
     expect(
@@ -7351,19 +7397,27 @@ describe("Renderer semantic hierarchy tool", () => {
         requestId: "auto_layout_set",
         call: {
           toolCallId: "tool_auto_layout_set",
-          toolName: DESIGN_ARRANGE_TOOL_NAME,
+          toolName: DESIGN_EDIT_TOOL_NAME,
           input: {
-            action: "set-auto-layout",
-            label: "Create vertical landing flow",
-            pageId: "page_welcome",
-            frameId: "frame_welcome",
-            autoLayout: {
-              mode: "vertical",
-              padding: { top: 24, right: 32, bottom: 24, left: 32 },
-              gap: 16,
-              primaryAlignment: "start",
-              counterAlignment: "center",
-            },
+            label: "Apply arrange edit",
+            edits: [
+              {
+                kind: "arrange",
+                input: {
+                  action: "set-auto-layout",
+                  label: "Create vertical landing flow",
+                  pageId: "page_welcome",
+                  frameId: "frame_welcome",
+                  autoLayout: {
+                    mode: "vertical",
+                    padding: { top: 24, right: 32, bottom: 24, left: 32 },
+                    gap: 16,
+                    primaryAlignment: "start",
+                    counterAlignment: "center",
+                  },
+                },
+              },
+            ],
           },
         },
         context: pageContext,
@@ -7374,17 +7428,7 @@ describe("Renderer semantic hierarchy tool", () => {
     expect(response).toMatchObject({
       ok: true,
       result: {
-        content: {
-          action: "set-auto-layout",
-          frameId: "frame_welcome",
-          autoLayout: {
-            mode: "vertical",
-            gap: 16,
-            counterAlignment: "center",
-          },
-          revision: 1,
-          atomic: true,
-        },
+        content: { action: "edit-design", revision: 1, atomic: true },
       },
     });
     const document = runtime.getSnapshot().document;
@@ -7401,13 +7445,21 @@ describe("Renderer semantic hierarchy tool", () => {
         requestId: "auto_layout_child_fill",
         call: {
           toolCallId: "tool_auto_layout_child_fill",
-          toolName: DESIGN_ARRANGE_TOOL_NAME,
+          toolName: DESIGN_EDIT_TOOL_NAME,
           input: {
-            action: "set-layout-sizing",
-            label: "Fill title width",
-            pageId: "page_welcome",
-            nodeId: "title_welcome",
-            sizing: { horizontal: "fill", vertical: "fixed" },
+            label: "Apply arrange edit",
+            edits: [
+              {
+                kind: "arrange",
+                input: {
+                  action: "set-layout-sizing",
+                  label: "Fill title width",
+                  pageId: "page_welcome",
+                  nodeId: "title_welcome",
+                  sizing: { horizontal: "fill", vertical: "fixed" },
+                },
+              },
+            ],
           },
         },
         context: { ...pageContext, revision: 1 },
@@ -7418,13 +7470,7 @@ describe("Renderer semantic hierarchy tool", () => {
     expect(sized).toMatchObject({
       ok: true,
       result: {
-        content: {
-          action: "set-layout-sizing",
-          nodeId: "title_welcome",
-          sizing: { horizontal: "fill", vertical: "fixed" },
-          revision: 2,
-          atomic: true,
-        },
+        content: { action: "edit-design", revision: 2, atomic: true },
       },
     });
     expect(
@@ -7436,14 +7482,22 @@ describe("Renderer semantic hierarchy tool", () => {
         requestId: "auto_layout_child_absolute",
         call: {
           toolCallId: "tool_auto_layout_child_absolute",
-          toolName: DESIGN_ARRANGE_TOOL_NAME,
+          toolName: DESIGN_EDIT_TOOL_NAME,
           input: {
-            action: "set-layout-positioning",
-            label: "Float title over the flow",
-            pageId: "page_welcome",
-            nodeId: "title_welcome",
-            positioning: "absolute",
-            constraints: { horizontal: "right", vertical: "top" },
+            label: "Apply arrange edit",
+            edits: [
+              {
+                kind: "arrange",
+                input: {
+                  action: "set-layout-positioning",
+                  label: "Float title over the flow",
+                  pageId: "page_welcome",
+                  nodeId: "title_welcome",
+                  positioning: "absolute",
+                  constraints: { horizontal: "right", vertical: "top" },
+                },
+              },
+            ],
           },
         },
         context: { ...pageContext, revision: 2 },
@@ -7454,14 +7508,7 @@ describe("Renderer semantic hierarchy tool", () => {
     expect(absolute).toMatchObject({
       ok: true,
       result: {
-        content: {
-          action: "set-layout-positioning",
-          nodeId: "title_welcome",
-          positioning: "absolute",
-          constraints: { horizontal: "right", vertical: "top" },
-          revision: 3,
-          atomic: true,
-        },
+        content: { action: "edit-design", revision: 3, atomic: true },
       },
     });
     expect(
@@ -7479,13 +7526,21 @@ describe("Renderer semantic hierarchy tool", () => {
         requestId: "auto_layout_child_limits",
         call: {
           toolCallId: "tool_auto_layout_child_limits",
-          toolName: DESIGN_ARRANGE_TOOL_NAME,
+          toolName: DESIGN_EDIT_TOOL_NAME,
           input: {
-            action: "set-layout-limits",
-            label: "Bound absolute title width",
-            pageId: "page_welcome",
-            nodeId: "title_welcome",
-            limits: { minWidth: 240, maxWidth: 720, minHeight: 48 },
+            label: "Apply arrange edit",
+            edits: [
+              {
+                kind: "arrange",
+                input: {
+                  action: "set-layout-limits",
+                  label: "Bound absolute title width",
+                  pageId: "page_welcome",
+                  nodeId: "title_welcome",
+                  limits: { minWidth: 240, maxWidth: 720, minHeight: 48 },
+                },
+              },
+            ],
           },
         },
         context: { ...pageContext, revision: 3 },
@@ -7787,19 +7842,27 @@ describe("Renderer semantic hierarchy tool", () => {
         requestId: "layout_guides_set",
         call: {
           toolCallId: "tool_layout_guides_set",
-          toolName: DESIGN_ARRANGE_TOOL_NAME,
+          toolName: DESIGN_EDIT_TOOL_NAME,
           input: {
-            action: "set-layout-guides",
-            label: "Show 8pt grid",
-            pageId: "page_welcome",
-            frameId: "frame_welcome",
-            layoutGuides: [
+            label: "Apply arrange edit",
+            edits: [
               {
-                id: "grid_8",
-                type: "grid",
-                size: 8,
-                color: "#ff5a5f",
-                opacity: 0.12,
+                kind: "arrange",
+                input: {
+                  action: "set-layout-guides",
+                  label: "Show 8pt grid",
+                  pageId: "page_welcome",
+                  frameId: "frame_welcome",
+                  layoutGuides: [
+                    {
+                      id: "grid_8",
+                      type: "grid",
+                      size: 8,
+                      color: "#ff5a5f",
+                      opacity: 0.12,
+                    },
+                  ],
+                },
               },
             ],
           },
@@ -7812,11 +7875,7 @@ describe("Renderer semantic hierarchy tool", () => {
     expect(guides).toMatchObject({
       ok: true,
       result: {
-        content: {
-          action: "set-layout-guides",
-          revision: 5,
-          atomic: true,
-        },
+        content: { action: "edit-design", revision: 5, atomic: true },
       },
     });
     expect(
@@ -7865,19 +7924,27 @@ describe("Renderer semantic hierarchy tool", () => {
         requestId: "auto_layout_baseline",
         call: {
           toolCallId: "tool_auto_layout_baseline",
-          toolName: DESIGN_ARRANGE_TOOL_NAME,
+          toolName: DESIGN_EDIT_TOOL_NAME,
           input: {
-            action: "set-auto-layout",
-            label: "Align icon and labels",
-            pageId: "page_welcome",
-            frameId: "frame_welcome",
-            autoLayout: {
-              mode: "horizontal",
-              padding: { top: 24, right: 32, bottom: 24, left: 32 },
-              gap: 16,
-              primaryAlignment: "start",
-              counterAlignment: "baseline",
-            },
+            label: "Apply arrange edit",
+            edits: [
+              {
+                kind: "arrange",
+                input: {
+                  action: "set-auto-layout",
+                  label: "Align icon and labels",
+                  pageId: "page_welcome",
+                  frameId: "frame_welcome",
+                  autoLayout: {
+                    mode: "horizontal",
+                    padding: { top: 24, right: 32, bottom: 24, left: 32 },
+                    gap: 16,
+                    primaryAlignment: "start",
+                    counterAlignment: "baseline",
+                  },
+                },
+              },
+            ],
           },
         },
         context: pageContext,
@@ -7888,12 +7955,7 @@ describe("Renderer semantic hierarchy tool", () => {
     expect(response).toMatchObject({
       ok: true,
       result: {
-        content: {
-          action: "set-auto-layout",
-          autoLayout: { counterAlignment: "baseline" },
-          revision: 1,
-          atomic: true,
-        },
+        content: { action: "edit-design", revision: 1, atomic: true },
       },
     });
     expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
@@ -7906,25 +7968,33 @@ describe("Renderer semantic hierarchy tool", () => {
         requestId: "auto_layout_wrap",
         call: {
           toolCallId: "tool_auto_layout_wrap",
-          toolName: DESIGN_ARRANGE_TOOL_NAME,
+          toolName: DESIGN_EDIT_TOOL_NAME,
           input: {
-            action: "set-auto-layout",
-            label: "Wrap landing content",
-            pageId: "page_welcome",
-            frameId: "frame_welcome",
-            autoLayout: {
-              mode: "horizontal",
-              padding: { top: 24, right: 24, bottom: 24, left: 24 },
-              gap: 16,
-              primaryAlignment: "start",
-              counterAlignment: "start",
-              sizing: { horizontal: "fixed", vertical: "hug" },
-              wrap: {
-                mode: "wrap",
-                counterGap: 20,
-                counterAxisAlignContent: "space-between",
+            label: "Apply arrange edit",
+            edits: [
+              {
+                kind: "arrange",
+                input: {
+                  action: "set-auto-layout",
+                  label: "Wrap landing content",
+                  pageId: "page_welcome",
+                  frameId: "frame_welcome",
+                  autoLayout: {
+                    mode: "horizontal",
+                    padding: { top: 24, right: 24, bottom: 24, left: 24 },
+                    gap: 16,
+                    primaryAlignment: "start",
+                    counterAlignment: "start",
+                    sizing: { horizontal: "fixed", vertical: "hug" },
+                    wrap: {
+                      mode: "wrap",
+                      counterGap: 20,
+                      counterAxisAlignContent: "space-between",
+                    },
+                  },
+                },
               },
-            },
+            ],
           },
         },
         context: pageContext,
@@ -7936,20 +8006,7 @@ describe("Renderer semantic hierarchy tool", () => {
     expect(response).toMatchObject({
       ok: true,
       result: {
-        content: {
-          action: "set-auto-layout",
-          frameId: "frame_welcome",
-          autoLayout: {
-            mode: "horizontal",
-            wrap: {
-              mode: "wrap",
-              counterGap: 20,
-              counterAxisAlignContent: "space-between",
-            },
-          },
-          revision: 1,
-          atomic: true,
-        },
+        content: { action: "edit-design", revision: 1, atomic: true },
       },
     });
     const document = runtime.getSnapshot().document;
@@ -7979,21 +8036,29 @@ describe("Renderer semantic hierarchy tool", () => {
         requestId: "auto_layout_wrap_fill_enable",
         call: {
           toolCallId: "tool_auto_layout_wrap_fill_enable",
-          toolName: DESIGN_ARRANGE_TOOL_NAME,
+          toolName: DESIGN_EDIT_TOOL_NAME,
           input: {
-            action: "set-auto-layout",
-            label: "Wrap landing content",
-            pageId: "page_welcome",
-            frameId: "frame_welcome",
-            autoLayout: {
-              mode: "horizontal",
-              padding: { top: 24, right: 24, bottom: 24, left: 24 },
-              gap: 16,
-              primaryAlignment: "start",
-              counterAlignment: "start",
-              sizing: { horizontal: "fixed", vertical: "hug" },
-              wrap: { mode: "wrap", counterGap: 20 },
-            },
+            label: "Apply arrange edit",
+            edits: [
+              {
+                kind: "arrange",
+                input: {
+                  action: "set-auto-layout",
+                  label: "Wrap landing content",
+                  pageId: "page_welcome",
+                  frameId: "frame_welcome",
+                  autoLayout: {
+                    mode: "horizontal",
+                    padding: { top: 24, right: 24, bottom: 24, left: 24 },
+                    gap: 16,
+                    primaryAlignment: "start",
+                    counterAlignment: "start",
+                    sizing: { horizontal: "fixed", vertical: "hug" },
+                    wrap: { mode: "wrap", counterGap: 20 },
+                  },
+                },
+              },
+            ],
           },
         },
         context: pageContext,
@@ -8007,13 +8072,21 @@ describe("Renderer semantic hierarchy tool", () => {
         requestId: "auto_layout_wrap_fill_child",
         call: {
           toolCallId: "tool_auto_layout_wrap_fill_child",
-          toolName: DESIGN_ARRANGE_TOOL_NAME,
+          toolName: DESIGN_EDIT_TOOL_NAME,
           input: {
-            action: "set-layout-sizing",
-            label: "Fill wrapped title row",
-            pageId: "page_welcome",
-            nodeId: "title_welcome",
-            sizing: { horizontal: "fill", vertical: "fixed" },
+            label: "Apply arrange edit",
+            edits: [
+              {
+                kind: "arrange",
+                input: {
+                  action: "set-layout-sizing",
+                  label: "Fill wrapped title row",
+                  pageId: "page_welcome",
+                  nodeId: "title_welcome",
+                  sizing: { horizontal: "fill", vertical: "fixed" },
+                },
+              },
+            ],
           },
         },
         context: { ...pageContext, revision: 1 },
@@ -8024,11 +8097,7 @@ describe("Renderer semantic hierarchy tool", () => {
     expect(filled).toMatchObject({
       ok: true,
       result: {
-        content: {
-          action: "set-layout-sizing",
-          revision: 2,
-          atomic: true,
-        },
+        content: { action: "edit-design", revision: 2, atomic: true },
       },
     });
     expect(
@@ -8045,26 +8114,34 @@ describe("Renderer semantic hierarchy tool", () => {
         requestId: "auto_grid_rows",
         call: {
           toolCallId: "tool_auto_grid_rows",
-          toolName: DESIGN_ARRANGE_TOOL_NAME,
+          toolName: DESIGN_EDIT_TOOL_NAME,
           input: {
-            action: "set-auto-layout",
-            label: "Create automatic content grid",
-            pageId: "page_welcome",
-            frameId: "frame_welcome",
-            autoLayout: {
-              mode: "grid",
-              padding: { top: 24, right: 24, bottom: 24, left: 24 },
-              rowGap: 16,
-              columnGap: 16,
-              rows: [{ type: "fill", value: 1 }],
-              columns: [
-                { type: "fill", value: 1 },
-                { type: "fill", value: 1 },
-              ],
-              itemsPositioning: "row-auto-flow",
-              autoTracks: "rows",
-              sizing: { horizontal: "fixed", vertical: "fixed" },
-            },
+            label: "Apply arrange edit",
+            edits: [
+              {
+                kind: "arrange",
+                input: {
+                  action: "set-auto-layout",
+                  label: "Create automatic content grid",
+                  pageId: "page_welcome",
+                  frameId: "frame_welcome",
+                  autoLayout: {
+                    mode: "grid",
+                    padding: { top: 24, right: 24, bottom: 24, left: 24 },
+                    rowGap: 16,
+                    columnGap: 16,
+                    rows: [{ type: "fill", value: 1 }],
+                    columns: [
+                      { type: "fill", value: 1 },
+                      { type: "fill", value: 1 },
+                    ],
+                    itemsPositioning: "row-auto-flow",
+                    autoTracks: "rows",
+                    sizing: { horizontal: "fixed", vertical: "fixed" },
+                  },
+                },
+              },
+            ],
           },
         },
         context: pageContext,
@@ -8074,7 +8151,7 @@ describe("Renderer semantic hierarchy tool", () => {
     );
     expect(automatic).toMatchObject({
       ok: true,
-      result: { content: { action: "set-auto-layout", revision: 1 } },
+      result: { content: { action: "edit-design", revision: 1 } },
     });
     const frame = runtime.getSnapshot().document.nodesById.frame_welcome;
     if (frame?.kind !== "frame") throw new Error("missing welcome frame");
@@ -8089,15 +8166,23 @@ describe("Renderer semantic hierarchy tool", () => {
         requestId: "reorder_grid_rows",
         call: {
           toolCallId: "tool_reorder_grid_rows",
-          toolName: DESIGN_ARRANGE_TOOL_NAME,
+          toolName: DESIGN_EDIT_TOOL_NAME,
           input: {
-            action: "reorder-grid-tracks",
-            label: "Move first content row to the end",
-            pageId: "page_welcome",
-            frameId: "frame_welcome",
-            axis: "rows",
-            fromIndices: [0],
-            insertionIndex: rowCount,
+            label: "Apply arrange edit",
+            edits: [
+              {
+                kind: "arrange",
+                input: {
+                  action: "reorder-grid-tracks",
+                  label: "Move first content row to the end",
+                  pageId: "page_welcome",
+                  frameId: "frame_welcome",
+                  axis: "rows",
+                  fromIndices: [0],
+                  insertionIndex: rowCount,
+                },
+              },
+            ],
           },
         },
         context: { ...pageContext, revision: 1 },
@@ -8108,18 +8193,14 @@ describe("Renderer semantic hierarchy tool", () => {
     expect(reordered).toMatchObject({
       ok: true,
       result: {
-        content: {
-          action: "reorder-grid-tracks",
-          frameId: "frame_welcome",
-          axis: "rows",
-          revision: 2,
-          atomic: true,
-        },
+        content: { action: "edit-design", revision: 2, atomic: true },
       },
     });
     if (!reordered.ok) throw new Error("Expected Grid track reorder result");
-    const content = reordered.result.content as { movements?: unknown };
-    expect(content.movements).toEqual(
+    const content = reordered.result.content as {
+      edits?: Array<{ movements?: unknown }>;
+    };
+    expect(content.edits?.[0]?.movements).toEqual(
       expect.arrayContaining([{ from: 0, to: rowCount - 1 }]),
     );
     expect(runtime.getSnapshot().state.history.undo).toHaveLength(2);
@@ -8132,19 +8213,27 @@ describe("Renderer semantic hierarchy tool", () => {
         requestId: "auto_layout_auto_gap",
         call: {
           toolCallId: "tool_auto_layout_auto_gap",
-          toolName: DESIGN_ARRANGE_TOOL_NAME,
+          toolName: DESIGN_EDIT_TOOL_NAME,
           input: {
-            action: "set-auto-layout",
-            label: "Distribute navigation content",
-            pageId: "page_welcome",
-            frameId: "frame_welcome",
-            autoLayout: {
-              mode: "horizontal",
-              padding: { top: 24, right: 32, bottom: 24, left: 32 },
-              gap: 16,
-              primaryAlignment: "space-between",
-              counterAlignment: "center",
-            },
+            label: "Apply arrange edit",
+            edits: [
+              {
+                kind: "arrange",
+                input: {
+                  action: "set-auto-layout",
+                  label: "Distribute navigation content",
+                  pageId: "page_welcome",
+                  frameId: "frame_welcome",
+                  autoLayout: {
+                    mode: "horizontal",
+                    padding: { top: 24, right: 32, bottom: 24, left: 32 },
+                    gap: 16,
+                    primaryAlignment: "space-between",
+                    counterAlignment: "center",
+                  },
+                },
+              },
+            ],
           },
         },
         context: pageContext,
@@ -8156,12 +8245,7 @@ describe("Renderer semantic hierarchy tool", () => {
     expect(response).toMatchObject({
       ok: true,
       result: {
-        content: {
-          action: "set-auto-layout",
-          autoLayout: { primaryAlignment: "space-between" },
-          revision: 1,
-          atomic: true,
-        },
+        content: { action: "edit-design", revision: 1, atomic: true },
       },
     });
     const document = runtime.getSnapshot().document;
@@ -8179,13 +8263,21 @@ describe("Renderer semantic hierarchy tool", () => {
         requestId: "arrange_spacing",
         call: {
           toolCallId: "tool_arrange_spacing",
-          toolName: DESIGN_ARRANGE_TOOL_NAME,
+          toolName: DESIGN_EDIT_TOOL_NAME,
           input: {
-            action: "set-horizontal-spacing",
-            label: "Overlap capability cards",
-            pageId: "page_welcome",
-            nodeIds: ["feature_one", "feature_two", "feature_three"],
-            spacing: -20,
+            label: "Apply arrange edit",
+            edits: [
+              {
+                kind: "arrange",
+                input: {
+                  action: "set-horizontal-spacing",
+                  label: "Overlap capability cards",
+                  pageId: "page_welcome",
+                  nodeIds: ["feature_one", "feature_two", "feature_three"],
+                  spacing: -20,
+                },
+              },
+            ],
           },
         },
         context: pageContext,
@@ -8196,11 +8288,7 @@ describe("Renderer semantic hierarchy tool", () => {
     expect(response).toMatchObject({
       ok: true,
       result: {
-        content: {
-          action: "set-horizontal-spacing",
-          resolvedSpacing: -20,
-          atomic: true,
-        },
+        content: { action: "edit-design", atomic: true },
       },
     });
     expect(
@@ -8216,12 +8304,20 @@ describe("Renderer semantic hierarchy tool", () => {
           requestId: "arrange_locked",
           call: {
             toolCallId: "tool_arrange_locked",
-            toolName: DESIGN_ARRANGE_TOOL_NAME,
+            toolName: DESIGN_EDIT_TOOL_NAME,
             input: {
-              action: "distribute-horizontal",
-              label: "Invalid locked arrangement",
-              pageId: "page_welcome",
-              nodeIds: ["feature_one", "feature_two", "feature_three"],
+              label: "Apply arrange edit",
+              edits: [
+                {
+                  kind: "arrange",
+                  input: {
+                    action: "distribute-horizontal",
+                    label: "Invalid locked arrangement",
+                    pageId: "page_welcome",
+                    nodeIds: ["feature_one", "feature_two", "feature_three"],
+                  },
+                },
+              ],
             },
           },
           context: pageContext,
@@ -8238,12 +8334,20 @@ describe("Renderer semantic hierarchy tool", () => {
           requestId: "arrange_scope",
           call: {
             toolCallId: "tool_arrange_scope",
-            toolName: DESIGN_ARRANGE_TOOL_NAME,
+            toolName: DESIGN_EDIT_TOOL_NAME,
             input: {
-              action: "align-left",
-              label: "Wrong Page",
-              pageId: "page_welcome",
-              nodeIds: ["feature_one", "feature_two"],
+              label: "Apply arrange edit",
+              edits: [
+                {
+                  kind: "arrange",
+                  input: {
+                    action: "align-left",
+                    label: "Wrong Page",
+                    pageId: "page_welcome",
+                    nodeIds: ["feature_one", "feature_two"],
+                  },
+                },
+              ],
             },
           },
           context: {
@@ -8257,7 +8361,9 @@ describe("Renderer semantic hierarchy tool", () => {
         new EditorRuntime(createWelcomeDocument()),
         "page_welcome",
       ),
-    ).rejects.toThrow("Arrangement operation targets Page page_welcome");
+    ).rejects.toThrow(
+      "Edit Design arrangement operation targets Page page_welcome",
+    );
   });
 
   it("returns scoped planner failures without partially changing the document", async () => {
@@ -8268,14 +8374,22 @@ describe("Renderer semantic hierarchy tool", () => {
           requestId: "hierarchy_mixed_parent",
           call: {
             toolCallId: "tool_hierarchy_mixed_parent",
-            toolName: DESIGN_HIERARCHY_TOOL_NAME,
+            toolName: DESIGN_EDIT_TOOL_NAME,
             input: {
-              action: "group",
-              label: "Invalid mixed parent group",
-              pageId: "page_welcome",
-              nodeIds: ["title_welcome", "feature_one"],
-              groupId: "invalid_group",
-              name: "Invalid group",
+              label: "Apply hierarchy edit",
+              edits: [
+                {
+                  kind: "hierarchy",
+                  input: {
+                    action: "group",
+                    label: "Invalid mixed parent group",
+                    pageId: "page_welcome",
+                    nodeIds: ["title_welcome", "feature_one"],
+                    groupId: "invalid_group",
+                    name: "Invalid group",
+                  },
+                },
+              ],
             },
           },
           context: pageContext,
@@ -8296,14 +8410,22 @@ describe("Renderer semantic hierarchy tool", () => {
           requestId: "hierarchy_locked",
           call: {
             toolCallId: "tool_hierarchy_locked",
-            toolName: DESIGN_HIERARCHY_TOOL_NAME,
+            toolName: DESIGN_EDIT_TOOL_NAME,
             input: {
-              action: "group",
-              label: "Group locked copy",
-              pageId: "page_welcome",
-              nodeIds: ["title_welcome", "subtitle_welcome"],
-              groupId: "locked_group",
-              name: "Locked group",
+              label: "Apply hierarchy edit",
+              edits: [
+                {
+                  kind: "hierarchy",
+                  input: {
+                    action: "group",
+                    label: "Group locked copy",
+                    pageId: "page_welcome",
+                    nodeIds: ["title_welcome", "subtitle_welcome"],
+                    groupId: "locked_group",
+                    name: "Locked group",
+                  },
+                },
+              ],
             },
           },
           context: pageContext,
@@ -8323,12 +8445,20 @@ describe("Renderer semantic hierarchy tool", () => {
           requestId: "hierarchy_lossy",
           call: {
             toolCallId: "tool_hierarchy_lossy",
-            toolName: DESIGN_HIERARCHY_TOOL_NAME,
+            toolName: DESIGN_EDIT_TOOL_NAME,
             input: {
-              action: "ungroup",
-              label: "Ungroup styled container",
-              pageId: "page_welcome",
-              groupId: "feature_group",
+              label: "Apply hierarchy edit",
+              edits: [
+                {
+                  kind: "hierarchy",
+                  input: {
+                    action: "ungroup",
+                    label: "Ungroup styled container",
+                    pageId: "page_welcome",
+                    groupId: "feature_group",
+                  },
+                },
+              ],
             },
           },
           context: pageContext,
@@ -8373,8 +8503,11 @@ describe("Renderer semantic hierarchy tool", () => {
           requestId: "hierarchy_stale",
           call: {
             toolCallId: "tool_hierarchy_stale",
-            toolName: DESIGN_HIERARCHY_TOOL_NAME,
-            input: groupInput,
+            toolName: DESIGN_EDIT_TOOL_NAME,
+            input: {
+              label: "Apply hierarchy edit",
+              edits: [{ kind: "hierarchy", input: groupInput }],
+            },
           },
           context: pageContext,
         },
@@ -8390,8 +8523,16 @@ describe("Renderer semantic hierarchy tool", () => {
           requestId: "hierarchy_wrong_page",
           call: {
             toolCallId: "tool_hierarchy_wrong_page",
-            toolName: DESIGN_HIERARCHY_TOOL_NAME,
-            input: { ...groupInput, pageId: "page_other" },
+            toolName: DESIGN_EDIT_TOOL_NAME,
+            input: {
+              label: "Apply hierarchy edit",
+              edits: [
+                {
+                  kind: "hierarchy",
+                  input: { ...groupInput, pageId: "page_other" },
+                },
+              ],
+            },
           },
           context: pageContext,
         },
@@ -8408,8 +8549,11 @@ describe("Renderer semantic hierarchy tool", () => {
           requestId: "hierarchy_cancelled",
           call: {
             toolCallId: "tool_hierarchy_cancelled",
-            toolName: DESIGN_HIERARCHY_TOOL_NAME,
-            input: groupInput,
+            toolName: DESIGN_EDIT_TOOL_NAME,
+            input: {
+              label: "Apply hierarchy edit",
+              edits: [{ kind: "hierarchy", input: groupInput }],
+            },
           },
           context: pageContext,
         },

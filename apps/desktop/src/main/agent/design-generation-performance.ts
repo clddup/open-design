@@ -8,7 +8,6 @@ import {
   DESIGN_FIRST_SLICE_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
   DESIGN_PLAN_TOOL_NAME,
-  DESIGN_REVIEW_TOOL_NAME,
 } from "@/shared/design-agent-tools.js";
 import type { RendererDesignToolPerformanceSample } from "./renderer-design-tool-host.js";
 import type { ModelProviderPerformanceSample } from "../model/model-provider-stream.js";
@@ -458,7 +457,6 @@ function classifyTool(toolName: string): ToolKind {
   )
     return "plan";
   if (toolName === DESIGN_CAPTURE_TOOL_NAME) return "capture";
-  if (toolName === DESIGN_REVIEW_TOOL_NAME) return "review";
   if (toolName === DESIGN_INSPECT_TOOL_NAME) return "inspect";
   if (
     toolName.startsWith("opendesign_") &&

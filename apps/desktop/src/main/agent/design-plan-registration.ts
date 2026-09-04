@@ -96,18 +96,10 @@ export function registerDesignWorkflowPlan(options: {
     [...previousStageTargetIds].every(
       (targetId) => !nextStageTargetIds.has(targetId),
     );
-  // A previous unfinished ledger is context, not automatic ownership of every
-  // matching target in a later user request. Resume its verified/drafted state
-  // only when the new Plan actually retains at least one incomplete target.
-  // Otherwise a deliberate redesign of an already verified artboard must open
-  // a fresh draft instead of being rejected as "already verified" before its
-  // first material transaction.
-  const recoverableDelivery = recoveryMatchesIncompletePlanTarget(
+  const recoverableTargets = resolveRecoverableTargets(
     options.recoverableDelivery,
     targets,
-  )
-    ? options.recoverableDelivery
-    : undefined;
+  );
   // Amendments are first constrained by identities that already own material
   // document state. Placement and reservation validation may otherwise report
   // a secondary error for a replacement ID before the caller learns that the
@@ -151,6 +143,12 @@ export function registerDesignWorkflowPlan(options: {
       designPlanReferenceStrategy(existing.plan),
       designPlanReferenceStrategy(plan),
     );
+  const globalMetadataChanged =
+    visualSystemChanged ||
+    briefFidelityChanged ||
+    designIntentChanged ||
+    designSkillsChanged ||
+    referenceStrategyChanged;
   const currentTargetIds = new Set(targets.map((target) => target.targetId));
   const targetsById = new Map<string, DesignDeliveryTargetState>(
     [...(existing?.targetsById ?? [])].filter(
@@ -168,16 +166,11 @@ export function registerDesignWorkflowPlan(options: {
         existing ? componentOccurrences(existing.plan, target.targetId) : [],
         componentOccurrences(plan, target.targetId),
       );
-      if (
-        targetChanged ||
-        visualSystemChanged ||
-        componentStrategyChanged ||
-        briefFidelityChanged ||
-        designIntentChanged ||
-        designSkillsChanged ||
-        referenceStrategyChanged
-      )
-        changedTargetIds.push(target.targetId);
+      const targetNeedsRework = targetChanged || componentStrategyChanged;
+      const shouldReopen =
+        targetNeedsRework ||
+        (current.delivery.status !== "verified" && globalMetadataChanged);
+      if (shouldReopen) changedTargetIds.push(target.targetId);
       targetsById.set(
         target.targetId,
         preserveMaterialTarget(
@@ -185,13 +178,7 @@ export function registerDesignWorkflowPlan(options: {
           target,
           inspection,
           reservedNodeIds,
-          targetChanged ||
-            visualSystemChanged ||
-            componentStrategyChanged ||
-            briefFidelityChanged ||
-            designIntentChanged ||
-            designSkillsChanged ||
-            referenceStrategyChanged,
+          shouldReopen,
         ),
       );
       continue;
@@ -201,11 +188,14 @@ export function registerDesignWorkflowPlan(options: {
       createTargetState(
         target,
         inspection,
-        recoverableDelivery,
+        recoverableTargets.get(target.targetId),
         reservedNodeIds,
       ),
     );
-    if (!current || !sameJson(current.planned, target)) {
+    if (
+      (!current || !sameJson(current.planned, target)) &&
+      recoverableTargets.get(target.targetId)?.status !== "verified"
+    ) {
       changedTargetIds.push(target.targetId);
     }
   }
@@ -229,6 +219,10 @@ export function registerDesignWorkflowPlan(options: {
     targetOrder,
     targetsById,
   };
+  state.planExecution.targets = state.planExecution.targets.filter(
+    (execution) =>
+      state.targetsById.get(execution.targetId)?.delivery.status !== "verified",
+  );
   normalizePlanExecution(state, inspection.revision);
   return {
     changedTargetIds: [...new Set(changedTargetIds)],
@@ -245,23 +239,6 @@ function normalizePlanExecution(
 ): void {
   let activeAssigned = false;
   for (const execution of state.planExecution.targets) {
-    const delivery = state.targetsById.get(execution.targetId)?.delivery;
-    if (delivery?.status === "verified") {
-      const revision = delivery.verifiedRevision ?? currentRevision;
-      execution.steps.forEach((step) => {
-        if (
-          step.status === "completed" &&
-          step.startedRevision !== undefined &&
-          step.completedRevision !== undefined
-        ) {
-          return;
-        }
-        step.status = "completed";
-        step.startedRevision = revision;
-        step.completedRevision = revision;
-      });
-      continue;
-    }
     let openSeen = false;
     for (const step of execution.steps) {
       if (!openSeen && step.status === "completed") continue;
@@ -289,17 +266,7 @@ function reconcilePlanExecution(
   const fresh = createInitialPlanExecution(plan, planRevision, currentRevision);
   if (!existing) return fresh;
 
-  const currentTargetIds = new Set(
-    plan.targets.map((target) => target.targetId),
-  );
-  const nextTargets = existing.planExecution.targets
-    .filter(
-      (target) =>
-        !currentTargetIds.has(target.targetId) &&
-        existing.targetsById.get(target.targetId)?.delivery.status ===
-          "verified",
-    )
-    .map((target) => structuredClone(target));
+  const nextTargets: DesignPlanExecution["targets"] = [];
   for (const target of fresh.targets) {
     const previous = existing.planExecution.targets.find(
       (candidate) => candidate.targetId === target.targetId,
@@ -324,7 +291,10 @@ function reconcileTargetExecution(
   next: readonly DesignPlanStepExecution[],
 ): { targetId: string; steps: DesignPlanStepExecution[] } {
   const locked = previous.filter(
-    (step) => step.kind === "implementation" && step.status !== "pending",
+    (step) =>
+      step.kind === "implementation" &&
+      step.status === "completed" &&
+      step.completedRevision !== undefined,
   );
   locked.forEach((step, index) => {
     const candidate = next[index];
@@ -491,16 +461,14 @@ function preserveMaterialTarget(
 function createTargetState(
   target: DesignPlanTarget,
   inspection: InspectedHierarchy,
-  recoverableDelivery: DesignDeliveryLedger | undefined,
+  recoverableTarget: DesignDeliveryTarget | undefined,
   reservedNodeIds: readonly string[],
 ): DesignDeliveryTargetState {
   const inspectedArtboard = inspection.nodesById.get(target.artboard.frameId);
-  const recovered = recoverableDelivery?.targets.find(
-    (candidate) =>
-      candidate.targetId === target.targetId &&
-      candidate.pageId === target.pageId &&
-      candidate.rootNodeId === target.artboard.frameId,
-  );
+  const recovered =
+    recoverableTarget?.targetId === target.targetId
+      ? recoverableTarget
+      : undefined;
   const recoveredAllocation =
     target.artboard.mode === "create" &&
     recovered?.allocatedRevision !== undefined;
@@ -556,8 +524,8 @@ function assertMaterialTargetsRemainStable(
   targets: readonly DesignPlanTarget[],
 ): void {
   if (!existing) return;
-  const materialTargets = [...existing.targetsById.values()].filter(
-    (target) => target.delivery.status !== "pending",
+  const materialTargets = [...existing.targetsById.values()].filter((target) =>
+    isMaterialDelivery(target.delivery),
   );
   if (
     materialTargets.length > 0 &&
@@ -764,19 +732,36 @@ function inspectedParentChainReaches(
   return false;
 }
 
-function recoveryMatchesIncompletePlanTarget(
+function resolveRecoverableTargets(
   delivery: DesignDeliveryLedger | undefined,
   targets: readonly DesignPlanTarget[],
-): boolean {
-  if (!delivery || delivery.activeTargetId === null) return false;
-  return targets.some((target) =>
-    delivery.targets.some(
-      (candidate) =>
-        candidate.status !== "verified" &&
-        candidate.targetId === target.targetId &&
-        candidate.pageId === target.pageId &&
-        candidate.rootNodeId === target.artboard.frameId,
-    ),
+): Map<string, DesignDeliveryTarget> {
+  if (!delivery?.activeTargetId) return new Map();
+  const active = delivery.targets.find(
+    (candidate) =>
+      candidate.targetId === delivery.activeTargetId &&
+      candidate.status !== "verified",
+  );
+  if (!active) return new Map();
+  const activeTarget = targets.find(
+    (candidate) =>
+      candidate.targetId === active.targetId &&
+      candidate.pageId === active.pageId &&
+      candidate.artboard.frameId === active.rootNodeId,
+  );
+  if (!activeTarget) return new Map();
+  const targetById = new Map(
+    targets.map((target) => [target.targetId, target]),
+  );
+  return new Map(
+    delivery.targets.flatMap((recovered) => {
+      const target = targetById.get(recovered.targetId);
+      return target &&
+        target.pageId === recovered.pageId &&
+        target.artboard.frameId === recovered.rootNodeId
+        ? [[recovered.targetId, recovered] as const]
+        : [];
+    }),
   );
 }
 
@@ -854,8 +839,7 @@ export function plannedNodeIdsForTarget(
   if (logoExploration?.targetId === targetId) {
     for (const direction of logoExploration.directions) {
       nodeIds.add(direction.rootNodeId);
-      nodeIds.add(direction.monochromeNodeId);
-      for (const nodeId of direction.smallSizeNodeIds) nodeIds.add(nodeId);
+      nodeIds.add(direction.masterNodeId);
     }
   }
   const strategy = designPlanComponentStrategy(plan);

@@ -5,10 +5,8 @@ import type {
 } from "@opendesign/agent-contracts";
 import {
   DESIGN_VECTOR_TOOL_NAME,
-  DesignVectorContract,
   type DesignVectorToolInput,
 } from "@/shared/design-agent-tools.js";
-import { formatValidationFailure } from "@/shared/contract-validation.js";
 import type { GlobalTaskCoordinator } from "./global-task-coordinator.js";
 
 export async function handleDesignVectorTool(input: {
@@ -20,15 +18,10 @@ export async function handleDesignVectorTool(input: {
 }): Promise<TrustedToolResult | null> {
   const { context, coordinator } = input;
   if (input.call.toolName !== DESIGN_VECTOR_TOOL_NAME) return null;
-  const parsed = DesignVectorContract.parse(input.call.input);
-  if (!parsed.ok) {
-    throw new TypeError(formatValidationFailure("Vector", parsed.issues));
-  }
-  const value = parsed.value;
+  const value = input.call.input as DesignVectorToolInput;
 
-  coordinator.assertVisualReviewBeforeWrite(context);
   const targetRefs = materialTargetRefs(value);
-  const targetIds = coordinator.resolveMaterialTargetIds(
+  const targetIds = coordinator.resolveMaterialTargetIdsIfPlanned(
     context,
     targetRefs.nodeIds,
     targetRefs.parentId,

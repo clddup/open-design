@@ -5,11 +5,37 @@ export function firstSliceModelInput(
   input: DesignFirstSliceToolInput,
 ): Record<string, unknown> {
   const value = structuredClone(input) as unknown as Record<string, unknown>;
-  for (const key of ["skillRefs", "briefFidelity", "referenceStrategy"]) {
+  for (const key of [
+    "version",
+    "objective",
+    "skillRefs",
+    "briefFidelity",
+    "referenceStrategy",
+  ]) {
     Reflect.deleteProperty(value, key);
   }
   for (const target of value.targets as Array<Record<string, unknown>>) {
     Reflect.deleteProperty(target, "qualityProfile");
+    Reflect.deleteProperty(target, "targetId");
+    Reflect.deleteProperty(target, "label");
+    Reflect.deleteProperty(target, "pageId");
+    Reflect.deleteProperty(target, "objective");
+    Reflect.deleteProperty(target, "layout");
+    Reflect.deleteProperty(target, "spacing");
+    const frame = target.frame as Record<string, unknown>;
+    const frameId = frame.frameId;
+    Reflect.deleteProperty(frame, "frameId");
+    Reflect.deleteProperty(frame, "x");
+    Reflect.deleteProperty(frame, "y");
+    for (const region of target.regions as Array<Record<string, unknown>>) {
+      if (region.parentId === frameId)
+        Reflect.deleteProperty(region, "parentId");
+    }
+  }
+  const firstSlice = value.firstSlice as Record<string, unknown>;
+  Reflect.deleteProperty(firstSlice, "targetId");
+  if (value.logoExploration) {
+    Reflect.deleteProperty(value.logoExploration, "targetId");
   }
   return value;
 }
@@ -30,7 +56,7 @@ export function firstSliceInput(): DesignFirstSliceToolInput {
       },
       visualThesis:
         "A directional editorial field expresses momentum instead of a generic mobile card stack.",
-      signatureMotif:
+      signatureDecision:
         "One cropped signal rail connects identity, next action, and progress.",
       typographyLanguage:
         "Editorial display type sets pace while compact neutral text preserves clarity.",

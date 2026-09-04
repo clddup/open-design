@@ -72,23 +72,6 @@ describe("Design Page Main tool handler", () => {
     expect(state.execute).not.toHaveBeenCalled();
   });
 
-  it("rejects malformed Page input before access or inspection checks", async () => {
-    const state = setup({
-      toolCallId: "delete_invalid",
-      toolName: DESIGN_PAGE_TOOL_NAME,
-      input: { action: "delete", label: "Delete Page" },
-    });
-
-    await expect(handleDesignPageTool(state.input)).rejects.toThrow(
-      /Page.*\/pageId/,
-    );
-    expect(state.coordinator.assertPageToolAccess).not.toHaveBeenCalled();
-    expect(
-      state.coordinator.assertPageLifecycleInspected,
-    ).not.toHaveBeenCalled();
-    expect(state.execute).not.toHaveBeenCalled();
-  });
-
   it("returns only approved Run-scoped Page structure capability", async () => {
     const call: ToolCallRequest = {
       toolCallId: "page_structure_access",

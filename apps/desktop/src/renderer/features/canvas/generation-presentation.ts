@@ -14,26 +14,18 @@ import type {
   LeaferGenerationSkeleton,
 } from "@opendesign/leafer-engine";
 import {
-  DESIGN_APPLY_TOOL_NAME,
-  DESIGN_ARRANGE_TOOL_NAME,
   DESIGN_CAPTURE_TOOL_NAME,
-  DESIGN_CHECKPOINT_TOOL_NAME,
   DESIGN_EDIT_TOOL_NAME,
   DESIGN_FIRST_SLICE_TOOL_NAME,
-  DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_PLAN_TOOL_NAME,
-  DESIGN_REVIEW_TOOL_NAME,
   DESIGN_VECTOR_TOOL_NAME,
   GENERATE_IMAGE_TOOL_NAME,
   IMPORT_SVG_TOOL_NAME,
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
   INTERNAL_IMPORT_SVG_TOOL_NAME,
   INTERNAL_UPDATE_IMAGE_TOOL_NAME,
-  DesignCheckpointContract,
   DesignPlanContract,
   designPlanTargets,
-  compileDesignFirstSliceToolInput,
-  FirstSliceContract,
   PLACE_IMAGE_TOOL_NAME,
   READ_IMAGE_TOOL_NAME,
   type DesignPlanTarget,
@@ -55,7 +47,6 @@ interface RequestedGenerationPlan {
 }
 
 interface RequestedGenerationTool {
-  checkpointAction?: "apply-and-capture" | "refine-and-capture";
   runId: string;
   toolName: string;
 }
@@ -95,9 +86,6 @@ export function projectGenerationPlanPresentationEvent(
   if (event.type === "run.completed") {
     return clearGenerationPlanPresentationRun(state, event.runId);
   }
-  if (event.type === "agent.error" && event.runId !== undefined) {
-    return clearGenerationPlanPresentationRun(state, event.runId);
-  }
   if (event.type === "tool.progress") {
     const callId = generationPlanCallId(event.runId, event.toolCallId);
     const requested = state.requestedToolByCallId[callId];
@@ -117,43 +105,14 @@ export function projectGenerationPlanPresentationEvent(
   }
   if (
     event.type === "tool.requested" &&
-    (event.toolName === DESIGN_PLAN_TOOL_NAME ||
-      event.toolName === DESIGN_FIRST_SLICE_TOOL_NAME)
+    event.toolName === DESIGN_PLAN_TOOL_NAME
   ) {
-    let plan: DesignPlanToolInput | undefined;
-    if (event.toolName === DESIGN_FIRST_SLICE_TOOL_NAME) {
-      const parsed = FirstSliceContract.parse(event.input);
-      plan = parsed.ok
-        ? compileDesignFirstSliceToolInput(parsed.value).plan
-        : undefined;
-    } else {
-      const parsed = DesignPlanContract.parse(event.input);
-      plan = parsed.ok ? parsed.value : undefined;
-    }
+    const parsed = DesignPlanContract.parse(event.input);
+    const plan = parsed.ok ? parsed.value : undefined;
     if (!plan) return state;
     const callId = generationPlanCallId(event.runId, event.toolCallId);
     return {
       ...state,
-      ...(event.toolName === DESIGN_FIRST_SLICE_TOOL_NAME
-        ? {
-            activityByRunId: {
-              ...state.activityByRunId,
-              [event.runId]: {
-                id: `${callId}:requested`,
-                phase: "building" as const,
-                runId: event.runId,
-                toolCallId: event.toolCallId,
-              },
-            },
-            requestedToolByCallId: {
-              ...state.requestedToolByCallId,
-              [callId]: {
-                runId: event.runId,
-                toolName: event.toolName,
-              },
-            },
-          }
-        : {}),
       requestedByCallId: {
         ...state.requestedByCallId,
         [callId]: {
@@ -165,21 +124,16 @@ export function projectGenerationPlanPresentationEvent(
     };
   }
   if (event.type === "tool.requested") {
-    if (!state.acceptedByRunId[event.runId]) return state;
-    const checkpointResult =
-      event.toolName === DESIGN_CHECKPOINT_TOOL_NAME
-        ? DesignCheckpointContract.parse(event.input)
-        : undefined;
-    const checkpointInput = checkpointResult?.ok
-      ? checkpointResult.value
-      : undefined;
-    const phase =
-      checkpointInput?.action === "refine-and-capture"
-        ? "refining"
-        : generationPhaseForTool(
-            event.toolName,
-            state.reviewedByRunId[event.runId] === true,
-          );
+    if (
+      !state.acceptedByRunId[event.runId] &&
+      event.toolName !== DESIGN_FIRST_SLICE_TOOL_NAME
+    ) {
+      return state;
+    }
+    const phase = generationPhaseForTool(
+      event.toolName,
+      state.reviewedByRunId[event.runId] === true,
+    );
     if (!phase) return state;
     const callId = generationPlanCallId(event.runId, event.toolCallId);
     return {
@@ -198,9 +152,6 @@ export function projectGenerationPlanPresentationEvent(
         [callId]: {
           runId: event.runId,
           toolName: event.toolName,
-          ...(checkpointInput
-            ? { checkpointAction: checkpointInput.action }
-            : {}),
         },
       },
     };
@@ -274,11 +225,39 @@ export function projectGenerationPlanPresentationEvent(
     };
   }
 
+  const firstSlicePlan =
+    requestedTool.toolName === DESIGN_FIRST_SLICE_TOOL_NAME
+      ? acceptedGenerationPlan(event.result)
+      : undefined;
+  if (firstSlicePlan) {
+    return {
+      ...state,
+      acceptedByRunId: {
+        ...state.acceptedByRunId,
+        [event.runId]: {
+          id: callId,
+          plan: firstSlicePlan,
+          runId: event.runId,
+          toolCallId: event.toolCallId,
+        },
+      },
+      activityByRunId: {
+        ...state.activityByRunId,
+        [event.runId]: {
+          id: `${callId}:accepted`,
+          phase: hasIndependentVisualCritic(event.result)
+            ? "refining"
+            : "structuring",
+          runId: event.runId,
+          toolCallId: event.toolCallId,
+        },
+      },
+      requestedToolByCallId,
+    };
+  }
+
   const reviewedByRunId = { ...state.reviewedByRunId };
-  const reviewCompleted =
-    requestedTool.toolName === DESIGN_REVIEW_TOOL_NAME ||
-    requestedTool.checkpointAction === "refine-and-capture" ||
-    hasIndependentVisualCritic(event.result);
+  const reviewCompleted = hasIndependentVisualCritic(event.result);
   if (reviewCompleted) reviewedByRunId[event.runId] = true;
   const phase = reviewCompleted
     ? "refining"
@@ -643,20 +622,13 @@ function generationPhaseForTool(
   ) {
     return "assets";
   }
-  if (
-    toolName === DESIGN_CAPTURE_TOOL_NAME ||
-    toolName === DESIGN_REVIEW_TOOL_NAME ||
-    toolName === DESIGN_CHECKPOINT_TOOL_NAME
-  ) {
+  if (toolName === DESIGN_CAPTURE_TOOL_NAME) {
     return "reviewing";
   }
   if (
-    toolName === DESIGN_APPLY_TOOL_NAME ||
     toolName === DESIGN_EDIT_TOOL_NAME ||
     toolName === DESIGN_FIRST_SLICE_TOOL_NAME ||
     toolName === INTERNAL_DESIGN_APPLY_TOOL_NAME ||
-    toolName === DESIGN_HIERARCHY_TOOL_NAME ||
-    toolName === DESIGN_ARRANGE_TOOL_NAME ||
     toolName === DESIGN_VECTOR_TOOL_NAME ||
     toolName === PLACE_IMAGE_TOOL_NAME ||
     toolName === UPDATE_IMAGE_TOOL_NAME ||
@@ -682,11 +654,12 @@ function generationPlanCallId(runId: string, toolCallId: string): string {
 
 function acceptedGenerationPlan(
   value: unknown,
-  plan: DesignPlanToolInput,
+  plan?: DesignPlanToolInput,
 ): DesignPlanToolInput | undefined {
   if (!isRecord(value)) return undefined;
   const parsed = DesignPlanContract.parse(value.plan, { canonical: true });
   const authoritative = parsed.ok ? parsed.value : plan;
+  if (!authoritative) return undefined;
   const common =
     value.ok === true &&
     (value.status === "accepted" ||

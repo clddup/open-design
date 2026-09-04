@@ -11,7 +11,7 @@ import {
 import { describe, expect, it } from "vitest";
 import {
   DESIGN_CAPTURE_TOOL_NAME,
-  DESIGN_CHECKPOINT_TOOL_NAME,
+  DESIGN_EDIT_TOOL_NAME,
   DESIGN_PLAN_TOOL_NAME,
   type DesignPlanToolInput,
 } from "@/shared/design-agent-tools";
@@ -111,7 +111,7 @@ const generationPlan = {
     },
     visualThesis:
       "An asymmetric editorial collision turns the launch message into a memorable visual event.",
-    signatureMotif:
+    signatureDecision:
       "One organic hero silhouette cuts through a rigid typographic grid.",
     typographyLanguage:
       "Large editorial display type contrasts with tightly controlled supporting copy.",
@@ -405,6 +405,15 @@ describe("Renderer typed plan skeleton presentation", () => {
 
     expect(
       projectGenerationPlanPresentationEvent(afterCompletion, {
+        type: "agent.error",
+        runId: "run_plan",
+        code: "provider_timeout",
+        message: "Provider timed out before the terminal event",
+      }),
+    ).toEqual(afterCompletion);
+
+    expect(
+      projectGenerationPlanPresentationEvent(afterCompletion, {
         type: "run.completed",
         runId: "run_plan",
         finishedAt: "2026-08-11T12:00:00.000Z",
@@ -502,8 +511,8 @@ describe("Renderer typed plan skeleton presentation", () => {
       type: "tool.requested",
       runId: "run_stages",
       toolCallId: "tool_apply_draft",
-      toolName: "opendesign_apply_transaction",
-      input: { label: "Build draft", commands: [] },
+      toolName: DESIGN_EDIT_TOOL_NAME,
+      input: { edits: [] },
       risk: "design_write",
     });
     expect(requested.activityByRunId.run_stages).toEqual({
@@ -874,59 +883,6 @@ describe("Renderer typed plan skeleton presentation", () => {
     expect(generationActivityMessageKey("recovering")).toBe(
       "agent.canvasPhaseRecovering",
     );
-  });
-
-  it("projects independent-critic refinement checkpoints as a refining stage", () => {
-    const requested = projectGenerationPlanPresentationEvent(
-      {
-        ...EMPTY_GENERATION_PLAN_PRESENTATION_STATE,
-        acceptedByRunId: {
-          run_checkpoint: {
-            id: "run_checkpoint:plan",
-            plan: generationPlan,
-            runId: "run_checkpoint",
-            toolCallId: "plan",
-          },
-        },
-      },
-      {
-        type: "tool.requested",
-        runId: "run_checkpoint",
-        toolCallId: "checkpoint_1",
-        toolName: DESIGN_CHECKPOINT_TOOL_NAME,
-        risk: "design_write",
-        input: {
-          version: 1,
-          action: "refine-and-capture",
-          refinement: {
-            label: "Remove obsolete badge",
-            commands: [
-              {
-                commandId: "remove_badge",
-                type: "delete_element",
-                nodeId: "obsolete_badge",
-              },
-            ],
-          },
-        },
-      },
-    );
-
-    expect(requested.activityByRunId.run_checkpoint).toMatchObject({
-      phase: "refining",
-    });
-    const completed = projectGenerationPlanPresentationEvent(requested, {
-      type: "tool.completed",
-      runId: "run_checkpoint",
-      toolCallId: "checkpoint_1",
-      result: { ok: true },
-      revision: 5,
-      transactionId: "transaction_checkpoint",
-    });
-    expect(completed.reviewedByRunId.run_checkpoint).toBe(true);
-    expect(completed.activityByRunId.run_checkpoint).toMatchObject({
-      phase: "refining",
-    });
   });
 });
 

@@ -34,7 +34,7 @@
 生产工具、compact first-slice、持久任务恢复和 Renderer 只接受同一个 `DesignPlanToolInput version: 1`。产品尚未正式发布，旧实验契约 v2–v7 已从类型、schema、validator、compiler 和恢复读取路径中删除，不提供 fallback、alias 或迁移分支。当前契约一次包含 target、quality profile、component strategy、brief fidelity，以及：
 
 - `designIntent.subject/audience/primaryJob`；
-- `visualThesis` 与必须在首个真实 slice 可见的 `signatureMotif`；
+- `visualThesis` 与必须在首个真实 slice 可见的 `signatureDecision`；
 - `typographyLanguage`、`colorMaterialLanguage`、`compositionTension`；
 - 至少三个具体 `antiPatterns`；
 - 由宿主绑定的当前内置 `skillRefs {id}`；skill 内容直接来自当前应用构建，不维护独立功能版本或手工内容哈希。

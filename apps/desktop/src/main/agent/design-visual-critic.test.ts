@@ -13,19 +13,8 @@ import {
 
 const criterionIds = [
   "visual-thesis",
-  "signature-motif",
-  "composition-tension",
-  "typography-character",
-  "material-coherence",
   "template-avoidance",
-  "glance-legibility",
-  "subject-specificity",
   "craft-precision",
-  "black-silhouette",
-  "counterform-contour",
-  "optical-balance",
-  "small-size-recognition",
-  "monochrome-integrity",
   "brand-color-system",
   "concept-divergence",
   "color-system-divergence",
@@ -35,7 +24,16 @@ const criterionIds = [
 ] as const;
 
 const identitySystemCriterionIds = [
-  ...criterionIds.slice(0, 15),
+  "visual-thesis",
+  "signature-decision",
+  "template-avoidance",
+  "craft-precision",
+  "black-silhouette",
+  "counterform-contour",
+  "optical-balance",
+  "small-size-recognition",
+  "monochrome-integrity",
+  "brand-color-system",
   "symbol-wordmark-relationship",
   "app-icon-optical-redraw",
   "app-icon-ecosystem-distinction",
@@ -44,13 +42,8 @@ const identitySystemCriterionIds = [
 
 const singleMarkCriterionIds = [
   "visual-thesis",
-  "signature-motif",
-  "composition-tension",
-  "typography-character",
-  "material-coherence",
+  "signature-decision",
   "template-avoidance",
-  "glance-legibility",
-  "subject-specificity",
   "craft-precision",
   "black-silhouette",
   "counterform-contour",
@@ -60,20 +53,34 @@ const singleMarkCriterionIds = [
   "brand-color-system",
 ] as const;
 
-const genericCriterionIds = criterionIds.slice(0, 9);
+const genericCriterionIds = [
+  "visual-thesis",
+  "signature-decision",
+  "composition-tension",
+  "typography-character",
+  "material-coherence",
+  "template-avoidance",
+  "glance-legibility",
+  "subject-specificity",
+  "craft-precision",
+] as const;
 
 describe("independent design visual critic", () => {
   it("blocks a generic Logo when one non-compensating critical score fails", async () => {
     let capturedRequest: Omit<ModelRequest, "signal"> | undefined;
+    const context = criticContext();
+    context.plan.logoOutputs = ["symbol"];
+    delete context.plan.logoExploration;
+    const baseline = scorecardFor(singleMarkCriterionIds, 4);
     const result = await runIndependentDesignVisualCritic(
       {
         complete: (request) => {
           capturedRequest = request;
           return Promise.resolve(
             responseEvents(request.attemptId, {
-              ...scorecard(4),
+              ...baseline,
               criteria: {
-                ...scorecard(4).criteria,
+                ...baseline.criteria,
                 "black-silhouette": {
                   score: 2,
                   evidence:
@@ -86,7 +93,7 @@ describe("independent design visual critic", () => {
           );
         },
       },
-      criticContext(),
+      context,
       new AbortController().signal,
     );
 
@@ -323,6 +330,36 @@ describe("independent design visual critic", () => {
     ).rejects.toThrow("Independent critic did not submit");
   });
 
+  it("does not spend a second Provider round trip repairing a malformed critic response", async () => {
+    const requests: Array<Omit<ModelRequest, "signal">> = [];
+    await expect(
+      runIndependentDesignVisualCritic(
+        {
+          complete: (request) => {
+            requests.push(request);
+            return Promise.resolve([
+              {
+                type: "block.completed",
+                attemptId: request.attemptId,
+                block: {
+                  id: "critic_prose",
+                  type: "text",
+                  text: "I will submit the scorecard next.",
+                },
+              },
+              ...responseEvents(request.attemptId, scorecard(4)),
+            ]);
+          },
+        },
+        criticContext("final"),
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow("Independent critic did not submit");
+
+    expect(requests).toHaveLength(1);
+    expect(requests[0]?.latencyProfile).toBe("interactive");
+  });
+
   it("allows an honestly ready first draft and requires the exact JPEG attachment shape", async () => {
     const result = await runIndependentDesignVisualCritic(
       {
@@ -436,11 +473,10 @@ describe("independent design visual critic", () => {
     expect(parsed).toMatchObject({
       userRequest: context.userRequest,
       deliverable: "ui",
-      calibration: context.plan.designIntent.calibration,
+      designIntent: context.plan.designIntent,
+      visualSystem: context.plan.visualSystem,
       deliveryCaptureAttachmentId: context.attachment.attachmentId,
     });
-    expect(parsed).not.toHaveProperty("designIntent");
-    expect(parsed).not.toHaveProperty("visualSystem");
   });
 
   it("reviews declared visual references as a non-compensating criterion", async () => {
@@ -674,7 +710,7 @@ function logoPlan(): DesignPlanToolInput {
         density: "airy",
       },
       visualThesis: "Open structure becomes a precise ownable contour",
-      signatureMotif: "One open counterform creates the identifying gesture",
+      signatureDecision: "One open counterform creates the identifying gesture",
       typographyLanguage: "Restrained wordmark with optical edits",
       colorMaterialLanguage:
         "A precise electric blue primary carries recognition while black and white remain proof variants",
@@ -706,8 +742,7 @@ function logoPlan(): DesignPlanToolInput {
               "Electric blue energizes the open contour while deep ink preserves precision.",
           },
           rootNodeId: "logo_direction",
-          monochromeNodeId: "logo_monochrome",
-          smallSizeNodeIds: ["logo_32", "logo_24", "logo_16"],
+          masterNodeId: "logo_master",
         },
         {
           conceptId: "modular-path",
@@ -722,12 +757,7 @@ function logoPlan(): DesignPlanToolInput {
               "Signal orange makes modular assembly feel active and materially distinct.",
           },
           rootNodeId: "logo_direction_modular",
-          monochromeNodeId: "logo_monochrome_modular",
-          smallSizeNodeIds: [
-            "logo_modular_32",
-            "logo_modular_24",
-            "logo_modular_16",
-          ],
+          masterNodeId: "logo_master_modular",
         },
         {
           conceptId: "spatial-link",
@@ -742,12 +772,7 @@ function logoPlan(): DesignPlanToolInput {
               "Violet separates the interlocking planes while maintaining one ownable silhouette.",
           },
           rootNodeId: "logo_direction_spatial",
-          monochromeNodeId: "logo_monochrome_spatial",
-          smallSizeNodeIds: [
-            "logo_spatial_32",
-            "logo_spatial_24",
-            "logo_spatial_16",
-          ],
+          masterNodeId: "logo_master_spatial",
         },
       ],
     },

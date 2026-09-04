@@ -43,15 +43,12 @@ import {
   type VectorOperationPlan,
 } from "@opendesign/editor-runtime";
 import {
-  DESIGN_ARRANGE_TOOL_NAME,
   DESIGN_CAPTURE_TOOL_NAME,
   INTERNAL_DESIGN_COMPONENT_TOOL_NAME,
   EXPORT_RASTER_TOOL_NAME,
   EXPORT_SVG_TOOL_NAME,
-  DESIGN_APPLY_TOOL_NAME,
   DESIGN_EDIT_TOOL_NAME,
   DESIGN_FONT_TOOL_NAME,
-  DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
   DESIGN_PAGE_TOOL_NAME,
   DESIGN_TEXT_RANGE_TOOL_NAME,
@@ -60,28 +57,19 @@ import {
   INTERNAL_IMPORT_SVG_TOOL_NAME,
   INTERNAL_READ_IMAGE_SOURCE_TOOL_NAME,
   INTERNAL_UPDATE_IMAGE_TOOL_NAME,
-  DesignApplyContract,
-  DesignArrangeContract,
-  DesignComponentContract,
-  DesignFontContract,
-  DesignHierarchyContract,
-  EditDesignContract,
-  DesignPageContract,
-  DesignTextRangeContract,
-  DesignVectorContract,
-  ExportRasterContract,
-  ExportSvgContract,
-  InternalImportSvgContract,
-  InternalReadImageSourceContract,
-  InternalUpdateImageContract,
   type DesignComponentToolInput,
   type DesignFontToolInput,
   type DesignPageToolInput,
   type DesignTextRangeToolInput,
+  type DesignVectorToolInput,
+  type ExportRasterToolInput,
+  type ExportSvgToolInput,
   type InternalDesignApplyToolInput,
   type InternalDesignEditToolInput,
+  type InternalImportSvgToolInput,
+  type InternalReadImageSourceToolInput,
+  type InternalUpdateImageToolInput,
 } from "@/shared/design-agent-tools";
-import { formatValidationFailure } from "@/shared/contract-validation";
 import { createAgentDesignIdAllocation } from "@/shared/design-id-allocation";
 import type {
   RendererDesignToolProgressPhase,
@@ -168,6 +156,7 @@ async function executeDesignToolRequestUnsafe(
 ): Promise<RendererDesignToolResponse> {
   const snapshot = runtime.getSnapshot();
   const document = snapshot.document;
+  const internalApplyInput = internalDesignApplyInput(request);
   options.onProgress?.("accepted", 0.02);
   if (document.documentId !== request.context.documentId) {
     throw new Error("The active Design File changed before tool execution");
@@ -239,13 +228,7 @@ async function executeDesignToolRequestUnsafe(
   }
 
   if (request.call.toolName === INTERNAL_DESIGN_COMPONENT_TOOL_NAME) {
-    const parsed = DesignComponentContract.parse(request.call.input);
-    if (!parsed.ok) {
-      throw new TypeError(
-        "Renderer received invalid canonical Component input",
-      );
-    }
-    const input = parsed.value;
+    const input = request.call.input as DesignComponentToolInput;
     if (document.revision !== request.context.revision) {
       throw designWorkflowError(
         "revision_conflict",
@@ -357,8 +340,8 @@ async function executeDesignToolRequestUnsafe(
   if (document.revision !== request.context.revision) {
     if (
       document.revision < request.context.revision ||
-      (!canRebasePlannedInsert(request, document) &&
-        !canRebaseNewDesignFileAssets(request, document))
+      (!canRebasePlannedInsert(request, internalApplyInput, document) &&
+        !canRebaseNewDesignFileAssets(internalApplyInput, document))
     ) {
       throw designWorkflowError(
         "revision_conflict",
@@ -368,11 +351,7 @@ async function executeDesignToolRequestUnsafe(
   }
 
   if (request.call.toolName === DESIGN_FONT_TOOL_NAME) {
-    const parsed = DesignFontContract.parse(request.call.input);
-    if (!parsed.ok) {
-      throw new TypeError("Renderer received invalid canonical Font input");
-    }
-    const input = parsed.value;
+    const input = request.call.input as DesignFontToolInput;
     assertPageWithinMutationTarget(
       input.pageId,
       request.context.mutationTarget,
@@ -423,13 +402,7 @@ async function executeDesignToolRequestUnsafe(
   }
 
   if (request.call.toolName === DESIGN_TEXT_RANGE_TOOL_NAME) {
-    const parsed = DesignTextRangeContract.parse(request.call.input);
-    if (!parsed.ok) {
-      throw new TypeError(
-        "Renderer received invalid canonical Text Range input",
-      );
-    }
-    const input = parsed.value;
+    const input = request.call.input as DesignTextRangeToolInput;
     assertPageWithinMutationTarget(
       input.pageId,
       request.context.mutationTarget,
@@ -482,11 +455,7 @@ async function executeDesignToolRequestUnsafe(
   }
 
   if (request.call.toolName === DESIGN_PAGE_TOOL_NAME) {
-    const parsed = DesignPageContract.parse(request.call.input);
-    if (!parsed.ok) {
-      throw new TypeError("Renderer received invalid canonical Page input");
-    }
-    const input = parsed.value;
+    const input = request.call.input as DesignPageToolInput;
     assertPageToolMutationTarget(input, request.context.mutationTarget);
     throwIfAgentGenerationAborted(options.signal);
     const safeToolCallId =
@@ -613,13 +582,7 @@ async function executeDesignToolRequestUnsafe(
   }
 
   if (request.call.toolName === INTERNAL_IMPORT_SVG_TOOL_NAME) {
-    const parsed = InternalImportSvgContract.parse(request.call.input);
-    if (!parsed.ok) {
-      throw new TypeError(
-        formatValidationFailure("internal SVG import", parsed.issues),
-      );
-    }
-    const input = parsed.value;
+    const input = request.call.input as InternalImportSvgToolInput;
     assertPageWithinMutationTarget(
       input.pageId,
       request.context.mutationTarget,
@@ -706,13 +669,7 @@ async function executeDesignToolRequestUnsafe(
   }
 
   if (request.call.toolName === EXPORT_RASTER_TOOL_NAME) {
-    const parsed = ExportRasterContract.parse(request.call.input);
-    if (!parsed.ok) {
-      throw new TypeError(
-        "Renderer received invalid canonical Raster export input",
-      );
-    }
-    const input = parsed.value;
+    const input = request.call.input as ExportRasterToolInput;
     assertPageWithinMutationTarget(
       input.pageId,
       request.context.mutationTarget,
@@ -756,13 +713,7 @@ async function executeDesignToolRequestUnsafe(
   }
 
   if (request.call.toolName === EXPORT_SVG_TOOL_NAME) {
-    const parsed = ExportSvgContract.parse(request.call.input);
-    if (!parsed.ok) {
-      throw new TypeError(
-        "Renderer received invalid canonical SVG export input",
-      );
-    }
-    const input = parsed.value;
+    const input = request.call.input as ExportSvgToolInput;
     assertPageWithinMutationTarget(
       input.pageId,
       request.context.mutationTarget,
@@ -801,340 +752,16 @@ async function executeDesignToolRequestUnsafe(
   }
 
   if (request.call.toolName === DESIGN_EDIT_TOOL_NAME) {
-    const parsed = EditDesignContract.parse(request.call.input, {
-      canonical: true,
-      internal: true,
-    });
-    if (!parsed.ok) {
-      throw new TypeError(
-        formatValidationFailure("Edit Design", parsed.issues),
-      );
-    }
-    return executeAtomicEditDesign(request, runtime, parsed.value, options);
-  }
-
-  if (request.call.toolName === DESIGN_HIERARCHY_TOOL_NAME) {
-    const parsed = DesignHierarchyContract.parse(request.call.input);
-    if (!parsed.ok) {
-      throw new TypeError(
-        "Renderer received invalid canonical Hierarchy input",
-      );
-    }
-    const input = parsed.value;
-    assertPageWithinMutationTarget(
-      input.pageId,
-      request.context.mutationTarget,
-      "Hierarchy",
+    return executeAtomicEditDesign(
+      request,
+      runtime,
+      request.call.input as InternalDesignEditToolInput,
+      options,
     );
-    const commandPrefix =
-      `hierarchy_${input.action}_${request.call.toolCallId}`.slice(0, 200);
-    const plan = planDesignHierarchyTool(document, input, commandPrefix);
-    if (!plan.ok) {
-      throw new Error(`hierarchy.${plan.code}: ${plan.message}`);
-    }
-    assertCommandsWithinMutationTarget(
-      document,
-      plan.commands,
-      request.context.mutationTarget,
-    );
-    const transactionId =
-      `transaction_agent_hierarchy_${request.call.toolCallId}_${Date.now()}`.slice(
-        0,
-        256,
-      );
-    const transaction = {
-      transactionId,
-      documentId: document.documentId,
-      baseRevision: document.revision,
-      actor: {
-        type: "agent",
-        id: `agent_${request.context.sessionId}`,
-        displayName: "OpenDesign Agent",
-      },
-      label: input.label,
-      commands: plan.commands,
-    } satisfies DesignTransaction;
-    throwIfAgentGenerationAborted(options.signal);
-    const preview = runtime.preview(transaction);
-    if (!preview.ok) {
-      throw designTransactionToolError(preview.error, transaction.commands);
-    }
-    throwIfAgentGenerationAborted(options.signal);
-    const result = runtime.apply(transaction);
-    if (!result.ok) {
-      throw designTransactionToolError(result.error, transaction.commands);
-    }
-    const appliedDocument = runtime.getSnapshot().document;
-    const childNodeIds =
-      input.action === "group" || input.action === "create-mask"
-        ? (appliedDocument.nodesById[input.groupId]?.childIds ?? [])
-        : input.action === "ungroup"
-          ? plan.selectionNodeIds
-          : input.action === "create-boolean" ||
-              input.action === "set-boolean-operation"
-            ? (appliedDocument.nodesById[input.booleanId]?.childIds ?? [])
-            : input.action === "ungroup-boolean"
-              ? plan.selectionNodeIds
-              : undefined;
-    const resultParentId =
-      input.action === "reparent"
-        ? input.parentId
-        : input.action === "reorder"
-          ? (appliedDocument.nodesById[plan.selectionNodeIds[0] ?? ""]
-              ?.parentId ?? null)
-          : undefined;
-    const siblingOrder =
-      input.action === "reorder" || input.action === "reparent"
-        ? resultParentId
-          ? appliedDocument.nodesById[resultParentId]?.childIds
-          : appliedDocument.pagesById[input.pageId]?.rootNodeIds
-        : undefined;
-    let hierarchyResult: Record<string, unknown>;
-    switch (input.action) {
-      case "reorder":
-        hierarchyResult = {
-          order: input.order,
-          nodeIds: plan.selectionNodeIds,
-          siblingOrder: siblingOrder ?? [],
-        };
-        break;
-      case "reparent":
-        hierarchyResult = {
-          nodeIds: plan.selectionNodeIds,
-          parentId: input.parentId,
-          index: input.index,
-          siblingOrder: siblingOrder ?? [],
-        };
-        break;
-      case "create-mask":
-        hierarchyResult = {
-          groupId: input.groupId,
-          maskNodeId: childNodeIds?.[0],
-          maskType: input.maskType,
-          childNodeIds,
-        };
-        break;
-      case "set-mask-type":
-        hierarchyResult = {
-          maskNodeId: input.maskNodeId,
-          maskType: input.maskType,
-        };
-        break;
-      case "remove-mask":
-        hierarchyResult = { maskNodeId: input.maskNodeId };
-        break;
-      case "create-boolean":
-      case "set-boolean-operation":
-        hierarchyResult = {
-          booleanId: input.booleanId,
-          operation: input.operation,
-          childNodeIds,
-        };
-        break;
-      case "ungroup-boolean":
-        hierarchyResult = { booleanId: input.booleanId, childNodeIds };
-        break;
-      case "group":
-      case "ungroup":
-        hierarchyResult = { groupId: input.groupId, childNodeIds };
-        break;
-    }
-    const planWarnings: readonly string[] =
-      "warnings" in plan && Array.isArray(plan.warnings) ? plan.warnings : [];
-    const warnings = [...new Set([...planWarnings, ...result.warnings])];
-    return {
-      requestId: request.requestId,
-      ok: true,
-      result: {
-        observedRevision: result.revision.revision,
-        content: {
-          ok: true,
-          action: input.action,
-          label: input.label,
-          pageId: input.pageId,
-          ...hierarchyResult,
-          revision: result.revision.revision,
-          atomic: true,
-          changes: result.changes,
-          warnings,
-        },
-        designRevision: {
-          previousRevision: transaction.baseRevision,
-          revision: result.revision.revision,
-          transactionId: transaction.transactionId,
-        },
-      },
-    };
-  }
-
-  if (request.call.toolName === DESIGN_ARRANGE_TOOL_NAME) {
-    const parsed = DesignArrangeContract.parse(request.call.input);
-    if (!parsed.ok) {
-      throw new TypeError("Renderer received invalid canonical Arrange input");
-    }
-    const input = parsed.value;
-    assertPageWithinMutationTarget(
-      input.pageId,
-      request.context.mutationTarget,
-      "Arrangement",
-    );
-    const commandPrefix =
-      `arrange_${input.action}_${request.call.toolCallId}`.slice(0, 200);
-    const plan = planDesignArrangeTool(document, input, commandPrefix);
-    if (!plan.ok) {
-      throw new Error(`arrange.${plan.code}: ${plan.message}`);
-    }
-    assertCommandsWithinMutationTarget(
-      document,
-      plan.commands,
-      request.context.mutationTarget,
-      {
-        allowPageGuideCommands:
-          input.action === "set-ruler-guides" && input.target === "page",
-      },
-    );
-    const transaction = {
-      transactionId:
-        `transaction_agent_arrange_${request.call.toolCallId}_${Date.now()}`.slice(
-          0,
-          256,
-        ),
-      documentId: document.documentId,
-      baseRevision: document.revision,
-      actor: {
-        type: "agent",
-        id: `agent_${request.context.sessionId}`,
-        displayName: "OpenDesign Agent",
-      },
-      label: input.label,
-      commands: plan.commands,
-    } satisfies DesignTransaction;
-    throwIfAgentGenerationAborted(options.signal);
-    const preview = runtime.preview(transaction);
-    if (!preview.ok) {
-      throw designTransactionToolError(preview.error, transaction.commands);
-    }
-    throwIfAgentGenerationAborted(options.signal);
-    const result = runtime.apply(transaction);
-    if (!result.ok) {
-      throw designTransactionToolError(result.error, transaction.commands);
-    }
-    return {
-      requestId: request.requestId,
-      ok: true,
-      result: {
-        observedRevision: result.revision.revision,
-        content: {
-          ok: true,
-          action: input.action,
-          label: input.label,
-          pageId: input.pageId,
-          nodeIds:
-            "selectionNodeIds" in plan
-              ? plan.selectionNodeIds
-              : "nodeIds" in plan
-                ? plan.nodeIds
-                : [plan.nodeId],
-          ...(input.action === "resize-frame"
-            ? {
-                frameId: input.frameId,
-                width: input.width,
-                height: input.height,
-              }
-            : {}),
-          ...(input.action === "set-constraints"
-            ? { nodeId: input.nodeId, constraints: input.constraints }
-            : {}),
-          ...(input.action === "set-rotation-origin"
-            ? { nodeId: input.nodeId, origin: input.origin }
-            : {}),
-          ...(input.action === "set-auto-layout"
-            ? { frameId: input.frameId, autoLayout: input.autoLayout }
-            : {}),
-          ...(input.action === "set-layout-sizing"
-            ? { nodeId: input.nodeId, sizing: input.sizing }
-            : {}),
-          ...(input.action === "set-layout-positioning"
-            ? {
-                nodeId: input.nodeId,
-                positioning: input.positioning,
-                ...(input.constraints
-                  ? { constraints: input.constraints }
-                  : {}),
-              }
-            : {}),
-          ...(input.action === "set-layout-limits"
-            ? { nodeId: input.nodeId, limits: input.limits }
-            : {}),
-          ...(input.action === "set-layout-guides"
-            ? { frameId: input.frameId, layoutGuides: input.layoutGuides }
-            : {}),
-          ...(input.action === "set-ruler-guides"
-            ? {
-                target: input.target,
-                ...(input.target === "frame" ? { frameId: input.frameId } : {}),
-                guides: input.guides,
-              }
-            : {}),
-          ...(input.action === "set-grid-placement"
-            ? { nodeId: input.nodeId, placement: input.placement }
-            : {}),
-          ...(input.action === "reorder-grid-tracks"
-            ? {
-                frameId: input.frameId,
-                axis: input.axis,
-                movements: "movements" in plan ? plan.movements : [],
-              }
-            : {}),
-          ...(input.action !== "resize-frame" &&
-          input.action !== "set-constraints" &&
-          input.action !== "set-auto-layout" &&
-          input.action !== "set-layout-sizing" &&
-          input.action !== "set-layout-positioning" &&
-          input.action !== "set-layout-limits" &&
-          input.action !== "set-layout-guides" &&
-          input.action !== "set-ruler-guides" &&
-          input.action !== "set-grid-placement" &&
-          input.action !== "reorder-grid-tracks" &&
-          "orderedNodeIds" in plan
-            ? { orderedNodeIds: plan.orderedNodeIds }
-            : {}),
-          ...(!("resolvedSpacing" in plan) || plan.resolvedSpacing === undefined
-            ? {}
-            : { resolvedSpacing: plan.resolvedSpacing }),
-          ...(!("tidyUpDimension" in plan) || plan.tidyUpDimension === undefined
-            ? {}
-            : { tidyUpDimension: plan.tidyUpDimension }),
-          ...(!("resolvedHorizontalSpacing" in plan) ||
-          plan.resolvedHorizontalSpacing === undefined
-            ? {}
-            : {
-                resolvedHorizontalSpacing: plan.resolvedHorizontalSpacing,
-              }),
-          ...(!("resolvedVerticalSpacing" in plan) ||
-          plan.resolvedVerticalSpacing === undefined
-            ? {}
-            : { resolvedVerticalSpacing: plan.resolvedVerticalSpacing }),
-          revision: result.revision.revision,
-          atomic: true,
-          changes: result.changes,
-          warnings: result.warnings,
-        },
-        designRevision: {
-          previousRevision: transaction.baseRevision,
-          revision: result.revision.revision,
-          transactionId: transaction.transactionId,
-        },
-      },
-    };
   }
 
   if (request.call.toolName === DESIGN_VECTOR_TOOL_NAME) {
-    const parsed = DesignVectorContract.parse(request.call.input);
-    if (!parsed.ok) {
-      throw new TypeError("Renderer received invalid canonical Vector input");
-    }
-    const input = parsed.value;
+    const input = request.call.input as DesignVectorToolInput;
     assertPageWithinMutationTarget(
       input.pageId,
       request.context.mutationTarget,
@@ -1546,13 +1173,7 @@ async function executeDesignToolRequestUnsafe(
   }
 
   if (request.call.toolName === INTERNAL_READ_IMAGE_SOURCE_TOOL_NAME) {
-    const parsed = InternalReadImageSourceContract.parse(request.call.input);
-    if (!parsed.ok) {
-      throw new TypeError(
-        formatValidationFailure("internal image source", parsed.issues),
-      );
-    }
-    const input = parsed.value;
+    const input = request.call.input as InternalReadImageSourceToolInput;
     assertPageWithinMutationTarget(
       input.pageId,
       request.context.mutationTarget,
@@ -1604,13 +1225,7 @@ async function executeDesignToolRequestUnsafe(
   }
 
   if (request.call.toolName === INTERNAL_UPDATE_IMAGE_TOOL_NAME) {
-    const parsed = InternalUpdateImageContract.parse(request.call.input);
-    if (!parsed.ok) {
-      throw new TypeError(
-        formatValidationFailure("internal image update", parsed.issues),
-      );
-    }
-    const input = parsed.value;
+    const input = request.call.input as InternalUpdateImageToolInput;
     assertPageWithinMutationTarget(
       input.pageId,
       request.context.mutationTarget,
@@ -1822,7 +1437,7 @@ async function executeDesignToolRequestUnsafe(
     };
   }
 
-  const applyInput = designApplyInput(request);
+  const applyInput = internalApplyInput;
   if (!applyInput) {
     throw new Error(`Unsupported design tool: ${request.call.toolName}`);
   }
@@ -1857,6 +1472,7 @@ async function executeDesignToolRequestUnsafe(
     throw designTransactionToolError(preview.error, transaction.commands);
   return await executeSemanticDesignTransaction({
     request,
+    applyInput,
     runtime,
     transaction,
     preview,
@@ -1879,6 +1495,7 @@ function executeAtomicEditDesign(
     );
   const commands: DesignOperation[] = [];
   const summaries: Array<Record<string, unknown>> = [];
+  const plannerWarnings: string[] = [];
   let workingDocument = document;
 
   input.edits.forEach((edit, index) => {
@@ -1913,6 +1530,10 @@ function executeAtomicEditDesign(
         throw new Error(`edit-design.hierarchy.${plan.code}: ${plan.message}`);
       }
       nextCommands = plan.commands;
+      appendStringWarnings(
+        plannerWarnings,
+        "warnings" in plan ? plan.warnings : undefined,
+      );
       summaries.push({
         kind: edit.kind,
         action: edit.input.action,
@@ -1933,10 +1554,15 @@ function executeAtomicEditDesign(
         throw new Error(`edit-design.arrange.${plan.code}: ${plan.message}`);
       }
       nextCommands = plan.commands;
+      appendStringWarnings(
+        plannerWarnings,
+        "warnings" in plan ? plan.warnings : undefined,
+      );
       summaries.push({
         kind: edit.kind,
         action: edit.input.action,
         label: edit.input.label,
+        ...("movements" in plan ? { movements: plan.movements } : {}),
       });
     }
 
@@ -2004,7 +1630,7 @@ function executeAtomicEditDesign(
         revision: result.revision.revision,
         atomic: true,
         changes: result.changes,
-        warnings: result.warnings,
+        warnings: [...new Set([...plannerWarnings, ...result.warnings])],
         ...(committedSteps.length > 0 ? { committedSteps } : {}),
       },
       designRevision: {
@@ -2017,6 +1643,13 @@ function executeAtomicEditDesign(
       },
     },
   };
+}
+
+function appendStringWarnings(target: string[], value: unknown): void {
+  if (!Array.isArray(value)) return;
+  for (const warning of value) {
+    if (typeof warning === "string") target.push(warning);
+  }
 }
 
 function editDesignTransaction(
@@ -2040,40 +1673,20 @@ function editDesignTransaction(
   };
 }
 
-function designApplyInput(
-  request: RendererDesignToolRequest,
-): InternalDesignApplyToolInput | undefined {
-  if (request.call.toolName === DESIGN_APPLY_TOOL_NAME) {
-    const parsed = DesignApplyContract.parse(request.call.input, {
-      canonical: true,
-    });
-    return parsed.ok ? parsed.value : undefined;
-  }
-  return internalDesignApplyInput(request);
-}
-
 function internalDesignApplyInput(
   request: RendererDesignToolRequest,
 ): InternalDesignApplyToolInput | undefined {
   if (request.call.toolName !== INTERNAL_DESIGN_APPLY_TOOL_NAME) {
     return undefined;
   }
-  const parsed = DesignApplyContract.parse(request.call.input, {
-    internal: true,
-  });
-  return parsed.ok ? parsed.value : undefined;
+  return request.call.input as InternalDesignApplyToolInput;
 }
 
 function canRebaseNewDesignFileAssets(
-  request: RendererDesignToolRequest,
+  input: InternalDesignApplyToolInput | undefined,
   document: DesignDocument,
 ): boolean {
-  const input = internalDesignApplyInput(request);
-  if (
-    request.call.toolName !== INTERNAL_DESIGN_APPLY_TOOL_NAME ||
-    !input ||
-    input.commands.length === 0
-  ) {
+  if (!input || input.commands.length === 0) {
     return false;
   }
   return input.commands.every(
@@ -2299,9 +1912,7 @@ function insertHierarchyToolError(
     recoverable: true,
     details: {
       kind: "design-transaction",
-      fingerprint: `design_${hashFailureText(
-        `${command.commandId}\u0000${command.node.id}\u0000${childId}\u0000${message}`,
-      )}`,
+      fingerprint: `design:insert_hierarchy:${issue.path}`.slice(0, 256),
       issues: [issue],
       recovery: {
         action: "inspect-and-revise",
@@ -2318,9 +1929,10 @@ function escapeJsonPointerSegment(value: string): string {
 
 function canRebasePlannedInsert(
   request: RendererDesignToolRequest,
+  internalApplyInput: InternalDesignApplyToolInput | undefined,
   document: DesignDocument,
 ): boolean {
-  const input = plannedRebaseApplyInput(request);
+  const input = plannedRebaseApplyInput(request, internalApplyInput);
   if (!input) return false;
   const guard = input.rebaseGuard;
   if (
@@ -2367,17 +1979,15 @@ function canRebasePlannedInsert(
 
 function plannedRebaseApplyInput(
   request: RendererDesignToolRequest,
+  internalApplyInput: InternalDesignApplyToolInput | undefined,
 ): InternalDesignApplyToolInput | undefined {
   if (request.call.toolName === INTERNAL_DESIGN_APPLY_TOOL_NAME) {
-    return internalDesignApplyInput(request);
+    return internalApplyInput;
   }
   if (request.call.toolName !== DESIGN_EDIT_TOOL_NAME) return undefined;
-  const parsed = EditDesignContract.parse(request.call.input, {
-    canonical: true,
-    internal: true,
-  });
-  if (!parsed.ok || parsed.value.edits.length !== 1) return undefined;
-  const edit = parsed.value.edits[0];
+  const input = request.call.input as InternalDesignEditToolInput;
+  if (input.edits.length !== 1) return undefined;
+  const edit = input.edits[0];
   return edit?.kind === "node" ? edit.input : undefined;
 }
 
@@ -2440,12 +2050,12 @@ function designTransactionToolError(
   const specificMessage = firstIssue
     ? `${error.message}: ${firstIssue.path || "document"}: ${firstIssue.message}`
     : error.message;
-  const fingerprintSource = issues
-    .map(
-      (issue) =>
-        `${issue.code}\u0000${issue.commandId ?? ""}\u0000${issue.nodeId ?? ""}\u0000${issue.path}\u0000${issue.message}`,
-    )
-    .join("\u0001");
+  const fingerprint = [
+    "design",
+    error.code,
+    firstIssue?.code ?? "unknown",
+    firstIssue?.path || "/",
+  ].join(":");
   return new DesignTransactionToolError({
     code: `design.${error.code}`,
     message: specificMessage,
@@ -2457,7 +2067,7 @@ function designTransactionToolError(
       error.code === "duplicate",
     details: {
       kind: "design-transaction",
-      fingerprint: `design_${hashFailureText(fingerprintSource)}`,
+      fingerprint: fingerprint.slice(0, 256),
       issues,
       recovery: {
         action: "inspect-and-revise",
@@ -2466,15 +2076,6 @@ function designTransactionToolError(
       },
     },
   });
-}
-
-function hashFailureText(value: string): string {
-  let hash = 0x811c9dc5;
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 0x01000193);
-  }
-  return (hash >>> 0).toString(16).padStart(8, "0");
 }
 
 function createScopedInspection(

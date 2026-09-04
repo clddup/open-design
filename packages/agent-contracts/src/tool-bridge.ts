@@ -4,7 +4,6 @@ import {
   selectDiscriminatedUnionSchema,
   type ValidationIssue,
 } from "@opendesign/contract-runtime";
-import { type AgentToolFailureIssue } from "./tool-failure.js";
 import {
   TrustedToolFailureSchema,
   TrustedToolResultSchema,
@@ -140,26 +139,13 @@ export type DesignToolBridgeResponse = Static<
   typeof DesignToolBridgeResponseSchema
 >;
 
-export type ToolInputIssueProvider = (
-  toolName: string,
-  input: unknown,
-) => readonly AgentToolFailureIssue[];
-
-export const ToolCallRequestContract = defineContract<
-  ToolCallRequest,
-  ToolCallRequest,
-  ToolInputIssueProvider
->(
-  {
-    schema: ToolCallRequestSchema,
-    code: "tool_call_request.schema_invalid",
-    subject: "tool call request",
-    recovery: "Correct the reported tool call field before retrying.",
-    refine: (value, inputIssues) => toolCallDomainIssues(value, inputIssues),
-    clone: false,
-  },
-  () => missingInputIssueProvider,
-);
+export const ToolCallRequestContract = defineContract<ToolCallRequest>({
+  schema: ToolCallRequestSchema,
+  code: "tool_call_request.schema_invalid",
+  subject: "tool call request",
+  recovery: "Correct the reported tool call envelope before retrying.",
+  clone: false,
+});
 
 export const TrustedToolContextContract = defineContract<TrustedToolContext>({
   schema: TrustedToolContextSchema,
@@ -181,21 +167,16 @@ export const ToolExecutionEventContract = defineContract<ToolExecutionEvent>({
   clone: false,
 });
 
-export const DesignToolBridgeRequestContract = defineContract<
-  DesignToolBridgeRequest,
-  DesignToolBridgeRequest,
-  ToolInputIssueProvider
->(
-  {
+export const DesignToolBridgeRequestContract =
+  defineContract<DesignToolBridgeRequest>({
     schema: DesignToolBridgeRequestSchema,
     code: "design_tool_bridge_request.schema_invalid",
     subject: "design tool bridge request",
-    recovery: "Correct the reported design tool request before retrying.",
-    refine: designToolBridgeRequestDomainIssues,
+    recovery: "Correct the reported design tool envelope before retrying.",
+    refine: (value) =>
+      prefixIssues(trustedToolContextDomainIssues(value.context), "/context"),
     clone: false,
-  },
-  () => missingInputIssueProvider,
-);
+  });
 
 export const DesignToolBridgeCancelContract =
   defineContract<DesignToolBridgeCancel>({
@@ -247,11 +228,8 @@ const DesignToolBridgeResponseIdentityContract = defineContract<{
   clone: false,
 });
 
-export function isToolCallRequest(
-  value: unknown,
-  inputIssues: ToolInputIssueProvider,
-): value is ToolCallRequest {
-  return ToolCallRequestContract.parse(value, inputIssues).ok;
+export function isToolCallRequest(value: unknown): value is ToolCallRequest {
+  return ToolCallRequestContract.parse(value).ok;
 }
 
 export function isTrustedToolContext(
@@ -268,9 +246,8 @@ export function isToolExecutionEvent(
 
 export function isDesignToolBridgeRequest(
   value: unknown,
-  inputIssues: ToolInputIssueProvider,
 ): value is DesignToolBridgeRequest {
-  return DesignToolBridgeRequestContract.parse(value, inputIssues).ok;
+  return DesignToolBridgeRequestContract.parse(value).ok;
 }
 
 export function isDesignToolBridgeCancel(
@@ -301,22 +278,6 @@ export function designToolBridgeResponseId(value: unknown): string | null {
   return parsed.ok ? parsed.value.requestId : null;
 }
 
-function toolCallDomainIssues(
-  value: ToolCallRequest,
-  inputIssues: ToolInputIssueProvider,
-): ValidationIssue[] {
-  return inputIssues(value.toolName, value.input).map((issue) => ({
-    code: issue.code ?? "tool_call_request.input_invalid",
-    path: prefixedPath("/input", issue.path),
-    message: issue.message,
-    ...(issue.expected === undefined ? {} : { expected: issue.expected }),
-    ...(issue.actual === undefined ? {} : { actual: issue.actual }),
-    recovery:
-      issue.recovery ??
-      "Use the selected tool's reported contract issues to correct one revised call.",
-  }));
-}
-
 export function trustedToolContextDomainIssues(
   value: TrustedToolContext,
 ): ValidationIssue[] {
@@ -339,27 +300,6 @@ export function trustedToolContextDomainIssues(
     });
   }
   return issues;
-}
-
-function designToolBridgeRequestDomainIssues(
-  value: DesignToolBridgeRequest,
-  inputIssues: ToolInputIssueProvider,
-): ValidationIssue[] {
-  return [
-    ...prefixIssues(toolCallDomainIssues(value.call, inputIssues), "/call"),
-    ...prefixIssues(trustedToolContextDomainIssues(value.context), "/context"),
-  ];
-}
-
-function missingInputIssueProvider(): readonly ValidationIssue[] {
-  return [
-    {
-      code: "tool_call_request.input_validator_required",
-      path: "/",
-      message: "Tool input validation requires the active trusted catalog",
-      recovery: "Parse the request with the current tool input issue provider.",
-    },
-  ];
 }
 
 function toolExecutionEventDomainIssues(

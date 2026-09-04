@@ -1,5 +1,6 @@
 import type {
   AgentEvent,
+  AssistantTimelineBlock,
   SelectionScope,
   SessionTimelineItem,
 } from "@opendesign/agent-contracts";
@@ -105,13 +106,19 @@ export function appendLiveAgentEvent(
     ];
   }
   if (event.type === "message.completed") {
-    if (!hasVisibleAssistantContent(event)) return [...events, event];
+    const matchingDeltas = events.filter(
+      (
+        candidate,
+      ): candidate is Extract<AgentEvent, { type: "message.delta" }> =>
+        isMatchingMessageDelta(candidate, event),
+    );
     const firstDeltaIndex = events.findIndex((candidate) =>
       isMatchingMessageDelta(candidate, event),
     );
     if (firstDeltaIndex < 0) return [...events, event];
+    const completed = mergeAssistantCompletion(event, matchingDeltas);
     return events.flatMap((candidate, index) => {
-      if (index === firstDeltaIndex) return [event];
+      if (index === firstDeltaIndex) return [completed];
       return isMatchingMessageDelta(candidate, event) ? [] : [candidate];
     });
   }
@@ -155,14 +162,23 @@ export function pruneLiveEventsCoveredByTimeline(
   timeline: readonly SessionTimelineItem[],
   activeRunId: string | null,
 ): AgentEvent[] {
-  const durableMessages = new Set(
+  const durableMessages = new Map(
     timeline.flatMap((item) =>
-      item.type === "assistant.message" ? [item.messageId] : [],
+      item.type === "assistant.message"
+        ? ([[item.messageId, item.blocks]] as const)
+        : [],
     ),
   );
   const durableTools = new Map(
     timeline.flatMap((item) =>
-      item.type === "tool" ? [[item.toolCallId, item.status] as const] : [],
+      item.type === "tool"
+        ? [
+            [
+              `${item.runId ?? "unknown-run"}:${item.toolCallId}`,
+              item.status,
+            ] as const,
+          ]
+        : [],
     ),
   );
   const durableApprovals = new Map(
@@ -178,7 +194,7 @@ export function pruneLiveEventsCoveredByTimeline(
   return events.filter((event) => {
     if (
       (event.type === "message.delta" || event.type === "message.completed") &&
-      durableMessages.has(event.messageId)
+      durableAssistantCoversEvent(durableMessages.get(event.messageId), event)
     ) {
       return false;
     }
@@ -188,7 +204,7 @@ export function pruneLiveEventsCoveredByTimeline(
       event.type === "tool.completed" ||
       event.type === "tool.failed"
     ) {
-      const status = durableTools.get(event.toolCallId);
+      const status = durableTools.get(`${event.runId}:${event.toolCallId}`);
       if (status === "completed" || status === "failed") return false;
     }
     if (event.type === "approval.requested") {
@@ -219,6 +235,20 @@ export function pruneLiveEventsCoveredByTimeline(
   });
 }
 
+export function reconcileActiveRunIdFromTimeline(
+  activeRunId: string | null,
+  timeline: readonly SessionTimelineItem[],
+): string | null {
+  if (!activeRunId) return null;
+  const run = [...timeline]
+    .reverse()
+    .find(
+      (item): item is Extract<SessionTimelineItem, { type: "run" }> =>
+        item.type === "run" && item.runId === activeRunId,
+    );
+  return run && run.status !== "started" ? null : activeRunId;
+}
+
 function isMatchingMessageDelta(
   candidate: AgentEvent,
   completed: Extract<AgentEvent, { type: "message.completed" }>,
@@ -230,14 +260,94 @@ function isMatchingMessageDelta(
   );
 }
 
-function hasVisibleAssistantContent(
+function mergeAssistantCompletion(
   event: Extract<AgentEvent, { type: "message.completed" }>,
+  deltas: readonly Extract<AgentEvent, { type: "message.delta" }>[],
+): Extract<AgentEvent, { type: "message.completed" }> {
+  const blocksById = new Map<
+    string,
+    { block: AssistantTimelineBlock; order: number }
+  >();
+  const consumedCompletedIds = new Set<string>();
+  for (const delta of deltas) {
+    const streamed = timelineBlockFromDelta(delta);
+    const completed = assistantBlockParts(event.blocks, delta.blockId);
+    if (
+      assistantBlocksContent(completed).length >=
+      assistantBlockContent(streamed).length
+    ) {
+      continue;
+    }
+    completed.forEach((block) => consumedCompletedIds.add(block.blockId));
+    blocksById.set(delta.blockId, {
+      block: streamed,
+      order: delta.blockIndex,
+    });
+  }
+  event.blocks.forEach((block, index) => {
+    if (
+      !consumedCompletedIds.has(block.blockId) &&
+      !blocksById.has(block.blockId)
+    ) {
+      blocksById.set(block.blockId, { block, order: index });
+    }
+  });
+  return {
+    ...event,
+    blocks: [...blocksById.values()]
+      .sort((left, right) => left.order - right.order)
+      .map(({ block }) => block),
+  };
+}
+
+function timelineBlockFromDelta(
+  event: Extract<AgentEvent, { type: "message.delta" }>,
+): AssistantTimelineBlock {
+  return event.blockType === "text"
+    ? { blockId: event.blockId, type: "text", text: event.delta }
+    : {
+        blockId: event.blockId,
+        type: "reasoning_summary",
+        status: "completed",
+        summary: event.delta,
+      };
+}
+
+function durableAssistantCoversEvent(
+  durable: readonly AssistantTimelineBlock[] | undefined,
+  event: Extract<AgentEvent, { type: "message.delta" | "message.completed" }>,
 ): boolean {
-  return event.blocks.some((block) =>
-    block.type === "text"
-      ? block.text.length > 0
-      : block.status === "completed" && Boolean(block.summary),
+  if (!durable) return false;
+  const visible =
+    event.type === "message.delta"
+      ? [timelineBlockFromDelta(event)]
+      : event.blocks.filter((block) => assistantBlockContent(block).length > 0);
+  return visible.every((block) => {
+    const persisted = assistantBlockParts(durable, block.blockId);
+    return assistantBlocksContent(persisted).includes(
+      assistantBlockContent(block),
+    );
+  });
+}
+
+function assistantBlockParts(
+  blocks: readonly AssistantTimelineBlock[],
+  blockId: string,
+): AssistantTimelineBlock[] {
+  return blocks.filter(
+    (block) =>
+      block.blockId === blockId || block.blockId.startsWith(`${blockId}_part_`),
   );
+}
+
+function assistantBlocksContent(
+  blocks: readonly AssistantTimelineBlock[],
+): string {
+  return blocks.map(assistantBlockContent).join("");
+}
+
+function assistantBlockContent(block: AssistantTimelineBlock): string {
+  return block.type === "text" ? block.text : (block.summary ?? "");
 }
 
 export function isDurableAgentCheckpoint(event: AgentEvent): boolean {

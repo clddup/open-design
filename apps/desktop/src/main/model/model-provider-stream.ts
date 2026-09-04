@@ -116,10 +116,6 @@ export async function* streamModelProvider(
         string,
         Extract<CanonicalStreamEvent, { type: "block.started" }>
       >();
-      const pendingBlockDeltas = new Map<
-        string,
-        Extract<CanonicalStreamEvent, { type: "block.delta" }>[]
-      >();
       const blockKinds = new Map<
         string,
         Extract<CanonicalStreamEvent, { type: "block.started" }>["kind"]
@@ -223,15 +219,25 @@ export async function* streamModelProvider(
             return;
           }
           if (event.type === "block.started") {
+            if (event.kind === "tool_call") {
+              if (!attemptPublished && attemptStarted) {
+                latestAttemptPublished = true;
+                yield attemptStarted;
+              }
+              for (const [blockId, pendingStart] of pendingBlockStarts) {
+                pendingBlockStarts.delete(blockId);
+                yield pendingStart;
+              }
+              attemptPublished = true;
+              yield event;
+              continue;
+            }
             pendingBlockStarts.set(event.blockId, event);
             continue;
           }
           if (event.type === "block.delta") {
             if (event.delta.length === 0) continue;
             if (blockKinds.get(event.blockId) === "tool_call") {
-              const pending = pendingBlockDeltas.get(event.blockId) ?? [];
-              pending.push(event);
-              pendingBlockDeltas.set(event.blockId, pending);
               continue;
             }
           }
@@ -246,12 +252,6 @@ export async function* streamModelProvider(
               pendingBlockStarts.delete(semanticBlockId);
               yield pendingStart;
             }
-            for (const pendingDelta of pendingBlockDeltas.get(
-              semanticBlockId,
-            ) ?? []) {
-              yield pendingDelta;
-            }
-            pendingBlockDeltas.delete(semanticBlockId);
           }
           attemptPublished = true;
           yield event;

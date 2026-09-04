@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import {
   isAgentAttachment,
   type AgentToolFailureIssue,
@@ -67,19 +66,16 @@ export function inferPiToolFailure(
   if (active.budgetExceeded) {
     return failure("tool_budget_exceeded", message, false);
   }
-  if (
-    !active.toolName.startsWith("opendesign_") ||
-    message.includes("not found")
-  ) {
+  if (!active.toolName.startsWith("opendesign_")) {
     return failure("unknown_tool", message, false);
   }
-  if (message.includes("output token limit")) {
-    return failure("truncated_tool_call", message, true);
-  }
-  if (message.toLowerCase().includes("abort")) {
-    return failure("run_cancelled", message, false);
-  }
-  return failure("invalid_tool_input", message, true);
+  return {
+    code: "tool_execution_failed",
+    message,
+    retryable: true,
+    recoverable: false,
+    runTerminal: true,
+  };
 }
 
 export function toolValidationFailure(
@@ -191,16 +187,10 @@ function validationFingerprint(
   toolName: string,
   issues: readonly { code?: string; path: string }[],
 ): string {
-  const canonical = issues
-    .map((issue) => `${issue.code ?? "invalid"}:${issue.path}`)
-    .sort()
-    .join("|");
-  return `validation_${createHash("sha256")
-    .update(toolName)
-    .update("\0")
-    .update(canonical)
-    .digest("hex")
-    .slice(0, 16)}`;
+  const first = issues[0];
+  return ["validation", toolName, first?.code ?? "invalid", first?.path || "/"]
+    .join(":")
+    .slice(0, 256);
 }
 
 function toolResultErrorText(value: unknown): string {

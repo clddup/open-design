@@ -7,10 +7,10 @@ import type {
 } from "@opendesign/design-contracts";
 import type { EditorRuntime } from "@opendesign/editor-runtime";
 import {
-  DesignStyleContract,
-  DesignVariableContract,
   INTERNAL_DESIGN_STYLE_TOOL_NAME,
   INTERNAL_DESIGN_VARIABLE_TOOL_NAME,
+  type DesignStyleToolInput,
+  type DesignVariableToolInput,
 } from "@/shared/design-agent-tools";
 import type {
   RendererDesignToolRequest,
@@ -35,11 +35,7 @@ export function executeDesignSystemToolRequest({
 }): RendererDesignToolResponse | null {
   const { call, context } = request;
   if (call.toolName === INTERNAL_DESIGN_VARIABLE_TOOL_NAME) {
-    const parsed = DesignVariableContract.parse(call.input);
-    if (!parsed.ok) {
-      throw new TypeError("Renderer received invalid canonical Variable input");
-    }
-    const input = parsed.value;
+    const input = call.input as DesignVariableToolInput;
     assertRevision(document, context.revision, "Variable");
     assertPageTarget(input.pageId, context.mutationTarget, "Variable");
     return executeDesignVariableTool({
@@ -55,11 +51,7 @@ export function executeDesignSystemToolRequest({
   if (call.toolName !== INTERNAL_DESIGN_STYLE_TOOL_NAME) {
     return null;
   }
-  const parsed = DesignStyleContract.parse(call.input);
-  if (!parsed.ok) {
-    throw new TypeError("Renderer received invalid canonical Style input");
-  }
-  const input = parsed.value;
+  const input = call.input as DesignStyleToolInput;
   assertRevision(document, context.revision, "Style");
   assertPageTarget(input.pageId, context.mutationTarget, "Style");
   if (

@@ -23,6 +23,8 @@ Agent utilityProcess ── Conversation / Provider / typed design tools
 - 固定版本 `leafer-editor@2.2.9` 是唯一生产画布与直接操作引擎；Leafer 场景只是当前 revision 的可丢弃投影。
 - Renderer 没有 Node.js、原始 IPC、任意文件系统或模型凭据能力。
 - Agent、MCP 和人工操作都必须通过版本化设计契约进入同一 `EditorRuntime`。
+- Conversation 是持续上下文；单次 Run 的失败、取消或 Provider 异常只结束本次执行，不删除历史消息、附件或已提交设计，也不阻塞下一条消息。
+- Provider 与 Main 共用每个工具的权威 Contract；Main 单次解析后再把 canonical 输入交给 Renderer。普通节点、层级和排列修改统一通过一个原子编辑入口执行。
 - Agent 新建设计优先尽快提交视觉成立、可编辑、可继续精修的真实首屏，并基于同一权威 brief 连续完成后续目标；产品不以低质量“快速模式”或展示骨架冒充真实设计进度。
 - 同一 Project 的 Design File 可以发布和启用 Component、Shared Style 与 Variable Library；跨文件 Instance、Style 和 Variable 引用继续通过唯一事务、revision 与撤销历史保持链接和更新。
 - 独立 Image 节点与 Shape/Frame/Text 的图片 Fill/Stroke 共用非破坏调整语义，人工与 Agent 修改都会进入同一事务、画布、capture 和位图导出链路。

@@ -34,17 +34,17 @@ export function createDesignIntentSchema(
     {
       subject: Type.String({
         ...TEXT,
-        minLength: 8,
+        minLength: 1,
         maxLength: limits.coreText,
       }),
       audience: Type.String({
         ...TEXT,
-        minLength: 8,
+        minLength: 1,
         maxLength: limits.coreText,
       }),
       primaryJob: Type.String({
         ...TEXT,
-        minLength: 8,
+        minLength: 1,
         maxLength: limits.coreText,
       }),
       calibration: Type.Object(
@@ -71,36 +71,38 @@ export function createDesignIntentSchema(
       ),
       visualThesis: Type.String({
         ...TEXT,
-        minLength: 16,
+        minLength: 1,
         maxLength: limits.directionText,
       }),
-      signatureMotif: Type.String({
+      signatureDecision: Type.String({
         ...TEXT,
-        minLength: 16,
+        minLength: 1,
         maxLength: limits.directionText,
+        description:
+          "Brief-specific signature decision. It may be structural, typographic, behavioral, material, or geometric; do not invent decorative motifs merely to fill this field.",
       }),
       typographyLanguage: Type.String({
         ...TEXT,
-        minLength: 12,
+        minLength: 1,
         maxLength: limits.languageText,
       }),
       colorMaterialLanguage: Type.String({
         ...TEXT,
-        minLength: 12,
+        minLength: 1,
         maxLength: limits.languageText,
       }),
       compositionTension: Type.String({
         ...TEXT,
-        minLength: 12,
+        minLength: 1,
         maxLength: limits.languageText,
       }),
       antiPatterns: Type.Array(
         Type.String({
           ...TEXT,
-          minLength: 8,
+          minLength: 1,
           maxLength: limits.antiPatternText,
         }),
-        { minItems: 3, maxItems: limits.antiPatterns, uniqueItems: true },
+        { minItems: 1, maxItems: limits.antiPatterns, uniqueItems: true },
       ),
     },
     {

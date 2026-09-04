@@ -284,6 +284,24 @@ export const DurableTimelineEventSchema = Type.Union([
   Type.Object(
     {
       ...DurableEventBase,
+      type: Type.Literal("completion.review"),
+      runId: RunIdSchema,
+      payload: Type.Object(
+        {
+          assistantMessageId: MessageIdSchema,
+          status: Type.Literal("rejected"),
+          code: IdSchema,
+          message: Type.String({ minLength: 1, maxLength: 20_000 }),
+          rejectionCount: Type.Integer({ minimum: 1, maximum: 100 }),
+        },
+        { additionalProperties: false },
+      ),
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      ...DurableEventBase,
       type: Type.Literal("tool.requested"),
       runId: RunIdSchema,
       payload: Type.Object(

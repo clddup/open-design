@@ -51,13 +51,17 @@ export function initialDeliveryStage(
 
 export function latestDeliveryLedger(
   toolCalls: readonly AgentToolCallRecord[],
+  includeRecoveryContext = false,
 ): DesignDeliveryLedger | undefined {
   for (let index = toolCalls.length - 1; index >= 0; index -= 1) {
     const result = toolCalls[index]?.result;
     if (!isRecord(result)) continue;
     if (result.deliveryDisposition === "superseded") return undefined;
     if (isDesignDeliveryLedger(result.delivery)) return result.delivery;
-    if (isDesignDeliveryLedger(result.unfinishedDelivery)) {
+    if (
+      includeRecoveryContext &&
+      isDesignDeliveryLedger(result.unfinishedDelivery)
+    ) {
       return result.unfinishedDelivery;
     }
   }

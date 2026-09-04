@@ -18,13 +18,6 @@ export class PiToolProgressCircuit {
   ): TrustedToolFailure {
     if (!failure.recoverable || failure.runTerminal) return failure;
 
-    if (failure.code === "design_inspection_required") {
-      return terminalFailure(
-        "design_recovery_no_progress",
-        "The run ignored the required document inspection and attempted another design write. The run was stopped instead of continuing an invisible recovery loop. Already committed revisions are preserved.",
-      );
-    }
-
     if (failure.code === "invalid_tool_input") {
       const fingerprint = failureFingerprint(toolName, failure);
       const invalidInputs =
@@ -69,10 +62,11 @@ function failureFingerprint(
 ): string {
   const structured = failure.details?.fingerprint;
   if (structured) return `${toolName}:${structured}`;
-  const workflowCode = /^(design(?:_workflow)?\.[a-z0-9_.-]+):/i.exec(
-    failure.message,
-  )?.[1];
-  return `${toolName}:${failure.code}:${workflowCode ?? failure.message}`;
+  const issue = failure.details?.issues[0];
+  const issueIdentity = issue?.code
+    ? `${issue.code}:${issue.path}`
+    : failure.code;
+  return `${toolName}:${issueIdentity}`;
 }
 
 function terminalFailure(code: string, message: string): TrustedToolFailure {

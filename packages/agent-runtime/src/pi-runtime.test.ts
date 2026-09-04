@@ -465,14 +465,32 @@ describe("OpenDesign Pi production runtime", () => {
       stopReason: "complete",
     });
     expect(gateway.requests).toHaveLength(2);
-    expect(gateway.requests[1]?.messages).toEqual(
+    const messages = gateway.requests[1]?.messages ?? [];
+    expect(
+      messages.some(
+        (message) =>
+          message.role === "user" && message.content === "先检查设计",
+      ),
+    ).toBe(true);
+    expect(
+      messages.some(
+        (message) =>
+          message.role === "user" && message.content === "继续完成设计",
+      ),
+    ).toBe(true);
+    const assistant = messages.find((message) => message.role === "assistant");
+    expect(
+      assistant?.blocks.some(
+        (block) => block.type === "text" && block.text === "已开始检查",
+      ),
+    ).toBe(true);
+    expect(assistant?.blocks).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ role: "user", content: "先检查设计" }),
         expect.objectContaining({
-          role: "assistant",
-          blocks: [expect.objectContaining({ text: "已开始检查" })],
+          type: "reasoning_summary",
+          summary: "正在核对画布结构",
         }),
-        expect.objectContaining({ role: "user", content: "继续完成设计" }),
+        expect.objectContaining({ type: "text", text: "已开始检查" }),
       ]),
     );
     expect(JSON.stringify(gateway.requests[1]?.messages)).not.toContain(
@@ -480,7 +498,7 @@ describe("OpenDesign Pi production runtime", () => {
     );
   });
 
-  it("never re-executes a tool-call ID recovered from the durable journal", async () => {
+  it("scopes provider tool-call IDs to the current Run", async () => {
     const store = new MemorySessionStore();
     store.events.push(
       priorEvent(1, "message.user", {
@@ -539,14 +557,14 @@ describe("OpenDesign Pi production runtime", () => {
       runId: "run_pi_recovered_tool",
     });
 
-    expect(executions).toBe(0);
+    expect(executions).toBe(1);
     expect(
       store.events.filter(
         (event) =>
           event.runId === "run_pi_recovered_tool" &&
           event.type === "tool.requested",
       ),
-    ).toHaveLength(0);
+    ).toHaveLength(1);
   });
 
   it("does not terminate a healthy multi-target tool loop at the old sixteen-turn limit", async () => {
@@ -600,7 +618,7 @@ describe("OpenDesign Pi production runtime", () => {
     });
   });
 
-  it("keeps Plan allocation compact and expands tools only after a material revision", async () => {
+  it("keeps Plan allocation and post-write continuation compact", async () => {
     const store = new MemorySessionStore();
     const definitions = disclosureProbeTools();
     const gateway = new RecordingGateway(
@@ -663,14 +681,18 @@ describe("OpenDesign Pi production runtime", () => {
     ).toContain('"basic"');
     expect(
       gateway.requests[2]?.tools.map((candidate) => candidate.name),
-    ).toEqual(definitions.map((definition) => definition.name));
+    ).toEqual([
+      "opendesign_inspect_probe",
+      "opendesign_material_probe",
+      "opendesign_capabilities_probe",
+    ]);
     expect(
       JSON.stringify(
         gateway.requests[2]?.tools.find(
           (candidate) => candidate.name === "opendesign_material_probe",
         )?.inputSchema,
       ),
-    ).toContain('"advanced"');
+    ).toContain('"basic"');
   });
 
   it("executes host-inspected Plan and the first material slice sequentially in one Provider turn", async () => {
@@ -753,10 +775,14 @@ describe("OpenDesign Pi production runtime", () => {
     ]);
     expect(
       gateway.requests[1]?.tools.map((candidate) => candidate.name),
-    ).toEqual(definitions.map((definition) => definition.name));
+    ).toEqual([
+      "opendesign_inspect_probe",
+      "opendesign_material_probe",
+      "opendesign_capabilities_probe",
+    ]);
   });
 
-  it("keeps inspection compact and expands after an existing-artboard Plan", async () => {
+  it("expands advanced tools only after explicit capability discovery", async () => {
     const store = new MemorySessionStore();
     const definitions = disclosureProbeTools();
     const gateway = new RecordingGateway(
@@ -765,6 +791,7 @@ describe("OpenDesign Pi production runtime", () => {
         toolResponse("existing_plan_call", "opendesign_plan_probe", {
           targets: [{ artboard: { mode: "existing" } }],
         }),
+        toolResponse("capabilities_call", "opendesign_capabilities_probe", {}),
         toolResponse("advanced_call", "opendesign_advanced_probe", {}),
         textResponse("Existing design updated."),
       ]),
@@ -803,9 +830,17 @@ describe("OpenDesign Pi production runtime", () => {
     });
 
     expect(gateway.requests[0]?.tools).toHaveLength(3);
-    expect(gateway.requests[1]?.tools).toHaveLength(3);
+    expect(gateway.requests[1]?.tools).toHaveLength(4);
     expect(
       gateway.requests[2]?.tools.map((candidate) => candidate.name),
+    ).toEqual([
+      "opendesign_inspect_probe",
+      "opendesign_plan_probe",
+      "opendesign_material_probe",
+      "opendesign_capabilities_probe",
+    ]);
+    expect(
+      gateway.requests[3]?.tools.map((candidate) => candidate.name),
     ).toEqual(definitions.map((definition) => definition.name));
   });
 });
@@ -875,6 +910,7 @@ function disclosureProbeTools(): AgentToolDefinition[] {
       },
       modelDisclosure: {
         bootstrap: "available",
+        continuation: "available",
         role: "material-write",
         bootstrapInputSchema: {
           type: "object",
@@ -886,6 +922,17 @@ function disclosureProbeTools(): AgentToolDefinition[] {
         typeof input === "object" && input !== null && !Array.isArray(input)
           ? []
           : [{ path: "/", message: "Expected an object" }],
+    },
+    {
+      ...tool,
+      name: "opendesign_capabilities_probe",
+      inputSchema: emptySchema,
+      modelDisclosure: {
+        bootstrap: "deferred",
+        afterInspection: "available",
+        continuation: "available",
+        role: "capability-discovery",
+      },
     },
     {
       ...tool,
@@ -1052,6 +1099,20 @@ class FailThenSucceedGateway implements ModelGateway {
     yield attemptStarted(modelRequest);
     const firstRequest = this.requests.length === 1;
     const blockId = firstRequest ? "partial_text" : "completed_text";
+    if (firstRequest) {
+      yield {
+        type: "block.started",
+        attemptId: modelRequest.attemptId,
+        blockId: "partial_reasoning",
+        kind: "reasoning_summary",
+      };
+      yield {
+        type: "block.delta",
+        attemptId: modelRequest.attemptId,
+        blockId: "partial_reasoning",
+        delta: "正在核对画布结构",
+      };
+    }
     yield {
       type: "block.started",
       attemptId: modelRequest.attemptId,

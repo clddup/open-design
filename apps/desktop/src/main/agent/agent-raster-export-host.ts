@@ -5,9 +5,9 @@ import type {
   TrustedToolResult,
 } from "@opendesign/agent-contracts";
 import {
-  ExportRasterContract,
   EXPORT_RASTER_TOOL_NAME,
   PreparedAgentRasterExportContract,
+  type ExportRasterToolInput,
 } from "@/shared/design-agent-tools.js";
 import { formatValidationFailure } from "@/shared/contract-validation.js";
 import type { RasterFileService } from "../raster/raster-file-service.js";
@@ -31,11 +31,7 @@ export class AgentRasterExportHost {
     if (call.toolName !== EXPORT_RASTER_TOOL_NAME) {
       throw new TypeError("Invalid Agent raster export tool call");
     }
-    const parsed = ExportRasterContract.parse(call.input);
-    if (!parsed.ok) {
-      throw new TypeError("Invalid Agent raster export tool call");
-    }
-    const publicInput = parsed.value;
+    const publicInput = call.input as ExportRasterToolInput;
     throwIfAborted(signal);
     const preparedResult = await this.renderer.execute(
       { ...call, input: publicInput },

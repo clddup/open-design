@@ -11,10 +11,7 @@ import type {
 import { describe, expect, it } from "vitest";
 import {
   DESIGN_AGENT_TOOL_SPECS,
-  DESIGN_APPLY_TOOL_NAME,
-  DESIGN_ARRANGE_TOOL_NAME,
   DESIGN_EDIT_TOOL_NAME,
-  DESIGN_HIERARCHY_TOOL_NAME,
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
   INTERNAL_IMPORT_SVG_TOOL_NAME,
   INTERNAL_UPDATE_IMAGE_TOOL_NAME,
@@ -68,15 +65,6 @@ describe("production Pi design-tool catalog", () => {
     );
     expect(adapter.modelTools.map((tool) => tool.name)).not.toContain(
       DESIGN_EDIT_TOOL_NAME,
-    );
-    expect(adapter.modelTools.map((tool) => tool.name)).not.toContain(
-      DESIGN_APPLY_TOOL_NAME,
-    );
-    expect(adapter.modelTools.map((tool) => tool.name)).not.toContain(
-      DESIGN_HIERARCHY_TOOL_NAME,
-    );
-    expect(adapter.modelTools.map((tool) => tool.name)).not.toContain(
-      DESIGN_ARRANGE_TOOL_NAME,
     );
   });
 });

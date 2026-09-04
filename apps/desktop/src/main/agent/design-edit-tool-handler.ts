@@ -11,11 +11,11 @@ import {
   type DesignHierarchyToolInput,
   type InternalDesignEditToolInput,
 } from "@/shared/design-agent-tools.js";
-import { formatValidationFailure } from "@/shared/contract-validation.js";
 import type {
   DesignPlanApplyAuthorization,
   GlobalTaskCoordinator,
 } from "./global-task-coordinator.js";
+import { contractValidationError } from "./contract-validation-error.js";
 
 export async function handleEditDesignTool(input: {
   call: ToolCallRequest;
@@ -25,13 +25,9 @@ export async function handleEditDesignTool(input: {
   withDelivery: (result: TrustedToolResult, runId: string) => TrustedToolResult;
 }): Promise<TrustedToolResult | null> {
   if (input.call.toolName !== DESIGN_EDIT_TOOL_NAME) return null;
-  const parsed = EditDesignContract.parse(input.call.input);
-  if (!parsed.ok) {
-    throw new TypeError(formatValidationFailure("Edit Design", parsed.issues));
-  }
+  const parsedInput = input.call.input as InternalDesignEditToolInput;
 
   const { context, coordinator } = input;
-  coordinator.assertVisualReviewBeforeWrite(context);
   let authorization: DesignPlanApplyAuthorization | undefined;
   let nodeInput:
     | Extract<
@@ -43,7 +39,7 @@ export async function handleEditDesignTool(input: {
   const materialTargetIds = new Set<string>();
   const createdNodeIds = new Set<string>();
 
-  for (const edit of parsed.value.edits) {
+  for (const edit of parsedInput.edits) {
     if (edit.kind === "node") {
       authorization = coordinator.assertDesignPlanForApply(context, edit.input);
       nodeInput = authorization?.input ?? edit.input;
@@ -56,7 +52,7 @@ export async function handleEditDesignTool(input: {
     if (edit.kind === "hierarchy") {
       const refs = hierarchyTargetRefs(edit.input);
       coordinator
-        .resolveMaterialTargetIds(context, refs.nodeIds, refs.parentId)
+        .resolveMaterialTargetIdsIfPlanned(context, refs.nodeIds, refs.parentId)
         .forEach((targetId) => materialTargetIds.add(targetId));
       hierarchyCreatedNodeIds(edit.input).forEach((nodeId) =>
         createdNodeIds.add(nodeId),
@@ -65,17 +61,11 @@ export async function handleEditDesignTool(input: {
       continue;
     }
     coordinator
-      .resolveMaterialTargetIds(context, arrangeTargetIds(edit.input))
+      .resolveMaterialTargetIdsIfPlanned(context, arrangeTargetIds(edit.input))
       .forEach((targetId) => materialTargetIds.add(targetId));
     canonicalEdits.push(edit);
   }
 
-  if (materialTargetIds.size > 1) {
-    throw designWorkflowError(
-      "cross_artboard_edit_invalid",
-      "One atomic Edit Design call cannot combine writes across delivery artboards",
-    );
-  }
   if (authorization?.rebaseGuard && canonicalEdits.length !== 1) {
     throw designWorkflowError(
       "edit_rebase_requires_inspection",
@@ -88,7 +78,7 @@ export async function handleEditDesignTool(input: {
     nodeInput,
   );
   const canonicalInput: InternalDesignEditToolInput = {
-    label: parsed.value.label,
+    label: parsedInput.label,
     edits: canonicalEdits.map((edit) =>
       edit.kind === "node" && rebaseGuard
         ? {
@@ -98,26 +88,36 @@ export async function handleEditDesignTool(input: {
         : edit,
     ),
   };
+  const parsedCanonical = EditDesignContract.parse(canonicalInput, {
+    internal: true,
+  });
+  if (!parsedCanonical.ok) {
+    throw contractValidationError(
+      "host-bound Edit Design",
+      parsedCanonical.issues,
+    );
+  }
   const result = await input.execute({
     ...input.call,
-    input: canonicalInput,
+    input: parsedCanonical.value,
   });
   coordinator.assertDesignApplyResult(context, authorization, result);
   if (nodeInput !== undefined) {
     coordinator.recordDesignApplyCompleted(
       context.runId,
-      nodeInput,
       authorization,
       result.designRevision?.revision,
       result.content,
+      [...createdNodeIds],
+    );
+  } else {
+    coordinator.recordMaterialDesignWriteCompleted(
+      context.runId,
+      [...materialTargetIds],
+      result.designRevision?.revision,
+      [...createdNodeIds],
     );
   }
-  coordinator.recordMaterialDesignWriteCompleted(
-    context.runId,
-    [...materialTargetIds],
-    result.designRevision?.revision,
-    [...createdNodeIds],
-  );
   return input.withDelivery(result, context.runId);
 }
 

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   DesignToolBridgeRequestContract,
   DesignToolBridgeResponseContract,
@@ -44,45 +44,19 @@ const request = {
 } as const;
 
 describe("agent tool wire contracts", () => {
-  it("requires the host tool's semantic input validator", () => {
-    const inputIssues = vi.fn(() => []);
-
-    expect(isDesignToolBridgeRequest(request, inputIssues)).toBe(true);
-    expect(inputIssues).toHaveBeenCalledWith(
-      request.call.toolName,
-      request.call.input,
-    );
-    const invalidInput = () => [
-      {
-        code: "design_apply.transaction_invalid",
-        path: "/transaction",
-        message: "Transaction is invalid",
-      },
-    ];
-    expect(isDesignToolBridgeRequest(request, invalidInput)).toBe(false);
+  it("keeps wire validation structural and leaves opaque tool input to Main", () => {
+    expect(isDesignToolBridgeRequest(request)).toBe(true);
+    expect(DesignToolBridgeRequestContract.parse(request).ok).toBe(true);
     expect(
-      DesignToolBridgeRequestContract.issues(request, invalidInput),
-    ).toContainEqual(
-      expect.objectContaining({
-        code: "design_apply.transaction_invalid",
-        path: "/call/input/transaction",
+      isDesignToolBridgeRequest({
+        ...request,
+        call: {
+          ...request.call,
+          toolName: "unknown_tool",
+          input: { malformedUntilMainParsesIt: true },
+        },
       }),
-    );
-    expect(
-      isDesignToolBridgeRequest(
-        { ...request, call: { ...request.call, toolName: "unknown_tool" } },
-        (toolName) =>
-          toolName === request.call.toolName
-            ? []
-            : [
-                {
-                  code: "design_tool.unknown",
-                  path: "/",
-                  message: "Unknown design tool",
-                },
-              ],
-      ),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("rejects forged context and non-exact wire objects", () => {
@@ -94,10 +68,7 @@ describe("agent tool wire contracts", () => {
       }),
     ).toBe(false);
     expect(
-      isDesignToolBridgeRequest(
-        { ...request, secretPath: "/tmp/private" },
-        () => [],
-      ),
+      isDesignToolBridgeRequest({ ...request, secretPath: "/tmp/private" }),
     ).toBe(false);
     expect(
       TrustedToolContextContract.issues({

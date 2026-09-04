@@ -286,6 +286,28 @@ export const AutoLayoutWrapSchema = Type.Object(
 
 export type AutoLayoutWrap = Static<typeof AutoLayoutWrapSchema>;
 
+export const HorizontalAutoLayoutSchema = Type.Object(
+  {
+    mode: Type.Literal("horizontal"),
+    ...AutoLayoutFlowProperties,
+    wrap: Type.Optional(AutoLayoutWrapSchema),
+  },
+  { additionalProperties: false },
+);
+
+export const VerticalAutoLayoutSchema = Type.Object(
+  {
+    mode: Type.Literal("vertical"),
+    ...AutoLayoutFlowProperties,
+  },
+  { additionalProperties: false },
+);
+
+export const LinearAutoLayoutSchema = Type.Union([
+  HorizontalAutoLayoutSchema,
+  VerticalAutoLayoutSchema,
+]);
+
 export const AutoLayoutSchema = Type.Union([
   Type.Object(
     {
@@ -293,21 +315,8 @@ export const AutoLayoutSchema = Type.Union([
     },
     { additionalProperties: false },
   ),
-  Type.Object(
-    {
-      mode: Type.Literal("horizontal"),
-      ...AutoLayoutFlowProperties,
-      wrap: Type.Optional(AutoLayoutWrapSchema),
-    },
-    { additionalProperties: false },
-  ),
-  Type.Object(
-    {
-      mode: Type.Literal("vertical"),
-      ...AutoLayoutFlowProperties,
-    },
-    { additionalProperties: false },
-  ),
+  HorizontalAutoLayoutSchema,
+  VerticalAutoLayoutSchema,
   Type.Object(
     {
       mode: Type.Literal("grid"),

@@ -129,8 +129,6 @@ export const agentConversationMessages = {
   "agent.planStepReviewRefine": "审查实际渲染并按需优化",
   "agent.reviewingDesign": "正在审查渲染结果",
   "agent.visualReviewReady": "视觉审查已记录",
-  "agent.checkpointingDesign": "正在应用并检查设计",
-  "agent.designCheckpointReady": "设计检查点已完成",
   "agent.organizingLayers": "正在整理图层",
   "agent.hierarchyUpdated": "图层结构已更新",
   "agent.updatingComponents": "正在构建可复用组件",

@@ -105,12 +105,8 @@ describe("tool result model projection", () => {
         logoExploration: { targetId: "concepts", directions: [] },
       },
       delivery: { version: 3, activeTargetId: "concepts" },
+      firstSlice: { targetId: "concepts", revision: 12 },
       changes: { changes: Array.from({ length: 100 }, () => ({})) },
-      checkpoint: {
-        version: 1,
-        action: "first-slice-and-capture",
-        status: "completed",
-      },
     });
 
     expect(projected).toMatchObject({

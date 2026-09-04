@@ -69,25 +69,16 @@ export function compileValidatedDesignFirstSliceToolInput(
       : {
           logoExploration: {
             targetId: input.logoExploration.targetId,
-            directions: input.logoExploration.directions.map((direction) => {
-              const [monochromeNodeId, size32, size24, size16] =
-                logoEvidenceNodeIds(direction.masterNodeId);
-              return {
-                conceptId: direction.conceptId,
-                label: direction.conceptId,
-                principle: direction.principle,
-                thesis: direction.thesis,
-                constructionLogic: direction.constructionLogic,
-                colorSystem: structuredClone(direction.colorSystem),
-                rootNodeId: direction.rootNodeId,
-                monochromeNodeId,
-                smallSizeNodeIds: [size32, size24, size16] as [
-                  string,
-                  string,
-                  string,
-                ],
-              };
-            }),
+            directions: input.logoExploration.directions.map((direction) => ({
+              conceptId: direction.conceptId,
+              label: direction.conceptId,
+              principle: direction.principle,
+              thesis: direction.thesis,
+              constructionLogic: direction.constructionLogic,
+              colorSystem: structuredClone(direction.colorSystem),
+              rootNodeId: direction.rootNodeId,
+              masterNodeId: direction.masterNodeId,
+            })),
           },
         }),
   };
@@ -118,16 +109,12 @@ export function compileValidatedDesignFirstSliceToolInput(
       commandIds,
     });
   }
-  const generatedEvidence = compileLogoEvidence(input, childCounts, ordinal);
-  commands.push(...generatedEvidence.commands);
-  const finalStep = steps.at(-1);
-  if (finalStep) finalStep.commandIds.push(...generatedEvidence.commandIds);
   return {
     plan,
     apply: {
       label: input.firstSlice.label,
       summary:
-        "Create the first meaningful editable design slice inside the allocated artboard",
+        "Create the first meaningful editable design slice inside the current artboard",
       steps,
       commands,
     },
@@ -135,159 +122,8 @@ export function compileValidatedDesignFirstSliceToolInput(
       ...input.firstSlice.stages.flatMap((stage) =>
         stage.elements.map((element) => element.id),
       ),
-      ...generatedEvidence.nodeIds,
     ],
   };
-}
-
-const LOGO_EVIDENCE_VARIANTS = [
-  { key: "mono", size: 64, monochrome: true },
-  { key: "32", size: 32, monochrome: false },
-  { key: "24", size: 24, monochrome: false },
-  { key: "16", size: 16, monochrome: false },
-] as const;
-
-function logoEvidenceNodeIds(
-  masterNodeId: string,
-): [string, string, string, string] {
-  return LOGO_EVIDENCE_VARIANTS.map(({ key }) =>
-    derivedEvidenceNodeId(masterNodeId, key),
-  ) as [string, string, string, string];
-}
-
-function compileLogoEvidence(
-  input: DesignFirstSliceToolInput,
-  childCounts: Map<string, number>,
-  startingOrdinal: number,
-): { commands: DesignOperation[]; commandIds: string[]; nodeIds: string[] } {
-  if (!input.logoExploration) {
-    return { commands: [], commandIds: [], nodeIds: [] };
-  }
-  const elements = input.firstSlice.stages.flatMap((stage) => stage.elements);
-  const elementsById = new Map(
-    elements.map((element) => [element.id, element]),
-  );
-  const parentById = new Map(
-    elements.map((element) => [element.id, element.parentId]),
-  );
-  const commands: DesignOperation[] = [];
-  for (const direction of input.logoExploration.directions) {
-    const evidenceRoot = elementsById.get(direction.evidenceRootNodeId);
-    const master = elementsById.get(direction.masterNodeId);
-    if (!evidenceRoot || !master) continue;
-    const subtree = elements.filter((element) =>
-      belongsToSubtree(element.id, direction.masterNodeId, parentById),
-    );
-    for (const [variantIndex, variant] of LOGO_EVIDENCE_VARIANTS.entries()) {
-      const placement = evidencePlacement(evidenceRoot, master, variantIndex);
-      for (const element of subtree) {
-        const commandId = `first_slice_${startingOrdinal + commands.length + 1}`;
-        const node = compileEvidenceNode(
-          element,
-          direction,
-          variant,
-          placement,
-        );
-        const parentId = node.parentId;
-        if (!parentId)
-          throw new Error("Generated Logo evidence requires a parent");
-        const index = childCounts.get(parentId) ?? 0;
-        childCounts.set(parentId, index + 1);
-        commands.push({
-          commandId,
-          type: "insert_element",
-          pageId: input.targets[0].pageId,
-          parentId,
-          index,
-          node,
-        });
-      }
-    }
-  }
-  return {
-    commands,
-    commandIds: commands.map((command) => command.commandId),
-    nodeIds: commands.flatMap((command) =>
-      command.type === "insert_element" ? [command.node.id] : [],
-    ),
-  };
-}
-
-function belongsToSubtree(
-  nodeId: string,
-  rootNodeId: string,
-  parentById: ReadonlyMap<string, string>,
-): boolean {
-  let current: string | undefined = nodeId;
-  while (current) {
-    if (current === rootNodeId) return true;
-    current = parentById.get(current);
-  }
-  return false;
-}
-
-function evidencePlacement(
-  evidenceRoot: DesignFirstSliceElement,
-  master: DesignFirstSliceElement,
-  variantIndex: number,
-): { scale: number; x: number; y: number } {
-  const variant = LOGO_EVIDENCE_VARIANTS[variantIndex];
-  const totalWidth = 172;
-  const precedingWidth = LOGO_EVIDENCE_VARIANTS.slice(0, variantIndex).reduce(
-    (sum, item) => sum + item.size + 12,
-    0,
-  );
-  const scale = variant.size / Math.max(master.width, master.height);
-  const slotX =
-    Math.max(0, (evidenceRoot.width - totalWidth) / 2) + precedingWidth;
-  return {
-    scale,
-    x: slotX + (variant.size - master.width * scale) / 2,
-    y: Math.max(0, (evidenceRoot.height - master.height * scale) / 2),
-  };
-}
-
-function compileEvidenceNode(
-  element: DesignFirstSliceElement,
-  direction: NonNullable<
-    DesignFirstSliceToolInput["logoExploration"]
-  >["directions"][number],
-  variant: (typeof LOGO_EVIDENCE_VARIANTS)[number],
-  placement: { scale: number; x: number; y: number },
-): DesignNode {
-  const node = compileElement(element);
-  const root = element.id === direction.masterNodeId;
-  node.id = derivedEvidenceNodeId(element.id, variant.key);
-  node.parentId = root
-    ? direction.evidenceRootNodeId
-    : derivedEvidenceNodeId(element.parentId, variant.key);
-  if (root) {
-    node.name = `${element.name} · ${variant.monochrome ? "Monochrome" : `${variant.size}px`}`;
-    node.transform = [
-      placement.scale,
-      0,
-      0,
-      placement.scale,
-      placement.x,
-      placement.y,
-    ];
-  }
-  return variant.monochrome ? monochromeNode(node) : node;
-}
-
-function derivedEvidenceNodeId(sourceNodeId: string, variant: string): string {
-  return `${sourceNodeId}__evidence_${variant}`;
-}
-
-function monochromeNode(node: DesignNode): DesignNode {
-  const properties = node.properties;
-  if ("fills" in properties && properties.fills.length > 0) {
-    properties.fills = [{ type: "solid", color: "#111111", opacity: 1 }];
-  }
-  if ("strokes" in properties && properties.strokes.length > 0) {
-    properties.strokes = [{ type: "solid", color: "#111111", opacity: 1 }];
-  }
-  return node;
 }
 
 function compileTarget(
@@ -375,6 +211,12 @@ function compileElement(element: DesignFirstSliceElement): DesignNode {
     ...(element.effects === undefined
       ? {}
       : { effects: structuredClone(element.effects) }),
+    ...(element.layoutPositioning === undefined
+      ? {}
+      : { layoutPositioning: element.layoutPositioning }),
+    ...(element.layoutSizing === undefined
+      ? {}
+      : { layoutSizing: structuredClone(element.layoutSizing) }),
     extensions: { generatedBy: "compact-first-slice" },
   };
   if (element.kind === "group") {
@@ -443,6 +285,25 @@ function compileElement(element: DesignFirstSliceElement): DesignNode {
       },
     };
   }
+  if (element.kind === "image") {
+    return {
+      ...base,
+      kind: "image" as const,
+      properties: {
+        assetId: element.assetId,
+        placement: element.placement ?? {
+          mode: "fill" as const,
+          focalPoint: { x: 0.5, y: 0.5 },
+        },
+        altText: element.altText ?? element.name,
+        cornerRadius: element.cornerRadius ?? 0,
+      },
+      extensions: {
+        ...base.extensions,
+        designRole: "media",
+      },
+    };
+  }
   const shape = {
     fills: structuredClone(element.fills),
     strokes: structuredClone(element.strokes),
@@ -456,6 +317,9 @@ function compileElement(element: DesignFirstSliceElement): DesignNode {
         ...shape,
         cornerRadius: element.cornerRadius ?? 0,
         clipsContent: element.clipsContent ?? false,
+        ...(element.autoLayout === undefined
+          ? {}
+          : { autoLayout: structuredClone(element.autoLayout) }),
       },
     };
   }

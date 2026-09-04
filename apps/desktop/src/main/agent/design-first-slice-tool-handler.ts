@@ -9,12 +9,10 @@ import {
   DesignApplyContract,
   DesignPlanContract,
   designPlanTargets,
-  FirstSliceContract,
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
-  logoBriefRequiresExploration,
+  type DesignFirstSliceToolInput,
 } from "@/shared/design-agent-tools.js";
-import { formatValidationFailure } from "@/shared/contract-validation.js";
-import { agentDesignNodeIdPrefix } from "@/shared/design-id-allocation.js";
+import { contractValidationError } from "./contract-validation-error.js";
 import type { GlobalTaskCoordinator } from "./global-task-coordinator.js";
 import type { RendererDesignToolHost } from "./renderer-design-tool-host.js";
 
@@ -28,39 +26,16 @@ export async function handleDesignFirstSliceTool(
   reportProgress?: (message: string, progress: number) => void,
 ): Promise<TrustedToolResult> {
   const authoritativePrompt = coordinator.authoritativeDesignPrompt(context);
-  const parsed = FirstSliceContract.parse(call.input, {
-    authoritativePrompt,
-    newNodeIdPrefix: agentDesignNodeIdPrefix(context.runId),
-  });
-  if (!parsed.ok) {
-    throw new TypeError(
-      formatValidationFailure("opendesign_generate_first_slice", parsed.issues),
-    );
-  }
-  const input = coordinator.bindFirstSliceToDeliveryScope(
-    context,
-    parsed.value,
-  );
-  if (
-    input.deliverable === "logo" &&
-    logoBriefRequiresExploration(authoritativePrompt) &&
-    input.logoExploration === undefined &&
-    (coordinator.getDeliveryStageContext(context.runId)?.plannedTargets ??
-      0) === 0
-  ) {
-    throw designWorkflowError(
-      "logo_exploration_required",
-      "The current Logo brief explicitly requests three concept directions. Submit one corrected opendesign_generate_first_slice call with logoExploration, three distinct principles and color systems, three declared first-target concept regions, one editable master symbol and one empty evidence root per direction; Main derives the monochrome and 32/24/16 px scale evidence. Do not allocate or draw a single direction first",
-    );
-  }
+  const input = call.input as DesignFirstSliceToolInput;
   const compiled = compileDesignFirstSliceToolInput(input);
   const parsedPlan = DesignPlanContract.parse(compiled.plan, {
     authoritativePrompt,
     canonical: true,
   });
   if (!parsedPlan.ok) {
-    throw new TypeError(
-      formatValidationFailure("compiled first-slice Plan", parsedPlan.issues),
+    throw contractValidationError(
+      "compiled first-slice Plan",
+      parsedPlan.issues,
     );
   }
   const parsedApply = DesignApplyContract.parse(compiled.apply, {
@@ -68,30 +43,27 @@ export async function handleDesignFirstSliceTool(
     internal: true,
   });
   if (!parsedApply.ok) {
-    throw new TypeError(
-      formatValidationFailure(
-        "compiled first-slice transaction",
-        parsedApply.issues,
-      ),
+    throw contractValidationError(
+      "compiled first-slice transaction",
+      parsedApply.issues,
     );
   }
   const normalizedApply = parsedApply.value;
 
-  const preparation = coordinator.prepareDesignPlan(context, compiled.plan);
+  const preparation = coordinator.prepareDesignPlan(context, parsedPlan.value);
   const allocation = coordinator.createDesignPlanAllocation(
     context.runId,
     preparation,
   );
   if (
     allocation &&
-    allocation.targetIds.length !== compiled.plan.targets.length
+    allocation.targetIds.length !== parsedPlan.value.targets.length
   ) {
     throw designWorkflowError(
       "allocation_state_invalid",
-      "Compact first-slice generation requires every declared target to be pending real Frame allocation",
+      "Compact first-slice generation requires the current target to be pending real Frame creation",
     );
   }
-  coordinator.assertVisualReviewBeforeWrite(context);
   const authorization = allocation
     ? coordinator.assertDesignPlanForAllocatedApply(
         context,
@@ -119,16 +91,14 @@ export async function handleDesignFirstSliceTool(
     : undefined;
   const combinedInput = allocation
     ? {
-        label: `Allocate artboards and ${resolvedApply.label}`,
+        label: `Create artboard and ${resolvedApply.label}`,
         summary:
-          "Create every stable delivery Frame root, then commit the first meaningful editable slice as real semantic revisions",
+          "Create the current delivery Frame and its first meaningful editable content atomically",
+        executionMode: "atomic" as const,
         steps: [
           {
             stepId: allocationStepId!,
-            label:
-              allocation.targetIds.length === 1
-                ? "Create real artboard"
-                : `Create ${allocation.targetIds.length} real artboards`,
+            label: "Create real artboard",
             commandIds: allocation.input.commands.map(
               (command) => command.commandId,
             ),
@@ -146,12 +116,22 @@ export async function handleDesignFirstSliceTool(
         commands: [...allocation.input.commands, ...resolvedApply.commands],
       }
     : resolvedApply;
+  const parsedCombinedInput = DesignApplyContract.parse(combinedInput, {
+    canonical: true,
+    internal: true,
+  });
+  if (!parsedCombinedInput.ok) {
+    throw contractValidationError(
+      "host-bound first-slice transaction",
+      parsedCombinedInput.issues,
+    );
+  }
 
   const applied = await rendererHost.execute(
     {
       ...call,
       toolName: INTERNAL_DESIGN_APPLY_TOOL_NAME,
-      input: combinedInput,
+      input: parsedCombinedInput.value,
     },
     executionContext,
     signal,
@@ -179,7 +159,6 @@ export async function handleDesignFirstSliceTool(
   }
   coordinator.recordDesignApplyCompleted(
     context.runId,
-    resolvedApply,
     authorization,
     applied.designRevision?.revision,
     applied.content,

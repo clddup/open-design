@@ -104,7 +104,7 @@ function projectToolResultValue(value: unknown, depth = 0): unknown {
     return value.map((item) => projectToolResultValue(item, depth + 1));
   }
   if (typeof value === "object") {
-    if (isFirstSliceCheckpointResult(value)) {
+    if (isFirstSliceCaptureResult(value)) {
       return projectRecordValue(compactFirstSliceResult(value), depth);
     }
     if (isDesignChangeSetResult(value)) {
@@ -127,14 +127,11 @@ function projectRecordValue(
   );
 }
 
-function isFirstSliceCheckpointResult(
+function isFirstSliceCaptureResult(
   value: object,
 ): value is Record<string, unknown> {
   const record = value as Record<string, unknown>;
-  return (
-    isRecord(record.checkpoint) &&
-    record.checkpoint.action === "first-slice-and-capture"
-  );
+  return isRecord(record.firstSlice) && isRecord(record.delivery);
 }
 
 function compactFirstSliceResult(
@@ -194,7 +191,8 @@ function compactFirstSliceResult(
     captureTarget: value.captureTarget,
     layoutQuality,
     reviewWorkflow: value.reviewWorkflow,
-    checkpoint: value.checkpoint,
+    materialRevisionPreserved: value.materialRevisionPreserved,
+    captureFailure: value.captureFailure,
     warnings: value.warnings,
     attachment: value.attachment,
     attachments: value.attachments,

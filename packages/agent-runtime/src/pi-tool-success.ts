@@ -89,6 +89,7 @@ export function projectPiToolSuccess(options: {
     status: "completed",
     result: options.result.content,
     ...(nextRevision === undefined ? {} : { revision: nextRevision }),
+    ...(revision === undefined ? {} : { revisionAdvanced: true as const }),
   };
   const details = {
     kind: TOOL_RESULT_KIND,

@@ -1,4 +1,5 @@
 import type { AgentEvent, AgentRequest } from "@opendesign/agent-contracts";
+import type { JournalEvent, SessionStore } from "@opendesign/session-store";
 import type { DesignDeliveryLedger } from "@opendesign/workspace-contracts";
 import { describe, expect, it, vi } from "vitest";
 import { AgentContinuationScheduler } from "./agent-continuation-scheduler";
@@ -39,24 +40,64 @@ const incomplete: DesignDeliveryLedger = {
   ],
 };
 
+function createMemorySessionStore(): SessionStore {
+  const events: JournalEvent[] = [];
+  return {
+    append: (event) => {
+      events.push(event);
+      return Promise.resolve();
+    },
+    appendNext: (sessionId, createEvent) => {
+      const event = createEvent(events.length + 1);
+      if (event.sessionId !== sessionId) throw new Error("Session mismatch");
+      events.push(event);
+      return Promise.resolve(event);
+    },
+    read: (sessionId) =>
+      Promise.resolve(events.filter((event) => event.sessionId === sessionId)),
+    readTimeline: () => Promise.resolve([]),
+    project: (sessionId) =>
+      Promise.resolve({
+        sessionId,
+        lastSequence: events.length,
+        messageCount: 0,
+        toolCallCount: 0,
+        compactedRanges: [],
+      }),
+  };
+}
+
 describe("Agent Run starter", () => {
   it("injects a Main-prepared inspection before sending the Run to Agent", async () => {
     const scheduler = new AgentContinuationScheduler(() => 1000);
     const send = vi.fn();
+    const start = vi.fn().mockResolvedValue(undefined);
     const initialDesignInspection = {
       version: 1 as const,
       observedRevision: source.revision,
       content: {
-        inspection: { pageId: "page_1", revision: source.revision },
+        inspection: {
+          pageId: "page_1",
+          revision: source.revision,
+          document: {
+            documentId: source.documentId,
+            revision: source.revision,
+            pagesById: {
+              page_1: { id: "page_1", rootNodeIds: [] },
+            },
+            nodesById: {},
+          },
+        },
       },
     };
     const started = await startAgentRun(source, {
-      agentHost: { send } as never,
+      agentHost: { send, start },
       continuationScheduler: scheduler,
       conversationIdByRunId: new Map(),
       initialInspectionControllers: new Map(),
       globalTaskCoordinator: {
         registerRun: vi.fn().mockResolvedValue({}),
+        setDeliveryScopeReview: vi.fn(),
         assertRunRevisionCurrent: vi.fn().mockResolvedValue(undefined),
         referenceAttachmentsForRun: vi.fn().mockReturnValue([]),
       } as never,
@@ -66,6 +107,7 @@ describe("Agent Run starter", () => {
           maxOutputTokens: 16_384,
         }),
       } as never,
+      sessionStore: createMemorySessionStore(),
       prepareInitialDesignInspection: vi
         .fn()
         .mockResolvedValue(initialDesignInspection),
@@ -76,9 +118,10 @@ describe("Agent Run starter", () => {
     });
 
     expect(started).toBe(true);
+    expect(start).toHaveBeenCalledOnce();
     expect(send).toHaveBeenCalledWith({
       ...source,
-      deliveryScopeReview: "direct",
+      deliveryScopeReview: "required",
       initialDesignInspection,
       modelContext: { contextWindow: 200_000, maxOutputTokens: 16_384 },
     });
@@ -93,20 +136,26 @@ describe("Agent Run starter", () => {
       .mockRejectedValue(
         new AgentRunAdmissionError("preflight_stale", "Design File advanced"),
       );
+    const sessionStore = createMemorySessionStore();
 
     await expect(
       startAgentRun(source, {
-        agentHost: { send } as never,
+        agentHost: {
+          send,
+          start: vi.fn().mockResolvedValue(undefined),
+        },
         continuationScheduler: scheduler,
         conversationIdByRunId: new Map(),
         initialInspectionControllers: new Map(),
         globalTaskCoordinator: {
           registerRun: vi.fn().mockResolvedValue({}),
+          setDeliveryScopeReview: vi.fn(),
           assertRunRevisionCurrent,
           handleAgentEvent,
           referenceAttachmentsForRun: vi.fn().mockReturnValue([]),
         } as never,
         modelProviderHost: { resolveModelContext: vi.fn() } as never,
+        sessionStore,
         prepareInitialDesignInspection: vi.fn().mockResolvedValue(undefined),
         referenceHost: {
           registerRun: vi.fn(),
@@ -121,9 +170,38 @@ describe("Agent Run starter", () => {
       expect.objectContaining({
         type: "agent.error",
         runId: source.runId,
-        code: "request_rejected",
+        code: "preflight_stale",
       }),
     );
+    expect(handleAgentEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "run.completed",
+        runId: source.runId,
+        stopReason: "error",
+      }),
+    );
+    await expect(sessionStore.read(source.sessionId)).resolves.toMatchObject([
+      {
+        type: "message.user",
+        runId: source.runId,
+        payload: {
+          messageId: `${source.runId}_user`,
+          content: source.prompt,
+        },
+      },
+      {
+        type: "run.state",
+        runId: source.runId,
+        payload: {
+          status: "error",
+          stopReason: "error",
+          failure: {
+            code: "preflight_stale",
+            message: "Design File advanced",
+          },
+        },
+      },
+    ]);
   });
 
   it("rejects a Renderer-forged initial inspection", async () => {
@@ -144,6 +222,7 @@ describe("Agent Run starter", () => {
           initialInspectionControllers: new Map(),
           globalTaskCoordinator: {} as never,
           modelProviderHost: {} as never,
+          sessionStore: createMemorySessionStore(),
           referenceHost: {} as never,
           publish: vi.fn(),
         },
@@ -162,6 +241,7 @@ describe("Agent Run starter", () => {
           initialInspectionControllers: new Map(),
           globalTaskCoordinator: {} as never,
           modelProviderHost: {} as never,
+          sessionStore: createMemorySessionStore(),
           referenceHost: {} as never,
           publish: vi.fn(),
         },
@@ -187,12 +267,16 @@ describe("Agent Run starter", () => {
 
     expect(
       await handleAgentRunControlRequest(explicit, {
-        agentHost: { send } as never,
+        agentHost: {
+          send,
+          start: vi.fn().mockResolvedValue(undefined),
+        },
         continuationScheduler: scheduler,
         conversationIdByRunId: new Map(),
         initialInspectionControllers: new Map(),
         globalTaskCoordinator: {
           registerRun: vi.fn().mockResolvedValue({}),
+          setDeliveryScopeReview: vi.fn(),
           assertRunRevisionCurrent: vi.fn().mockResolvedValue(undefined),
           referenceAttachmentsForRun: vi.fn().mockReturnValue([]),
         } as never,
@@ -202,6 +286,7 @@ describe("Agent Run starter", () => {
             maxOutputTokens: 16_384,
           }),
         } as never,
+        sessionStore: createMemorySessionStore(),
         prepareInitialDesignInspection: vi.fn().mockResolvedValue(undefined),
         referenceHost: {
           registerRun: vi.fn(),
@@ -235,17 +320,19 @@ describe("Agent Run starter", () => {
         }),
     );
     const dependencies = {
-      agentHost: { send } as never,
+      agentHost: { send, start: vi.fn().mockResolvedValue(undefined) } as never,
       continuationScheduler: scheduler,
       conversationIdByRunId: new Map<string, string>(),
       initialInspectionControllers: new Map<string, AbortController>(),
       globalTaskCoordinator: {
         registerRun: vi.fn().mockResolvedValue({}),
+        setDeliveryScopeReview: vi.fn(),
         assertRunRevisionCurrent: vi.fn().mockResolvedValue(undefined),
         handleAgentEvent: vi.fn(),
         referenceAttachmentsForRun: vi.fn().mockReturnValue([]),
       } as never,
       modelProviderHost: { resolveModelContext: vi.fn() } as never,
+      sessionStore: createMemorySessionStore(),
       prepareInitialDesignInspection,
       referenceHost: {
         registerRun: vi.fn(),
@@ -270,11 +357,12 @@ describe("Agent Run starter", () => {
   it("does not send a scheduled continuation after the user cancels it", async () => {
     const scheduler = new AgentContinuationScheduler(() => 1000);
     scheduler.registerRun(source);
+    scheduler.setDeliveryScopeReview(source.runId, "required");
     scheduler.record({
       type: "tool.completed",
       runId: source.runId,
       toolCallId: "inspect_source",
-      result: { unfinishedDelivery: incomplete },
+      result: { delivery: incomplete },
     });
     const decision = scheduler.record({
       type: "run.completed",
@@ -291,6 +379,7 @@ describe("Agent Run starter", () => {
 
     const terminalEvents: AgentEvent[] = [];
     const send = vi.fn();
+    const sessionStore = createMemorySessionStore();
     const started = await startAgentRun(
       {
         ...source,
@@ -298,17 +387,22 @@ describe("Agent Run starter", () => {
         continuation: decision.continuation,
       },
       {
-        agentHost: { send } as never,
+        agentHost: {
+          send,
+          start: vi.fn().mockResolvedValue(undefined),
+        },
         continuationScheduler: scheduler,
         conversationIdByRunId: new Map(),
         initialInspectionControllers: new Map(),
         globalTaskCoordinator: {
           registerRun: vi.fn().mockResolvedValue({}),
+          setDeliveryScopeReview: vi.fn(),
           assertRunRevisionCurrent: vi.fn().mockResolvedValue(undefined),
           handleAgentEvent: (event: AgentEvent) => terminalEvents.push(event),
           referenceAttachmentsForRun: vi.fn().mockReturnValue([]),
         } as never,
         modelProviderHost: { resolveModelContext: vi.fn() } as never,
+        sessionStore,
         referenceHost: {
           registerRun: vi.fn(),
           releaseRun: vi.fn(),
@@ -325,5 +419,17 @@ describe("Agent Run starter", () => {
         stopReason: "cancelled",
       }),
     );
+    await expect(sessionStore.read(source.sessionId)).resolves.toMatchObject([
+      {
+        type: "message.user",
+        runId: decision.nextRunId,
+        payload: { content: source.prompt },
+      },
+      {
+        type: "run.state",
+        runId: decision.nextRunId,
+        payload: { status: "cancelled", stopReason: "cancelled" },
+      },
+    ]);
   });
 });

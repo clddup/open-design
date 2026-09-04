@@ -34,13 +34,10 @@ import { prepareInitialDesignInspection } from "./agent/agent-initial-design-ins
 import { AgentIpcRouter } from "./agent/agent-ipc-router";
 import { AgentRunCoordinator } from "./agent/agent-run-coordinator";
 import { handleDesignPlanTool } from "./agent/design-plan-tool-handler";
-import { handleDesignPlanUpdateTool } from "./agent/design-plan-update-tool-handler.js";
 import { handleDeliveryScopeTool } from "./agent/delivery-scope-tool-handler";
 import { handleDesignFirstSliceTool } from "./agent/design-first-slice-tool-handler";
-import {
-  handleDesignCheckpointTool,
-  handleFirstSliceCheckpoint,
-} from "./agent/design-checkpoint-tool-handler";
+import { parseDesignToolInput } from "./agent/design-tool-input-parser";
+import { applyFirstSliceAndCapture } from "./agent/first-slice-capture-orchestrator";
 import {
   MainDesignToolRuntime,
   mainDesignToolAuditDiagnostic,
@@ -67,6 +64,7 @@ import { registerRasterFileIpc } from "./raster/raster-file-ipc";
 import { RasterFileService } from "./raster/raster-file-service";
 import { FontBinaryMainService } from "./font/font-binary-main";
 import type { RasterExportFormat } from "@opendesign/import-export-service/raster";
+import type { SessionStore } from "@opendesign/session-store";
 import { ModelProviderHost } from "./model/model-provider-host";
 import { registerModelServiceIpc } from "./model/model-service-ipc";
 import { ImageGenerationHost } from "./model/image-generation-host";
@@ -94,15 +92,10 @@ import {
 import { translate } from "@/shared/i18n/messages";
 import {
   DESIGN_CAPTURE_TOOL_NAME,
-  DESIGN_CHECKPOINT_TOOL_NAME,
   DESIGN_DELIVERY_SCOPE_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
   DESIGN_FIRST_SLICE_TOOL_NAME,
   DESIGN_PLAN_TOOL_NAME,
-  DESIGN_PLAN_UPDATE_TOOL_NAME,
-  INTERNAL_DESIGN_APPLY_TOOL_NAME,
-  DesignApplyContract,
-  type DesignApplyToolInput,
 } from "@/shared/design-agent-tools";
 
 const designGenerationPerformance = new DesignGenerationPerformanceTracker();
@@ -151,6 +144,7 @@ let modelProviderHost: ModelProviderHost | null = null;
 let imageGenerationHost: ImageGenerationHost | null = null;
 let agentAttachmentHost: AgentAttachmentHost | null = null;
 let agentReferenceHost: AgentReferenceHost | null = null;
+let agentSessionStore: SessionStore | null = null;
 let agentSvgExportHost: AgentSvgExportHost | null = null;
 let agentSvgImportHost: AgentSvgImportHost | null = null;
 let agentRasterExportHost: AgentRasterExportHost | null = null;
@@ -204,6 +198,7 @@ const agentRunCoordinator = new AgentRunCoordinator({
     modelProviderHost,
     projectHost,
     referenceHost: agentReferenceHost,
+    sessionStore: agentSessionStore,
   }),
   prepareInitialDesignInspection: prepareInitialInspectionForRun,
   publish: (event) => desktopWindowHost.send(channels.agentEvent, event),
@@ -751,8 +746,19 @@ async function startDesktopApplication(
   const agentSessionStoreBinding = new AgentSessionStoreBinding(
     agentHost,
     join(homedir(), ".opendesign", "sessions", "events.jsonl"),
+    (diagnostic) =>
+      diagnosticHost.publish({
+        level: "warning",
+        source: "storage",
+        presentation: "silent",
+        code: diagnostic.code,
+        message: diagnostic.message,
+        ...(diagnostic.sessionId
+          ? { context: { conversationId: diagnostic.sessionId } }
+          : {}),
+      }),
   );
-  const agentSessionStore = agentSessionStoreBinding.store;
+  agentSessionStore = agentSessionStoreBinding.store;
   const persistedLocale = workspaceStore.getPreference("locale");
   applicationPreferences.restoreLocale(persistedLocale);
   const previousMenu = Menu.getApplicationMenu();
@@ -790,9 +796,10 @@ async function startDesktopApplication(
     agentHost.setModelRequestHandler(null);
     agentHost.setDesignToolRequestHandler(null);
     agentSessionStoreBinding.dispose();
+    agentSessionStore = null;
   });
   const mainDesignToolRuntime = new MainDesignToolRuntime({
-    dispatch: async (call, context, signal, reportProgress) => {
+    parseInput: (call, context) => {
       if (!globalTaskCoordinator) {
         throw new FatalAgentRunError(
           "run_services_unavailable",
@@ -800,13 +807,21 @@ async function startDesktopApplication(
         );
       }
       try {
-        globalTaskCoordinator.assertDesignToolContext(context);
+        return parseDesignToolInput(globalTaskCoordinator, call, context);
       } catch (error) {
         throw new FatalAgentRunError(
           "run_context_invalid",
           error instanceof Error
             ? error.message
             : "Design tool Run context is invalid",
+        );
+      }
+    },
+    dispatch: async (call, context, signal, reportProgress) => {
+      if (!globalTaskCoordinator) {
+        throw new FatalAgentRunError(
+          "run_services_unavailable",
+          "Global Task services are not initialized",
         );
       }
       const executionContext =
@@ -824,51 +839,6 @@ async function startDesktopApplication(
             : {}),
           reportProgress: options.reportProgress ?? reportProgress,
         });
-      const executeDesignApply = async (
-        applyCall: ToolCallRequest,
-        input: DesignApplyToolInput,
-        stageProgress?: (message: string, progress: number) => void,
-      ): Promise<TrustedToolResult> => {
-        const parsedInput = DesignApplyContract.parse(input, {
-          canonical: true,
-        });
-        if (!parsedInput.ok) {
-          throw new TypeError("Invalid design apply tool input");
-        }
-        const normalizedInput = parsedInput.value;
-        globalTaskCoordinator!.assertVisualReviewBeforeWrite(context);
-        const authorization = globalTaskCoordinator!.assertDesignPlanForApply(
-          context,
-          normalizedInput,
-        );
-        const resolvedInput = authorization?.input ?? normalizedInput;
-        const result = await executeRendererTool(
-          {
-            ...applyCall,
-            toolName: INTERNAL_DESIGN_APPLY_TOOL_NAME,
-            input: {
-              ...resolvedInput,
-              ...(authorization?.rebaseGuard
-                ? { rebaseGuard: authorization.rebaseGuard }
-                : {}),
-            },
-          },
-          stageProgress ? { reportProgress: stageProgress } : {},
-        );
-        globalTaskCoordinator!.assertDesignApplyResult(
-          context,
-          authorization,
-          result,
-        );
-        globalTaskCoordinator!.recordDesignApplyCompleted(
-          context.runId,
-          resolvedInput,
-          authorization,
-          result.designRevision?.revision,
-          result.content,
-        );
-        return withDesignDelivery(result, context.runId);
-      };
       const captureReviewSession = createDesignCaptureReviewSession({
         context,
         signal,
@@ -884,18 +854,10 @@ async function startDesktopApplication(
       });
       if (designPageResult) return designPageResult;
       if (call.toolName === DESIGN_DELIVERY_SCOPE_TOOL_NAME) {
-        return await handleDeliveryScopeTool(
-          globalTaskCoordinator,
-          rendererDesignToolHost,
-          call,
-          context,
-          executionContext,
-          signal,
-          reportProgress,
-        );
+        return handleDeliveryScopeTool(globalTaskCoordinator, call, context);
       }
       if (call.toolName === DESIGN_FIRST_SLICE_TOOL_NAME) {
-        return await handleFirstSliceCheckpoint(
+        return await applyFirstSliceAndCapture(
           {
             firstSlice: (stageProgress) =>
               handleDesignFirstSliceTool(
@@ -923,34 +885,8 @@ async function startDesktopApplication(
           reportProgress,
         );
       }
-      if (call.toolName === DESIGN_CHECKPOINT_TOOL_NAME) {
-        return await handleDesignCheckpointTool(
-          call,
-          {
-            apply: executeDesignApply,
-            assertRefinementReady: () =>
-              globalTaskCoordinator!.assertDesignRefinementReady(context),
-            capture: (captureCall, stageProgress) =>
-              captureReviewSession.capture(captureCall, stageProgress),
-            getDelivery: () =>
-              globalTaskCoordinator!.getDeliveryLedger(context.runId),
-          },
-          reportProgress,
-        );
-      }
       if (call.toolName === DESIGN_PLAN_TOOL_NAME) {
-        return await handleDesignPlanTool(
-          globalTaskCoordinator,
-          rendererDesignToolHost,
-          call,
-          context,
-          executionContext,
-          signal,
-          reportProgress,
-        );
-      }
-      if (call.toolName === DESIGN_PLAN_UPDATE_TOOL_NAME) {
-        return handleDesignPlanUpdateTool(globalTaskCoordinator, call, context);
+        return handleDesignPlanTool(globalTaskCoordinator, call, context);
       }
       const captureReviewResult = await captureReviewSession.handle(call);
       if (captureReviewResult) return captureReviewResult;
@@ -1057,7 +993,8 @@ async function startDesktopApplication(
   );
   globalTaskCoordinator.reconcileInterruptedTasks();
   try {
-    const recovered = await agentSessionStore.reconcileInterruptedRuns();
+    const recovered =
+      await agentSessionStoreBinding.store.reconcileInterruptedRuns();
     if (recovered.recoveredRuns > 0) {
       console.info(
         `Recovered ${recovered.recoveredRuns} interrupted Agent run(s) and ${recovered.recoveredTools} tool call(s)`,

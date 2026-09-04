@@ -163,6 +163,16 @@ describe("Pi completion guard adapter", () => {
     expect(
       result.store.events.filter((event) => event.type === "message.assistant"),
     ).toHaveLength(2);
+    const reviewEvents = result.store.events.filter(
+      (event) => event.type === "completion.review",
+    );
+    expect(reviewEvents).toHaveLength(1);
+    expect(reviewEvents[0]?.payload).toMatchObject({
+      status: "rejected",
+      code: "completion_guard_rejected",
+      rejectionCount: 1,
+      message: "Capture and refine the rendered draft first.",
+    });
     expect(result.events.at(-1)).toMatchObject({
       type: "run.completed",
       stopReason: "complete",

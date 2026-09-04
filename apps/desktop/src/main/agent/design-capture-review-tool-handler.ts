@@ -7,8 +7,6 @@ import type {
 import {
   DESIGN_CAPTURE_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
-  DESIGN_REVIEW_TOOL_NAME,
-  DesignVisualReviewContract,
 } from "@/shared/design-agent-tools.js";
 import type { RendererDesignCaptureTarget } from "@/shared/design-tool-bridge.js";
 import { formatValidationFailure } from "@/shared/contract-validation.js";
@@ -99,6 +97,7 @@ export function createDesignCaptureReviewSession(
 
     let visualCritic:
       Awaited<ReturnType<typeof runIndependentDesignVisualCritic>> | undefined;
+    let visualCriticUnavailable: { message: string } | undefined;
     if (layoutQuality === undefined || layoutQuality.errorCount === 0) {
       const attachment = requireDesignVisualCriticAttachment(result.content);
       const criticContext = input.coordinator.resolveVisualCriticContext(
@@ -109,16 +108,21 @@ export function createDesignCaptureReviewSession(
       if (criticContext) {
         reportProgress?.("Running independent visual critic", 0.94);
         const modelProviderHost = input.getModelProviderHost();
-        visualCritic = await runIndependentDesignVisualCritic(
-          modelProviderHost,
-          {
-            ...criticContext,
-            modelSelection: modelProviderHost.resolveVisualCriticSelection(
-              criticContext.modelSelection,
-            ),
-          },
-          input.signal,
-        );
+        try {
+          visualCritic = await runIndependentDesignVisualCritic(
+            modelProviderHost,
+            {
+              ...criticContext,
+              modelSelection: modelProviderHost.resolveVisualCriticSelection(
+                criticContext.modelSelection,
+              ),
+            },
+            input.signal,
+          );
+        } catch (error) {
+          if (input.signal.aborted) throw error;
+          visualCriticUnavailable = { message: errorMessage(error) };
+        }
       }
     }
     const reviewWorkflow = input.coordinator.recordCanvasCapture(
@@ -126,6 +130,7 @@ export function createDesignCaptureReviewSession(
       observedRevision,
       layoutQuality,
       visualCritic,
+      visualCriticUnavailable,
     );
     return {
       ...result,
@@ -145,26 +150,14 @@ export function createDesignCaptureReviewSession(
     call: ToolCallRequest,
   ): Promise<TrustedToolResult | null> => {
     if (call.toolName === DESIGN_CAPTURE_TOOL_NAME) return await capture(call);
-    if (call.toolName !== DESIGN_REVIEW_TOOL_NAME) return null;
-
-    const parsed = DesignVisualReviewContract.parse(call.input, {
-      skillRefs: input.coordinator.resolveVisualReviewSkillRefs(input.context),
-    });
-    if (!parsed.ok) {
-      throw new TypeError(
-        formatValidationFailure("Visual Review", parsed.issues),
-      );
-    }
-    input.coordinator.registerVisualReview(input.context, parsed.value);
-    return {
-      content: {
-        ok: true,
-        status: "accepted",
-        refinements: parsed.value.refinements,
-        delivery: input.coordinator.getDeliveryLedger(input.context.runId),
-      },
-    };
+    return null;
   };
 
   return { capture, handle };
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error
+    ? error.message.slice(0, 1_000)
+    : "Independent visual critic is unavailable";
 }

@@ -59,7 +59,6 @@ export interface PreparedOpenDesignPiContext {
   initialMessages: Message[];
   promptMessage: UserMessage;
   systemPrompt: string;
-  priorToolCallIds: string[];
   compactedThroughSequence?: number;
 }
 
@@ -117,7 +116,6 @@ export async function prepareOpenDesignPiContext(
   }
 
   const restored = restoreModelMessages(priorEvents);
-  const priorToolCallIds = collectPriorToolCallIds(priorEvents);
   const context = new OpenDesignPiContextAdapter({
     budget,
     maxContextCharacters,
@@ -157,7 +155,6 @@ export async function prepareOpenDesignPiContext(
     initialMessages,
     promptMessage,
     systemPrompt: options.systemPrompt,
-    priorToolCallIds,
     ...(compactedThroughSequence === undefined
       ? {}
       : { compactedThroughSequence }),
@@ -465,18 +462,4 @@ function toContextFailure(error: unknown): PiContextFailure {
 
 function snapshotRequest(request: AgentRunRequest): AgentRunRequest {
   return structuredClone(request);
-}
-
-function collectPriorToolCallIds(
-  events: readonly { type: string; payload: unknown }[],
-): string[] {
-  const ids = new Set<string>();
-  for (const event of events) {
-    if (event.type !== "tool.requested") continue;
-    const toolCallId = (event.payload as { toolCallId?: unknown }).toolCallId;
-    if (typeof toolCallId === "string" && toolCallId.length > 0) {
-      ids.add(toolCallId);
-    }
-  }
-  return [...ids];
 }

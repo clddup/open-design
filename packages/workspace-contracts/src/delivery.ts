@@ -5,6 +5,7 @@ import {
 } from "@opendesign/contract-runtime";
 import {
   DesignEntityIdSchema,
+  MAX_DESIGN_TARGETS,
   RunTargetSetSchema,
   runTargetSetDomainIssues,
 } from "./access.js";
@@ -99,7 +100,7 @@ export const DesignPlanExecutionSchema = Type.Object(
     planRevision: Type.Integer({ minimum: 1 }),
     targets: Type.Array(DesignPlanTargetExecutionSchema, {
       minItems: 1,
-      maxItems: 32,
+      maxItems: MAX_DESIGN_TARGETS,
     }),
   },
   { additionalProperties: false },
@@ -110,7 +111,7 @@ export const DesignDeliveryLedgerSchema = Type.Object(
     version: Type.Literal(DESIGN_DELIVERY_LEDGER_VERSION),
     targets: Type.Array(DesignDeliveryTargetSchema, {
       minItems: 1,
-      maxItems: 32,
+      maxItems: MAX_DESIGN_TARGETS,
     }),
     activeTargetId: Type.Union([StableIdSchema, Type.Null()]),
     planExecution: Type.Optional(DesignPlanExecutionSchema),
@@ -241,6 +242,7 @@ function appendPlanExecutionIssues(
     ledger.targets.map((target) => [target.targetId, target]),
   );
   const executionTargetIds = new Set<string>();
+  let previousDeliveryTargetIndex = -1;
   let sequence: "completed" | "active" | "pending" = "completed";
   let previousCompletedRevision: number | undefined;
 
@@ -256,7 +258,10 @@ function appendPlanExecutionIssues(
       );
     }
     executionTargetIds.add(target.targetId);
-    if (ledger.targets[targetIndex]?.targetId !== target.targetId) {
+    const deliveryTargetIndex = ledger.targets.findIndex(
+      (candidate) => candidate.targetId === target.targetId,
+    );
+    if (deliveryTargetIndex <= previousDeliveryTargetIndex) {
       issues.push(
         issue(
           "workspace.plan_execution_target_order_invalid",
@@ -265,6 +270,10 @@ function appendPlanExecutionIssues(
         ),
       );
     }
+    previousDeliveryTargetIndex = Math.max(
+      previousDeliveryTargetIndex,
+      deliveryTargetIndex,
+    );
     const delivery = deliveryById.get(target.targetId);
     if (!delivery) {
       issues.push(
@@ -361,12 +370,15 @@ function appendPlanExecutionIssues(
     }
   });
 
-  if (ledger.planExecution.targets.length !== ledger.targets.length) {
+  if (
+    ledger.activeTargetId !== null &&
+    !executionTargetIds.has(ledger.activeTargetId)
+  ) {
     issues.push(
       issue(
         "workspace.plan_execution_target_count_invalid",
         "/planExecution/targets",
-        "Plan execution must cover every delivery target exactly once",
+        "Plan execution must cover the active delivery target",
       ),
     );
   }

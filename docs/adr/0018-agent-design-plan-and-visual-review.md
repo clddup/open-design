@@ -51,7 +51,7 @@ Main 在 Renderer 写入前验证 create Plan 的画板/区域/组件声明以�
 
 Page Mutation Target 只能计划该 Page；Document Mutation Target 可以计划当前检查结果中同一 Design File 的多个 Page。跨 Design File/Project target 仍不属于本决策的已实现范围。
 
-所有 deliverable 默认使用 `editable-composition`。`single-raster` 只允许一个 target，且计划必须携带当前用户消息中的精确摘录，摘录本身明确要求单张扁平图片。图片生成和放置必须复用计划声明的 role；生成结果不能自行成为完成证据。
+所有 deliverable 默认使用 `editable-composition`。`single-raster` 只允许一个 target，并且必须声明 `final-single-image` 角色且不包含组件候选；是否属于单张扁平图片交付由 Agent 根据当前用户需求判断，不再复制用户原话并由宿主做脆弱的字符串匹配。图片生成和放置必须复用计划声明的 role；生成结果不能自行成为完成证据。
 
 新图层必须位于所属 target 的计划 Frame 内。`artboard.mode=create` 的首个创建事务必须按计划位置和尺寸创建轴对齐的 Page-root Frame，并同时包含至少一个非容器的真实可编辑内容层；不能先把空画板写进正式文档，再承诺由后续调用填充。create target 的每个声明区域必须使用原 `nodeId`，以计划 bounds 创建为画板直属、轴对齐的 `Group` 或 `Frame`；当该区域首次进入事务时，同一事务必须在其子树内包含至少一个非 `Group/Frame` 的真实内容层。Main 只为 create target 编译画板/区域结构节点的 Page、parent 和父级局部几何。
 

@@ -37,7 +37,15 @@ export function disclosedToolDefinitions(
   if (phase === "expanded") return visibleDefinitions;
   if (phase === "continuation") {
     return visibleDefinitions
-      .filter((definition) => definition.modelDisclosure?.role !== "plan")
+      .filter((definition) => {
+        const disclosure = definition.modelDisclosure;
+        return (
+          disclosure === undefined ||
+          (disclosure.role !== "plan" &&
+            (disclosure.bootstrap === "available" ||
+              disclosure.continuation === "available"))
+        );
+      })
       .map((definition) => projectDisclosure(definition, phase));
   }
   return visibleDefinitions.flatMap((definition) => {
@@ -102,10 +110,10 @@ export function deliveryScopeReviewToolDefinitions(
  * New-design Runs stay on the compact surface through inspection and the
  * current stage's first material commit, then enter a continuation surface
  * that keeps that stage authoritative while allowing the next compact stage.
- * General Runs expand after a material revision. A Plan
- * that explicitly targets an existing artboard expands the edit surface
- * because its first valid mutation may require hierarchy/layout/component
- * tooling.
+ * Both new-design and general Runs stay on a compact continuation surface
+ * after material writes. Advanced tools expand only after the model explicitly
+ * inspects the capability manifest, avoiding a full catalog dump during
+ * ordinary compose/edit/capture loops.
  */
 export function resolveModelToolDisclosurePhase(
   definitions: readonly AgentToolDefinition[],
@@ -128,20 +136,11 @@ export function resolveModelToolDisclosurePhase(
   let planned = false;
   for (const record of records) {
     const role = roles.get(record.toolName);
-    if (role === "material-write" && record.revision !== undefined) {
-      const disclosure = definitions.find(
-        (definition) => definition.name === record.toolName,
-      )?.modelDisclosure;
-      if (
-        options.surface === "new-design" &&
-        disclosure?.surfaces?.includes("new-design")
-      ) {
-        return "continuation";
-      }
+    if (role === "capability-discovery" && record.status === "completed") {
       return "expanded";
     }
-    if (role === "plan" && planTargetsExistingArtboard(record.input)) {
-      return "expanded";
+    if (role === "material-write" && record.revisionAdvanced === true) {
+      return "continuation";
     }
     if (role === "plan") planned = true;
     if (role === "inspection") {
@@ -153,23 +152,4 @@ export function resolveModelToolDisclosurePhase(
     return "host-inspected";
   }
   return inspected ? "inspected" : "bootstrap";
-}
-
-function planTargetsExistingArtboard(input: unknown): boolean {
-  if (!isRecord(input)) return false;
-  if (isExistingArtboard(input.artboard)) return true;
-  return (
-    Array.isArray(input.targets) &&
-    input.targets.some(
-      (target) => isRecord(target) && isExistingArtboard(target.artboard),
-    )
-  );
-}
-
-function isExistingArtboard(value: unknown): boolean {
-  return isRecord(value) && value.mode === "existing";
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

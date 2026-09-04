@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   compileDesignFirstSliceToolInput,
   DESIGN_FIRST_SLICE_TOOL_NAME,
+  FirstSliceContract,
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
   type DesignFirstSliceToolInput,
 } from "@/shared/design-agent-tools.js";
@@ -24,7 +25,8 @@ const context = {
 describe("handleDesignFirstSliceTool", () => {
   it("commits allocation and the first real slice through one semantic history group", async () => {
     const input = firstSliceInput();
-    let boundInput: DesignFirstSliceToolInput | undefined;
+    let authorizedApply:
+      ReturnType<typeof compileDesignFirstSliceToolInput>["apply"] | undefined;
     let registeredPlan:
       ReturnType<typeof compileDesignFirstSliceToolInput>["plan"] | undefined;
     const delivery = {
@@ -46,12 +48,7 @@ describe("handleDesignFirstSliceTool", () => {
       authoritativeDesignPrompt: vi
         .fn()
         .mockReturnValue("Create a focused home screen"),
-      bindFirstSliceToDeliveryScope: vi.fn(
-        (_context: unknown, value: DesignFirstSliceToolInput) => {
-          boundInput = value;
-          return value;
-        },
-      ),
+      firstSliceTargetBinding: vi.fn(() => targetBinding(input)),
       prepareDesignPlan: vi.fn(
         (
           _context: unknown,
@@ -73,26 +70,16 @@ describe("handleDesignFirstSliceTool", () => {
       ),
       createDesignPlanAllocation: vi.fn().mockReturnValue({
         targetIds: ["home"],
-        input: {
-          label: "Allocate Home artboard",
-          commands: [
-            {
-              commandId: "allocate_home",
-              type: "insert_element",
-              pageId: "page_1",
-              parentId: null,
-              index: 0,
-              node: { id: "frame_home", kind: "frame" },
-            },
-          ],
-        },
+        input: allocationInput(),
       }),
-      assertVisualReviewBeforeWrite: vi.fn(),
       assertDesignPlanForAllocatedApply: vi.fn(
         (
           _context: unknown,
           apply: ReturnType<typeof compileDesignFirstSliceToolInput>["apply"],
-        ) => ({ input: apply, plan: registeredPlan, targetIds: ["home"] }),
+        ) => {
+          authorizedApply = apply;
+          return { input: apply, plan: registeredPlan, targetIds: ["home"] };
+        },
       ),
       assertDesignApplyResult: vi.fn(),
       recordDesignPlanAllocated: vi.fn(),
@@ -131,7 +118,7 @@ describe("handleDesignFirstSliceTool", () => {
     const call = {
       toolCallId: "slice_1",
       toolName: DESIGN_FIRST_SLICE_TOOL_NAME,
-      input: firstSliceModelInput(input),
+      input: canonicalFirstSlice(input),
     };
 
     const result = await handleDesignFirstSliceTool(
@@ -164,24 +151,24 @@ describe("handleDesignFirstSliceTool", () => {
       ["home"],
       4,
     );
-    if (!boundInput) throw new Error("Expected host-bound First Slice input");
-    const stableCompiled = compileDesignFirstSliceToolInput(boundInput);
-    expect(boundInput.targets[0]).toMatchObject({
-      frame: { frameId: "odr_run_slice_4_home_frame_home" },
-      regions: [
-        {
-          nodeId: "odr_run_slice_4_home_home_hero",
-          parentId: "odr_run_slice_4_home_frame_home",
-        },
-      ],
+    expect(registeredPlan?.targets[0]).toMatchObject({
+      artboard: { frameId: "frame_home" },
+      composition: {
+        regions: [
+          {
+            nodeId: "odr_run_slice_4_home_home_hero",
+          },
+        ],
+      },
     });
-    expect(boundInput.firstSlice.stages[0].elements[0]).toMatchObject({
-      id: "odr_run_slice_4_home_hero_title",
-      parentId: "odr_run_slice_4_home_home_hero",
+    expect(authorizedApply?.commands[0]).toMatchObject({
+      node: {
+        id: "odr_run_slice_4_home_hero_title",
+        parentId: "odr_run_slice_4_home_home_hero",
+      },
     });
     expect(coordinator.recordDesignApplyCompleted).toHaveBeenCalledWith(
       "run_slice",
-      stableCompiled.apply,
       expect.objectContaining({ targetIds: ["home"] }),
       5,
       {
@@ -226,7 +213,7 @@ describe("handleDesignFirstSliceTool", () => {
       authoritativeDesignPrompt: vi
         .fn()
         .mockReturnValue("Create a focused home screen"),
-      bindFirstSliceToDeliveryScope: vi.fn(passthroughFirstSlice),
+      firstSliceTargetBinding: vi.fn(() => targetBinding(input)),
       prepareDesignPlan: vi.fn().mockReturnValue({
         status: "accepted",
         planRevision: 1,
@@ -237,12 +224,8 @@ describe("handleDesignFirstSliceTool", () => {
       commitDesignPlan: vi.fn(),
       createDesignPlanAllocation: vi.fn().mockReturnValue({
         targetIds: ["home"],
-        input: {
-          label: "Allocate Home artboard",
-          commands: [{ commandId: "allocate_home" }],
-        },
+        input: allocationInput(),
       }),
-      assertVisualReviewBeforeWrite: vi.fn(),
       assertDesignPlanForAllocatedApply: vi.fn().mockReturnValue({
         input: compiled.apply,
         plan: compiled.plan,
@@ -263,7 +246,7 @@ describe("handleDesignFirstSliceTool", () => {
         {
           toolCallId: "slice_failed",
           toolName: DESIGN_FIRST_SLICE_TOOL_NAME,
-          input: firstSliceModelInput(input),
+          input: canonicalFirstSlice(input),
         },
         context,
         context,
@@ -280,7 +263,7 @@ describe("handleDesignFirstSliceTool", () => {
     const compiled = compileDesignFirstSliceToolInput(input);
     const coordinator = {
       authoritativeDesignPrompt: vi.fn(() => "Create a focused home screen"),
-      bindFirstSliceToDeliveryScope: vi.fn(passthroughFirstSlice),
+      firstSliceTargetBinding: vi.fn(() => targetBinding(input)),
       prepareDesignPlan: vi.fn(() => ({
         status: "accepted",
         planRevision: 1,
@@ -293,7 +276,6 @@ describe("handleDesignFirstSliceTool", () => {
           preparation,
       ),
       createDesignPlanAllocation: vi.fn(() => undefined),
-      assertVisualReviewBeforeWrite: vi.fn(),
       assertDesignPlanForApply: vi.fn(() => ({
         input: compiled.apply,
         plan: compiled.plan,
@@ -327,7 +309,7 @@ describe("handleDesignFirstSliceTool", () => {
       {
         toolCallId: "slice_scope",
         toolName: DESIGN_FIRST_SLICE_TOOL_NAME,
-        input: firstSliceModelInput(input),
+        input: canonicalFirstSlice(input),
       },
       context,
       context,
@@ -345,127 +327,64 @@ describe("handleDesignFirstSliceTool", () => {
       allocation: { targetIds: ["home"], revision: 4 },
     });
   });
-
-  it("rejects a one-direction compact Logo call when the authoritative brief requests three", async () => {
-    const input = logoFirstSliceInput();
-    const coordinator = {
-      authoritativeDesignPrompt: vi
-        .fn()
-        .mockReturnValue("Concept Exploration 提供 3 个真正不同的设计方向"),
-      bindFirstSliceToDeliveryScope: vi.fn(passthroughFirstSlice),
-      getDeliveryStageContext: vi.fn(() => ({ plannedTargets: 0 })),
-      prepareDesignPlan: vi.fn(),
-    };
-    const rendererHost = { execute: vi.fn() };
-
-    await expect(
-      handleDesignFirstSliceTool(
-        coordinator as never,
-        rendererHost as never,
-        {
-          toolCallId: "slice_logo_incomplete",
-          toolName: DESIGN_FIRST_SLICE_TOOL_NAME,
-          input: firstSliceModelInput(input),
-        },
-        context,
-        context,
-        new AbortController().signal,
-      ),
-    ).rejects.toThrow("design_workflow.logo_exploration_required");
-    expect(coordinator.prepareDesignPlan).not.toHaveBeenCalled();
-    expect(rendererHost.execute).not.toHaveBeenCalled();
-  });
-
-  it("does not repeat the exploration gate for the next verified Logo target", async () => {
-    const input = logoFirstSliceInput();
-    const coordinator = {
-      authoritativeDesignPrompt: vi
-        .fn()
-        .mockReturnValue("Concept Exploration 提供 3 个真正不同的设计方向"),
-      bindFirstSliceToDeliveryScope: vi.fn(passthroughFirstSlice),
-      getDeliveryStageContext: vi.fn(() => ({
-        plannedTargets: 1,
-        verifiedTargets: 1,
-      })),
-      prepareDesignPlan: vi.fn(() => {
-        throw new Error("next Logo target reached Plan registration");
-      }),
-    };
-
-    await expect(
-      handleDesignFirstSliceTool(
-        coordinator as never,
-        { execute: vi.fn() } as never,
-        {
-          toolCallId: "slice_logo_selected_system",
-          toolName: DESIGN_FIRST_SLICE_TOOL_NAME,
-          input: firstSliceModelInput(input),
-        },
-        context,
-        context,
-        new AbortController().signal,
-      ),
-    ).rejects.toThrow("next Logo target reached Plan registration");
-  });
-
-  it("returns a field-level domain failure before any zero-revision write", async () => {
-    const input = firstSliceModelInput(firstSliceInput());
-    const firstSlice = input.firstSlice as {
-      stages: Array<{ elements: Array<Record<string, unknown>> }>;
-    };
-    firstSlice.stages[0].elements[0].parentId = "missing_region";
-    const coordinator = {
-      authoritativeDesignPrompt: vi
-        .fn()
-        .mockReturnValue("Create a focused home screen"),
-      prepareDesignPlan: vi.fn(),
-      createDesignPlanAllocation: vi.fn(),
-    };
-    const rendererHost = { execute: vi.fn() };
-
-    await expect(
-      handleDesignFirstSliceTool(
-        coordinator as never,
-        rendererHost as never,
-        {
-          toolCallId: "slice_invalid_parent",
-          toolName: DESIGN_FIRST_SLICE_TOOL_NAME,
-          input,
-        },
-        { ...context, revision: 0 },
-        { ...context, revision: 0 },
-        new AbortController().signal,
-      ),
-    ).rejects.toThrow(
-      "first_slice.parent_not_available at /firstSlice/stages/0/elements/0/parentId",
-    );
-    expect(coordinator.prepareDesignPlan).not.toHaveBeenCalled();
-    expect(coordinator.createDesignPlanAllocation).not.toHaveBeenCalled();
-    expect(rendererHost.execute).not.toHaveBeenCalled();
-  });
 });
 
-function passthroughFirstSlice(
-  _context: unknown,
-  value: DesignFirstSliceToolInput,
+function canonicalFirstSlice(
+  input: DesignFirstSliceToolInput,
 ): DesignFirstSliceToolInput {
-  return value;
+  const parsed = FirstSliceContract.parse(firstSliceModelInput(input), {
+    authoritativePrompt: "Create a focused home screen",
+    newNodeIdPrefix: "odr_run_slice_",
+    target: targetBinding(input),
+  });
+  if (!parsed.ok) throw new Error(JSON.stringify(parsed.issues));
+  return parsed.value;
 }
 
-function logoFirstSliceInput(): DesignFirstSliceToolInput {
-  const input = firstSliceInput();
-  input.deliverable = "logo";
-  input.designIntent.calibration.surfaceMode = "graphic";
-  input.logoColorStrategy = {
-    mode: "brand-color",
-    rationale:
-      "A vivid violet primary identifies the creative platform without relying on generic black geometry.",
-    lightDarkAdaptation:
-      "Use the primary violet on light surfaces and a brighter optical variant on dark surfaces.",
+function targetBinding(input: DesignFirstSliceToolInput) {
+  const target = input.targets[0];
+  return {
+    targetId: target.targetId,
+    label: target.label,
+    objective: target.objective,
+    pageId: target.pageId,
+    frame: { ...target.frame },
   };
-  input.targets = input.targets.map((target) => ({
-    ...target,
-    qualityProfile: { kind: "graphic" },
-  }));
-  return input;
+}
+
+function allocationInput() {
+  return {
+    label: "Allocate Home artboard",
+    summary: "Create the current target artboard",
+    commands: [
+      {
+        commandId: "allocate_home",
+        type: "insert_element" as const,
+        pageId: "page_1",
+        parentId: null,
+        index: 0,
+        node: {
+          id: "frame_home",
+          kind: "frame" as const,
+          name: "Home",
+          parentId: null,
+          childIds: [],
+          visible: true,
+          locked: false,
+          transform: [1, 0, 0, 1, 80, 40],
+          size: { width: 390, height: 844 },
+          exportSettings: [],
+          opacity: 1,
+          properties: {
+            fills: [{ type: "solid" as const, color: "#ffffff", opacity: 1 }],
+            strokes: [],
+            strokeWidth: 0,
+            cornerRadius: 0,
+            clipsContent: true,
+          },
+          extensions: { agentTargetId: "home" },
+        },
+      },
+    ],
+  };
 }

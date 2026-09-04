@@ -70,8 +70,7 @@ function setup(call: ToolCallRequest) {
   const targetIds = ["target_brand"];
   const coordinator = {
     assertDocumentInspected: vi.fn(),
-    assertVisualReviewBeforeWrite: vi.fn(),
-    resolveMaterialTargetIds: vi.fn(() => targetIds),
+    resolveMaterialTargetIdsIfPlanned: vi.fn(() => targetIds),
     recordMaterialDesignWriteCompleted: vi.fn(),
   };
   const deliveredResult = {
@@ -132,21 +131,6 @@ describe("Design import/export Main tool handler", () => {
     expect(state.getSvgExportHost).not.toHaveBeenCalled();
     expect(state.getRasterExportHost).not.toHaveBeenCalled();
     expect(state.getSvgImportHost).not.toHaveBeenCalled();
-  });
-
-  it("rejects malformed SVG export before inspection or native save", async () => {
-    const state = setup({
-      toolCallId: "export_svg_invalid",
-      toolName: EXPORT_SVG_TOOL_NAME,
-      input: { ...svgExportInput, suggestedName: "../brand.svg" },
-    });
-
-    await expect(handleDesignImportExportTool(state.input)).rejects.toThrow(
-      /SVG export.*\/suggestedName/,
-    );
-
-    expect(state.coordinator.assertDocumentInspected).not.toHaveBeenCalled();
-    expect(state.getSvgExportHost).not.toHaveBeenCalled();
   });
 
   it("exports inspected SVG through the Main save host", async () => {
@@ -213,13 +197,8 @@ describe("Design import/export Main tool handler", () => {
       context,
     );
     expect(
-      state.coordinator.assertVisualReviewBeforeWrite,
-    ).toHaveBeenCalledWith(context);
-    expect(state.coordinator.resolveMaterialTargetIds).toHaveBeenCalledWith(
-      context,
-      [],
-      "frame_brand",
-    );
+      state.coordinator.resolveMaterialTargetIdsIfPlanned,
+    ).toHaveBeenCalledWith(context, [], "frame_brand");
     expect(state.svgImportHost.execute).toHaveBeenCalledWith(
       call,
       context,

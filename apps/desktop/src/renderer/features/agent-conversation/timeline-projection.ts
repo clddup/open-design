@@ -118,9 +118,8 @@ export function projectAgentTimeline({
     t,
   )) {
     const durableItem = merged.get(item.id);
-    if (durableItem?.kind === "assistant" && durableItem.state === "done") {
-      // The retained live window can begin mid-stream. A completed journal
-      // message is authoritative and cannot be replaced by a suffix-only view.
+    if (isAssistantItem(durableItem) && isAssistantItem(item)) {
+      merged.set(item.id, mergeAssistantProjection(durableItem, item));
       continue;
     }
     merged.set(item.id, {
@@ -208,6 +207,42 @@ export function projectAgentTimeline({
       return left.order - right.order || left.id.localeCompare(right.id);
     });
   return ordered;
+}
+
+function mergeAssistantProjection(
+  durable: AgentTimelineItem & { kind: "assistant" },
+  live: AgentTimelineItem & { kind: "assistant" },
+): AgentTimelineItem {
+  const remainingDurable = [...(durable.assistantBlocks ?? [])];
+  const mergedBlocks = (live.assistantBlocks ?? []).flatMap((block) => {
+    const matching = remainingDurable.filter(
+      (candidate) =>
+        candidate.blockId === block.blockId ||
+        candidate.blockId.startsWith(`${block.blockId}_part_`),
+    );
+    matching.forEach((candidate) => {
+      const index = remainingDurable.indexOf(candidate);
+      if (index >= 0) remainingDurable.splice(index, 1);
+    });
+    return matching.map((candidate) => candidate.content).join("").length >=
+      block.content.length
+      ? matching
+      : [block];
+  });
+  mergedBlocks.push(...remainingDurable);
+  mergedBlocks.sort((left, right) => left.blockIndex - right.blockIndex);
+  return {
+    ...durable,
+    assistantBlocks: mergedBlocks,
+    routine: mergedBlocks.length === 0,
+    state: live.state === "active" ? "active" : durable.state,
+  };
+}
+
+function isAssistantItem(
+  item: AgentTimelineItem | undefined,
+): item is AgentTimelineItem & { kind: "assistant" } {
+  return item?.kind === "assistant";
 }
 
 function collapseRecoverableFailures(
@@ -377,7 +412,10 @@ function projectDurableTimeline(
   );
   return visibleTimeline.map((item) => {
     const base = {
-      id: item.itemId,
+      id:
+        item.type === "tool"
+          ? timelineToolId(item.runId, item.toolCallId)
+          : item.itemId,
       ...(item.runId === undefined ? {} : { runId: item.runId }),
       order: item.sequence,
       time: eventTime(item.updatedAt, locale, t),
@@ -646,7 +684,6 @@ function projectLiveEvents(
       });
     }
     if (event.type === "agent.error") {
-      if (event.runId) finalizeRunActivity(event.runId);
       const failure = runFailurePresentation(
         event.failure,
         event.message,
@@ -654,7 +691,7 @@ function projectLiveEvents(
         t,
       );
       const id = event.runId
-        ? `run:${event.runId}`
+        ? `run-error:${event.runId}:${order}`
         : `runtime:error:${event.requestId ?? event.code}`;
       update(
         id,
@@ -663,7 +700,7 @@ function projectLiveEvents(
           ...(event.runId ? { runId: event.runId } : {}),
           routine: false,
           state: "error",
-          kind: event.runId ? "run" : "system",
+          kind: "system",
           time: t("common.error"),
           title: event.runId ? failure.title : t("agent.agentUnavailable"),
           detail: event.runId
@@ -783,7 +820,7 @@ function projectLiveEvents(
     }
     if (event.type === "tool.requested") {
       hideGenericRunStatus(event.runId);
-      updateEvent(`tool:${event.toolCallId}`, {
+      updateEvent(timelineToolId(event.runId, event.toolCallId), {
         state: "active",
         kind: "tool",
         toolName: event.toolName,
@@ -792,9 +829,10 @@ function projectLiveEvents(
       });
     }
     if (event.type === "tool.progress") {
-      const existing = items.get(`tool:${event.toolCallId}`);
+      const toolId = timelineToolId(event.runId, event.toolCallId);
+      const existing = items.get(toolId);
       const committedDesignStep = parseDesignStepProgressMessage(event.message);
-      updateEvent(`tool:${event.toolCallId}`, {
+      updateEvent(toolId, {
         state: "active",
         kind: "tool",
         time: `${Math.round(event.progress * 100)}%`,
@@ -820,8 +858,9 @@ function projectLiveEvents(
       }
     }
     if (event.type === "tool.completed") {
-      const existing = items.get(`tool:${event.toolCallId}`);
-      updateEvent(`tool:${event.toolCallId}`, {
+      const toolId = timelineToolId(event.runId, event.toolCallId);
+      const existing = items.get(toolId);
+      updateEvent(toolId, {
         state: "done",
         kind: "tool",
         detail: undefined,
@@ -853,12 +892,13 @@ function projectLiveEvents(
     }
     if (event.type === "tool.failed") {
       if (event.code === "run_cancelled") return;
-      const existingTool = items.get(`tool:${event.toolCallId}`);
+      const toolId = timelineToolId(event.runId, event.toolCallId);
+      const existingTool = items.get(toolId);
       const routine = isRoutineRecoverableToolFailure(
         event.code,
         event.details,
       );
-      updateEvent(`tool:${event.toolCallId}`, {
+      updateEvent(toolId, {
         routine,
         recoverableFailure:
           event.recoverable === true &&
@@ -879,7 +919,7 @@ function projectLiveEvents(
       });
     }
     if (event.type === "approval.requested") {
-      const tool = items.get(`tool:${event.toolCallId}`);
+      const tool = items.get(timelineToolId(event.runId, event.toolCallId));
       updateEvent(`approval:${event.approvalId}`, {
         state: "queued",
         kind: "approval",
@@ -905,7 +945,16 @@ function projectLiveEvents(
     }
     if (event.type === "run.completed") {
       finalizeRunActivity(event.runId);
-      const existing = items.get(`run:${event.runId}`);
+      const runErrors = [...items.values()]
+        .filter(
+          (item) =>
+            item.runId === event.runId && item.id.startsWith("run-error:"),
+        )
+        .sort((left, right) => left.order - right.order);
+      const terminalAgentError = runErrors.at(-1);
+      if (event.stopReason !== "complete") {
+        runErrors.forEach((item) => items.delete(item.id));
+      }
       const terminalToolFailure = [...items.values()]
         .filter(
           (item) =>
@@ -934,8 +983,8 @@ function projectLiveEvents(
                 ? t("agent.taskStopped")
                 : event.stopReason === "budget"
                   ? t("agent.contextLimit")
-                  : existing?.state === "error"
-                    ? existing.title
+                  : terminalAgentError
+                    ? terminalAgentError.title
                     : t("agent.taskFailed"),
           detail:
             event.stopReason === "complete"
@@ -944,28 +993,35 @@ function projectLiveEvents(
                 ? t("agent.requestCancelled")
                 : event.stopReason === "budget"
                   ? t("agent.contextLimitDetail")
-                  : existing?.state === "error"
-                    ? existing.detail
+                  : terminalAgentError
+                    ? terminalAgentError.detail
                     : t("agent.tryAgain"),
-          ...((existing?.failureCode ?? terminalToolFailure?.failureCode)
+          ...((terminalAgentError?.failureCode ??
+          terminalToolFailure?.failureCode)
             ? {
                 failureCode:
-                  existing?.failureCode ?? terminalToolFailure?.failureCode,
+                  terminalAgentError?.failureCode ??
+                  terminalToolFailure?.failureCode,
               }
             : {}),
-          ...((existing?.failureMessage ?? terminalToolFailure?.failureMessage)
+          ...((terminalAgentError?.failureMessage ??
+          terminalToolFailure?.failureMessage)
             ? {
                 failureMessage:
-                  existing?.failureMessage ??
+                  terminalAgentError?.failureMessage ??
                   terminalToolFailure?.failureMessage,
               }
             : {}),
         },
-        existing?.state !== "error",
+        true,
       );
     }
   });
   return [...items.values()];
+}
+
+function timelineToolId(runId: string | undefined, toolCallId: string): string {
+  return `tool:${runId ?? "unknown-run"}:${toolCallId}`;
 }
 
 function projectAssistantBlocks(

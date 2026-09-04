@@ -23,9 +23,6 @@ export async function handleCanonicalDesignComponentTool(
   input.coordinator.assertComponentToolAccess(input.context, componentInput);
   input.coordinator.assertDocumentInspected(input.context);
   const materialWrite = componentToolIsMaterialWrite(componentInput);
-  if (materialWrite) {
-    input.coordinator.assertVisualReviewBeforeWrite(input.context);
-  }
   const result = await input.execute({ ...input.call, input: componentInput });
   if (!materialWrite) return result;
   const refs = materialTargetRefsForComponentTool(componentInput);

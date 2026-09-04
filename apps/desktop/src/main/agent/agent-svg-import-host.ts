@@ -10,7 +10,7 @@ import {
   AgentSvgImportResultContract,
   IMPORT_SVG_TOOL_NAME,
   INTERNAL_IMPORT_SVG_TOOL_NAME,
-  ImportSvgContract,
+  type ImportSvgToolInput,
   type InternalImportSvgToolInput,
 } from "@/shared/design-agent-tools";
 
@@ -60,9 +60,7 @@ export class AgentSvgImportHost {
     if (call.toolName !== IMPORT_SVG_TOOL_NAME) {
       throw new TypeError("Invalid Agent SVG import tool call");
     }
-    const parsed = ImportSvgContract.parse(call.input);
-    if (!parsed.ok) throw new TypeError("Invalid Agent SVG import tool call");
-    const publicInput = parsed.value;
+    const publicInput = call.input as ImportSvgToolInput;
     throwIfAborted(signal);
     const materialized = await this.references.materializeSvg(
       publicInput.attachmentId,

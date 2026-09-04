@@ -2,6 +2,7 @@ import type {
   AgentEvent,
   SessionTimelineItem,
 } from "@opendesign/agent-contracts";
+import { MAX_REASONING_SUMMARY_CHARACTERS } from "@opendesign/agent-contracts";
 import { describe, expect, it } from "vitest";
 import { translate } from "@/shared/i18n/messages";
 import { projectAgentTimeline } from "./timeline-projection";
@@ -123,15 +124,15 @@ describe("Agent continuation timeline projection", () => {
         transactionId: "transaction_first_slice",
       },
       {
-        itemId: "tool:checkpoint_visible",
+        itemId: "tool:capture_visible",
         sessionId: "conversation_1",
         runId,
         sequence: 2,
         createdAt: now,
         updatedAt: now,
         type: "tool",
-        toolCallId: "checkpoint_visible",
-        toolName: "opendesign_design_checkpoint",
+        toolCallId: "capture_visible",
+        toolName: "opendesign_capture_canvas",
         input: {},
         risk: "design_write",
         status: "completed",
@@ -177,7 +178,7 @@ describe("Agent continuation timeline projection", () => {
           },
         },
         revision: 3,
-        transactionId: "transaction_checkpoint",
+        transactionId: "transaction_capture",
       },
     ];
 
@@ -764,6 +765,43 @@ describe("Agent continuation timeline projection", () => {
     });
   });
 
+  it("keeps the Run active when agent.error arrives before its terminal event", () => {
+    const runId = "run_error_before_terminal";
+    const items = projectAgentTimeline({
+      activeRunId: runId,
+      events: [
+        {
+          type: "run.started",
+          runId,
+          startedAt: "2026-08-25T08:19:24.568Z",
+        },
+        {
+          type: "agent.error",
+          runId,
+          code: "provider_timeout",
+          message: "Provider timed out before the terminal event",
+        },
+      ],
+      locale: "zh-CN",
+      stoppingRunId: null,
+      timeline: [],
+      t: (key, parameters) => translate("zh-CN", key, parameters),
+    });
+
+    expect(items).toHaveLength(2);
+    expect(items.find((item) => item.id === `run:${runId}`)).toMatchObject({
+      kind: "run",
+      state: "active",
+    });
+    expect(
+      items.find((item) => item.id.startsWith(`run-error:${runId}:`)),
+    ).toMatchObject({
+      kind: "system",
+      state: "error",
+      failureCode: "provider_timeout",
+    });
+  });
+
   it("finalizes streamed text in place when completion has no replacement blocks", () => {
     const runId = "run_empty_completion";
     const items = projectAgentTimeline({
@@ -804,6 +842,65 @@ describe("Agent continuation timeline projection", () => {
         ],
       }),
     );
+  });
+
+  it("merges split durable reasoning without repeating the live tail", () => {
+    const runId = "run_long_reasoning";
+    const messageId = "assistant_long_reasoning";
+    const summary = "理".repeat(MAX_REASONING_SUMMARY_CHARACTERS + 1);
+    const now = "2026-08-14T00:00:00.000Z";
+    const items = projectAgentTimeline({
+      activeRunId: null,
+      events: [
+        {
+          type: "message.completed",
+          runId,
+          messageId,
+          blocks: [
+            {
+              blockId: "reasoning_0",
+              type: "reasoning_summary",
+              status: "completed",
+              summary,
+            },
+          ],
+        },
+      ],
+      locale: "zh-CN",
+      stoppingRunId: null,
+      timeline: [
+        {
+          itemId: `message:${messageId}`,
+          sessionId: "conversation_1",
+          runId,
+          sequence: 1,
+          createdAt: now,
+          updatedAt: now,
+          type: "assistant.message",
+          messageId,
+          blocks: [
+            {
+              blockId: "reasoning_0",
+              type: "reasoning_summary",
+              status: "completed",
+              summary: summary.slice(0, MAX_REASONING_SUMMARY_CHARACTERS),
+            },
+            {
+              blockId: "reasoning_0_part_1",
+              type: "reasoning_summary",
+              status: "completed",
+              summary: summary.slice(MAX_REASONING_SUMMARY_CHARACTERS),
+            },
+          ],
+        },
+      ],
+      t: (key, parameters) => translate("zh-CN", key, parameters),
+    });
+
+    const assistant = items.find((item) => item.id === `message:${messageId}`);
+    expect(
+      assistant?.assistantBlocks?.map((block) => block.content).join(""),
+    ).toBe(summary);
   });
 
   it("shows only the stopped Run outcome for cancellation cleanup failures", () => {
@@ -1191,7 +1288,7 @@ describe("Agent continuation timeline projection", () => {
 
     expect(items.map((item) => item.id)).toEqual([
       "message:mixed",
-      "tool:apply_shell",
+      "tool:run_reasoning:apply_shell",
       "message:reasoning_only",
     ]);
     expect(items[0]).toMatchObject({

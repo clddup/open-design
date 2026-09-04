@@ -569,83 +569,11 @@ const MODEL_TEXT_CORE_REQUIRED = [
   "fontWeight",
   "fontSlant",
   "lineHeight",
-  "letterSpacing",
-  "textAlignHorizontal",
-  "textAlignVertical",
-  "textResize",
-  "textWrap",
-  "textOverflow",
-  "textTruncation",
 ] as const;
-
-function textMode(
-  textResize: "fixed" | "auto-width" | "auto-height",
-  textWrap: readonly ("none" | "word" | "character")[],
-  textOverflow: readonly ("visible" | "clip")[],
-  textTruncation: "disabled" | "ending",
-  maxLines: Record<string, unknown>,
-  requireMaxLines = false,
-) {
-  return {
-    type: "object" as const,
-    properties: {
-      textResize: { const: textResize },
-      textWrap: { enum: textWrap },
-      textOverflow: { enum: textOverflow },
-      textTruncation: { const: textTruncation },
-      maxLines,
-    },
-    required: [
-      "textResize",
-      "textWrap",
-      "textOverflow",
-      "textTruncation",
-      ...(requireMaxLines ? ["maxLines"] : []),
-    ],
-  };
-}
 
 const MODEL_TEXT_PROPERTY_KEYS = Object.keys(MODEL_TEXT_PROPERTIES);
 const MODEL_TEXT_PROPERTIES_SCHEMA = requiredPropertiesSchema(
   MODEL_TEXT_CORE_REQUIRED,
-  [
-    textMode(
-      "fixed",
-      ["none", "word", "character"],
-      ["visible", "clip"],
-      "disabled",
-      { type: "null" },
-    ),
-    textMode("fixed", ["none", "word", "character"], ["clip"], "ending", {
-      anyOf: [{ type: "null" }, { type: "integer", minimum: 1 }],
-    }),
-    textMode("auto-width", ["none"], ["visible"], "disabled", { type: "null" }),
-    textMode(
-      "auto-width",
-      ["none"],
-      ["visible"],
-      "ending",
-      {
-        type: "integer",
-        minimum: 1,
-      },
-      true,
-    ),
-    textMode("auto-height", ["word", "character"], ["visible"], "disabled", {
-      type: "null",
-    }),
-    textMode(
-      "auto-height",
-      ["word", "character"],
-      ["visible"],
-      "ending",
-      {
-        type: "integer",
-        minimum: 1,
-      },
-      true,
-    ),
-  ],
 );
 
 const MODEL_IMAGE_PROPERTY_KEYS = [
@@ -808,6 +736,12 @@ const MODEL_INSERT_NODE_SCHEMA = {
   required: ["id", "name", "transform", "size", "kind", "properties"],
 } as const;
 
+const MODEL_REPLACE_NODE_SCHEMA = {
+  ...MODEL_INSERT_NODE_SCHEMA,
+  description:
+    "Replacement node. Supply semantic node fields and parentId for non-root nodes; omit childIds and structural defaults because Main reconstructs the subtree and preserves the inspected root location.",
+} as const;
+
 const MODEL_NODE_OPERATION_SCHEMA = {
   anyOf: [
     {
@@ -825,7 +759,7 @@ const MODEL_NODE_OPERATION_SCHEMA = {
         index: { type: "integer", minimum: 0 },
         node: MODEL_INSERT_NODE_SCHEMA,
       },
-      required: ["commandId", "type", "pageId", "parentId", "index", "node"],
+      required: ["commandId", "type", "pageId", "parentId", "node"],
       additionalProperties: false,
     },
     {
@@ -868,7 +802,7 @@ const MODEL_NODE_OPERATION_SCHEMA = {
         },
         index: { type: "integer", minimum: 0 },
       },
-      required: ["commandId", "type", "nodeId", "pageId", "parentId", "index"],
+      required: ["commandId", "type", "nodeId", "pageId", "parentId"],
       additionalProperties: false,
     },
     {
@@ -887,7 +821,7 @@ const MODEL_NODE_OPERATION_SCHEMA = {
         commandId: { type: "string", minLength: 1, maxLength: 256 },
         type: { const: "replace_subtree" },
         rootNodeId: { type: "string", minLength: 1, maxLength: 256 },
-        nodes: { type: "array", minItems: 1, items: MODEL_NODE_SCHEMA },
+        nodes: { type: "array", minItems: 1, items: MODEL_REPLACE_NODE_SCHEMA },
       },
       required: ["commandId", "type", "rootNodeId", "nodes"],
       additionalProperties: false,

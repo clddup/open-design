@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { INTERNAL_DESIGN_APPLY_TOOL_NAME } from "@/shared/design-agent-tools";
 import { executeSemanticDesignTransaction } from "./design-transaction-steps";
 
 describe("executeSemanticDesignTransaction", () => {
@@ -45,7 +46,7 @@ describe("executeSemanticDesignTransaction", () => {
           requestId: "request_first_error",
           call: {
             toolCallId: "tool_first_error",
-            toolName: "opendesign_apply_transaction",
+            toolName: INTERNAL_DESIGN_APPLY_TOOL_NAME,
             input: {
               label: "Build login",
               steps: [
@@ -72,6 +73,22 @@ describe("executeSemanticDesignTransaction", () => {
             mutationTarget: { kind: "page", pageId: "page_1" },
           },
         } as never,
+        applyInput: {
+          label: "Build login",
+          steps: [
+            {
+              stepId: "footer",
+              label: "Build footer",
+              commandIds: ["first_slice_1"],
+            },
+            {
+              stepId: "copy",
+              label: "Add copy",
+              commandIds: ["first_slice_2"],
+            },
+          ],
+          commands,
+        },
         runtime: runtime as never,
         transaction: {
           transactionId: "transaction_first_error",

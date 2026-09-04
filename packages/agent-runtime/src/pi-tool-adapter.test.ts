@@ -135,6 +135,42 @@ class RecordingGateway implements ModelGateway {
 }
 
 describe("OpenDesign Pi tool adapter", () => {
+  it("rejects parameters that change after the tracked tool call starts", async () => {
+    const execute = vi.fn(
+      async function* (): AsyncIterable<ToolExecutionEvent> {
+        await Promise.resolve();
+        yield { type: "completed", result: { content: { ok: true } } };
+      },
+    );
+    const adapter = new OpenDesignPiToolAdapter({
+      request,
+      definitions: [moveTool],
+      toolExecutor: { execute },
+      lifecycle: {
+        approvalRequested: () => Promise.resolve(),
+        approvalResolved: () => Promise.resolve(),
+      },
+      maxToolCalls: 8,
+    });
+    adapter.beginToolCall({
+      toolCallId: "changed_input_1",
+      toolName: moveTool.name,
+      args: { dx: 12 },
+    });
+    await expect(
+      adapter.tools[0]?.execute(
+        "changed_input_1",
+        { dx: 24 },
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow("parameters changed after tool_execution_start");
+    expect(execute).not.toHaveBeenCalled();
+    expect(adapter.forcedError).toMatchObject({
+      code: "tool_call_input_changed",
+      runTerminal: true,
+    });
+  });
+
   it("keeps the next compact stage available after a material revision", async () => {
     const firstSliceTool: AgentToolDefinition = {
       ...moveTool,
@@ -153,9 +189,9 @@ describe("OpenDesign Pi tool adapter", () => {
         role: "plan",
       },
     };
-    const checkpointTool: AgentToolDefinition = {
+    const continuationEditTool: AgentToolDefinition = {
       ...moveTool,
-      name: "opendesign_design_checkpoint",
+      name: "opendesign_edit_design",
       modelDisclosure: {
         bootstrap: "deferred",
         afterInspection: "available",
@@ -175,7 +211,7 @@ describe("OpenDesign Pi tool adapter", () => {
       definitions: [
         firstSliceTool,
         planTool,
-        checkpointTool,
+        continuationEditTool,
         newDesignInspectTool,
       ],
       toolExecutor: {
@@ -304,6 +340,7 @@ describe("OpenDesign Pi tool adapter", () => {
         status: "completed",
         result: { ok: true, attachments: [attachment] },
         revision: 13,
+        revisionAdvanced: true,
       },
     ]);
     expect(result.store.events.map((event) => event.type)).toEqual([
@@ -720,7 +757,6 @@ describe("OpenDesign Pi tool adapter", () => {
     expect(failures[0]).toMatchObject({
       code: "design.invalid",
       recoverable: true,
-      details: { attempt: 1, maxAttempts: 2 },
     });
     expect(failures[1]).toMatchObject({
       code: "design_recovery_no_progress",
@@ -745,7 +781,6 @@ describe("OpenDesign Pi tool adapter", () => {
       toolName: moveTool.name,
       code: "design.invalid",
       inspectionCompleted: false,
-      details: { attempt: 1, maxAttempts: 2 },
     });
     expect(JSON.stringify(gateway.requests[1]?.messages)).toContain(
       "node_tool",

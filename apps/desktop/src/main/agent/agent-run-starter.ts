@@ -2,23 +2,30 @@ import type {
   AgentEvent,
   AgentInitialDesignInspection,
   AgentRequest,
+  AgentRunFailure,
 } from "@opendesign/agent-contracts";
+import {
+  appendRunJournalEvent,
+  resolveDeliveryScopeReview,
+} from "@opendesign/agent-runtime";
+import type { SessionStore } from "@opendesign/session-store";
 import type { ModelProviderHost } from "../model/model-provider-host.js";
 import type { AgentContinuationScheduler } from "./agent-continuation-scheduler.js";
 import type { AgentHost } from "./agent-host.js";
 import type { AgentReferenceHost } from "./agent-reference-host.js";
+import { AgentRunAdmissionError } from "./agent-run-admission-error.js";
 import type { GlobalTaskCoordinator } from "./global-task-coordinator.js";
-import { resolveDeliveryScopeReview } from "./delivery-scope-review-policy.js";
 
 type RunStartRequest = Extract<AgentRequest, { type: "run.start" }>;
 
 export interface AgentRunStarterDependencies {
-  agentHost: AgentHost;
+  agentHost: Pick<AgentHost, "send" | "start">;
   continuationScheduler: AgentContinuationScheduler;
   conversationIdByRunId: Map<string, string>;
   globalTaskCoordinator: GlobalTaskCoordinator;
   initialInspectionControllers: Map<string, AbortController>;
   modelProviderHost: ModelProviderHost;
+  sessionStore: SessionStore;
   prepareInitialDesignInspection?: (
     request: RunStartRequest,
     signal: AbortSignal,
@@ -47,7 +54,12 @@ export async function handleAgentRunControlRequest(
         request.sessionId,
       )) {
         dependencies.initialInspectionControllers.get(runId)?.abort();
-        dependencies.agentHost.send({ type: "run.cancel", runId });
+        try {
+          dependencies.agentHost.send({ type: "run.cancel", runId });
+        } catch {
+          // A crashed generation has already lost this Run. The new Run below
+          // starts a fresh generation instead of inheriting that failure.
+        }
       }
     }
     const started = await startAgentRun(request, dependencies);
@@ -84,15 +96,15 @@ export async function startAgentRun(
     modelProviderHost,
     referenceHost,
   } = dependencies;
-  const trustedRequest: RunStartRequest = {
-    ...request,
-    deliveryScopeReview: resolveDeliveryScopeReview(request),
-  };
-  continuationScheduler.registerRun(trustedRequest);
+  const trustedRequest: RunStartRequest = { ...request };
   try {
+    await agentHost.start();
+    continuationScheduler.registerRun(trustedRequest);
     await globalTaskCoordinator.registerRun(trustedRequest);
     if (continuationScheduler.isCancellationRequested(request.runId)) {
-      globalTaskCoordinator.handleAgentEvent(cancelledRun(request.runId));
+      const completed = cancelledRun(request.runId);
+      await persistUnsentRun(dependencies.sessionStore, request, completed);
+      globalTaskCoordinator.handleAgentEvent(completed);
       continuationScheduler.forgetRun(request.runId);
       return false;
     }
@@ -120,18 +132,38 @@ export async function startAgentRun(
       }
     }
     if (continuationScheduler.isCancellationRequested(request.runId)) {
-      globalTaskCoordinator.handleAgentEvent(cancelledRun(request.runId));
+      const completed = cancelledRun(request.runId);
+      await persistUnsentRun(dependencies.sessionStore, request, completed);
+      globalTaskCoordinator.handleAgentEvent(completed);
       continuationScheduler.forgetRun(request.runId);
       return false;
     }
+    const deliveryScopeReview = resolveDeliveryScopeReview({
+      ...trustedRequest,
+      ...(initialDesignInspection === undefined
+        ? {}
+        : { initialDesignInspection }),
+    });
+    const admittedRequest = {
+      ...trustedRequest,
+      deliveryScopeReview,
+    };
+    continuationScheduler.setDeliveryScopeReview(
+      request.runId,
+      deliveryScopeReview,
+    );
+    globalTaskCoordinator.setDeliveryScopeReview(
+      request.runId,
+      deliveryScopeReview,
+    );
     await globalTaskCoordinator.assertRunRevisionCurrent(request.runId);
     referenceHost.registerRun(
-      trustedRequest,
+      admittedRequest,
       globalTaskCoordinator.referenceAttachmentsForRun(request.runId),
     );
     conversationIdByRunId.set(request.runId, request.sessionId);
     agentHost.send({
-      ...trustedRequest,
+      ...admittedRequest,
       ...(initialDesignInspection === undefined
         ? {}
         : { initialDesignInspection }),
@@ -144,14 +176,76 @@ export async function startAgentRun(
     conversationIdByRunId.delete(request.runId);
     referenceHost.releaseRun(request.runId);
     continuationScheduler.forgetRun(request.runId);
+    const failure = requestFailure(error);
+    const completed = failedRun(request.runId);
+    try {
+      await persistUnsentRun(
+        dependencies.sessionStore,
+        request,
+        completed,
+        failure,
+      );
+    } catch (journalError) {
+      console.error("Failed to persist rejected Agent Run", journalError);
+    }
     globalTaskCoordinator.handleAgentEvent({
       type: "agent.error",
-      code: "request_rejected",
-      message: error instanceof Error ? error.message : "Agent request failed",
+      code: failure.code,
+      message: failure.message,
       runId: request.runId,
+      failure,
     });
+    globalTaskCoordinator.handleAgentEvent(completed);
     throw error;
   }
+}
+
+async function persistUnsentRun(
+  store: SessionStore,
+  request: RunStartRequest,
+  completed: Extract<AgentEvent, { type: "run.completed" }>,
+  failure?: AgentRunFailure,
+): Promise<void> {
+  const timestamp = completed.finishedAt;
+  await appendRunJournalEvent(
+    store,
+    request,
+    "message.user",
+    {
+      messageId: `${request.runId}_user`,
+      content: request.prompt,
+      ...(request.attachments === undefined
+        ? {}
+        : { attachments: request.attachments }),
+      documentId: request.documentId,
+      revision: request.revision,
+      scope: request.scope,
+      mutationTarget: request.mutationTarget,
+    },
+    timestamp,
+  );
+  await appendRunJournalEvent(
+    store,
+    request,
+    "run.state",
+    {
+      status: completed.stopReason,
+      startedAt: timestamp,
+      finishedAt: timestamp,
+      stopReason: completed.stopReason,
+      ...(failure ? { failure } : {}),
+    },
+    timestamp,
+  );
+}
+
+function requestFailure(error: unknown): AgentRunFailure {
+  return {
+    code:
+      error instanceof AgentRunAdmissionError ? error.code : "request_rejected",
+    message: error instanceof Error ? error.message : "Agent request failed",
+    retryable: true,
+  };
 }
 
 function cancelledRun(
@@ -162,5 +256,16 @@ function cancelledRun(
     runId,
     finishedAt: new Date().toISOString(),
     stopReason: "cancelled",
+  };
+}
+
+function failedRun(
+  runId: string,
+): Extract<AgentEvent, { type: "run.completed" }> {
+  return {
+    type: "run.completed",
+    runId,
+    finishedAt: new Date().toISOString(),
+    stopReason: "error",
   };
 }

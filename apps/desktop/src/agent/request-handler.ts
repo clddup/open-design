@@ -26,6 +26,7 @@ export async function dispatchAgentRequest(
   request: AgentRequest,
   options: AgentRequestHandlerOptions,
 ): Promise<void> {
+  let runCompleted = false;
   const postValidated = (event: AgentEvent): void => {
     const result = AgentEventContract.parse(event);
     if (!result.ok) {
@@ -36,10 +37,20 @@ export async function dispatchAgentRequest(
         )}`,
       );
     }
+    if (
+      request.type === "run.start" &&
+      event.type === "run.completed" &&
+      event.runId === request.runId
+    ) {
+      runCompleted = true;
+    }
     options.postMessage(result.value);
   };
   try {
     await handleRequest(request, { ...options, postMessage: postValidated });
+    if (request.type === "run.start" && !runCompleted) {
+      throw new Error("Agent Run ended without run.completed");
+    }
   } catch (error: unknown) {
     const message = (
       error instanceof Error ? error.message : "Agent request failed"
@@ -57,6 +68,14 @@ export async function dispatchAgentRequest(
         ? { requestId: request.requestId }
         : {}),
     } satisfies AgentEvent);
+    if (request.type === "run.start" && !runCompleted) {
+      options.postMessage({
+        type: "run.completed",
+        runId: request.runId,
+        finishedAt: new Date().toISOString(),
+        stopReason: "error",
+      });
+    }
   }
 }
 

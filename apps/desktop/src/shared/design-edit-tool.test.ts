@@ -38,13 +38,6 @@ describe("Edit Design contract", () => {
                     fontWeight: 500,
                     fontSlant: "normal",
                     lineHeight: 20,
-                    letterSpacing: 0.2,
-                    textAlignHorizontal: "left",
-                    textAlignVertical: "top",
-                    textResize: "fixed",
-                    textWrap: "none",
-                    textOverflow: "visible",
-                    textTruncation: "disabled",
                     fills: [{ type: "solid", color: "#C9D6DB", opacity: 1 }],
                     strokes: [],
                     strokeWidth: 0,
@@ -86,6 +79,13 @@ describe("Edit Design contract", () => {
                       textDecorationThickness: null,
                       textDecorationColor: null,
                       textDecorationSkipInk: null,
+                      letterSpacing: 0,
+                      textAlignHorizontal: "left",
+                      textAlignVertical: "top",
+                      textResize: "fixed",
+                      textWrap: "word",
+                      textOverflow: "visible",
+                      textTruncation: "disabled",
                       maxLines: null,
                     },
                   },
@@ -105,13 +105,25 @@ describe("Edit Design contract", () => {
     ).toEqual([]);
 
     const autoHeightEnding = structuredClone(input);
-    const autoHeightProperties =
-      autoHeightEnding.edits[0].input.commands[0].node.properties;
+    const autoHeightProperties = autoHeightEnding.edits[0].input.commands[0]
+      .node.properties as Record<string, unknown>;
     autoHeightProperties.textResize = "auto-height";
     autoHeightProperties.textWrap = "word";
     autoHeightProperties.textOverflow = "visible";
     autoHeightProperties.textTruncation = "ending";
-    expect(EditDesignContract.parse(autoHeightEnding).ok).toBe(false);
+    const autoHeightResult = EditDesignContract.parse(autoHeightEnding);
+    expect(autoHeightResult).toMatchObject({
+      ok: true,
+      value: {
+        edits: [
+          {
+            input: {
+              commands: [{ node: { properties: { maxLines: 1 } } }],
+            },
+          },
+        ],
+      },
+    });
   });
 
   it("compiles one node transaction and validates ordered hierarchy/layout edits", () => {

@@ -35,7 +35,6 @@ import {
   DESIGN_INSPECT_TOOL_NAME,
   READ_IMAGE_TOOL_NAME,
   DESIGN_PAGE_TOOL_NAME,
-  DESIGN_REVIEW_TOOL_NAME,
   EXPORT_RASTER_TOOL_NAME,
   EXPORT_SVG_TOOL_NAME,
   GENERATE_IMAGE_TOOL_NAME,
@@ -222,6 +221,7 @@ describe("production Agent context budget", () => {
         DESIGN_FIRST_SLICE_TOOL_NAME,
         DESIGN_INSPECT_TOOL_NAME,
         READ_IMAGE_TOOL_NAME,
+        GENERATE_IMAGE_TOOL_NAME,
       ]);
       expect(
         JSON.stringify(
@@ -234,7 +234,7 @@ describe("production Agent context budget", () => {
         (gateway.requests[0]?.system.length ?? 0) +
           JSON.stringify(gateway.requests[0]?.tools).length,
       ).toBeLessThan(50_000);
-      expect(gateway.requests[0]?.tools).not.toContainEqual(
+      expect(gateway.requests[0]?.tools).toContainEqual(
         expect.objectContaining({ name: GENERATE_IMAGE_TOOL_NAME }),
       );
       const initialUserMessage = gateway.requests[0]?.messages.find(
@@ -504,7 +504,6 @@ describe("production Agent context budget", () => {
       expect(inspectedNames).not.toEqual(
         expect.arrayContaining([
           DESIGN_CAPTURE_TOOL_NAME,
-          DESIGN_REVIEW_TOOL_NAME,
           DESIGN_SYSTEM_TOOL_NAME,
         ]),
       );

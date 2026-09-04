@@ -10,7 +10,7 @@ Use this skill only for `deliverable=ui` and only after a trusted capture exists
 Review these criteria independently:
 
 1. Visual thesis: can the intended subject and point of view be inferred from the rendered result?
-2. Signature motif: is the planned memorable device visible, integrated, and strong enough to survive at a glance?
+2. Signature decision: is the planned brief-specific layout, type, material, behavior, silhouette, or geometric decision visible, integrated, and strong enough to survive at a glance without relying on a standalone ornament?
 3. Composition tension: do scale, balance, negative space, density, overlap, or asymmetry create deliberate focus rather than a default template?
 4. Typography character: do type choices and hierarchy carry personality while remaining readable?
 5. Material coherence: do color, imagery, shape, surface, and effects feel like one system?
@@ -29,6 +29,6 @@ When the host supplies visual references, also judge the declared transferable d
 
 Treat dark backdrops with cyan lines, concentric scanner rings, HUD microcopy, generic security language, and a conventional form card as template symptoms unless the actual product context requires them and at least two independent visual decisions remain distinctive without those devices. Do not confuse the presence of a planned motif with the motif being original, strong, or well crafted.
 
-Apply a primitive-substitution test: if replacing circles with rectangles, or one gradient with another, leaves the same claimed concept because captions and naming do all the work, fail `signature-motif`, `subject-specificity`, and `template-avoidance`. A primitive family may dominate only when its contour, spacing, crop, material, typography relationship, or information behavior is visibly authored rather than repeated at default settings.
+Apply a primitive-substitution test: if replacing circles with rectangles, or one gradient with another, leaves the same claimed concept because captions and naming do all the work, fail `signature-decision`, `subject-specificity`, and `template-avoidance`. A primitive family may dominate only when its contour, spacing, crop, material, typography relationship, or information behavior is visibly authored rather than repeated at default settings.
 
 Judge the first captured draft honestly. Pass it when every required criterion is visibly delivery-ready; do not invent mandatory defects or force a ceremonial refinement. When it fails, choose the most consequential real shortcomings rather than minor geometry details. A deterministic layout warning may support a failure, but it cannot be the entire critique when the design is generic, weak at thumbnail scale, or under-crafted.

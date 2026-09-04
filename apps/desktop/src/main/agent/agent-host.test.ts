@@ -185,12 +185,11 @@ describe("AgentHost model bridge", () => {
     });
   });
 
-  it("returns structured recovery instead of dropping an invalid design tool request", () => {
+  it("forwards tool input unchanged to the single authoritative Main parser", async () => {
     const host = new AgentHost();
+    const handler = vi.fn(() => Promise.resolve({ content: { ok: true } }));
+    host.setDesignToolRequestHandler(handler);
     void host.start();
-    const error = vi
-      .spyOn(console, "error")
-      .mockImplementation(() => undefined);
 
     postToHost({
       type: "design-tool.request",
@@ -210,25 +209,18 @@ describe("AgentHost model bridge", () => {
       },
     });
 
-    expect(error).toHaveBeenCalledWith("Rejected invalid design tool request");
-    const postMessage = electron.child.postMessage as {
-      mock: { calls: unknown[][] };
-    };
-    expect(postMessage.mock.calls.at(-1)?.[0]).toMatchObject({
+    await vi.waitFor(() => expect(handler).toHaveBeenCalledOnce());
+    expect(handler).toHaveBeenCalledWith(
+      expect.objectContaining({ input: { unexpected: true } }),
+      expect.objectContaining({ runId: "run_1" }),
+      expect.any(AbortSignal),
+      expect.any(Function),
+    );
+    expect(electron.child.postMessage).toHaveBeenCalledWith({
       type: "design-tool.response",
       requestId: "design_tool_request_1",
-      ok: false,
-      error: {
-        code: "invalid_tool_request",
-        retryable: false,
-        recoverable: true,
-        details: {
-          kind: "tool-validation",
-          fingerprint:
-            "design_tool_bridge:design_tool.empty_input_invalid:/call/input/unexpected",
-          issues: [{ path: "/call/input/unexpected" }],
-        },
-      },
+      ok: true,
+      result: { content: { ok: true } },
     });
   });
 

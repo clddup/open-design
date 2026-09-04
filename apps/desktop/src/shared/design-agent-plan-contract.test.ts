@@ -87,23 +87,14 @@ describe("DesignPlanContract", () => {
     );
   });
 
-  it("keeps monochrome as a Logo variant unless the authoritative brief makes it primary", () => {
+  it("does not turn Logo color taste into a structural write gate", () => {
     const input = planInput();
     input.deliverable = "logo";
     input.designIntent.calibration.surfaceMode = "graphic";
     input.targets[0].qualityProfile = { kind: "graphic" };
     input.visualSystem.palette = ["#111111", "#FFFFFF"];
 
-    const missing = DesignPlanContract.parse(input);
-    expect(missing).toMatchObject({
-      ok: false,
-      issues: [
-        expect.objectContaining({
-          code: "design_plan.logo_color_strategy_required",
-          path: "/logoColorStrategy",
-        }),
-      ],
-    });
+    expect(DesignPlanContract.parse(input).ok).toBe(true);
 
     input.logoColorStrategy = {
       mode: "brand-color",
@@ -112,37 +103,7 @@ describe("DesignPlanContract", () => {
       lightDarkAdaptation:
         "Use deep blue on light surfaces and a brighter blue with white counters on dark surfaces.",
     };
-    const neutral = DesignPlanContract.parse(input);
-    expect(neutral).toMatchObject({
-      ok: false,
-      issues: [
-        expect.objectContaining({
-          code: "design_plan.logo_brand_color_required",
-          path: "/visualSystem/palette",
-        }),
-      ],
-    });
-
-    input.logoColorStrategy.mode = "monochrome-by-brief";
-    expect(
-      DesignPlanContract.parse(input, {
-        authoritativePrompt:
-          "Include monochrome tests alongside a full-color primary Logo.",
-      }),
-    ).toMatchObject({
-      ok: false,
-      issues: [
-        expect.objectContaining({
-          code: "design_plan.logo_monochrome_not_requested",
-          path: "/logoColorStrategy/mode",
-        }),
-      ],
-    });
-    expect(
-      DesignPlanContract.parse(input, {
-        authoritativePrompt: "The primary Logo must be monochrome only.",
-      }).ok,
-    ).toBe(true);
+    expect(DesignPlanContract.parse(input).ok).toBe(true);
   });
 
   it("reports parent-local region overflow with a stable path", () => {
@@ -200,7 +161,7 @@ describe("DesignPlanContract", () => {
     );
   });
 
-  it("limits only active visual references in the domain refinement", () => {
+  it("accepts every structurally valid Conversation reference in one plan", () => {
     const input = planInput();
     input.referenceStrategy = {
       synthesis:
@@ -214,17 +175,7 @@ describe("DesignPlanContract", () => {
         avoid: ["literal layout copy"],
       })),
     };
-    const result = DesignPlanContract.parse(input);
-    expect(result.ok).toBe(false);
-    if (result.ok) throw new Error("Expected active-reference failure");
-    expect(result.issues).toContainEqual(
-      expect.objectContaining({
-        code: "design_plan.active_reference_limit_exceeded",
-        path: "/referenceStrategy/references",
-        expected: 2,
-        actual: 3,
-      }),
-    );
+    expect(DesignPlanContract.parse(input).ok).toBe(true);
   });
 
   it("does not repair an invalid trusted canonical skill binding", () => {
@@ -246,17 +197,14 @@ describe("DesignPlanContract", () => {
     );
   });
 
-  it("keeps single-raster requirements in one output-mode refinement", () => {
+  it("keeps structural single-raster requirements in one output-mode refinement", () => {
     const input = planInput();
     input.outputMode = "single-raster";
     const result = DesignPlanContract.parse(input);
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("Expected single-raster failure");
     expect(result.issues.map((issue) => issue.code)).toEqual(
-      expect.arrayContaining([
-        "design_plan.single_raster_evidence_required",
-        "design_plan.single_raster_role_required",
-      ]),
+      expect.arrayContaining(["design_plan.single_raster_role_required"]),
     );
   });
 });
@@ -359,7 +307,7 @@ function planInput(): Omit<DesignPlanToolInput, "skillRefs"> {
       },
       visualThesis:
         "A calm editorial gateway makes security feel precise rather than bureaucratic.",
-      signatureMotif:
+      signatureDecision:
         "One vertical signal rail connects identity, credentials, and the primary action.",
       typographyLanguage:
         "Editorial display type creates character while compact neutral copy preserves speed.",

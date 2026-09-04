@@ -45,9 +45,9 @@ export function restoreModelMessages(
     };
     if (
       typeof payload.toolCallId === "string" &&
-      !terminalToolCalls.has(payload.toolCallId)
+      !terminalToolCalls.has(toolCallKey(event.runId, payload.toolCallId))
     ) {
-      terminalToolCalls.set(payload.toolCallId, {
+      terminalToolCalls.set(toolCallKey(event.runId, payload.toolCallId), {
         content:
           event.type === "tool.completed"
             ? payload.result
@@ -82,14 +82,14 @@ export function restoreModelMessages(
       ]
     : [];
   const requestedToolCallIds = new Set<string>();
-  let resultOrder: string[] = [];
+  let resultOrder: Array<{ key: string; projectedId: string }> = [];
   const flushToolResults = (): void => {
-    for (const toolCallId of resultOrder) {
-      const terminal = terminalToolCalls.get(toolCallId);
+    for (const { key, projectedId } of resultOrder) {
+      const terminal = terminalToolCalls.get(key);
       if (terminal === undefined) continue;
       messages.push({
         role: "tool",
-        toolCallId,
+        toolCallId: projectedId,
         content: projectToolResultForModel(terminal.content),
         isError: terminal.isError,
       });
@@ -98,7 +98,7 @@ export function restoreModelMessages(
         if (attachments.length > 0) {
           messages.push(
             canonicalUserMessage(
-              `Multimodal content returned by tool call ${toolCallId}.`,
+              `Multimodal content returned by tool call ${projectedId}.`,
               attachments,
             ),
           );
@@ -176,6 +176,23 @@ export function restoreModelMessages(
       });
       continue;
     }
+    if (event.type === "completion.review") {
+      flushToolResults();
+      const payload = event.payload as {
+        code: string;
+        message: string;
+      };
+      messages.push({
+        role: "user",
+        content: [
+          "[OpenDesign trusted completion review]",
+          `code=${payload.code}`,
+          payload.message,
+          "This is a persisted host decision, not a user message. Continue from the current document revision and correct the reported completion gap.",
+        ].join("\n"),
+      });
+      continue;
+    }
     if (event.type === "tool.requested") {
       const payload = event.payload as {
         toolCallId?: unknown;
@@ -185,16 +202,20 @@ export function restoreModelMessages(
       if (
         typeof payload.toolCallId !== "string" ||
         typeof payload.toolName !== "string" ||
-        requestedToolCallIds.has(payload.toolCallId)
+        requestedToolCallIds.has(toolCallKey(event.runId, payload.toolCallId))
       ) {
         continue;
       }
-      requestedToolCallIds.add(payload.toolCallId);
-      resultOrder.push(payload.toolCallId);
+      const key = toolCallKey(event.runId, payload.toolCallId);
+      const terminal = terminalToolCalls.get(key);
+      if (!terminal) continue;
+      const projectedId = `history_${event.sequence}_${payload.toolCallId}`;
+      requestedToolCallIds.add(key);
+      resultOrder.push({ key, projectedId });
       const block: CanonicalContentBlock = {
-        id: `${payload.toolCallId}_block`,
+        id: `${projectedId}_block`,
         type: "tool_call",
-        toolCallId: payload.toolCallId,
+        toolCallId: projectedId,
         name: payload.toolName,
         input: payload.input,
       };
@@ -205,6 +226,10 @@ export function restoreModelMessages(
   }
   flushToolResults();
   return messages;
+}
+
+function toolCallKey(runId: string | undefined, toolCallId: string): string {
+  return `${runId ?? "legacy-run"}:${toolCallId}`;
 }
 
 export function canonicalUserMessage(

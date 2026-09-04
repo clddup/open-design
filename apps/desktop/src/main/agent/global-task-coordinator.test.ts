@@ -132,7 +132,7 @@ const designPlan: DesignPlanToolInput = {
     },
     visualThesis:
       "A precise signal workspace makes operational hierarchy visible without a generic card dashboard.",
-    signatureMotif:
+    signatureDecision:
       "One continuous signal rail connects navigation, primary work, and contextual inspection.",
     typographyLanguage:
       "Compact utilitarian labels support one decisive editorial heading tier.",
@@ -160,7 +160,7 @@ const visualReview = {
     "The rendered workspace preserves the requested product structure and adds no unrequested capability",
   distinctiveness:
     "The signal workspace has a recognizable hierarchy beyond a generic product dashboard.",
-  signatureMotif:
+  signatureDecision:
     "The continuous signal rail links navigation and the dominant primary work plane.",
   composition: "The primary work area needs more width",
   hierarchy: "The inspector competes with the page title",
@@ -173,7 +173,7 @@ const visualReview = {
   criteria: {
     "visual-thesis":
       "The operational signal thesis is visible in the primary plane.",
-    "signature-motif":
+    "signature-decision":
       "The rail remains visible across navigation and content.",
     "composition-tension":
       "The asymmetric split establishes one dominant region.",
@@ -349,7 +349,7 @@ function multiTargetPlan(pageId: string): DesignPlanToolInput {
       },
       visualThesis:
         "A directional editorial field expresses momentum instead of a generic mobile card stack.",
-      signatureMotif:
+      signatureDecision:
         "One cropped signal rail connects identity, next action, and progress.",
       typographyLanguage:
         "Editorial display type sets pace while compact neutral text preserves clarity.",
@@ -972,133 +972,6 @@ describe("GlobalTaskCoordinator", () => {
     });
   });
 
-  it("advances Plan steps only from the active step with material revision evidence", async () => {
-    const { store, host, file, opened, pageId } = await setup();
-    const coordinator = new GlobalTaskCoordinator(host, store);
-    const runId = "run_serial_plan";
-    await coordinator.registerRun({
-      type: "run.start",
-      runId,
-      sessionId: "conversation_mobile",
-      prompt: "Design a polished product workspace",
-      documentId: file.documentId,
-      revision: opened.document.revision,
-      modelSelection,
-      scope: { kind: "page", pageId, selectedNodeIds: [] },
-      mutationTarget: { kind: "page", pageId },
-    });
-    const context = {
-      runId,
-      sessionId: "conversation_mobile",
-      documentId: file.documentId,
-      revision: opened.document.revision,
-      scope: { kind: "page" as const, pageId, selectedNodeIds: [] },
-      mutationTarget: { kind: "page" as const, pageId },
-    };
-    coordinator.recordDocumentInspection(
-      context,
-      inspectionResult(opened.document, pageId),
-    );
-    const serialPlan = designPlanForPage(pageId);
-    serialPlan.targets[0].implementationSteps.push({
-      stepId: "add_states",
-      label: "Add states",
-    });
-    coordinator.registerDesignPlan(context, serialPlan);
-
-    expect(coordinator.getDeliveryLedger(runId)?.planExecution).toMatchObject({
-      planRevision: 1,
-      targets: [
-        {
-          steps: [
-            { stepId: "build_hierarchy", status: "in_progress" },
-            { stepId: "add_states", status: "pending" },
-            { kind: "review-refine", status: "pending" },
-          ],
-        },
-      ],
-    });
-    expect(() =>
-      coordinator.updateDesignPlan(context, {
-        planRevision: 2,
-        targetId: "workspace",
-        completeStepId: "build_hierarchy",
-      }),
-    ).toThrow("design_workflow.plan_revision_stale");
-    expect(() =>
-      coordinator.updateDesignPlan(context, {
-        planRevision: 1,
-        targetId: "workspace",
-        completeStepId: "add_states",
-      }),
-    ).toThrow("design_workflow.plan_step_state_invalid");
-    expect(() =>
-      coordinator.updateDesignPlan(context, {
-        planRevision: 1,
-        targetId: "workspace",
-        completeStepId: "build_hierarchy",
-      }),
-    ).toThrow("design_workflow.plan_step_evidence_missing");
-
-    coordinator.recordMaterialDesignWriteCompleted(runId, ["workspace"], 1);
-    expect(
-      coordinator.updateDesignPlan(context, {
-        planRevision: 1,
-        targetId: "workspace",
-        completeStepId: "build_hierarchy",
-      }).planExecution,
-    ).toMatchObject({
-      targets: [
-        {
-          steps: [
-            {
-              stepId: "build_hierarchy",
-              status: "completed",
-              completedRevision: 1,
-            },
-            {
-              stepId: "add_states",
-              status: "in_progress",
-              startedRevision: 1,
-            },
-            { kind: "review-refine", status: "pending" },
-          ],
-        },
-      ],
-    });
-    coordinator.recordMaterialDesignWriteCompleted(runId, ["workspace"], 2);
-    coordinator.updateDesignPlan(context, {
-      planRevision: 1,
-      targetId: "workspace",
-      completeStepId: "add_states",
-    });
-    const reviewStep = coordinator
-      .getDeliveryLedger(runId)
-      ?.planExecution?.targets[0]?.steps.at(-1);
-    expect(reviewStep).toMatchObject({
-      kind: "review-refine",
-      status: "in_progress",
-      startedRevision: 2,
-    });
-    expect(() =>
-      coordinator.updateDesignPlan(context, {
-        planRevision: 1,
-        targetId: "workspace",
-        completeStepId: reviewStep?.stepId ?? "missing",
-      }),
-    ).toThrow("design_workflow.plan_review_step_host_owned");
-    coordinator.handleAgentEvent({
-      type: "run.completed",
-      runId,
-      finishedAt: "2026-08-08T12:30:00.000Z",
-      stopReason: "complete",
-    });
-    expect(
-      store.listGlobalTasks().find((task) => task.runId === runId)?.lifecycle,
-    ).toBe("needs_attention");
-    store.close();
-  });
-
   it("records a staged Apply through trusted final revision when semantic telemetry is absent", async () => {
     const { store, host, file, opened, pageId } = await setup();
     const coordinator = new GlobalTaskCoordinator(host, store);
@@ -1147,7 +1020,6 @@ describe("GlobalTaskCoordinator", () => {
     expect(() =>
       coordinator.recordDesignApplyCompleted(
         runId,
-        input,
         { input, plan, targetIds: ["workspace"] },
         2,
         { ok: true },
@@ -1188,6 +1060,12 @@ describe("GlobalTaskCoordinator", () => {
       mimeType: "image/png" as const,
       byteSize: 4_000,
     };
+    const generatedAttachment = {
+      attachmentId: `image_${"d".repeat(64)}`,
+      name: "generated-reference.png",
+      mimeType: "image/png" as const,
+      byteSize: 5_000,
+    };
     const sessionStore = {
       readTimeline: vi.fn().mockResolvedValue([
         {
@@ -1205,6 +1083,21 @@ describe("GlobalTaskCoordinator", () => {
           revision: 1,
           scope: { kind: "page", pageId, selectedNodeIds: [] },
           mutationTarget: { kind: "page", pageId },
+        },
+        {
+          itemId: "tool:previous_generation",
+          sessionId: "conversation_mobile",
+          runId: "run_previous_design",
+          sequence: 2,
+          createdAt: "2026-08-01T00:00:01.000Z",
+          updatedAt: "2026-08-01T00:00:02.000Z",
+          type: "tool",
+          toolCallId: "previous_generation",
+          toolName: "opendesign_generate_image",
+          input: {},
+          risk: "external",
+          status: "completed",
+          result: { attachments: [generatedAttachment] },
         },
       ]),
     };
@@ -1269,6 +1162,7 @@ describe("GlobalTaskCoordinator", () => {
     ).not.toThrow();
     expect(coordinator.referenceAttachmentsForRun(runId)).toEqual([
       previousAttachment,
+      generatedAttachment,
       expect.objectContaining({ attachmentId: feedbackScreenshotId }),
     ]);
     const update = insertExistingChild(
@@ -1279,7 +1173,6 @@ describe("GlobalTaskCoordinator", () => {
     const authorization = coordinator.assertDesignPlanForApply(context, update);
     coordinator.recordDesignApplyCompleted(
       runId,
-      update,
       authorization,
       document.revision + 1,
     );
@@ -1360,12 +1253,7 @@ describe("GlobalTaskCoordinator", () => {
     );
     const draft = draftTargets(pageId, plan.targets);
     const authorization = coordinator.assertDesignPlanForApply(context, draft);
-    coordinator.recordDesignApplyCompleted(
-      runId,
-      authorization?.input ?? draft,
-      authorization,
-      2,
-    );
+    coordinator.recordDesignApplyCompleted(runId, authorization, 2);
     expect(
       coordinator.resolveVisualCriticContext(context, 2, {
         attachmentId: "capture_reference",
@@ -1436,12 +1324,7 @@ describe("GlobalTaskCoordinator", () => {
     coordinator.recordDesignPlanAllocated(runId, [plan.targets[0].targetId], 1);
     const draft = draftTargets(pageId, plan.targets);
     const authorization = coordinator.assertDesignPlanForApply(context, draft);
-    coordinator.recordDesignApplyCompleted(
-      runId,
-      authorization?.input ?? draft,
-      authorization,
-      2,
-    );
+    coordinator.recordDesignApplyCompleted(runId, authorization, 2);
     const drafted = withDraftedTargets(
       opened.document,
       pageId,
@@ -1459,25 +1342,15 @@ describe("GlobalTaskCoordinator", () => {
       ),
     );
 
-    expect(coordinator.resolveVisualReviewSkillRefs(context)).toEqual(
-      BUILTIN_GRAPHIC_DESIGN_SKILL_REFS,
-    );
+    expect(
+      coordinator.resolveVisualCriticContext(context, 2, {
+        attachmentId: "capture_graphic",
+        byteSize: 12_000,
+        mimeType: "image/jpeg",
+        name: "capture.jpg",
+      })?.plan.skillRefs,
+    ).toEqual(BUILTIN_GRAPHIC_DESIGN_SKILL_REFS);
 
-    expect(() =>
-      coordinator.registerVisualReview(context, visualReview),
-    ).toThrow("design_workflow.visual_review_skill_binding_invalid");
-    expect(() =>
-      coordinator.registerVisualReview(context, {
-        ...visualReview,
-        skillRefs: coordinator.resolveVisualReviewSkillRefs(context),
-      }),
-    ).not.toThrow();
-    expect(() =>
-      coordinator.registerVisualReview(context, {
-        ...visualReview,
-        skillRefs: coordinator.resolveVisualReviewSkillRefs(context),
-      }),
-    ).toThrow("design_workflow.capture_required");
     store.close();
   });
 
@@ -1618,9 +1491,14 @@ describe("GlobalTaskCoordinator", () => {
       mutationTarget: { kind: "page" as const, pageId },
     };
 
-    expect(() =>
-      coordinator.assertDesignPlanForRaster(context, "hero"),
-    ).toThrow("structured design plan");
+    expect(coordinator.assertDesignPlanForRaster(context, "hero")).toBe(
+      undefined,
+    );
+    coordinator.recordGeneratedRaster(
+      context,
+      "image_before_plan",
+      "supporting-content",
+    );
     expect(() =>
       coordinator.registerDesignPlan(context, designPlanForPage(pageId)),
     ).toThrow("Inspect the bound design document");
@@ -1652,17 +1530,14 @@ describe("GlobalTaskCoordinator", () => {
       pageId,
     });
     expect(() =>
-      coordinator.registerVisualReview(context, visualReview),
-    ).toThrow("design_workflow.material_write_required");
-    expect(() =>
       coordinator.assertDesignPlanForRaster(context, "hero"),
     ).not.toThrow();
     expect(() =>
       coordinator.assertDesignPlanForRaster(context, "background"),
     ).not.toThrow();
-    expect(() =>
+    expect(
       coordinator.assertDesignPlanForRaster(context, "final-single-image"),
-    ).toThrow("not declared");
+    ).toMatchObject({ deliverable: "ui" });
     coordinator.recordGeneratedRaster(context, "image_generated", "hero");
     expect(
       coordinator.resolveGeneratedRasterAttachmentId(
@@ -1686,36 +1561,26 @@ describe("GlobalTaskCoordinator", () => {
         "hero",
       ),
     ).toThrow("image_attachment_ambiguous");
-    expect(() =>
+    expect(
       coordinator.resolveGeneratedRasterAttachmentId(
         context,
         "image_generated",
         "background",
       ),
-    ).toThrow("cannot be placed as background");
+    ).toBe("image_generated");
     expect(() =>
-      coordinator.assertDesignPlanForImagePlacement(
-        context,
-        "hero",
-        "wrong_parent",
-      ),
-    ).toThrow("planned artboard Frame");
+      coordinator.assertImagePlacement(context, "wrong_parent"),
+    ).toThrow("current document inspection");
     expect(() =>
-      coordinator.assertDesignPlanForImagePlacement(
-        context,
-        "background",
-        "workspace_artboard",
-        "image_generated",
-      ),
-    ).toThrow("declared as hero");
+      coordinator.assertImagePlacement(context, "workspace_artboard"),
+    ).toThrow("current document inspection");
     expect(() =>
       coordinator.registerDesignPlan(context, {
         ...designPlanForPage(pageId),
         outputMode: "single-raster",
         rasterAssetRoles: ["final-single-image"],
-        singleRasterEvidence: "Refine the mobile experience",
       }),
-    ).toThrow("explicitly requests one flattened image");
+    ).not.toThrow();
     coordinator.registerDesignPlan(context, {
       ...designPlanForPage(pageId),
       rasterAssetRoles: [],
@@ -1909,12 +1774,7 @@ describe("GlobalTaskCoordinator", () => {
       context,
       plannedDraft,
     );
-    coordinator.recordDesignApplyCompleted(
-      context.runId,
-      authorization?.input ?? plannedDraft,
-      authorization,
-      1,
-    );
+    coordinator.recordDesignApplyCompleted(context.runId, authorization, 1);
     expect(coordinator.resolveCanvasCaptureTarget(context)).toEqual({
       kind: "frame",
       nodeId: "workspace_artboard",
@@ -1927,32 +1787,26 @@ describe("GlobalTaskCoordinator", () => {
     expect(() => coordinator.recordCanvasCapture(context, 1)).toThrow(
       "design_workflow.layout_quality_unavailable",
     );
-    expect(
-      coordinator.recordCanvasCapture(
-        context,
+    const failedCriticCapture = coordinator.recordCanvasCapture(
+      context,
+      1,
+      cleanLayoutQuality(
+        context.documentId,
+        pageId,
+        "workspace_artboard",
         1,
-        cleanLayoutQuality(
-          context.documentId,
-          pageId,
-          "workspace_artboard",
-          1,
-          designPlan.targets[0].qualityProfile,
-        ),
+        designPlan.targets[0].qualityProfile,
       ),
-    ).toEqual({
+      independentCritic(1, false),
+    );
+    expect(failedCriticCapture).toMatchObject({
       captureSequence: 1,
       capturedRevision: 1,
       deliveryTargetId: "workspace",
-      nextAction: "record-visual-review",
-      reviewEligible: true,
+      nextAction: "refine-independent-critic-findings",
+      reviewEligible: false,
     });
-    expect(() => coordinator.assertVisualReviewBeforeWrite(context)).toThrow(
-      "structured visual review",
-    );
-    coordinator.registerVisualReview(context, visualReview);
-    expect(() =>
-      coordinator.registerVisualReview(context, visualReview),
-    ).toThrow("design_workflow.capture_required");
+    expect(failedCriticCapture.critic?.passed).toBe(false);
     expect(
       coordinator.recordCanvasCapture(
         context,
@@ -1972,12 +1826,6 @@ describe("GlobalTaskCoordinator", () => {
       nextAction: "refine-reviewed-target",
       reviewEligible: false,
     });
-    expect(() =>
-      coordinator.registerVisualReview(context, visualReview),
-    ).toThrow("design_workflow.capture_required");
-    expect(() =>
-      coordinator.assertVisualReviewBeforeWrite(context),
-    ).not.toThrow();
     const navigationRegion: DesignApplyToolInput = {
       label: "Create planned navigation region",
       commands: [
@@ -2120,7 +1968,7 @@ describe("GlobalTaskCoordinator", () => {
     store.close();
   });
 
-  it("keeps a captured draft unverified until exact-revision visual review", async () => {
+  it("finishes exact-revision structural verification when the critic is unavailable", async () => {
     const { store, host, file, opened, pageId } = await setup();
     const coordinator = new GlobalTaskCoordinator(host, store);
     await coordinator.registerRun({
@@ -2180,12 +2028,7 @@ describe("GlobalTaskCoordinator", () => {
     );
     const draft = draftTargets(pageId, plan.targets);
     const authorization = coordinator.assertDesignPlanForApply(context, draft);
-    coordinator.recordDesignApplyCompleted(
-      context.runId,
-      authorization?.input ?? draft,
-      authorization,
-      2,
-    );
+    coordinator.recordDesignApplyCompleted(context.runId, authorization, 2);
     const draftedDocument = withDraftedTargets(
       opened.document,
       pageId,
@@ -2207,16 +2050,20 @@ describe("GlobalTaskCoordinator", () => {
           target.artboard.frameId,
           target.qualityProfile,
         ),
+        undefined,
+        { message: "critic provider timed out" },
       ),
     ).toMatchObject({
-      nextAction: "record-visual-review",
-      reviewEligible: true,
+      nextAction: "complete-delivery",
+      reviewEligible: false,
+      verified: true,
+      verification: "deterministic-structure-fallback",
+      criticUnavailable: { message: "critic provider timed out" },
     });
     expect(
       coordinator.getDeliveryLedger(context.runId)?.targets[0],
     ).toMatchObject({
-      status: "captured",
-      captureRevision: 2,
+      status: "verified",
     });
     expect(
       coordinator.resolveVisualCriticContext(context, 2, {
@@ -2225,11 +2072,7 @@ describe("GlobalTaskCoordinator", () => {
         mimeType: "image/jpeg",
         name: "capture.jpg",
       }),
-    ).toMatchObject({
-      observedRevision: 2,
-      phase: "draft",
-      target: { targetId: target.targetId },
-    });
+    ).toBeNull();
     store.close();
   });
 
@@ -2277,12 +2120,7 @@ describe("GlobalTaskCoordinator", () => {
       context,
       homeDraft,
     );
-    coordinator.recordDesignApplyCompleted(
-      context.runId,
-      homeAuthorization?.input ?? homeDraft,
-      homeAuthorization,
-      2,
-    );
+    coordinator.recordDesignApplyCompleted(context.runId, homeAuthorization, 2);
     const draftedHome = withDraftedTargets(opened.document, pageId, [home], 2);
     coordinator.recordDocumentInspection(
       context,
@@ -2335,7 +2173,6 @@ describe("GlobalTaskCoordinator", () => {
     );
     coordinator.recordDesignApplyCompleted(
       context.runId,
-      homeRefinement,
       refinementAuthorization,
       3,
     );
@@ -2382,7 +2219,6 @@ describe("GlobalTaskCoordinator", () => {
     );
     coordinator.recordDesignApplyCompleted(
       context.runId,
-      profileAuthorization?.input ?? profileDraft,
       profileAuthorization,
       4,
     );
@@ -2429,7 +2265,7 @@ describe("GlobalTaskCoordinator", () => {
     store.close();
   });
 
-  it("defers visual critique until every required raster role is placed in the target", async () => {
+  it("reviews an incomplete raster composition without verifying it", async () => {
     const { store, host, file, opened, pageId } = await setup();
     const coordinator = new GlobalTaskCoordinator(host, store);
     const runId = "run_raster_before_critic";
@@ -2471,12 +2307,7 @@ describe("GlobalTaskCoordinator", () => {
     );
     const draft = draftTargets(pageId, [target]);
     const authorization = coordinator.assertDesignPlanForApply(context, draft);
-    coordinator.recordDesignApplyCompleted(
-      runId,
-      authorization?.input ?? draft,
-      authorization,
-      2,
-    );
+    coordinator.recordDesignApplyCompleted(runId, authorization, 2);
     const drafted = withDraftedTargets(opened.document, pageId, [target], 2);
     coordinator.recordDocumentInspection(
       context,
@@ -2489,7 +2320,11 @@ describe("GlobalTaskCoordinator", () => {
         mimeType: "image/jpeg",
         name: "draft.jpg",
       }),
-    ).toBeNull();
+    ).toMatchObject({
+      observedRevision: 2,
+      phase: "draft",
+      target: { targetId: target.targetId },
+    });
     expect(
       coordinator.recordCanvasCapture(
         context,
@@ -2500,15 +2335,14 @@ describe("GlobalTaskCoordinator", () => {
           target.artboard.frameId,
           target.qualityProfile,
         ),
+        independentCritic(2, false),
       ),
     ).toMatchObject({
       nextAction: "place-required-raster-assets",
       pendingRasterRoles: ["hero"],
       reviewEligible: false,
+      critic: { passed: false },
     });
-    expect(() =>
-      coordinator.registerVisualReview(context, visualReview),
-    ).toThrow("design_workflow.material_write_required");
 
     const region = target.composition.regions[0];
     if (!region) throw new Error("Raster target region is missing");
@@ -2604,12 +2438,7 @@ describe("GlobalTaskCoordinator", () => {
       context,
       homeDraft,
     );
-    coordinator.recordDesignApplyCompleted(
-      context.runId,
-      authorization?.input ?? homeDraft,
-      authorization,
-      2,
-    );
+    coordinator.recordDesignApplyCompleted(context.runId, authorization, 2);
     const draftedHome = withDraftedTargets(opened.document, pageId, [home], 2);
     coordinator.recordDocumentInspection(
       context,
@@ -2707,12 +2536,7 @@ describe("GlobalTaskCoordinator", () => {
           command.type !== "insert_element" || command.pageId === pageId,
       ),
     ).toBe(true);
-    coordinator.recordDesignApplyCompleted(
-      context.runId,
-      authorization?.input ?? draft,
-      authorization,
-      2,
-    );
+    coordinator.recordDesignApplyCompleted(context.runId, authorization, 2);
     const draftedDocument = withDraftedTargets(
       opened.document,
       pageId,
@@ -2827,14 +2651,14 @@ describe("GlobalTaskCoordinator", () => {
 
     const draft = draftTargets(pageId, plan.targets);
     expect(() => coordinator.assertDesignPlanForApply(context, draft)).toThrow(
-      "design_workflow.active_ui_target_required",
+      "design_workflow.plan_step_order_invalid",
     );
     expect(() =>
       coordinator.assertDesignPlanForApply(
         context,
         flattenedUiDraft(pageId, homeTarget),
       ),
-    ).toThrow("design_workflow.ui_draft_structure_incomplete");
+    ).not.toThrow();
     const homeDraft = draftTargets(pageId, [homeTarget]);
     const misidentifiedHomeDraft = structuredClone(homeDraft);
     if (misidentifiedHomeDraft.steps?.[0]) {
@@ -2865,7 +2689,6 @@ describe("GlobalTaskCoordinator", () => {
     ).toBe(false);
     coordinator.recordDesignApplyCompleted(
       context.runId,
-      draftAuthorization?.input ?? homeDraft,
       draftAuthorization,
       2,
     );
@@ -2980,12 +2803,7 @@ describe("GlobalTaskCoordinator", () => {
         commandIds: ["refine_home"],
       },
     ]);
-    coordinator.recordDesignApplyCompleted(
-      context.runId,
-      homeAuthorization?.input ?? refineHome,
-      homeAuthorization,
-      3,
-    );
+    coordinator.recordDesignApplyCompleted(context.runId, homeAuthorization, 3);
     expect(
       coordinator.getDeliveryLedger(context.runId)?.planExecution?.targets,
     ).toMatchObject([
@@ -3117,7 +2935,6 @@ describe("GlobalTaskCoordinator", () => {
     );
     coordinator.recordDesignApplyCompleted(
       context.runId,
-      profileDraftAuthorization?.input ?? profileDraft,
       profileDraftAuthorization,
       4,
     );
@@ -3136,8 +2953,8 @@ describe("GlobalTaskCoordinator", () => {
         "frame_profile",
         profileTarget.qualityProfile,
       ),
+      independentCritic(4, false),
     );
-    coordinator.registerVisualReview(context, visualReview);
     const refineProfile: DesignApplyToolInput = {
       label: "Refine Profile hierarchy",
       commands: [
@@ -3155,7 +2972,6 @@ describe("GlobalTaskCoordinator", () => {
     );
     coordinator.recordDesignApplyCompleted(
       context.runId,
-      refineProfile,
       profileAuthorization,
       5,
     );
@@ -3296,34 +3112,42 @@ describe("GlobalTaskCoordinator", () => {
       exclusions: ["No unrequested product capability"],
       assumptions: ["Use an iOS safe area"],
     };
-    const scopeAllocation = coordinator.createDeliveryScopeAllocation(
+    const scopeReservation = coordinator.createDeliveryScopeReservation(
       context,
-      "scope_call",
       reviewedScope,
     );
-    const scopeRevision = opened.document.revision + 1;
     coordinator.recordDeliveryScopeCompleted(
       context,
-      "scope_call",
       reviewedScope,
-      scopeAllocation,
-      scopeRevision,
+      scopeReservation,
     );
-    coordinator.handleAgentEvent({
-      type: "tool.completed",
-      runId: context.runId,
-      toolCallId: "scope_call",
-      result: { ok: true },
-      revision: scopeRevision,
+    const contextAfterScope = context;
+    expect(coordinator.getDeliveryLedger(context.runId)?.targets).toHaveLength(
+      24,
+    );
+    expect(
+      coordinator
+        .getDeliveryLedger(context.runId)
+        ?.targets.every((target) => target.status === "pending"),
+    ).toBe(true);
+    expect(coordinator.getDeliveryStageContext(context.runId)).toMatchObject({
+      totalTargets: 24,
+      plannedTargets: 0,
+      nextTarget: {
+        targetId: reviewedScope.targets[0]?.targetId,
+        artboard: {
+          frameId: scopeReservation.artboards[0]?.frameId,
+        },
+      },
     });
-    const contextAfterScope = { ...context, revision: scopeRevision };
+    expect(
+      coordinator.getDeliveryStageContext(context.runId)?.nextTarget?.artboard,
+    ).not.toHaveProperty("allocatedRevision");
     expect(() =>
       coordinator.recordDeliveryScopeCompleted(
         contextAfterScope,
-        "scope_call",
         reviewedScope,
-        scopeAllocation,
-        scopeRevision,
+        scopeReservation,
       ),
     ).toThrow("delivery_scope_already_reviewed");
     plan.objective = "Paraphrased executable objective";
@@ -3372,7 +3196,14 @@ describe("GlobalTaskCoordinator", () => {
       throw new Error("Material template is missing");
     }
     const materialNodeId = `${idAllocation.newNodeIdPrefix}scope_material`;
-    const authorization = coordinator.assertDesignPlanForApply(
+    const allocation = coordinator.createDesignPlanAllocation(context.runId);
+    expect(allocation?.targetIds).toEqual([reviewedScope.targets[0]?.targetId]);
+    expect(allocation?.input.commands).toHaveLength(1);
+    expect(allocation?.input.commands[0]).toMatchObject({
+      type: "insert_element",
+      node: { id: boundTarget.artboard.frameId },
+    });
+    const authorization = coordinator.assertDesignPlanForAllocatedApply(
       contextAfterScope,
       {
         label: "Build the first recorded target",
@@ -3429,6 +3260,7 @@ describe("GlobalTaskCoordinator", () => {
           },
         ],
       },
+      allocation?.targetIds ?? [],
     );
     expect(authorization?.input.commands).toMatchObject([
       {
@@ -3514,7 +3346,7 @@ describe("GlobalTaskCoordinator", () => {
       sessionId: context.sessionId,
       prompt: "Continue the recorded delivery scope",
       documentId: context.documentId,
-      revision: scopeRevision,
+      revision: context.revision,
       modelSelection,
       deliveryScopeReview: "required",
       scope: { kind: "page", pageId, selectedNodeIds: [] },
@@ -3578,12 +3410,7 @@ describe("GlobalTaskCoordinator", () => {
     if (!home) throw new Error("Home target is missing");
     const draft = draftTargets(pageId, [home], true);
     const authorization = coordinator.assertDesignPlanForApply(context, draft);
-    coordinator.recordDesignApplyCompleted(
-      context.runId,
-      draft,
-      authorization,
-      1,
-    );
+    coordinator.recordDesignApplyCompleted(context.runId, authorization, 1);
     coordinator.handleAgentEvent({
       type: "tool.completed",
       runId: context.runId,
@@ -3707,7 +3534,7 @@ describe("GlobalTaskCoordinator", () => {
     store.close();
   });
 
-  it("refuses to verify a delivery target whose planned region is empty", async () => {
+  it("keeps the artboard material invariant without requiring every planned region", async () => {
     const { store, host, file, opened, pageId } = await setup();
     const coordinator = new GlobalTaskCoordinator(host, store);
     await coordinator.registerRun({
@@ -3739,7 +3566,26 @@ describe("GlobalTaskCoordinator", () => {
     const plan: DesignPlanToolInput = {
       ...sourcePlan,
       objective: "Design the requested Home screen",
-      targets: [homeTarget],
+      targets: [
+        {
+          ...homeTarget,
+          composition: {
+            ...homeTarget.composition,
+            regions: [
+              ...homeTarget.composition.regions,
+              {
+                nodeId: "frame_home_optional_support",
+                name: "Optional supporting content",
+                role: "content",
+                x: 24,
+                y: 720,
+                width: 342,
+                height: 80,
+              },
+            ],
+          },
+        },
+      ],
     };
     coordinator.registerDesignPlan(context, plan);
     const fullDraft = draftTargets(pageId, plan.targets, true);
@@ -3753,7 +3599,7 @@ describe("GlobalTaskCoordinator", () => {
     };
     expect(() =>
       coordinator.assertDesignPlanForApply(context, emptyDraft),
-    ).toThrow("design_workflow.empty_region_draft");
+    ).toThrow("design_workflow.empty_artboard_draft");
     expect(coordinator.getDeliveryLedger(context.runId)?.targets).toMatchObject(
       [{ targetId: "target_home", status: "pending" }],
     );
@@ -3761,12 +3607,7 @@ describe("GlobalTaskCoordinator", () => {
       context,
       fullDraft,
     );
-    coordinator.recordDesignApplyCompleted(
-      context.runId,
-      fullDraft,
-      authorization,
-      1,
-    );
+    coordinator.recordDesignApplyCompleted(context.runId, authorization, 1);
     const draftedDocument = withDraftedTargets(
       opened.document,
       pageId,
@@ -3782,8 +3623,8 @@ describe("GlobalTaskCoordinator", () => {
         "frame_home",
         homeTarget.qualityProfile,
       ),
+      independentCritic(1, false),
     );
-    coordinator.registerVisualReview(context, visualReview);
     const refinement: DesignApplyToolInput = {
       label: "Refine Home shell",
       commands: [
@@ -3797,7 +3638,6 @@ describe("GlobalTaskCoordinator", () => {
     };
     coordinator.recordDesignApplyCompleted(
       context.runId,
-      refinement,
       coordinator.assertDesignPlanForApply(context, refinement),
       2,
     );
@@ -3828,7 +3668,7 @@ describe("GlobalTaskCoordinator", () => {
         ),
         independentCritic(2, true),
       ),
-    ).toThrow("Planned region frame_home_content is empty");
+    ).toThrow("Delivery artboard frame_home has no real editable content");
     expect(coordinator.getDeliveryLedger(context.runId)).toMatchObject({
       activeTargetId: "target_home",
       targets: [{ targetId: "target_home", status: "refined" }],
@@ -3868,6 +3708,10 @@ describe("GlobalTaskCoordinator", () => {
     if (!sourceTarget) throw new Error("Home target is missing");
     const target: DesignPlanTarget = {
       ...sourceTarget,
+      implementationSteps: [
+        { stepId: "build_content", label: "Build its content" },
+        { stepId: "polish_content", label: "Polish its content" },
+      ],
       composition: {
         ...sourceTarget.composition,
         regions: [
@@ -4017,6 +3861,39 @@ describe("GlobalTaskCoordinator", () => {
           command.node.id === "form_region",
       ),
     ).toHaveLength(1);
+
+    coordinator.recordDesignPlanAllocated(
+      context.runId,
+      allocation.targetIds,
+      1,
+    );
+    coordinator.recordDesignApplyCompleted(context.runId, authorization, 2);
+    coordinator.handleAgentEvent({
+      type: "tool.completed",
+      runId: context.runId,
+      toolCallId: "tool_first_region_material",
+      result: { ok: true },
+      revision: 2,
+    });
+    const followUp = insertExistingChild(
+      pageId,
+      "form_region",
+      "follow_up_copy",
+    );
+    followUp.steps = [
+      {
+        stepId: "polish_content",
+        label: "Polish its content",
+        commandIds: followUp.commands.map((command) => command.commandId),
+      },
+    ];
+    const followUpAuthorization = coordinator.assertDesignPlanForApply(
+      { ...context, revision: 2 },
+      followUp,
+    );
+    expect(
+      followUpAuthorization?.input.commands.map((command) => command.commandId),
+    ).toEqual(["insert_follow_up_copy"]);
     store.close();
   });
 
@@ -4076,6 +3953,44 @@ describe("GlobalTaskCoordinator", () => {
 
     await coordinator.registerRun({
       type: "run.start",
+      runId: "run_explicit_after_failure",
+      sessionId: "conversation_mobile",
+      prompt: "Make a separate explicit edit",
+      documentId: file.documentId,
+      revision: 2,
+      modelSelection,
+      scope: { kind: "page", pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page", pageId },
+    });
+    expect(
+      coordinator.getRecoverableDelivery({
+        runId: "run_explicit_after_failure",
+        sessionId: "conversation_mobile",
+        documentId: file.documentId,
+        revision: 2,
+        scope: { kind: "page", pageId, selectedNodeIds: [] },
+        mutationTarget: { kind: "page", pageId },
+      }),
+    ).toBeUndefined();
+    coordinator.handleAgentEvent({
+      type: "agent.error",
+      runId: "run_explicit_after_failure",
+      code: "provider_error",
+      message: "The explicit Run failed independently",
+    });
+
+    coordinator.handleAgentEvent({
+      type: "run.continuation",
+      runId: "run_interrupted_delivery",
+      status: "scheduled",
+      attempt: 1,
+      maxAttempts: 3,
+      reason: "incomplete",
+      nextRunId: "run_resumed_delivery",
+    });
+
+    await coordinator.registerRun({
+      type: "run.start",
       runId: "run_resumed_delivery",
       sessionId: "conversation_mobile",
       prompt: "Finish the design",
@@ -4084,6 +3999,13 @@ describe("GlobalTaskCoordinator", () => {
       modelSelection,
       scope: { kind: "page", pageId, selectedNodeIds: [] },
       mutationTarget: { kind: "page", pageId },
+      continuation: {
+        parentRunId: "run_interrupted_delivery",
+        rootRunId: "run_interrupted_delivery",
+        attempt: 1,
+        maxAttempts: 3,
+        reason: "incomplete",
+      },
     });
     const context = {
       runId: "run_resumed_delivery",
@@ -4094,6 +4016,9 @@ describe("GlobalTaskCoordinator", () => {
       mutationTarget: { kind: "page" as const, pageId },
     };
     expect(coordinator.getRecoverableDelivery(context)).toMatchObject({
+      activeTargetId: "target_profile",
+    });
+    expect(coordinator.getDeliveryLedger(context.runId)).toMatchObject({
       activeTargetId: "target_profile",
     });
     const plan = multiTargetPlan(pageId);
@@ -4151,6 +4076,77 @@ describe("GlobalTaskCoordinator", () => {
         insertExistingChild(pageId, "frame_profile", "legacy_unreserved"),
       ),
     ).toThrow("new_node_id_namespace_required");
+
+    store.close();
+  });
+
+  it("lets a fresh Run edit an existing Agent artboard after the prior Run failed", async () => {
+    const { store, host, file, opened, pageId } = await setup();
+    const document = withExistingArtboard(opened.document, pageId);
+    const coordinator = new GlobalTaskCoordinator(host, store);
+    const run = async (runId: string) => {
+      await coordinator.registerRun({
+        type: "run.start",
+        runId,
+        sessionId: "conversation_mobile",
+        prompt: "继续修改之前生成的设计",
+        documentId: file.documentId,
+        revision: document.revision,
+        modelSelection,
+        scope: { kind: "page", pageId, selectedNodeIds: [] },
+        mutationTarget: { kind: "page", pageId },
+      });
+      const context = {
+        runId,
+        sessionId: "conversation_mobile",
+        documentId: file.documentId,
+        revision: document.revision,
+        scope: { kind: "page" as const, pageId, selectedNodeIds: [] },
+        mutationTarget: { kind: "page" as const, pageId },
+      };
+      coordinator.recordDocumentInspection(
+        context,
+        inspectionResult(document, pageId),
+      );
+      coordinator.registerDesignPlan(context, existingArtboardPlan(pageId));
+      return context;
+    };
+
+    const failedContext = await run("run_failed_existing_edit");
+    expect(
+      coordinator.assertDesignPlanForApply(failedContext, {
+        label: "Adjust old design",
+        commands: [
+          {
+            commandId: "adjust_old_design",
+            type: "update_properties",
+            nodeId: "existing_nested_frame",
+            opacity: 0.9,
+          },
+        ],
+      }),
+    ).toBeDefined();
+    coordinator.handleAgentEvent({
+      type: "agent.error",
+      runId: failedContext.runId,
+      code: "provider_error",
+      message: "Provider stopped this Run",
+    });
+
+    const nextContext = await run("run_next_existing_edit");
+    expect(
+      coordinator.assertDesignPlanForApply(nextContext, {
+        label: "Continue editing old design",
+        commands: [
+          {
+            commandId: "continue_old_design",
+            type: "update_properties",
+            nodeId: "existing_nested_frame",
+            opacity: 0.8,
+          },
+        ],
+      }),
+    ).toMatchObject({ targetIds: ["workspace"] });
 
     store.close();
   });
@@ -4255,7 +4251,6 @@ describe("GlobalTaskCoordinator", () => {
     });
     coordinator.recordDesignApplyCompleted(
       context.runId,
-      logicalRegionWrite,
       resolvedLogicalRegion,
       1,
     );
@@ -4278,12 +4273,13 @@ describe("GlobalTaskCoordinator", () => {
           1,
           existingPlan.targets[0].qualityProfile,
         ),
+        independentCritic(1, false),
       ),
     ).toMatchObject({
-      reviewEligible: true,
+      reviewEligible: false,
+      nextAction: "refine-independent-critic-findings",
       deliveryTargetId: "workspace",
     });
-    coordinator.registerVisualReview(contextAtRevision1, visualReview);
     const refinement: DesignApplyToolInput = {
       label: "Refine existing logical region",
       commands: [
@@ -4301,7 +4297,6 @@ describe("GlobalTaskCoordinator", () => {
     );
     coordinator.recordDesignApplyCompleted(
       context.runId,
-      refinement,
       refinementAuthorization,
       2,
     );
@@ -4348,9 +4343,19 @@ describe("GlobalTaskCoordinator", () => {
       verified: true,
       nextAction: "complete-delivery",
     });
-    expect(() =>
-      coordinator.assertDesignPlanForApply(contextAtRevision2, refinement),
-    ).toThrow("design_workflow.delivery_already_verified");
+    const postVerificationEdit = coordinator.assertDesignPlanForApply(
+      contextAtRevision2,
+      refinement,
+    );
+    expect(postVerificationEdit?.targetIds).toEqual(["workspace"]);
+    coordinator.recordDesignApplyCompleted(
+      context.runId,
+      postVerificationEdit,
+      3,
+    );
+    expect(coordinator.getDeliveryLedger(context.runId)).toMatchObject({
+      targets: [{ targetId: "workspace", status: "drafted", draftRevision: 3 }],
+    });
     expect(() =>
       coordinator.assertDesignPlanForApply(
         contextAtRevision2,
@@ -4454,12 +4459,7 @@ describe("GlobalTaskCoordinator", () => {
       context,
       replacement,
     );
-    coordinator.recordDesignApplyCompleted(
-      context.runId,
-      replacement,
-      authorization,
-      1,
-    );
+    coordinator.recordDesignApplyCompleted(context.runId, authorization, 1);
     coordinator.handleAgentEvent({
       type: "tool.completed",
       runId: context.runId,
@@ -5027,7 +5027,7 @@ describe("GlobalTaskCoordinator", () => {
     store.close();
   });
 
-  it("ends the current task on a structured provider failure", async () => {
+  it("keeps a structured provider failure inside the Run until run.completed", async () => {
     const { store, host, file, opened, pageId } = await setup();
     const coordinator = new GlobalTaskCoordinator(host, store);
     await coordinator.registerRun({
@@ -5052,7 +5052,7 @@ describe("GlobalTaskCoordinator", () => {
         retryable: true,
       },
     });
-    expect(store.listGlobalTasks()[0]?.lifecycle).toBe("failed");
+    expect(store.listGlobalTasks()[0]?.lifecycle).toBe("queued");
     expect(() =>
       coordinator.assertDesignToolContext({
         runId: "run_retryable",
@@ -5062,7 +5062,7 @@ describe("GlobalTaskCoordinator", () => {
         scope: { kind: "page", pageId, selectedNodeIds: [] },
         mutationTarget: { kind: "page", pageId },
       }),
-    ).toThrow("requires an active registered Run");
+    ).not.toThrow();
     coordinator.handleAgentEvent({
       type: "run.completed",
       runId: "run_retryable",
@@ -5070,6 +5070,70 @@ describe("GlobalTaskCoordinator", () => {
       stopReason: "error",
     });
     expect(store.listGlobalTasks()[0]?.lifecycle).toBe("failed");
+    store.close();
+  });
+
+  it("keeps a conflict inside the current Run and reuses the Conversation after its terminal event", async () => {
+    const { store, host, file, opened, pageId } = await setup();
+    const coordinator = new GlobalTaskCoordinator(host, store);
+    const context = {
+      runId: "run_conflict",
+      sessionId: "conversation_mobile",
+      documentId: file.documentId,
+      revision: opened.document.revision,
+      scope: { kind: "page" as const, pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page" as const, pageId },
+    };
+    await coordinator.registerRun({
+      type: "run.start",
+      ...context,
+      prompt: "Update the current design",
+      modelSelection,
+    });
+
+    coordinator.handleAgentEvent({
+      type: "tool.failed",
+      runId: context.runId,
+      toolCallId: "edit_1",
+      code: "design_revision_conflict",
+      message: "The canvas changed before the edit was applied",
+      retryable: true,
+      recoverable: true,
+    });
+
+    expect(
+      store.listGlobalTasks().find((task) => task.runId === context.runId)
+        ?.lifecycle,
+    ).toBe("queued");
+    expect(() => coordinator.assertDesignToolContext(context)).not.toThrow();
+
+    coordinator.handleAgentEvent({
+      type: "run.completed",
+      runId: context.runId,
+      finishedAt: "2026-08-07T12:02:00.000Z",
+      stopReason: "error",
+    });
+    expect(
+      store.listGlobalTasks().find((task) => task.runId === context.runId)
+        ?.lifecycle,
+    ).toBe("failed");
+    expect(() => coordinator.assertDesignToolContext(context)).toThrow(
+      "requires an active registered Run",
+    );
+
+    await expect(
+      coordinator.registerRun({
+        type: "run.start",
+        ...context,
+        runId: "run_after_conflict",
+        prompt: "Continue from the latest revision",
+        modelSelection,
+      }),
+    ).resolves.toMatchObject({
+      runId: "run_after_conflict",
+      conversationId: context.sessionId,
+      lifecycle: "queued",
+    });
     store.close();
   });
 

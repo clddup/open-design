@@ -8,7 +8,7 @@
 
 ## 背景
 
-生产 Run `run_1787630879071_1` 为同一 Page 下 24 个微信小程序界面。运行约 22 分钟，`T_plan≈262s / T1≈328s / T_all≈1339s`；43 次 Provider 请求累计约 1289 秒，65 次 Renderer 工作累计约 12 秒。首个登录 target 经一次独立 Critic 发现 `visual-thesis / signature-motif / template-avoidance / subject-specificity` 失败并完成 refinement，首页和 AI 入口随后单独起草。
+生产 Run `run_1787630879071_1` 为同一 Page 下 24 个微信小程序界面。运行约 22 分钟，`T_plan≈262s / T1≈328s / T_all≈1339s`；43 次 Provider 请求累计约 1289 秒，65 次 Renderer 工作累计约 12 秒。首个登录 target 经一次独立 Critic 发现 `visual-thesis / signature-decision / template-avoidance / subject-specificity` 失败并完成 refinement，首页和 AI 入口随后单独起草。
 
 之后模型在一笔 42 命令事务中同时写入剩余 21 个 target，每个 target 只有画板、后补的计划 Region 和一层包含整页标题、行、箭头、按钮文案的巨大 Text。每个 capture 的 `checkedNodeCount=3 / checkedTextNodeCount=1`，但 `deterministic-fast-delivery` 仍逐个写入相同 revision `417` 的 `reviewRevision/verifiedRevision`，最终声称 24 个页面全部完成。
 

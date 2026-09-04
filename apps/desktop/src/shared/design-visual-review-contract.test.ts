@@ -10,10 +10,6 @@ import {
   DesignVisualReviewContract,
   type DesignVisualReviewModelInput,
 } from "./design-agent-plan-review";
-import {
-  DESIGN_AGENT_TOOL_SPECS,
-  DESIGN_REVIEW_TOOL_NAME,
-} from "./design-agent-tools";
 
 describe("Visual Review contract", () => {
   it("uses one disclosed structure schema and binds active Plan skills", () => {
@@ -92,29 +88,18 @@ describe("Visual Review contract", () => {
     );
   });
 
-  it("keeps visible-evidence quality in one domain refinement", () => {
+  it("accepts concise non-empty visual evidence without guessing quality from prose length", () => {
     const input = review();
     expect(
       DesignVisualReviewContract.issues({
         ...input,
-        hierarchy: "Looks good....",
+        hierarchy: "清晰",
         criteria: {
           ...input.criteria,
-          "visual-thesis": "Looks good....",
+          "visual-thesis": "成立",
         },
       }),
-    ).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          code: "design_visual_review.evidence_not_substantive",
-          path: "/hierarchy",
-        }),
-        expect.objectContaining({
-          code: "design_visual_review.criterion_not_substantive",
-          path: "/criteria/visual-thesis",
-        }),
-      ]),
-    );
+    ).toEqual([]);
   });
 
   it("accepts one concrete failed criterion without inventing a second defect", () => {
@@ -128,13 +113,25 @@ describe("Visual Review contract", () => {
     ).toEqual([]);
   });
 
-  it("wires Pi validation to the same model contract", () => {
-    const tool = DESIGN_AGENT_TOOL_SPECS.find(
-      (candidate) => candidate.name === DESIGN_REVIEW_TOOL_NAME,
-    );
-    expect(tool).toHaveProperty(
-      "validateInputIssues",
-      DesignVisualReviewContract.issues,
+  it("represents a passing review with empty failures and refinements", () => {
+    const input = review();
+    expect(
+      DesignVisualReviewContract.issues({
+        ...input,
+        failedCriteria: [],
+        refinements: [],
+      }),
+    ).toEqual([]);
+    expect(
+      DesignVisualReviewContract.issues({
+        ...input,
+        failedCriteria: [],
+      }),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "design_visual_review.failure_refinement_mismatch",
+        path: "/refinements",
+      }),
     );
   });
 });
@@ -146,7 +143,7 @@ function review(): DesignVisualReviewModelInput {
       "The capture preserves the requested product structure without invented capability.",
     distinctiveness:
       "The asymmetric signal workspace is recognizable beyond a generic dashboard.",
-    signatureMotif:
+    signatureDecision:
       "A continuous signal rail visibly connects navigation and primary work.",
     composition:
       "One dominant work plane and a narrow inspector establish deliberate tension.",
@@ -165,7 +162,7 @@ function review(): DesignVisualReviewModelInput {
     criteria: {
       "visual-thesis":
         "The operational signal thesis is visible in the dominant work plane.",
-      "signature-motif":
+      "signature-decision":
         "The signal rail remains visible across navigation and content.",
       "composition-tension":
         "The asymmetric split establishes one dominant region and one support edge.",

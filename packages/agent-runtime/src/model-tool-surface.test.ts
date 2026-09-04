@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { AgentRunRequest } from "./index.js";
-import { resolveInitialModelToolSurface } from "./model-tool-surface.js";
+import {
+  resolveDeliveryScopeReview,
+  resolveInitialModelToolSurface,
+} from "./model-tool-surface.js";
 
 describe("initial model tool surface", () => {
   it("selects the compact surface only for an exact host-inspected blank Page creation", () => {
@@ -12,7 +15,16 @@ describe("initial model tool surface", () => {
     ).toBe("general");
     expect(
       resolveInitialModelToolSurface(
-        request({ attachments: [{ attachmentId: "image_1" } as never] }),
+        request({
+          attachments: [
+            {
+              attachmentId: `image_${"a".repeat(64)}`,
+              name: "reference.png",
+              mimeType: "image/png",
+              byteSize: 1024,
+            },
+          ],
+        }),
       ),
     ).toBe("general");
     expect(
@@ -26,6 +38,94 @@ describe("initial model tool surface", () => {
         }),
       ),
     ).toBe("general");
+  });
+
+  it("keeps document briefs on the compact creation surface", () => {
+    expect(
+      resolveInitialModelToolSurface(
+        request({
+          attachments: [
+            {
+              attachmentId: `file_${"b".repeat(64)}`,
+              name: "product-brief.md",
+              mimeType: "text/markdown",
+              byteSize: 4096,
+            },
+          ],
+        }),
+      ),
+    ).toBe("new-design");
+  });
+
+  it("requires an explicit one-or-many target scope for every new composition", () => {
+    expect(resolveDeliveryScopeReview(request())).toBe("required");
+    expect(
+      resolveDeliveryScopeReview(
+        request({
+          prompt: "按照附件设计完整产品",
+          attachments: [
+            {
+              attachmentId: `file_${"b".repeat(64)}`,
+              name: "完整产品需求.md",
+              mimeType: "text/markdown",
+              byteSize: 4096,
+            },
+          ],
+        }),
+      ),
+    ).toBe("required");
+    expect(
+      resolveDeliveryScopeReview(
+        request({
+          prompt: "参考这张图创建登录页",
+          attachments: [
+            {
+              attachmentId: `image_${"a".repeat(64)}`,
+              name: "reference.png",
+              mimeType: "image/png",
+              byteSize: 1024,
+            },
+          ],
+        }),
+      ),
+    ).toBe("required");
+  });
+
+  it("keeps existing-design edits and Page lifecycle operations direct", () => {
+    const populated = inspection([{ ...emptyFrame(), childIds: ["title"] }]);
+    expect(
+      resolveDeliveryScopeReview(
+        request({
+          prompt: "继续优化当前 dashboard",
+          initialDesignInspection: populated,
+        }),
+      ),
+    ).toBe("direct");
+    expect(
+      resolveDeliveryScopeReview(
+        request({
+          prompt: "删除页面",
+          initialDesignInspection: populated,
+        }),
+      ),
+    ).toBe("direct");
+  });
+
+  it("preserves the parent scope policy for automatic continuation", () => {
+    expect(
+      resolveDeliveryScopeReview(
+        request({
+          deliveryScopeReview: "required",
+          continuation: {
+            parentRunId: "run_parent",
+            rootRunId: "run_parent",
+            attempt: 1,
+            maxAttempts: 3,
+            reason: "budget",
+          },
+        }),
+      ),
+    ).toBe("required");
   });
 
   it("lets empty host state outrank later-stage wording inside a creation brief", () => {

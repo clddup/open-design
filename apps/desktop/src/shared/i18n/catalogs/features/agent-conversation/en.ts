@@ -137,8 +137,6 @@ export const agentConversationMessages = {
     "Review the rendered result and refine if needed",
   "agent.reviewingDesign": "Reviewing rendered design",
   "agent.visualReviewReady": "Visual review recorded",
-  "agent.checkpointingDesign": "Applying and checking the design",
-  "agent.designCheckpointReady": "Design checkpoint completed",
   "agent.organizingLayers": "Organizing layers",
   "agent.hierarchyUpdated": "Layer structure updated",
   "agent.updatingComponents": "Building reusable components",

@@ -5,6 +5,7 @@ import type {
 } from "@opendesign/agent-contracts";
 import { createEmptyDesignDocument } from "@opendesign/editor-runtime";
 import type { DesignDocument } from "@opendesign/design-contracts";
+import type { JournalEvent } from "@opendesign/session-store";
 import { describe, expect, it, vi } from "vitest";
 import type { AgentHost } from "./agent-host";
 import {
@@ -28,7 +29,7 @@ const source: RunStartRequest = {
 
 const trustedSource: RunStartRequest = {
   ...source,
-  deliveryScopeReview: "direct",
+  deliveryScopeReview: "required",
 };
 
 describe("AgentRunCoordinator", () => {
@@ -44,10 +45,13 @@ describe("AgentRunCoordinator", () => {
     await fixture.coordinator.handleRequest(source);
 
     expect(fixture.globalTaskCoordinator.registerRun).toHaveBeenCalledWith(
-      trustedSource,
+      source,
     );
+    expect(
+      fixture.globalTaskCoordinator.setDeliveryScopeReview,
+    ).toHaveBeenCalledWith(source.runId, "required");
     expect(fixture.prepareInitialDesignInspection).toHaveBeenCalledWith(
-      trustedSource,
+      source,
       expect.any(AbortSignal),
     );
     expect(fixture.referenceHost.registerRun).toHaveBeenCalledWith(
@@ -121,7 +125,7 @@ describe("AgentRunCoordinator", () => {
     );
   });
 
-  it("accepts the next explicit message as soon as the current Run fails", async () => {
+  it("keeps the Run active between agent.error and run.completed", async () => {
     const fixture = setup();
     await fixture.coordinator.handleRequest(source);
     fixture.coordinator.handleEvent({
@@ -137,23 +141,21 @@ describe("AgentRunCoordinator", () => {
     });
 
     expect(fixture.coordinator.hasActiveConversationRun(source.sessionId)).toBe(
-      false,
+      true,
     );
     expect(fixture.publish).not.toHaveBeenCalledWith(
       expect.objectContaining({ type: "run.continuation" }),
     );
 
-    await fixture.coordinator.handleRequest({
+    const next = {
       ...source,
       runId: "run_after_failure",
       prompt: "继续完成当前设计",
-    });
-    expect(fixture.send).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: "run.start",
-        runId: "run_after_failure",
-        sessionId: source.sessionId,
-      }),
+    };
+    await expect(fixture.coordinator.handleRequest(next)).rejects.toMatchObject(
+      {
+        code: "conversation_busy",
+      },
     );
 
     fixture.coordinator.handleEvent({
@@ -163,6 +165,43 @@ describe("AgentRunCoordinator", () => {
       stopReason: "error",
     });
     expect(fixture.coordinator.hasActiveConversationRun(source.sessionId)).toBe(
+      false,
+    );
+    await fixture.coordinator.handleRequest(next);
+    expect(fixture.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "run.start",
+        runId: "run_after_failure",
+        sessionId: source.sessionId,
+      }),
+    );
+  });
+
+  it("keeps a recoverable revision conflict inside the active Run", async () => {
+    const fixture = setup();
+    await fixture.coordinator.handleRequest(source);
+    const conflict: AgentEvent = {
+      type: "tool.failed",
+      runId: source.runId,
+      toolCallId: "edit_1",
+      code: "design_revision_conflict",
+      message: "The canvas changed before the edit was applied",
+      retryable: true,
+      recoverable: true,
+    };
+
+    fixture.coordinator.handleEvent(conflict);
+
+    expect(fixture.send).not.toHaveBeenCalledWith({
+      type: "run.cancel",
+      runId: source.runId,
+    });
+    expect(fixture.referenceHost.releaseRun).not.toHaveBeenCalled();
+    expect(fixture.forgetRun).not.toHaveBeenCalled();
+    expect(fixture.globalTaskCoordinator.handleAgentEvent).toHaveBeenCalledWith(
+      conflict,
+    );
+    expect(fixture.coordinator.hasActiveConversationRun(source.sessionId)).toBe(
       true,
     );
   });
@@ -170,11 +209,9 @@ describe("AgentRunCoordinator", () => {
   it("contains an invalid Global Task projection to the current Run", async () => {
     const fixture = setup();
     await fixture.coordinator.handleRequest(source);
-    fixture.globalTaskCoordinator.handleAgentEvent.mockImplementationOnce(
-      () => {
-        throw new TypeError("Invalid Global Task projection");
-      },
-    );
+    fixture.globalTaskCoordinator.handleAgentEvent.mockImplementation(() => {
+      throw new TypeError("Invalid Global Task projection");
+    });
 
     expect(() =>
       fixture.coordinator.handleEvent({
@@ -201,6 +238,13 @@ describe("AgentRunCoordinator", () => {
       message: "Invalid Global Task projection",
       runId: source.runId,
     });
+    expect(fixture.publish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "run.completed",
+        runId: source.runId,
+        stopReason: "error",
+      }),
+    );
   });
 
   it("releases every Run lease after a process-level Agent failure", async () => {
@@ -291,6 +335,24 @@ describe("AgentRunCoordinator", () => {
 
   it("does not start a continuation whose document read outlives a process failure", async () => {
     const fixture = setup();
+    fixture.prepareInitialDesignInspection.mockResolvedValue({
+      version: 1,
+      observedRevision: source.revision,
+      content: {
+        inspection: {
+          pageId: "page_1",
+          revision: source.revision,
+          document: {
+            documentId: source.documentId,
+            revision: source.revision,
+            pagesById: {
+              page_1: { id: "page_1", rootNodeIds: [] },
+            },
+            nodesById: {},
+          },
+        },
+      },
+    });
     let finishRead!: (value: {
       document: ReturnType<typeof createEmptyDesignDocument>;
     }) => void;
@@ -314,7 +376,7 @@ describe("AgentRunCoordinator", () => {
       runId: source.runId,
       toolCallId: "inspect_1",
       result: {
-        unfinishedDelivery: {
+        delivery: {
           version: 4,
           activeTargetId: "target_1",
           targets: [
@@ -379,10 +441,13 @@ describe("AgentRunCoordinator", () => {
 });
 
 function setup() {
+  let sessionSequence = 0;
   const send = vi.fn();
   const globalTaskCoordinator = {
     handleAgentEvent: vi.fn(),
     registerRun: vi.fn(() => Promise.resolve({})),
+    disposeRun: vi.fn(),
+    setDeliveryScopeReview: vi.fn(),
     assertRunRevisionCurrent: vi.fn(() => Promise.resolve()),
     referenceAttachmentsForRun: vi.fn(() => []),
   };
@@ -419,6 +484,12 @@ function setup() {
     modelProviderHost,
     projectHost,
     referenceHost,
+    sessionStore: {
+      appendNext: vi.fn(
+        (_sessionId: string, createEvent: (sequence: number) => JournalEvent) =>
+          Promise.resolve(createEvent(++sessionSequence)),
+      ),
+    } as never,
   } as unknown as AgentRunCoordinatorServices;
   const prepareInitialDesignInspection = vi.fn<
     (
@@ -429,7 +500,10 @@ function setup() {
   const publish = vi.fn<(event: AgentEvent) => void>();
   const forgetRun = vi.fn();
   const coordinator = new AgentRunCoordinator({
-    agentHost: { send } as unknown as AgentHost,
+    agentHost: {
+      send,
+      start: vi.fn().mockResolvedValue(undefined),
+    } as unknown as AgentHost,
     forgetRun,
     getServices: () => services,
     prepareInitialDesignInspection,

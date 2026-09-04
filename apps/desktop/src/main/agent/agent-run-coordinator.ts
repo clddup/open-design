@@ -3,6 +3,7 @@ import type {
   AgentInitialDesignInspection,
   AgentRequest,
 } from "@opendesign/agent-contracts";
+import type { SessionStore } from "@opendesign/session-store";
 import type { ModelProviderHost } from "../model/model-provider-host.js";
 import type { ProjectHost } from "../project/project-host.js";
 import { prepareAgentContinuation } from "./agent-continuation-host.js";
@@ -12,6 +13,7 @@ import type { AgentReferenceHost } from "./agent-reference-host.js";
 import { AgentRunAdmissionError } from "./agent-run-admission-error.js";
 import { handleAgentRunControlRequest } from "./agent-run-starter.js";
 import type { GlobalTaskCoordinator } from "./global-task-coordinator.js";
+import { terminalAgentRunId } from "@/shared/agent-run-lifecycle.js";
 
 type RunControlRequest = Extract<
   AgentRequest,
@@ -24,6 +26,7 @@ export interface AgentRunCoordinatorServices {
   modelProviderHost: ModelProviderHost | null;
   projectHost: ProjectHost | null;
   referenceHost: AgentReferenceHost | null;
+  sessionStore: SessionStore | null;
 }
 
 type AvailableAgentRunCoordinatorServices = {
@@ -31,6 +34,7 @@ type AvailableAgentRunCoordinatorServices = {
   modelProviderHost: ModelProviderHost;
   projectHost: ProjectHost;
   referenceHost: AgentReferenceHost;
+  sessionStore: SessionStore;
 };
 
 export interface AgentRunCoordinatorOptions {
@@ -87,7 +91,7 @@ export class AgentRunCoordinator {
     try {
       this.#processEvent(event, services);
     } catch (error) {
-      this.#handleEventFailure(event, error, services.referenceHost);
+      this.#handleEventFailure(event, error, services);
     }
   }
 
@@ -107,12 +111,7 @@ export class AgentRunCoordinator {
         : null,
     });
 
-    const terminalRunId =
-      event.type === "run.completed"
-        ? event.runId
-        : event.type === "agent.error"
-          ? event.runId
-          : undefined;
+    const terminalRunId = terminalAgentRunId(event);
     if (terminalRunId) {
       services.referenceHost?.releaseRun(terminalRunId);
       this.#options.forgetRun(terminalRunId);
@@ -173,6 +172,7 @@ export class AgentRunCoordinator {
         signal: AbortSignal,
       ) => this.#options.prepareInitialDesignInspection(request, signal),
       referenceHost: services.referenceHost,
+      sessionStore: services.sessionStore,
     };
   }
 
@@ -191,7 +191,8 @@ export class AgentRunCoordinator {
       services.globalTaskCoordinator &&
       services.modelProviderHost &&
       services.projectHost &&
-      services.referenceHost,
+      services.referenceHost &&
+      services.sessionStore,
     );
   }
 
@@ -217,12 +218,13 @@ export class AgentRunCoordinator {
   #handleEventFailure(
     event: AgentEvent,
     error: unknown,
-    referenceHost: AgentReferenceHost | null,
+    services: AgentRunCoordinatorServices,
   ): void {
     const runId = "runId" in event ? event.runId : undefined;
+    const failure = taskEventFailure(error, runId);
     if (!runId) {
-      this.#releaseAllRunLeases(referenceHost);
-      this.#options.publish(taskEventFailure(error));
+      this.#releaseAllRunLeases(services.referenceHost);
+      this.#publishProjectionFailure(failure, services);
       return;
     }
     if (event.type !== "run.completed" && event.type !== "agent.error") {
@@ -233,12 +235,37 @@ export class AgentRunCoordinator {
         // prevents a corrupt task projection from retaining the Run lease.
       }
     }
-    referenceHost?.releaseRun(runId);
+    services.referenceHost?.releaseRun(runId);
     this.#options.forgetRun(runId);
     this.#continuations.forgetRun(runId);
     this.#conversationIdByRunId.delete(runId);
     this.#initialInspectionControllers.delete(runId);
-    this.#options.publish(taskEventFailure(error, runId));
+    this.#publishProjectionFailure(failure, services);
+    this.#publishProjectionFailure(
+      {
+        type: "run.completed",
+        runId,
+        finishedAt: new Date().toISOString(),
+        stopReason: "error",
+      },
+      services,
+    );
+  }
+
+  #publishProjectionFailure(
+    failure: AgentEvent,
+    services: AgentRunCoordinatorServices,
+  ): void {
+    try {
+      services.globalTaskCoordinator?.handleAgentEvent(failure);
+    } catch (projectionError) {
+      console.error(
+        "Failed to persist Global Task projection failure",
+        projectionError,
+      );
+    } finally {
+      this.#options.publish(failure);
+    }
   }
 }
 

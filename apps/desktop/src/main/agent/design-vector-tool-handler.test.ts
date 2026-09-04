@@ -19,39 +19,12 @@ const context: TrustedToolContext = {
 
 function coordinatorMocks() {
   return {
-    assertVisualReviewBeforeWrite: vi.fn(),
-    resolveMaterialTargetIds: vi.fn(() => ["target_1"]),
+    resolveMaterialTargetIdsIfPlanned: vi.fn(() => ["target_1"]),
     recordMaterialDesignWriteCompleted: vi.fn(),
   };
 }
 
 describe("design vector Main tool boundary", () => {
-  it("returns the structured Contract error before executing invalid input", async () => {
-    const execute =
-      vi.fn<(call: ToolCallRequest) => Promise<TrustedToolResult>>();
-    await expect(
-      handleDesignVectorTool({
-        call: {
-          toolCallId: "call_invalid_vector",
-          toolName: DESIGN_VECTOR_TOOL_NAME,
-          input: {
-            action: "cut-path",
-            label: "Cut logo",
-            pageId: "page_1",
-            nodeId: "logo_path",
-            pathId: "outer_path",
-            at: { kind: "segment", segmentId: "curve" },
-          },
-        },
-        context,
-        coordinator: coordinatorMocks() as unknown as GlobalTaskCoordinator,
-        execute,
-        withDelivery: (result) => result,
-      }),
-    ).rejects.toThrow(/design_vector\.schema_invalid at \/at\/t/);
-    expect(execute).not.toHaveBeenCalled();
-  });
-
   it("records all cross-layer vector targets as one material write", async () => {
     const sourceInput = {
       action: "transform-layers-vertices",
@@ -91,11 +64,9 @@ describe("design vector Main tool boundary", () => {
       }),
     ).resolves.toBe(result);
     expect(execute.mock.calls[0]?.[0].input).toEqual(sourceInput);
-    expect(taskCoordinator.resolveMaterialTargetIds).toHaveBeenCalledWith(
-      context,
-      ["mark", "shadow"],
-      undefined,
-    );
+    expect(
+      taskCoordinator.resolveMaterialTargetIdsIfPlanned,
+    ).toHaveBeenCalledWith(context, ["mark", "shadow"], undefined);
     expect(
       taskCoordinator.recordMaterialDesignWriteCompleted,
     ).toHaveBeenCalledWith("run_1", ["target_1"], 1, []);

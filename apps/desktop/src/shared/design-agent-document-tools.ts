@@ -70,7 +70,7 @@ export const PAGE_STRUCTURE_ACCESS_TOOL_INPUT_SCHEMA = executableJsonSchema({
     },
     reason: {
       type: "string",
-      minLength: 8,
+      minLength: 1,
       maxLength: 500,
       pattern: "\\S",
     },

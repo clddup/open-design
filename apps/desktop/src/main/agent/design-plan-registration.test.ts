@@ -61,7 +61,7 @@ describe("current Design Plan amendments", () => {
     ).toThrow("design_workflow.artboard_overlap");
   });
 
-  it("reopens a material target when visual intent changes and keeps stable geometry", () => {
+  it("does not reopen a verified target when global visual intent changes", () => {
     const initialPlan = plan();
     const initial = registerDesignWorkflowPlan({
       inspection: inspectedExistingDesign(),
@@ -81,13 +81,9 @@ describe("current Design Plan amendments", () => {
       },
     });
     const target = amended.state.targetsById.get("target_home");
-    expect(amended.changedTargetIds).toEqual(["target_home"]);
-    expect(target?.delivery.status).toBe("drafted");
-    expect(target?.planned.artboard.frameId).toBe("frame_home");
-    expect(target?.planned.composition.regions[0]?.nodeId).toBe(
-      "logical_content",
-    );
-    expect(target?.lastReview).toBeNull();
+    expect(amended.changedTargetIds).toEqual([]);
+    expect(target?.delivery.status).toBe("verified");
+    expect(target?.lastReview).toEqual(review());
   });
 
   it("does not inherit verified state when a new Plan redesigns only a completed target", () => {
@@ -129,6 +125,89 @@ describe("current Design Plan amendments", () => {
     ).toMatchObject({ status: "drafted", draftRevision: 7 });
   });
 
+  it("recovers only the active incomplete target from a previous delivery", () => {
+    const recoveryPlan = plan();
+    const home = recoveryPlan.targets[0];
+    if (!home || home.qualityProfile.kind !== "ui") {
+      throw new Error("Home UI target is missing");
+    }
+    recoveryPlan.targets.push({
+      ...structuredClone(home),
+      targetId: "target_profile",
+      label: "Profile",
+      artboard: {
+        ...structuredClone(home.artboard),
+        mode: "create",
+        frameId: "frame_profile",
+        x: 430,
+      },
+      composition: {
+        ...structuredClone(home.composition),
+        regions: home.composition.regions.map((region) => ({
+          ...region,
+          nodeId: "logical_profile_content",
+        })),
+      },
+      qualityProfile: {
+        ...structuredClone(home.qualityProfile),
+        safeAreaNodeIds: ["logical_profile_content"],
+        interactiveNodeIds: [],
+      },
+    });
+    const inspection = inspectedExistingDesign();
+    inspection.nodesById.set("frame_profile", {
+      childIds: [],
+      componentId: null,
+      id: "frame_profile",
+      kind: "frame",
+      locked: false,
+      parentId: null,
+      size: { width: 390, height: 844 },
+      transform: [1, 0, 0, 1, 430, 0],
+    });
+    inspection.pageRootsById.get("page_1")?.add("frame_profile");
+
+    const recovered = registerDesignWorkflowPlan({
+      inspection,
+      plan: recoveryPlan,
+      recoverableDelivery: {
+        version: 4,
+        targets: [
+          {
+            targetId: "target_home",
+            label: "Previous Home",
+            pageId: "page_1",
+            rootNodeId: "frame_home",
+            reservedNodeIds: ["frame_home", "navigation_group"],
+            status: "verified",
+            allocatedRevision: 3,
+            draftRevision: 6,
+            captureRevision: 7,
+            reviewRevision: 7,
+            verifiedRevision: 7,
+          },
+          {
+            targetId: "target_profile",
+            label: "Profile",
+            pageId: "page_1",
+            rootNodeId: "frame_profile",
+            reservedNodeIds: ["frame_profile"],
+            status: "allocated",
+            allocatedRevision: 5,
+          },
+        ],
+        activeTargetId: "target_profile",
+      },
+    });
+
+    expect(
+      recovered.state.targetsById.get("target_home")?.delivery.status,
+    ).toBe("verified");
+    expect(
+      recovered.state.targetsById.get("target_profile")?.delivery,
+    ).toMatchObject({ status: "allocated", allocatedRevision: 5 });
+  });
+
   it("reports material identity violations before replacement placement errors", () => {
     const initialPlan = plan();
     const initial = registerDesignWorkflowPlan({
@@ -162,17 +241,13 @@ describe("current Design Plan amendments", () => {
     );
   });
 
-  it("reopens a material target when the brief, quality policy, or skill refs change", () => {
+  it("does not reopen verified targets for global metadata changes", () => {
     const initialPlan = plan();
     const initial = registerDesignWorkflowPlan({
       inspection: inspectedExistingDesign(),
       plan: initialPlan,
     });
     markVerified(initial.state.targetsById.get("target_home"));
-    const qualityTarget = initialPlan.targets[0];
-    if (qualityTarget.qualityProfile.kind !== "ui") {
-      throw new Error("UI quality profile required");
-    }
     const amendments: DesignPlanToolInput[] = [
       {
         ...initialPlan,
@@ -182,21 +257,6 @@ describe("current Design Plan amendments", () => {
             "Existing Home navigation, primary content, and account status",
           ],
         },
-      },
-      {
-        ...initialPlan,
-        targets: [
-          {
-            ...qualityTarget,
-            qualityProfile: {
-              ...qualityTarget.qualityProfile,
-              safeAreaInsets: {
-                ...qualityTarget.qualityProfile.safeAreaInsets,
-                top: 44,
-              },
-            },
-          },
-        ],
       },
       {
         ...initialPlan,
@@ -228,11 +288,49 @@ describe("current Design Plan amendments", () => {
         inspection: inspectedExistingDesign(),
         plan: amendedPlan,
       });
-      expect(amended.changedTargetIds).toEqual(["target_home"]);
+      expect(amended.changedTargetIds).toEqual([]);
       expect(
         amended.state.targetsById.get("target_home")?.delivery.status,
-      ).toBe("drafted");
+      ).toBe("verified");
     }
+  });
+
+  it("reopens a verified target for a target-local quality change", () => {
+    const initialPlan = plan();
+    const initial = registerDesignWorkflowPlan({
+      inspection: inspectedExistingDesign(),
+      plan: initialPlan,
+    });
+    markVerified(initial.state.targetsById.get("target_home"));
+    const qualityTarget = initialPlan.targets[0];
+    if (!qualityTarget || qualityTarget.qualityProfile.kind !== "ui") {
+      throw new Error("UI quality profile required");
+    }
+
+    const amended = registerDesignWorkflowPlan({
+      existing: initial.state,
+      inspection: inspectedExistingDesign(),
+      plan: {
+        ...initialPlan,
+        targets: [
+          {
+            ...qualityTarget,
+            qualityProfile: {
+              ...qualityTarget.qualityProfile,
+              safeAreaInsets: {
+                ...qualityTarget.qualityProfile.safeAreaInsets,
+                top: 44,
+              },
+            },
+          },
+        ],
+      },
+    });
+
+    expect(amended.changedTargetIds).toEqual(["target_home"]);
+    expect(amended.state.targetsById.get("target_home")?.delivery.status).toBe(
+      "drafted",
+    );
   });
 
   it("drops artboard self references and lets quality sets follow current descendants", () => {
@@ -411,7 +509,65 @@ describe("current Design Plan amendments", () => {
     ).toThrow(/navigation_group.*target_home.*target_profile/i);
   });
 
-  it("advances to a bounded next Plan while retaining verified target state", () => {
+  it("does not mark a new Plan step completed from an old verified revision", () => {
+    const initialPlan = plan();
+    const initial = registerDesignWorkflowPlan({
+      inspection: inspectedExistingDesign(),
+      plan: initialPlan,
+    });
+    const execution = initial.state.planExecution.targets[0];
+    if (!execution) throw new Error("Home Plan execution is missing");
+    execution.steps.forEach((step, index) => {
+      step.status = "completed";
+      step.startedRevision = index + 3;
+      step.completedRevision = index + 4;
+    });
+    markVerified(initial.state.targetsById.get("target_home"));
+    const home = initialPlan.targets[0];
+    if (!home) throw new Error("Home target is missing");
+
+    const amended = registerDesignWorkflowPlan({
+      existing: initial.state,
+      inspection: inspectedExistingDesign(),
+      plan: {
+        ...initialPlan,
+        targets: [
+          {
+            ...home,
+            implementationSteps: [
+              ...home.implementationSteps,
+              {
+                stepId: "refine_new_direction",
+                label: "Refine new direction",
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    const completedImplementationSteps = execution.steps.filter(
+      (step) => step.kind === "implementation",
+    );
+    const amendedSteps = amended.state.planExecution.targets[0]?.steps;
+    expect(amendedSteps?.slice(0, completedImplementationSteps.length)).toEqual(
+      completedImplementationSteps,
+    );
+    expect(amendedSteps?.[completedImplementationSteps.length]).toMatchObject({
+      stepId: "refine_new_direction",
+      status: "in_progress",
+      startedRevision: 7,
+    });
+    expect(
+      amendedSteps?.[completedImplementationSteps.length]?.completedRevision,
+    ).toBe(undefined);
+    expect(amendedSteps?.at(-1)).toMatchObject({
+      stepId: "target_home.review-refine",
+      status: "pending",
+    });
+  });
+
+  it("advances to a bounded next Plan without carrying verified targets into its execution", () => {
     const firstPlan = plan();
     firstPlan.targets[0]?.implementationSteps.push({
       stepId: "polish_visual_system",
@@ -430,7 +586,6 @@ describe("current Design Plan amendments", () => {
       step.startedRevision = index + 3;
       step.completedRevision = index + 4;
     });
-    const historicalSteps = structuredClone(completedExecution.steps);
     markVerified(first.state.targetsById.get("target_home"));
     const home = firstPlan.targets[0];
     if (!home || home.qualityProfile.kind !== "ui") {
@@ -488,8 +643,12 @@ describe("current Design Plan amendments", () => {
     expect(
       advanced.state.targetsById.get("target_profile")?.delivery.status,
     ).toBe("pending");
-    expect(advanced.state.planExecution.targets[0]?.steps).toEqual(
-      historicalSteps,
+    expect(advanced.state.planExecution.targets).toHaveLength(1);
+    expect(advanced.state.planExecution.targets[0]?.targetId).toBe(
+      "target_profile",
+    );
+    expect(advanced.state.planExecution.targets[0]?.steps[0]?.status).toBe(
+      "in_progress",
     );
     expect(advanced.changedTargetIds).toEqual(["target_profile"]);
   });
@@ -581,7 +740,7 @@ function plan(): DesignPlanToolInput {
       },
       visualThesis:
         "A directional editorial field expresses momentum instead of a generic card stack.",
-      signatureMotif:
+      signatureDecision:
         "One cropped signal rail connects identity, next action, and progress.",
       typographyLanguage:
         "Editorial display type sets pace while compact neutral text preserves clarity.",
@@ -626,7 +785,7 @@ function review(): DesignVisualReviewToolInput {
     })),
     briefFidelity: "The capture preserves the requested product semantics.",
     distinctiveness: "The signal field is recognizable beyond a generic UI.",
-    signatureMotif:
+    signatureDecision:
       "The signal rail remains visible across the main hierarchy.",
     composition: "The primary content has deliberate visual priority.",
     hierarchy: "Navigation and content retain distinct visual roles.",
@@ -637,7 +796,7 @@ function review(): DesignVisualReviewToolInput {
     antiTemplate: "The design avoids repeated cards and ornamental gradients.",
     criteria: {
       "visual-thesis": "The directional editorial thesis is visible.",
-      "signature-motif": "The signal rail is visibly integrated.",
+      "signature-decision": "The signal rail is visibly integrated.",
       "composition-tension": "Offset alignment creates one focal path.",
       "typography-character": "Type roles add character while staying clear.",
       "material-coherence": "Color and surface decisions form one system.",

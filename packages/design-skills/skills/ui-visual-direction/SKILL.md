@@ -11,11 +11,11 @@ Before drawing, name the subject, audience, primary job, and one visual thesis. 
 
 Set calibration from task frequency, information load, audience, brand posture, viewport, and mood: expressiveness is `restrained|balanced|expressive`, density is `airy|balanced|dense`. Do not choose the middle pair merely because the brief is ambiguous.
 
-Commit to one signature motif that can be seen in the first meaningful slice. It may be a distinctive silhouette, spatial rule, type treatment, material behavior, data expression, or interaction surface. It must support the product rather than decorate an otherwise generic template.
+Choose one signature decision that can be seen in the first meaningful slice. It may be a distinctive layout relationship, silhouette, spatial rule, type treatment, material behavior, information behavior, or interaction surface. It must support the product rather than decorate an otherwise generic template. Do not manufacture a standalone ornament just to satisfy this field.
 
 When image references are attached, classify their role before drawing. A style reference contributes transferable color, type, material, and edge behavior; a composition reference contributes hierarchy, scale, crop, and negative-space relationships; a brand reference contributes supplied identity constraints. Extract a small set of explicit decisions and explicit avoidances. Do not copy the reference's product semantics, literal layout, text, subject, or brand mark, and do not place a reference image unless it is separately classified as a content asset.
 
-Derive the motif from the actual user job. If the brief is generic, do not invent a fake security system, dashboard, data stream, or brand mythology merely to create visual noise. A login screen can derive character from the transition into the product, the credential relationship, typography, spatial framing, or material behavior without pretending unsupported capabilities exist.
+Derive the signature decision from the actual user job. If the brief is generic, do not invent a fake security system, dashboard, data stream, or brand mythology merely to create visual noise. A login screen can derive character from the transition into the product, the credential relationship, typography, spatial framing, or material behavior without pretending unsupported capabilities exist.
 
 Specify:
 
@@ -35,4 +35,4 @@ Test the direction before drawing:
 
 Avoid default AI output: centered card-on-background login screens, purple-on-white gradients, repeated same-radius cards, icon tiles above every heading, evenly distributed accent colors, placeholder dashboards, and decoration unrelated to the subject. Dark backgrounds with cyan circuit lines, concentric scanner rings, HUD micro-labels, or generic “secure channel” copy are also templates unless the actual product context makes them necessary and the composition remains distinctive without them. Minimalism is valid only when proportion, typography, spacing, and material precision carry a recognizable point of view.
 
-The first real slice must already demonstrate the thesis and motif. Do not postpone all identity to a later refinement.
+The first real slice must already demonstrate the thesis and signature decision. Do not postpone all identity to a later refinement.

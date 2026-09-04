@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  DESIGN_CHECKPOINT_TOOL_NAME,
   DESIGN_SYSTEM_TOOL_NAME,
   DESIGN_DELIVERY_SCOPE_TOOL_NAME,
 } from "@/shared/design-agent-tools.js";
@@ -25,16 +24,6 @@ describe("Agent design-system timeline presentation", () => {
     );
     expect(toolTitle(DESIGN_SYSTEM_TOOL_NAME, "done", t)).toBe(
       "agent.designSystemUpdated",
-    );
-  });
-
-  it("presents a conditional checkpoint as one native trusted design step", () => {
-    expect(isNativeDesignTool(DESIGN_CHECKPOINT_TOOL_NAME)).toBe(true);
-    expect(toolTitle(DESIGN_CHECKPOINT_TOOL_NAME, "active", t)).toBe(
-      "agent.checkpointingDesign",
-    );
-    expect(toolTitle(DESIGN_CHECKPOINT_TOOL_NAME, "done", t)).toBe(
-      "agent.designCheckpointReady",
     );
   });
 

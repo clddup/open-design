@@ -73,11 +73,11 @@ describe("PiToolProgressCircuit", () => {
 
   it("stops one repeated recoverable root cause without a revision", () => {
     const circuit = new PiToolProgressCircuit();
-    circuit.recordFailure("opendesign_design_checkpoint", recoverableFailure);
-    const result = circuit.recordFailure(
-      "opendesign_design_checkpoint",
-      recoverableFailure,
-    );
+    circuit.recordFailure("opendesign_edit_design", recoverableFailure);
+    const result = circuit.recordFailure("opendesign_edit_design", {
+      ...recoverableFailure,
+      message: "Same failure with revised wording",
+    });
     expect(result).toMatchObject({
       code: "design_recovery_no_progress",
       recoverable: false,
@@ -109,9 +109,9 @@ describe("PiToolProgressCircuit", () => {
       },
     };
 
-    circuit.recordFailure("opendesign_design_checkpoint", failure);
+    circuit.recordFailure("opendesign_capture_canvas", failure);
     const terminal = circuit.recordFailure(
-      "opendesign_design_checkpoint",
+      "opendesign_capture_canvas",
       failure,
     );
 
@@ -121,7 +121,7 @@ describe("PiToolProgressCircuit", () => {
     });
   });
 
-  it("stops when the model ignores a required inspection and repeats the write", () => {
+  it("allows one inspection-required recovery before stopping a true repeat", () => {
     const circuit = new PiToolProgressCircuit();
     const details: TrustedToolFailure["details"] = {
       kind: "design-transaction",
@@ -145,12 +145,16 @@ describe("PiToolProgressCircuit", () => {
         details,
       }),
     ).not.toHaveProperty("runTerminal");
+    const inspectionRequired = {
+      ...recoverableFailure,
+      code: "design_inspection_required",
+      details,
+    };
     expect(
-      circuit.recordFailure("opendesign_edit_design", {
-        ...recoverableFailure,
-        code: "design_inspection_required",
-        details,
-      }),
+      circuit.recordFailure("opendesign_edit_design", inspectionRequired),
+    ).not.toHaveProperty("runTerminal");
+    expect(
+      circuit.recordFailure("opendesign_edit_design", inspectionRequired),
     ).toMatchObject({
       code: "design_recovery_no_progress",
       runTerminal: true,

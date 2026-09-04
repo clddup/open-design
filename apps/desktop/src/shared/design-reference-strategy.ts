@@ -20,16 +20,14 @@ export type DesignReferenceStrategy = {
   }>;
 };
 
-export const MAX_ACTIVE_VISUAL_REFERENCES = 2;
-
 export const DESIGN_REFERENCE_STRATEGY_SCHEMA = {
   type: "object",
   description:
-    "Declare only images from this Conversation that are intentionally used as references or content; undeclared images are ignored and at most two style/composition/brand references may be active.",
+    "Declare only images from this Conversation that are intentionally used as references or content; undeclared images are ignored.",
   properties: {
     synthesis: {
       type: "string",
-      minLength: 12,
+      minLength: 1,
       maxLength: 1_000,
       pattern: "\\S",
     },
@@ -46,7 +44,7 @@ export const DESIGN_REFERENCE_STRATEGY_SCHEMA = {
           decision: { enum: [...DESIGN_REFERENCE_DECISIONS] },
           application: {
             type: "string",
-            minLength: 12,
+            minLength: 1,
             maxLength: 1_000,
             pattern: "\\S",
           },
@@ -56,7 +54,7 @@ export const DESIGN_REFERENCE_STRATEGY_SCHEMA = {
             uniqueItems: true,
             items: {
               type: "string",
-              minLength: 4,
+              minLength: 1,
               maxLength: 256,
               pattern: "\\S",
             },
@@ -67,7 +65,7 @@ export const DESIGN_REFERENCE_STRATEGY_SCHEMA = {
             uniqueItems: true,
             items: {
               type: "string",
-              minLength: 4,
+              minLength: 1,
               maxLength: 256,
               pattern: "\\S",
             },

@@ -1,4 +1,7 @@
-import { JsonlSessionStore } from "@opendesign/session-store";
+import {
+  JsonlSessionStore,
+  type SessionStoreReadDiagnostic,
+} from "@opendesign/session-store";
 import type { AgentHost } from "./agent-host.js";
 import { AgentSessionStoreHost } from "./agent-session-store-host.js";
 
@@ -10,9 +13,13 @@ export class AgentSessionStoreBinding {
   readonly #agentHost: SessionStoreAgentHost;
   #disposed = false;
 
-  constructor(agentHost: SessionStoreAgentHost, path: string) {
+  constructor(
+    agentHost: SessionStoreAgentHost,
+    path: string,
+    reportReadDiagnostic?: (diagnostic: SessionStoreReadDiagnostic) => void,
+  ) {
     this.#agentHost = agentHost;
-    this.store = new JsonlSessionStore(path);
+    this.store = new JsonlSessionStore(path, { reportReadDiagnostic });
     const sessionStoreHost = new AgentSessionStoreHost(this.store);
     agentHost.setSessionStoreRequestHandler((request, signal) =>
       sessionStoreHost.execute(request, signal),

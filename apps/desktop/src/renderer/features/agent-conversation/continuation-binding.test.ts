@@ -48,7 +48,7 @@ describe("Agent continuation renderer binding", () => {
     );
   });
 
-  it("releases a Run on a structured retryable provider error", () => {
+  it("retains a Run until the terminal event after a provider error", () => {
     const files = new Map([["run_old", target]]);
     const workspace = {
       releaseFileForRun: vi.fn(),
@@ -64,6 +64,61 @@ describe("Agent continuation renderer binding", () => {
         message: "Provider timed out",
         retryable: true,
       },
+    };
+
+    projectAgentRunFileBinding(event, new Map(), files, workspace);
+
+    expect(files.get("run_old")).toEqual(target);
+    expect(workspace.releaseFileForRun).not.toHaveBeenCalled();
+    expect(projectAgentActiveRunId("run_old", event, "run_old")).toBe(
+      "run_old",
+    );
+  });
+
+  it("retains a Run while it recovers from a revision conflict", () => {
+    const conversations = new Map([["run_old", "conversation_1"]]);
+    const files = new Map([["run_old", target]]);
+    const workspace = {
+      releaseFileForRun: vi.fn(),
+      retainFileForRun: vi.fn(),
+    };
+    const event: AgentEvent = {
+      type: "tool.failed",
+      runId: "run_old",
+      toolCallId: "edit_1",
+      code: "design_revision_conflict",
+      message: "The canvas changed before the edit was applied",
+      retryable: true,
+      recoverable: true,
+    };
+
+    const eventRunId = projectAgentRunFileBinding(
+      event,
+      conversations,
+      files,
+      workspace,
+    );
+
+    expect(eventRunId).toBe("run_old");
+    expect(files.get("run_old")).toEqual(target);
+    expect(conversations.get("run_old")).toBe("conversation_1");
+    expect(workspace.releaseFileForRun).not.toHaveBeenCalled();
+    expect(projectAgentActiveRunId("run_old", event, eventRunId)).toBe(
+      "run_old",
+    );
+  });
+
+  it("releases and deactivates a Run only on run.completed", () => {
+    const files = new Map([["run_old", target]]);
+    const workspace = {
+      releaseFileForRun: vi.fn(),
+      retainFileForRun: vi.fn(),
+    };
+    const event: AgentEvent = {
+      type: "run.completed",
+      runId: "run_old",
+      finishedAt: "2026-09-04T10:00:00.000Z",
+      stopReason: "error",
     };
 
     projectAgentRunFileBinding(event, new Map(), files, workspace);

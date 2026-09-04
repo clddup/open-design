@@ -7,12 +7,12 @@ import {
   type ValidationIssue,
   type ValidationIssueValue,
 } from "./contract-validation";
+import { MAX_TRANSACTION_COMMANDS } from "@opendesign/design-contracts";
 import type {
   LOGO_CONCEPT_PRINCIPLES,
   DesignLogoOutput,
 } from "./design-agent-plan-review";
 import type { DesignBriefFidelity } from "./design-brief-fidelity";
-import { DESIGN_FIRST_SLICE_MAX_ELEMENTS } from "./design-first-slice-budget";
 import { compileValidatedDesignFirstSliceToolInput } from "./design-first-slice-compiler";
 import {
   DESIGN_FIRST_SLICE_CANONICAL_INPUT_SCHEMA,
@@ -21,21 +21,13 @@ import {
   type DesignFirstSliceElementInput,
   type DesignFirstSliceModelInput,
 } from "./design-first-slice-tool-schema";
-import {
-  isActiveVisualReferenceDecision,
-  MAX_ACTIVE_VISUAL_REFERENCES,
-  type DesignReferenceStrategy,
-} from "./design-reference-strategy";
+import { type DesignReferenceStrategy } from "./design-reference-strategy";
 import {
   logoColorDomainIssues,
   type DesignLogoColorStrategy,
 } from "./design-logo-color";
 
 export { DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA } from "./design-first-slice-tool-schema";
-export {
-  DESIGN_FIRST_SLICE_MAX_ELEMENTS,
-  DESIGN_FIRST_SLICE_MAX_STAGES,
-} from "./design-first-slice-budget";
 
 export type DesignFirstSliceElement = DesignFirstSliceElementInput;
 export type DesignFirstSliceToolInput = Omit<
@@ -57,7 +49,6 @@ export type DesignFirstSliceToolInput = Omit<
       };
       rootNodeId: string;
       masterNodeId: string;
-      evidenceRootNodeId: string;
     }>;
   };
 };
@@ -65,6 +56,21 @@ export type DesignFirstSliceToolInput = Omit<
 export type FirstSliceContractContext = {
   authoritativePrompt?: string;
   newNodeIdPrefix?: string;
+  target?: FirstSliceTargetBinding;
+};
+
+export type FirstSliceTargetBinding = {
+  targetId: string;
+  pageId: string;
+  frame: {
+    frameId: string;
+    x: number;
+    y: number;
+    width?: number;
+    height?: number;
+  };
+  label?: string;
+  objective?: string;
 };
 
 export const FirstSliceContract = defineContract<
@@ -89,113 +95,169 @@ export const FirstSliceContract = defineContract<
   () => ({}),
 );
 
-export function logoBriefRequiresExploration(prompt: string): boolean {
-  return (
-    /(?:3|三)\s*(?:个|套|种|条)?\s*(?:真正|明显|完全)?\s*(?:不同|独立|差异化)?\s*(?:的)?\s*(?:logo\s*)?(?:设计)?(?:方向|方案|概念)/iu.test(
-      prompt,
-    ) ||
-    /\b(?:three|3)\s+(?:(?:genuinely|truly|visibly|materially|distinct|different)\s+)*(?:logo\s+)?(?:directions?|concepts?|options?)\b/iu.test(
-      prompt,
-    )
-  );
-}
-
 function bindFirstSliceHostContext(
   input: DesignFirstSliceModelInput,
   context: FirstSliceContractContext,
 ): DesignFirstSliceToolInput {
-  const boundInput = context.newNodeIdPrefix
-    ? bindFirstSliceLocalDocumentIds(input, context.newNodeIdPrefix)
-    : input;
-  const objective = boundInput.objective.trim();
+  const objective = (
+    context.authoritativePrompt ?? "Create the requested visual deliverable"
+  ).trim();
+  const target = bindFirstSliceTarget(input.targets[0], context, objective);
+  const targetId = target.targetId;
+  const stableId = (localId: string) =>
+    context.newNodeIdPrefix && !localId.startsWith("odr_")
+      ? `${context.newNodeIdPrefix}${targetId.length}_${targetId}_${localId}`
+      : localId;
+  const frameId = target.frame.frameId;
+  const regions =
+    input.targets[0]?.regions.map((region) => ({
+      ...region,
+      nodeId: stableId(region.nodeId),
+      parentId:
+        region.parentId === undefined || region.parentId === frameId
+          ? frameId
+          : stableId(region.parentId),
+    })) ?? [];
   return {
-    ...boundInput,
-    skillRefs: builtinDesignSkillRefsForDeliverable(boundInput.deliverable),
+    ...input,
+    version: 1,
+    objective,
+    designIntent:
+      input.designIntent ?? defaultDesignIntent(input.deliverable, objective),
+    visualSystem:
+      input.visualSystem ?? defaultVisualSystem(input, input.deliverable),
+    skillRefs: builtinDesignSkillRefsForDeliverable(input.deliverable),
     briefFidelity: defaultBriefFidelity(
       context.authoritativePrompt ?? objective,
     ),
-    targets: boundInput.targets.map((target) =>
-      bindFirstSliceTarget(target, boundInput.deliverable),
-    ),
-    rasterAssetRoles: [...boundInput.rasterAssetRoles],
-  } as DesignFirstSliceToolInput;
-}
-
-function bindFirstSliceLocalDocumentIds(
-  input: DesignFirstSliceModelInput,
-  prefix: string,
-): DesignFirstSliceModelInput {
-  const stableId = (targetId: string, localId: string) =>
-    `${prefix}${targetId.length}_${targetId}_${localId}`;
-  const logoExploration = input.logoExploration;
-  return {
-    ...input,
-    targets: input.targets.map((target) => ({
-      ...target,
-      frame: {
-        ...target.frame,
-        frameId: stableId(target.targetId, target.frame.frameId),
+    targets: [
+      {
+        ...target,
+        regions,
+        qualityProfile: defaultQualityProfile(input.deliverable, regions),
       },
-      regions: target.regions.map((region) => ({
-        ...region,
-        nodeId: stableId(target.targetId, region.nodeId),
-        parentId: stableId(target.targetId, region.parentId),
-      })),
-    })),
+    ],
     firstSlice: {
       ...input.firstSlice,
+      targetId,
       stages: input.firstSlice.stages.map((stage) => ({
         ...stage,
         elements: stage.elements.map((element) => ({
           ...element,
-          id: stableId(input.firstSlice.targetId, element.id),
-          parentId: stableId(input.firstSlice.targetId, element.parentId),
+          id: stableId(element.id),
+          parentId: stableId(element.parentId),
+          strokes: element.strokes ?? [],
+          strokeWidth: element.strokeWidth ?? 0,
         })),
       })),
     },
-    ...(logoExploration === undefined
+    ...(input.logoExploration === undefined
       ? {}
       : {
           logoExploration: {
-            ...logoExploration,
-            directions: logoExploration.directions.map((direction) => ({
+            ...input.logoExploration,
+            targetId,
+            directions: input.logoExploration.directions.map((direction) => ({
               ...direction,
-              rootNodeId: stableId(
-                logoExploration.targetId,
-                direction.rootNodeId,
-              ),
-              masterNodeId: stableId(
-                logoExploration.targetId,
-                direction.masterNodeId,
-              ),
-              evidenceRootNodeId: stableId(
-                logoExploration.targetId,
-                direction.evidenceRootNodeId,
-              ),
+              rootNodeId: stableId(direction.rootNodeId),
+              masterNodeId: stableId(direction.masterNodeId),
             })),
           },
         }),
-  };
+    rasterAssetRoles: [...input.rasterAssetRoles],
+  } as DesignFirstSliceToolInput;
 }
 
 function bindFirstSliceTarget(
-  target: DesignFirstSliceModelInput["targets"][number],
-  deliverable: DesignFirstSliceToolInput["deliverable"],
-): DesignFirstSliceToolInput["targets"][number] {
-  const safeNodeId = target.regions[0]?.nodeId ?? "";
+  submitted: DesignFirstSliceModelInput["targets"][number] | undefined,
+  context: FirstSliceContractContext,
+  fallbackObjective: string,
+): Omit<
+  DesignFirstSliceToolInput["targets"][number],
+  "regions" | "qualityProfile"
+> {
+  const host = context.target;
   return {
-    ...target,
-    qualityProfile:
-      deliverable === "ui"
-        ? {
-            kind: "ui",
-            platform: "other",
-            input: "mixed",
-            insets: [0, 0, 0, 0] as [number, number, number, number],
-            safeNodeIds: safeNodeId ? [safeNodeId] : [],
-            hitNodeIds: [],
-          }
-        : { kind: "graphic" },
+    targetId: host?.targetId ?? "",
+    label: host?.label ?? "Design",
+    pageId: host?.pageId ?? "",
+    objective: host?.objective ?? fallbackObjective,
+    frame: {
+      frameId: host?.frame.frameId ?? "",
+      x: host?.frame.x ?? Number.NaN,
+      y: host?.frame.y ?? Number.NaN,
+      width: host?.frame.width ?? submitted?.frame.width ?? Number.NaN,
+      height: host?.frame.height ?? submitted?.frame.height ?? Number.NaN,
+    },
+    layout: "Authored from the submitted region geometry",
+    spacing: "Defined by authored coordinates and Auto Layout",
+  };
+}
+
+function defaultDesignIntent(
+  deliverable: DesignFirstSliceToolInput["deliverable"],
+  objective: string,
+): DesignFirstSliceToolInput["designIntent"] {
+  const subject = objective.slice(0, 500);
+  return {
+    subject,
+    audience: "The audience described by the user brief",
+    primaryJob: subject,
+    calibration: {
+      surfaceMode: deliverable === "ui" ? "operate" : "graphic",
+      expressiveness: "balanced",
+      density: "balanced",
+    },
+    visualThesis: "Judge the authored visual result against the user brief",
+    signatureDecision:
+      "Use the submitted composition itself; do not invent a decorative motif",
+    typographyLanguage: "Derived from the submitted editable text layers",
+    colorMaterialLanguage: "Derived from the submitted paints and effects",
+    compositionTension: "Derived from the submitted spatial relationships",
+    antiPatterns: ["Do not replace design meaning with generic decoration"],
+  };
+}
+
+function defaultVisualSystem(
+  input: DesignFirstSliceModelInput,
+  deliverable: DesignFirstSliceToolInput["deliverable"],
+): DesignFirstSliceToolInput["visualSystem"] {
+  const textStyles = input.firstSlice.stages
+    .flatMap((stage) => stage.elements)
+    .filter((element) => element.kind === "text")
+    .map(
+      (element) =>
+        `${element.text.fontFamily} ${element.text.fontStyleName} ${element.text.fontSize}/${element.text.lineHeight}`,
+    );
+  return {
+    formLanguage: "Derived from the submitted editable geometry",
+    palette: ["Authored node paints"],
+    surfaceAndDepth: "Derived from the submitted layers and effects",
+    typography:
+      textStyles.length > 0
+        ? [...new Set(textStyles)].slice(0, 4)
+        : [
+            deliverable === "ui"
+              ? "Interface typography"
+              : "Graphic typography",
+          ],
+    effects: [],
+  };
+}
+
+function defaultQualityProfile(
+  deliverable: DesignFirstSliceToolInput["deliverable"],
+  regions: DesignFirstSliceToolInput["targets"][number]["regions"],
+): DesignFirstSliceToolInput["targets"][number]["qualityProfile"] {
+  if (deliverable !== "ui") return { kind: "graphic" };
+  const safeNodeId = regions[0]?.nodeId;
+  return {
+    kind: "ui",
+    platform: "other",
+    input: "mixed",
+    insets: [0, 0, 0, 0],
+    safeNodeIds: safeNodeId ? [safeNodeId] : [],
+    hitNodeIds: [],
   };
 }
 
@@ -242,10 +304,7 @@ function chunkRequiredContent(value: string): string[] {
   return chunks.slice(0, 24);
 }
 
-function refineFirstSlice(
-  input: DesignFirstSliceToolInput,
-  context: FirstSliceContractContext,
-): ValidationIssue[] {
+function refineFirstSlice(input: DesignFirstSliceToolInput): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
   if (
     !isBuiltinDesignSkillRefsForDeliverable(input.deliverable, input.skillRefs)
@@ -295,9 +354,6 @@ function refineFirstSlice(
   }
   issues.push(
     ...logoColorDomainIssues({
-      ...(context.authoritativePrompt === undefined
-        ? {}
-        : { authoritativePrompt: context.authoritativePrompt }),
       codePrefix: "first_slice",
       deliverable: input.deliverable,
       ...(input.logoExploration === undefined
@@ -384,19 +440,6 @@ function refineFirstSlice(
       });
     }
   }
-  if (flattened.length > DESIGN_FIRST_SLICE_MAX_ELEMENTS) {
-    issues.push(
-      issue(
-        "first_slice.element_limit_exceeded",
-        "/firstSlice/stages",
-        `${flattened.length} model-authored content elements exceed the combined first-slice budget`,
-        DESIGN_FIRST_SLICE_MAX_ELEMENTS,
-        flattened.length,
-        `Defer ${flattened.length - DESIGN_FIRST_SLICE_MAX_ELEMENTS} secondary elements to continuation.`,
-      ),
-    );
-  }
-
   const firstTargetRegionIds = new Set(
     firstTarget.regions.map((region) => region.nodeId),
   );
@@ -498,6 +541,22 @@ function refineFirstSlice(
 
   refineLogoExploration(input, elementsById, parentById, issues);
   refineReferenceStrategy(input.referenceStrategy, issues);
+  if (issues.length === 0) {
+    const commandCount =
+      compileValidatedDesignFirstSliceToolInput(input).apply.commands.length;
+    if (commandCount > MAX_TRANSACTION_COMMANDS) {
+      issues.push(
+        issue(
+          "first_slice.transaction_limit_exceeded",
+          "/firstSlice/stages",
+          `${commandCount} compiled operations exceed the shared DesignTransaction safety limit`,
+          MAX_TRANSACTION_COMMANDS,
+          commandCount,
+          "Split the target at a coherent visual boundary and continue with the remaining detail after the committed revision.",
+        ),
+      );
+    }
+  }
   return issues.slice(0, 64);
 }
 
@@ -676,18 +735,9 @@ function refineLogoExploration(
       ),
     );
   }
-  const principles = new Map<string, string>();
   const identities = new Map<string, string>();
   for (const [directionIndex, direction] of exploration.directions.entries()) {
     const path = `/logoExploration/directions/${directionIndex}`;
-    registerUniqueId(
-      principles,
-      String(direction.principle),
-      `${path}/principle`,
-      "first_slice.duplicate_logo_principle",
-      "Logo generative principle",
-      issues,
-    );
     const root = elementsById.get(direction.rootNodeId);
     if (!root || (root.kind !== "frame" && root.kind !== "group")) {
       issues.push(
@@ -704,7 +754,6 @@ function refineLogoExploration(
       [direction.conceptId, `${path}/conceptId`],
       [direction.rootNodeId, `${path}/rootNodeId`],
       [direction.masterNodeId, `${path}/masterNodeId`],
-      [direction.evidenceRootNodeId, `${path}/evidenceRootNodeId`],
     ] as const) {
       registerUniqueId(
         identities,
@@ -727,32 +776,6 @@ function refineLogoExploration(
           "Logo master must be an actual descendant of the concept root",
           `firstSlice descendant of ${direction.rootNodeId}`,
           direction.masterNodeId,
-        ),
-      );
-    }
-    const evidenceRoot = elementsById.get(direction.evidenceRootNodeId);
-    if (
-      !evidenceRoot ||
-      (evidenceRoot.kind !== "frame" && evidenceRoot.kind !== "group") ||
-      !parentChainReaches(evidenceRoot.id, direction.rootNodeId, parentById)
-    ) {
-      issues.push(
-        issue(
-          "first_slice.logo_evidence_root_not_materialized",
-          `${path}/evidenceRootNodeId`,
-          "Logo evidence root must be an actual Frame or Group beneath the concept root",
-          `firstSlice Frame/Group descendant of ${direction.rootNodeId}`,
-          direction.evidenceRootNodeId,
-        ),
-      );
-    } else if (evidenceRoot.width < 172 || evidenceRoot.height < 64) {
-      issues.push(
-        issue(
-          "first_slice.logo_evidence_root_too_small",
-          `${path}/evidenceRootNodeId`,
-          "Logo evidence root must fit host-derived monochrome and 32/24/16 px specimens",
-          { width: 172, height: 64 },
-          { width: evidenceRoot.width, height: evidenceRoot.height },
         ),
       );
     }
@@ -788,7 +811,6 @@ function refineReferenceStrategy(
 ): void {
   if (!strategy) return;
   const attachments = new Map<string, string>();
-  let activeCount = 0;
   for (const [index, reference] of strategy.references.entries()) {
     registerUniqueId(
       attachments,
@@ -797,18 +819,6 @@ function refineReferenceStrategy(
       "first_slice.duplicate_reference_attachment",
       "Reference attachment ID",
       issues,
-    );
-    if (isActiveVisualReferenceDecision(reference.decision)) activeCount += 1;
-  }
-  if (activeCount > MAX_ACTIVE_VISUAL_REFERENCES) {
-    issues.push(
-      issue(
-        "first_slice.active_reference_limit_exceeded",
-        "/referenceStrategy/references",
-        "Too many active visual references",
-        MAX_ACTIVE_VISUAL_REFERENCES,
-        activeCount,
-      ),
     );
   }
 }
@@ -864,6 +874,7 @@ export function compileDesignFirstSliceToolInput(
 
 function isMaterialElement(element: DesignFirstSliceElementInput): boolean {
   if (element.kind === "group") return false;
+  if (element.kind === "image") return true;
   return element.fills.length > 0 || element.strokes.length > 0;
 }
 

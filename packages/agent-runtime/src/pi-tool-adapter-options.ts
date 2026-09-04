@@ -13,7 +13,6 @@ export interface OpenDesignPiToolAdapterOptions {
   approvalPort?: ApprovalPort;
   lifecycle: PiToolLifecyclePort;
   maxToolCalls: number;
-  priorToolCallIds?: readonly string[];
   initialInspection?: boolean;
   initialModelToolSurface?: ModelToolSurface;
   now?: () => Date;

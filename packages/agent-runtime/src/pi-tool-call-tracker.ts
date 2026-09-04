@@ -54,17 +54,11 @@ export class PiToolCallTracker {
   #toolCallCount = 0;
   #toolSequence = 0;
 
-  constructor(maxToolCalls: number, priorToolCallIds: readonly string[] = []) {
+  constructor(maxToolCalls: number) {
     if (!Number.isInteger(maxToolCalls) || maxToolCalls < 0) {
       throw new RangeError("Pi tool-call limit must be a non-negative integer");
     }
     this.#maxToolCalls = maxToolCalls;
-    for (const toolCallId of priorToolCallIds) {
-      if (typeof toolCallId !== "string" || toolCallId.length === 0) {
-        throw new TypeError("Prior Pi tool-call IDs must be non-empty strings");
-      }
-      this.#seen.add(toolCallId);
-    }
   }
 
   get hasPending(): boolean {

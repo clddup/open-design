@@ -96,7 +96,7 @@ export function createDesignWorkflowFailureDetailsSchema<
       recovery: Type.Object(
         {
           action: Type.Literal("follow-workflow"),
-          required: Type.Literal(true),
+          required: Type.Boolean(),
         },
         { additionalProperties: false },
       ),
@@ -170,6 +170,27 @@ export function designWorkflowFailureDomainIssues(
       message: "Inspection requirement must match its stable workflow code",
       expected: definition.requiresInspection,
       actual: value.details.requiresInspection ?? null,
+      recovery,
+    });
+  }
+  if (
+    definition &&
+    "recovery" in value.details &&
+    typeof value.details.recovery === "object" &&
+    value.details.recovery !== null &&
+    "required" in value.details.recovery &&
+    value.details.recovery.required !== definition.requiresInspection
+  ) {
+    issues.push({
+      code: "trusted_tool_failure.workflow_recovery_mismatch",
+      path: `${prefix}/details/recovery/required`,
+      message:
+        "Workflow recovery requirement must match whether a new inspection is required",
+      expected: definition.requiresInspection,
+      actual:
+        typeof value.details.recovery.required === "boolean"
+          ? value.details.recovery.required
+          : null,
       recovery,
     });
   }

@@ -8,12 +8,12 @@ import {
   type DesignDeliveryScope,
 } from "@/shared/design-agent-tools.js";
 import type { DesignWorkflowState } from "./design-plan-registration.js";
-import type { DeliveryScopeArtboardAllocation } from "./delivery-scope-artboard-allocation.js";
+import type { DeliveryScopeArtboardReservation } from "./delivery-scope-artboard-reservation.js";
 
 export function projectDesignDeliveryStage(
   state: DesignWorkflowState | undefined,
   scope: DesignDeliveryScope | undefined,
-  allocations?: ReadonlyMap<string, DeliveryScopeArtboardAllocation>,
+  reservations?: ReadonlyMap<string, DeliveryScopeArtboardReservation>,
 ): DesignDeliveryStage | undefined {
   if (!state && !scope) return undefined;
   const currentTargets = state ? designPlanTargets(state.plan) : [];
@@ -51,14 +51,9 @@ export function projectDesignDeliveryStage(
         (target) => target.targetId === next.targetId,
       ) ?? -1)
     : -1;
-  const nextArtboard = next ? allocations?.get(next.targetId) : undefined;
-  if (next && nextArtboard?.allocatedRevision === undefined) {
-    throw new TypeError(
-      `Next delivery target ${next.targetId} has no host-owned allocated artboard`,
-    );
-  }
+  const nextArtboard = next ? reservations?.get(next.targetId) : undefined;
   const nextTarget =
-    next && nextArtboard?.allocatedRevision !== undefined
+    next && nextArtboard
       ? {
           stage: nextIndex >= 0 ? nextIndex + 1 : 1,
           targetId: next.targetId,
@@ -72,7 +67,6 @@ export function projectDesignDeliveryStage(
             y: nextArtboard.y,
             width: nextArtboard.width,
             height: nextArtboard.height,
-            allocatedRevision: nextArtboard.allocatedRevision,
           },
         }
       : undefined;

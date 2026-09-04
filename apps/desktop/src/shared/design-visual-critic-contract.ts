@@ -19,13 +19,13 @@ export function createDesignVisualCriticVerdictContract<
 >(criterionIds: readonly CriterionId[]) {
   const evidenceSchema = {
     type: "string",
-    minLength: 12,
+    minLength: 1,
     maxLength: 1_000,
     pattern: "\\S",
   } as const;
   const refinementSchema = {
     type: "string",
-    minLength: 8,
+    minLength: 1,
     maxLength: 500,
     pattern: "\\S",
     description: "The material change required to reach delivery readiness.",
@@ -58,7 +58,7 @@ export function createDesignVisualCriticVerdictContract<
     properties: {
       summary: {
         type: "string",
-        minLength: 12,
+        minLength: 1,
         maxLength: 1_000,
         pattern: "\\S",
       },

@@ -185,13 +185,41 @@ function refineModelApplyNodeProperties(
       return;
     }
     if (command.type !== "replace_subtree") return;
-    command.nodes.forEach((node, nodeIndex) =>
-      refineModelNodeProperties(
-        node,
-        `/commands/${commandIndex}/nodes/${nodeIndex}`,
-        issues,
-      ),
-    );
+    const replacementIds = new Set(command.nodes.map((node) => node.id));
+    const rootCount = command.nodes.filter(
+      (node) => node.id === command.rootNodeId,
+    ).length;
+    if (rootCount !== 1) {
+      issues.push({
+        code: "design_apply.replacement_root_invalid",
+        path: `/commands/${commandIndex}/rootNodeId`,
+        message: "Replacement nodes must contain the named root exactly once",
+        expected: 1,
+        actual: rootCount,
+        recovery:
+          "Include one replacement node whose id equals rootNodeId; Main preserves its inspected parent and position in the destination hierarchy.",
+      });
+    }
+    command.nodes.forEach((node, nodeIndex) => {
+      const path = `/commands/${commandIndex}/nodes/${nodeIndex}`;
+      refineModelNodeProperties(node, path, issues);
+      if (
+        node.id !== command.rootNodeId &&
+        (typeof node.parentId !== "string" ||
+          !replacementIds.has(node.parentId))
+      ) {
+        issues.push({
+          code: "design_apply.replacement_parent_invalid",
+          path: `${path}/parentId`,
+          message:
+            "Every non-root replacement node must name another replacement node as parent",
+          expected: "replacement node ID",
+          actual: node.parentId,
+          recovery:
+            "Set parentId to the intended replacement container; omit structural childIds because Main derives them.",
+        });
+      }
+    });
   });
   return issues;
 }
@@ -318,13 +346,35 @@ function compileModelDesignOperation(command: unknown): unknown {
   }
   if (command.type === "replace_subtree" && Array.isArray(command.nodes)) {
     const rawNodes = command.nodes as unknown[];
+    const childIdsByParent = new Map<string, string[]>();
+    for (const node of rawNodes) {
+      if (
+        !isRecord(node) ||
+        typeof node.id !== "string" ||
+        typeof node.parentId !== "string"
+      ) {
+        continue;
+      }
+      const children = childIdsByParent.get(node.parentId) ?? [];
+      children.push(node.id);
+      childIdsByParent.set(node.parentId, children);
+    }
     const normalized = {
       ...command,
       nodes: rawNodes.map((node) =>
         isRecord(node)
           ? {
+              visible: true,
+              locked: false,
+              opacity: 1,
               exportSettings: [],
+              extensions: {},
               ...node,
+              parentId: node.id === command.rootNodeId ? null : node.parentId,
+              childIds:
+                typeof node.id === "string"
+                  ? (childIdsByParent.get(node.id) ?? [])
+                  : [],
               properties: compileModelNodeProperties(
                 node.kind,
                 node.properties,
@@ -344,6 +394,12 @@ function compileModelDesignOperation(command: unknown): unknown {
     );
     return { ...command, exportSettings };
   }
+  if (command.type === "move_element") {
+    return {
+      ...structuredClone(command),
+      index: typeof command.index === "number" ? command.index : 0,
+    };
+  }
   if (command.type !== "insert_element") {
     return structuredClone(command);
   }
@@ -356,6 +412,7 @@ function compileModelInsertOperation(
   if (!isRecord(command.node)) return undefined;
   return {
     ...command,
+    index: typeof command.index === "number" ? command.index : 0,
     node: {
       visible: true,
       locked: false,
@@ -414,8 +471,21 @@ function compileModelTextProperties(
       : value.textDecoration === "strikethrough"
         ? "strikethrough"
         : "none";
+  const textResize = value.textResize ?? "fixed";
+  const textTruncation = value.textTruncation ?? "disabled";
+  const textWrap =
+    value.textWrap ?? (textResize === "auto-width" ? "none" : "word");
+  const textOverflow =
+    value.textOverflow ??
+    (textResize === "fixed" && textTruncation === "ending"
+      ? "clip"
+      : "visible");
+  const maxLines =
+    value.maxLines ??
+    (textTruncation === "ending" && textResize !== "fixed" ? 1 : null);
   return {
     ...shapeDefaults,
+    letterSpacing: 0,
     paragraphIndent: 0,
     paragraphSpacing: 0,
     listSpacing: 0,
@@ -423,7 +493,13 @@ function compileModelTextProperties(
     textCase: "original",
     textDecoration: decoration,
     ...defaultAdvancedTextDecoration(decoration),
-    maxLines: null,
+    textAlignHorizontal: "left",
+    textAlignVertical: "top",
+    textResize,
+    textWrap,
+    textOverflow,
+    textTruncation,
+    maxLines,
     ...value,
   };
 }

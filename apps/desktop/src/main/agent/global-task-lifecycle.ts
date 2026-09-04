@@ -30,18 +30,11 @@ export function projectGlobalTaskLifecycle(
   if (event.type === "run.started") return "running";
   if (event.type === "approval.requested") return "waiting_approval";
   if (event.type === "approval.resolved") return "running";
-  if (
-    event.type === "tool.failed" &&
-    /conflict|revision|stale/i.test(event.code)
-  ) {
-    return "conflict";
-  }
   if (event.type === "run.continuation") {
     return event.status === "needs_attention"
       ? "needs_attention"
       : "interrupted";
   }
-  if (event.type === "agent.error") return "failed";
   if (event.type !== "run.completed") return current;
   if (event.stopReason === "complete") return "completed";
   if (event.stopReason === "cancelled") return "cancelled";

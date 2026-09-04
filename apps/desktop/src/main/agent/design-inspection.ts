@@ -43,59 +43,14 @@ export function assertDeliveryTargetStructure(
     assertLogoExplorationEvidence(inspection, target, plan);
     return inspectDeclaredComponentStrategy(inspection, target, plan);
   }
-  for (const region of target.planned.composition.regions) {
-    const regionNode = inspection.nodesById.get(region.nodeId);
-    const expectedParentId = region.parentId ?? artboardId;
-    if (
-      !regionNode ||
-      (regionNode.kind !== "group" && regionNode.kind !== "frame") ||
-      regionNode.parentId !== expectedParentId
-    ) {
-      throw designWorkflowError(
-        "delivery_structure_incomplete",
-        `Planned region ${region.nodeId} must be a Group or Frame child of declared parent ${expectedParentId} inside delivery artboard ${artboardId}; inspect the current document and finish that region before capturing again`,
-      );
-    }
-    if (!inspectedSubtreeHasMaterialNode(inspection.nodesById, region.nodeId)) {
-      throw designWorkflowError(
-        "delivery_structure_incomplete",
-        `Planned region ${region.nodeId} is empty; add real editable design content before capturing the target again`,
-      );
-    }
+  if (!inspectedSubtreeHasMaterialNode(inspection.nodesById, artboardId)) {
+    throw designWorkflowError(
+      "delivery_structure_incomplete",
+      `Delivery artboard ${artboardId} has no real editable content`,
+    );
   }
-  assertUiTargetHasEditableComposition(inspection, target, plan);
   assertLogoExplorationEvidence(inspection, target, plan);
   return inspectDeclaredComponentStrategy(inspection, target, plan);
-}
-
-function assertUiTargetHasEditableComposition(
-  inspection: InspectedHierarchy,
-  target: DesignDeliveryTargetState,
-  plan: DesignPlanToolInput,
-): void {
-  if (plan.deliverable !== "ui" || target.planned.artboard.mode !== "create") {
-    return;
-  }
-  const pending = [target.planned.artboard.frameId];
-  const visited = new Set<string>();
-  const leafKinds: string[] = [];
-  while (pending.length > 0) {
-    const nodeId = pending.pop();
-    if (!nodeId || visited.has(nodeId)) continue;
-    visited.add(nodeId);
-    const node = inspection.nodesById.get(nodeId);
-    if (!node) continue;
-    if (node.kind === "frame" || node.kind === "group") {
-      pending.push(...node.childIds);
-      continue;
-    }
-    if (node.kind !== "slice") leafKinds.push(node.kind);
-  }
-  if (leafKinds.length !== 1 || leafKinds[0] !== "text") return;
-  throw designWorkflowError(
-    "ui_draft_structure_incomplete",
-    `UI target ${target.delivery.targetId} cannot be flattened into one Text layer; headings, controls, rows, navigation, data, and target-specific visual elements must remain separately editable`,
-  );
 }
 
 function assertLogoExplorationEvidence(
@@ -122,23 +77,18 @@ function assertLogoExplorationEvidence(
         `Logo concept ${direction.conceptId} requires semantic Frame/Group ${direction.rootNodeId} inside exploration artboard ${artboardId}`,
       );
     }
-    for (const evidenceNodeId of new Set([
-      direction.monochromeNodeId,
-      ...direction.smallSizeNodeIds,
-    ])) {
-      if (
-        !inspection.nodesById.has(evidenceNodeId) ||
-        !inspectedParentChainReaches(
-          inspection.nodesById,
-          evidenceNodeId,
-          direction.rootNodeId,
-        )
-      ) {
-        throw designWorkflowError(
-          "logo_exploration_incomplete",
-          `Logo concept ${direction.conceptId} requires evidence node ${evidenceNodeId} beneath ${direction.rootNodeId}; provide monochrome and ordered 32/24/16 px optical tests before final verification`,
-        );
-      }
+    if (
+      !inspection.nodesById.has(direction.masterNodeId) ||
+      !inspectedParentChainReaches(
+        inspection.nodesById,
+        direction.masterNodeId,
+        direction.rootNodeId,
+      )
+    ) {
+      throw designWorkflowError(
+        "logo_exploration_incomplete",
+        `Logo concept ${direction.conceptId} requires its authored master ${direction.masterNodeId} beneath ${direction.rootNodeId}`,
+      );
     }
   }
 }

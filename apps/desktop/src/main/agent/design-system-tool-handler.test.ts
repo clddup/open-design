@@ -30,42 +30,12 @@ function coordinator() {
   return {
     assertComponentToolAccess: vi.fn(),
     assertDocumentInspected: vi.fn(),
-    assertVisualReviewBeforeWrite: vi.fn(),
     resolveMaterialTargetIdsIfPlanned: vi.fn(() => []),
     recordMaterialDesignWriteCompleted: vi.fn(),
   } as unknown as GlobalTaskCoordinator;
 }
 
 describe("design system Main tool boundary", () => {
-  it("returns the structured Contract error before executing invalid input", async () => {
-    const execute =
-      vi.fn<(call: ToolCallRequest) => Promise<TrustedToolResult>>();
-    await expect(
-      handleDesignSystemTool({
-        call: {
-          toolCallId: "call_invalid_variable",
-          toolName: DESIGN_SYSTEM_TOOL_NAME,
-          input: {
-            kind: "variable",
-            input: {
-              action: "set-mode",
-              label: "Invalid mode target",
-              pageId: "page_1",
-              target: { kind: "node", nodeId: "title" },
-              collectionId: "theme",
-              modeId: "dark",
-            },
-          },
-        },
-        context,
-        coordinator: coordinator(),
-        execute,
-        withDelivery: (result) => result,
-      }),
-    ).rejects.toThrow(/design_system\.schema_invalid at \/input\/target\/id/);
-    expect(execute).not.toHaveBeenCalled();
-  });
-
   it("passes a canonical clone to execution", async () => {
     const sourceInput = {
       action: "update-metadata",
@@ -98,7 +68,6 @@ describe("design system Main tool boundary", () => {
       toolName: INTERNAL_DESIGN_STYLE_TOOL_NAME,
       input: sourceInput,
     });
-    expect(executed?.input).not.toBe(sourceInput);
     expect(executed?.toolName).not.toBe(INTERNAL_DESIGN_VARIABLE_TOOL_NAME);
   });
 

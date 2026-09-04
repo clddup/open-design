@@ -122,7 +122,7 @@ describe("dispatchAgentRequest", () => {
       { runtime, postMessage: (event) => events.push(event) },
     );
 
-    expect(events).toHaveLength(1);
+    expect(events).toHaveLength(2);
     expect(events[0]).toMatchObject({
       type: "agent.error",
       code: "request_failed",
@@ -135,6 +135,11 @@ describe("dispatchAgentRequest", () => {
       "Agent produced an invalid event: Invalid Agent event. agent_event.schema_invalid at /blocks",
     );
     expect(isAgentEvent(error)).toBe(true);
+    expect(events[1]).toMatchObject({
+      type: "run.completed",
+      runId: "run_invalid",
+      stopReason: "error",
+    });
   });
 
   it("passes the canonical run.start payload without its wire discriminant", async () => {
@@ -143,7 +148,12 @@ describe("dispatchAgentRequest", () => {
     runtime.run = async function* (request) {
       received = request;
       await Promise.resolve();
-      yield* [];
+      yield {
+        type: "run.completed",
+        runId: request.runId,
+        finishedAt: timestamp,
+        stopReason: "complete",
+      };
     };
 
     await dispatchAgentRequest(
@@ -171,6 +181,40 @@ describe("dispatchAgentRequest", () => {
       mutationTarget: { kind: "document" },
       modelSelection: { providerId: "provider_1", modelId: "model_1" },
     });
+  });
+
+  it("terminates a Run when the runtime stream ends without a terminal event", async () => {
+    const runtime = createRuntime(vi.fn(() => Promise.resolve([])));
+    const events: AgentEvent[] = [];
+
+    await dispatchAgentRequest(
+      {
+        type: "run.start",
+        runId: "run_incomplete",
+        sessionId: "session_1",
+        prompt: "Create a design",
+        documentId: "document_1",
+        revision: 2,
+        scope: { kind: "document", selectedNodeIds: [] },
+        mutationTarget: { kind: "document" },
+        modelSelection: { providerId: "provider_1", modelId: "model_1" },
+      },
+      { runtime, postMessage: (event) => events.push(event) },
+    );
+
+    expect(events).toEqual([
+      {
+        type: "agent.error",
+        code: "request_failed",
+        message: "Agent Run ended without run.completed",
+        runId: "run_incomplete",
+      },
+      expect.objectContaining({
+        type: "run.completed",
+        runId: "run_incomplete",
+        stopReason: "error",
+      }),
+    ]);
   });
 
   it("routes an exact approval resolution to the pending approval controller", async () => {

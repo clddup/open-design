@@ -64,7 +64,7 @@ export const DESIGN_PLAN_COMPONENT_STRATEGY_SCHEMA = {
   properties: {
     summary: {
       type: "string",
-      minLength: 12,
+      minLength: 1,
       maxLength: 1_000,
       pattern: NON_WHITESPACE_PATTERN,
     },
@@ -91,7 +91,7 @@ export const DESIGN_PLAN_COMPONENT_STRATEGY_SCHEMA = {
               decision: { const: "reuse-component" },
               rationale: {
                 type: "string",
-                minLength: 12,
+                minLength: 1,
                 maxLength: 500,
                 pattern: NON_WHITESPACE_PATTERN,
               },
@@ -136,7 +136,7 @@ export const DESIGN_PLAN_COMPONENT_STRATEGY_SCHEMA = {
               decision: { const: "component" },
               rationale: {
                 type: "string",
-                minLength: 12,
+                minLength: 1,
                 maxLength: 500,
                 pattern: NON_WHITESPACE_PATTERN,
               },
@@ -189,7 +189,7 @@ export const DESIGN_PLAN_COMPONENT_STRATEGY_SCHEMA = {
               decision: { const: "ordinary" },
               rationale: {
                 type: "string",
-                minLength: 12,
+                minLength: 1,
                 maxLength: 500,
                 pattern: NON_WHITESPACE_PATTERN,
               },

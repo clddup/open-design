@@ -787,8 +787,8 @@ describe("AgentTimeline", () => {
         type: "tool.requested",
         runId: "run_canvas_1",
         toolCallId: "tool_canvas_1",
-        toolName: "opendesign_apply_transaction",
-        input: { label: "Build the page", commands: [] },
+        toolName: "opendesign_edit_design",
+        input: { edits: [] },
         risk: "design_write",
       },
       {
@@ -826,7 +826,7 @@ describe("AgentTimeline", () => {
       screen.queryByText("Working on your design"),
     ).not.toBeInTheDocument();
     expect(screen.queryByText("Task completed")).not.toBeInTheDocument();
-    expect(container).not.toHaveTextContent("opendesign_apply_transaction");
+    expect(container).not.toHaveTextContent("opendesign_edit_design");
     expect(container).not.toHaveTextContent("transaction_canvas_1");
     expect(container).not.toHaveTextContent("run_canvas_1");
   });
@@ -926,18 +926,25 @@ describe("AgentTimeline", () => {
     );
   });
 
-  it("shows semantic hierarchy work as native layer activity", () => {
+  it("shows semantic hierarchy work through the unified canvas activity", () => {
     const events: AgentEvent[] = [
       {
         type: "tool.requested",
         runId: "run_hierarchy_1",
         toolCallId: "tool_hierarchy_1",
-        toolName: "opendesign_edit_hierarchy",
+        toolName: "opendesign_edit_design",
         input: {
-          action: "group",
-          pageId: "page_1",
-          nodeIds: ["body", "face"],
-          groupId: "mascot",
+          edits: [
+            {
+              kind: "hierarchy",
+              input: {
+                action: "group",
+                pageId: "page_1",
+                nodeIds: ["body", "face"],
+                groupId: "mascot",
+              },
+            },
+          ],
         },
         risk: "design_write",
       },
@@ -964,22 +971,29 @@ describe("AgentTimeline", () => {
       />,
     );
 
-    expect(screen.getByText("Layer structure updated")).toBeInTheDocument();
-    expect(container).not.toHaveTextContent("opendesign_edit_hierarchy");
+    expect(screen.getByText("Canvas updated")).toBeInTheDocument();
+    expect(container).not.toHaveTextContent("opendesign_edit_design");
     expect(container).not.toHaveTextContent("transaction_hierarchy_1");
   });
 
-  it("shows precise arrangement as native layer activity", () => {
+  it("shows precise arrangement through the unified canvas activity", () => {
     const events: AgentEvent[] = [
       {
         type: "tool.requested",
         runId: "run_arrange_1",
         toolCallId: "tool_arrange_1",
-        toolName: "opendesign_arrange_layers",
+        toolName: "opendesign_edit_design",
         input: {
-          action: "distribute-horizontal",
-          pageId: "page_1",
-          nodeIds: ["one", "two", "three"],
+          edits: [
+            {
+              kind: "arrange",
+              input: {
+                action: "distribute-horizontal",
+                pageId: "page_1",
+                nodeIds: ["one", "two", "three"],
+              },
+            },
+          ],
         },
         risk: "design_write",
       },
@@ -1006,8 +1020,8 @@ describe("AgentTimeline", () => {
       />,
     );
 
-    expect(screen.getByText("Layer arrangement updated")).toBeInTheDocument();
-    expect(container).not.toHaveTextContent("opendesign_arrange_layers");
+    expect(screen.getByText("Canvas updated")).toBeInTheDocument();
+    expect(container).not.toHaveTextContent("opendesign_edit_design");
     expect(container).not.toHaveTextContent("transaction_arrange_1");
   });
 
@@ -1431,6 +1445,12 @@ describe("AgentTimeline", () => {
             },
           },
           {
+            type: "run.completed",
+            runId: "run_previous",
+            finishedAt: now,
+            stopReason: "error",
+          },
+          {
             type: "run.started",
             runId: "run_current",
             startedAt: now,
@@ -1550,8 +1570,8 @@ describe("AgentTimeline", () => {
         updatedAt: now,
         type: "tool",
         toolCallId: "durable_canvas_tool",
-        toolName: "opendesign_apply_transaction",
-        input: {},
+        toolName: "opendesign_edit_design",
+        input: { edits: [] },
         risk: "design_write",
         status: "completed",
         progressMessage: "Validating design tool parameters and revision",
@@ -1812,8 +1832,8 @@ describe("AgentTimeline", () => {
         updatedAt: now,
         type: "tool",
         toolCallId: "tool_interrupted",
-        toolName: "opendesign_apply_transaction",
-        input: {},
+        toolName: "opendesign_edit_design",
+        input: { label: "Continue edit", edits: [] },
         risk: "design_write",
         status: "running",
       },
@@ -1842,8 +1862,8 @@ describe("AgentTimeline", () => {
         type: "tool.requested",
         runId: "run_scope_1",
         toolCallId: "tool_scope_1",
-        toolName: "opendesign_apply_transaction",
-        input: {},
+        toolName: "opendesign_edit_design",
+        input: { label: "Continue edit", edits: [] },
         risk: "design_write",
       },
       {
@@ -1886,8 +1906,8 @@ describe("AgentTimeline", () => {
         type: "tool.requested",
         runId: "run_invariant_1",
         toolCallId: "tool_invariant_1",
-        toolName: "opendesign_apply_transaction",
-        input: {},
+        toolName: "opendesign_edit_design",
+        input: { label: "Continue edit", edits: [] },
         risk: "design_write",
       },
       {
@@ -1955,7 +1975,7 @@ describe("AgentTimeline", () => {
         updatedAt: now,
         type: "tool",
         toolCallId: "durable_review_retry",
-        toolName: "opendesign_record_visual_review",
+        toolName: "opendesign_capture_canvas",
         input: {},
         risk: "read",
         status: "failed",
@@ -1967,7 +1987,7 @@ describe("AgentTimeline", () => {
         type: "tool.requested",
         runId: "run_review_retry",
         toolCallId: "live_review_retry",
-        toolName: "opendesign_record_visual_review",
+        toolName: "opendesign_capture_canvas",
         input: {},
         risk: "read",
       },

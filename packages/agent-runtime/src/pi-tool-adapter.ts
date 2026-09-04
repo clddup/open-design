@@ -3,6 +3,7 @@ import {
   type BeforeToolCallContext,
   type BeforeToolCallResult,
 } from "@earendil-works/pi-agent-core";
+import { isDeepStrictEqual } from "node:util";
 import {
   type RunStopReason,
   type TrustedToolFailure,
@@ -81,10 +82,7 @@ export class OpenDesignPiToolAdapter {
     this.#approvalPort = options.approvalPort;
     this.#lifecycle = options.lifecycle;
     this.#now = options.now ?? (() => new Date());
-    this.#tracker = new PiToolCallTracker(
-      options.maxToolCalls,
-      options.priorToolCallIds,
-    );
+    this.#tracker = new PiToolCallTracker(options.maxToolCalls);
 
     this.#catalog = new PiToolSurfaceCatalog(
       options.definitions,
@@ -284,37 +282,6 @@ export class OpenDesignPiToolAdapter {
         ...(failure.runTerminal ? { terminate: true } : {}),
       };
     }
-    const blockedFailure = this.#designFailureRecovery.blockedFailure(
-      active.toolName,
-      context.args,
-    );
-    if (blockedFailure) {
-      const validationFailure =
-        blockedFailure.details?.kind === "tool-validation";
-      const failure = this.#recordProgressFailure(active.toolName, {
-        ...blockedFailure,
-        code: "repeated_tool_failure",
-        message: validationFailure
-          ? "The same invalid tool arguments were suppressed. Correct the reported field paths before retrying."
-          : "The same failing tool input was suppressed. Inspect the current document and revise the transaction before retrying.",
-        retryable: false,
-        recoverable: true,
-        ...(blockedFailure.details
-          ? {
-              details: {
-                ...blockedFailure.details,
-                retrySuppressed: true,
-              },
-            }
-          : {}),
-      });
-      this.#tracker.setFailure(active.toolCallId, failure);
-      return {
-        block: true,
-        reason: modelFailureText(failure),
-        ...(failure.runTerminal ? { terminate: true } : {}),
-      };
-    }
     if (this.#toolExecutor === undefined) {
       return this.#block(
         active.toolCallId,
@@ -375,16 +342,17 @@ export class OpenDesignPiToolAdapter {
     try {
       const active = this.#tracker.get(toolCallId);
       const validationFailure = active
-        ? this.#validateActiveInput(active, definition)
+        ? this.#activeExecutionInputFailure(active, definition, parameters)
         : toolValidationFailure(definition, parameters);
       if (validationFailure) {
         throw new TrustedToolExecutionError(validationFailure);
       }
+      const input = active?.input ?? parameters;
       const completedResult = await executeTrustedPiTool({
         context: createTrustedToolContext(this.#request, this.#currentRevision),
         definition,
         onUpdate,
-        parameters,
+        parameters: input,
         signal,
         toolCallId,
         ...(this.#toolExecutor ? { toolExecutor: this.#toolExecutor } : {}),
@@ -393,7 +361,7 @@ export class OpenDesignPiToolAdapter {
       const success = projectPiToolSuccess({
         currentRevision: this.#currentRevision,
         definition,
-        input: parameters,
+        input,
         result: completedResult,
         toolCallId,
       });
@@ -460,6 +428,23 @@ export class OpenDesignPiToolAdapter {
     const validationFailure = toolValidationFailure(definition, active.input);
     if (validationFailure === undefined) active.inputValidated = true;
     return validationFailure;
+  }
+
+  #activeExecutionInputFailure(
+    active: ActiveToolCall,
+    definition: AgentToolDefinition,
+    parameters: unknown,
+  ): TrustedToolFailure | undefined {
+    if (!isDeepStrictEqual(active.input, parameters)) {
+      return {
+        code: "tool_call_input_changed",
+        message: `Tool ${active.toolName} parameters changed after tool_execution_start`,
+        retryable: false,
+        recoverable: false,
+        runTerminal: true,
+      };
+    }
+    return this.#validateActiveInput(active, definition);
   }
 
   #block(

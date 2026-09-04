@@ -5,7 +5,6 @@ import type {
 } from "@opendesign/agent-contracts";
 import {
   DESIGN_SYSTEM_TOOL_NAME,
-  DesignSystemContract,
   INTERNAL_DESIGN_COMPONENT_TOOL_NAME,
   INTERNAL_DESIGN_STYLE_TOOL_NAME,
   INTERNAL_DESIGN_VARIABLE_TOOL_NAME,
@@ -13,7 +12,6 @@ import {
   type DesignSystemToolInput,
   type DesignVariableToolInput,
 } from "@/shared/design-agent-tools.js";
-import { formatValidationFailure } from "@/shared/contract-validation.js";
 import { handleCanonicalDesignComponentTool } from "./design-component-tool-handler.js";
 import type { GlobalTaskCoordinator } from "./global-task-coordinator.js";
 
@@ -29,27 +27,22 @@ export async function handleDesignSystemTool(
   input: HandlerInput,
 ): Promise<TrustedToolResult | null> {
   if (input.call.toolName !== DESIGN_SYSTEM_TOOL_NAME) return null;
-  const parsed = DesignSystemContract.parse(input.call.input);
-  if (!parsed.ok) {
-    throw new TypeError(
-      formatValidationFailure("Design system", parsed.issues),
-    );
-  }
-  if (parsed.value.kind === "component") {
+  const designSystemInput = input.call.input as DesignSystemToolInput;
+  if (designSystemInput.kind === "component") {
     return handleCanonicalDesignComponentTool(
       {
         ...input,
         call: internalCall(
           input.call,
           INTERNAL_DESIGN_COMPONENT_TOOL_NAME,
-          parsed.value.input,
+          designSystemInput.input,
         ),
       },
-      parsed.value.input,
+      designSystemInput.input,
     );
   }
   input.coordinator.assertDocumentInspected(input.context);
-  return handleVariableOrStyle(input, parsed.value);
+  return handleVariableOrStyle(input, designSystemInput);
 }
 
 async function handleVariableOrStyle(
@@ -57,9 +50,6 @@ async function handleVariableOrStyle(
   designSystemInput: Exclude<DesignSystemToolInput, { kind: "component" }>,
 ): Promise<TrustedToolResult> {
   const nodeIds = materialNodeIds(designSystemInput);
-  if (nodeIds.length > 0) {
-    input.coordinator.assertVisualReviewBeforeWrite(input.context);
-  }
   const toolName =
     designSystemInput.kind === "variable"
       ? INTERNAL_DESIGN_VARIABLE_TOOL_NAME

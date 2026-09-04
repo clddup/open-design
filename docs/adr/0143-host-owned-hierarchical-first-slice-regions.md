@@ -26,11 +26,11 @@ compact `firstSlice.elements` 不得复用任何 planned region ID，也不得�
 
 可信 Main 在每个 semantic stage 首次引用 region 时，按父级优先顺序注入真实无装饰 Frame 容器。该入口同时服务 compact first-slice、continuation 和普通 create-target apply。只创建被真实内容使用的 region 及其祖先；未使用 region 不写入文档，不制造空 Group。容器与同 stage 的内容一起进入既有 progressive transaction、history group、revision、rollback 和一次 undo。Main 从注册 Plan 绑定 Page、parent、transform 与 size，模型不能覆盖这些结构事实。
 
-### 首屏预算按模型内容计数
+### 首屏只服从共享事务安全边界
 
-首切片仍为 1–3 个 semantic stage，但模型内容上限从 32 调整为 48；宿主注入的 region Frame 不计入该预算。48 覆盖本次 35 层登录页并保留有限余量，同时继续约束 Provider 输出和单次事务规模。超限仍返回字段级数量和恢复动作。
+首切片不再维护 32、48 或 1–3 stage 等产品私有数量门禁。模型可以按当前目标需要提交语义 stage 和可编辑内容，最终编译结果只服从公共 `DesignTransaction` 的 500-command 资源安全上限。该上限来自所有写入路径共用的事务契约，不是设计质量指标；超限时按完整编译命令数返回准确字段路径，并在一个连贯视觉边界后继续。
 
-这个预算只限制首次可见材料，不要求首屏是占位稿。模型应优先提交一个具有真实层级、内容和视觉命题的可编辑画面；后续未知依赖仍通过 continuation 完成。
+首屏不能为了满足固定元素配额退化成占位稿。模型应优先提交具有真实层级、内容和视觉命题的可编辑画面；只有真实依赖未知或达到公共事务安全边界时才 continuation。
 
 ### 渐进失败返回最早语义边界
 
@@ -41,13 +41,13 @@ Renderer 可以尝试更长的 semantic step 前缀以满足跨步骤文档 inva
 - 普通 `auth → form`、品牌方向子区和内容模块可以保持 Figma 式父子结构，不再被强制铺平到 artboard。
 - Plan 是 region 身份和几何的唯一结构事实；模型输出更短，也不会因同 ID 的 kind、parent 或 bounds 重复抄写失败。
 - 所有真实 region 和内容仍通过唯一 EditorRuntime 事务进入文档，没有第二份可写状态或直接 Renderer mutation。
-- 48 不是质量分数，也不保证复杂 target 在一个调用内完成；真实收益继续以 Provider 首事件、首 Assistant 可见内容、首 material revision 与最终完成时间测量。
+- 首稿没有独立元素配额；真实收益继续以 Provider 首事件、首 Assistant 可见内容、首 material revision、视觉审查与最终完成时间测量。
 - Agent 时间线可以汇总同一未提交恢复链的中间失败，但不得隐藏最终根因或把零 revision 显示为设计进展。
 
 ## 验证
 
 - compact schema/normalizer 拒绝模型元素复用 region ID，并接受 region parent-first 层级；
-- 35 个模型内容元素、`auth_region → form_region` 与独立 footer 在一个 compact call 中编译为父级优先真实 Frame 和内容命令；
+- 35 个及超过历史 48 配额的模型内容、`auth_region → form_region` 与独立 footer 可在一个 compact call 中编译为父级优先真实 Frame 和内容命令；
 - Main write/capture 门禁接受嵌套 region，拒绝错误父级、越界 region 和空 region；
 - skeleton 把嵌套 parent-local 几何累加到 artboard-local 展示坐标；
 - semantic transaction 在所有候选失败时报告最短候选的首个错误；

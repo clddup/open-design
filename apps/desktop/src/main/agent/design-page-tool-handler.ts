@@ -5,11 +5,10 @@ import type {
 } from "@opendesign/agent-contracts";
 import {
   DESIGN_PAGE_TOOL_NAME,
-  DesignPageContract,
   PAGE_STRUCTURE_ACCESS_TOOL_NAME,
-  PageStructureAccessContract,
+  type DesignPageToolInput,
+  type PageStructureAccessToolInput,
 } from "@/shared/design-agent-tools.js";
-import { formatValidationFailure } from "@/shared/contract-validation.js";
 import type { GlobalTaskCoordinator } from "./global-task-coordinator.js";
 
 export async function handleDesignPageTool(input: {
@@ -19,12 +18,7 @@ export async function handleDesignPageTool(input: {
   execute(call: ToolCallRequest): Promise<TrustedToolResult>;
 }): Promise<TrustedToolResult | null> {
   if (input.call.toolName === PAGE_STRUCTURE_ACCESS_TOOL_NAME) {
-    const parsed = PageStructureAccessContract.parse(input.call.input);
-    if (!parsed.ok) {
-      throw new TypeError(
-        formatValidationFailure("Page Structure Access", parsed.issues),
-      );
-    }
+    const access = input.call.input as PageStructureAccessToolInput;
     if (!input.coordinator.hasPageStructureAccess(input.context.runId)) {
       throw new Error("Page structure access was not approved for this Run");
     }
@@ -35,17 +29,13 @@ export async function handleDesignPageTool(input: {
         capability: "page-structure",
         scope: "current-design-file",
         expires: "run-end",
-        actions: parsed.value.actions,
+        actions: access.actions,
       },
     };
   }
   if (input.call.toolName !== DESIGN_PAGE_TOOL_NAME) return null;
 
-  const parsed = DesignPageContract.parse(input.call.input);
-  if (!parsed.ok) {
-    throw new TypeError(formatValidationFailure("Page", parsed.issues));
-  }
-  const pageInput = parsed.value;
+  const pageInput = input.call.input as DesignPageToolInput;
   input.coordinator.assertPageToolAccess(input.context, pageInput);
   input.coordinator.assertPageLifecycleInspected(input.context);
   const result = await input.execute({ ...input.call, input: pageInput });
@@ -79,13 +69,12 @@ export function designPageToolPreauthorization(
   coordinator: GlobalTaskCoordinator | null,
 ): boolean | null {
   if (call.toolName !== PAGE_STRUCTURE_ACCESS_TOOL_NAME) return null;
-  const parsed = PageStructureAccessContract.parse(call.input);
-  if (!parsed.ok) return true;
+  const access = call.input as PageStructureAccessToolInput;
   return (
     coordinator?.hasPageStructureAuthorization(
       context.runId,
       call.toolCallId,
-      parsed.value.actions,
+      access.actions,
     ) ?? false
   );
 }

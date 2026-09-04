@@ -2,16 +2,10 @@ export const DESIGN_CAPABILITIES_TOOL_NAME = "opendesign_get_capabilities";
 export const DESIGN_INSPECT_TOOL_NAME = "opendesign_inspect_document";
 export const DESIGN_CAPTURE_TOOL_NAME = "opendesign_capture_canvas";
 export const DESIGN_PLAN_TOOL_NAME = "opendesign_define_design_plan";
-export const DESIGN_PLAN_UPDATE_TOOL_NAME = "opendesign_update_plan";
 export const DESIGN_DELIVERY_SCOPE_TOOL_NAME =
   "opendesign_review_delivery_scope";
 export const DESIGN_FIRST_SLICE_TOOL_NAME = "opendesign_generate_first_slice";
-export const DESIGN_REVIEW_TOOL_NAME = "opendesign_record_visual_review";
-export const DESIGN_CHECKPOINT_TOOL_NAME = "opendesign_design_checkpoint";
 export const DESIGN_EDIT_TOOL_NAME = "opendesign_edit_design";
-export const DESIGN_APPLY_TOOL_NAME = "opendesign_apply_transaction";
-export const DESIGN_HIERARCHY_TOOL_NAME = "opendesign_edit_hierarchy";
-export const DESIGN_ARRANGE_TOOL_NAME = "opendesign_arrange_layers";
 export const DESIGN_VECTOR_TOOL_NAME = "opendesign_edit_vector";
 export const DESIGN_FONT_TOOL_NAME = "opendesign_manage_fonts";
 export const DESIGN_TEXT_RANGE_TOOL_NAME = "opendesign_style_text_range";

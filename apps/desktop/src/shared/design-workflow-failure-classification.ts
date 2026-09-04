@@ -88,6 +88,7 @@ function workflowFailure(
   options: WorkflowFailureOptions,
 ): TrustedToolFailure {
   const { code, phase, requiresInspection } = classification;
+  const path = options.path ?? workflowIssuePath(code);
   return {
     code: `design_${code}`,
     message,
@@ -95,7 +96,7 @@ function workflowFailure(
     recoverable: true,
     details: {
       kind: "design-workflow",
-      fingerprint: `workflow_${hashText(`${code}:${detail}`)}`,
+      fingerprint: `workflow:${code}:${phase}:${path}`,
       workflowCode: code,
       phase,
       requiresInspection,
@@ -104,12 +105,12 @@ function workflowFailure(
           code: `design_workflow.${code}`,
           ...(options.commandId ? { commandId: options.commandId } : {}),
           ...(options.nodeId ? { nodeId: options.nodeId } : {}),
-          path: options.path ?? workflowIssuePath(code),
+          path,
           message: detail,
           recovery,
         },
       ],
-      recovery: { action: "follow-workflow", required: true },
+      recovery: { action: "follow-workflow", required: requiresInspection },
     },
   };
 }
@@ -149,13 +150,4 @@ function workflowPresentation(
   if (phase === "plan-repair") return "repairing-plan";
   if (phase === "layout-repair") return "repairing-layout";
   return "applying-draft";
-}
-
-function hashText(value: string): string {
-  let hash = 0x811c9dc5;
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 0x01000193);
-  }
-  return (hash >>> 0).toString(16).padStart(8, "0");
 }

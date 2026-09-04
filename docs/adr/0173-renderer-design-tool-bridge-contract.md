@@ -2,7 +2,7 @@
 
 ## 状态
 
-已接受。
+部分被 ADR-0302 取代。Bridge envelope、Trusted Context、capture target、response 与 correlation 继续有效；工具语义输入改由 Main 单次解析，bridge 不再重复执行工具 Contract。
 
 ## 背景
 

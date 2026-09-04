@@ -179,21 +179,25 @@ describe("Page Agent contracts", () => {
         }),
       ]),
     );
-    for (const reason of ["short", "        "]) {
-      expect(
-        PageStructureAccessContract.issues({
-          actions: ["create-page"],
-          reason,
+    expect(
+      PageStructureAccessContract.parse({
+        actions: ["create-page"],
+        reason: "需要",
+      }).ok,
+    ).toBe(true);
+    expect(
+      PageStructureAccessContract.issues({
+        actions: ["create-page"],
+        reason: "        ",
+      }),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "page_structure_access.schema_invalid",
+          path: "/reason",
         }),
-      ).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            code: "page_structure_access.schema_invalid",
-            path: "/reason",
-          }),
-        ]),
-      );
-    }
+      ]),
+    );
   });
 
   it("wires Pi validation to the same Page contracts", () => {

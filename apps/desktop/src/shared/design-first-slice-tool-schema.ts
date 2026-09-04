@@ -4,21 +4,22 @@ import {
   BlendModeSchema,
   DropShadowEffectSchema,
   InnerShadowEffectSchema,
+  ImagePlacementSchema,
   LayerBlurEffectSchema,
+  LayoutPositioningSchema,
+  LayoutSizingSchema,
+  LinearAutoLayoutSchema,
   LinearGradientPaintSchema,
   OuterGlowEffectSchema,
   RadialGradientPaintSchema,
   SolidPaintSchema,
+  MAX_TRANSACTION_COMMANDS,
   executableJsonSchema,
   Type,
   type Static,
   type TSchema,
 } from "@opendesign/design-contracts";
 import type { TObject, TUnion } from "@sinclair/typebox";
-import {
-  DESIGN_FIRST_SLICE_MAX_ELEMENTS,
-  DESIGN_FIRST_SLICE_MAX_STAGES,
-} from "./design-first-slice-budget";
 import {
   DESIGN_LOGO_OUTPUTS,
   LOGO_CONCEPT_PRINCIPLES,
@@ -77,7 +78,6 @@ const UNIT_SCHEMA = Type.Number({ minimum: 0, maximum: 1 });
 const COMPACT_DESIGN_INTENT_SCHEMA = createDesignIntentSchema(
   COMPACT_DESIGN_INTENT_LIMITS,
 );
-
 const DELIVERABLE_SCHEMA = Type.Union([
   Type.Literal("ui"),
   Type.Literal("poster"),
@@ -122,6 +122,8 @@ const ELEMENT_BASE_PROPERTIES = {
   effects: Type.Optional(
     Type.Array(FIRST_SLICE_EFFECT_SCHEMA, { maxItems: 4 }),
   ),
+  layoutPositioning: Type.Optional(LayoutPositioningSchema),
+  layoutSizing: Type.Optional(LayoutSizingSchema),
   ...SHAPE_APPEARANCE_PROPERTIES,
 };
 
@@ -129,6 +131,8 @@ const MODEL_ELEMENT_BASE_PROPERTIES = {
   ...ELEMENT_BASE_PROPERTIES,
   id: localIdSchema(),
   parentId: localIdSchema(),
+  strokes: Type.Optional(SHAPE_APPEARANCE_PROPERTIES.strokes),
+  strokeWidth: Type.Optional(SHAPE_APPEARANCE_PROPERTIES.strokeWidth),
 };
 
 const GROUP_ELEMENT_SCHEMA = Type.Object(
@@ -145,6 +149,7 @@ const FRAME_ELEMENT_SCHEMA = Type.Object(
     kind: Type.Literal("frame"),
     cornerRadius: Type.Optional(Type.Number({ minimum: 0, maximum: 100_000 })),
     clipsContent: Type.Optional(Type.Boolean()),
+    autoLayout: Type.Optional(LinearAutoLayoutSchema),
   },
   CLOSED,
 );
@@ -214,6 +219,18 @@ const TEXT_ELEMENT_SCHEMA = Type.Object(
   CLOSED,
 );
 
+const IMAGE_ELEMENT_SCHEMA = Type.Object(
+  {
+    ...ELEMENT_BASE_PROPERTIES,
+    kind: Type.Literal("image"),
+    assetId: idSchema(),
+    placement: Type.Optional(ImagePlacementSchema),
+    altText: Type.Optional(Type.String({ maxLength: 2_000 })),
+    cornerRadius: Type.Optional(Type.Number({ minimum: 0, maximum: 100_000 })),
+  },
+  CLOSED,
+);
+
 const ELEMENT_KIND_SCHEMA = Type.Union([
   Type.Literal("group"),
   Type.Literal("frame"),
@@ -221,6 +238,7 @@ const ELEMENT_KIND_SCHEMA = Type.Union([
   Type.Literal("ellipse"),
   Type.Literal("path"),
   Type.Literal("text"),
+  Type.Literal("image"),
 ]);
 
 function executableElementSchema(
@@ -229,7 +247,7 @@ function executableElementSchema(
   return executableJsonSchema({
     type: "object",
     description:
-      "One editable document node. Every node uses canonical Figma-shaped fills, strokes, opacity, blendMode and effects at node level. Group appearance must be empty; Path additionally requires path; Text additionally requires text.",
+      "One editable document node. Frames may define canonical horizontal or vertical Auto Layout; direct children participate in flow by default and may define layoutSizing, or opt out with layoutPositioning=absolute. Every node uses canonical Figma-shaped fills, strokes, opacity, blendMode and effects at node level. Group appearance must be empty; Path additionally requires path; Text additionally requires text.",
     properties: {
       ...baseProperties,
       kind: ELEMENT_KIND_SCHEMA,
@@ -237,8 +255,12 @@ function executableElementSchema(
         Type.Number({ minimum: 0, maximum: 100_000 }),
       ),
       clipsContent: Type.Optional(Type.Boolean()),
+      autoLayout: Type.Optional(FRAME_ELEMENT_SCHEMA.properties.autoLayout),
       path: Type.Optional(PATH_ELEMENT_SCHEMA.properties.path),
       text: Type.Optional(TEXT_ELEMENT_SCHEMA.properties.text),
+      assetId: Type.Optional(IMAGE_ELEMENT_SCHEMA.properties.assetId),
+      placement: IMAGE_ELEMENT_SCHEMA.properties.placement,
+      altText: IMAGE_ELEMENT_SCHEMA.properties.altText,
     },
     required: [
       "id",
@@ -249,8 +271,6 @@ function executableElementSchema(
       "width",
       "height",
       "fills",
-      "strokes",
-      "strokeWidth",
       "kind",
     ],
     additionalProperties: false,
@@ -261,6 +281,7 @@ function executableElementSchema(
       elementKindBranch(ELLIPSE_ELEMENT_SCHEMA),
       elementKindBranch(PATH_ELEMENT_SCHEMA, ["path"]),
       elementKindBranch(TEXT_ELEMENT_SCHEMA, ["text"]),
+      elementKindBranch(IMAGE_ELEMENT_SCHEMA, ["assetId"]),
     ],
   }) as unknown as TUnion<
     [
@@ -270,6 +291,7 @@ function executableElementSchema(
       typeof ELLIPSE_ELEMENT_SCHEMA,
       typeof PATH_ELEMENT_SCHEMA,
       typeof TEXT_ELEMENT_SCHEMA,
+      typeof IMAGE_ELEMENT_SCHEMA,
     ]
   >;
 }
@@ -323,7 +345,15 @@ const REGION_MODEL_SCHEMA = Type.Object(
   {
     ...REGION_SCHEMA.properties,
     nodeId: localIdSchema(),
-    parentId: localIdSchema(),
+    parentId: Type.Optional(
+      Type.String({
+        minLength: 1,
+        maxLength: 64,
+        pattern: LOCAL_ID_PATTERN,
+        description:
+          "Earlier call-local region nodeId for a nested region. Omit for a root region; Main binds the current artboard Frame.",
+      }),
+    ),
   },
   {
     ...CLOSED,
@@ -344,25 +374,26 @@ const FRAME_SCHEMA = Type.Object(
 );
 
 const FRAME_MODEL_SCHEMA = Type.Object(
-  { ...FRAME_SCHEMA.properties, frameId: localIdSchema() },
-  CLOSED,
+  {
+    width: DIMENSION_SCHEMA,
+    height: DIMENSION_SCHEMA,
+  },
+  {
+    ...CLOSED,
+    description:
+      "Requested artboard size. Main owns its identity and placement.",
+  },
 );
 
 const TARGET_MODEL_SCHEMA = Type.Object(
   {
-    targetId: idSchema(128),
-    label: idSchema(),
-    pageId: idSchema(),
-    objective: textSchema(500),
     frame: FRAME_MODEL_SCHEMA,
-    layout: textSchema(320),
-    spacing: textSchema(160),
     regions: Type.Array(REGION_MODEL_SCHEMA, { minItems: 1, maxItems: 12 }),
   },
   {
     ...CLOSED,
     description:
-      "The one current rolling-stage target. Concisely describe its job and spatial strategy; do not restate the complete delivery suite or justify individual primitives.",
+      "Geometry for the one Main-bound current target. Do not repeat target identity or explanatory planning text.",
   },
 );
 
@@ -425,12 +456,13 @@ const TARGET_CANONICAL_SCHEMA = Type.Object(
   CLOSED,
 );
 
-function firstSlicePayloadSchema<TElement extends TSchema>(
-  elementSchema: TElement,
-) {
+function firstSlicePayloadSchema<
+  TElement extends TSchema,
+  TTargetId extends TSchema,
+>(elementSchema: TElement, targetIdSchema: TTargetId) {
   return Type.Object(
     {
-      targetId: idSchema(128),
+      targetId: targetIdSchema,
       label: idSchema(),
       stages: Type.Array(
         Type.Object(
@@ -439,15 +471,16 @@ function firstSlicePayloadSchema<TElement extends TSchema>(
             label: idSchema(),
             elements: Type.Array(elementSchema, {
               minItems: 1,
-              maxItems: DESIGN_FIRST_SLICE_MAX_ELEMENTS,
+              maxItems: MAX_TRANSACTION_COMMANDS,
             }),
           },
           CLOSED,
         ),
         {
           minItems: 1,
-          maxItems: DESIGN_FIRST_SLICE_MAX_STAGES,
-          description: `At most ${DESIGN_FIRST_SLICE_MAX_ELEMENTS} model-authored elements total across all stages.`,
+          maxItems: MAX_TRANSACTION_COMMANDS,
+          description:
+            "Semantic implementation groups, not animation batches. The compiled operation uses the shared DesignTransaction command safety limit.",
         },
       ),
     },
@@ -459,11 +492,13 @@ function firstSlicePayloadSchema<TElement extends TSchema>(
   );
 }
 
-const FIRST_SLICE_MODEL_SCHEMA = firstSlicePayloadSchema(
-  DESIGN_FIRST_SLICE_ELEMENT_SCHEMA,
+const FIRST_SLICE_MODEL_SCHEMA = Type.Omit(
+  firstSlicePayloadSchema(DESIGN_FIRST_SLICE_ELEMENT_SCHEMA, idSchema(128)),
+  ["targetId"],
 );
 const FIRST_SLICE_CANONICAL_SCHEMA = firstSlicePayloadSchema(
   DESIGN_FIRST_SLICE_CANONICAL_ELEMENT_SCHEMA,
+  idSchema(128),
 );
 
 const LOGO_OUTPUTS_SCHEMA = Type.Array(
@@ -508,12 +543,13 @@ const LOGO_DIRECTION_COLOR_SYSTEM_SCHEMA = Type.Object(
   CLOSED,
 );
 
-function logoExplorationSchema<TDocumentId extends TSchema>(
-  documentIdSchema: TDocumentId,
-) {
+function logoExplorationSchema<
+  TDocumentId extends TSchema,
+  TTargetId extends TSchema,
+>(documentIdSchema: TDocumentId, targetIdSchema: TTargetId) {
   return Type.Object(
     {
-      targetId: idSchema(128),
+      targetId: targetIdSchema,
       directions: Type.Array(
         Type.Object(
           {
@@ -535,24 +571,26 @@ function logoExplorationSchema<TDocumentId extends TSchema>(
             }),
             masterNodeId: Type.Intersect([documentIdSchema], {
               description:
-                "ID of the direction's editable master symbol root beneath rootNodeId. Author this mark once; the host derives visual scale evidence from it.",
-            }),
-            evidenceRootNodeId: Type.Intersect([documentIdSchema], {
-              description:
-                "ID of an empty Frame/Group beneath rootNodeId reserved for host-derived monochrome and 32/24/16 px scale evidence. Give it at least 172 x 64 px.",
+                "ID of the direction's editable master symbol root beneath rootNodeId. Author one intentional primary mark; do not add mechanically scaled evidence clones.",
             }),
           },
           CLOSED,
         ),
-        { minItems: 3, maxItems: 3 },
+        { minItems: 1, maxItems: 8 },
       ),
     },
     CLOSED,
   );
 }
 
-const LOGO_EXPLORATION_MODEL_SCHEMA = logoExplorationSchema(localIdSchema());
-const LOGO_EXPLORATION_CANONICAL_SCHEMA = logoExplorationSchema(idSchema());
+const LOGO_EXPLORATION_MODEL_SCHEMA = Type.Omit(
+  logoExplorationSchema(localIdSchema(), idSchema(128)),
+  ["targetId"],
+);
+const LOGO_EXPLORATION_CANONICAL_SCHEMA = logoExplorationSchema(
+  idSchema(),
+  idSchema(128),
+);
 
 const FIDELITY_ITEM_SCHEMA = textSchema(500);
 const BRIEF_FIDELITY_SCHEMA = Type.Object(
@@ -633,22 +671,11 @@ const SKILL_REFS_SCHEMA = Type.Array(Type.Object({ id: idSchema() }, CLOSED), {
   maxItems: 8,
 });
 
-const NON_LOGO_DELIVERABLE_SCHEMA = Type.Union([
-  Type.Literal("ui"),
-  Type.Literal("poster"),
-  Type.Literal("brand-asset"),
-  Type.Literal("illustration"),
-  Type.Literal("presentation-visual"),
-  Type.Literal("other"),
-]);
-
 const FIRST_SLICE_MODEL_PROPERTIES = {
-  version: Type.Literal(1),
   deliverable: DELIVERABLE_SCHEMA,
-  objective: textSchema(2_000),
-  designIntent: COMPACT_DESIGN_INTENT_SCHEMA,
-  targets: Type.Array(TARGET_MODEL_SCHEMA, { minItems: 1, maxItems: 32 }),
-  visualSystem: VISUAL_SYSTEM_SCHEMA,
+  designIntent: Type.Optional(COMPACT_DESIGN_INTENT_SCHEMA),
+  targets: Type.Array(TARGET_MODEL_SCHEMA, { minItems: 1, maxItems: 1 }),
+  visualSystem: Type.Optional(VISUAL_SYSTEM_SCHEMA),
   rasterAssetRoles: RASTER_ASSET_ROLES_SCHEMA,
   logoOutputs: Type.Optional(LOGO_OUTPUTS_SCHEMA),
   logoExploration: Type.Optional(LOGO_EXPLORATION_MODEL_SCHEMA),
@@ -665,7 +692,7 @@ const FIRST_SLICE_CANONICAL_PROPERTIES = {
   briefFidelity: BRIEF_FIDELITY_SCHEMA,
   targets: Type.Array(TARGET_CANONICAL_SCHEMA, {
     minItems: 1,
-    maxItems: 32,
+    maxItems: 1,
   }),
   visualSystem: VISUAL_SYSTEM_SCHEMA,
   rasterAssetRoles: RASTER_ASSET_ROLES_SCHEMA,
@@ -692,30 +719,15 @@ function firstSliceSchema<TProperties extends Record<string, TSchema>>(
   return executableJsonSchema({
     ...base,
     ...(description === undefined ? {} : { description }),
-    anyOf: [
-      {
-        type: "object",
-        properties: {
-          deliverable: { const: "logo" },
-          logoColorStrategy: LOGO_COLOR_STRATEGY_SCHEMA,
-        },
-        required: ["deliverable", "logoColorStrategy"],
-      },
-      {
-        type: "object",
-        properties: { deliverable: NON_LOGO_DELIVERABLE_SCHEMA },
-        required: ["deliverable"],
-      },
-    ],
   });
 }
 
 const FIRST_SLICE_LOGO_DESCRIPTION =
-  "Logo work declares its primary color strategy and distinct exploration palettes, with monochrome kept as evidence unless explicitly requested as the identity.";
+  "Logo work should establish a brief-specific primary color treatment, with monochrome kept as evidence unless explicitly requested as the identity; logoColorStrategy is optional guidance, not a write gate.";
 
 export const DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA = firstSliceSchema(
   FIRST_SLICE_MODEL_PROPERTIES_SCHEMA,
-  `Create exactly one current target's real artboard and editable first slice. Provide one concise brief-specific direction, target job/layout, visual system, image roles, and actual content layers; never restate the complete suite or explain every primitive. Frame, Rectangle, Ellipse, Path and Text appearance uses the same canonical fills/strokes, blend modes, shadows and blur effects as the editable document; use solid, linear, radial or angular paints directly instead of approximating material depth with extra flat rectangles. Reusable Component decisions happen after this real hierarchy exists, using inspected Frame/Group roots like Figma's create-component-from-node flow. ${FIRST_SLICE_LOGO_DESCRIPTION} Main binds host-owned skills, complete brief fidelity, and quality defaults before domain refinement.`,
+  `Create exactly one Main-bound target's real artboard and editable first slice. Submit requested artboard size, parent-first regions, image roles, and actual content layers; do not repeat target identity, planning prose, visual rationale, or host state. Frame, Rectangle, Ellipse, Path, Text and persistent Image appearance uses the same canonical document semantics; use an assetId returned by image generation when real subject evidence is required instead of a geometric placeholder. Use canonical paints and effects directly instead of approximating depth with extra flat rectangles. Reusable Component decisions happen after this real hierarchy exists, using inspected Frame/Group roots like Figma's create-component-from-node flow. ${FIRST_SLICE_LOGO_DESCRIPTION} Main derives the executable Plan metadata, binds stable identities, skills, brief fidelity, and quality defaults, then validates the authored geometry.`,
 );
 
 export const DESIGN_FIRST_SLICE_CANONICAL_INPUT_SCHEMA = firstSliceSchema(
@@ -734,4 +746,5 @@ export type DesignFirstSliceElementInput =
   | Static<typeof RECTANGLE_ELEMENT_SCHEMA>
   | Static<typeof ELLIPSE_ELEMENT_SCHEMA>
   | Static<typeof PATH_ELEMENT_SCHEMA>
-  | Static<typeof TEXT_ELEMENT_SCHEMA>;
+  | Static<typeof TEXT_ELEMENT_SCHEMA>
+  | Static<typeof IMAGE_ELEMENT_SCHEMA>;

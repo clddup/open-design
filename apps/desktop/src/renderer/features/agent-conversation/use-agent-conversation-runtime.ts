@@ -21,6 +21,7 @@ import {
 } from "react";
 import type { MessageKey, MessageParameters } from "@/shared/i18n/messages";
 import type { AgentRequestErrorCode } from "@/shared/agent-request-contract";
+import { terminalAgentRunId } from "@/shared/agent-run-lifecycle";
 import { reportRendererError } from "../diagnostics/diagnostics";
 import {
   EMPTY_GENERATION_PLAN_PRESENTATION_STATE,
@@ -40,6 +41,7 @@ import {
   isDurableAgentCheckpoint,
   mergeDurableTimeline,
   pruneLiveEventsCoveredByTimeline,
+  reconcileActiveRunIdFromTimeline,
   selectionScope,
   touchConversationList,
   updateConversationAgentState,
@@ -86,6 +88,7 @@ export function useAgentConversationRuntime({
     null,
   );
   const runCounter = useRef(0);
+  const globalTasksRef = useRef<GlobalTaskProjection[]>([]);
   const conversationIdByRunId = useRef(new Map<string, string>());
   const designFileByRunId = useRef(
     new Map<
@@ -147,10 +150,45 @@ export function useAgentConversationRuntime({
     generationPlanPresentation.activityByRunId,
     t,
   ]);
+  const restoreGlobalTaskBinding = useCallback(
+    (task: GlobalTaskProjection) => {
+      if (!task.runId) return;
+      conversationIdByRunId.current.set(task.runId, task.conversationId);
+      if (!isActiveGlobalTask(task)) return;
+      const target = task.targetSet.primaryTarget;
+      const targetIsOpen = Object.values(workspace.getSnapshot().files).some(
+        (file) =>
+          file.projectId === target.projectId &&
+          file.designFileId === target.designFileId,
+      );
+      if (!targetIsOpen) return;
+      workspace.retainFileForRun(
+        target.projectId,
+        target.designFileId,
+        task.runId,
+      );
+      designFileByRunId.current.set(task.runId, {
+        projectId: target.projectId,
+        designFileId: target.designFileId,
+        documentId: target.documentId,
+      });
+    },
+    [workspace],
+  );
+
+  const applyGlobalTasks = useCallback(
+    (tasks: GlobalTaskProjection[]) => {
+      globalTasksRef.current = tasks;
+      tasks.forEach(restoreGlobalTaskBinding);
+      setGlobalTasks(tasks);
+    },
+    [restoreGlobalTaskBinding],
+  );
+
   const refreshGlobalTasks = useCallback(async () => {
     const tasks = await window.desktop?.listGlobalTasks();
-    if (tasks) setGlobalTasks(tasks);
-  }, []);
+    if (tasks) applyGlobalTasks(tasks);
+  }, [applyGlobalTasks]);
 
   const requestConversationHistory = useCallback(
     async (conversationId: string) => {
@@ -246,19 +284,16 @@ export function useAgentConversationRuntime({
   );
 
   useEffect(() => {
-    void window.desktop
-      ?.listGlobalTasks()
-      .then(setGlobalTasks)
-      .catch((error: unknown) => {
-        setWorkspaceError(
-          reportRendererError(
-            "global_tasks_load_failed",
-            error,
-            t("error.loadGlobalTasks"),
-          ),
-        );
-      });
-  }, [setWorkspaceError, t]);
+    void refreshGlobalTasks().catch((error: unknown) => {
+      setWorkspaceError(
+        reportRendererError(
+          "global_tasks_load_failed",
+          error,
+          t("error.loadGlobalTasks"),
+        ),
+      );
+    });
+  }, [refreshGlobalTasks, setWorkspaceError, t]);
 
   useEffect(() => {
     return window.desktop?.onAgentEvent((event) => {
@@ -276,15 +311,24 @@ export function useAgentConversationRuntime({
         }
         latestHistoryRequestId.current.delete(event.sessionId);
         conversationIdByHistoryRequestId.current.delete(event.requestId);
+        restoreTimelineRunBindings(
+          event.timeline,
+          event.sessionId,
+          conversationIdByRunId.current,
+        );
         setAgentByConversationId((current) =>
           updateConversationAgentState(current, event.sessionId, (previous) => {
-            const activeRunId = previous.activeRunId;
             const timeline = mergeDurableTimeline(
               previous.timeline,
               event.timeline,
             );
+            const activeRunId = reconcileActiveRunIdFromTimeline(
+              previous.activeRunId,
+              timeline,
+            );
             return {
               ...previous,
+              activeRunId,
               timeline,
               events: pruneLiveEventsCoveredByTimeline(
                 previous.events,
@@ -301,8 +345,12 @@ export function useAgentConversationRuntime({
       setGenerationPlanPresentation((current) =>
         projectGenerationPlanPresentationEvent(current, event),
       );
-      if (event.type === "agent.error") {
-        void refreshGlobalTasks().catch(() => undefined);
+      const eventRunId = "runId" in event ? event.runId : undefined;
+      if (eventRunId && !conversationIdByRunId.current.has(eventRunId)) {
+        const task = globalTasksRef.current.find(
+          (candidate) => candidate.runId === eventRunId,
+        );
+        if (task) restoreGlobalTaskBinding(task);
       }
 
       const runId = projectAgentRunFileBinding(
@@ -318,6 +366,7 @@ export function useAgentConversationRuntime({
           : undefined;
       if (!conversationId) {
         if (event.type === "agent.error") {
+          void refreshGlobalTasks().catch(() => undefined);
           setAgentRuntimeError(event.message);
           if (event.runId === undefined && event.requestId === undefined) {
             setAgentByConversationId((current) =>
@@ -342,9 +391,10 @@ export function useAgentConversationRuntime({
         );
       }
 
+      const terminalRunId = terminalAgentRunId(event);
       if (
+        terminalRunId !== undefined ||
         event.type === "run.started" ||
-        event.type === "run.completed" ||
         event.type === "run.continuation" ||
         event.type === "approval.requested" ||
         event.type === "approval.resolved" ||
@@ -375,12 +425,12 @@ export function useAgentConversationRuntime({
       if (isDurableAgentCheckpoint(event)) {
         scheduleConversationHistory(conversationId);
       }
-      if (event.type === "run.completed" || event.type === "agent.error") {
-        if (event.type === "run.completed") {
-          void requestConversationHistory(conversationId);
-          conversationIdByRunId.current.delete(event.runId);
-        }
-        if (event.type === "agent.error" && event.requestId) {
+      if (terminalRunId !== undefined) {
+        void requestConversationHistory(conversationId);
+        conversationIdByRunId.current.delete(terminalRunId);
+      }
+      if (event.type === "agent.error") {
+        if (event.requestId) {
           conversationIdByHistoryRequestId.current.delete(event.requestId);
         }
       }
@@ -388,6 +438,7 @@ export function useAgentConversationRuntime({
   }, [
     refreshGlobalTasks,
     requestConversationHistory,
+    restoreGlobalTaskBinding,
     scheduleConversationHistory,
     setConversations,
     workspace,
@@ -517,9 +568,6 @@ export function useAgentConversationRuntime({
             conversationId,
             (previous) => ({
               ...previous,
-              timeline: previous.timeline.filter(
-                (item) => item.itemId !== optimisticItemId,
-              ),
               activeRunId:
                 previous.activeRunId === runId ? null : previous.activeRunId,
               error: reportRendererError(
@@ -646,6 +694,20 @@ function activeGlobalTaskRunId(
         ["queued", "running", "waiting_approval"].includes(task.lifecycle),
     )?.runId ?? null
   );
+}
+
+function isActiveGlobalTask(task: GlobalTaskProjection): boolean {
+  return ["queued", "running", "waiting_approval"].includes(task.lifecycle);
+}
+
+function restoreTimelineRunBindings(
+  timeline: readonly SessionTimelineItem[],
+  conversationId: string,
+  conversationIdByRunId: Map<string, string>,
+): void {
+  for (const item of timeline) {
+    if (item.runId) conversationIdByRunId.set(item.runId, conversationId);
+  }
 }
 
 class AgentRequestRejectedError extends Error {

@@ -3,7 +3,7 @@ import type { DesignDeliveryScope } from "@/shared/design-agent-tools.js";
 import { projectDesignDeliveryStage } from "./design-delivery-stage-projection.js";
 
 describe("design delivery stage projection", () => {
-  it("exposes the host-owned artboard for the next rolling target", () => {
+  it("exposes the host-reserved artboard before any empty Frame is written", () => {
     const scope: DesignDeliveryScope = {
       version: 1,
       deliverable: "ui",
@@ -37,7 +37,6 @@ describe("design delivery stage projection", () => {
               y: 0,
               width: 1440,
               height: 900,
-              allocatedRevision: 5,
             },
           ],
         ]),
@@ -59,7 +58,6 @@ describe("design delivery stage projection", () => {
           y: 0,
           width: 1440,
           height: 900,
-          allocatedRevision: 5,
         },
       },
     });

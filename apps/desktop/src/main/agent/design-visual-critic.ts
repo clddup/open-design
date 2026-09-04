@@ -18,18 +18,26 @@ import {
   createDesignVisualCriticVerdictContract,
   DesignVisualCriticCaptureContentContract,
   type DesignVisualCriticAttachment,
+  type DesignVisualCriticVerdict,
 } from "@/shared/design-visual-critic-contract.js";
 import { designWorkflowError } from "@/shared/design-workflow-failure-classification.js";
 
 const GENERIC_CRITERIA = [
   "visual-thesis",
-  "signature-motif",
+  "signature-decision",
   "composition-tension",
   "typography-character",
   "material-coherence",
   "template-avoidance",
   "glance-legibility",
   "subject-specificity",
+  "craft-precision",
+] as const satisfies readonly DesignVisualCriterion[];
+
+const LOGO_GENERIC_CRITERIA = [
+  "visual-thesis",
+  "signature-decision",
+  "template-avoidance",
   "craft-precision",
 ] as const satisfies readonly DesignVisualCriterion[];
 
@@ -109,7 +117,7 @@ export async function runIndependentDesignVisualCritic(
     {
       attemptId,
       sessionId: `${context.runId}:visual-critic`,
-      latencyProfile: "extended",
+      latencyProfile: "interactive",
       modelSelection: {
         providerId: context.modelSelection.providerId,
         modelId: context.modelSelection.modelId,
@@ -123,6 +131,7 @@ export async function runIndependentDesignVisualCritic(
         "For every logo-concept-*-quality criterion, judge that declared direction independently. It must have an ownable silhouette, visibly intentional construction, controlled contour or counterform, recognition at 32/24/16 px, anti-template originality, and visible agreement with its thesis. A caption cannot rescue an arbitrary shape, and stronger sibling concepts cannot compensate for one filler direction.",
         "For Logo color, treat monochrome as a required stress test rather than the default primary identity. brand-color-system fails when the main mark is only black/white/gray without an explicitly monochrome-only user brief, when color is decorative rather than semantic, or when light/dark adaptation is not visible. color-system-divergence requires explored directions to make materially different color decisions, not hue swaps. app-icon-ecosystem-distinction requires ownable color and optical weight among real macOS/Windows app icons.",
         "When visual references are supplied, the first image is always the delivery capture and later images are the authorized references named in the JSON contract. Judge the declared transferable decisions and avoidances; do not demand literal copying or confuse a content asset with a style reference.",
+        "Write summary, evidence, and refinements in the language of the user's request.",
         formatBuiltinDesignReviewSkillBundleForDeliverable(
           context.plan.deliverable,
         ),
@@ -160,16 +169,15 @@ export async function runIndependentDesignVisualCritic(
     (block) =>
       block.type === "tool_call" && block.name === SUBMIT_CRITIQUE_TOOL,
   );
-  const hasUnexpectedOutput = response.blocks.some(
-    (block) =>
-      block.type === "text" ||
-      (block.type === "tool_call" && block.name !== SUBMIT_CRITIQUE_TOOL),
-  );
   const call = calls[0];
   if (
     response.stopReason !== "tool_use" ||
     calls.length !== 1 ||
-    hasUnexpectedOutput ||
+    response.blocks.some(
+      (block) =>
+        block.type === "text" ||
+        (block.type === "tool_call" && block.name !== SUBMIT_CRITIQUE_TOOL),
+    ) ||
     call?.type !== "tool_call"
   ) {
     throw designWorkflowError(
@@ -189,7 +197,7 @@ export async function runIndependentDesignVisualCritic(
       },
     );
   }
-  const verdict = parsed.value;
+  const verdict: DesignVisualCriticVerdict<CriticCriterionId> = parsed.value;
   const scoreValues = criterionIds.map((id) => verdict.criteria[id].score);
   const averageScore =
     Math.round(
@@ -252,9 +260,14 @@ function criticEvidenceContract(
       label: context.target.label,
       objective: context.target.objective,
       qualityProfile: context.target.qualityProfile,
+      composition: context.target.composition,
+      editableLayers: context.target.editableLayers,
+      validationChecks: context.target.validationChecks,
     },
     briefFidelity: context.plan.briefFidelity,
-    calibration: context.plan.designIntent.calibration,
+    designIntent: context.plan.designIntent,
+    visualSystem: context.plan.visualSystem,
+    logoOutputs: context.plan.logoOutputs,
     referenceStrategy: context.plan.referenceStrategy,
     deliveryCaptureAttachmentId: context.attachment.attachmentId,
     visualReferenceAttachmentIds: context.referenceAttachments.map(
@@ -274,31 +287,43 @@ function criticCriteria(
     (direction) => direction.criterionId,
   );
   const reviewingExploration = directionCriteria.length > 0;
-  const logoCriteria: CriticCriterionId[] =
-    plan.deliverable !== "logo"
-      ? []
-      : [
-          ...LOGO_BASE_CRITERIA,
-          ...(!reviewingExploration
-            ? []
-            : (["concept-divergence", "color-system-divergence"] as const)),
-          ...directionCriteria,
-          ...(!reviewingExploration &&
-          (logoOutputs.has("wordmark") || logoOutputs.has("lockups"))
-            ? (["symbol-wordmark-relationship"] as const)
-            : []),
-          ...(!reviewingExploration && logoOutputs.has("app-icon")
-            ? ([
-                "app-icon-optical-redraw",
-                "app-icon-ecosystem-distinction",
-              ] as const)
-            : []),
-          ...(!reviewingExploration && logoOutputs.size > 1
-            ? (["component-system-integrity"] as const)
-            : []),
-        ];
+  if (plan.deliverable !== "logo") {
+    return [
+      ...GENERIC_CRITERIA,
+      ...(activeVisualReferenceIds(plan.referenceStrategy).length > 0
+        ? [REFERENCE_CRITERION]
+        : []),
+    ];
+  }
+  const genericCriteria = reviewingExploration
+    ? LOGO_GENERIC_CRITERIA.filter(
+        (criterion) => criterion !== "signature-decision",
+      )
+    : LOGO_GENERIC_CRITERIA;
+  const logoCriteria: CriticCriterionId[] = reviewingExploration
+    ? [
+        "brand-color-system",
+        "concept-divergence",
+        "color-system-divergence",
+        ...directionCriteria,
+      ]
+    : [
+        ...LOGO_BASE_CRITERIA,
+        ...(logoOutputs.has("wordmark") || logoOutputs.has("lockups")
+          ? (["symbol-wordmark-relationship"] as const)
+          : []),
+        ...(logoOutputs.has("app-icon")
+          ? ([
+              "app-icon-optical-redraw",
+              "app-icon-ecosystem-distinction",
+            ] as const)
+          : []),
+        ...(logoOutputs.size > 1
+          ? (["component-system-integrity"] as const)
+          : []),
+      ];
   return [
-    ...GENERIC_CRITERIA,
+    ...genericCriteria,
     ...logoCriteria,
     ...(activeVisualReferenceIds(plan.referenceStrategy).length > 0
       ? [REFERENCE_CRITERION]
@@ -317,7 +342,7 @@ function logoDirectionCriterionContracts(
   thesis: string;
   constructionLogic: string;
   colorSystem: { palette: string[]; rationale: string };
-  requiredEvidenceNodeIds: [string, string, string, string];
+  requiredEvidenceNodeIds: string[];
   rubric: readonly string[];
 }> {
   const directions =
@@ -332,15 +357,13 @@ function logoDirectionCriterionContracts(
     thesis: direction.thesis,
     constructionLogic: direction.constructionLogic,
     colorSystem: structuredClone(direction.colorSystem),
-    requiredEvidenceNodeIds: [
-      direction.monochromeNodeId,
-      ...direction.smallSizeNodeIds,
-    ],
+    requiredEvidenceNodeIds: [direction.rootNodeId, direction.masterNodeId],
     rubric: [
       "ownable black silhouette",
       "visible intentional construction logic",
       "controlled counterform or contour",
-      "recognition at 32, 24, and 16 px",
+      "a silhouette and counterform robust enough for later optical redraws at small sizes",
+      "no mechanically scaled clone presented as proof of small-size optimization",
       "anti-template originality",
       "a brief-specific primary color system whose role is visible in the mark rather than only in captions or presentation backgrounds",
       "visible agreement between the form and declared thesis without relying on its caption",
@@ -373,7 +396,11 @@ function toLedgerVisualReview(
   refinements: readonly string[],
 ): DesignVisualReviewToolInput {
   const generic = Object.fromEntries(
-    GENERIC_CRITERIA.map((id) => [id, critic.criteria[id].evidence]),
+    GENERIC_CRITERIA.map((id) => [
+      id,
+      critic.criteria[id]?.evidence ??
+        "Not applicable to this target; evaluated through deliverable-specific criteria.",
+    ]),
   ) as Record<DesignVisualCriterion, string>;
   const reviewFailedCriteria = [
     ...new Set(
@@ -387,7 +414,7 @@ function toLedgerVisualReview(
     skillRefs: structuredClone(plan.skillRefs),
     briefFidelity: generic["subject-specificity"],
     distinctiveness: generic["visual-thesis"],
-    signatureMotif: generic["signature-motif"],
+    signatureDecision: generic["signature-decision"],
     composition: generic["composition-tension"],
     hierarchy: generic["glance-legibility"],
     typography: generic["typography-character"],
@@ -427,7 +454,7 @@ function closestGenericCriterion(failed: string): DesignVisualCriterion {
   ) {
     return "template-avoidance";
   }
-  if (failed.startsWith("logo-concept-")) return "signature-motif";
+  if (failed.startsWith("logo-concept-")) return "signature-decision";
   return "craft-precision";
 }
 

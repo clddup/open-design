@@ -18,14 +18,11 @@ import {
 } from "./design-edit-tool";
 import {
   DesignPlanContract,
-  DesignVisualReviewContract,
   DESIGN_PLAN_TOOL_INPUT_SCHEMA,
-  DESIGN_VISUAL_REVIEW_TOOL_INPUT_SCHEMA,
 } from "./design-agent-plan-review";
 import {
   DESIGN_CAPABILITIES_TOOL_NAME,
   DESIGN_CAPTURE_TOOL_NAME,
-  DESIGN_CHECKPOINT_TOOL_NAME,
   DESIGN_SYSTEM_TOOL_NAME,
   DESIGN_DELIVERY_SCOPE_TOOL_NAME,
   DESIGN_EDIT_TOOL_NAME,
@@ -34,8 +31,6 @@ import {
   DESIGN_INSPECT_TOOL_NAME,
   DESIGN_PAGE_TOOL_NAME,
   DESIGN_PLAN_TOOL_NAME,
-  DESIGN_PLAN_UPDATE_TOOL_NAME,
-  DESIGN_REVIEW_TOOL_NAME,
   DESIGN_TEXT_RANGE_TOOL_NAME,
   DESIGN_VECTOR_TOOL_NAME,
   EXPORT_RASTER_TOOL_NAME,
@@ -55,10 +50,6 @@ import {
   READ_IMAGE_TOOL_NAME,
   UPDATE_IMAGE_TOOL_NAME,
 } from "./design-agent-tool-names";
-import {
-  DESIGN_PLAN_UPDATE_TOOL_INPUT_SCHEMA,
-  DesignPlanUpdateContract,
-} from "./design-plan-execution";
 import {
   EditImageContract,
   GenerateImageContract,
@@ -100,10 +91,6 @@ import {
   PageStructureAccessContract,
   PAGE_STRUCTURE_ACCESS_TOOL_INPUT_SCHEMA,
 } from "./design-agent-document-tools";
-import {
-  DesignCheckpointContract,
-  DESIGN_CHECKPOINT_TOOL_INPUT_SCHEMA,
-} from "./design-agent-checkpoint";
 import { DesignComponentContract } from "./design-component-tool";
 import { DesignVariableContract } from "./design-variable-tool";
 import { DesignStyleContract } from "./design-style-tool";
@@ -137,7 +124,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
       whenDeliveryScopeReview: "required" as const,
     },
     description:
-      "For a broad product brief, document attachment, four-or-more deliverables, or a host-required scope definition, establish the complete user-visible delivery plan before detailed design planning. Each target must be one independently verifiable screen, flow, visual direction, or asset artboard with its intended real width and height; do not collapse requested product areas into representative artboards and do not split headings, cards, or decorative regions into targets. Delivery targets are not document Pages: keep a product suite on the current Page and create one Frame/Artboard per target. Include concise required content, exclusions, and assumptions. The host records the plan and atomically creates every target as a real editable Frame without a ceremonial user confirmation; these empty allocated Frames are not drafts or completed work. Later executable stages must use the host-returned existing artboard identity for deliveryStage.nextTarget. Page creation and cross-Page organization are separate explicit lifecycle operations and are never inferred from target count. Small focused requests execute directly and should not call this tool.",
+      "Before creating a new composition, record its complete user-visible one-or-many artboard scope. A focused Logo or screen is one target; a product brief keeps every independently verifiable screen, flow, visual direction, or asset as its own target. Use the brief's real deliverables rather than prompt length, attachment count, or a representative sample. Every target includes its intended real width and height. Do not split headings, cards, or decorative regions into targets. Delivery targets are not document Pages: keep a product suite on the current Page and create one Frame/Artboard per target. Include concise required content, exclusions, and assumptions. The host records stable target identities and non-overlapping geometry without writing empty Frames. Each Frame is created atomically with its own first meaningful editable content when that target becomes active. Page creation and cross-Page organization are separate explicit lifecycle operations and are never inferred from target count. Focused edits to existing content do not call this tool.",
     inputSchema: DESIGN_DELIVERY_SCOPE_TOOL_INPUT_SCHEMA,
     risk: "design_write" as const,
     approval: "never" as const,
@@ -153,17 +140,19 @@ export const DESIGN_AGENT_TOOL_SPECS = [
       surfaces: ["general" as const, "new-design" as const],
     },
     description:
-      "Create exactly one current target's real artboard and meaningful editable content in one rollback-safe call. For reviewed multi-target scope, declare only deliveryStage.nextTarget and finish it before the next call. Include concise designIntent, layout/spacing, visualSystem, raster roles, and an actual named hierarchy; Main binds skills, fidelity, quality, and an initially empty component strategy. The content must visibly prove the thesis and signature motif, not retrofit reasons to generic primitives. Use canonical document fills/strokes, blend modes, shadows and blur only when they serve the chosen form; do not simulate every surface with stacks of flat rectangles. Complete the target within 48 model-authored elements or submit its smallest coherent portion. Use short call-local IDs for the target Frame, regions, elements, and their references; Main binds them to globally stable Run-scoped document IDs. Multi-direction Logo work uses a shared brand invariant but three independent form hypotheses, principles and color systems; make every primary master work as a monochrome silhouette while applying its brief-specific color treatment in the same slice, keep cards/captions secondary, and let Main derive monochrome/32/24/16 evidence. Path commands use node-local coordinates and are not rescaled by width/height. Use 1-3 stages, 48 elements total, one inspected Page, parent-local geometry, and exact fonts. After success, inspect the real hierarchy and promote justified roots to Components through the disclosed design-system tool, matching Figma's create-component-from-node workflow; a new-design Run remains on a focused continuation surface with complete node appearance and contour editing.",
+      "Create exactly one current target's real artboard and meaningful editable content in one rollback-safe call. For reviewed multi-target scope, design only deliveryStage.nextTarget and finish it before the next call. Include concise designIntent, requested artboard width/height, parent-first regions, visualSystem, raster roles, and an actual named hierarchy. Main already binds the target/Page/Frame identity, placement, objective, skills, fidelity, quality profile, and component defaults; do not echo those fields. When real subject evidence is essential, call opendesign_generate_image first and use its persistent assetId in an image element inside this same first slice instead of committing a geometric placeholder. The content must visibly prove the thesis and a brief-specific signature decision, not retrofit reasons to generic primitives. The signature may be structural, typographic, behavioral, material, or geometric; never default to concentric rings, light beams, HUD decoration, gradient blocks, or stacked rectangles as shorthand for “cool” or “technology”. Use canonical document fills/strokes, blend modes, shadows and blur only when they serve the chosen form. Complete one coherent target within the shared DesignTransaction safety limit rather than degrading it to satisfy an arbitrary first-slice element quota. Region and element IDs remain call-local, and Main binds those IDs to the Run namespace. When the user requests multiple Logo directions, author the requested number of genuinely independent form hypotheses under one shared brand invariant; apply each direction's brief-specific primary color treatment in the same slice and do not create uniformly scaled evidence clones. Later selected Logo/App Icon targets perform real optical redraws. Path commands use node-local coordinates and are not rescaled by width/height. Use semantic stages, one inspected Page, parent-local geometry, and exact fonts. After success, inspect the real hierarchy and promote justified roots to Components through the disclosed design-system tool, matching Figma's create-component-from-node workflow; a new-design Run remains on a focused continuation surface with complete node appearance and contour editing.",
     inputSchema: DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA,
     risk: "design_write" as const,
     approval: "never" as const,
-    validateInputIssues: FirstSliceContract.issues,
+    validateInputIssues: FirstSliceContract.modelIssues,
   },
   {
     name: DESIGN_CAPABILITIES_TOOL_NAME,
     modelDisclosure: {
       bootstrap: "deferred" as const,
       afterInspection: "available" as const,
+      continuation: "available" as const,
+      role: "capability-discovery" as const,
     },
     description:
       "Read the trusted, versioned OpenDesign professional design capability manifest. It reports available, degraded, and unavailable workflows across contract, runtime, human UI, Agent, render, and export surfaces, including providers, limitations, and evidence counts. Call this before planning work that may require Pen editing, boolean operations, Auto Layout, components, variables, rich typography, image crop, AI image editing, or export.",
@@ -190,10 +179,11 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     name: DESIGN_CAPTURE_TOOL_NAME,
     modelDisclosure: {
       bootstrap: "deferred" as const,
+      continuation: "available" as const,
       surfaces: ["general" as const, "new-design" as const],
     },
     description:
-      "Capture the Main-selected target in the Run-bound OpenDesign document as a bounded image and return it as multimodal content together with captureTarget, the observed document revision, and reviewWorkflow. After the planned artboard exists, captureTarget is that exact Frame; otherwise it is the bound Page. Frame captures return layoutQuality, a trusted exact-revision report over the complete rendered Component projection, clipping ancestor chain, artboard containment, quality profile, and production text layout. A componentTarget is the stable instanceId + sourcePath repair identity; projection node IDs are capture-only and must never be reused as persistent mutation targets. Overflow issues include world-space bounds plus parent-local repair geometry. When reviewWorkflow.nextAction is repair-layout-overflow, call the returned opendesign_edit_design arrange repair-overflow entry first; it expands safe trailing-edge delivery and persistent clipping Frames in one undoable revision, then capture again. If that bounded repair fails, inspect and explicitly correct the unsafe structure. The first representative new UI target and identity work receive the stateless exact-revision critic; later UI targets reuse that reviewed visual system but still fail deterministic verification when they are empty, flattened into one Text layer, structurally incomplete, or geometrically invalid. Follow reviewWorkflow.nextAction. Call record_visual_review only when reviewEligible is explicitly true as a legacy recovery path. Final verification may include a bounded non-blocking componentStrategy report when actual Component/Instance bindings differ from the model-authored plan; it is maintainability guidance and does not invalidate an otherwise useful visual delivery. The capture uses an isolated Leafer projection of the captured revision, so user pan, zoom, selection, window size, or switching to another open Design File cannot change its pixels or mutation target. Use this after a successful material design write to evaluate the rendered composition, hierarchy, spacing, proportions, and effects before recording the required visual review. A baseline capture before a write may inform planning but does not unlock review. This does not capture other applications, windows, files, or screens.",
+      "Capture the Main-selected target in the Run-bound OpenDesign document as a bounded image and return it as multimodal content together with captureTarget, the observed document revision, and reviewWorkflow. After the planned artboard exists, captureTarget is that exact Frame; otherwise it is the bound Page. Frame captures return layoutQuality, a trusted exact-revision report over the complete rendered Component projection, clipping ancestor chain, artboard containment, quality profile, and production text layout. A componentTarget is the stable instanceId + sourcePath repair identity; projection node IDs are capture-only and must never be reused as persistent mutation targets. Overflow issues include world-space bounds plus parent-local repair geometry. When reviewWorkflow.nextAction is repair-layout-overflow, call the returned opendesign_edit_design arrange repair-overflow entry first; it expands safe trailing-edge delivery and persistent clipping Frames in one undoable revision, then capture again. If that bounded repair fails, inspect and explicitly correct the unsafe structure. The first representative new UI target and identity work receive the stateless exact-revision critic; later UI targets reuse that reviewed visual system but still fail deterministic verification when they are empty, flattened into one Text layer, structurally incomplete, or geometrically invalid. Follow reviewWorkflow.nextAction; Main owns the independent review and delivery ledger, so do not call or invent a separate review/checkpoint tool. Final verification may include a bounded non-blocking componentStrategy report when actual Component/Instance bindings differ from the model-authored plan; it is maintainability guidance and does not invalidate an otherwise useful visual delivery. The capture uses an isolated Leafer projection of the captured revision, so user pan, zoom, selection, window size, or switching to another open Design File cannot change its pixels or mutation target. Use this after a successful material design write to evaluate the rendered composition, hierarchy, spacing, proportions, and effects before Main records the trusted verdict. A baseline capture before a write may inform planning but does not unlock review. This does not capture other applications, windows, files, or screens.",
     inputSchema: EMPTY_DESIGN_TOOL_INPUT_SCHEMA,
     risk: "read" as const,
     approval: "never" as const,
@@ -206,45 +196,11 @@ export const DESIGN_AGENT_TOOL_SPECS = [
       role: "plan" as const,
     },
     description:
-      "Define one bounded executable design stage after inspection and before imagery or design writes. When a complete Delivery Scope was reviewed, plan only its first not-yet-planned recorded target; after verification the host returns deliveryStage.nextTarget for the next Plan. Never repeat completed targets or put the whole recorded suite into one Plan. Match the current target exactly and omit host-bound skillRefs. Declare intent, current-target brief fidelity, evidence medium, image classifications, component decisions, stable artboard/regions, and quality profiles. Use imagery when real-world subject evidence matters; vectors may serve logos, diagrams, and intentional illustration. UI quality nodes must be real foreground/control descendants, never the delivery Frame; non-UI uses graphic. Main allocates create targets as Page-root Frames and verifies live geometry, components, capture, review, refinement, and delivery. single-raster requires one explicitly requested flattened target and no component candidates.",
+      "Define one bounded executable design stage after inspection and before imagery or design writes. When a complete Delivery Scope was reviewed, plan only its first not-yet-planned recorded target; after verification the host returns deliveryStage.nextTarget for the next Plan. Never repeat completed targets or put the whole recorded suite into one Plan. Match the current target exactly and omit host-bound skillRefs. Declare intent, current-target brief fidelity, evidence medium, image classifications, component decisions, stable artboard/regions, and quality profiles. Use imagery when real-world subject evidence matters; vectors may serve logos, diagrams, and intentional illustration. UI quality nodes must be real foreground/control descendants, never the delivery Frame; non-UI uses graphic. Planning never writes an empty Frame: the first material transaction creates a new Page-root artboard together with meaningful editable content, while Main binds its declared geometry. single-raster requires one explicitly requested flattened target and no component candidates.",
     inputSchema: DESIGN_PLAN_TOOL_INPUT_SCHEMA,
     risk: "design_write" as const,
     approval: "never" as const,
     validateInputIssues: DesignPlanContract.issues,
-  },
-  {
-    name: DESIGN_PLAN_UPDATE_TOOL_NAME,
-    modelDisclosure: {
-      bootstrap: "deferred" as const,
-      afterInspection: "available" as const,
-      surfaces: ["general" as const, "new-design" as const],
-    },
-    description:
-      "Advance the current user-visible execution Plan after completing its active implementation step. Submit the exact planRevision, targetId, and active completeStepId returned by the host. Main requires a real revision-advancing write after that step started, marks only that step completed, and activates only its immediate successor. Review/refine is host-owned and completes only after exact-revision capture verification. Never skip, reorder, backfill, or mark a step complete before its work exists.",
-    inputSchema: DESIGN_PLAN_UPDATE_TOOL_INPUT_SCHEMA,
-    risk: "design_write" as const,
-    approval: "never" as const,
-    validateInputIssues: DesignPlanUpdateContract.issues,
-  },
-  {
-    name: DESIGN_REVIEW_TOOL_NAME,
-    modelDisclosure: { bootstrap: "deferred" as const },
-    description:
-      "Legacy recovery only: record a typed Visual Review when the newest opendesign_capture_canvas result explicitly returns reviewEligible=true. Main binds the exact locally loaded critic revision for the active deliverable; do not send skillRefs. Compare the capture with the latest request, briefFidelity and active designIntent; evaluate every non-compensating critic criterion, list only criteria that visibly fail, and provide one concrete refinement for each real failure without inventing a second defect. For non-UI work whose credibility depends on a real subject or environment, missing required raster evidence fails subject-specificity and material-coherence; typography cannot compensate for it. Strong color or accessibility cannot compensate for a missing visual thesis, invisible signature motif, generic composition, weak typography, incoherent material system, or template symptoms. Any fidelity or criterion failure must appear in refinements. Do not submit generic praise. The host rejects malformed reviews, baseline/pre-write captures, already-reviewed captures, and captures older than the latest material revision. This records Run review state and does not mutate the canvas.",
-    inputSchema: DESIGN_VISUAL_REVIEW_TOOL_INPUT_SCHEMA,
-    risk: "read" as const,
-    approval: "never" as const,
-    validateInputIssues: DesignVisualReviewContract.issues,
-  },
-  {
-    name: DESIGN_CHECKPOINT_TOOL_NAME,
-    modelDisclosure: { bootstrap: "deferred" as const },
-    description:
-      "Execute a real design checkpoint without a Provider round trip used only to request capture. Use apply-and-capture when the next material transaction is fully known: Main validates and commits it through the canonical apply path, captures only if that write produced a new trusted revision, and returns exact-revision independent critic findings. After reading material findings, use refine-and-capture when the concrete refinement is known. Main applies that refinement through the same canonical path and captures only the successful refined revision. A failed prerequisite short-circuits later stages. If capture fails after a committed write, the result preserves that designRevision and reports capture-failed so you can recover without repeating the write. This tool does not replace inspect, Plan, image generation, Page approval, or dependencies whose result must be read before authoring the next stage.",
-    inputSchema: DESIGN_CHECKPOINT_TOOL_INPUT_SCHEMA,
-    risk: "design_write" as const,
-    approval: "never" as const,
-    validateInputIssues: DesignCheckpointContract.issues,
   },
   {
     name: READ_IMAGE_TOOL_NAME,
@@ -263,11 +219,11 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     name: GENERATE_IMAGE_TOOL_NAME,
     modelDisclosure: {
       bootstrap: "available" as const,
-      beforePlan: "deferred" as const,
+      beforePlan: "available" as const,
       surfaces: ["general" as const, "new-design" as const],
     },
     description:
-      "Generate one original raster image with OpenDesign's globally configured image-generation model. A successful opendesign_define_design_plan call must already declare the exact role as reference, background, hero, supporting-content, or final-single-image. This selection is application-wide and independent of the current conversation model. The result is staged immediately as a persistent current-Design-File asset and also returned as a current-Run attachment. Call opendesign_place_image only for a declared placeable role. The tool never accepts a provider or model ID and fails explicitly when no global image-generation model is configured.",
+      "Generate one original raster image with OpenDesign's globally configured image-generation model whenever real subject evidence, photography, texture, or illustration materially improves the requested design. The result is staged immediately as a persistent current-Design-File asset and returned with an assetId that can be used by the compact first-slice image element in the same Provider turn. This selection is application-wide and independent of the current conversation model. The tool never accepts a provider or model ID and fails explicitly when no global image-generation model is configured.",
     inputSchema: GENERATE_IMAGE_TOOL_INPUT_SCHEMA,
     risk: "external" as const,
     approval: "never" as const,
@@ -277,6 +233,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     name: PLACE_IMAGE_TOOL_NAME,
     modelDisclosure: {
       bootstrap: "deferred" as const,
+      continuation: "available" as const,
       role: "material-write" as const,
       surfaces: ["general" as const, "new-design" as const],
     },
@@ -358,13 +315,14 @@ export const DESIGN_AGENT_TOOL_SPECS = [
       bootstrap: "deferred" as const,
       afterInspection: "available" as const,
       beforePlan: "deferred" as const,
+      continuation: "available" as const,
       role: "material-write" as const,
       surfaces: ["general" as const, "new-design" as const],
       bootstrapDescription:
-        "Perform one coherent inspected node edit inside an existing planned artboard. Use one node edit entry; it supports editable Path contours, gradients and effects as well as insert, property update, move and delete. Main binds the edit to the active Plan step. New artboard roots still use opendesign_generate_first_slice. After a material revision, this same tool adds compact layout repair without changing tool names.",
+        "Perform one coherent inspected node edit inside the active Run target. Use one node edit entry; it supports editable Path contours, gradients and effects as well as insert, property update, move and delete. Existing content remains editable whether or not a Plan created it; matching material revisions update the Plan ledger when one is active. New artboard roots still use opendesign_generate_first_slice. After a material revision, this same tool adds compact layout repair without changing tool names.",
       bootstrapInputSchema: DESIGN_BOOTSTRAP_EDIT_TOOL_INPUT_SCHEMA,
       continuationDescription:
-        "Continue the current design with complete node appearance and contour edits plus compact visual layout repair. Rebuild weak silhouettes with editable Paths instead of falling back to generic circles and rectangles. Use align, distribute, spacing, repair-overflow, resize-frame, or Page/Frame ruler guides when the inspected document requires them; keep all targets inside the active delivery artboard. Main owns Plan-step binding.",
+        "Continue the current design with complete node appearance and contour edits plus compact visual layout repair. Rebuild weak silhouettes with editable Paths instead of falling back to generic circles and rectangles. Use align, distribute, spacing, repair-overflow, resize-frame, or Page/Frame ruler guides when the inspected document requires them; keep writes inside the active Run target. Existing content remains editable after review or verification, and a successful revision invalidates stale capture evidence instead of requiring a new Plan.",
       continuationInputSchema: DESIGN_CONTINUATION_EDIT_TOOL_INPUT_SCHEMA,
     },
     description:
@@ -391,6 +349,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     name: DESIGN_SYSTEM_TOOL_NAME,
     modelDisclosure: {
       bootstrap: "deferred" as const,
+      continuation: "available" as const,
       role: "material-write" as const,
       surfaces: ["general" as const, "new-design" as const],
       continuationDescription:

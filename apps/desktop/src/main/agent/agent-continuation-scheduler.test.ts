@@ -16,6 +16,7 @@ function request(
     scope: { kind: "page", pageId: "page_1", selectedNodeIds: [] },
     mutationTarget: { kind: "page", pageId: "page_1" },
     modelSelection: { providerId: "provider", modelId: "design" },
+    deliveryScopeReview: "required",
     ...(continuation ? { continuation } : {}),
   };
 }
@@ -58,7 +59,7 @@ function recordDelivery(
     type: "tool.completed",
     runId,
     toolCallId: `inspect_${runId}`,
-    result: { unfinishedDelivery: delivery },
+    result: { delivery },
   });
 }
 
@@ -130,7 +131,20 @@ describe("AgentContinuationScheduler", () => {
     });
   });
 
-  it("ends failed Runs so the next explicit Conversation message starts cleanly", () => {
+  it("uses the admitted scope policy when creating a continuation request", () => {
+    const scheduler = new AgentContinuationScheduler(() => 2500);
+    const initial = request();
+    scheduler.registerRun(initial);
+    scheduler.setDeliveryScopeReview(initial.runId, "required");
+    recordDelivery(scheduler, initial.runId);
+
+    expect(scheduler.record(completed(initial.runId, "budget"))).toMatchObject({
+      kind: "schedule",
+      source: { deliveryScopeReview: "required" },
+    });
+  });
+
+  it("waits for run.completed before ending a failed Run", () => {
     const retryable = new AgentContinuationScheduler(() => 3000);
     const retryableRequest = request();
     retryable.registerRun(retryableRequest);
@@ -146,7 +160,7 @@ describe("AgentContinuationScheduler", () => {
         retryable: true,
       },
     });
-    expect(retryable.activeRunIds()).toEqual([]);
+    expect(retryable.activeRunIds()).toEqual([retryableRequest.runId]);
     expect(
       retryable.record(completed(retryableRequest.runId, "error")),
     ).toBeNull();
@@ -169,6 +183,31 @@ describe("AgentContinuationScheduler", () => {
     });
     expect(fatal.record(completed(fatalRequest.runId, "error"))).toBeNull();
     expect(fatal.activeRunIds()).toEqual([]);
+  });
+
+  it("never auto-continues a direct edit from recovery context or a local Plan", () => {
+    const scheduler = new AgentContinuationScheduler(() => 3500);
+    const direct = {
+      ...request(),
+      runId: "run_direct",
+      deliveryScopeReview: "direct" as const,
+    };
+    scheduler.registerRun(direct);
+    scheduler.record({
+      type: "tool.completed",
+      runId: direct.runId,
+      toolCallId: "inspect_old_delivery",
+      result: { unfinishedDelivery: incomplete },
+    });
+    scheduler.record({
+      type: "tool.completed",
+      runId: direct.runId,
+      toolCallId: "edit_delivery",
+      result: { delivery: incomplete },
+    });
+
+    expect(scheduler.record(completed(direct.runId, "complete"))).toBeNull();
+    expect(scheduler.activeRunIds()).toEqual([]);
   });
 
   it("does not auto-continue an incomplete delivery after the Renderer circuit opens", () => {
@@ -264,7 +303,6 @@ describe("AgentContinuationScheduler", () => {
               y: 0,
               width: 1440,
               height: 900,
-              allocatedRevision: 4,
             },
           },
         },

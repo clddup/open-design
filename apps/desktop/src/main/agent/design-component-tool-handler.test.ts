@@ -37,7 +37,6 @@ function setup(call: ToolCallRequest) {
   const coordinator = {
     assertComponentToolAccess: vi.fn(),
     assertDocumentInspected: vi.fn(),
-    assertVisualReviewBeforeWrite: vi.fn(),
     resolveMaterialTargetIdsIfPlanned: vi.fn(() => targetIds),
     recordMaterialDesignWriteCompleted: vi.fn(),
   };
@@ -94,9 +93,6 @@ describe("Design Component Main tool handler", () => {
       context,
     );
     expect(
-      state.coordinator.assertVisualReviewBeforeWrite,
-    ).not.toHaveBeenCalled();
-    expect(
       state.coordinator.resolveMaterialTargetIdsIfPlanned,
     ).not.toHaveBeenCalled();
     expect(state.withDelivery).not.toHaveBeenCalled();
@@ -127,9 +123,6 @@ describe("Design Component Main tool handler", () => {
         call.input as DesignComponentToolInput,
       ),
     ).resolves.toBe(state.delivered);
-    expect(
-      state.coordinator.assertVisualReviewBeforeWrite,
-    ).toHaveBeenCalledWith(context);
     expect(
       state.coordinator.resolveMaterialTargetIdsIfPlanned,
     ).toHaveBeenCalledWith(context, [], "screen_frame");
@@ -164,9 +157,6 @@ describe("Design Component Main tool handler", () => {
       call.input as DesignComponentToolInput,
     );
 
-    expect(
-      state.coordinator.assertVisualReviewBeforeWrite,
-    ).not.toHaveBeenCalled();
     expect(
       state.coordinator.recordMaterialDesignWriteCompleted,
     ).not.toHaveBeenCalled();

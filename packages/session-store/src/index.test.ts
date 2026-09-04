@@ -9,6 +9,7 @@ import {
   projectTimeline,
   type JournalEvent,
   type SessionStore,
+  type SessionStoreReadDiagnostic,
 } from "./index.js";
 
 function event(
@@ -128,7 +129,7 @@ async function expectRecoveredTimeline(store: SessionStore): Promise<void> {
     blocks: [{ type: "text", text: "I will align it." }],
   });
   expect(timeline.find((item) => item.type === "tool")).toMatchObject({
-    itemId: "tool:tool_1",
+    itemId: "tool:run_1:tool_1",
     status: "completed",
     progress: 0.5,
     progressMessage: "Applying transaction",
@@ -350,7 +351,10 @@ describe("session journal recovery", () => {
   it("reconstructs stable timeline identities from JSONL and keeps raw events", async () => {
     const directory = await mkdtemp(join(tmpdir(), "opendesign-session-"));
     const path = join(directory, "events.jsonl");
-    const store = new JsonlSessionStore(path);
+    const diagnostics: SessionStoreReadDiagnostic[] = [];
+    const store = new JsonlSessionStore(path, {
+      reportReadDiagnostic: (diagnostic) => diagnostics.push(diagnostic),
+    });
 
     await expectRecoveredTimeline(store);
 
@@ -370,6 +374,42 @@ describe("session journal recovery", () => {
       "utf8",
     );
     await expect(store.read("session_1")).resolves.toEqual(events);
+    expect(diagnostics).toMatchObject([
+      { code: "session_event_json_invalid", lineNumber: 10 },
+      { code: "session_event_contract_invalid", lineNumber: 11 },
+      {
+        code: "session_event_contract_invalid",
+        lineNumber: 12,
+        eventId: "malformed_payload",
+        sequence: 10,
+      },
+    ]);
+
+    await store.read("session_1");
+    expect(diagnostics).toHaveLength(3);
+  });
+
+  it("reports a truncated JSONL tail while preserving earlier events", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "opendesign-session-"));
+    const path = join(directory, "events.jsonl");
+    const diagnostics: SessionStoreReadDiagnostic[] = [];
+    await appendFile(
+      path,
+      `${JSON.stringify(events[0])}\n{"eventId":"partial`,
+      "utf8",
+    );
+
+    const store = new JsonlSessionStore(path, {
+      reportReadDiagnostic: (diagnostic) => diagnostics.push(diagnostic),
+    });
+    await expect(store.read("session_1")).resolves.toEqual([events[0]]);
+    expect(diagnostics).toEqual([
+      expect.objectContaining({
+        code: "session_event_truncated_tail",
+        storage: "jsonl",
+        lineNumber: 2,
+      }),
+    ]);
   });
 
   it("keeps a persisted failed tool while removing only invalid legacy details", async () => {
@@ -417,7 +457,7 @@ describe("session journal recovery", () => {
     const path = join(directory, "events.jsonl");
     const requested = event(1, "tool.requested", {
       toolCallId: "tool_stale_workflow_failure",
-      toolName: "opendesign_design_checkpoint",
+      toolName: "opendesign_capture_canvas",
       input: {},
       risk: "design_write",
     });
@@ -547,7 +587,7 @@ describe("session journal recovery", () => {
 
     await expect(store.readTimeline("session_1")).resolves.toEqual([
       expect.objectContaining({
-        itemId: "tool:tool_failed_1",
+        itemId: "tool:run_1:tool_failed_1",
         type: "tool",
         status: "failed",
         error: {
@@ -562,6 +602,58 @@ describe("session journal recovery", () => {
         decision: "deny",
       }),
     ]);
+  });
+
+  it("keeps reused provider tool-call IDs isolated by Run", () => {
+    const firstRun = event(1, "tool.requested", {
+      toolCallId: "call_1",
+      toolName: "design.inspect",
+      input: {},
+      risk: "read",
+    });
+    const firstCompleted = event(2, "tool.completed", {
+      toolCallId: "call_1",
+      result: { run: 1 },
+    });
+    const secondRun = {
+      ...event(3, "tool.requested", {
+        toolCallId: "call_1",
+        toolName: "design.inspect",
+        input: {},
+        risk: "read",
+      }),
+      runId: "run_2",
+    };
+    const secondFailed = {
+      ...event(4, "tool.failed", {
+        toolCallId: "call_1",
+        code: "second_failed",
+        message: "Run 2 failed",
+      }),
+      runId: "run_2",
+    };
+
+    const tools = projectTimeline("session_1", [
+      firstRun,
+      firstCompleted,
+      secondRun,
+      secondFailed,
+    ]).filter((item) => item.type === "tool");
+
+    expect(tools[0]).toMatchObject({
+      itemId: "tool:run_1:call_1",
+      runId: "run_1",
+      status: "completed",
+      result: { run: 1 },
+    });
+    expect(tools[1]).toMatchObject({
+      itemId: "tool:run_2:call_1",
+      runId: "run_2",
+      status: "failed",
+    });
+    expect(tools[1]?.type).toBe("tool");
+    if (tools[1]?.type !== "tool") return;
+    expect(tools[1].error).toMatchObject({ code: "second_failed" });
   });
 
   it("reconstructs the same timeline from SQLite and creates parent directories", async () => {

@@ -13,7 +13,7 @@
 1. Main 在 Delivery Ledger 中持有唯一 `planExecution`：稳定 `planRevision`、target 顺序、稳定 `stepId`、step kind、状态和开始/完成 revision。Renderer 只投影该 ledger。
 2. 全部 target 形成一条串行链，状态只允许 `pending → in_progress → completed`。completed 必须为连续前缀；只要仍有 pending，就必须恰有一个 in-progress；任何时刻最多一个 in-progress。
 3. Plan 注册时 Main 激活首个实现步骤，并为每个 target 自动追加最后一个 host-owned `review-refine` 步骤。模型声明的实现步骤不得伪装为 review 门禁。
-4. Apply 只能从当前 active step 开始按稳定 ID/label 顺序提交。成功 material transaction 可完成所覆盖的连续步骤并激活直接后继；失败、请求事件、进度文本和无 revision 操作不能推进状态。单独的 `opendesign_update_plan` 只能在已有后续 material revision 证据时完成当前实现步骤。
+4. Apply 只能从当前 active step 开始按稳定 ID/label 顺序提交。成功 material transaction 根据 Renderer 返回的 committed step 与 revision 证据完成所覆盖的连续步骤，并激活直接后继；失败、请求事件、进度文本和无 revision 操作不能推进状态。不存在由模型单独声明步骤完成的更新工具。
 5. Capture 在实现步骤未完成时返回当前真实步骤，不进入 review。`review-refine` 只能由可信 capture/review/refinement/verification 链完成；模型不能直接完成它。
 6. Plan amendment 显式增加 `planRevision`，已经开始的步骤必须保留 ID、顺序、label 与 kind。verified target 的 execution 必须全部 completed。
 7. Completion Guard 在任何步骤 pending/in-progress 时拒绝 Run completion。Timeline 不再读取 tool name、label、message 或 `rNNN` 文案推断状态。

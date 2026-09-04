@@ -30,7 +30,6 @@ import {
   modelBridgeRequestValidationError,
   type ModelBridgeResponse,
 } from "@/shared/model-bridge";
-import { designAgentToolInputIssues } from "@/shared/design-agent-tools";
 import {
   isSessionStoreBridgeRequest,
   isSessionStoreBridgeResponse,
@@ -261,10 +260,10 @@ export class AgentHost {
       } satisfies SessionStoreBridgeResponse);
       return;
     }
-    const designToolRequest = DesignToolBridgeRequestContract.parse(
-      message,
-      designAgentToolInputIssues,
-    );
+    // This boundary validates only the untrusted IPC envelope and trusted
+    // context shape. MainDesignToolRuntime owns the single authoritative tool
+    // input parse so host binding and policy always consume the same value.
+    const designToolRequest = DesignToolBridgeRequestContract.parse(message);
     if (designToolRequest.ok) {
       void this.handleDesignToolRequest(
         designToolRequest.value.requestId,
@@ -395,7 +394,7 @@ export class AgentHost {
     if (event.type === "approval.resolved") {
       this.#pendingApprovals.delete(event.approvalId);
     }
-    if (event.type === "run.completed" || event.type === "agent.error") {
+    if (event.type === "run.completed") {
       const runId = event.runId;
       if (runId) {
         for (const [key, tool] of this.#toolRequests) {

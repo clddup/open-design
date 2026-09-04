@@ -15,9 +15,10 @@ import {
 import {
   DESIGN_AGENT_TOOL_SPECS,
   DESIGN_CAPTURE_TOOL_NAME,
-  DESIGN_REVIEW_TOOL_NAME,
   READ_IMAGE_TOOL_NAME,
 } from "@/shared/design-agent-tools.js";
+import { contractValidationError } from "./contract-validation-error.js";
+import type { ValidationResult } from "@/shared/contract-validation.js";
 
 export interface MainDesignToolDispatcher {
   (
@@ -30,6 +31,10 @@ export interface MainDesignToolDispatcher {
 
 export interface MainDesignToolRuntimeOptions {
   dispatch: MainDesignToolDispatcher;
+  parseInput(
+    call: ToolCallRequest,
+    context: TrustedToolContext,
+  ): ValidationResult<unknown>;
   isPreauthorized(call: ToolCallRequest, context: TrustedToolContext): boolean;
   recordAudit(event: ToolAuditEvent): void | Promise<void>;
 }
@@ -83,7 +88,9 @@ export class MainDesignToolRuntime {
       this.#runtime.register({
         name: spec.name,
         description: spec.description,
-        validateInput: (input) => spec.validateInputIssues(input).length === 0,
+        // execute() performs the authoritative structured validation once so
+        // failures retain their stable code/path details before policy runs.
+        validateInput: () => true,
         validateOutput: isTrustedToolResult,
         capability,
         resolveCapability: (_input, request) => ({
@@ -104,8 +111,13 @@ export class MainDesignToolRuntime {
     signal: AbortSignal,
     reportProgress: (message: string, progress: number) => void,
   ): Promise<TrustedToolResult> {
+    const parsed = this.options.parseInput(call, context);
+    if (!parsed.ok) {
+      throw contractValidationError(call.toolName, parsed.issues);
+    }
+    const canonicalCall = { ...call, input: parsed.value };
     const key = invocationKey(context.runId, call.toolCallId);
-    const invocation = { call, context };
+    const invocation = { call: canonicalCall, context };
     if (this.#invocations.has(key)) {
       throw runtimeFailure(
         new ToolRuntimeError(
@@ -121,7 +133,7 @@ export class MainDesignToolRuntime {
           runId: context.runId,
           toolCallId: call.toolCallId,
           toolName: call.toolName,
-          input: call.input,
+          input: canonicalCall.input,
         },
         { signal, reportProgress },
       )) as TrustedToolResult;
@@ -180,7 +192,6 @@ function declaredCapability(
   const sideEffect =
     spec.risk !== "read" ||
     spec.name === DESIGN_CAPTURE_TOOL_NAME ||
-    spec.name === DESIGN_REVIEW_TOOL_NAME ||
     spec.name === READ_IMAGE_TOOL_NAME;
   return {
     capability:
@@ -200,13 +211,17 @@ function declaredCapability(
 }
 
 function requireToolSpec(toolName: string) {
-  const spec = DESIGN_AGENT_TOOL_SPECS.find(
-    (candidate) => candidate.name === toolName,
-  );
+  const spec = findToolSpec(toolName);
   if (!spec) {
     throw new ToolRuntimeError("TOOL_NOT_FOUND", `Unknown tool: ${toolName}`);
   }
   return spec;
+}
+
+function findToolSpec(toolName: string) {
+  return DESIGN_AGENT_TOOL_SPECS.find(
+    (candidate) => candidate.name === toolName,
+  );
 }
 
 function invocationKey(runId: string, toolCallId: string): string {

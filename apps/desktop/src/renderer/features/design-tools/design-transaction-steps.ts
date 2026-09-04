@@ -6,8 +6,6 @@ import type {
 } from "@opendesign/design-contracts";
 import type { EditorRuntime } from "@opendesign/editor-runtime";
 import {
-  DESIGN_APPLY_TOOL_NAME,
-  DesignApplyContract,
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
   type InternalDesignApplyToolInput,
 } from "@/shared/design-agent-tools";
@@ -35,6 +33,7 @@ type SemanticTransactionOptions = {
 
 export async function executeSemanticDesignTransaction(options: {
   request: RendererDesignToolRequest;
+  applyInput?: InternalDesignApplyToolInput;
   runtime: EditorRuntime;
   transaction: DesignTransaction;
   preview: DesignTransactionSuccess;
@@ -44,9 +43,15 @@ export async function executeSemanticDesignTransaction(options: {
     commands: readonly DesignOperation[],
   ) => Error;
 }): Promise<RendererDesignToolResponse> {
-  const { request, runtime, transaction, preview, execution, createFailure } =
-    options;
-  const applyInput = designApplyInput(request);
+  const {
+    request,
+    applyInput,
+    runtime,
+    transaction,
+    preview,
+    execution,
+    createFailure,
+  } = options;
   if (
     request.call.toolName === INTERNAL_DESIGN_APPLY_TOOL_NAME &&
     applyInput?.executionMode === "atomic"
@@ -86,7 +91,7 @@ export async function executeSemanticDesignTransaction(options: {
 
   const remainingCommands = [...transaction.commands];
   const remainingSteps = semanticApplySteps(
-    request,
+    applyInput,
     transaction.commands,
     transaction.label ?? "Apply design transaction",
   );
@@ -240,20 +245,17 @@ type SemanticApplyStep = {
 };
 
 function semanticApplySteps(
-  request: RendererDesignToolRequest,
+  applyInput: InternalDesignApplyToolInput | undefined,
   commands: readonly DesignOperation[],
   fallbackLabel: string,
 ): SemanticApplyStep[] {
-  const applyInput = designApplyInput(request);
-  if (applyInput) {
-    const steps = applyInput.steps;
-    if (steps) {
-      return steps.map((step) => ({
-        commandCount: step.commandIds.length,
-        label: step.label,
-        stepId: step.stepId,
-      }));
-    }
+  const steps = applyInput?.steps;
+  if (steps) {
+    return steps.map((step) => ({
+      commandCount: step.commandIds.length,
+      label: step.label,
+      stepId: step.stepId,
+    }));
   }
   return [
     {
@@ -262,24 +264,6 @@ function semanticApplySteps(
       stepId: "transaction",
     },
   ];
-}
-
-function designApplyInput(
-  request: RendererDesignToolRequest,
-): InternalDesignApplyToolInput | undefined {
-  if (request.call.toolName === DESIGN_APPLY_TOOL_NAME) {
-    const parsed = DesignApplyContract.parse(request.call.input, {
-      canonical: true,
-    });
-    return parsed.ok ? parsed.value : undefined;
-  }
-  if (request.call.toolName === INTERNAL_DESIGN_APPLY_TOOL_NAME) {
-    const parsed = DesignApplyContract.parse(request.call.input, {
-      internal: true,
-    });
-    return parsed.ok ? parsed.value : undefined;
-  }
-  return undefined;
 }
 
 function semanticStageCandidateSizes(

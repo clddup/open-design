@@ -6,12 +6,9 @@ import type {
 import {
   DESIGN_FONT_TOOL_NAME,
   DESIGN_TEXT_RANGE_TOOL_NAME,
-  DesignFontContract,
-  DesignTextRangeContract,
   type DesignFontToolInput,
   type DesignTextRangeToolInput,
 } from "@/shared/design-agent-tools.js";
-import { formatValidationFailure } from "@/shared/contract-validation.js";
 import type { GlobalTaskCoordinator } from "./global-task-coordinator.js";
 
 export async function handleDesignTypographyTool(input: {
@@ -23,24 +20,15 @@ export async function handleDesignTypographyTool(input: {
 }): Promise<TrustedToolResult | null> {
   let value: DesignFontToolInput | DesignTextRangeToolInput;
   if (input.call.toolName === DESIGN_FONT_TOOL_NAME) {
-    const parsed = DesignFontContract.parse(input.call.input);
-    if (!parsed.ok) {
-      throw new TypeError(formatValidationFailure("Font", parsed.issues));
-    }
-    value = parsed.value;
+    value = input.call.input as DesignFontToolInput;
   } else if (input.call.toolName === DESIGN_TEXT_RANGE_TOOL_NAME) {
-    const parsed = DesignTextRangeContract.parse(input.call.input);
-    if (!parsed.ok) {
-      throw new TypeError(formatValidationFailure("Text Range", parsed.issues));
-    }
-    value = parsed.value;
+    value = input.call.input as DesignTextRangeToolInput;
   } else {
     return null;
   }
 
   const { context, coordinator } = input;
   coordinator.assertDocumentInspected(context);
-  coordinator.assertVisualReviewBeforeWrite(context);
   const targetNodeIds =
     "nodeIds" in value ? [...value.nodeIds] : [value.nodeId];
   const targetIds = coordinator.resolveMaterialTargetIdsIfPlanned(

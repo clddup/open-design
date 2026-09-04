@@ -44,7 +44,6 @@ describe("Edit Design Main boundary", () => {
     };
     const execute = vi.fn().mockResolvedValue(result);
     const coordinator = {
-      assertVisualReviewBeforeWrite: vi.fn(),
       assertDesignPlanForApply: vi.fn(() => authorization),
       assertDesignApplyResult: vi.fn(),
       recordDesignApplyCompleted: vi.fn(),
@@ -77,10 +76,10 @@ describe("Edit Design Main boundary", () => {
     );
     expect(coordinator.recordDesignApplyCompleted).toHaveBeenCalledWith(
       context.runId,
-      canonicalInput,
       authorization,
       5,
       result.content,
+      [],
     );
   });
 
@@ -121,7 +120,6 @@ describe("Edit Design Main boundary", () => {
       },
     } satisfies TrustedToolResult);
     const coordinator = {
-      assertVisualReviewBeforeWrite: vi.fn(),
       assertDesignPlanForApply: vi.fn(() => authorization),
       assertDesignApplyResult: vi.fn(),
       recordDesignApplyCompleted: vi.fn(),
@@ -164,8 +162,7 @@ describe("Edit Design Main boundary", () => {
     };
     const execute = vi.fn().mockResolvedValue(result);
     const coordinator = {
-      assertVisualReviewBeforeWrite: vi.fn(),
-      resolveMaterialTargetIds: vi.fn(() => ["target_main"]),
+      resolveMaterialTargetIdsIfPlanned: vi.fn(() => ["target_main"]),
       recordMaterialDesignWriteCompleted: vi.fn(),
       assertDesignApplyResult: vi.fn(),
       recordDesignApplyCompleted: vi.fn(),
@@ -211,7 +208,9 @@ describe("Edit Design Main boundary", () => {
       }),
     ).resolves.toBe(result);
     expect(execute).toHaveBeenCalledOnce();
-    expect(coordinator.resolveMaterialTargetIds).toHaveBeenCalledTimes(2);
+    expect(coordinator.resolveMaterialTargetIdsIfPlanned).toHaveBeenCalledTimes(
+      2,
+    );
     expect(coordinator.recordMaterialDesignWriteCompleted).toHaveBeenCalledWith(
       context.runId,
       ["target_main"],
@@ -231,8 +230,7 @@ describe("Edit Design Main boundary", () => {
     };
     const execute = vi.fn().mockResolvedValue(result);
     const coordinator = {
-      assertVisualReviewBeforeWrite: vi.fn(),
-      resolveMaterialTargetIds: vi.fn(() => []),
+      resolveMaterialTargetIdsIfPlanned: vi.fn(() => []),
       recordMaterialDesignWriteCompleted: vi.fn(),
       assertDesignApplyResult: vi.fn(),
       recordDesignApplyCompleted: vi.fn(),
@@ -265,7 +263,7 @@ describe("Edit Design Main boundary", () => {
         withDelivery: (value) => value,
       }),
     ).resolves.toBe(result);
-    expect(coordinator.resolveMaterialTargetIds).toHaveBeenCalledWith(
+    expect(coordinator.resolveMaterialTargetIdsIfPlanned).toHaveBeenCalledWith(
       context,
       [],
     );
@@ -277,47 +275,23 @@ describe("Edit Design Main boundary", () => {
     );
   });
 
-  it("rejects an invalid nested edit before execution", async () => {
-    const execute = vi.fn();
-    await expect(
-      handleEditDesignTool({
-        call: {
-          toolCallId: "invalid_edit",
-          toolName: DESIGN_EDIT_TOOL_NAME,
-          input: {
-            label: "Invalid",
-            edits: [
-              {
-                kind: "arrange",
-                input: {
-                  action: "resize-frame",
-                  label: "Resize",
-                  pageId: "page_main",
-                  frameId: "frame_main",
-                  width: 0,
-                  height: 720,
-                },
-              },
-            ],
-          },
-        },
-        context,
-        coordinator: {} as never,
-        execute,
-        withDelivery: (value) => value,
-      }),
-    ).rejects.toThrow("design_edit.schema_invalid at /edits/0/input/width");
-    expect(execute).not.toHaveBeenCalled();
-  });
-
-  it("rejects one atomic edit that resolves to multiple delivery artboards", async () => {
-    const execute = vi.fn();
+  it("allows one atomic edit across existing delivery artboards", async () => {
+    const result: TrustedToolResult = {
+      content: { ok: true },
+      designRevision: {
+        previousRevision: 4,
+        revision: 5,
+        transactionId: "transaction_cross_artboard_edit",
+      },
+    };
+    const execute = vi.fn().mockResolvedValue(result);
     const coordinator = {
-      assertVisualReviewBeforeWrite: vi.fn(),
-      resolveMaterialTargetIds: vi
+      resolveMaterialTargetIdsIfPlanned: vi
         .fn()
         .mockReturnValueOnce(["target_a"])
         .mockReturnValueOnce(["target_b"]),
+      recordMaterialDesignWriteCompleted: vi.fn(),
+      assertDesignApplyResult: vi.fn(),
     };
 
     await expect(
@@ -356,7 +330,13 @@ describe("Edit Design Main boundary", () => {
         execute,
         withDelivery: (value) => value,
       }),
-    ).rejects.toThrow("cross_artboard_edit_invalid");
-    expect(execute).not.toHaveBeenCalled();
+    ).resolves.toBe(result);
+    expect(execute).toHaveBeenCalledOnce();
+    expect(coordinator.recordMaterialDesignWriteCompleted).toHaveBeenCalledWith(
+      context.runId,
+      ["target_a", "target_b"],
+      5,
+      ["a_group"],
+    );
   });
 });

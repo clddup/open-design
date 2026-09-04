@@ -121,7 +121,6 @@ function target(targetId: string, stage: number) {
       y: 0,
       width: 1440,
       height: 900,
-      allocatedRevision: 1,
     },
   };
 }

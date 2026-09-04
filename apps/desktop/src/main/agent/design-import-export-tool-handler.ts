@@ -6,12 +6,9 @@ import type {
 import {
   EXPORT_RASTER_TOOL_NAME,
   EXPORT_SVG_TOOL_NAME,
-  ExportRasterContract,
-  ExportSvgContract,
   IMPORT_SVG_TOOL_NAME,
-  ImportSvgContract,
+  type ImportSvgToolInput,
 } from "@/shared/design-agent-tools.js";
-import { formatValidationFailure } from "@/shared/contract-validation.js";
 import type { AgentRasterExportHost } from "./agent-raster-export-host.js";
 import type { AgentSvgExportHost } from "./agent-svg-export-host.js";
 import type { AgentSvgImportHost } from "./agent-svg-import-host.js";
@@ -33,32 +30,22 @@ export async function handleDesignImportExportTool(
   input: DesignImportExportToolHandlerInput,
 ): Promise<TrustedToolResult | null> {
   if (input.call.toolName === EXPORT_SVG_TOOL_NAME) {
-    const parsed = ExportSvgContract.parse(input.call.input);
-    if (!parsed.ok) {
-      throw new TypeError(formatValidationFailure("SVG export", parsed.issues));
-    }
     input.coordinator.assertDocumentInspected(input.context);
     return await input
       .getSvgExportHost()
       .execute(
-        { ...input.call, input: parsed.value },
+        { ...input.call, input: input.call.input },
         input.executionContext,
         input.signal,
       );
   }
 
   if (input.call.toolName === EXPORT_RASTER_TOOL_NAME) {
-    const parsed = ExportRasterContract.parse(input.call.input);
-    if (!parsed.ok) {
-      throw new TypeError(
-        formatValidationFailure("Raster export", parsed.issues),
-      );
-    }
     input.coordinator.assertDocumentInspected(input.context);
     return await input
       .getRasterExportHost()
       .execute(
-        { ...input.call, input: parsed.value },
+        { ...input.call, input: input.call.input },
         input.executionContext,
         input.signal,
       );
@@ -66,21 +53,17 @@ export async function handleDesignImportExportTool(
 
   if (input.call.toolName !== IMPORT_SVG_TOOL_NAME) return null;
 
-  const parsed = ImportSvgContract.parse(input.call.input);
-  if (!parsed.ok) {
-    throw new TypeError(formatValidationFailure("SVG import", parsed.issues));
-  }
+  const importInput = input.call.input as ImportSvgToolInput;
   input.coordinator.assertDocumentInspected(input.context);
-  input.coordinator.assertVisualReviewBeforeWrite(input.context);
-  const targetIds = input.coordinator.resolveMaterialTargetIds(
+  const targetIds = input.coordinator.resolveMaterialTargetIdsIfPlanned(
     input.context,
     [],
-    parsed.value.parentId,
+    importInput.parentId,
   );
   const result = await input
     .getSvgImportHost()
     .execute(
-      { ...input.call, input: parsed.value },
+      { ...input.call, input: importInput },
       input.executionContext,
       input.signal,
     );

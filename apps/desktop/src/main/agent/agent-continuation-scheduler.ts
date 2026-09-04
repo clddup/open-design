@@ -46,6 +46,18 @@ export class AgentContinuationScheduler {
     this.#pendingConversationIdByRunId.delete(request.runId);
   }
 
+  setDeliveryScopeReview(
+    runId: string,
+    deliveryScopeReview: "direct" | "required",
+  ): void {
+    const request = this.#requestsByRunId.get(runId);
+    if (!request) throw new Error(`Agent Run is not registered: ${runId}`);
+    this.#requestsByRunId.set(runId, {
+      ...request,
+      deliveryScopeReview,
+    });
+  }
+
   hasActiveConversationRun(conversationId: string): boolean {
     return (
       [...this.#requestsByRunId.values()].some(
@@ -138,10 +150,6 @@ export class AgentContinuationScheduler {
         this.#remainingScopeByRunId.set(runId, remainingScope);
       }
     }
-    if (event.type === "agent.error") {
-      this.forgetRun(runId);
-      return null;
-    }
     if (event.type !== "run.completed") return null;
 
     const source = this.#requestsByRunId.get(runId);
@@ -155,6 +163,7 @@ export class AgentContinuationScheduler {
     if (
       cancellationRequested ||
       !source ||
+      source.deliveryScopeReview !== "required" ||
       !currentDelivery ||
       (!hasIncompleteTarget(currentDelivery) && !hasRemainingScope)
     )
@@ -210,9 +219,7 @@ function deliveryFromEvent(
     return undefined;
   if (isDesignDeliveryLedger(event.result.delivery))
     return event.result.delivery;
-  return isDesignDeliveryLedger(event.result.unfinishedDelivery)
-    ? event.result.unfinishedDelivery
-    : undefined;
+  return undefined;
 }
 
 function remainingScopeFromEvent(event: AgentEvent): boolean | undefined {

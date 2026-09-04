@@ -1,5 +1,7 @@
 # ADR-0125：权威 compact brief 与无重规划 continuation
 
+> 部分决策已由 ADR-0301 取代：不再物化或校验自动生成的 monochrome/32/24/16 evidence nodes。
+
 - 状态：Accepted
 - 日期：2026-08-21
 - DesignDocument / transaction / revision：不变

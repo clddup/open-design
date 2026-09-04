@@ -54,6 +54,7 @@ export type Contract<CanonicalValue, Context = undefined> = {
     context?: Context,
   ) => ValidationResult<CanonicalValue>;
   issues: (input: unknown, context?: Context) => ValidationIssue[];
+  modelIssues: (input: unknown, context?: Context) => ValidationIssue[];
 };
 
 export type ContractValidationOptions = {
@@ -93,19 +94,14 @@ export function validateContract<
   context: Context,
   options: ContractValidationOptions = {},
 ): ValidationResult<CanonicalValue> {
-  const selectedSchema = definition.selectSchema?.(input) ?? definition.schema;
-  const structureIssues = options.structureValidated
-    ? []
-    : contractSchemaIssues(selectedSchema, input, definition);
-  if (structureIssues.length > 0) {
-    return { ok: false, issues: structureIssues };
-  }
-
-  const modelValue = input as ModelValue;
-  const modelDomainIssues = definition.refineModel?.(modelValue, context) ?? [];
-  if (modelDomainIssues.length > 0) {
-    return { ok: false, issues: [...modelDomainIssues] };
-  }
+  const modelResult = validateContractModel(
+    definition,
+    input,
+    context,
+    options,
+  );
+  if (!modelResult.ok) return modelResult;
+  const modelValue = modelResult.value;
   const value = definition.bind
     ? definition.bind(modelValue, context)
     : (modelValue as unknown as CanonicalValue);
@@ -128,6 +124,30 @@ export function validateContract<
         ok: true,
         value: definition.clone === false ? value : structuredClone(value),
       };
+}
+
+export function validateContractModel<
+  ModelValue,
+  CanonicalValue = ModelValue,
+  Context = undefined,
+>(
+  definition: ContractDefinition<ModelValue, CanonicalValue, Context>,
+  input: unknown,
+  context: Context,
+  options: ContractValidationOptions = {},
+): ValidationResult<ModelValue> {
+  const selectedSchema = definition.selectSchema?.(input) ?? definition.schema;
+  const structureIssues = options.structureValidated
+    ? []
+    : contractSchemaIssues(selectedSchema, input, definition);
+  if (structureIssues.length > 0) {
+    return { ok: false, issues: structureIssues };
+  }
+  const value = input as ModelValue;
+  const domainIssues = definition.refineModel?.(value, context) ?? [];
+  return domainIssues.length > 0
+    ? { ok: false, issues: [...domainIssues] }
+    : { ok: true, value };
 }
 
 export function defineContract<
@@ -153,6 +173,14 @@ export function defineContract<
       ? {}
       : { canonicalSchema: definition.canonical.schema }),
     parse,
+    modelIssues(input, context) {
+      const result = validateContractModel(
+        definition,
+        input,
+        contextFor(context),
+      );
+      return result.ok ? [] : result.issues;
+    },
     issues(input, context) {
       const result = parse(input, context);
       return result.ok ? [] : result.issues;

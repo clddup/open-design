@@ -3,7 +3,6 @@ import { BUILTIN_UI_DESIGN_SKILL_REFS } from "@opendesign/design-skills";
 import { describe, expect, it, vi } from "vitest";
 import {
   DESIGN_PLAN_TOOL_NAME,
-  INTERNAL_DESIGN_APPLY_TOOL_NAME,
   type DesignPlanToolInput,
 } from "@/shared/design-agent-tools.js";
 import { handleDesignPlanTool } from "./design-plan-tool-handler.js";
@@ -11,12 +10,9 @@ import { handleDesignPlanTool } from "./design-plan-tool-handler.js";
 const plan: DesignPlanToolInput = {
   version: 1,
   deliverable: "ui",
-  objective: "Design Home and Profile",
+  objective: "Design Home",
   outputMode: "editable-composition",
-  targets: [
-    target("target_home", "Home", "frame_home", 120),
-    target("target_profile", "Profile", "frame_profile", 558),
-  ],
+  targets: [target("target_home", "Home", "frame_home", 120)],
   visualSystem: {
     avoidances: ["No generic card stack", "No placeholder-only content"],
     formLanguage: "Precise mobile controls",
@@ -31,7 +27,7 @@ const plan: DesignPlanToolInput = {
     candidates: [],
   },
   briefFidelity: {
-    requiredContent: ["Home and Profile screens"],
+    requiredContent: ["Home screen"],
     preservedSemantics: [],
     prohibitedAdditions: ["No unrequested product capability"],
     assumptions: ["Use an iOS mobile viewport"],
@@ -47,7 +43,7 @@ const plan: DesignPlanToolInput = {
     },
     visualThesis:
       "A directional editorial field expresses momentum instead of a generic card stack.",
-    signatureMotif:
+    signatureDecision:
       "One cropped signal rail connects identity, next action, and progress.",
     typographyLanguage:
       "Editorial display type sets pace while compact neutral text preserves clarity.",
@@ -76,27 +72,27 @@ const context = {
 };
 
 describe("handleDesignPlanTool", () => {
-  it("allocates every create target through one atomic renderer transaction", async () => {
+  it("records the executable Plan without writing an empty artboard", () => {
     const delivery = {
-      version: 2 as const,
-      targets: plan.targets.map((candidate) => ({
-        targetId: candidate.targetId,
-        label: candidate.label,
-        pageId: candidate.pageId,
-        rootNodeId: candidate.artboard.frameId,
-        status: "allocated" as const,
-        allocatedRevision: 1,
-      })),
+      version: 4 as const,
+      targets: [
+        {
+          targetId: "target_home",
+          label: "Home",
+          pageId: "page_1",
+          rootNodeId: "frame_home",
+          reservedNodeIds: ["frame_home"],
+          status: "pending" as const,
+        },
+      ],
       activeTargetId: "target_home",
     };
     const coordinator = {
-      authoritativeDesignPrompt: vi
-        .fn()
-        .mockReturnValue("Design Home and Profile"),
+      authoritativeDesignPrompt: vi.fn().mockReturnValue("Design Home"),
       prepareDesignPlan: vi.fn().mockReturnValue({
         status: "accepted",
         planRevision: 1,
-        changedTargetIds: ["target_home", "target_profile"],
+        changedTargetIds: ["target_home"],
         plan,
         state: {},
       }),
@@ -104,40 +100,8 @@ describe("handleDesignPlanTool", () => {
         (_context: unknown, preparation: Record<string, unknown>) =>
           preparation,
       ),
-      createDesignPlanAllocation: vi.fn().mockReturnValue({
-        targetIds: ["target_home", "target_profile"],
-        input: {
-          label: "Allocate 2 planned artboards",
-          commands: plan.targets.map((candidate, index) => ({
-            commandId: `allocate_${candidate.targetId}`,
-            type: "insert_element",
-            pageId: candidate.pageId,
-            parentId: null,
-            index,
-            node: {
-              id: candidate.artboard.frameId,
-              kind: "frame",
-            },
-          })),
-        },
-      }),
-      recordDesignPlanAllocated: vi.fn(),
       getDeliveryLedger: vi.fn().mockReturnValue(delivery),
       getDeliveryStageContext: vi.fn().mockReturnValue(undefined),
-    };
-    let renderedCall: ToolCallRequest | undefined;
-    const rendererHost = {
-      execute: vi.fn((rendererCall: ToolCallRequest) => {
-        renderedCall = rendererCall;
-        return Promise.resolve({
-          content: { ok: true },
-          designRevision: {
-            previousRevision: 0,
-            revision: 1,
-            transactionId: "transaction_allocate",
-          },
-        });
-      }),
     };
     const call: ToolCallRequest = {
       toolCallId: "tool_plan",
@@ -145,122 +109,14 @@ describe("handleDesignPlanTool", () => {
       input: plan,
     };
 
-    const result = await handleDesignPlanTool(
-      coordinator as never,
-      rendererHost as never,
-      call,
-      context,
-      context,
-      new AbortController().signal,
-    );
+    const result = handleDesignPlanTool(coordinator as never, call, context);
 
-    expect(rendererHost.execute).toHaveBeenCalledOnce();
-    expect(renderedCall).toMatchObject({
-      toolCallId: "tool_plan_allocate",
-      toolName: INTERNAL_DESIGN_APPLY_TOOL_NAME,
-      input: {
-        executionMode: "atomic",
-        commands: [
-          { node: { id: "frame_home" } },
-          { node: { id: "frame_profile" } },
-        ],
-      },
+    expect(coordinator.commitDesignPlan).toHaveBeenCalledOnce();
+    expect(result.content).toMatchObject({
+      delivery,
+      nextAction: "write-current-target",
     });
-    expect(coordinator.recordDesignPlanAllocated).toHaveBeenCalledWith(
-      "run_plan",
-      ["target_home", "target_profile"],
-      1,
-    );
-    expect(result).toMatchObject({
-      content: {
-        allocation: {
-          targetIds: ["target_home", "target_profile"],
-          revision: 1,
-          transactionId: "transaction_allocate",
-        },
-        delivery,
-      },
-      designRevision: {
-        previousRevision: 0,
-        revision: 1,
-        transactionId: "transaction_allocate",
-      },
-    });
-  });
-
-  it("does not advance the delivery ledger when the allocation transaction fails", async () => {
-    const coordinator = {
-      authoritativeDesignPrompt: vi
-        .fn()
-        .mockReturnValue("Design Home and Profile"),
-      prepareDesignPlan: vi.fn().mockReturnValue({
-        status: "accepted",
-        planRevision: 1,
-        changedTargetIds: ["target_home", "target_profile"],
-        plan,
-        state: {},
-      }),
-      commitDesignPlan: vi.fn(),
-      createDesignPlanAllocation: vi.fn().mockReturnValue({
-        targetIds: ["target_home", "target_profile"],
-        input: {
-          label: "Allocate 2 planned artboards",
-          commands: [{ commandId: "allocate_home" }],
-        },
-      }),
-      recordDesignPlanAllocated: vi.fn(),
-      getDeliveryLedger: vi.fn(),
-      getDeliveryStageContext: vi.fn().mockReturnValue(undefined),
-    };
-    const rendererHost = {
-      execute: vi.fn().mockRejectedValue(new Error("revision conflict")),
-    };
-
-    await expect(
-      handleDesignPlanTool(
-        coordinator as never,
-        rendererHost as never,
-        {
-          toolCallId: "tool_plan_failed",
-          toolName: DESIGN_PLAN_TOOL_NAME,
-          input: plan,
-        },
-        context,
-        context,
-        new AbortController().signal,
-      ),
-    ).rejects.toThrow("revision conflict");
-    expect(coordinator.recordDesignPlanAllocated).not.toHaveBeenCalled();
-    expect(coordinator.commitDesignPlan).not.toHaveBeenCalled();
-  });
-
-  it("returns structured Plan field issues before registration", async () => {
-    const invalid = structuredClone(plan) as DesignPlanToolInput & {
-      unexpectedField?: string;
-    };
-    invalid.unexpectedField = "not allowed";
-    const coordinator = {
-      authoritativeDesignPrompt: vi
-        .fn()
-        .mockReturnValue("Design Home and Profile"),
-      prepareDesignPlan: vi.fn(),
-    };
-
-    await expect(
-      handleDesignPlanTool(
-        coordinator as never,
-        { execute: vi.fn() } as never,
-        {
-          toolCallId: "tool_plan_invalid",
-          toolName: DESIGN_PLAN_TOOL_NAME,
-          input: invalid,
-        },
-        context,
-        context,
-        new AbortController().signal,
-      ),
-    ).rejects.toThrow("design_plan.schema_invalid");
-    expect(coordinator.prepareDesignPlan).not.toHaveBeenCalled();
+    expect(result).not.toHaveProperty("designRevision");
   });
 });
 

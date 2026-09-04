@@ -8,6 +8,7 @@ export interface AgentToolCallRecord {
   status: "completed";
   result?: unknown;
   revision?: number;
+  revisionAdvanced?: true;
 }
 
 export interface AgentUnresolvedDesignWriteFailure {
@@ -29,7 +30,7 @@ export interface AgentCompletionContext {
 }
 
 export type AgentCompletionDecision =
-  { allow: true } | { allow: false; message: string };
+  { allow: true } | { allow: false; message: string; terminal?: true };
 
 export interface CompletionGuardPort {
   review(

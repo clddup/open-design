@@ -216,7 +216,7 @@ function formatSkillBundle(
     "The host selects the applicable skill IDs; do not send them. Apply plan skills before writes and critics only to trusted captures.",
     ...(hasPlanning
       ? [
-          "Compare three different visual mechanisms; expose none. Reject palette/effect swaps and primitive-plus-story templates; require two independent authored relationships",
+          "When the brief requests alternatives, compare genuinely different visual mechanisms internally. Reject palette/effect swaps and primitive-plus-story templates; require authored relationships rather than decorative stories.",
         ]
       : []),
   ].join("\n");

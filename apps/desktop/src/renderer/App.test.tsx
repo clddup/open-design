@@ -6481,8 +6481,8 @@ describe("App", () => {
         type: "tool.requested",
         runId: request.runId,
         toolCallId: "tool_apply_poster",
-        toolName: "opendesign_apply_transaction",
-        input: { label: "Build poster", commands: [] },
+        toolName: "opendesign_edit_design",
+        input: { label: "Build poster", edits: [] },
         risk: "design_write",
       });
       emitAgentEvent?.({
@@ -6700,7 +6700,7 @@ describe("App", () => {
       [...document.querySelectorAll("[data-agent-message]")].some((message) =>
         message.textContent?.includes("Create a pricing card"),
       ),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("uses the structured busy code for a rejected follow-up message", async () => {
@@ -6799,10 +6799,8 @@ describe("App", () => {
     ).toBeInTheDocument();
     const retryPrompt = screen.getByLabelText("Continue the task");
     expect(retryPrompt).toBeEnabled();
-    expect(
-      screen.queryByRole("button", { name: "Stop" }),
-    ).not.toBeInTheDocument();
-    expect(document.querySelector("[data-agent-caret]")).toBeNull();
+    expect(screen.getByRole("button", { name: "Stop" })).toBeInTheDocument();
+    expect(document.querySelector("[data-agent-caret]")).not.toBeNull();
 
     act(() => {
       emitAgentEvent?.({
@@ -6817,6 +6815,11 @@ describe("App", () => {
         historyCountBeforeRun + 1,
       ),
     );
+    expect(retryPrompt).toBeEnabled();
+    expect(
+      screen.queryByRole("button", { name: "Stop" }),
+    ).not.toBeInTheDocument();
+    expect(document.querySelector("[data-agent-caret]")).toBeNull();
 
     await user.type(retryPrompt, "Retry with a simpler plan");
     expect(screen.getByRole("button", { name: "Send" })).toBeEnabled();
@@ -6949,15 +6952,23 @@ describe("App", () => {
         requestId: "renderer_tool_1",
         call: {
           toolCallId: "tool_call_1",
-          toolName: "opendesign_apply_transaction",
+          toolName: "opendesign_edit_design",
           input: {
             label: "Rename welcome frame",
-            commands: [
+            edits: [
               {
-                commandId: "rename_welcome",
-                type: "update_properties",
-                nodeId: "frame_welcome",
-                name: "Agent-updated canvas",
+                kind: "node",
+                input: {
+                  label: "Rename welcome frame",
+                  commands: [
+                    {
+                      commandId: "rename_welcome",
+                      type: "update_properties",
+                      nodeId: "frame_welcome",
+                      name: "Agent-updated canvas",
+                    },
+                  ],
+                },
               },
             ],
           },
@@ -7025,15 +7036,23 @@ describe("App", () => {
         requestId: "renderer_tool_autosave_failure",
         call: {
           toolCallId: "tool_call_autosave_failure",
-          toolName: "opendesign_apply_transaction",
+          toolName: "opendesign_edit_design",
           input: {
             label: "Rename without persistence",
-            commands: [
+            edits: [
               {
-                commandId: "rename_without_persistence",
-                type: "update_properties",
-                nodeId: "frame_welcome",
-                name: "Dirty Agent result",
+                kind: "node",
+                input: {
+                  label: "Rename without persistence",
+                  commands: [
+                    {
+                      commandId: "rename_without_persistence",
+                      type: "update_properties",
+                      nodeId: "frame_welcome",
+                      name: "Dirty Agent result",
+                    },
+                  ],
+                },
               },
             ],
           },
@@ -7095,15 +7114,23 @@ describe("App", () => {
         requestId: "renderer_stale_workflow_failure",
         call: {
           toolCallId: "stale_workflow_failure",
-          toolName: "opendesign_apply_transaction",
+          toolName: "opendesign_edit_design",
           input: {
             label: "Stale Agent edit",
-            commands: [
+            edits: [
               {
-                commandId: "stale_rename",
-                type: "update_properties",
-                nodeId: "frame_welcome",
-                name: "Stale Agent update",
+                kind: "node",
+                input: {
+                  label: "Stale Agent edit",
+                  commands: [
+                    {
+                      commandId: "stale_rename",
+                      type: "update_properties",
+                      nodeId: "frame_welcome",
+                      name: "Stale Agent update",
+                    },
+                  ],
+                },
               },
             ],
           },
@@ -7206,15 +7233,23 @@ describe("App", () => {
         requestId: "renderer_background_file_a",
         call: {
           toolCallId: "tool_background_file_a",
-          toolName: "opendesign_apply_transaction",
+          toolName: "opendesign_edit_design",
           input: {
             label: "Refine file A",
-            commands: [
+            edits: [
               {
-                commandId: "rename_file_a_frame",
-                type: "update_properties",
-                nodeId: "frame_welcome",
-                name: "Agent-updated file A",
+                kind: "node",
+                input: {
+                  label: "Refine file A",
+                  commands: [
+                    {
+                      commandId: "rename_file_a_frame",
+                      type: "update_properties",
+                      nodeId: "frame_welcome",
+                      name: "Agent-updated file A",
+                    },
+                  ],
+                },
               },
             ],
           },
@@ -7605,7 +7640,7 @@ function rendererGenerationPlan(): DesignPlanToolInput {
       },
       visualThesis:
         "An asymmetric editorial collision makes the launch message memorable.",
-      signatureMotif:
+      signatureDecision:
         "One organic hero silhouette cuts through a rigid typographic grid.",
       typographyLanguage:
         "Large editorial display type contrasts with controlled supporting copy.",

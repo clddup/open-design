@@ -17,6 +17,7 @@ import type {
 import type { ModelSelection } from "@opendesign/model-gateway";
 import type { DesignLayoutQualityReport } from "@opendesign/editor-runtime";
 import type { SessionStore } from "@opendesign/session-store";
+import { toolResultAttachments } from "@opendesign/agent-runtime";
 import {
   DESIGN_DELIVERY_LEDGER_VERSION,
   WORKSPACE_CONTRACT_VERSION,
@@ -38,10 +39,9 @@ import {
   type DesignApplyToolInput,
   type DesignDeliveryScope,
   type DesignComponentToolInput,
-  type DesignFirstSliceToolInput,
+  type FirstSliceTargetBinding,
   type DesignPlanTarget,
   type DesignPlanToolInput,
-  type DesignPlanUpdateToolInput,
   type DesignReferenceStrategy,
   type DesignVisualReviewToolInput,
   type PlannedDesignRebaseGuard,
@@ -76,18 +76,18 @@ import type {
 import { AgentRunAdmissionError } from "./agent-run-admission-error.js";
 import { projectDesignDeliveryStage } from "./design-delivery-stage-projection.js";
 import {
-  bindFirstSliceToScopeAllocation,
-  createScopeArtboardAllocation,
-  finalizeScopeAllocation,
-  projectScopeAllocationIntoInspection,
-  scopeAllocationLedger,
-  type DeliveryScopeAllocation,
-  type DeliveryScopeArtboardAllocation,
-} from "./delivery-scope-artboard-allocation.js";
+  createScopeArtboardReservation,
+  finalizeScopeReservation,
+  nextArtboardOrigin,
+  scopeReservationLedger,
+  type DeliveryScopeReservation,
+  type DeliveryScopeArtboardReservation,
+} from "./delivery-scope-artboard-reservation.js";
 import {
   assertApplyPlanSteps,
   bindApplyToActivePlanSteps,
 } from "./design-plan-apply-execution.js";
+import { bindDesignOperationStructure } from "./design-apply-structure-binding.js";
 
 type RunStartRequest = Extract<AgentRequest, { type: "run.start" }>;
 
@@ -101,6 +101,29 @@ export type DesignPlanApplyAuthorization = {
 export type DesignPlanAllocation = {
   input: DesignApplyToolInput;
   targetIds: string[];
+};
+
+type RunToolBinding = {
+  conversationId: string;
+  documentId: string;
+  revision: number;
+  scope: SelectionScope;
+  mutationTarget: DesignMutationTarget;
+  prompt: string;
+  modelSelection: ModelSelection;
+  attachments: AgentAttachment[];
+  imageAttachments: AgentImageAttachment[];
+  deliveryScopeReview: "direct" | "required";
+  continuationParentRunId?: string;
+};
+
+type ContinuationTransfer = {
+  parentRunId: string;
+  plan?: DesignWorkflowState;
+  delivery?: DesignDeliveryLedger;
+  deliveryScope?: DesignDeliveryScope;
+  scopeReservations?: Map<string, DeliveryScopeArtboardReservation>;
+  rasterRoles?: Map<string, RasterAssetRole>;
 };
 
 const activeLifecycles = new Set<GlobalTaskLifecycle>([
@@ -133,21 +156,7 @@ function requireFailedCriticReview(
 
 export class GlobalTaskCoordinator {
   readonly #tasksByRunId = new Map<string, GlobalTaskProjection>();
-  readonly #toolBindingsByRunId = new Map<
-    string,
-    {
-      conversationId: string;
-      documentId: string;
-      revision: number;
-      scope: SelectionScope;
-      mutationTarget: DesignMutationTarget;
-      prompt: string;
-      modelSelection: ModelSelection;
-      attachments: AgentAttachment[];
-      imageAttachments: AgentImageAttachment[];
-      deliveryScopeReview: "direct" | "required";
-    }
-  >();
+  readonly #toolBindingsByRunId = new Map<string, RunToolBinding>();
   readonly #designPlansByRunId = new Map<string, DesignWorkflowState>();
   readonly #generatedRasterRolesByRunId = new Map<
     string,
@@ -164,9 +173,13 @@ export class GlobalTaskCoordinator {
     }
   >();
   readonly #deliveryScopesByRunId = new Map<string, DesignDeliveryScope>();
-  readonly #deliveryScopeAllocationsByRunId = new Map<
+  readonly #deliveryScopeReservationsByRunId = new Map<
     string,
-    Map<string, DeliveryScopeArtboardAllocation>
+    Map<string, DeliveryScopeArtboardReservation>
+  >();
+  readonly #continuationTransfersByRunId = new Map<
+    string,
+    ContinuationTransfer
   >();
 
   constructor(
@@ -238,6 +251,9 @@ export class GlobalTaskCoordinator {
     ) {
       throw new Error("Agent run selection is outside the target page");
     }
+    const continuationTransfer = request.continuation
+      ? this.#consumeContinuationTransfer(request)
+      : undefined;
     const timestamp = this.now().toISOString();
     const primaryTarget = {
       targetId: `target_${request.runId}`,
@@ -251,22 +267,15 @@ export class GlobalTaskCoordinator {
         : {}),
       baseRevision: request.revision,
     };
-    const continuedPlan = request.continuation
-      ? this.#designPlansByRunId.get(request.runId)
-      : undefined;
-    const continuedScopeAllocation = request.continuation
-      ? this.#deliveryScopeAllocationsByRunId.get(request.runId)
-      : undefined;
-    const continuedScopeRevision = continuedScopeAllocation?.values().next()
-      .value?.allocatedRevision;
+    const continuedPlan = continuationTransfer?.plan;
+    const continuedScopeReservation = continuationTransfer?.scopeReservations;
     const continuedDelivery = continuedPlan
       ? deliveryLedger(continuedPlan)
-      : continuedScopeAllocation && validRevision(continuedScopeRevision)
-        ? scopeAllocationLedger(
-            [...continuedScopeAllocation.values()],
-            continuedScopeRevision,
-          )
-        : undefined;
+      : continuationTransfer?.delivery
+        ? structuredClone(continuationTransfer.delivery)
+        : continuedScopeReservation
+          ? scopeReservationLedger([...continuedScopeReservation.values()])
+          : undefined;
     const task: GlobalTaskProjection = {
       version: WORKSPACE_CONTRACT_VERSION,
       taskId: `task_${request.runId}`,
@@ -285,6 +294,27 @@ export class GlobalTaskCoordinator {
     });
     this.workspaceStore.saveGlobalTask(task);
     this.#tasksByRunId.set(request.runId, task);
+    if (continuedPlan) {
+      this.#designPlansByRunId.set(request.runId, continuedPlan);
+    }
+    if (continuationTransfer?.deliveryScope) {
+      this.#deliveryScopesByRunId.set(
+        request.runId,
+        continuationTransfer.deliveryScope,
+      );
+    }
+    if (continuedScopeReservation) {
+      this.#deliveryScopeReservationsByRunId.set(
+        request.runId,
+        continuedScopeReservation,
+      );
+    }
+    if (continuationTransfer?.rasterRoles) {
+      this.#generatedRasterRolesByRunId.set(
+        request.runId,
+        continuationTransfer.rasterRoles,
+      );
+    }
     const attachments = await this.#conversationAttachments(request);
     this.#toolBindingsByRunId.set(request.runId, {
       conversationId: request.sessionId,
@@ -293,6 +323,9 @@ export class GlobalTaskCoordinator {
       scope: structuredClone(request.scope),
       mutationTarget: structuredClone(request.mutationTarget),
       deliveryScopeReview: request.deliveryScopeReview ?? "direct",
+      ...(request.continuation
+        ? { continuationParentRunId: request.continuation.parentRunId }
+        : {}),
       prompt: request.prompt,
       modelSelection: structuredClone(request.modelSelection),
       attachments,
@@ -303,10 +336,32 @@ export class GlobalTaskCoordinator {
     return task;
   }
 
+  #consumeContinuationTransfer(request: RunStartRequest): ContinuationTransfer {
+    const transfer = this.#continuationTransfersByRunId.get(request.runId);
+    if (
+      !transfer ||
+      transfer.parentRunId !== request.continuation?.parentRunId
+    ) {
+      throw new Error("Agent continuation workflow state is unavailable");
+    }
+    this.#continuationTransfersByRunId.delete(request.runId);
+    return transfer;
+  }
+
   referenceAttachmentsForRun(runId: string): AgentAttachment[] {
     return structuredClone(
       this.#toolBindingsByRunId.get(runId)?.attachments ?? [],
     );
+  }
+
+  setDeliveryScopeReview(
+    runId: string,
+    deliveryScopeReview: "direct" | "required",
+  ): void {
+    const binding = this.#toolBindingsByRunId.get(runId);
+    if (!binding)
+      throw new Error("Delivery scope policy requires an active Run");
+    binding.deliveryScopeReview = deliveryScopeReview;
   }
 
   async #conversationAttachments(
@@ -316,9 +371,16 @@ export class GlobalTaskCoordinator {
     if (this.sessionStore) {
       const timeline = await this.sessionStore.readTimeline(request.sessionId);
       for (const item of timeline) {
-        if (item.type !== "user.message") continue;
-        for (const attachment of item.attachments ?? []) {
-          byId.set(attachment.attachmentId, structuredClone(attachment));
+        if (item.type === "user.message") {
+          for (const attachment of item.attachments ?? []) {
+            byId.set(attachment.attachmentId, structuredClone(attachment));
+          }
+          continue;
+        }
+        if (item.type === "tool" && item.status === "completed") {
+          for (const attachment of toolResultAttachments(item.result)) {
+            byId.set(attachment.attachmentId, structuredClone(attachment));
+          }
         }
       }
     }
@@ -375,23 +437,67 @@ export class GlobalTaskCoordinator {
     return binding.prompt;
   }
 
-  bindFirstSliceToDeliveryScope(
+  firstSliceTargetBinding(
     context: TrustedToolContext,
-    input: DesignFirstSliceToolInput,
-  ): DesignFirstSliceToolInput {
+  ): FirstSliceTargetBinding {
     this.assertDesignToolContext(context);
-    return bindFirstSliceToScopeAllocation(
-      this.#deliveryScopesByRunId.get(context.runId),
-      this.#deliveryScopeAllocationsByRunId.get(context.runId),
-      input,
-    );
+    const scope = this.#deliveryScopesByRunId.get(context.runId);
+    if (scope) {
+      const next = this.getDeliveryStageContext(context.runId)?.nextTarget;
+      if (!next) {
+        throw designWorkflowError(
+          "delivery_scope_mismatch",
+          "The recorded delivery scope has no unplanned target available for a new first slice",
+        );
+      }
+      return {
+        targetId: next.targetId,
+        label: next.label,
+        objective: next.objective,
+        pageId: next.artboard.pageId,
+        frame: {
+          frameId: next.artboard.frameId,
+          x: next.artboard.x,
+          y: next.artboard.y,
+          width: next.artboard.width,
+          height: next.artboard.height,
+        },
+      };
+    }
+    const inspection = this.#requireDocumentInspection(context);
+    const binding = this.#toolBindingsByRunId.get(context.runId);
+    const pageId =
+      binding?.mutationTarget.kind === "page"
+        ? binding.mutationTarget.pageId
+        : context.scope.pageId;
+    if (!pageId || !inspection.pageRootsById.has(pageId)) {
+      throw designWorkflowError(
+        "allocated_artboard_invalid",
+        "First Slice requires the current inspected Page",
+      );
+    }
+    if (!inspection.newNodeIdPrefix) {
+      throw designWorkflowError(
+        "allocated_artboard_invalid",
+        "First Slice requires the current Run node ID allocation",
+      );
+    }
+    const origin = nextArtboardOrigin(pageId, inspection);
+    return {
+      targetId: "first_slice",
+      pageId,
+      frame: {
+        frameId: `${inspection.newNodeIdPrefix}artboard`,
+        x: origin.x,
+        y: origin.y,
+      },
+    };
   }
 
-  createDeliveryScopeAllocation(
+  createDeliveryScopeReservation(
     context: TrustedToolContext,
-    toolCallId: string,
     scope: DesignDeliveryScope,
-  ): DeliveryScopeAllocation {
+  ): DeliveryScopeReservation {
     this.assertDesignToolContext(context);
     this.#assertDeliveryScopeCanBeReviewed(context);
     const inspection = this.#requireDocumentInspection(context);
@@ -412,40 +518,27 @@ export class GlobalTaskCoordinator {
         "Delivery scope artboards require the current Run node ID allocation",
       );
     }
-    return createScopeArtboardAllocation(scope, pageId, inspection);
+    return createScopeArtboardReservation(scope, pageId, inspection);
   }
 
   recordDeliveryScopeCompleted(
     context: TrustedToolContext,
-    toolCallId: string,
     scope: DesignDeliveryScope,
-    allocation: DeliveryScopeAllocation,
-    revision?: number,
+    reservation: DeliveryScopeReservation,
   ): {
     scope: DesignDeliveryScope;
-    artboards: DeliveryScopeArtboardAllocation[];
+    artboards: DeliveryScopeArtboardReservation[];
   } {
     this.assertDesignToolContext(context);
     this.#assertDeliveryScopeCanBeReviewed(context);
-    if (!validRevision(revision)) {
-      throw designWorkflowError(
-        "allocation_revision_invalid",
-        "Delivery scope artboard allocation did not return a valid document revision",
-      );
-    }
     const accepted = structuredClone(scope);
-    const artboards = finalizeScopeAllocation(accepted, allocation, revision);
+    const artboards = finalizeScopeReservation(accepted, reservation);
     this.#deliveryScopesByRunId.set(context.runId, accepted);
-    this.#deliveryScopeAllocationsByRunId.set(
+    this.#deliveryScopeReservationsByRunId.set(
       context.runId,
       new Map(artboards.map((artboard) => [artboard.targetId, artboard])),
     );
-    projectScopeAllocationIntoInspection(
-      this.#inspectionsByRunId.get(context.runId),
-      artboards,
-      revision,
-    );
-    this.#persistScopeAllocation(context.runId, artboards, revision);
+    this.#persistScopeReservation(context.runId, artboards);
     return {
       scope: structuredClone(accepted),
       artboards: structuredClone(artboards),
@@ -659,7 +752,7 @@ export class GlobalTaskCoordinator {
     const executablePlan = bindPlanToReviewedScope(
       binding.deliveryScopeReview,
       this.#deliveryScopesByRunId.get(context.runId),
-      this.#deliveryScopeAllocationsByRunId.get(context.runId),
+      this.#deliveryScopeReservationsByRunId.get(context.runId),
       existingPlan,
       plan,
     );
@@ -676,7 +769,8 @@ export class GlobalTaskCoordinator {
     ) {
       const targetPageId = binding.mutationTarget.pageId;
       if (targets.some((target) => target.pageId !== targetPageId)) {
-        throw new Error(
+        throw designWorkflowError(
+          "scope_conflict",
           "Design plan targets a Page outside the registered Page mutation target",
         );
       }
@@ -684,21 +778,10 @@ export class GlobalTaskCoordinator {
     if (
       targets.some((target) => !inspection.pageRootsById.has(target.pageId))
     ) {
-      throw new Error(
+      throw designWorkflowError(
+        "target_stale",
         "Design plan target Page is missing from the current document inspection",
       );
-    }
-    if (executablePlan.outputMode === "single-raster") {
-      const evidence = executablePlan.singleRasterEvidence;
-      if (
-        !evidence ||
-        !binding.prompt.includes(evidence) ||
-        !explicitlyRequestsSingleRaster(evidence)
-      ) {
-        throw new Error(
-          "Single-raster output requires an exact excerpt that explicitly requests one flattened image",
-        );
-      }
     }
     assertDeclaredReferencesAuthorizedForRun(
       designPlanReferenceStrategy(executablePlan),
@@ -733,56 +816,6 @@ export class GlobalTaskCoordinator {
     const { state, ...result } = registration;
     void state;
     return result;
-  }
-
-  updateDesignPlan(
-    context: TrustedToolContext,
-    input: DesignPlanUpdateToolInput,
-  ): DesignDeliveryLedger {
-    this.assertDesignToolContext(context);
-    const state = this.#requireDesignPlan(context);
-    if (input.planRevision !== state.planRevision) {
-      throw designWorkflowError(
-        "plan_revision_stale",
-        `Plan revision ${input.planRevision} is stale; the current Plan revision is ${state.planRevision}`,
-      );
-    }
-    const owner = state.planExecution.targets.find(
-      (target) => target.targetId === input.targetId,
-    );
-    const step = owner?.steps.find(
-      (candidate) => candidate.status === "in_progress",
-    );
-    if (!owner || !step || step.stepId !== input.completeStepId) {
-      throw designWorkflowError(
-        "plan_step_state_invalid",
-        `Plan step ${input.completeStepId} is not the current in-progress step`,
-      );
-    }
-    if (step.kind !== "implementation") {
-      throw designWorkflowError(
-        "plan_review_step_host_owned",
-        "Review and refine progress is derived from trusted capture and verification evidence",
-      );
-    }
-    const target = state.targetsById.get(owner.targetId);
-    const evidenceRevision = target?.lastMaterialWriteRevision;
-    if (
-      evidenceRevision === null ||
-      evidenceRevision === undefined ||
-      step.startedRevision === undefined ||
-      evidenceRevision <= step.startedRevision
-    ) {
-      throw designWorkflowError(
-        "plan_step_evidence_missing",
-        `Plan step ${step.stepId} requires a real material revision after it started`,
-      );
-    }
-    step.status = "completed";
-    step.completedRevision = evidenceRevision;
-    activateNextPlanStep(state, evidenceRevision);
-    this.#persistDelivery(context.runId, state);
-    return deliveryLedger(state);
   }
 
   createDesignPlanAllocation(
@@ -917,6 +950,7 @@ export class GlobalTaskCoordinator {
     observedRevision = context.revision,
     layoutQuality?: DesignLayoutQualityReport,
     visualCritic?: DesignVisualCriticResult,
+    visualCriticUnavailable?: { message: string },
   ) {
     this.assertDesignToolContext(context);
     if (!Number.isSafeInteger(observedRevision) || observedRevision < 0) {
@@ -1009,29 +1043,8 @@ export class GlobalTaskCoordinator {
       observedRevision,
     );
     if (pendingRasterRoles.length > 0) {
-      if (visualCritic !== undefined) {
-        throw designWorkflowError(
-          "visual_critic_unavailable",
-          "Independent visual review cannot run before every required raster role is present in the captured target",
-        );
-      }
       target.captureCount = captureSequence;
       target.lastCaptureRevision = observedRevision;
-      target.delivery = {
-        targetId: target.delivery.targetId,
-        label: target.delivery.label,
-        pageId: target.delivery.pageId,
-        rootNodeId: target.delivery.rootNodeId,
-        reservedNodeIds: [...target.delivery.reservedNodeIds],
-        status: "captured",
-        ...(target.delivery.allocatedRevision === undefined
-          ? {}
-          : { allocatedRevision: target.delivery.allocatedRevision }),
-        ...(target.lastMaterialWriteRevision === null
-          ? {}
-          : { draftRevision: target.lastMaterialWriteRevision }),
-        captureRevision: observedRevision,
-      };
       this.#persistDelivery(context.runId, state);
       return {
         captureSequence,
@@ -1040,26 +1053,14 @@ export class GlobalTaskCoordinator {
         nextAction: "place-required-raster-assets",
         pendingRasterRoles,
         reviewEligible: false,
+        ...(visualCritic === undefined
+          ? {}
+          : { critic: publicCriticResult(visualCritic) }),
       };
     }
     if (!implementationPlanCompleted(state, target.delivery.targetId)) {
       target.captureCount = captureSequence;
       target.lastCaptureRevision = observedRevision;
-      target.delivery = {
-        targetId: target.delivery.targetId,
-        label: target.delivery.label,
-        pageId: target.delivery.pageId,
-        rootNodeId: target.delivery.rootNodeId,
-        reservedNodeIds: [...target.delivery.reservedNodeIds],
-        status: "captured",
-        ...(target.delivery.allocatedRevision === undefined
-          ? {}
-          : { allocatedRevision: target.delivery.allocatedRevision }),
-        ...(target.lastMaterialWriteRevision === null
-          ? {}
-          : { draftRevision: target.lastMaterialWriteRevision }),
-        captureRevision: observedRevision,
-      };
       this.#persistDelivery(context.runId, state);
       const activeStep = state.planExecution.targets
         .find((candidate) => candidate.targetId === target.delivery.targetId)
@@ -1068,7 +1069,7 @@ export class GlobalTaskCoordinator {
         captureSequence,
         capturedRevision: observedRevision,
         deliveryTargetId: target.delivery.targetId,
-        nextAction: "complete-current-plan-step",
+        nextAction: "continue-current-plan-step",
         ...(activeStep
           ? {
               currentPlanStep: {
@@ -1117,7 +1118,7 @@ export class GlobalTaskCoordinator {
         nextAction: nextIncompleteTarget(state)
           ? "continue-next-target"
           : this.#nextUnplannedScopeTarget(context.runId, state)
-            ? "define-next-plan"
+            ? "generate-next-slice"
             : "complete-delivery",
         reviewEligible: false,
         verified: true,
@@ -1176,6 +1177,53 @@ export class GlobalTaskCoordinator {
         critic: publicCriticResult(visualCritic),
       };
     }
+    if (
+      visualCriticUnavailable !== undefined &&
+      (target.delivery.status === "drafted" ||
+        target.delivery.status === "captured" ||
+        target.delivery.status === "refined")
+    ) {
+      const inspection = this.#inspectionsByRunId.get(context.runId);
+      if (!inspection || inspection.revision !== observedRevision) {
+        throw designWorkflowError(
+          "delivery_verification_required",
+          "Visual review fallback requires authoritative structure from the exact captured revision",
+        );
+      }
+      const componentStrategy = assertDeliveryTargetStructure(
+        inspection,
+        target,
+        state.plan,
+      );
+      target.captureCount = captureSequence;
+      target.lastCaptureRevision = observedRevision;
+      target.reviewedCaptureCount = captureSequence;
+      target.reviewedCaptureRevision = observedRevision;
+      completeReviewPlanStep(state, target.delivery.targetId, observedRevision);
+      target.delivery = {
+        ...target.delivery,
+        status: "verified",
+        captureRevision: observedRevision,
+        reviewRevision: observedRevision,
+        verifiedRevision: observedRevision,
+      };
+      this.#persistDelivery(context.runId, state);
+      return {
+        captureSequence,
+        capturedRevision: observedRevision,
+        deliveryTargetId: target.delivery.targetId,
+        nextAction: nextIncompleteTarget(state)
+          ? "continue-next-target"
+          : this.#nextUnplannedScopeTarget(context.runId, state)
+            ? "generate-next-slice"
+            : "complete-delivery",
+        reviewEligible: false,
+        verified: true,
+        verification: "deterministic-structure-fallback",
+        criticUnavailable: visualCriticUnavailable,
+        ...(componentStrategy.issueCount === 0 ? {} : { componentStrategy }),
+      };
+    }
     let componentStrategy:
       ReturnType<typeof assertDeliveryTargetStructure> | undefined;
     if (target.delivery.status === "refined") {
@@ -1215,7 +1263,7 @@ export class GlobalTaskCoordinator {
         nextAction: nextIncompleteTarget(state)
           ? "continue-next-target"
           : this.#nextUnplannedScopeTarget(context.runId, state)
-            ? "define-next-plan"
+            ? "generate-next-slice"
             : "complete-delivery",
         reviewEligible: false,
         verified: true,
@@ -1234,18 +1282,12 @@ export class GlobalTaskCoordinator {
         reviewEligible: false,
       };
     }
-    target.delivery = {
-      ...target.delivery,
-      status: "captured",
-      captureRevision: observedRevision,
-    };
-    this.#persistDelivery(context.runId, state);
     return {
       captureSequence,
       capturedRevision: observedRevision,
       deliveryTargetId: target.delivery.targetId,
-      nextAction: "record-visual-review",
-      reviewEligible: true,
+      nextAction: "retry-independent-review",
+      reviewEligible: false,
     };
   }
 
@@ -1298,14 +1340,7 @@ export class GlobalTaskCoordinator {
     ) {
       return null;
     }
-    if (
-      pendingPlaceableRasterRoles(
-        state,
-        target,
-        this.#inspectionsByRunId.get(context.runId),
-        observedRevision,
-      ).length > 0
-    ) {
+    if (!implementationPlanCompleted(state, target.delivery.targetId)) {
       return null;
     }
     return {
@@ -1334,91 +1369,6 @@ export class GlobalTaskCoordinator {
     };
   }
 
-  registerVisualReview(
-    context: TrustedToolContext,
-    review: DesignVisualReviewToolInput,
-  ): void {
-    const state = this.#requireDesignPlan(context);
-    if (!sameValue(review.skillRefs, state.plan.skillRefs)) {
-      throw designWorkflowError(
-        "visual_review_skill_binding_invalid",
-        "Visual Review skills do not match the active Design Plan",
-      );
-    }
-    const target = firstTargetWithStatus(state, "captured");
-    if (!target) {
-      if (
-        [...state.targetsById.values()].some(
-          (candidate) =>
-            candidate.delivery.status !== "pending" &&
-            candidate.delivery.status !== "allocated",
-        )
-      ) {
-        throw designWorkflowError(
-          "capture_required",
-          "Call opendesign_capture_canvas once after the latest material design write, then record the visual review from that returned image; do not retry the review before capturing",
-        );
-      }
-      throw designWorkflowError(
-        "material_write_required",
-        "Apply one successful material design transaction from the accepted plan, then call opendesign_capture_canvas before recording a visual review; do not retry the review yet",
-      );
-    }
-    if (
-      pendingPlaceableRasterRoles(
-        state,
-        target,
-        this.#inspectionsByRunId.get(context.runId),
-        target.lastCaptureRevision,
-      ).length > 0
-    ) {
-      throw designWorkflowError(
-        "material_write_required",
-        "Place every raster asset required by the accepted plan in the current target, then capture that exact revision before recording a visual review",
-      );
-    }
-    if (target.captureCount <= target.reviewedCaptureCount) {
-      throw designWorkflowError(
-        "capture_required",
-        "Call opendesign_capture_canvas once after the latest material design write, then record the visual review from that returned image; do not retry the review before capturing",
-      );
-    }
-    if (
-      target.lastCaptureRevision === null ||
-      (target.lastMaterialWriteRevision !== null &&
-        target.lastCaptureRevision < target.lastMaterialWriteRevision)
-    ) {
-      throw designWorkflowError(
-        "capture_revision_invalid",
-        "The latest rendered capture predates the latest material design revision; capture the current canvas again before recording the review",
-      );
-    }
-    target.lastReview = structuredClone(review);
-    target.reviewedCaptureCount = target.captureCount;
-    target.reviewedCaptureRevision = target.lastCaptureRevision;
-    target.delivery = {
-      ...target.delivery,
-      status: "reviewed",
-      reviewRevision: target.lastCaptureRevision,
-    };
-    this.#persistDelivery(context.runId, state);
-  }
-
-  resolveVisualReviewSkillRefs(
-    context: TrustedToolContext,
-  ): DesignPlanToolInput["skillRefs"] {
-    return structuredClone(this.#requireDesignPlan(context).plan.skillRefs);
-  }
-
-  assertVisualReviewBeforeWrite(context: TrustedToolContext): void {
-    const state = this.#designPlansByRunId.get(context.runId);
-    if (state && firstTargetWithStatus(state, "captured")) {
-      throw new Error(
-        "Record a structured visual review of the latest canvas capture before refining the design",
-      );
-    }
-  }
-
   assertDesignRefinementReady(context: TrustedToolContext): void {
     const state = this.#requireDesignPlan(context);
     const target = nextCaptureTarget(state);
@@ -1437,14 +1387,10 @@ export class GlobalTaskCoordinator {
   assertDesignPlanForRaster(
     context: TrustedToolContext,
     role: RasterAssetRole,
-  ): DesignPlanToolInput {
-    const state = this.#requireDesignPlan(context);
-    if (!state.plan.rasterAssetRoles.includes(role)) {
-      throw new Error(
-        `Raster role ${role} is not declared by the active design plan`,
-      );
-    }
-    return state.plan;
+  ): DesignPlanToolInput | undefined {
+    void role;
+    this.assertDesignToolContext(context);
+    return this.#designPlansByRunId.get(context.runId)?.plan;
   }
 
   recordGeneratedRaster(
@@ -1452,12 +1398,12 @@ export class GlobalTaskCoordinator {
     attachmentId: string,
     role: RasterAssetRole,
   ): void {
-    this.assertDesignPlanForRaster(context, role);
-    const roles = this.#generatedRasterRolesByRunId.get(context.runId);
-    if (!roles) {
-      throw new Error("Generated raster requires an active design plan");
-    }
+    this.assertDesignToolContext(context);
+    const roles =
+      this.#generatedRasterRolesByRunId.get(context.runId) ??
+      new Map<string, RasterAssetRole>();
     roles.set(attachmentId, role);
+    this.#generatedRasterRolesByRunId.set(context.runId, roles);
   }
 
   resolveGeneratedRasterAttachmentId(
@@ -1465,17 +1411,9 @@ export class GlobalTaskCoordinator {
     requestedAttachmentId: string,
     role: PlaceableRasterAssetRole,
   ): string {
-    this.assertDesignPlanForRaster(context, role);
+    this.assertDesignToolContext(context);
     const generated = this.#generatedRasterRolesByRunId.get(context.runId);
-    const exactRole = generated?.get(requestedAttachmentId);
-    if (exactRole !== undefined) {
-      if (exactRole !== role) {
-        throw new Error(
-          `Generated raster was declared as ${exactRole} and cannot be placed as ${role}`,
-        );
-      }
-      return requestedAttachmentId;
-    }
+    if (generated?.has(requestedAttachmentId)) return requestedAttachmentId;
     const candidates = [...(generated?.entries() ?? [])].flatMap(
       ([attachmentId, candidateRole]) =>
         candidateRole === role ? [attachmentId] : [],
@@ -1490,26 +1428,24 @@ export class GlobalTaskCoordinator {
     return requestedAttachmentId;
   }
 
-  assertDesignPlanForImagePlacement(
+  assertImagePlacement(
     context: TrustedToolContext,
-    role: PlaceableRasterAssetRole,
     parentId: string | null,
-    attachmentId?: string,
     nodeId?: string,
-  ): DesignPlanToolInput {
-    const state = this.#requireDesignPlan(context);
-    if (!state.plan.rasterAssetRoles.includes(role)) {
-      throw new Error(
-        `Raster role ${role} is not declared by the active design plan`,
+  ): void {
+    this.assertDesignToolContext(context);
+    const inspection = this.#inspectionsByRunId.get(context.runId);
+    if (parentId !== null && !inspection?.nodesById.has(parentId)) {
+      throw designWorkflowError(
+        "target_stale",
+        `Image parent ${parentId} is not present in the current document inspection`,
+        { nodeId: parentId },
       );
     }
-    const generatedRole = attachmentId
-      ? this.#generatedRasterRolesByRunId.get(context.runId)?.get(attachmentId)
-      : undefined;
-    if (generatedRole && generatedRole !== role) {
-      throw new Error(
-        `Generated raster was declared as ${generatedRole} and cannot be placed as ${role}`,
-      );
+    const state = this.#designPlansByRunId.get(context.runId);
+    if (!state) {
+      assertNewNodeIdUsesInspectionNamespace(inspection, nodeId);
+      return;
     }
     const target = findTargetForParent(state, parentId);
     if (!target && parentId !== null) {
@@ -1526,30 +1462,11 @@ export class GlobalTaskCoordinator {
         );
       }
     }
-    if (!target?.artboardEstablished) {
-      throw new Error(
-        "Image placement requires the planned artboard Frame to be created first",
-      );
-    }
-    assertFocusedUiTargetWrites(state, [target.delivery.targetId]);
-    if (
-      parentId !== target.planned.artboard.frameId &&
-      (parentId === null || !target.artboardDescendantIds.has(parentId))
-    ) {
-      throw new Error(
-        "Design images must be placed inside the planned artboard Frame",
-      );
-    }
     assertNewNodeIdUsesInspectionNamespace(
-      this.#inspectionsByRunId.get(context.runId),
+      inspection,
       nodeId,
-      new Set(target.delivery.reservedNodeIds),
+      new Set(target?.delivery.reservedNodeIds ?? []),
     );
-    if (target.delivery.status !== "captured") {
-      this.assertVisualReviewBeforeWrite(context);
-    }
-    assertDeliveryAcceptsMaterialWrites(state);
-    return state.plan;
   }
 
   assertDesignPlanForApply(
@@ -1561,18 +1478,23 @@ export class GlobalTaskCoordinator {
       prepared?.state ?? this.#designPlansByRunId.get(context.runId);
     const scopedInput = this.#bindApplyToRegisteredPage(context, input);
     if (!state) {
-      assertApplyUsesNewNodeIdNamespace(
+      const boundInput = bindDesignOperationStructure(
         scopedInput,
         this.#inspectionsByRunId.get(context.runId),
       );
-      if (!designApplyRequiresPlan(scopedInput)) return undefined;
-      this.#requireDesignPlan(context);
+      assertApplyUsesNewNodeIdNamespace(
+        boundInput,
+        this.#inspectionsByRunId.get(context.runId),
+      );
       return undefined;
     }
-    const resolvedInput = resolvePlannedStructureGeometry(
-      scopedInput,
-      state,
-      this.#deliveryScopeAllocationsByRunId.get(context.runId),
+    const resolvedInput = bindDesignOperationStructure(
+      resolvePlannedStructureGeometry(
+        scopedInput,
+        state,
+        this.#deliveryScopeReservationsByRunId.get(context.runId),
+      ),
+      this.#inspectionsByRunId.get(context.runId),
     );
     const targetIds = [...assertPlannedTargetWrites(resolvedInput, state)];
     const boundInput = bindApplyToActivePlanSteps(
@@ -1581,19 +1503,22 @@ export class GlobalTaskCoordinator {
       resolvedInput,
     );
     if (designApplyRequiresPlan(boundInput) && targetIds.length === 0) {
-      throw new Error(
+      throw designWorkflowError(
+        "material_write_required",
         "Material design commands must target a declared delivery artboard",
       );
     }
-    assertFocusedUiTargetWrites(state, targetIds);
-    assertUiDraftIsNotFlattened(boundInput, state, targetIds);
     assertApplyUsesNewNodeIdNamespace(
       boundInput,
       this.#inspectionsByRunId.get(context.runId),
       reservedNodeIdsForTargets(state, targetIds),
     );
-    assertDeliveryAcceptsMaterialWrites(state);
-    assertApplyPlanSteps(state, targetIds, boundInput.steps);
+    if (
+      hasActivePlanStepForTargets(state, targetIds) &&
+      (designApplyRequiresPlan(boundInput) || boundInput.steps !== undefined)
+    ) {
+      assertApplyPlanSteps(state, targetIds, boundInput.steps);
+    }
     const rebaseTargets = targetIds.flatMap((targetId) => {
       const target = state.targetsById.get(targetId);
       if (!target?.artboardEstablished) return [];
@@ -1676,10 +1601,13 @@ export class GlobalTaskCoordinator {
         );
       }
     }
-    const resolvedInput = resolvePlannedStructureGeometry(
-      input,
-      state,
-      this.#deliveryScopeAllocationsByRunId.get(context.runId),
+    const resolvedInput = bindDesignOperationStructure(
+      resolvePlannedStructureGeometry(
+        input,
+        state,
+        this.#deliveryScopeReservationsByRunId.get(context.runId),
+      ),
+      this.#inspectionsByRunId.get(context.runId),
     );
     const targetIds = [
       ...assertPlannedTargetWrites(
@@ -1700,13 +1628,11 @@ export class GlobalTaskCoordinator {
       );
     }
     assertFocusedUiTargetWrites(state, targetIds);
-    assertUiDraftIsNotFlattened(boundInput, state, targetIds);
     assertApplyUsesNewNodeIdNamespace(
       boundInput,
       this.#inspectionsByRunId.get(context.runId),
       reservedNodeIdsForTargets(state, targetIds),
     );
-    assertDeliveryAcceptsMaterialWrites(state);
     assertApplyPlanSteps(state, targetIds, boundInput.steps);
     return {
       input: boundInput,
@@ -1745,17 +1671,21 @@ export class GlobalTaskCoordinator {
 
   recordDesignApplyCompleted(
     runId: string,
-    input: DesignApplyToolInput,
     authorization: DesignPlanApplyAuthorization | undefined,
     revision?: number,
     resultContent?: unknown,
+    addedNodeIds: readonly string[] = [],
   ): void {
     const state = this.#designPlansByRunId.get(runId);
     if (!state || !authorization || authorization.targetIds.length === 0)
       return;
+    const input = authorization.input;
     for (const targetId of authorization.targetIds) {
       const target = state.targetsById.get(targetId);
       if (!target) continue;
+      addedNodeIds.forEach((nodeId) =>
+        target.artboardDescendantIds.add(nodeId),
+      );
       const inspection = this.#inspectionsByRunId.get(runId);
       if (
         input.commands.some(
@@ -1835,67 +1765,40 @@ export class GlobalTaskCoordinator {
     this.#recordTargetWrites(runId, state, targetIds, revision);
   }
 
-  resolveMaterialTargetIds(
-    context: TrustedToolContext,
-    nodeIds: readonly string[],
-    parentId?: string | null,
-  ): string[] {
-    const state = this.#requireDesignPlan(context);
-    const targets = new Set<string>();
-    for (const nodeId of nodeIds) {
-      const target = findTargetForNode(state, nodeId);
-      if (!target) {
-        throw new Error(
-          `Design write target ${nodeId} is outside every declared delivery artboard`,
-        );
-      }
-      targets.add(target.delivery.targetId);
-    }
-    if (parentId !== undefined) {
-      const target = findTargetForParent(state, parentId);
-      if (!target) {
-        throw new Error(
-          "Design write parent is outside every declared delivery artboard",
-        );
-      }
-      targets.add(target.delivery.targetId);
-    }
-    if (targets.size > 1) {
-      throw new Error(
-        "One design operation cannot move or combine layers across delivery artboards",
-      );
-    }
-    const targetIds = [...targets];
-    assertFocusedUiTargetWrites(state, targetIds);
-    assertDeliveryAcceptsMaterialWrites(state);
-    return targetIds;
-  }
-
   resolveMaterialTargetIdsIfPlanned(
     context: TrustedToolContext,
     nodeIds: readonly string[],
     parentId?: string | null,
   ): string[] {
     this.assertDesignToolContext(context);
-    if (!this.#designPlansByRunId.has(context.runId)) return [];
-    return this.resolveMaterialTargetIds(context, nodeIds, parentId);
+    const state = this.#designPlansByRunId.get(context.runId);
+    if (!state) return [];
+    const targets = new Set<string>();
+    for (const nodeId of nodeIds) {
+      const target = findTargetForNode(state, nodeId);
+      if (target) targets.add(target.delivery.targetId);
+    }
+    if (parentId !== undefined) {
+      const target = findTargetForParent(state, parentId);
+      if (target) targets.add(target.delivery.targetId);
+    }
+    return [...targets];
   }
 
   getDeliveryLedger(runId: string): DesignDeliveryLedger | undefined {
     const state = this.#designPlansByRunId.get(runId);
     if (state) return deliveryLedger(state);
-    const allocation = this.#deliveryScopeAllocationsByRunId.get(runId);
-    const revision = allocation?.values().next().value?.allocatedRevision;
-    return allocation && validRevision(revision)
-      ? scopeAllocationLedger([...allocation.values()], revision)
-      : undefined;
+    const reservation = this.#deliveryScopeReservationsByRunId.get(runId);
+    if (reservation) return scopeReservationLedger([...reservation.values()]);
+    const delivery = this.#tasksByRunId.get(runId)?.delivery;
+    return delivery ? structuredClone(delivery) : undefined;
   }
 
   getDeliveryStageContext(runId: string): DesignDeliveryStage | undefined {
     return projectDesignDeliveryStage(
       this.#designPlansByRunId.get(runId),
       this.#deliveryScopesByRunId.get(runId),
-      this.#deliveryScopeAllocationsByRunId.get(runId),
+      this.#deliveryScopeReservationsByRunId.get(runId),
     );
   }
 
@@ -1903,11 +1806,15 @@ export class GlobalTaskCoordinator {
     context: TrustedToolContext,
   ): DesignDeliveryLedger | undefined {
     this.assertDesignToolContext(context);
+    const binding = this.#toolBindingsByRunId.get(context.runId);
+    if (!binding?.continuationParentRunId) return undefined;
+    const current = this.getDeliveryLedger(context.runId);
+    if (current) return current;
     const candidate = this.workspaceStore
       .listGlobalTasks()
       .filter(
         (task) =>
-          task.runId !== context.runId &&
+          task.runId === binding.continuationParentRunId &&
           task.conversationId === context.sessionId &&
           task.targetSet.primaryTarget.documentId === context.documentId &&
           task.delivery?.activeTargetId !== null &&
@@ -2006,16 +1913,15 @@ export class GlobalTaskCoordinator {
     this.workspaceStore.saveGlobalTask(updated);
   }
 
-  #persistScopeAllocation(
+  #persistScopeReservation(
     runId: string,
-    artboards: readonly DeliveryScopeArtboardAllocation[],
-    revision: number,
+    artboards: readonly DeliveryScopeArtboardReservation[],
   ): void {
     const task = this.#tasksByRunId.get(runId);
     if (!task) return;
     const updated: GlobalTaskProjection = {
       ...task,
-      delivery: scopeAllocationLedger(artboards, revision),
+      delivery: scopeReservationLedger(artboards),
       updatedAt: this.now().toISOString(),
     };
     this.#tasksByRunId.set(runId, updated);
@@ -2034,35 +1940,41 @@ export class GlobalTaskCoordinator {
       event.status === "scheduled" &&
       event.nextRunId
     ) {
-      const plan = this.#designPlansByRunId.get(runId);
-      if (plan) {
-        // Automatic continuation is a new Provider Run, not a new design
-        // workflow. Carry the accepted Plan and ledger forward in memory so
-        // the next Run can resume the first incomplete target immediately
-        // instead of guessing IDs or spending another turn recreating Plan.
-        this.#designPlansByRunId.set(event.nextRunId, structuredClone(plan));
-      }
-      const deliveryScope = this.#deliveryScopesByRunId.get(runId);
-      if (deliveryScope) {
-        this.#deliveryScopesByRunId.set(
-          event.nextRunId,
-          structuredClone(deliveryScope),
-        );
-      }
-      const scopeAllocations = this.#deliveryScopeAllocationsByRunId.get(runId);
-      if (scopeAllocations) {
-        this.#deliveryScopeAllocationsByRunId.set(
-          event.nextRunId,
-          structuredClone(scopeAllocations),
-        );
-      }
-      const rasterRoles = this.#generatedRasterRolesByRunId.get(runId);
-      if (rasterRoles) {
-        this.#generatedRasterRolesByRunId.set(
-          event.nextRunId,
-          structuredClone(rasterRoles),
-        );
-      }
+      const persistedParent = this.workspaceStore
+        .listGlobalTasks()
+        .find((candidate) => candidate.runId === runId);
+      const parentDelivery =
+        this.#tasksByRunId.get(runId)?.delivery ?? persistedParent?.delivery;
+      this.#continuationTransfersByRunId.set(event.nextRunId, {
+        parentRunId: runId,
+        ...(this.#designPlansByRunId.get(runId)
+          ? { plan: structuredClone(this.#designPlansByRunId.get(runId)!) }
+          : {}),
+        ...(this.#deliveryScopesByRunId.get(runId)
+          ? {
+              deliveryScope: structuredClone(
+                this.#deliveryScopesByRunId.get(runId)!,
+              ),
+            }
+          : {}),
+        ...(parentDelivery
+          ? { delivery: structuredClone(parentDelivery) }
+          : {}),
+        ...(this.#deliveryScopeReservationsByRunId.get(runId)
+          ? {
+              scopeReservations: structuredClone(
+                this.#deliveryScopeReservationsByRunId.get(runId)!,
+              ),
+            }
+          : {}),
+        ...(this.#generatedRasterRolesByRunId.get(runId)
+          ? {
+              rasterRoles: structuredClone(
+                this.#generatedRasterRolesByRunId.get(runId)!,
+              ),
+            }
+          : {}),
+      });
     }
     if (event.type === "tool.completed" && event.revision !== undefined) {
       const binding = this.#toolBindingsByRunId.get(runId);
@@ -2091,9 +2003,7 @@ export class GlobalTaskCoordinator {
           event.type === "run.continuation" && event.nextRunId
             ? event.nextRunId
             : runId;
-        this.#designPlansByRunId.delete(abandonedRunId);
-        this.#generatedRasterRolesByRunId.delete(abandonedRunId);
-        this.#deliveryScopeAllocationsByRunId.delete(abandonedRunId);
+        this.disposeRun(abandonedRunId);
       }
       return;
     }
@@ -2110,14 +2020,7 @@ export class GlobalTaskCoordinator {
         : projectedLifecycle;
     if (lifecycle === task.lifecycle) {
       if (event.type === "run.completed") {
-        this.#tasksByRunId.delete(runId);
-        this.#toolBindingsByRunId.delete(runId);
-        this.#designPlansByRunId.delete(runId);
-        this.#generatedRasterRolesByRunId.delete(runId);
-        this.#inspectionsByRunId.delete(runId);
-        this.#pageStructureAccessByRunId.delete(runId);
-        this.#deliveryScopesByRunId.delete(runId);
-        this.#deliveryScopeAllocationsByRunId.delete(runId);
+        this.disposeRun(runId);
       }
       return;
     }
@@ -2132,19 +2035,21 @@ export class GlobalTaskCoordinator {
     } else {
       this.#tasksByRunId.delete(runId);
     }
-    if (
-      event.type === "run.completed" ||
-      event.type === "run.continuation" ||
-      event.type === "agent.error"
-    ) {
-      this.#toolBindingsByRunId.delete(runId);
-      this.#designPlansByRunId.delete(runId);
-      this.#generatedRasterRolesByRunId.delete(runId);
-      this.#inspectionsByRunId.delete(runId);
-      this.#pageStructureAccessByRunId.delete(runId);
-      this.#deliveryScopesByRunId.delete(runId);
-      this.#deliveryScopeAllocationsByRunId.delete(runId);
+    if (!activeLifecycles.has(lifecycle)) {
+      this.disposeRun(runId);
     }
+  }
+
+  disposeRun(runId: string): void {
+    this.#tasksByRunId.delete(runId);
+    this.#toolBindingsByRunId.delete(runId);
+    this.#designPlansByRunId.delete(runId);
+    this.#generatedRasterRolesByRunId.delete(runId);
+    this.#inspectionsByRunId.delete(runId);
+    this.#pageStructureAccessByRunId.delete(runId);
+    this.#deliveryScopesByRunId.delete(runId);
+    this.#deliveryScopeReservationsByRunId.delete(runId);
+    this.#continuationTransfersByRunId.delete(runId);
   }
 
   #interruptActiveTasks(): void {
@@ -2155,16 +2060,10 @@ export class GlobalTaskCoordinator {
         lifecycle: "interrupted",
         updatedAt: timestamp,
       });
-      this.#tasksByRunId.delete(runId);
-      this.#toolBindingsByRunId.delete(runId);
-      this.#designPlansByRunId.delete(runId);
-      this.#generatedRasterRolesByRunId.delete(runId);
-      this.#inspectionsByRunId.delete(runId);
-      this.#pageStructureAccessByRunId.delete(runId);
-      this.#deliveryScopesByRunId.delete(runId);
-      this.#deliveryScopeAllocationsByRunId.delete(runId);
+      this.disposeRun(runId);
       this.#touchConversation(task.conversationId, timestamp);
     }
+    this.#continuationTransfersByRunId.clear();
   }
 
   #touchConversation(conversationId: string, updatedAt: string): void {
@@ -2323,7 +2222,7 @@ function assertNewNodeIdHasPrefix(nodeId: string, prefix: string): void {
 function resolvePlannedStructureGeometry(
   input: DesignApplyToolInput,
   state: DesignWorkflowState,
-  scopeAllocations?: ReadonlyMap<string, DeliveryScopeArtboardAllocation>,
+  scopeReservations?: ReadonlyMap<string, DeliveryScopeArtboardReservation>,
 ): DesignApplyToolInput {
   const plannedNodes = new Map<
     string,
@@ -2353,7 +2252,7 @@ function resolvePlannedStructureGeometry(
       });
       if (
         target.planned.artboard.mode !== "create" &&
-        !scopeAllocations?.has(target.delivery.targetId)
+        !scopeReservations?.has(target.delivery.targetId)
       ) {
         continue;
       }
@@ -2646,13 +2545,17 @@ function assertPlannedTargetWrites(
             assumedAllocatedTargetIds.has(candidate.delivery.targetId),
         )
       ) {
-        throw new Error(
+        throw designWorkflowError(
+          "target_stale",
           "New design layers cannot be scattered outside the planned artboard Frame",
+          { commandId: command.commandId, nodeId: command.node.id },
         );
       }
       if (command.type === "insert_element") {
-        throw new Error(
+        throw designWorkflowError(
+          "delivery_structure_incomplete",
           "The first design creation transaction must create the planned axis-aligned Page-root Frame at its declared position and dimensions",
+          { commandId: command.commandId, nodeId: command.node.id },
         );
       }
       throw designWorkflowError(
@@ -2701,7 +2604,8 @@ function assertPlannedArtboardWrite(
           commandBelongsToTarget(command, state, input),
       )
     ) {
-      throw new Error(
+      throw designWorkflowError(
+        "delivery_structure_incomplete",
         "Create the planned artboard Frame before replacing design subtrees",
       );
     }
@@ -2726,7 +2630,8 @@ function assertPlannedArtboardWrite(
       artboardInsert.node.size.width !== artboard.width ||
       artboardInsert.node.size.height !== artboard.height
     ) {
-      throw new Error(
+      throw designWorkflowError(
+        "delivery_structure_incomplete",
         "The first design creation transaction must create the planned axis-aligned Page-root Frame at its declared position and dimensions",
       );
     }
@@ -2743,8 +2648,10 @@ function assertPlannedArtboardWrite(
           state.artboardDescendantIds,
         )
       ) {
-        throw new Error(
+        throw designWorkflowError(
+          "target_stale",
           "Every new design layer must be nested under the planned artboard Frame",
+          { commandId: command.commandId, nodeId: command.node.id },
         );
       }
     }
@@ -2766,8 +2673,10 @@ function assertPlannedArtboardWrite(
         state.artboardDescendantIds,
       )
     ) {
-      throw new Error(
+      throw designWorkflowError(
+        "target_stale",
         "New design layers cannot be scattered outside the planned artboard Frame",
+        { commandId: command.commandId, nodeId: command.node.id },
       );
     }
   }
@@ -2803,14 +2712,10 @@ function assertPlannedRegionWrites(
       command.node.size.width !== region.width ||
       command.node.size.height !== region.height
     ) {
-      throw new Error(
-        `Planned region ${region.nodeId} must be an axis-aligned Group or Frame inside declared parent ${expectedParentId} at its parent-local bounds`,
-      );
-    }
-    if (!insertedSubtreeHasMaterialNode(inserts, region.nodeId)) {
       throw designWorkflowError(
-        "empty_region_draft",
-        `Planned region ${region.nodeId} must include at least one real editable content layer in the same transaction; do not commit empty Group or Frame scaffolding`,
+        "delivery_structure_incomplete",
+        `Planned region ${region.nodeId} must be an axis-aligned Group or Frame inside declared parent ${expectedParentId} at its parent-local bounds`,
+        { commandId: command.commandId, nodeId: command.node.id },
       );
     }
   }
@@ -3121,15 +3026,6 @@ function pendingPlaceableRasterRoles(
   return required.filter((role) => !placed.has(role));
 }
 
-function assertDeliveryAcceptsMaterialWrites(state: DesignWorkflowState): void {
-  if (!nextIncompleteTarget(state)) {
-    throw designWorkflowError(
-      "delivery_already_verified",
-      "Every planned target is already verified; amend the plan before applying more material changes",
-    );
-  }
-}
-
 function assertFocusedUiTargetWrites(
   state: DesignWorkflowState,
   targetIds: readonly string[],
@@ -3149,57 +3045,16 @@ function assertFocusedUiTargetWrites(
   );
 }
 
-function assertUiDraftIsNotFlattened(
-  input: DesignApplyToolInput,
+function hasActivePlanStepForTargets(
   state: DesignWorkflowState,
   targetIds: readonly string[],
-): void {
-  if (state.plan.deliverable !== "ui") return;
-  const insertedParents = new Map(
-    input.commands.flatMap((command) =>
-      command.type === "insert_element"
-        ? [[command.node.id, command.parentId] as const]
-        : [],
-    ),
+): boolean {
+  const targets = new Set(targetIds);
+  return state.planExecution.targets.some(
+    (target) =>
+      targets.has(target.targetId) &&
+      target.steps.some((step) => step.status === "in_progress"),
   );
-  for (const targetId of targetIds) {
-    const target = state.targetsById.get(targetId);
-    if (
-      !target ||
-      target.planned.artboard.mode !== "create" ||
-      (target.delivery.status !== "pending" &&
-        target.delivery.status !== "allocated")
-    ) {
-      continue;
-    }
-    const authoredLeaves = input.commands.filter(
-      (
-        command,
-      ): command is Extract<
-        DesignApplyToolInput["commands"][number],
-        { type: "insert_element" }
-      > =>
-        command.type === "insert_element" &&
-        command.node.kind !== "frame" &&
-        command.node.kind !== "group" &&
-        command.node.kind !== "slice" &&
-        parentChainReaches(
-          command.parentId,
-          target.planned.artboard.frameId,
-          insertedParents,
-          target.artboardDescendantIds,
-        ),
-    );
-    if (
-      authoredLeaves.length === 1 &&
-      authoredLeaves[0]?.node.kind === "text"
-    ) {
-      throw designWorkflowError(
-        "ui_draft_structure_incomplete",
-        `UI target ${targetId} cannot be flattened into one multiline Text layer; realize its planned hierarchy as separate editable labels, controls, content surfaces, and target-specific visual elements before committing the first draft`,
-      );
-    }
-  }
 }
 
 function assertDeclaredReferencesAuthorizedForRun(
@@ -3382,17 +3237,6 @@ function completeReviewPlanStep(
   activateNextPlanStep(state, revision);
 }
 
-function explicitlyRequestsSingleRaster(value: string): boolean {
-  return (
-    /\b(?:single|one|flattened|flat)\b.{0,40}\b(?:image|raster|bitmap|png|jpe?g|webp)\b/i.test(
-      value,
-    ) ||
-    /(?:单张|一张|整张|扁平化|不可编辑).{0,20}(?:图片|图像|海报|PNG|JPE?G|WebP)/i.test(
-      value,
-    )
-  );
-}
-
 function sameMutationTarget(
   left: DesignMutationTarget,
   right: DesignMutationTarget,
@@ -3425,7 +3269,8 @@ function sameScope(left: SelectionScope, right: SelectionScope): boolean {
 function bindPlanToReviewedScope(
   reviewMode: "direct" | "required",
   scope: DesignDeliveryScope | undefined,
-  allocations: ReadonlyMap<string, DeliveryScopeArtboardAllocation> | undefined,
+  reservations:
+    ReadonlyMap<string, DeliveryScopeArtboardReservation> | undefined,
   existing: DesignWorkflowState | undefined,
   plan: DesignPlanToolInput,
 ): DesignPlanToolInput {
@@ -3494,16 +3339,16 @@ function bindPlanToReviewedScope(
     if (!target) mismatch(`Target ${index + 1} is missing`);
     target.label = confirmed.label;
     target.objective = confirmed.objective;
-    const allocation = allocations?.get(confirmed.targetId);
-    if (allocation) {
-      target.pageId = allocation.pageId;
+    const reservation = reservations?.get(confirmed.targetId);
+    if (reservation) {
+      target.pageId = reservation.pageId;
       target.artboard = {
-        mode: "existing",
-        frameId: allocation.frameId,
-        x: allocation.x,
-        y: allocation.y,
-        width: allocation.width,
-        height: allocation.height,
+        mode: "create",
+        frameId: reservation.frameId,
+        x: reservation.x,
+        y: reservation.y,
+        width: reservation.width,
+        height: reservation.height,
       };
     }
   }
@@ -3521,10 +3366,6 @@ function bindPlanToReviewedScope(
     assumptions: [...scope.assumptions],
   };
   return bound;
-}
-
-function sameValue(left: unknown, right: unknown): boolean {
-  return JSON.stringify(left) === JSON.stringify(right);
 }
 
 function nodeBelongsToPage(

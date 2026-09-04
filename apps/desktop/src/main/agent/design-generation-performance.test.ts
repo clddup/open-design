@@ -7,7 +7,6 @@ import { describe, expect, it } from "vitest";
 import {
   DESIGN_CAPTURE_TOOL_NAME,
   DESIGN_PLAN_TOOL_NAME,
-  DESIGN_REVIEW_TOOL_NAME,
 } from "@/shared/design-agent-tools";
 import { DesignGenerationPerformanceTracker } from "./design-generation-performance";
 
@@ -82,7 +81,7 @@ describe("DesignGenerationPerformanceTracker", () => {
       completed(tracker, runId, "apply", ledger(targetCount, 0, "drafted"), 1);
 
       now = baseTime + 300;
-      requested(tracker, runId, "review", DESIGN_REVIEW_TOOL_NAME);
+      requested(tracker, runId, "review", DESIGN_CAPTURE_TOOL_NAME);
       now = baseTime + 400;
       completed(tracker, runId, "review", ledger(targetCount, 0, "reviewed"));
 

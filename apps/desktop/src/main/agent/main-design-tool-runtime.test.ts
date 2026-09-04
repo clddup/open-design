@@ -6,6 +6,7 @@ import {
 import type { ToolAuditEvent } from "@opendesign/tool-runtime";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  DESIGN_AGENT_TOOL_SPECS,
   DESIGN_INSPECT_TOOL_NAME,
   PAGE_STRUCTURE_ACCESS_TOOL_NAME,
 } from "@/shared/design-agent-tools.js";
@@ -51,6 +52,7 @@ describe("MainDesignToolRuntime", () => {
     const progress = vi.fn();
     const runtime = new MainDesignToolRuntime({
       dispatch,
+      parseInput: parseTestInput,
       isPreauthorized: () => true,
       recordAudit: (event) => {
         audit.push(event);
@@ -83,19 +85,118 @@ describe("MainDesignToolRuntime", () => {
     ]);
   });
 
+  it("dispatches the canonical input returned by the single Main parser", async () => {
+    const source = { actions: ["create-page"], reason: "Create a Page" };
+    const canonical = {
+      actions: ["create-page"],
+      reason: "Create the approved Page",
+    };
+    const parseInput = vi.fn(() => ({ ok: true as const, value: canonical }));
+    const dispatch = vi.fn(() => Promise.resolve({ content: { ok: true } }));
+    const isPreauthorized = vi.fn(() => true);
+    const runtime = new MainDesignToolRuntime({
+      dispatch,
+      parseInput,
+      isPreauthorized,
+      recordAudit: () => undefined,
+    });
+    const call = {
+      toolCallId: "call_page_access",
+      toolName: PAGE_STRUCTURE_ACCESS_TOOL_NAME,
+      input: source,
+    };
+
+    await runtime.execute(
+      call,
+      context,
+      new AbortController().signal,
+      () => undefined,
+    );
+
+    expect(parseInput).toHaveBeenCalledOnce();
+    expect(parseInput).toHaveBeenCalledWith(call, context);
+    expect(isPreauthorized).toHaveBeenCalledWith(
+      expect.objectContaining({ input: canonical }),
+      context,
+    );
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({ input: canonical }),
+      context,
+      expect.any(AbortSignal),
+      expect.any(Function),
+    );
+  });
+
   it("rejects invalid semantic input before domain execution", async () => {
     const dispatch = vi.fn();
     const runtime = fixtureRuntime({ dispatch });
 
+    const execution = runtime.execute(
+      { ...inspectCall(), input: { forged: true } },
+      context,
+      new AbortController().signal,
+      () => undefined,
+    );
+    await expect(execution).rejects.toSatisfy(
+      hasTrustedFailure("invalid_tool_input"),
+    );
+    await expect(execution).rejects.toMatchObject({
+      cause: {
+        details: {
+          kind: "tool-validation",
+          fingerprint: expect.stringContaining(
+            `${DESIGN_INSPECT_TOOL_NAME}:design_tool.empty_input_invalid:/forged`,
+          ) as unknown as string,
+          issues: [
+            expect.objectContaining({
+              code: "design_tool.empty_input_invalid",
+              path: "/forged",
+            }),
+          ],
+        },
+      },
+    });
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it("preserves expected and actual values in structured validation failures", async () => {
+    const runtime = new MainDesignToolRuntime({
+      dispatch: vi.fn(),
+      parseInput: () => ({
+        ok: false,
+        issues: [
+          {
+            code: "design_edit.width_invalid",
+            path: "/edits/0/input/width",
+            message: "Width must be positive",
+            expected: "> 0",
+            actual: 0,
+          },
+        ],
+      }),
+      isPreauthorized: () => true,
+      recordAudit: () => undefined,
+    });
+
     await expect(
       runtime.execute(
-        { ...inspectCall(), input: { forged: true } },
+        inspectCall(),
         context,
         new AbortController().signal,
         () => undefined,
       ),
-    ).rejects.toSatisfy(hasTrustedFailure("invalid_tool_input"));
-    expect(dispatch).not.toHaveBeenCalled();
+    ).rejects.toMatchObject({
+      cause: {
+        details: {
+          issues: [
+            expect.objectContaining({
+              expected: "> 0",
+              actual: 0,
+            }),
+          ],
+        },
+      },
+    });
   });
 
   it("requires Main preauthorization for approval-gated tools", async () => {
@@ -218,9 +319,32 @@ function fixtureRuntime(options: {
   return new MainDesignToolRuntime({
     dispatch:
       options.dispatch ?? (() => Promise.resolve({ content: { ok: true } })),
+    parseInput: parseTestInput,
     isPreauthorized: options.isPreauthorized ?? (() => true),
     recordAudit: () => undefined,
   });
+}
+
+function parseTestInput(call: ToolCallRequest) {
+  const spec = DESIGN_AGENT_TOOL_SPECS.find(
+    (candidate) => candidate.name === call.toolName,
+  );
+  const issues = spec?.validateInputIssues(call.input) ?? [
+    {
+      code: "design_tool.unknown",
+      path: "/",
+      message: "Unknown design tool",
+    },
+  ];
+  return issues.length === 0
+    ? { ok: true as const, value: structuredClone(call.input) }
+    : {
+        ok: false as const,
+        issues: issues.map((issue) => ({
+          ...issue,
+          code: issue.code ?? "design_tool.input_invalid",
+        })),
+      };
 }
 
 function hasTrustedFailure(code: string, terminal = false) {

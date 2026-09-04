@@ -1,4 +1,5 @@
 import type { AgentEvent } from "@opendesign/agent-contracts";
+import { terminalAgentRunId } from "@/shared/agent-run-lifecycle";
 import type { WorkspaceRuntime } from "../../state/workspace-runtime";
 
 export type AgentRunFileTarget = {
@@ -12,9 +13,7 @@ export function projectAgentActiveRunId(
   event: AgentEvent,
   eventRunId: string | undefined,
 ): string | null {
-  if (event.type === "run.completed")
-    return previous === eventRunId ? null : previous;
-  if (event.type === "agent.error")
+  if (terminalAgentRunId(event) !== undefined)
     return previous === eventRunId ? null : previous;
   if (event.type === "run.started") return event.runId;
   if (event.type !== "run.continuation" || !event.nextRunId) return previous;
@@ -29,10 +28,7 @@ export function projectAgentRunFileBinding(
   workspace: Pick<WorkspaceRuntime, "releaseFileForRun" | "retainFileForRun">,
 ): string | undefined {
   const runId = "runId" in event ? event.runId : undefined;
-  if (
-    runId &&
-    (event.type === "run.completed" || event.type === "agent.error")
-  ) {
+  if (runId && terminalAgentRunId(event) === runId) {
     const target = designFileByRunId.get(runId);
     if (target) {
       workspace.releaseFileForRun(target.projectId, target.designFileId, runId);

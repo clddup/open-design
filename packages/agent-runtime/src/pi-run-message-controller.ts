@@ -32,6 +32,7 @@ type AppendJournal = (
 
 interface ActiveAssistantMessage {
   messageId: string;
+  blocks: AssistantTimelineBlock[];
 }
 
 interface PendingCompletion {
@@ -131,6 +132,7 @@ export class PiRunMessageController {
     this.#turn += 1;
     this.#activeAssistant = {
       messageId: `${this.#options.request.runId}_assistant_${this.#turn}`,
+      blocks: [],
     };
   }
 
@@ -163,6 +165,9 @@ export class PiRunMessageController {
         `Pi ${update.type} referenced a non-${expectedPiType} content block`,
       );
     }
+    active.blocks = visibleTimelineBlocks(
+      toTimelineBlocks(message, active.messageId),
+    );
     await this.#options.publish({
       type: "message.delta",
       runId: this.#options.request.runId,
@@ -250,9 +255,25 @@ export class PiRunMessageController {
       pending.message,
       pending.blocks,
     );
+    await this.#options.append("completion.review", {
+      assistantMessageId: pending.active.messageId,
+      status: "rejected",
+      code: "completion_guard_rejected",
+      message: decision.message,
+      rejectionCount: this.#guardRejections + 1,
+    });
+    if (decision.terminal) {
+      this.#forcedStopReason = "error";
+      this.#forcedError = {
+        code: "completion_state_invalid",
+        message: decision.message,
+        retryable: true,
+      };
+      return;
+    }
     this.#guardRejections += 1;
     if (
-      this.#guardRejections > this.#options.maxCompletionGuardRejections ||
+      this.#guardRejections >= this.#options.maxCompletionGuardRejections ||
       this.#turn >= this.#options.maxTurns
     ) {
       this.#forcedStopReason = "error";
@@ -306,6 +327,36 @@ export class PiRunMessageController {
           retryable: true,
         };
       }
+    }
+  }
+
+  async interrupt(
+    message: string,
+    cancellationRequested: boolean,
+  ): Promise<void> {
+    const active = this.#activeAssistant;
+    this.#activeAssistant = undefined;
+    this.#activeUserMessage = false;
+    this.#activeToolResultCallId = undefined;
+    if (active && active.blocks.length > 0) {
+      await this.#options.append("message.assistant", {
+        messageId: active.messageId,
+        blocks: active.blocks,
+      });
+      await this.#options.publish({
+        type: "message.completed",
+        runId: this.#options.request.runId,
+        messageId: active.messageId,
+        blocks: active.blocks,
+      });
+    }
+    if (!cancellationRequested) {
+      this.#forcedStopReason = "error";
+      this.#forcedError = {
+        code: "run_interrupted",
+        message,
+        retryable: true,
+      };
     }
   }
 
@@ -406,9 +457,7 @@ function visibleTimelineBlocks(
   blocks: readonly AssistantTimelineBlock[],
 ): AssistantTimelineBlock[] {
   return blocks.filter((block) =>
-    block.type === "text"
-      ? block.text.length > 0
-      : block.status === "completed" && Boolean(block.summary),
+    block.type === "text" ? block.text.length > 0 : Boolean(block.summary),
   );
 }
 

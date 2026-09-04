@@ -23,48 +23,12 @@ const context: TrustedToolContext = {
 function coordinatorMocks() {
   return {
     assertDocumentInspected: vi.fn(),
-    assertVisualReviewBeforeWrite: vi.fn(),
     resolveMaterialTargetIdsIfPlanned: vi.fn(() => ["target_1"]),
     recordMaterialDesignWriteCompleted: vi.fn(),
   };
 }
 
 describe("design typography Main tool boundary", () => {
-  it("rejects invalid Font branch fields before Renderer execution", async () => {
-    const execute = vi.fn();
-    await expect(
-      handleDesignTypographyTool({
-        call: {
-          toolCallId: "font_invalid",
-          toolName: DESIGN_FONT_TOOL_NAME,
-          input: {
-            action: "reflow",
-            label: "Reflow heading",
-            pageId: "page_1",
-            nodeIds: ["heading"],
-            expectedFont: {
-              fontFamily: "Inter",
-              fontStyleName: "Regular",
-              fontWeight: 400,
-              fontSlant: "normal",
-            },
-            replacementFont: {
-              fontFamily: "Arial",
-              fontStyleName: "Regular",
-              fontWeight: 400,
-              fontSlant: "normal",
-            },
-          },
-        },
-        context,
-        coordinator: coordinatorMocks() as unknown as GlobalTaskCoordinator,
-        execute,
-        withDelivery: (result) => result,
-      }),
-    ).rejects.toThrow("design_font.schema_invalid");
-    expect(execute).not.toHaveBeenCalled();
-  });
-
   it.each([
     {
       toolName: DESIGN_FONT_TOOL_NAME,
@@ -122,9 +86,6 @@ describe("design typography Main tool boundary", () => {
       }),
     ).resolves.toBe(result);
     expect(coordinator.assertDocumentInspected).toHaveBeenCalledWith(context);
-    expect(coordinator.assertVisualReviewBeforeWrite).toHaveBeenCalledWith(
-      context,
-    );
     expect(coordinator.resolveMaterialTargetIdsIfPlanned).toHaveBeenCalledWith(
       context,
       entry.nodeIds,
@@ -135,6 +96,5 @@ describe("design typography Main tool boundary", () => {
       5,
     );
     expect(execute.mock.calls[0]?.[0]?.input).toEqual(entry.input);
-    expect(execute.mock.calls[0]?.[0]?.input).not.toBe(entry.input);
   });
 });

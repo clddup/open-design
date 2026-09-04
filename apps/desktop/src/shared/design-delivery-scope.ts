@@ -1,4 +1,5 @@
 import { Type, type Static } from "@opendesign/design-contracts";
+import { MAX_DESIGN_TARGETS } from "@opendesign/workspace-contracts";
 import { defineContract, type ValidationIssue } from "./contract-validation";
 
 const CLOSED = { additionalProperties: false } as const;
@@ -36,7 +37,7 @@ export const DESIGN_DELIVERY_SCOPE_TOOL_INPUT_SCHEMA = Type.Object(
             pattern: STABLE_ID_PATTERN,
           }),
           label: text(1, 128),
-          objective: text(8, 500),
+          objective: text(1, 500),
           artboard: Type.Object(
             {
               width: Type.Number({ minimum: 16, maximum: 100_000 }),
@@ -50,13 +51,13 @@ export const DESIGN_DELIVERY_SCOPE_TOOL_INPUT_SCHEMA = Type.Object(
           ),
           requiredContent: Type.Array(text(2, 240), {
             minItems: 1,
-            maxItems: 8,
+            maxItems: 32,
             uniqueItems: true,
           }),
         },
         CLOSED,
       ),
-      { minItems: 1, maxItems: 24 },
+      { minItems: 1, maxItems: MAX_DESIGN_TARGETS },
     ),
     exclusions: Type.Array(text(2, 240), {
       maxItems: 12,

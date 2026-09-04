@@ -24,11 +24,13 @@ export const ModelToolDisclosureSchema = Type.Object(
       Type.Union([Type.Literal("available"), Type.Literal("deferred")]),
     ),
     afterInspection: Type.Optional(Type.Literal("available")),
+    continuation: Type.Optional(Type.Literal("available")),
     role: Type.Optional(
       Type.Union([
         Type.Literal("inspection"),
         Type.Literal("plan"),
         Type.Literal("material-write"),
+        Type.Literal("capability-discovery"),
       ]),
     ),
     surfaces: Type.Optional(

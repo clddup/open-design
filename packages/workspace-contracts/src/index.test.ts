@@ -888,6 +888,22 @@ describe("workspace contract schemas", () => {
     };
     expect(DesignDeliveryLedgerContract.parse(ledger).ok).toBe(true);
 
+    const continuedStage = structuredClone(ledger);
+    continuedStage.targets.unshift({
+      targetId: "target_previous",
+      label: "Previous",
+      pageId: "page_1",
+      rootNodeId: "frame_previous",
+      reservedNodeIds: ["frame_previous"],
+      status: "verified",
+      allocatedRevision: 1,
+      draftRevision: 1,
+      captureRevision: 1,
+      reviewRevision: 1,
+      verifiedRevision: 1,
+    });
+    expect(DesignDeliveryLedgerContract.parse(continuedStage).ok).toBe(true);
+
     const issueCodes = (value: unknown) => {
       const result = DesignDeliveryLedgerContract.parse(value);
       expect(result.ok).toBe(false);

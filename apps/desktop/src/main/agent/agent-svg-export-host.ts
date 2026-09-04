@@ -5,9 +5,9 @@ import type {
   TrustedToolResult,
 } from "@opendesign/agent-contracts";
 import {
-  ExportSvgContract,
   EXPORT_SVG_TOOL_NAME,
   PreparedAgentSvgExportContract,
+  type ExportSvgToolInput,
 } from "@/shared/design-agent-tools";
 import { formatValidationFailure } from "@/shared/contract-validation";
 import type { SvgFileService } from "../svg/svg-file-service";
@@ -44,9 +44,7 @@ export class AgentSvgExportHost {
     if (call.toolName !== EXPORT_SVG_TOOL_NAME) {
       throw new TypeError("Invalid Agent SVG export tool call");
     }
-    const parsed = ExportSvgContract.parse(call.input);
-    if (!parsed.ok) throw new TypeError("Invalid Agent SVG export tool call");
-    const publicInput = parsed.value;
+    const publicInput = call.input as ExportSvgToolInput;
     throwIfAborted(signal);
     const preparedResult = await this.renderer.execute(
       { ...call, input: publicInput },

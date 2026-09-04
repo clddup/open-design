@@ -5,7 +5,6 @@ import {
   DESIGN_AGENT_TOOL_SPECS,
   DESIGN_BOOTSTRAP_EDIT_TOOL_INPUT_SCHEMA,
   DESIGN_CAPABILITIES_TOOL_NAME,
-  DESIGN_CHECKPOINT_TOOL_NAME,
   DESIGN_SYSTEM_TOOL_NAME,
   INTERNAL_DESIGN_COMPONENT_TOOL_NAME as DESIGN_COMPONENT_TOOL_NAME,
   DESIGN_FIRST_SLICE_TOOL_NAME,
@@ -16,7 +15,6 @@ import {
   DESIGN_PAGE_TOOL_NAME,
   PAGE_STRUCTURE_ACCESS_TOOL_NAME,
   DESIGN_PLAN_TOOL_NAME,
-  DESIGN_REVIEW_TOOL_NAME,
   EXPORT_SVG_TOOL_NAME,
   EXPORT_RASTER_TOOL_NAME,
   EDIT_IMAGE_TOOL_NAME,
@@ -29,12 +27,10 @@ import {
   UPDATE_IMAGE_TOOL_NAME,
   DesignApplyContract,
   DesignArrangeContract,
-  DesignCheckpointContract,
   DesignComponentContract,
   DesignPageContract,
   DesignPlanContract,
   DesignHierarchyContract,
-  DesignVisualReviewContract,
   FirstSliceContract,
   designAgentToolInputIssues,
   isAgentSvgImportResult,
@@ -143,17 +139,7 @@ describe("design Agent tool contract", () => {
     expect(firstSlice).not.toHaveProperty("explainInvalidInput");
     expect(firstSlice).toHaveProperty(
       "validateInputIssues",
-      FirstSliceContract.issues,
-    );
-  });
-
-  it("wires Checkpoint validation to its single contract entry", () => {
-    const checkpoint = DESIGN_AGENT_TOOL_SPECS.find(
-      (tool) => tool.name === DESIGN_CHECKPOINT_TOOL_NAME,
-    );
-    expect(checkpoint).toHaveProperty(
-      "validateInputIssues",
-      DesignCheckpointContract.issues,
+      FirstSliceContract.modelIssues,
     );
   });
 
@@ -166,7 +152,6 @@ describe("design Agent tool contract", () => {
           type: "insert_element",
           pageId: "page_1",
           parentId: "poster_artboard",
-          index: 0,
           node: {
             id: "poster_background",
             name: "Poster background",
@@ -202,6 +187,7 @@ describe("design Agent tool contract", () => {
     expect(parsedApply(compactInput)).toMatchObject({
       commands: [
         {
+          index: 0,
           node: {
             parentId: "poster_artboard",
             childIds: [],
@@ -234,6 +220,85 @@ describe("design Agent tool contract", () => {
         compactInput,
       ),
     ).toBe(false);
+  });
+
+  it("does not require the model to guess a move destination index", () => {
+    const input = {
+      label: "Move the title into the selected section",
+      commands: [
+        {
+          commandId: "move_title",
+          type: "move_element",
+          nodeId: "title",
+          pageId: "page_1",
+          parentId: "section",
+        },
+      ],
+    };
+
+    expect(schemaValidationIssues(DesignApplyContract.schema, input)).toEqual(
+      [],
+    );
+    expect(parsedApply(input)).toMatchObject({
+      commands: [{ type: "move_element", index: 0 }],
+    });
+  });
+
+  it("compiles a replacement subtree from semantic nodes instead of canonical structure echoes", () => {
+    const input = {
+      label: "Replace the stale hero",
+      commands: [
+        {
+          commandId: "replace_hero",
+          type: "replace_subtree",
+          rootNodeId: "hero",
+          nodes: [
+            {
+              id: "hero",
+              name: "Hero",
+              transform: [1, 0, 0, 1, 0, 0],
+              size: { width: 640, height: 360 },
+              kind: "group",
+              properties: {},
+            },
+            {
+              id: "hero_accent",
+              name: "Hero accent",
+              parentId: "hero",
+              transform: [1, 0, 0, 1, 24, 24],
+              size: { width: 120, height: 48 },
+              kind: "rectangle",
+              properties: {
+                fills: [{ type: "solid", color: "#4F46E5", opacity: 1 }],
+              },
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(schemaValidationIssues(DesignApplyContract.schema, input)).toEqual(
+      [],
+    );
+    expect(parsedApply(input)).toMatchObject({
+      commands: [
+        {
+          nodes: [
+            { id: "hero", parentId: null, childIds: ["hero_accent"] },
+            {
+              id: "hero_accent",
+              parentId: "hero",
+              childIds: [],
+              visible: true,
+              locked: false,
+              exportSettings: [],
+              opacity: 1,
+              extensions: {},
+            },
+          ],
+        },
+      ],
+    });
   });
 
   it("compiles every public node kind into the canonical document contract", () => {
@@ -1338,7 +1403,7 @@ describe("design Agent tool contract", () => {
         },
         visualThesis:
           "A precise signal room uses directional data bands and controlled density instead of a generic dashboard grid.",
-        signatureMotif:
+        signatureDecision:
           "One continuous signal rail links navigation, primary metric, and active decision across the canvas.",
         typographyLanguage:
           "Condensed display numerals contrast with calm utilitarian labels and readable body copy.",
@@ -1354,47 +1419,6 @@ describe("design Agent tool contract", () => {
       },
       skillRefs: structuredClone(BUILTIN_UI_DESIGN_SKILL_REFS),
     };
-    const review = {
-      version: 1,
-      skillRefs: structuredClone(BUILTIN_UI_DESIGN_SKILL_REFS),
-      briefFidelity:
-        "The capture preserves the requested analytics functions and adds no new capability.",
-      distinctiveness:
-        "The signal rail creates a recognizable identity beyond a generic workspace.",
-      signatureMotif:
-        "The continuous rail is visible but needs stronger primary-metric integration.",
-      composition:
-        "The primary plane is clear but the inspector is too dominant.",
-      hierarchy: "The heading and chart compete at the same contrast.",
-      typography: "Secondary labels need a quieter weight and clearer role.",
-      assetIntegration: "Vector data accents align with the chart grid.",
-      formAndSurface: "Too many bordered surfaces flatten the depth.",
-      effects: "The selection halo is legible without decorative glow.",
-      antiTemplate:
-        "The asymmetric hierarchy avoids an equal card grid and ornamental gradient.",
-      criteria: {
-        "visual-thesis": "The signal-room thesis is legible in the data plane.",
-        "signature-motif":
-          "The rail crosses navigation and the primary surface.",
-        "composition-tension": "The split creates a dominant work area.",
-        "typography-character":
-          "Condensed numerals add identity without noise.",
-        "material-coherence": "Graphite planes and one accent form a system.",
-        "template-avoidance": "The screen avoids repeated cards and gradients.",
-        "glance-legibility":
-          "The primary task and action remain clear at thumbnail scale.",
-        "subject-specificity":
-          "The composition remains tied to the requested product subject.",
-        "craft-precision":
-          "Spacing, alignment, and control proportions need deliberate polish.",
-      },
-      failedCriteria: ["signature-motif", "craft-precision"],
-      refinements: [
-        "Reduce inspector width and contrast",
-        "Integrate the signal rail with the primary metric",
-      ],
-    };
-
     const planSpec = DESIGN_AGENT_TOOL_SPECS.find(
       (tool) => tool.name === DESIGN_PLAN_TOOL_NAME,
     );
@@ -1456,11 +1480,11 @@ describe("design Agent tool contract", () => {
         ...plan,
         referenceStrategy: {
           synthesis:
-            "Three simultaneous visual references would make generation and critique unbounded.",
+            "Use all three user-authorized references when each contributes a distinct relevant decision.",
           references: [reference("a"), reference("b"), reference("c")],
         },
       }),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       validateDesignAgentToolInput(DESIGN_PLAN_TOOL_NAME, {
         ...plan,
@@ -1530,6 +1554,15 @@ describe("design Agent tool contract", () => {
           avoidances: ["Make it good"],
         },
       }),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_PLAN_TOOL_NAME, {
+        ...plan,
+        visualSystem: {
+          ...plan.visualSystem,
+          avoidances: [""],
+        },
+      }),
     ).toBe(false);
     expect(
       validateDesignAgentToolInput(DESIGN_PLAN_TOOL_NAME, {
@@ -1546,7 +1579,7 @@ describe("design Agent tool contract", () => {
     expect(
       validateDesignAgentToolInput(DESIGN_PLAN_TOOL_NAME, {
         ...plan,
-        designIntent: { ...plan.designIntent, signatureMotif: "Modern" },
+        designIntent: { ...plan.designIntent, signatureDecision: " " },
       }),
     ).toBe(false);
     expect(
@@ -1587,117 +1620,6 @@ describe("design Agent tool contract", () => {
         ...plan,
         outputMode: "single-raster",
         rasterAssetRoles: ["final-single-image"],
-        singleRasterEvidence: "one flattened image",
-      }),
-    ).toBe(false);
-    expect(validateDesignAgentToolInput(DESIGN_REVIEW_TOOL_NAME, review)).toBe(
-      true,
-    );
-    const { skillRefs: _reviewSkillRefs, ...modelReview } = review;
-    expect(_reviewSkillRefs).toEqual(BUILTIN_UI_DESIGN_SKILL_REFS);
-    expect(
-      validateDesignAgentToolInput(DESIGN_REVIEW_TOOL_NAME, modelReview),
-    ).toBe(true);
-    const parsedReview = DesignVisualReviewContract.parse(modelReview, {
-      skillRefs: BUILTIN_UI_DESIGN_SKILL_REFS,
-    });
-    expect(parsedReview.ok && parsedReview.value.skillRefs).toEqual(
-      BUILTIN_UI_DESIGN_SKILL_REFS,
-    );
-    expect(
-      validateDesignAgentToolInput(DESIGN_REVIEW_TOOL_NAME, {
-        ...review,
-        version: 2,
-      }),
-    ).toBe(false);
-    expect(
-      validateDesignAgentToolInput(DESIGN_REVIEW_TOOL_NAME, {
-        ...review,
-        criteria: { ...review.criteria, "visual-thesis": "Looks good" },
-      }),
-    ).toBe(false);
-    expect(
-      validateDesignAgentToolInput(DESIGN_REVIEW_TOOL_NAME, {
-        ...review,
-        refinements: ["Looks fine"],
-      }),
-    ).toBe(false);
-    expect(
-      validateDesignAgentToolInput(DESIGN_REVIEW_TOOL_NAME, {
-        briefFidelity: review.briefFidelity,
-        composition: review.composition,
-        hierarchy: review.hierarchy,
-        typography: review.typography,
-        assetIntegration: review.assetIntegration,
-        formAndSurface: review.formAndSurface,
-        effects: review.effects,
-        refinements: review.refinements,
-      }),
-    ).toBe(false);
-
-    const checkpointApply = {
-      label: "Refine hero spacing",
-      commands: [
-        {
-          commandId: "remove_obsolete_badge",
-          type: "delete_element",
-          nodeId: "obsolete_badge",
-        },
-      ],
-    };
-    expect(
-      validateDesignAgentToolInput(DESIGN_CHECKPOINT_TOOL_NAME, {
-        version: 1,
-        action: "apply-and-capture",
-        apply: checkpointApply,
-      }),
-    ).toBe(true);
-    const checkpointSpec = DESIGN_AGENT_TOOL_SPECS.find(
-      (tool) => tool.name === DESIGN_CHECKPOINT_TOOL_NAME,
-    );
-    expect(checkpointSpec?.inputSchema).toMatchObject({
-      anyOf: [
-        {
-          properties: {
-            version: { const: 1 },
-            action: { const: "apply-and-capture" },
-          },
-          additionalProperties: false,
-        },
-        {
-          properties: {
-            version: { const: 1 },
-            action: { const: "refine-and-capture" },
-          },
-          additionalProperties: false,
-        },
-      ],
-    });
-    expect(checkpointSpec?.inputSchema).toHaveProperty(
-      "anyOf.0.properties.apply",
-    );
-    expect(checkpointSpec?.inputSchema).toHaveProperty(
-      "anyOf.1.properties.refinement",
-    );
-    expect(
-      validateDesignAgentToolInput(DESIGN_CHECKPOINT_TOOL_NAME, {
-        version: 1,
-        action: "refine-and-capture",
-        refinement: checkpointApply,
-      }),
-    ).toBe(true);
-    expect(
-      validateDesignAgentToolInput(DESIGN_CHECKPOINT_TOOL_NAME, {
-        version: 1,
-        action: "refine-and-capture",
-      }),
-    ).toBe(false);
-    expect(
-      validateDesignAgentToolInput(DESIGN_CHECKPOINT_TOOL_NAME, {
-        version: 1,
-        action: "apply-and-capture",
-        apply: checkpointApply,
-        captureAnyway: true,
       }),
     ).toBe(false);
   });

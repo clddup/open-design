@@ -2,7 +2,7 @@
 
 ## 状态
 
-已接受。
+部分被 ADR-0302 取代。Tool/Result wire、结构化 failure、revision 与准确错误投影继续有效；跨进程 request 不再重复解析 opaque tool input。
 
 ## 背景
 

@@ -2,11 +2,13 @@ import type {
   AgentEvent,
   SessionTimelineItem,
 } from "@opendesign/agent-contracts";
+import { MAX_REASONING_SUMMARY_CHARACTERS } from "@opendesign/agent-contracts";
 import { describe, expect, it } from "vitest";
 import {
   appendLiveAgentEvent,
   mergeDurableTimeline,
   pruneLiveEventsCoveredByTimeline,
+  reconcileActiveRunIdFromTimeline,
   touchConversationList,
 } from "./conversation-runtime-state";
 
@@ -47,7 +49,7 @@ describe("conversation runtime state", () => {
     expect(projected[1]).toMatchObject({ type: "tool.requested" });
   });
 
-  it("does not erase streamed text when an empty completion marker arrives", () => {
+  it("finalizes streamed text when an empty completion marker arrives", () => {
     const delta: AgentEvent = {
       type: "message.delta",
       runId: "run_1",
@@ -65,9 +67,98 @@ describe("conversation runtime state", () => {
     };
 
     expect(appendLiveAgentEvent([delta], completed)).toEqual([
-      delta,
-      completed,
+      {
+        ...completed,
+        blocks: [{ blockId: "text_1", type: "text", text: "已经显示的回复" }],
+      },
     ]);
+  });
+
+  it("does not erase a streamed reasoning block from a partial completion", () => {
+    const reasoning: AgentEvent = {
+      type: "message.delta",
+      runId: "run_1",
+      messageId: "assistant_1",
+      blockId: "reasoning_0",
+      blockType: "reasoning_summary",
+      blockIndex: 0,
+      delta: "正在分析完整需求",
+    };
+    const text: AgentEvent = {
+      type: "message.delta",
+      runId: "run_1",
+      messageId: "assistant_1",
+      blockId: "text_1",
+      blockType: "text",
+      blockIndex: 1,
+      delta: "开始生成第一张画板",
+    };
+    const completed: AgentEvent = {
+      type: "message.completed",
+      runId: "run_1",
+      messageId: "assistant_1",
+      blocks: [{ blockId: "text_1", type: "text", text: "开始生成第一张画板" }],
+    };
+
+    expect(appendLiveAgentEvent([reasoning, text], completed)).toEqual([
+      {
+        ...completed,
+        blocks: [
+          {
+            blockId: "reasoning_0",
+            type: "reasoning_summary",
+            status: "completed",
+            summary: "正在分析完整需求",
+          },
+          completed.blocks[0],
+        ],
+      },
+    ]);
+  });
+
+  it("does not duplicate split durable reasoning after streaming completes", () => {
+    const summary = "分".repeat(MAX_REASONING_SUMMARY_CHARACTERS + 1);
+    const delta: AgentEvent = {
+      type: "message.delta",
+      runId: "run_1",
+      messageId: "assistant_1",
+      blockId: "reasoning_0",
+      blockType: "reasoning_summary",
+      blockIndex: 0,
+      delta: summary,
+    };
+    const completed: AgentEvent = {
+      type: "message.completed",
+      runId: "run_1",
+      messageId: "assistant_1",
+      blocks: [
+        {
+          blockId: "reasoning_0",
+          type: "reasoning_summary",
+          status: "completed",
+          summary: summary.slice(0, MAX_REASONING_SUMMARY_CHARACTERS),
+        },
+        {
+          blockId: "reasoning_0_part_1",
+          type: "reasoning_summary",
+          status: "completed",
+          summary: summary.slice(MAX_REASONING_SUMMARY_CHARACTERS),
+        },
+      ],
+    };
+
+    const result = appendLiveAgentEvent([delta], completed);
+    expect(result).toEqual([completed]);
+    const finalized = result[0];
+    expect(finalized?.type).toBe("message.completed");
+    if (finalized?.type !== "message.completed") return;
+    expect(
+      finalized.blocks
+        .map((block) =>
+          block.type === "text" ? block.text : (block.summary ?? ""),
+        )
+        .join(""),
+    ).toBe(summary);
   });
 
   it("finalizes a streamed message without moving it past later activity", () => {
@@ -175,6 +266,65 @@ describe("conversation runtime state", () => {
     expect(pruneLiveEventsCoveredByTimeline([event], [], null)).toEqual([
       event,
     ]);
+  });
+
+  it("retains richer live content when durable history has only part of the message", () => {
+    const live: AgentEvent[] = [
+      {
+        type: "message.completed",
+        runId: "run_finished",
+        messageId: "assistant_partial",
+        blocks: [
+          {
+            blockId: "reasoning_0",
+            type: "reasoning_summary",
+            status: "completed",
+            summary: "完整分析",
+          },
+          { blockId: "text_1", type: "text", text: "开始执行" },
+        ],
+      },
+    ];
+    const timeline: SessionTimelineItem[] = [
+      {
+        itemId: "message:assistant_partial",
+        sessionId: "conversation_1",
+        runId: "run_finished",
+        sequence: 2,
+        createdAt: "2026-08-22T00:00:00.000Z",
+        updatedAt: "2026-08-22T00:00:00.000Z",
+        type: "assistant.message",
+        messageId: "assistant_partial",
+        blocks: [{ blockId: "text_1", type: "text", text: "开始执行" }],
+      },
+    ];
+
+    expect(pruneLiveEventsCoveredByTimeline(live, timeline, null)).toEqual(
+      live,
+    );
+  });
+
+  it("clears a stale active Run after durable history records its terminal state", () => {
+    const timeline: SessionTimelineItem[] = [
+      {
+        itemId: "run:run_1",
+        sessionId: "conversation_1",
+        runId: "run_1",
+        sequence: 3,
+        createdAt: "2026-08-22T00:00:00.000Z",
+        updatedAt: "2026-08-22T00:01:00.000Z",
+        type: "run",
+        status: "error",
+        startedAt: "2026-08-22T00:00:00.000Z",
+        finishedAt: "2026-08-22T00:01:00.000Z",
+        stopReason: "error",
+      },
+    ];
+
+    expect(reconcileActiveRunIdFromTimeline("run_1", timeline)).toBeNull();
+    expect(reconcileActiveRunIdFromTimeline("run_other", timeline)).toBe(
+      "run_other",
+    );
   });
 
   it("does not let an older activity timestamp reorder conversations", () => {

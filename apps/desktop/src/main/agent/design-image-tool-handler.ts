@@ -14,19 +14,20 @@ import {
   PLACE_IMAGE_TOOL_NAME,
   READ_IMAGE_TOOL_NAME,
   UPDATE_IMAGE_TOOL_NAME,
-  EditImageContract,
-  GenerateImageContract,
-  PlaceImageContract,
   PreparedImageEditSourceContract,
-  ReadImageContract,
-  UpdateImageContract,
+  type EditImageToolInput,
+  type GenerateImageToolInput,
+  type PlaceImageToolInput,
+  type ReadImageToolInput,
+  type UpdateImageToolInput,
 } from "@/shared/design-agent-tools.js";
-import { formatValidationFailure } from "@/shared/contract-validation.js";
 import type { AgentAttachmentHost } from "./agent-attachment-host.js";
 import type { AgentReferenceHost } from "./agent-reference-host.js";
 import type { GlobalTaskCoordinator } from "./global-task-coordinator.js";
 import type { ImageGenerationHost } from "../model/image-generation-host.js";
+import { contractValidationError } from "./contract-validation-error.js";
 import type { DesignImageEditService } from "./design-image-edit-service.js";
+import { designWorkflowError } from "@/shared/design-workflow-failure-classification.js";
 
 export type DesignImageToolHandlerInput = {
   call: ToolCallRequest;
@@ -61,26 +62,16 @@ export async function handleDesignImageTool(
   const imageGenerationHost = handlerInput.getImageGenerationHost();
 
   if (call.toolName === READ_IMAGE_TOOL_NAME) {
-    const parsed = ReadImageContract.parse(call.input);
-    if (!parsed.ok) {
-      throw new TypeError(
-        formatValidationFailure("opendesign_read_image", parsed.issues),
-      );
-    }
-    return await referenceHost.readImage(parsed.value, context, signal);
-  }
-  if (call.toolName === GENERATE_IMAGE_TOOL_NAME) {
-    const parsed = GenerateImageContract.parse(call.input);
-    if (!parsed.ok) {
-      throw new TypeError(
-        formatValidationFailure("opendesign_generate_image", parsed.issues),
-      );
-    }
-    globalTaskCoordinator.assertDesignPlanForRaster(context, parsed.value.role);
-    const generated = await imageGenerationHost.generateImage(
-      parsed.value,
+    return await referenceHost.readImage(
+      call.input as ReadImageToolInput,
+      context,
       signal,
     );
+  }
+  if (call.toolName === GENERATE_IMAGE_TOOL_NAME) {
+    const input = call.input as GenerateImageToolInput;
+    globalTaskCoordinator.assertDesignPlanForRaster(context, input.role);
+    const generated = await imageGenerationHost.generateImage(input, signal);
     const attachment = await attachmentHost.importImageBytes(
       `generated-image.${generated.outputFormat}`,
       generated.bytes,
@@ -97,7 +88,7 @@ export async function handleDesignImageTool(
     globalTaskCoordinator.recordGeneratedRaster(
       context,
       authorized.attachmentId,
-      parsed.value.role,
+      input.role,
     );
     const intrinsic = nativeImage
       .createFromBuffer(Buffer.from(generated.bytes))
@@ -133,7 +124,7 @@ export async function handleDesignImageTool(
               },
               extensions: {
                 attachmentId: authorized.attachmentId,
-                designRole: parsed.value.role,
+                designRole: input.role,
                 generatedBy: "opendesign-agent",
                 staged: true,
               },
@@ -153,7 +144,7 @@ export async function handleDesignImageTool(
           : {}),
         size: generated.size,
         quality: generated.quality,
-        role: parsed.value.role,
+        role: input.role,
         outputFormat: generated.outputFormat,
         attachment: authorized,
         attachments: [authorized],
@@ -162,7 +153,7 @@ export async function handleDesignImageTool(
           name: authorized.name,
           mimeType: authorized.mimeType,
           size: { width: intrinsic.width, height: intrinsic.height },
-          role: parsed.value.role,
+          role: input.role,
           scope: "design-file",
         },
       },
@@ -172,13 +163,16 @@ export async function handleDesignImageTool(
     };
   }
   if (call.toolName === PLACE_IMAGE_TOOL_NAME) {
-    const parsed = PlaceImageContract.parse(call.input);
-    if (!parsed.ok) {
-      throw new TypeError(
-        formatValidationFailure("Place Image", parsed.issues),
+    const input = call.input as PlaceImageToolInput;
+    if (
+      executionContext.mutationTarget.kind === "page" &&
+      executionContext.mutationTarget.pageId !== input.pageId
+    ) {
+      throw designWorkflowError(
+        "scope_conflict",
+        "Image placement targets a Page outside the active mutation target",
       );
     }
-    const input = parsed.value;
     const attachmentId =
       "attachmentId" in input && input.attachmentId !== undefined
         ? referenceHost.hasAuthorizedImage(input.attachmentId, context)
@@ -189,14 +183,12 @@ export async function handleDesignImageTool(
               input.role,
             )
         : undefined;
-    globalTaskCoordinator.assertDesignPlanForImagePlacement(
+    globalTaskCoordinator.assertImagePlacement(
       context,
-      input.role,
       input.parentId,
-      attachmentId,
       input.nodeId,
     );
-    const targetIds = globalTaskCoordinator.resolveMaterialTargetIds(
+    const targetIds = globalTaskCoordinator.resolveMaterialTargetIdsIfPlanned(
       context,
       [],
       input.parentId,
@@ -234,7 +226,12 @@ export async function handleDesignImageTool(
       : attachmentId
         ? `asset_${attachmentId.slice("image_".length)}`
         : undefined;
-    if (!assetId) throw new Error("Image placement source is missing");
+    if (!assetId) {
+      throw designWorkflowError(
+        "reference_unavailable",
+        "Image placement source is missing",
+      );
+    }
     const assetCommand = image
       ? [
           {
@@ -307,25 +304,20 @@ export async function handleDesignImageTool(
     return withDelivery(result, context.runId);
   }
   if (call.toolName === UPDATE_IMAGE_TOOL_NAME) {
-    const parsed = UpdateImageContract.parse(call.input);
-    if (!parsed.ok) {
-      throw new TypeError(
-        formatValidationFailure("Update Image", parsed.issues),
-      );
-    }
-    const input = parsed.value;
+    const input = call.input as UpdateImageToolInput;
     if (
       executionContext.mutationTarget.kind === "page" &&
       executionContext.mutationTarget.pageId !== input.pageId
     ) {
-      throw new Error(
+      throw designWorkflowError(
+        "scope_conflict",
         "Image update targets a Page outside the active mutation target",
       );
     }
-    globalTaskCoordinator.assertVisualReviewBeforeWrite(context);
-    const targetIds = globalTaskCoordinator.resolveMaterialTargetIds(context, [
-      input.nodeId,
-    ]);
+    const targetIds = globalTaskCoordinator.resolveMaterialTargetIdsIfPlanned(
+      context,
+      [input.nodeId],
+    );
     if (input.action === "replace-source") {
       const image = await referenceHost.materializeImage(
         input.attachmentId,
@@ -384,24 +376,21 @@ export async function handleDesignImageTool(
     return withDelivery(result, context.runId);
   }
   if (call.toolName === EDIT_IMAGE_TOOL_NAME) {
-    const parsed = EditImageContract.parse(call.input);
-    if (!parsed.ok) {
-      throw new TypeError(formatValidationFailure("Edit Image", parsed.issues));
-    }
-    const input = parsed.value;
+    const input = call.input as EditImageToolInput;
     if (
       executionContext.mutationTarget.kind === "page" &&
       executionContext.mutationTarget.pageId !== input.pageId
     ) {
-      throw new Error(
+      throw designWorkflowError(
+        "scope_conflict",
         "Image edit targets a Page outside the active mutation target",
       );
     }
     globalTaskCoordinator.assertDocumentInspected(context);
-    globalTaskCoordinator.assertVisualReviewBeforeWrite(context);
-    const targetIds = globalTaskCoordinator.resolveMaterialTargetIds(context, [
-      input.nodeId,
-    ]);
+    const targetIds = globalTaskCoordinator.resolveMaterialTargetIdsIfPlanned(
+      context,
+      [input.nodeId],
+    );
     const prepared = await executeRendererTool({
       ...call,
       toolCallId: `${call.toolCallId}_read_source`.slice(0, 256),
@@ -416,11 +405,9 @@ export async function handleDesignImageTool(
       prepared.content,
     );
     if (!parsedPrepared.ok) {
-      throw new TypeError(
-        formatValidationFailure(
-          "Image edit source preparation",
-          parsedPrepared.issues,
-        ),
+      throw contractValidationError(
+        "Image edit source preparation",
+        parsedPrepared.issues,
       );
     }
     const source = parsedPrepared.value.asset;

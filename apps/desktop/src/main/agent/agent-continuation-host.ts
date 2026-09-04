@@ -74,6 +74,7 @@ export function prepareAgentContinuation(
     .then(async (next) => {
       if (canStart && !canStart()) {
         continuationScheduler.forgetRun(next.runId);
+        starter.globalTaskCoordinator.disposeRun(next.runId);
         publish({
           type: "run.completed",
           runId: next.runId,

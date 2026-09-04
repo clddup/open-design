@@ -45,7 +45,6 @@ export interface PiRunEventAdapterOptions {
   maxTurns?: number;
   maxGeneratedTokens?: number;
   maxCompletionGuardRejections?: number;
-  priorToolCallIds?: readonly string[];
   initialModelToolSurface?: ModelToolSurface;
   now?: () => Date;
 }
@@ -120,9 +119,6 @@ export class PiRunEventAdapter {
         ...(options.initialModelToolSurface === undefined
           ? {}
           : { initialModelToolSurface: options.initialModelToolSurface }),
-        ...(options.priorToolCallIds === undefined
-          ? {}
-          : { priorToolCallIds: options.priorToolCallIds }),
         now: this.#now,
         lifecycle: {
           approvalRequested: async (approval) => {
@@ -234,6 +230,15 @@ export class PiRunEventAdapter {
     if (event.type === "agent_end") {
       await this.#endRun();
     }
+  }
+
+  async interrupt(error: unknown): Promise<void> {
+    if (this.#ended || !this.#started) return;
+    await this.#messages.interrupt(
+      error instanceof Error ? error.message : "Pi Agent run was interrupted",
+      this.#isCancellationRequested?.() === true,
+    );
+    await this.#endRun();
   }
 
   async #startRun(): Promise<void> {

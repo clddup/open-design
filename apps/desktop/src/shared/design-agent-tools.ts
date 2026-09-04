@@ -38,12 +38,12 @@ export {
   compileDesignFirstSliceToolInput,
   DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA,
   FirstSliceContract,
-  logoBriefRequiresExploration,
 } from "./design-first-slice-tool";
 export type {
   DesignFirstSliceElement,
   DesignFirstSliceToolInput,
   FirstSliceContractContext,
+  FirstSliceTargetBinding,
 } from "./design-first-slice-tool";
 export type {
   DesignApplyToolInput,
@@ -60,14 +60,11 @@ export {
 export type { DesignArrangeToolInput } from "./design-arrange-tool";
 export { componentStrategyOccurrencesForTarget } from "./design-plan-component-strategy";
 export {
-  DESIGN_PLAN_UPDATE_TOOL_INPUT_SCHEMA,
   DESIGN_PLAN_REVIEW_STEP_LABEL,
-  DesignPlanUpdateContract,
   createInitialPlanExecution,
   designPlanReviewStepId,
   serializePlanStepStatuses,
 } from "./design-plan-execution";
-export type { DesignPlanUpdateToolInput } from "./design-plan-execution";
 export {
   DESIGN_PLAN_CANONICAL_INPUT_SCHEMA,
   DESIGN_LOGO_EXPLORATION_SCHEMA,
@@ -108,14 +105,11 @@ export type {
 export {
   DESIGN_LOGO_COLOR_MODES,
   DESIGN_LOGO_COLOR_STRATEGY_SCHEMA,
-  logoBriefExplicitlyRequiresMonochrome,
-  paletteHasChromaticColor,
 } from "./design-logo-color";
 export type { DesignLogoColorStrategy } from "./design-logo-color";
 export {
   DESIGN_REFERENCE_DECISIONS,
   DESIGN_REFERENCE_STRATEGY_SCHEMA,
-  MAX_ACTIVE_VISUAL_REFERENCES,
   activeVisualReferenceIds,
   isActiveVisualReferenceDecision,
 } from "./design-reference-strategy";
@@ -243,11 +237,6 @@ export type {
   PageStructureAccessAction,
   PageStructureAccessToolInput,
 } from "./design-agent-document-tools";
-export {
-  DesignCheckpointContract,
-  DESIGN_CHECKPOINT_TOOL_INPUT_SCHEMA,
-} from "./design-agent-checkpoint";
-export type { DesignCheckpointToolInput } from "./design-agent-checkpoint";
 export * from "./design-agent-tool-names";
 export {
   DESIGN_AGENT_TOOL_SPECS,

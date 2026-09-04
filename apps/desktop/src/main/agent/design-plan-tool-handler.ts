@@ -4,58 +4,19 @@ import type {
   TrustedToolResult,
 } from "@opendesign/agent-contracts";
 import {
-  DesignPlanContract,
-  INTERNAL_DESIGN_APPLY_TOOL_NAME,
   designPlanTargets,
+  type DesignPlanToolInput,
 } from "@/shared/design-agent-tools.js";
-import { formatValidationFailure } from "@/shared/contract-validation.js";
 import type { GlobalTaskCoordinator } from "./global-task-coordinator.js";
-import type { RendererDesignToolHost } from "./renderer-design-tool-host.js";
 
-export async function handleDesignPlanTool(
+export function handleDesignPlanTool(
   coordinator: GlobalTaskCoordinator,
-  rendererHost: RendererDesignToolHost,
   call: ToolCallRequest,
   context: TrustedToolContext,
-  executionContext: TrustedToolContext,
-  signal: AbortSignal,
-  reportProgress?: (message: string, progress: number) => void,
-): Promise<TrustedToolResult> {
-  const parsed = DesignPlanContract.parse(call.input, {
-    authoritativePrompt: coordinator.authoritativeDesignPrompt(context),
-  });
-  if (!parsed.ok) {
-    throw new TypeError(
-      formatValidationFailure("opendesign_define_design_plan", parsed.issues),
-    );
-  }
-  const plan = parsed.value;
+): TrustedToolResult {
+  const plan = call.input as DesignPlanToolInput;
   const preparation = coordinator.prepareDesignPlan(context, plan);
-  const allocation = coordinator.createDesignPlanAllocation(
-    context.runId,
-    preparation,
-  );
-  const allocated = allocation
-    ? await rendererHost.execute(
-        {
-          ...call,
-          toolCallId: `${call.toolCallId}_allocate`,
-          toolName: INTERNAL_DESIGN_APPLY_TOOL_NAME,
-          input: { ...allocation.input, executionMode: "atomic" },
-        },
-        executionContext,
-        signal,
-        reportProgress ? { reportProgress } : {},
-      )
-    : undefined;
   const registration = coordinator.commitDesignPlan(context, preparation);
-  if (allocation) {
-    coordinator.recordDesignPlanAllocated(
-      context.runId,
-      allocation.targetIds,
-      allocated?.designRevision?.revision,
-    );
-  }
   return {
     content: {
       ok: true,
@@ -70,16 +31,7 @@ export async function handleDesignPlanTool(
       rasterAssetRoles: registration.plan.rasterAssetRoles,
       delivery: coordinator.getDeliveryLedger(context.runId),
       deliveryStage: coordinator.getDeliveryStageContext(context.runId),
-      allocation: allocation
-        ? {
-            targetIds: allocation.targetIds,
-            revision: allocated?.designRevision?.revision,
-            transactionId: allocated?.designRevision?.transactionId,
-          }
-        : null,
+      nextAction: "write-current-target",
     },
-    ...(allocated?.designRevision
-      ? { designRevision: allocated.designRevision }
-      : {}),
   };
 }

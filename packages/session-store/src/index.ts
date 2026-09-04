@@ -47,6 +47,23 @@ export interface SessionProjection {
   compactedRanges: Array<{ fromSequence: number; toSequence: number }>;
 }
 
+export type SessionStoreReadDiagnostic = {
+  code:
+    | "session_event_json_invalid"
+    | "session_event_contract_invalid"
+    | "session_event_truncated_tail";
+  message: string;
+  storage: "jsonl" | "sqlite";
+  sessionId?: string;
+  eventId?: string;
+  sequence?: number;
+  lineNumber?: number;
+};
+
+export type SessionStoreOptions = {
+  reportReadDiagnostic?: (diagnostic: SessionStoreReadDiagnostic) => void;
+};
+
 export interface SessionStore {
   append<T>(event: JournalEvent<T>): Promise<void>;
   appendNext?<T>(
@@ -60,9 +77,13 @@ export interface SessionStore {
 
 export class SqliteSessionStore implements SessionStore {
   readonly #database: DatabaseSync;
+  readonly #reportReadDiagnostic: (
+    diagnostic: SessionStoreReadDiagnostic,
+  ) => void;
 
-  constructor(path: string) {
+  constructor(path: string, options: SessionStoreOptions = {}) {
     if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
+    this.#reportReadDiagnostic = diagnosticReporter(options);
     this.#database = new DatabaseSync(path);
     this.#database.exec(`
       PRAGMA busy_timeout = 5000;
@@ -139,25 +160,7 @@ export class SqliteSessionStore implements SessionStore {
       payload_json: string;
     }>;
 
-    return Promise.resolve(
-      rows.flatMap((row) => {
-        try {
-          const candidate = {
-            eventId: row.event_id,
-            sessionId: row.session_id,
-            ...(row.run_id ? { runId: row.run_id } : {}),
-            sequence: row.sequence,
-            type: row.type,
-            createdAt: row.created_at,
-            payload: JSON.parse(row.payload_json) as unknown,
-          };
-          const parsed = parsePersistedJournalEvent(candidate);
-          return parsed === undefined ? [] : [parsed];
-        } catch {
-          return [];
-        }
-      }),
-    );
+    return Promise.resolve(rows.flatMap((row) => this.#readRow(row)));
   }
 
   async readTimeline(sessionId: string): Promise<SessionTimelineItem[]> {
@@ -191,13 +194,62 @@ export class SqliteSessionStore implements SessionStore {
         JSON.stringify(event.payload),
       );
   }
+
+  #readRow(row: {
+    event_id: string;
+    session_id: string;
+    run_id: string | null;
+    sequence: number;
+    type: string;
+    created_at: string;
+    payload_json: string;
+  }): DurableTimelineEvent[] {
+    let payload: unknown;
+    try {
+      payload = JSON.parse(row.payload_json) as unknown;
+    } catch {
+      this.#reportReadDiagnostic({
+        code: "session_event_json_invalid",
+        message: `Stored Session event ${row.event_id} has invalid JSON and was skipped`,
+        storage: "sqlite",
+        sessionId: row.session_id,
+        eventId: row.event_id,
+        sequence: row.sequence,
+      });
+      return [];
+    }
+    const candidate = {
+      eventId: row.event_id,
+      sessionId: row.session_id,
+      ...(row.run_id ? { runId: row.run_id } : {}),
+      sequence: row.sequence,
+      type: row.type,
+      createdAt: row.created_at,
+      payload,
+    };
+    const parsed = parsePersistedJournalEvent(candidate);
+    if (parsed.ok) return [parsed.event];
+    this.#reportReadDiagnostic({
+      code: "session_event_contract_invalid",
+      message: `Stored Session event ${row.event_id} violates its contract and was skipped: ${parsed.message}`,
+      storage: "sqlite",
+      sessionId: row.session_id,
+      eventId: row.event_id,
+      sequence: row.sequence,
+    });
+    return [];
+  }
 }
 
 export class JsonlSessionStore implements SessionStore {
   private readonly path: string;
+  readonly #reportReadDiagnostic: (
+    diagnostic: SessionStoreReadDiagnostic,
+  ) => void;
 
-  constructor(path: string) {
+  constructor(path: string, options: SessionStoreOptions = {}) {
     this.path = resolve(path);
+    this.#reportReadDiagnostic = diagnosticReporter(options);
   }
 
   append<T>(event: JournalEvent<T>): Promise<void> {
@@ -212,7 +264,11 @@ export class JsonlSessionStore implements SessionStore {
     createEvent: (sequence: number) => JournalEvent<T>,
   ): Promise<JournalEvent<T>> {
     return enqueueJsonl(this.path, async () => {
-      const events = await readJsonlEvents(this.path, sessionId);
+      const events = await readJsonlEvents(
+        this.path,
+        sessionId,
+        this.#reportReadDiagnostic,
+      );
       const nextSequence =
         events.reduce(
           (maximum, event) => Math.max(maximum, event.sequence),
@@ -227,7 +283,7 @@ export class JsonlSessionStore implements SessionStore {
 
   async read(sessionId: string): Promise<DurableTimelineEvent[]> {
     await waitForJsonlAppends(this.path);
-    return readJsonlEvents(this.path, sessionId);
+    return readJsonlEvents(this.path, sessionId, this.#reportReadDiagnostic);
   }
 
   async readTimeline(sessionId: string): Promise<SessionTimelineItem[]> {
@@ -245,7 +301,10 @@ export class JsonlSessionStore implements SessionStore {
       throw new TypeError("Interrupted Run recovery requires a timestamp");
     }
     return enqueueJsonl(this.path, async () => {
-      const events = await readAllJsonlEvents(this.path);
+      const events = await readAllJsonlEvents(
+        this.path,
+        this.#reportReadDiagnostic,
+      );
       const runs = new Map<
         string,
         {
@@ -466,7 +525,7 @@ function projectValidatedTimeline(
 
     if (event.type === "tool.requested" && event.runId) {
       const payload = event.payload;
-      const key = `tool:${payload.toolCallId}`;
+      const key = toolTimelineKey(event.runId, payload.toolCallId);
       if (!items.has(key)) {
         items.set(key, {
           ...timelineBase(key, event),
@@ -484,7 +543,7 @@ function projectValidatedTimeline(
 
     if (event.type === "tool.progress") {
       const payload = event.payload;
-      const key = `tool:${payload.toolCallId}`;
+      const key = toolTimelineKey(event.runId, payload.toolCallId);
       const current = items.get(key);
       if (current?.type === "tool") {
         items.set(key, {
@@ -500,7 +559,7 @@ function projectValidatedTimeline(
 
     if (event.type === "tool.completed") {
       const payload = event.payload;
-      const key = `tool:${payload.toolCallId}`;
+      const key = toolTimelineKey(event.runId, payload.toolCallId);
       const current = items.get(key);
       if (current?.type === "tool") {
         items.set(key, {
@@ -521,7 +580,7 @@ function projectValidatedTimeline(
 
     if (event.type === "tool.failed") {
       const payload = event.payload;
-      const key = `tool:${payload.toolCallId}`;
+      const key = toolTimelineKey(event.runId, payload.toolCallId);
       const current = items.get(key);
       if (current?.type === "tool") {
         items.set(key, {
@@ -654,7 +713,7 @@ function projectEvents(
     }
     if (event.type === "tool.requested") {
       const payload = event.payload;
-      toolCalls.add(payload.toolCallId);
+      toolCalls.add(toolTimelineKey(event.runId, payload.toolCallId));
     }
     if (event.type === "design.revision") {
       const payload = event.payload;
@@ -686,6 +745,13 @@ function timelineBase(itemId: string, event: JournalEvent): TimelineBase {
     createdAt: event.createdAt,
     updatedAt: event.createdAt,
   };
+}
+
+function toolTimelineKey(
+  runId: string | undefined,
+  toolCallId: string,
+): string {
+  return `tool:${runId ?? "unknown-run"}:${toolCallId}`;
 }
 
 function compareEvents(left: JournalEvent, right: JournalEvent): number {
@@ -736,14 +802,16 @@ async function appendJsonlEvent<T>(
 async function readJsonlEvents(
   path: string,
   sessionId: string,
+  reportDiagnostic: (diagnostic: SessionStoreReadDiagnostic) => void,
 ): Promise<DurableTimelineEvent[]> {
-  return (await readAllJsonlEvents(path)).filter(
+  return (await readAllJsonlEvents(path, reportDiagnostic)).filter(
     (event) => event.sessionId === sessionId,
   );
 }
 
 async function readAllJsonlEvents(
   path: string,
+  reportDiagnostic: (diagnostic: SessionStoreReadDiagnostic) => void,
 ): Promise<DurableTimelineEvent[]> {
   let content: string;
   try {
@@ -753,17 +821,40 @@ async function readAllJsonlEvents(
     throw error;
   }
 
-  return content
-    .split("\n")
-    .filter(Boolean)
-    .flatMap((line) => {
+  const lines = content.split("\n");
+  const hasTerminatingNewline = content.endsWith("\n");
+  return lines
+    .flatMap((line, index) => {
+      if (line.length === 0) return [];
+      const lineNumber = index + 1;
+      let candidate: unknown;
       try {
-        const candidate: unknown = JSON.parse(line);
-        const parsed = parsePersistedJournalEvent(candidate);
-        return parsed === undefined ? [] : [parsed];
+        candidate = JSON.parse(line);
       } catch {
+        const truncated = !hasTerminatingNewline && index === lines.length - 1;
+        reportDiagnostic({
+          code: truncated
+            ? "session_event_truncated_tail"
+            : "session_event_json_invalid",
+          message: truncated
+            ? `Session journal has a truncated final event at line ${lineNumber}; earlier events were recovered`
+            : `Session journal line ${lineNumber} has invalid JSON and was skipped`,
+          storage: "jsonl",
+          lineNumber,
+        });
         return [];
       }
+      const parsed = parsePersistedJournalEvent(candidate);
+      if (parsed.ok) return [parsed.event];
+      const identity = persistedEventIdentity(candidate);
+      reportDiagnostic({
+        code: "session_event_contract_invalid",
+        message: `Session journal line ${lineNumber} violates its event contract and was skipped: ${parsed.message}`,
+        storage: "jsonl",
+        lineNumber,
+        ...identity,
+      });
+      return [];
     })
     .sort(compareEvents);
 }
@@ -807,10 +898,54 @@ function requireTimelineItem(value: unknown): SessionTimelineItem {
 
 function parsePersistedJournalEvent(
   value: unknown,
-): DurableTimelineEvent | undefined {
+): { ok: true; event: DurableTimelineEvent } | { ok: false; message: string } {
   const recovered = recoverPersistedEvent(value);
   const parsed = DurableTimelineEventContract.parse(recovered);
-  return parsed.ok ? parsed.value : undefined;
+  return parsed.ok
+    ? { ok: true, event: parsed.value }
+    : {
+        ok: false,
+        message: formatRuntimeContractFailure(
+          "Persisted Session event",
+          parsed.issues,
+        ),
+      };
+}
+
+function persistedEventIdentity(value: unknown): {
+  sessionId?: string;
+  eventId?: string;
+  sequence?: number;
+} {
+  if (!isRecord(value)) return {};
+  return {
+    ...(typeof value.sessionId === "string"
+      ? { sessionId: value.sessionId }
+      : {}),
+    ...(typeof value.eventId === "string" ? { eventId: value.eventId } : {}),
+    ...(Number.isSafeInteger(value.sequence)
+      ? { sequence: Number(value.sequence) }
+      : {}),
+  };
+}
+
+function diagnosticReporter(
+  options: SessionStoreOptions,
+): (diagnostic: SessionStoreReadDiagnostic) => void {
+  const reported = new Set<string>();
+  return (diagnostic) => {
+    const identity = [
+      diagnostic.code,
+      diagnostic.storage,
+      diagnostic.sessionId ?? "",
+      diagnostic.eventId ?? "",
+      diagnostic.sequence ?? "",
+      diagnostic.lineNumber ?? "",
+    ].join(":");
+    if (reported.has(identity)) return;
+    reported.add(identity);
+    options.reportReadDiagnostic?.(diagnostic);
+  };
 }
 
 function recoverPersistedEvent(value: unknown): unknown {

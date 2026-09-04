@@ -34,7 +34,7 @@ const DEFAULT_LIMITS: AgentRuntimeLimits = {
   maxTurns: 160,
   maxToolCalls: 320,
   maxGeneratedTokens: 200_000,
-  maxCompletionGuardRejections: 32,
+  maxCompletionGuardRejections: 2,
   maxContextCharacters: 240_000,
 };
 
@@ -185,7 +185,6 @@ export class OpenDesignPiRuntime {
         maxTurns: this.#limits.maxTurns,
         maxGeneratedTokens: this.#limits.maxGeneratedTokens,
         maxCompletionGuardRejections: this.#limits.maxCompletionGuardRejections,
-        priorToolCallIds: prepared.priorToolCallIds,
         initialModelToolSurface,
         now: this.#now,
       });
@@ -258,7 +257,11 @@ export class OpenDesignPiRuntime {
       try {
         const run = agent.prompt(prepared.promptMessage);
         if (active.abortController.signal.aborted) agent.abort();
-        await run;
+        try {
+          await run;
+        } catch (error) {
+          await adapter.interrupt(error);
+        }
       } finally {
         unsubscribe();
         agent.abort();

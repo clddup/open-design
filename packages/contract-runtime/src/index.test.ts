@@ -52,6 +52,48 @@ describe("contract runtime", () => {
     expect(refined).toBe(true);
   });
 
+  it("validates model input before trusted host binding without inventing canonical fields", () => {
+    const contract = defineContract<
+      { localId: string },
+      { localId: string; stableId: string },
+      { stableId?: string }
+    >(
+      {
+        schema: Type.Object(
+          { localId: Type.String({ minLength: 1 }) },
+          { additionalProperties: false },
+        ),
+        code: "example.model_invalid",
+        subject: "model input",
+        bind: (value, context) => ({
+          ...value,
+          stableId: context.stableId ?? "",
+        }),
+        canonical: {
+          schema: Type.Object(
+            {
+              localId: Type.String({ minLength: 1 }),
+              stableId: Type.String({ minLength: 1 }),
+            },
+            { additionalProperties: false },
+          ),
+          code: "example.host_binding_invalid",
+          subject: "host-bound input",
+        },
+      },
+      () => ({}),
+    );
+
+    expect(contract.modelIssues({ localId: "shape" })).toEqual([]);
+    expect(contract.parse({ localId: "shape" })).toMatchObject({ ok: false });
+    expect(
+      contract.parse({ localId: "shape" }, { stableId: "node_shape" }),
+    ).toEqual({
+      ok: true,
+      value: { localId: "shape", stableId: "node_shape" },
+    });
+  });
+
   it("selects only a matching literal-discriminated union branch", () => {
     const schema = Type.Union([
       Type.Object(

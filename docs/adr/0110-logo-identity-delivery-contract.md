@@ -1,5 +1,7 @@
 # ADR-0110：Logo 身份探索、矢量首切片与交付证据
 
+> 部分决策已由 ADR-0301 取代：不再物化或校验自动生成的 monochrome/32/24/16 evidence nodes。
+
 - 状态：Accepted
 - 日期：2026-08-20
 - Design Plan：`1`（增加 Logo 专属可选字段，`deliverable=logo` 时必填）

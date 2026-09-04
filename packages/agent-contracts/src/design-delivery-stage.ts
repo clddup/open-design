@@ -1,5 +1,6 @@
 import { Type, type Static } from "@sinclair/typebox";
 import {
+  MAX_DESIGN_TARGETS,
   StableIdSchema,
   WorkspaceNameSchema,
 } from "@opendesign/workspace-contracts";
@@ -7,8 +8,6 @@ import {
   defineContract,
   type ValidationIssue,
 } from "@opendesign/contract-runtime";
-
-const MAX_DELIVERY_STAGE_TARGETS = 32;
 
 const DeliveryStageTargetSchema = Type.Object(
   {
@@ -25,11 +24,11 @@ const DeliveryStageTargetSchema = Type.Object(
 
 const DeliveryStageCurrentPlanSchema = Type.Object(
   {
-    stage: Type.Integer({ minimum: 1, maximum: MAX_DELIVERY_STAGE_TARGETS }),
+    stage: Type.Integer({ minimum: 1, maximum: MAX_DESIGN_TARGETS }),
     status: Type.Union([Type.Literal("active"), Type.Literal("verified")]),
     targets: Type.Array(DeliveryStageTargetSchema, {
       minItems: 1,
-      maxItems: MAX_DELIVERY_STAGE_TARGETS,
+      maxItems: MAX_DESIGN_TARGETS,
     }),
   },
   { additionalProperties: false },
@@ -43,14 +42,13 @@ const DeliveryStageArtboardSchema = Type.Object(
     y: Type.Number(),
     width: Type.Number({ minimum: 16, maximum: 100_000 }),
     height: Type.Number({ minimum: 16, maximum: 100_000 }),
-    allocatedRevision: Type.Integer({ minimum: 0 }),
   },
   { additionalProperties: false },
 );
 
 const DeliveryStageNextTargetSchema = Type.Object(
   {
-    stage: Type.Integer({ minimum: 1, maximum: MAX_DELIVERY_STAGE_TARGETS }),
+    stage: Type.Integer({ minimum: 1, maximum: MAX_DESIGN_TARGETS }),
     ...DeliveryStageTargetSchema.properties,
     artboard: DeliveryStageArtboardSchema,
   },
@@ -61,15 +59,15 @@ export const DesignDeliveryStageSchema = Type.Object(
   {
     totalTargets: Type.Integer({
       minimum: 1,
-      maximum: MAX_DELIVERY_STAGE_TARGETS,
+      maximum: MAX_DESIGN_TARGETS,
     }),
     plannedTargets: Type.Integer({
       minimum: 0,
-      maximum: MAX_DELIVERY_STAGE_TARGETS,
+      maximum: MAX_DESIGN_TARGETS,
     }),
     verifiedTargets: Type.Integer({
       minimum: 0,
-      maximum: MAX_DELIVERY_STAGE_TARGETS,
+      maximum: MAX_DESIGN_TARGETS,
     }),
     currentPlan: Type.Optional(DeliveryStageCurrentPlanSchema),
     nextTarget: Type.Optional(DeliveryStageNextTargetSchema),

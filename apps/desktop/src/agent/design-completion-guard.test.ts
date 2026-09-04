@@ -4,17 +4,13 @@ import type {
 } from "@opendesign/agent-runtime";
 import { describe, expect, it } from "vitest";
 import {
-  DESIGN_APPLY_TOOL_NAME,
-  DESIGN_ARRANGE_TOOL_NAME,
   DESIGN_CAPTURE_TOOL_NAME,
-  DESIGN_CHECKPOINT_TOOL_NAME,
   DESIGN_DELIVERY_SCOPE_TOOL_NAME,
+  DESIGN_EDIT_TOOL_NAME,
   DESIGN_FIRST_SLICE_TOOL_NAME,
-  DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
   DESIGN_PAGE_TOOL_NAME,
   DESIGN_PLAN_TOOL_NAME,
-  DESIGN_REVIEW_TOOL_NAME,
   GENERATE_IMAGE_TOOL_NAME,
   IMPORT_SVG_TOOL_NAME,
   PLACE_IMAGE_TOOL_NAME,
@@ -24,13 +20,21 @@ import { reviewDesignCompletion } from "./design-completion-guard";
 
 const materialWrite: AgentToolCallRecord = {
   toolCallId: "write_1",
-  toolName: DESIGN_APPLY_TOOL_NAME,
+  toolName: DESIGN_EDIT_TOOL_NAME,
   input: {
-    label: "Build mascot",
-    commands: [{ type: "insert_element" }, { type: "insert_element" }],
+    edits: [
+      {
+        kind: "node",
+        input: {
+          label: "Build mascot",
+          commands: [{ type: "insert_element" }, { type: "insert_element" }],
+        },
+      },
+    ],
   },
   status: "completed",
   revision: 5,
+  revisionAdvanced: true,
 };
 
 const designPlan: AgentToolCallRecord = {
@@ -93,7 +97,7 @@ const firstCapture: AgentToolCallRecord = {
 
 const visualReview: AgentToolCallRecord = {
   toolCallId: "review_1",
-  toolName: DESIGN_REVIEW_TOOL_NAME,
+  toolName: DESIGN_CAPTURE_TOOL_NAME,
   input: {
     briefFidelity:
       "The rendered design preserves the requested mascot content without inventing product controls",
@@ -111,13 +115,21 @@ const visualReview: AgentToolCallRecord = {
 
 const refinementWrite: AgentToolCallRecord = {
   toolCallId: "write_2",
-  toolName: DESIGN_APPLY_TOOL_NAME,
+  toolName: DESIGN_EDIT_TOOL_NAME,
   input: {
-    label: "Refine mascot silhouette",
-    commands: [{ type: "update_properties" }],
+    edits: [
+      {
+        kind: "node",
+        input: {
+          label: "Refine mascot silhouette",
+          commands: [{ type: "update_properties" }],
+        },
+      },
+    ],
   },
   status: "completed",
   revision: 6,
+  revisionAdvanced: true,
 };
 
 const finalCapture: AgentToolCallRecord = {
@@ -126,6 +138,7 @@ const finalCapture: AgentToolCallRecord = {
   input: {},
   status: "completed",
   revision: 6,
+  result: deliveryResult("verified"),
 };
 
 function context(
@@ -406,7 +419,7 @@ describe("design completion guard", () => {
     expect(nextStage.allow).toBe(false);
     if (nextStage.allow) throw new Error("Expected the next rolling Plan");
     expect(nextStage.message).toContain("target_profile");
-    expect(nextStage.message).toContain("next Plan");
+    expect(nextStage.message).toContain("opendesign_generate_first_slice");
 
     const continuedStage = reviewDesignCompletion(
       context(
@@ -454,7 +467,6 @@ describe("design completion guard", () => {
                     y: 0,
                     width: 1440,
                     height: 900,
-                    allocatedRevision: 5,
                   },
                 },
               },
@@ -470,34 +482,10 @@ describe("design completion guard", () => {
     expect(continuedStage.message).toContain("target_profile");
   });
 
-  it("asks for the first executable Plan after scope artboards are allocated", () => {
-    const allocatedScope = structuredClone(deliveryScope);
-    allocatedScope.result = {
-      ...(allocatedScope.result as Record<string, unknown>),
-      delivery: {
-        version: 4,
-        targets: [
-          {
-            targetId: "target_home",
-            label: "Home",
-            pageId: "page_1",
-            rootNodeId: "run_scope_scope_1",
-            reservedNodeIds: ["run_scope_scope_1"],
-            status: "allocated",
-            allocatedRevision: 5,
-          },
-          {
-            targetId: "target_profile",
-            label: "Profile",
-            pageId: "page_1",
-            rootNodeId: "run_scope_scope_2",
-            reservedNodeIds: ["run_scope_scope_2"],
-            status: "allocated",
-            allocatedRevision: 5,
-          },
-        ],
-        activeTargetId: "target_home",
-      },
+  it("asks for the first executable Plan after scope artboards are reserved", () => {
+    const reservedScope = structuredClone(deliveryScope);
+    reservedScope.result = {
+      ...(reservedScope.result as Record<string, unknown>),
       deliveryStage: {
         totalTargets: 2,
         plannedTargets: 0,
@@ -515,21 +503,20 @@ describe("design completion guard", () => {
             y: 0,
             width: 1440,
             height: 900,
-            allocatedRevision: 5,
           },
         },
       },
     };
 
     const result = reviewDesignCompletion(
-      context([allocatedScope], undefined, {
+      context([reservedScope], undefined, {
         deliveryScopeReview: "required",
       }),
     );
 
     expect(result.allow).toBe(false);
     if (result.allow) throw new Error("Expected executable Plan requirement");
-    expect(result.message).toContain("no executable target Plan");
+    expect(result.message).toContain("no executable target");
     expect(result.message).toContain("target_home");
   });
 
@@ -556,17 +543,52 @@ describe("design completion guard", () => {
     expect(result.message).toContain("restart the request");
   });
 
-  it("blocks a resumed Run while inspection reports unfinished delivery", () => {
+  it("blocks a real continuation while inspection reports unfinished delivery", () => {
     const unfinished = deliveryResult("pending").delivery;
-    expectBlocked(
-      [
+    const result = reviewDesignCompletion(
+      context(
+        [{ ...inspection, result: { unfinishedDelivery: unfinished } }],
+        undefined,
         {
-          ...inspection,
-          result: { unfinishedDelivery: unfinished },
+          continuation: {
+            parentRunId: "run_parent",
+            rootRunId: "run_parent",
+            attempt: 1,
+            maxAttempts: 3,
+            reason: "budget",
+          },
         },
-      ],
-      "profile_content",
+      ),
     );
+    expect(result.allow).toBe(false);
+    if (result.allow) throw new Error("Expected continuation to be blocked");
+    expect(result.message).toContain("profile_content");
+  });
+
+  it("does not turn old unfinished delivery into an explicit direct edit obligation", () => {
+    const unfinished = deliveryResult("pending").delivery;
+    expect(
+      reviewDesignCompletion(
+        context(
+          [
+            { ...inspection, result: { unfinishedDelivery: unfinished } },
+            materialWrite,
+          ],
+          undefined,
+          { deliveryScopeReview: "direct" },
+        ),
+      ),
+    ).toEqual({ allow: true });
+  });
+
+  it("does not upgrade a successful direct edit into capture and review ceremony", () => {
+    expect(
+      reviewDesignCompletion(
+        context([inspection, designPlan, materialWrite], undefined, {
+          deliveryScopeReview: "direct",
+        }),
+      ),
+    ).toEqual({ allow: true });
   });
 
   it("allows an explicit trusted Page clear to supersede unfinished delivery without capture", () => {
@@ -591,7 +613,7 @@ describe("design completion guard", () => {
           ],
           {
             toolCallId: "old_failure",
-            toolName: DESIGN_APPLY_TOOL_NAME,
+            toolName: DESIGN_EDIT_TOOL_NAME,
             code: "design.invalid",
             message: "Old Main deletion failed",
             inspectionCompleted: true,
@@ -618,7 +640,7 @@ describe("design completion guard", () => {
         ],
         {
           toolCallId: "duplicate_write",
-          toolName: DESIGN_APPLY_TOOL_NAME,
+          toolName: DESIGN_EDIT_TOOL_NAME,
           code: "design.duplicate",
           message: "Node login-brand-cover-v3 already exists",
           inspectionCompleted: true,
@@ -634,8 +656,18 @@ describe("design completion guard", () => {
     );
   });
 
-  it("requires capture, refinement, and a final capture in order", () => {
-    expectBlocked([materialWrite], "structured design plan");
+  it("requires capture to return Main-owned delivery and review evidence", () => {
+    expect(reviewDesignCompletion(context([materialWrite]))).toEqual({
+      allow: true,
+    });
+    expectBlocked(
+      [
+        inspection,
+        designPlan,
+        { ...materialWrite, revisionAdvanced: undefined },
+      ],
+      "No material design transaction reached",
+    );
     expectBlocked([designPlan, materialWrite], "document inspection");
     expectBlocked(
       [inspection, designPlan, materialWrite],
@@ -643,36 +675,12 @@ describe("design completion guard", () => {
     );
     expectBlocked(
       [inspection, designPlan, materialWrite, firstCapture],
-      "opendesign_record_visual_review",
+      "Main-owned delivery ledger and visual verdict",
     );
     expectBlocked(
       [inspection, designPlan, materialWrite, firstCapture, visualReview],
-      "concrete refinement transaction",
+      "Main-owned delivery ledger and visual verdict",
     );
-    expectBlocked(
-      [
-        inspection,
-        designPlan,
-        materialWrite,
-        firstCapture,
-        visualReview,
-        refinementWrite,
-      ],
-      "again",
-    );
-    expect(
-      reviewDesignCompletion(
-        context([
-          inspection,
-          designPlan,
-          materialWrite,
-          firstCapture,
-          visualReview,
-          refinementWrite,
-          finalCapture,
-        ]),
-      ),
-    ).toEqual({ allow: true });
   });
 
   it("accepts trusted host inspection plus the combined plan and first-slice write", () => {
@@ -694,6 +702,7 @@ describe("design completion guard", () => {
       },
       status: "completed",
       revision: 5,
+      revisionAdvanced: true,
       result: {
         plan: {
           version: 1,
@@ -758,23 +767,18 @@ describe("design completion guard", () => {
     ).toEqual({ allow: true });
   });
 
-  it("accepts an all-verified host ledger from one conditional checkpoint", () => {
+  it("accepts an all-verified host ledger from one trusted capture", () => {
     expect(
       reviewDesignCompletion(
         context([
           {
-            toolCallId: "checkpoint_verified",
-            toolName: DESIGN_CHECKPOINT_TOOL_NAME,
-            input: {
-              version: 1,
-              action: "refine-and-capture",
-              refinement: refinementWrite.input,
-            },
+            toolCallId: "capture_verified",
+            toolName: DESIGN_CAPTURE_TOOL_NAME,
+            input: {},
             status: "completed",
             revision: 8,
             result: {
               ...deliveryResult("verified"),
-              checkpoint: { status: "completed", materialRevision: 8 },
             },
           },
         ]),
@@ -805,6 +809,7 @@ describe("design completion guard", () => {
       },
       status: "completed",
       revision: 5,
+      revisionAdvanced: true,
     };
 
     const singleRasterPlan: AgentToolCallRecord = {
@@ -834,7 +839,7 @@ describe("design completion guard", () => {
     ).toEqual({ allow: true });
   });
 
-  it("rejects a new editable artboard that is only a placed raster", () => {
+  it("requires rendered review after a raster-backed editable write without counting layers", () => {
     const editablePlan: AgentToolCallRecord = {
       ...designPlan,
       input: {
@@ -844,18 +849,26 @@ describe("design completion guard", () => {
     };
     const artboardOnly: AgentToolCallRecord = {
       toolCallId: "write_artboard",
-      toolName: DESIGN_APPLY_TOOL_NAME,
+      toolName: DESIGN_EDIT_TOOL_NAME,
       input: {
-        label: "Create artboard",
-        commands: [
+        edits: [
           {
-            type: "insert_element",
-            node: { id: "artboard_1", kind: "frame" },
+            kind: "node",
+            input: {
+              label: "Create artboard",
+              commands: [
+                {
+                  type: "insert_element",
+                  node: { id: "artboard_1", kind: "frame" },
+                },
+              ],
+            },
           },
         ],
       },
       status: "completed",
       revision: 5,
+      revisionAdvanced: true,
     };
     const placeHero: AgentToolCallRecord = {
       toolCallId: "place_hero",
@@ -863,26 +876,35 @@ describe("design completion guard", () => {
       input: { role: "hero" },
       status: "completed",
       revision: 6,
+      revisionAdvanced: true,
     };
 
     expectBlocked(
       [inspection, editablePlan, artboardOnly, placeHero],
-      "dominated by one placed raster",
+      "opendesign_capture_canvas",
     );
   });
 
   it("accepts a semantic hierarchy edit as a post-review refinement without making it a material draft", () => {
     const hierarchyWrite: AgentToolCallRecord = {
       toolCallId: "hierarchy_1",
-      toolName: DESIGN_HIERARCHY_TOOL_NAME,
+      toolName: DESIGN_EDIT_TOOL_NAME,
       input: {
-        action: "group",
-        pageId: "page_1",
-        nodeIds: ["body", "face"],
-        groupId: "mascot",
+        edits: [
+          {
+            kind: "hierarchy",
+            input: {
+              action: "group",
+              pageId: "page_1",
+              nodeIds: ["body", "face"],
+              groupId: "mascot",
+            },
+          },
+        ],
       },
       status: "completed",
       revision: 6,
+      revisionAdvanced: true,
     };
 
     expect(reviewDesignCompletion(context([hierarchyWrite]))).toEqual({
@@ -915,6 +937,7 @@ describe("design completion guard", () => {
       },
       status: "completed",
       revision: 6,
+      revisionAdvanced: true,
     };
 
     expect(reviewDesignCompletion(context([updateImage]))).toEqual({
@@ -938,15 +961,23 @@ describe("design completion guard", () => {
   it("accepts a precise arrangement as a post-review refinement without making it a material draft", () => {
     const arrangeWrite: AgentToolCallRecord = {
       toolCallId: "arrange_1",
-      toolName: DESIGN_ARRANGE_TOOL_NAME,
+      toolName: DESIGN_EDIT_TOOL_NAME,
       input: {
-        action: "set-horizontal-spacing",
-        pageId: "page_1",
-        nodeIds: ["card_one", "card_two"],
-        spacing: 24,
+        edits: [
+          {
+            kind: "arrange",
+            input: {
+              action: "set-horizontal-spacing",
+              pageId: "page_1",
+              nodeIds: ["card_one", "card_two"],
+              spacing: 24,
+            },
+          },
+        ],
       },
       status: "completed",
       revision: 7,
+      revisionAdvanced: true,
     };
 
     expect(reviewDesignCompletion(context([arrangeWrite]))).toEqual({
@@ -981,6 +1012,7 @@ describe("design completion guard", () => {
       },
       status: "completed",
       revision: 6,
+      revisionAdvanced: true,
     };
 
     expect(reviewDesignCompletion(context([inspection, importSvg]))).toEqual({

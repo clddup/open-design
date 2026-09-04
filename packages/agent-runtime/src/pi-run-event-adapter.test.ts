@@ -291,6 +291,70 @@ describe("Pi run event adapter", () => {
     ).rejects.toThrow("production tool adapter");
   });
 
+  it("persists streamed Assistant content when the Pi loop is interrupted", async () => {
+    const store = new MemorySessionStore();
+    const events: AgentEvent[] = [];
+    const adapter = new PiRunEventAdapter({
+      request,
+      sessionStore: store,
+      emit: (event) => {
+        events.push(event);
+      },
+      now: fixedNow,
+    });
+    const partialMessage = {
+      role: "assistant",
+      content: [{ type: "text", text: "已经显示的分析" }],
+      api: "openai-responses",
+      provider: "configured-provider",
+      model: "design-model",
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 0,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+      },
+      stopReason: "pending",
+      timestamp: 1,
+    };
+
+    await adapter.accept({ type: "agent_start" });
+    await adapter.accept({
+      type: "message_start",
+      message: { ...partialMessage, content: [] },
+    } as never);
+    await adapter.accept({
+      type: "message_update",
+      message: partialMessage,
+      assistantMessageEvent: {
+        type: "text_delta",
+        contentIndex: 0,
+        delta: "已经显示的分析",
+        partial: partialMessage,
+      },
+    } as never);
+    await adapter.interrupt(new Error("stream bridge failed"));
+
+    const persisted = store.events.find(
+      (event) => event.type === "message.assistant",
+    );
+    expect(persisted?.payload).toMatchObject({
+      blocks: [{ text: "已经显示的分析" }],
+    });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "message.completed",
+        blocks: [expect.objectContaining({ text: "已经显示的分析" })],
+      }),
+    );
+    expect(events.at(-1)).toMatchObject({
+      type: "run.completed",
+      stopReason: "error",
+    });
+  });
+
   it("finalizes a pending adapted tool when Pi reaches agent_end unexpectedly", async () => {
     const store = new MemorySessionStore();
     const events: AgentEvent[] = [];

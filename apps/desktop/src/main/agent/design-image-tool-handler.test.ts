@@ -8,6 +8,8 @@ import {
   EDIT_IMAGE_TOOL_NAME,
   GENERATE_IMAGE_TOOL_NAME,
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
+  type InternalDesignApplyToolInput,
+  PLACE_IMAGE_TOOL_NAME,
   READ_IMAGE_TOOL_NAME,
 } from "@/shared/design-agent-tools.js";
 import { handleDesignImageTool } from "./design-image-tool-handler.js";
@@ -33,9 +35,10 @@ function dependencies(call: ToolCallRequest) {
   const coordinator = {
     assertDocumentInspected: vi.fn(),
     assertDesignPlanForRaster: vi.fn(),
-    assertVisualReviewBeforeWrite: vi.fn(),
     recordGeneratedRaster: vi.fn(),
-    resolveMaterialTargetIds: vi.fn(() => ["target_image"]),
+    recordMaterialDesignWriteCompleted: vi.fn(),
+    assertImagePlacement: vi.fn(),
+    resolveMaterialTargetIdsIfPlanned: vi.fn(() => []),
   };
   const attachment = {
     attachmentId: `image_${"a".repeat(64)}`,
@@ -49,6 +52,12 @@ function dependencies(call: ToolCallRequest) {
   const referenceHost = {
     readImage: vi.fn(),
     registerGeneratedImage: vi.fn((value: typeof attachment) => value),
+    hasAuthorizedImage: vi.fn(() => true),
+    materializeImage: vi.fn().mockResolvedValue({
+      attachment,
+      data: Buffer.from([1, 2, 3, 4]).toString("base64"),
+      mimeType: "image/webp" as const,
+    }),
   };
   const imageGenerationHost = {
     generateImage: vi.fn().mockResolvedValue({
@@ -197,19 +206,46 @@ describe("Design Image Main tool handler", () => {
     });
   });
 
-  it("rejects malformed generation input before calling external services", async () => {
-    const setup = dependencies({
-      toolCallId: "invalid_generate",
-      toolName: GENERATE_IMAGE_TOOL_NAME,
-      input: { prompt: "Too large", role: "hero", size: "8192x8192" },
-    });
+  it("places a Conversation image without requiring a design Plan", async () => {
+    const call: ToolCallRequest = {
+      toolCallId: "place_history_image",
+      toolName: PLACE_IMAGE_TOOL_NAME,
+      input: {
+        attachmentId: `image_${"a".repeat(64)}`,
+        pageId: "page_main",
+        parentId: "existing_frame",
+        index: 0,
+        nodeId: "history_hero",
+        name: "History hero",
+        role: "hero",
+        x: 24,
+        y: 24,
+        width: 720,
+        height: 480,
+      },
+    };
+    const setup = dependencies(call);
 
-    await expect(handleDesignImageTool(setup.input)).rejects.toThrow(
-      /generate_image.*size/i,
+    await expect(handleDesignImageTool(setup.input)).resolves.toMatchObject({
+      designRevision: { revision: 4 },
+    });
+    expect(setup.coordinator.assertImagePlacement).toHaveBeenCalledWith(
+      context,
+      "existing_frame",
+      "history_hero",
     );
-    expect(setup.imageGenerationHost.generateImage).not.toHaveBeenCalled();
-    expect(setup.attachmentHost.importImageBytes).not.toHaveBeenCalled();
-    expect(setup.execute).not.toHaveBeenCalled();
+    expect(
+      setup.coordinator.resolveMaterialTargetIdsIfPlanned,
+    ).toHaveBeenCalledWith(context, [], "existing_frame");
+    const executed = setup.execute.mock.calls[0]?.[0];
+    expect(executed?.toolName).toBe(INTERNAL_DESIGN_APPLY_TOOL_NAME);
+    const input = executed?.input as InternalDesignApplyToolInput;
+    const inserted = input.commands.find(
+      (command) => command.type === "insert_element",
+    );
+    expect(inserted?.type).toBe("insert_element");
+    if (inserted?.type !== "insert_element") return;
+    expect(inserted.node).toMatchObject({ id: "history_hero", kind: "image" });
   });
 
   it("returns the prepared image source field path before external editing", async () => {

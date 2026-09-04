@@ -18,8 +18,6 @@ import {
   type DesignTargetQualityProfile,
 } from "./design-plan-quality-profile";
 import {
-  isActiveVisualReferenceDecision,
-  MAX_ACTIVE_VISUAL_REFERENCES,
   DESIGN_REFERENCE_STRATEGY_SCHEMA,
   type DesignReferenceStrategy,
 } from "./design-reference-strategy";
@@ -29,7 +27,6 @@ import {
   type ValidationResult,
   validateContract,
 } from "./contract-validation";
-import { isRecord, substantiveReviewText } from "./design-agent-validation";
 import {
   DESIGN_LOGO_COLOR_STRATEGY_SCHEMA,
   logoColorDomainIssues,
@@ -157,8 +154,7 @@ export type DesignLogoExploration = {
       rationale: string;
     };
     rootNodeId: string;
-    monochromeNodeId: string;
-    smallSizeNodeIds: [string, string, string];
+    masterNodeId: string;
   }>;
 };
 
@@ -178,12 +174,11 @@ export type DesignPlanToolInput = {
   logoColorStrategy?: DesignLogoColorStrategy;
   logoOutputs?: DesignLogoOutput[];
   logoExploration?: DesignLogoExploration;
-  singleRasterEvidence?: string;
 };
 
 export const DESIGN_VISUAL_CRITERIA = [
   "visual-thesis",
-  "signature-motif",
+  "signature-decision",
   "composition-tension",
   "typography-character",
   "material-coherence",
@@ -200,7 +195,7 @@ export type DesignVisualReviewToolInput = {
   skillRefs: BuiltinDesignSkillRef[];
   briefFidelity: string;
   distinctiveness: string;
-  signatureMotif: string;
+  signatureDecision: string;
   composition: string;
   hierarchy: string;
   typography: string;
@@ -248,7 +243,7 @@ const DESIGN_PLAN_COMPOSITION_SCHEMA = {
     },
     hierarchy: {
       type: "array",
-      minItems: 2,
+      minItems: 1,
       maxItems: 16,
       items: {
         type: "string",
@@ -365,7 +360,7 @@ const DESIGN_PLAN_TARGET_BASE_SCHEMA = {
     composition: DESIGN_PLAN_COMPOSITION_SCHEMA,
     editableLayers: {
       type: "array",
-      minItems: 2,
+      minItems: 1,
       maxItems: 24,
       items: {
         type: "string",
@@ -398,11 +393,11 @@ const DESIGN_PLAN_TARGET_BASE_SCHEMA = {
         additionalProperties: false,
       },
       description:
-        "Ordered material implementation steps with stable IDs. Steps execute serially; keep them coarse enough that each one can be completed by a bounded set of real design writes. Visual review and refinement are appended and owned by the host, so do not include them here.",
+        "Ordered material implementation steps with stable IDs. Use one step for a coherent target by default; split only when the target genuinely needs separate committed revisions, never merely by visual region. Steps execute serially. Visual review and refinement are appended and owned by the host, so do not include them here.",
     },
     validationChecks: {
       type: "array",
-      minItems: 2,
+      minItems: 1,
       maxItems: 16,
       items: {
         type: "string",
@@ -438,7 +433,7 @@ const DESIGN_PLAN_TARGET_SCHEMA = {
 export const DESIGN_LOGO_EXPLORATION_SCHEMA = {
   type: "object",
   description:
-    "Optional for a requested multi-direction Logo exploration. Three genuinely different concept directions with stable editable roots, distinct thesis-specific primary color systems, and rendered monochrome plus 32/24/16 px evidence. Each thesis states the relevant brand meaning; each constructionLogic names the visible geometric mechanism, memorable silhouette/counterform anchor, and feature that survives at 16 px. Cosmetic variants, hue swaps, and caption-dependent arbitrary shapes are invalid.",
+    "Optional for a requested multi-direction Logo exploration. Three genuinely different concept directions with stable editable roots, one authored master each, and distinct thesis-specific primary color systems. Each thesis states the relevant brand meaning; each constructionLogic names the visible geometric mechanism, memorable silhouette/counterform anchor, and feature intended to survive at small size. Cosmetic variants, hue swaps, mechanically scaled clones, and caption-dependent arbitrary shapes are invalid.",
   properties: {
     targetId: {
       type: "string",
@@ -448,8 +443,8 @@ export const DESIGN_LOGO_EXPLORATION_SCHEMA = {
     },
     directions: {
       type: "array",
-      minItems: 3,
-      maxItems: 3,
+      minItems: 1,
+      maxItems: 8,
       items: {
         type: "object",
         properties: {
@@ -468,13 +463,13 @@ export const DESIGN_LOGO_EXPLORATION_SCHEMA = {
           principle: { enum: [...LOGO_CONCEPT_PRINCIPLES] },
           thesis: {
             type: "string",
-            minLength: 16,
+            minLength: 1,
             maxLength: 1_000,
             pattern: "\\S",
           },
           constructionLogic: {
             type: "string",
-            minLength: 16,
+            minLength: 1,
             maxLength: 1_000,
             pattern: "\\S",
             description:
@@ -497,7 +492,7 @@ export const DESIGN_LOGO_EXPLORATION_SCHEMA = {
               },
               rationale: {
                 type: "string",
-                minLength: 16,
+                minLength: 1,
                 maxLength: 1_000,
                 pattern: "\\S",
               },
@@ -511,25 +506,13 @@ export const DESIGN_LOGO_EXPLORATION_SCHEMA = {
             maxLength: 256,
             pattern: "^[^\\u0000-\\u001F\\u007F]+$",
           },
-          monochromeNodeId: {
+          masterNodeId: {
             type: "string",
             minLength: 1,
             maxLength: 256,
             pattern: "^[^\\u0000-\\u001F\\u007F]+$",
-          },
-          smallSizeNodeIds: {
-            type: "array",
-            minItems: 3,
-            maxItems: 3,
-            uniqueItems: true,
             description:
-              "Stable evidence nodes ordered 32 px, 24 px, then 16 px.",
-            items: {
-              type: "string",
-              minLength: 1,
-              maxLength: 256,
-              pattern: "^[^\\u0000-\\u001F\\u007F]+$",
-            },
+              "Stable ID of the one authored editable symbol master beneath rootNodeId.",
           },
         },
         required: [
@@ -540,8 +523,7 @@ export const DESIGN_LOGO_EXPLORATION_SCHEMA = {
           "constructionLogic",
           "colorSystem",
           "rootNodeId",
-          "monochromeNodeId",
-          "smallSizeNodeIds",
+          "masterNodeId",
         ],
         additionalProperties: false,
       },
@@ -586,7 +568,7 @@ const DESIGN_PLAN_MODEL_INPUT_JSON_SCHEMA = {
       properties: {
         avoidances: {
           type: "array",
-          minItems: 2,
+          minItems: 1,
           maxItems: 12,
           items: {
             type: "string",
@@ -681,14 +663,6 @@ const DESIGN_PLAN_MODEL_INPUT_JSON_SCHEMA = {
     },
     logoColorStrategy: DESIGN_LOGO_COLOR_STRATEGY_SCHEMA,
     logoExploration: DESIGN_LOGO_EXPLORATION_SCHEMA,
-    singleRasterEvidence: {
-      type: "string",
-      minLength: 1,
-      maxLength: 200,
-      pattern: "\\S",
-      description:
-        "Allowed only for one target when the user explicitly requests a single flattened image.",
-    },
   },
   required: [
     "version",
@@ -735,7 +709,7 @@ export const DESIGN_PLAN_CANONICAL_INPUT_SCHEMA = executableJsonSchema({
 
 const REVIEW_TEXT_SCHEMA = {
   type: "string",
-  minLength: 12,
+  minLength: 1,
   maxLength: 1_000,
   pattern: "\\S",
 } as const;
@@ -748,7 +722,7 @@ const DESIGN_VISUAL_REVIEW_MODEL_INPUT_JSON_SCHEMA = {
     version: { const: 1 },
     briefFidelity: REVIEW_TEXT_SCHEMA,
     distinctiveness: REVIEW_TEXT_SCHEMA,
-    signatureMotif: REVIEW_TEXT_SCHEMA,
+    signatureDecision: REVIEW_TEXT_SCHEMA,
     composition: REVIEW_TEXT_SCHEMA,
     hierarchy: REVIEW_TEXT_SCHEMA,
     typography: REVIEW_TEXT_SCHEMA,
@@ -769,18 +743,16 @@ const DESIGN_VISUAL_REVIEW_MODEL_INPUT_JSON_SCHEMA = {
     },
     failedCriteria: {
       type: "array",
-      minItems: 1,
       maxItems: DESIGN_VISUAL_CRITERIA.length,
       uniqueItems: true,
       items: { enum: [...DESIGN_VISUAL_CRITERIA] },
     },
     refinements: {
       type: "array",
-      minItems: 1,
       maxItems: 12,
       items: {
         type: "string",
-        minLength: 8,
+        minLength: 1,
         maxLength: 500,
         pattern: "\\S",
       },
@@ -790,7 +762,7 @@ const DESIGN_VISUAL_REVIEW_MODEL_INPUT_JSON_SCHEMA = {
     "version",
     "briefFidelity",
     "distinctiveness",
-    "signatureMotif",
+    "signatureDecision",
     "composition",
     "hierarchy",
     "typography",
@@ -841,7 +813,7 @@ function parseDesignPlan(
         code: "design_plan.canonical_schema_invalid",
         subject: "canonical Design Plan",
         maximum: 32,
-        refine: (value) => refineDesignPlan(value, context),
+        refine: refineDesignPlan,
       },
       modelInput,
       undefined,
@@ -863,7 +835,7 @@ function parseDesignPlan(
         maximum: 32,
       },
       bind: bindDesignPlanHostContext,
-      refine: (value) => refineDesignPlan(value, context),
+      refine: refineDesignPlan,
     },
     modelInput,
     undefined,
@@ -899,10 +871,7 @@ function bindDesignPlanHostContext(
   };
 }
 
-function refineDesignPlan(
-  input: DesignPlanToolInput,
-  context: DesignPlanContractContext = {},
-): ValidationIssue[] {
+function refineDesignPlan(input: DesignPlanToolInput): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
   if (
     !isBuiltinDesignSkillRefsForDeliverable(input.deliverable, input.skillRefs)
@@ -916,7 +885,6 @@ function refineDesignPlan(
     );
   }
 
-  refinePlanIntent(input.designIntent, issues);
   if (
     input.deliverable === "ui" &&
     input.designIntent.calibration.surfaceMode === "graphic"
@@ -989,32 +957,9 @@ function refineDesignPlan(
     issues,
   );
   refinePlanReferenceStrategy(input.referenceStrategy, issues);
-  refinePlanLogo(input, targetIds, issues, context.authoritativePrompt);
+  refinePlanLogo(input, targetIds, issues);
   refinePlanOutputMode(input, issues);
   return issues;
-}
-
-function refinePlanIntent(
-  intent: DesignIntent,
-  issues: ValidationIssue[],
-): void {
-  for (const [field, value] of [
-    ["visualThesis", intent.visualThesis],
-    ["signatureMotif", intent.signatureMotif],
-    ["typographyLanguage", intent.typographyLanguage],
-    ["colorMaterialLanguage", intent.colorMaterialLanguage],
-    ["compositionTension", intent.compositionTension],
-  ] as const) {
-    if (!substantiveReviewText(value)) {
-      issues.push(
-        planIssue(
-          "design_plan.intent_not_substantive",
-          `/designIntent/${field}`,
-          `${field} must describe a concrete visible design decision`,
-        ),
-      );
-    }
-  }
 }
 
 function refinePlanTarget(
@@ -1230,7 +1175,6 @@ function refinePlanReferenceStrategy(
 ): void {
   if (!strategy) return;
   const attachmentIds = new Map<string, string>();
-  let activeReferences = 0;
   for (const [referenceIndex, reference] of strategy.references.entries()) {
     registerPlanId(
       attachmentIds,
@@ -1240,20 +1184,6 @@ function refinePlanReferenceStrategy(
       "Reference attachment ID",
       issues,
     );
-    if (isActiveVisualReferenceDecision(reference.decision)) {
-      activeReferences += 1;
-    }
-  }
-  if (activeReferences > MAX_ACTIVE_VISUAL_REFERENCES) {
-    issues.push(
-      planIssue(
-        "design_plan.active_reference_limit_exceeded",
-        "/referenceStrategy/references",
-        "Too many active visual references",
-        MAX_ACTIVE_VISUAL_REFERENCES,
-        activeReferences,
-      ),
-    );
   }
 }
 
@@ -1261,11 +1191,9 @@ function refinePlanLogo(
   input: DesignPlanToolInput,
   targetIds: ReadonlyMap<string, string>,
   issues: ValidationIssue[],
-  authoritativePrompt?: string,
 ): void {
   issues.push(
     ...logoColorDomainIssues({
-      ...(authoritativePrompt === undefined ? {} : { authoritativePrompt }),
       deliverable: input.deliverable,
       ...(input.logoExploration === undefined
         ? {}
@@ -1315,32 +1243,20 @@ function refinePlanLogo(
       ),
     );
   }
-  const principles = new Map<string, string>();
-  const semanticAndEvidenceIds = new Map<string, string>();
+  const semanticIds = new Map<string, string>();
   for (const [directionIndex, direction] of exploration.directions.entries()) {
     const path = `/logoExploration/directions/${directionIndex}`;
-    registerPlanId(
-      principles,
-      direction.principle,
-      `${path}/principle`,
-      "design_plan.duplicate_logo_principle",
-      "Logo concept principle",
-      issues,
-    );
     for (const [field, id] of [
       ["conceptId", direction.conceptId],
       ["rootNodeId", direction.rootNodeId],
-      ["monochromeNodeId", direction.monochromeNodeId],
-      ...direction.smallSizeNodeIds.map(
-        (nodeId, index) => [`smallSizeNodeIds/${index}`, nodeId] as const,
-      ),
+      ["masterNodeId", direction.masterNodeId],
     ] as const) {
       registerPlanId(
-        semanticAndEvidenceIds,
+        semanticIds,
         id,
         `${path}/${field}`,
-        "design_plan.duplicate_logo_semantic_or_evidence_id",
-        "Logo semantic or evidence ID",
+        "design_plan.duplicate_logo_semantic_id",
+        "Logo semantic ID",
         issues,
       );
     }
@@ -1365,15 +1281,6 @@ function refinePlanOutputMode(
         ),
       );
     }
-    if (!input.singleRasterEvidence) {
-      issues.push(
-        planIssue(
-          "design_plan.single_raster_evidence_required",
-          "/singleRasterEvidence",
-          "Single-raster output requires explicit user-request evidence",
-        ),
-      );
-    }
     if (!finalRasterDeclared) {
       issues.push(
         planIssue(
@@ -1395,15 +1302,6 @@ function refinePlanOutputMode(
       );
     }
     return;
-  }
-  if (input.singleRasterEvidence !== undefined) {
-    issues.push(
-      planIssue(
-        "design_plan.single_raster_evidence_not_permitted",
-        "/singleRasterEvidence",
-        "Editable composition cannot include single-raster evidence",
-      ),
-    );
   }
   if (finalRasterDeclared) {
     issues.push(
@@ -1509,19 +1407,6 @@ export type DesignVisualReviewContractContext = {
   skillRefs?: readonly BuiltinDesignSkillRef[];
 };
 
-const DESIGN_VISUAL_REVIEW_TEXT_FIELDS = [
-  "briefFidelity",
-  "distinctiveness",
-  "signatureMotif",
-  "composition",
-  "hierarchy",
-  "typography",
-  "assetIntegration",
-  "formAndSurface",
-  "effects",
-  "antiTemplate",
-] as const satisfies readonly (keyof DesignVisualReviewModelInput)[];
-
 function parseDesignVisualReviewModel(
   input: unknown,
 ): ValidationResult<DesignVisualReviewModelInput> {
@@ -1604,40 +1489,23 @@ function refineDesignVisualReview(
   input: DesignVisualReviewModelInput | DesignVisualReviewToolInput,
 ): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
-  for (const field of DESIGN_VISUAL_REVIEW_TEXT_FIELDS) {
-    if (!substantiveReviewText(input[field])) {
-      issues.push(
-        visualReviewIssue(
-          "design_visual_review.evidence_not_substantive",
-          `/${field}`,
-          "Review evidence must describe concrete visible evidence rather than generic praise",
-        ),
-      );
-    }
+  if (
+    (input.failedCriteria.length === 0) !==
+    (input.refinements.length === 0)
+  ) {
+    issues.push(
+      visualReviewIssue(
+        "design_visual_review.failure_refinement_mismatch",
+        input.failedCriteria.length === 0 ? "/refinements" : "/failedCriteria",
+        "Failed criteria and concrete refinements must either both be empty for a pass or both contain real failures",
+      ),
+    );
   }
-  for (const criterion of DESIGN_VISUAL_CRITERIA) {
-    if (!substantiveReviewText(input.criteria[criterion])) {
-      issues.push(
-        visualReviewIssue(
-          "design_visual_review.criterion_not_substantive",
-          `/criteria/${criterion}`,
-          "Criterion evidence must describe what the capture visibly proves or fails",
-        ),
-      );
-    }
-  }
-  input.refinements.forEach((refinement, index) => {
-    if (!substantiveReviewText(refinement)) {
-      issues.push(
-        visualReviewIssue(
-          "design_visual_review.refinement_not_actionable",
-          `/refinements/${index}`,
-          "Refinement must name a concrete design change",
-        ),
-      );
-    }
-  });
   return issues;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function refineCanonicalDesignVisualReview(

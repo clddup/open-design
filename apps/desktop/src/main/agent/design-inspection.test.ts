@@ -90,7 +90,7 @@ const plan: DesignPlanToolInput = {
     },
     visualThesis:
       "A directional editorial field expresses momentum instead of a generic card stack.",
-    signatureMotif:
+    signatureDecision:
       "One cropped signal rail connects identity, next action, and progress.",
     typographyLanguage:
       "Editorial display type sets pace while compact neutral text preserves clarity.",
@@ -318,7 +318,7 @@ describe("Agent design inspection component strategy", () => {
     });
   });
 
-  it("rejects a new UI target flattened into one Text layer", () => {
+  it("leaves weak one-Text UI quality to visual review", () => {
     const inspection = completeInspection();
     const region = requiredNode(inspection, "region_home");
     region.childIds = ["home_copy"];
@@ -333,7 +333,7 @@ describe("Agent design inspection component strategy", () => {
 
     expect(() =>
       assertDeliveryTargetStructure(inspection, targetState(homeTarget), plan),
-    ).toThrow("design_workflow.ui_draft_structure_incomplete");
+    ).not.toThrow();
   });
 
   it("blocks final logo verification when a declared concept lacks real optical evidence", () => {
@@ -381,18 +381,13 @@ describe("Agent design inspection component strategy", () => {
         ...requiredNode(inspection, "home_hero_group"),
         id: direction.rootNodeId,
         parentId: "region_home",
-        childIds: [direction.monochromeNodeId, ...direction.smallSizeNodeIds],
+        childIds: [direction.masterNodeId],
       });
-      for (const nodeId of [
-        direction.monochromeNodeId,
-        ...direction.smallSizeNodeIds,
-      ]) {
-        inspection.nodesById.set(nodeId, {
-          ...requiredNode(inspection, "hero_shape"),
-          id: nodeId,
-          parentId: direction.rootNodeId,
-        });
-      }
+      inspection.nodesById.set(direction.masterNodeId, {
+        ...requiredNode(inspection, "hero_shape"),
+        id: direction.masterNodeId,
+        parentId: direction.rootNodeId,
+      });
     }
 
     expect(() =>
@@ -403,7 +398,7 @@ describe("Agent design inspection component strategy", () => {
       ),
     ).not.toThrow();
 
-    inspection.nodesById.delete("type_16");
+    inspection.nodesById.delete("type_master");
     expect(() =>
       assertDeliveryTargetStructure(
         inspection,
@@ -434,12 +429,7 @@ function logoDirection(
       rationale: `${prefix} assigns a distinct chromatic role to the identifying contour.`,
     },
     rootNodeId: `${prefix}_root`,
-    monochromeNodeId: `${prefix}_mono`,
-    smallSizeNodeIds: [`${prefix}_32`, `${prefix}_24`, `${prefix}_16`] as [
-      string,
-      string,
-      string,
-    ],
+    masterNodeId: `${prefix}_master`,
   };
 }
 

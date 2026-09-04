@@ -459,8 +459,7 @@ describe("ModelProviderHost", () => {
     }
   });
 
-  it("retries an interrupted partial tool call before it reaches the Agent", async () => {
-    vi.useFakeTimers();
+  it("does not replay a tool call after its visible start", async () => {
     const store = new WorkspaceStore(":memory:");
     let callCount = 0;
     const host = new ModelProviderHost(
@@ -486,58 +485,123 @@ describe("ModelProviderHost", () => {
             blockId: "tool",
             delta: '{"targetId":',
           };
-          if (callCount === 1) {
-            yield {
-              type: "attempt.failed",
-              attemptId: request.attemptId,
-              error: {
-                code: "provider_error",
-                message: "terminated",
-                retryable: true,
-                provider: "provider_1",
-              },
-            };
-            return;
-          }
           yield {
-            type: "block.completed",
+            type: "attempt.failed",
             attemptId: request.attemptId,
-            block: {
-              id: "tool",
-              type: "tool_call",
-              toolCallId: "call_recovered",
-              name: "opendesign_inspect_document",
-              input: {},
+            error: {
+              code: "provider_error",
+              message: "terminated",
+              retryable: true,
+              provider: "provider_1",
             },
           };
-          yield completedEvent(request.attemptId, "resp_recovered");
         },
       }),
     );
     host.saveProfile({ ...profile, apiKey: "provider-secret" });
 
     try {
-      const pending = host.complete(
+      const events = await host.complete(
         baseRequest("attempt_partial_tool_retry"),
         new AbortController().signal,
       );
-      await vi.advanceTimersByTimeAsync(401);
-      const events = await pending;
 
-      expect(callCount).toBe(2);
+      expect(callCount).toBe(1);
       expect(
         events.filter((event) => event.type === "block.started"),
       ).toHaveLength(1);
       expect(
         events.filter((event) => event.type === "block.delta"),
-      ).toHaveLength(1);
+      ).toHaveLength(0);
       expect(events).not.toContainEqual(
-        expect.objectContaining({ type: "attempt.failed" }),
+        expect.objectContaining({ type: "attempt.retrying" }),
       );
-      expect(events.at(-1)).toMatchObject({ type: "attempt.completed" });
+      expect(events.at(-1)).toMatchObject({
+        type: "attempt.failed",
+        error: { message: "terminated" },
+      });
     } finally {
       store.close();
-      vi.useRealTimers();
+    }
+  });
+
+  it("publishes a tool start before its JSON input is complete", async () => {
+    const store = new WorkspaceStore(":memory:");
+    let releaseCompletion!: () => void;
+    const completionGate = new Promise<void>((resolve) => {
+      releaseCompletion = resolve;
+    });
+    const host = new ModelProviderHost(
+      store,
+      cipher,
+      globalThis.fetch,
+      undefined,
+      undefined,
+      () => ({
+        async *stream(request): AsyncIterable<CanonicalStreamEvent> {
+          yield startedEvent(request.attemptId);
+          yield {
+            type: "block.started",
+            attemptId: request.attemptId,
+            blockId: "tool",
+            kind: "tool_call",
+          };
+          yield {
+            type: "block.delta",
+            attemptId: request.attemptId,
+            blockId: "tool",
+            delta: '{"pageId":"page_1"}',
+          };
+          await completionGate;
+          yield {
+            type: "block.completed",
+            attemptId: request.attemptId,
+            block: {
+              id: "tool",
+              type: "tool_call",
+              toolCallId: "call_1",
+              name: "opendesign_inspect_document",
+              input: { pageId: "page_1" },
+            },
+          };
+          yield completedEvent(request.attemptId, "resp_tool");
+        },
+      }),
+    );
+    host.saveProfile({ ...profile, apiKey: "provider-secret" });
+
+    try {
+      const stream = host.stream(
+        baseRequest("attempt_live_tool"),
+        new AbortController().signal,
+      );
+      const iterator = stream[Symbol.asyncIterator]();
+      await expect(iterator.next()).resolves.toMatchObject({
+        value: { type: "attempt.started" },
+      });
+      await expect(iterator.next()).resolves.toMatchObject({
+        value: { type: "block.started", kind: "tool_call" },
+      });
+
+      releaseCompletion();
+      await expect(iterator.next()).resolves.toMatchObject({
+        value: {
+          type: "block.completed",
+          block: {
+            type: "tool_call",
+            name: "opendesign_inspect_document",
+          },
+        },
+      });
+      await expect(iterator.next()).resolves.toMatchObject({
+        value: { type: "attempt.completed" },
+      });
+      await expect(iterator.next()).resolves.toEqual({
+        done: true,
+        value: undefined,
+      });
+    } finally {
+      store.close();
     }
   });
 

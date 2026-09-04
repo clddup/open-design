@@ -12,12 +12,13 @@ const PAGE_LIFECYCLE_INTENT =
  * Selects the narrow model-facing surface for the first Provider turn.
  *
  * This is intentionally conservative. A compact new-design run requires an
- * exact host inspection, no attachments/selection/continuation, and an
- * explicit creation intent. The Page may already contain unrelated work: the
- * compact surface can only allocate new stable artboard roots and write
- * beneath them, while Main rejects overlap with existing roots. Any edit,
- * redesign, Page lifecycle, attachment, or recovery intent retains the full
- * workflow.
+ * exact host inspection, no visual attachments/selection/continuation, and an
+ * explicit creation intent. Text and document attachments only enrich the
+ * brief and do not require the image classification workflow. The Page may
+ * already contain unrelated work: the compact surface can only allocate new
+ * stable artboard roots and write beneath them, while Main rejects overlap
+ * with existing roots. Any edit, redesign, Page lifecycle, visual attachment,
+ * or recovery intent retains the full workflow.
  */
 export function resolveInitialModelToolSurface(
   request: Readonly<AgentRunRequest>,
@@ -31,7 +32,9 @@ export function resolveInitialModelToolSurface(
   if (
     request.initialDesignInspection === undefined ||
     request.continuation !== undefined ||
-    (request.attachments?.length ?? 0) > 0 ||
+    request.attachments?.some((attachment) =>
+      attachment.mimeType.startsWith("image/"),
+    ) === true ||
     request.scope.selectedNodeIds.length > 0 ||
     request.mutationTarget.kind !== "page" ||
     !CREATE_INTENT.test(request.prompt) ||
@@ -45,6 +48,37 @@ export function resolveInitialModelToolSurface(
     return "general";
   }
   return "new-design";
+}
+
+/**
+ * Scope is decided from the requested operation and inspected document state,
+ * never from prompt length, attachment count, or an arbitrary target quota.
+ * Every new composition records its actual one-or-many artboard scope; edits
+ * of existing material continue directly without inheriting that ceremony.
+ */
+export function resolveDeliveryScopeReview(
+  request: Readonly<AgentRunRequest>,
+): "direct" | "required" {
+  if (request.continuation !== undefined) {
+    return request.deliveryScopeReview ?? "direct";
+  }
+  if (
+    request.initialDesignInspection === undefined ||
+    request.mutationTarget.kind !== "page" ||
+    request.scope.selectedNodeIds.length > 0 ||
+    PAGE_LIFECYCLE_INTENT.test(request.prompt)
+  ) {
+    return "direct";
+  }
+  const targetPageIsEmpty = inspectionTargetPageIsEmpty(
+    request.initialDesignInspection.content.inspection,
+    request.mutationTarget.pageId,
+  );
+  if (targetPageIsEmpty) return "required";
+  return CREATE_INTENT.test(request.prompt) &&
+    !CURRENT_EDIT_INTENT.test(request.prompt)
+    ? "required"
+    : "direct";
 }
 
 /**

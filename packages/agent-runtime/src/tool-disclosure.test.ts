@@ -98,6 +98,7 @@ describe("model tool disclosure", () => {
       name: "opendesign_capture_canvas",
       modelDisclosure: {
         bootstrap: "deferred" as const,
+        continuation: "available" as const,
         surfaces: ["general", "new-design"] as const,
       },
     };
@@ -121,7 +122,7 @@ describe("model tool disclosure", () => {
         [definition, compact, inspection, plan, newDesignVisible],
         [
           {
-            toolCallId: "slice_1",
+            toolCallId: "slice_observed",
             toolName: compact.name,
             input: {},
             status: "completed",
@@ -130,10 +131,26 @@ describe("model tool disclosure", () => {
         ],
         { initialInspection: true, surface: "new-design" },
       ),
+    ).toBe("host-inspected");
+    expect(
+      resolveModelToolDisclosurePhase(
+        [definition, compact, inspection, plan, newDesignVisible],
+        [
+          {
+            toolCallId: "slice_1",
+            toolName: compact.name,
+            input: {},
+            status: "completed",
+            revision: 4,
+            revisionAdvanced: true,
+          },
+        ],
+        { initialInspection: true, surface: "new-design" },
+      ),
     ).toBe("continuation");
   });
 
-  it("keeps a new-design continuation on its compact surface", () => {
+  it("keeps every ordinary continuation on its compact surface", () => {
     const generalOnly = {
       ...definition,
       name: "opendesign_manage_fonts",
@@ -158,7 +175,7 @@ describe("model tool disclosure", () => {
       disclosedToolDefinitions([generalOnly, compact], "continuation", {
         surface: "general",
       }).map((tool) => tool.name),
-    ).toEqual([generalOnly.name, compact.name]);
+    ).toEqual([compact.name]);
   });
 
   it("uses a continuation-specific Provider schema without changing execution", () => {
@@ -170,6 +187,7 @@ describe("model tool disclosure", () => {
       ...definition,
       modelDisclosure: {
         bootstrap: "deferred" as const,
+        continuation: "available" as const,
         continuationDescription: "Compact continuation",
         continuationInputSchema: continuationSchema,
       },
@@ -186,6 +204,39 @@ describe("model tool disclosure", () => {
       inputSchema: continuationSchema,
     });
     expect(projected?.validateInputIssues?.({})).toEqual([]);
+  });
+
+  it("expands advanced tools only after successful capability discovery", () => {
+    const capabilityDiscovery = {
+      ...definition,
+      name: "opendesign_get_capabilities",
+      modelDisclosure: {
+        bootstrap: "deferred" as const,
+        afterInspection: "available" as const,
+        continuation: "available" as const,
+        role: "capability-discovery" as const,
+      },
+    };
+    const advanced = {
+      ...definition,
+      name: "opendesign_edit_vector",
+      modelDisclosure: { bootstrap: "deferred" as const },
+    };
+
+    expect(
+      resolveModelToolDisclosurePhase(
+        [capabilityDiscovery, advanced],
+        [
+          {
+            toolCallId: "capabilities_1",
+            toolName: capabilityDiscovery.name,
+            input: {},
+            status: "completed",
+          },
+        ],
+        { initialInspection: true, surface: "general" },
+      ),
+    ).toBe("expanded");
   });
 
   it("allows a compact first material slice beside Plan on the host-inspected surface", () => {

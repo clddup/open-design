@@ -1,6 +1,6 @@
 # OpenDesign 验证状态
 
-- 日期：2026-09-02
+- 日期：2026-09-04
 
 - 环境基线：Node.js 24.14.0、pnpm 10.32.1、Electron 43.3.0、Vite 8.2.1
 - 文档协议：`DesignDocument 1.57.0`
@@ -39,6 +39,8 @@ pnpm typecheck
 pnpm test
 pnpm build
 ```
+
+当前工作树已实际通过 `pnpm lint`、`pnpm typecheck`、`pnpm test` 与 `pnpm build`；根测试为 192 个文件、1584 项，Desktop 测试为 195 个文件、1453 项，`git diff --check` 同样通过。`pnpm format:check` 当前只报告已有改动的 `docs/design-capability-baseline.md`，该文件未在本轮自动格式化，因此不能把聚合 `pnpm verify` 记录为全绿。
 
 测试覆盖的关键路径包括：
 
@@ -90,7 +92,7 @@ pnpm build
 - Design Image Inspection 专项证明当前 scope Image/image Paint、跨 Run staged asset 与 source/result/mask/reference family 由独立 projector 生成，并通过同一 executable Schema/Contract 进入 Main hierarchy；asset map identity、缺失引用、非法 operation 和额外 source payload 返回准确嵌套 path。投影不包含 data URI、外部 URI、本地路径或扩展值，65 条派生链有界返回 64 条并明确 truncated；Renderer executor 删除原内联图片遍历。见 ADR-0209。
 - Design Delivery Stage 专项证明 Main 生成的 total/planned/verified、current Plan 与 next target 只由一个 executable Schema/Contract 拥有；planned=0 的待规划范围、active stage、verified stage + next 均可复现，计数越界、current range、重复 target 与提前 next 返回稳定 code/path。Completion Guard 同时使用 canonical Delivery Scope/Ledger，Continuation Scheduler 和 Renderer Timeline 不再分别手写 stage、next、status 结构；八个 owner 测试文件 138 项通过。见 ADR-0210。
 - Initial Design Inspection 与 Agent Request 专项证明 Main 预取内容以结构化 `{ inspection, unfinishedDelivery?, deliveryStage? }` 穿过进程边界，Agent Runtime 只在 Provider prompt 边界序列化一次；空投影、超预算、document revision、嵌套 Stage、Initial revision、Selection primary node 与 Page target 错配均返回准确 code/path。Delivery Stage owner 已下沉到 Agent Contracts，Desktop 不保留兼容 re-export。见 ADR-0211。
-- 跨进程 Design Tool Wire 专项证明 Tool Call、Trusted Context、Failure/Result、Execution Event 与 Utility/Main/Renderer 两段 bridge 由独立 executable Contract owner 组合；权威工具输入 issue 不再降级为 boolean，`/transaction` 可沿 wire 保留为 `/call/input/transaction`，context 与 result/rebase 同样保留完整嵌套 path。Main 对非法可关联请求返回一个结构化、可恢复的 `tool-validation` failure，不再用 generic terminal error 丢失根因。见 ADR-0212。
+- 跨进程 Design Tool Wire 的 envelope、Trusted Context、Failure/Result、Execution Event 与 correlation 继续由独立 executable Contract owner 组合；`call.input` 在 Utility/Main/Renderer bridge 中保持 opaque，不再沿两段 bridge 重复执行工具语义校验。`MainDesignToolRuntime` 按工具名通过权威 Contract 单次解析并返回结构化、可恢复的 `tool-validation` failure，Renderer 只执行 Main 已解析和授权的 canonical value。普通 Node/Hierarchy/Arrange 编辑已统一为 `opendesign_edit_design`，旧公开工具名和直达执行分支删除；是否发生材料写入只由可信 `designRevision` 证明。见 ADR-0212 与 ADR-0302。
 - Agent Request/Event/Timeline owner 专项证明 attachment、Model Context、Request、assistant block、Durable/Session Timeline 与 Agent Event 已从 package 根入口迁入独立 schema/refinement owner；Agent Request 与 Model Gateway 的 Model Selection schema 对象严格同一，空 model ID 在 canonical owner 处失败。根入口只剩稳定 re-export、协议常量和 JSON-RPC 类型，Attachment family、Initial revision、Page scope、Event union、Timeline selection/failure/compaction 均保留准确路径。见 ADR-0213。
 - Agent Runtime owner 专项证明 Runtime Run 类型直接派生 canonical `run.start`，Desktop 只移除 wire discriminant；历史 assistant source 通过 canonical Resolved Model Identity Contract 投影，非法 identity 不进入模型上下文。Runtime 根入口只做 re-export，Run/prompt、ports、journal message、预算、checkpoint 与 journal identity 分属低于 500 行的 owner；渐进工具披露、原始 journal 和上下文压缩行为保持不变。见 ADR-0214。
 - Pi Tool Adapter owner 专项证明安全 definition/阶段工具面、active call、approval、Trusted Executor event stream、success/revision projection 与恢复协调已分属独立 owner；主 Adapter 低于 500 行。全量 Agent Runtime 回归继续覆盖重复 tool call、budget、schema failure、approval、progress、取消、revision、无进展 circuit 与渐进 disclosure；公开工具目录和每轮 Provider 可见工具面均未改变。见 ADR-0215。

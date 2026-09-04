@@ -120,6 +120,10 @@ describe("Agent event and timeline contracts", () => {
           code: "trusted_tool_failure.workflow_code_mismatch",
           path: "/payload/code",
         },
+        {
+          code: "trusted_tool_failure.workflow_recovery_mismatch",
+          path: "/payload/details/recovery/required",
+        },
       ],
     });
   });
@@ -414,7 +418,7 @@ describe("Agent event and timeline contracts", () => {
             recovery: "Capture once, then continue review.",
           },
         ],
-        recovery: { action: "follow-workflow", required: true },
+        recovery: { action: "follow-workflow", required: false },
       },
     };
     expect(isAgentEvent(workflowFailure)).toBe(true);
