@@ -9,7 +9,9 @@ import {
   refineProviderConnectionResult,
   refineSaveGlobalImageGenerationSettingsRequest,
   refineSaveModelProviderProfileRequest,
+  refineSaveVisualCriticSelectionRequest,
   refineTestModelProviderConnectionRequest,
+  visualCriticSelectionIssues,
 } from "./provider-config-contract-domain";
 import {
   DeleteModelProviderProfileRequestSchema,
@@ -20,6 +22,7 @@ import {
   ProviderConnectionResultSchema,
   SaveGlobalImageGenerationSettingsRequestSchema,
   SaveModelProviderProfileRequestSchema,
+  SaveVisualCriticSelectionRequestSchema,
   TestModelProviderConnectionRequestSchema,
   type DeleteModelProviderProfileRequest,
   type GlobalImageGenerationSettings,
@@ -28,6 +31,7 @@ import {
   type ProviderConnectionResult,
   type SaveGlobalImageGenerationSettingsRequest,
   type SaveModelProviderProfileRequest,
+  type SaveVisualCriticSelectionRequest,
   type TestModelProviderConnectionRequest,
 } from "./provider-config-contract-schemas";
 
@@ -44,6 +48,7 @@ export {
   type ProviderConnectionResult,
   type SaveGlobalImageGenerationSettingsRequest,
   type SaveModelProviderProfileRequest,
+  type SaveVisualCriticSelectionRequest,
   type TestModelProviderConnectionRequest,
 } from "./provider-config-contract-schemas";
 
@@ -84,6 +89,15 @@ export const DeleteModelProviderProfileRequestContract =
     code: "provider_config.delete_profile_schema_invalid",
     subject: "model Provider delete request",
     clone: false,
+  });
+
+export const SaveVisualCriticSelectionRequestContract =
+  defineContract<SaveVisualCriticSelectionRequest>({
+    schema: SaveVisualCriticSelectionRequestSchema,
+    code: "provider_config.save_visual_critic_selection_schema_invalid",
+    subject: "visual critic model selection request",
+    clone: false,
+    refine: refineSaveVisualCriticSelectionRequest,
   });
 
 export const TestModelProviderConnectionRequestContract =
@@ -166,6 +180,12 @@ export function isDeleteModelProviderProfileRequest(
   return DeleteModelProviderProfileRequestContract.parse(value).ok;
 }
 
+export function isSaveVisualCriticSelectionRequest(
+  value: unknown,
+): value is SaveVisualCriticSelectionRequest {
+  return SaveVisualCriticSelectionRequestContract.parse(value).ok;
+}
+
 export function deleteModelProviderProfileRequestValidationError(
   value: unknown,
 ): string | null {
@@ -226,6 +246,18 @@ export function normalizeProviderBaseUrl(value: string): string {
   const url = new URL(value.trim());
   url.pathname = url.pathname.replace(/\/+$/u, "");
   return url.toString().replace(/\/$/u, "");
+}
+
+export function isVisualCriticSelectionAvailable(
+  catalog: ModelProviderCatalog,
+  selection: TestModelProviderConnectionRequest,
+): boolean {
+  return (
+    visualCriticSelectionIssues({
+      ...catalog,
+      visualCriticSelection: selection,
+    }).length === 0
+  );
 }
 
 function validationFailure<T>(

@@ -305,6 +305,7 @@ beforeEach(() => {
     }),
     saveGlobalImageGenerationSettings: vi.fn(),
     saveModelProviderProfile: vi.fn(),
+    saveVisualCriticSelection: vi.fn(),
     deleteModelProviderProfile: vi.fn(),
     testModelProviderConnection: vi.fn(),
     onModelProviderCatalogChange: vi.fn().mockReturnValue(() => undefined),

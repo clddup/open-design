@@ -7,6 +7,7 @@ import type {
   SaveGlobalImageGenerationSettingsRequest,
   ModelProviderCatalog,
   SaveModelProviderProfileRequest,
+  SaveVisualCriticSelectionRequest,
 } from "@/shared/desktop-api";
 import { I18nProvider } from "@/renderer/i18n";
 import { SettingsFeature } from "./SettingsFeature";
@@ -102,6 +103,16 @@ beforeEach(() => {
             reasoningEffort: "medium",
           },
         } satisfies ModelProviderCatalog),
+      ),
+    saveVisualCriticSelection: vi
+      .fn()
+      .mockImplementation((request: SaveVisualCriticSelectionRequest) =>
+        Promise.resolve({
+          ...configuredCatalog,
+          ...(request.selection
+            ? { visualCriticSelection: request.selection }
+            : {}),
+        }),
       ),
     deleteModelProviderProfile: vi.fn().mockResolvedValue(emptyCatalog),
     testModelProviderConnection: vi.fn().mockResolvedValue({
@@ -298,6 +309,49 @@ describe("SettingsFeature", () => {
     );
   });
 
+  it("selects only a vision-capable tool model for independent visual review", async () => {
+    vi.mocked(window.desktop!.getModelProviderCatalog).mockResolvedValue({
+      ...configuredCatalog,
+      providers: [
+        configuredCatalog.providers[0],
+        {
+          ...configuredCatalog.providers[0],
+          providerId: "text-provider",
+          name: "Text provider",
+          models: [
+            {
+              ...configuredCatalog.providers[0].models[0],
+              modelId: "text-model",
+              name: "Text model",
+              capabilities: {
+                ...configuredCatalog.providers[0].models[0].capabilities,
+                imageInput: false,
+              },
+            },
+          ],
+        },
+      ],
+    });
+    const user = userEvent.setup();
+    renderSettings();
+
+    await user.click(screen.getByRole("tab", { name: "Models" }));
+    const select = await screen.findByLabelText("Review model");
+    expect(
+      within(select).getByText("Saved provider/Saved model"),
+    ).toBeVisible();
+    expect(within(select).queryByText("Text provider/Text model")).toBeNull();
+
+    await user.selectOptions(select, '["provider-saved","saved-model"]');
+    expect(window.desktop!.saveVisualCriticSelection).toHaveBeenCalledWith({
+      selection: {
+        providerId: "provider-saved",
+        modelId: "saved-model",
+      },
+    });
+    expect(await screen.findByText("Visual review model saved")).toBeVisible();
+  });
+
   it("cancels a new Provider with Back or Escape and restores the saved Provider", async () => {
     vi.mocked(window.desktop!.getModelProviderCatalog).mockResolvedValue(
       configuredCatalog,
@@ -377,6 +431,7 @@ describe("SettingsFeature", () => {
     expect(screen.getByRole("textbox", { name: "模型 ID 1" })).toHaveValue(
       "draft-model",
     );
+    expect(screen.getByLabelText("审核模型")).toBeVisible();
     expect(window.desktop!.getModelProviderCatalog).toHaveBeenCalledOnce();
   });
 });

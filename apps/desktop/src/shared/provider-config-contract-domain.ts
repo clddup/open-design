@@ -6,6 +6,7 @@ import type {
   ProviderConnectionResult,
   SaveGlobalImageGenerationSettingsRequest,
   SaveModelProviderProfileRequest,
+  SaveVisualCriticSelectionRequest,
   TestModelProviderConnectionRequest,
 } from "./provider-config-contract-schemas";
 import type { ValidationIssue } from "./contract-validation";
@@ -13,50 +14,99 @@ import type { ValidationIssue } from "./contract-validation";
 export function refineModelProviderCatalog(
   value: ModelProviderCatalog,
 ): ValidationIssue[] {
-  const issues = value.providers.flatMap((provider, index) =>
-    providerIssues(provider, `/providers/${index}`),
-  );
-  issues.push(
+  return [
+    ...value.providers.flatMap((provider, index) =>
+      providerIssues(provider, `/providers/${index}`),
+    ),
     ...duplicateIssues(
       value.providers.map((provider) => provider.providerId),
       "/providers",
       "provider_config.provider_id_duplicate",
       "Provider IDs must be unique within the catalog",
     ),
+    ...defaultSelectionIssues(value),
+    ...visualCriticSelectionIssues(value),
+  ];
+}
+
+function defaultSelectionIssues(
+  catalog: ModelProviderCatalog,
+): ValidationIssue[] {
+  const selection = catalog.defaultSelection;
+  if (!selection) return [];
+  const provider = catalog.providers.find(
+    (candidate) => candidate.providerId === selection.providerId,
   );
-  if (value.defaultSelection) {
+  const model = provider?.models.find(
+    (candidate) => candidate.modelId === selection.modelId,
+  );
+  const issues = selectionIssues(selection, "/defaultSelection");
+  if (!provider?.enabled || !model?.capabilities.toolUse) {
     issues.push(
-      ...selectionIssues(value.defaultSelection, "/defaultSelection"),
+      issue(
+        "provider_config.default_selection_unavailable",
+        "/defaultSelection",
+        "Default selection must resolve to an enabled Provider model with Agent tool use",
+      ),
     );
-    const provider = value.providers.find(
-      (candidate) =>
-        candidate.providerId === value.defaultSelection?.providerId,
+  } else if (
+    selection.reasoningEffort !== undefined &&
+    !model.reasoningEfforts.includes(selection.reasoningEffort)
+  ) {
+    issues.push(
+      issue(
+        "provider_config.default_reasoning_effort_unsupported",
+        "/defaultSelection/reasoningEffort",
+        "Default reasoning effort must be supported by the selected model",
+      ),
     );
-    const model = provider?.models.find(
-      (candidate) => candidate.modelId === value.defaultSelection?.modelId,
-    );
-    if (!provider?.enabled || !model?.capabilities.toolUse) {
-      issues.push(
-        issue(
-          "provider_config.default_selection_unavailable",
-          "/defaultSelection",
-          "Default selection must resolve to an enabled Provider model with Agent tool use",
-        ),
-      );
-    } else if (
-      value.defaultSelection.reasoningEffort !== undefined &&
-      !model.reasoningEfforts.includes(value.defaultSelection.reasoningEffort)
-    ) {
-      issues.push(
-        issue(
-          "provider_config.default_reasoning_effort_unsupported",
-          "/defaultSelection/reasoningEffort",
-          "Default reasoning effort must be supported by the selected model",
-        ),
-      );
-    }
   }
   return issues;
+}
+
+export function visualCriticSelectionIssues(
+  catalog: ModelProviderCatalog,
+): ValidationIssue[] {
+  const selection = catalog.visualCriticSelection;
+  if (!selection) return [];
+  const provider = catalog.providers.find(
+    (candidate) => candidate.providerId === selection.providerId,
+  );
+  const model = provider?.models.find(
+    (candidate) => candidate.modelId === selection.modelId,
+  );
+  const unavailable =
+    !provider?.enabled ||
+    !model?.capabilities.toolUse ||
+    !model.capabilities.imageInput;
+  const issues = selectionIssues(selection, "/visualCriticSelection");
+  if (unavailable) {
+    issues.push(
+      issue(
+        "provider_config.visual_critic_selection_unavailable",
+        "/visualCriticSelection",
+        "Visual critic selection must resolve to an enabled model with image input and Agent tool use",
+      ),
+    );
+  } else if (
+    selection.reasoningEffort !== undefined &&
+    !model.reasoningEfforts.includes(selection.reasoningEffort)
+  ) {
+    issues.push(
+      issue(
+        "provider_config.visual_critic_reasoning_effort_unsupported",
+        "/visualCriticSelection/reasoningEffort",
+        "Visual critic reasoning effort must be supported by the selected model",
+      ),
+    );
+  }
+  return issues;
+}
+
+export function refineSaveVisualCriticSelectionRequest(
+  value: SaveVisualCriticSelectionRequest,
+): ValidationIssue[] {
+  return value.selection ? selectionIssues(value.selection, "/selection") : [];
 }
 
 export function refineSaveModelProviderProfileRequest(

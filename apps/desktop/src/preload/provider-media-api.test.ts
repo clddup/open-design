@@ -56,6 +56,21 @@ describe("extracted Provider and media Preload APIs", () => {
     expect(listener).not.toHaveBeenCalled();
     catalogEvent?.(catalog);
     expect(listener).toHaveBeenCalledWith(catalog);
+
+    await expect(
+      api.saveVisualCriticSelection({
+        selection: {
+          providerId: "provider_1",
+          modelId: "design-model",
+        },
+      }),
+    ).resolves.toEqual(catalog);
+    expect(invoke).toHaveBeenCalledWith(channels.saveVisualCriticSelection, {
+      selection: {
+        providerId: "provider_1",
+        modelId: "design-model",
+      },
+    });
   });
 
   it("rejects invalid Provider input before invoking Main", async () => {

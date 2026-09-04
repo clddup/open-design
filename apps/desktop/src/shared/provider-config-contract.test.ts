@@ -45,6 +45,10 @@ describe("Provider configuration contract", () => {
         modelId: "design-model",
         reasoningEffort: "medium",
       },
+      visualCriticSelection: {
+        providerId: "provider_1",
+        modelId: "design-model",
+      },
     };
     expect(isModelProviderCatalog(catalog)).toBe(true);
     expect(isModelProviderCatalog({ ...catalog, version: 1 })).toBe(false);
@@ -121,6 +125,49 @@ describe("Provider configuration contract", () => {
       expect.objectContaining({
         code: "provider_config.default_reasoning_effort_unsupported",
         path: "/defaultSelection/reasoningEffort",
+      }),
+    );
+    expect(
+      ModelProviderCatalogContract.issues({
+        version: 3,
+        providers: [
+          {
+            ...profile,
+            models: [
+              {
+                ...model,
+                capabilities: { ...model.capabilities, imageInput: false },
+              },
+            ],
+            hasApiKey: false,
+            updatedAt: now,
+          },
+        ],
+        visualCriticSelection: {
+          providerId: "provider_1",
+          modelId: "design-model",
+        },
+      }),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "provider_config.visual_critic_selection_unavailable",
+        path: "/visualCriticSelection",
+      }),
+    );
+    expect(
+      ModelProviderCatalogContract.issues({
+        version: 3,
+        providers: [{ ...profile, hasApiKey: false, updatedAt: now }],
+        visualCriticSelection: {
+          providerId: "provider_1",
+          modelId: "design-model",
+          reasoningEffort: "low",
+        },
+      }),
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "provider_config.visual_critic_reasoning_effort_unsupported",
+        path: "/visualCriticSelection/reasoningEffort",
       }),
     );
   });

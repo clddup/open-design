@@ -8,6 +8,40 @@
   position: relative;
 }
 
+.criticSetting {
+  display: grid;
+  align-items: center;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 340px);
+  padding: 12px 2px;
+  border-top: 1px solid var(--ui-border-subtle);
+  border-bottom: 1px solid var(--ui-border-subtle);
+
+  > span {
+    display: grid;
+    gap: 4px;
+  }
+
+  strong {
+    font-size: 11px;
+  }
+
+  small {
+    color: var(--ui-text-faint);
+    font-size: 10px;
+    line-height: 1.45;
+  }
+
+  .field {
+    gap: 5px;
+
+    > span {
+      color: var(--ui-text-faint);
+      font-size: 9px;
+    }
+  }
+}
+
 .globalImageForm {
   max-width: 760px;
   padding: 20px 22px;
@@ -380,6 +414,10 @@
 }
 
 @media (max-width: 760px) {
+  .criticSetting {
+    grid-template-columns: 1fr;
+  }
+
   .providerWorkspace {
     grid-template-columns: 168px minmax(0, 1fr);
   }

@@ -21,6 +21,13 @@ export const settingsMessages = {
   "settings.modelsTitle": "模型服务",
   "settings.modelsDescription":
     "管理 Provider、API 协议、凭据和可供 Agent 选择的模型。",
+  "settings.visualCriticModel": "独立视觉审核",
+  "settings.visualCriticDescription":
+    "可选用独立的视觉模型审核精确 revision 截图，不携带生成模型的会话上下文。",
+  "settings.visualCriticSelection": "审核模型",
+  "settings.visualCriticFollowAuthor": "跟随当前会话模型",
+  "settings.visualCriticSaved": "视觉审核模型已保存",
+  "settings.visualCriticSaveFailed": "无法保存视觉审核模型",
   "settings.imageGenerationTitle": "全局图片服务",
   "settings.imageGenerationDescription":
     "配置一套应用级图片生成与 AI 编辑服务。它与所有会话模型和 Provider 配置完全独立。",

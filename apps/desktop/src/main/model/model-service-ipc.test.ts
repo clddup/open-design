@@ -84,6 +84,14 @@ describe("registerModelServiceIpc", () => {
       invoke(fixture, channels.saveModelProviderProfile, saveProvider),
     ).toEqual(catalog);
     expect(
+      invoke(fixture, channels.saveVisualCriticSelection, {
+        selection: {
+          providerId: "provider-local",
+          modelId: "design-model",
+        },
+      }),
+    ).toEqual(catalog);
+    expect(
       invoke(fixture, channels.deleteModelProviderProfile, {
         providerId: "provider-local",
       }),
@@ -100,12 +108,18 @@ describe("registerModelServiceIpc", () => {
       saveImageSettings,
     );
     expect(fixture.modelHost.saveProfile).toHaveBeenCalledWith(saveProvider);
+    expect(fixture.modelHost.saveVisualCriticSelection).toHaveBeenCalledWith({
+      selection: {
+        providerId: "provider-local",
+        modelId: "design-model",
+      },
+    });
     expect(fixture.modelHost.deleteProfile).toHaveBeenCalledWith({
       providerId: "provider-local",
     });
-    expect(fixture.publishModelProviderCatalog).toHaveBeenCalledTimes(2);
-    expect(fixture.handlers.size).toBe(6);
-    expect(fixture.assertRenderer).toHaveBeenCalledTimes(6);
+    expect(fixture.publishModelProviderCatalog).toHaveBeenCalledTimes(3);
+    expect(fixture.handlers.size).toBe(7);
+    expect(fixture.assertRenderer).toHaveBeenCalledTimes(7);
   });
 
   it("validates sender identity before arguments, payloads and host resolution", () => {
@@ -197,6 +211,7 @@ function setup(
     deleteProfile: vi.fn(() => catalog),
     getCatalog: vi.fn(() => catalog),
     saveProfile: vi.fn(() => catalog),
+    saveVisualCriticSelection: vi.fn(() => catalog),
     testConnection: vi.fn(() => Promise.resolve(connectionResult)),
   };
   const getImageGenerationHost = vi.fn(() => imageHost);

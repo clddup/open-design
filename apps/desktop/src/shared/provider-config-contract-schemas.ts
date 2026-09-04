@@ -85,6 +85,14 @@ export const ModelProviderCatalogSchema = Type.Object(
     version: Type.Literal(MODEL_PROVIDER_CATALOG_VERSION),
     providers: Type.Array(ModelProviderProfileSchema, { maxItems: 64 }),
     defaultSelection: Type.Optional(ModelSelectionSchema),
+    visualCriticSelection: Type.Optional(ModelSelectionSchema),
+  },
+  { additionalProperties: false },
+);
+
+export const SaveVisualCriticSelectionRequestSchema = Type.Object(
+  {
+    selection: Type.Union([ModelSelectionSchema, Type.Null()]),
   },
   { additionalProperties: false },
 );
@@ -168,6 +176,9 @@ export type ModelProviderProfile = Static<typeof ModelProviderProfileSchema>;
 export type ModelProviderCatalog = Static<typeof ModelProviderCatalogSchema>;
 export type SaveModelProviderProfileRequest = Static<
   typeof SaveModelProviderProfileRequestSchema
+>;
+export type SaveVisualCriticSelectionRequest = Static<
+  typeof SaveVisualCriticSelectionRequestSchema
 >;
 export type DeleteModelProviderProfileRequest = Static<
   typeof DeleteModelProviderProfileRequestSchema

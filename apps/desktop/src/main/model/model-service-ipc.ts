@@ -4,6 +4,7 @@ import {
   DeleteModelProviderProfileRequestContract,
   SaveGlobalImageGenerationSettingsRequestContract,
   SaveModelProviderProfileRequestContract,
+  SaveVisualCriticSelectionRequestContract,
   TestModelProviderConnectionRequestContract,
 } from "@/shared/provider-config-contract.js";
 import { formatValidationFailure } from "@/shared/contract-validation.js";
@@ -12,7 +13,11 @@ import type { ModelProviderHost } from "./model-provider-host.js";
 
 type ModelProviderIpcHost = Pick<
   ModelProviderHost,
-  "deleteProfile" | "getCatalog" | "saveProfile" | "testConnection"
+  | "deleteProfile"
+  | "getCatalog"
+  | "saveProfile"
+  | "saveVisualCriticSelection"
+  | "testConnection"
 >;
 type ImageGenerationIpcHost = Pick<
   ImageGenerationHost,
@@ -81,6 +86,27 @@ export function registerModelServiceIpc(options: {
         );
       }
       const catalog = options.getModelProviderHost().saveProfile(parsed.value);
+      options.publishModelProviderCatalog(catalog);
+      return catalog;
+    },
+  );
+  options.ipc.handle(
+    channels.saveVisualCriticSelection,
+    (event, ...args: unknown[]) => {
+      options.assertRenderer(event);
+      assertArgumentCount(args, 1);
+      const parsed = SaveVisualCriticSelectionRequestContract.parse(args[0]);
+      if (!parsed.ok) {
+        throw new TypeError(
+          formatValidationFailure(
+            "visual critic model selection request",
+            parsed.issues,
+          ),
+        );
+      }
+      const catalog = options
+        .getModelProviderHost()
+        .saveVisualCriticSelection(parsed.value);
       options.publishModelProviderCatalog(catalog);
       return catalog;
     },

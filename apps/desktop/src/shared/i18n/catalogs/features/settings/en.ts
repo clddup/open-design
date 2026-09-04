@@ -21,6 +21,13 @@ export const settingsMessages = {
   "settings.modelsTitle": "Model provider",
   "settings.modelsDescription":
     "Manage provider profiles, API protocols, credentials, and Agent models.",
+  "settings.visualCriticModel": "Independent visual review",
+  "settings.visualCriticDescription":
+    "Optionally use a separate vision-capable model to judge exact-revision captures without the author conversation.",
+  "settings.visualCriticSelection": "Review model",
+  "settings.visualCriticFollowAuthor": "Follow the conversation model",
+  "settings.visualCriticSaved": "Visual review model saved",
+  "settings.visualCriticSaveFailed": "Could not save visual review model",
   "settings.imageGenerationTitle": "Global image service",
   "settings.imageGenerationDescription":
     "Configure one application-wide service for image generation and AI editing. It is independent of every conversation model and Provider profile.",

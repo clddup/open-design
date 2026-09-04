@@ -5,6 +5,7 @@ import {
   isProviderConnectionResult,
   isSaveGlobalImageGenerationSettingsRequest,
   isSaveModelProviderProfileRequest,
+  isSaveVisualCriticSelectionRequest,
   isTestModelProviderConnectionRequest,
   type DeleteModelProviderProfileRequest,
   type GlobalImageGenerationSettings,
@@ -12,6 +13,7 @@ import {
   type ProviderConnectionResult,
   type SaveGlobalImageGenerationSettingsRequest,
   type SaveModelProviderProfileRequest,
+  type SaveVisualCriticSelectionRequest,
   type TestModelProviderConnectionRequest,
 } from "@/shared/provider-config-contract";
 import { channels, type DesktopApi } from "@/shared/desktop-api";
@@ -23,6 +25,7 @@ type ProviderApi = Pick<
   | "getGlobalImageGenerationSettings"
   | "saveGlobalImageGenerationSettings"
   | "saveModelProviderProfile"
+  | "saveVisualCriticSelection"
   | "deleteModelProviderProfile"
   | "testModelProviderConnection"
   | "onModelProviderCatalogChange"
@@ -74,6 +77,20 @@ export function createProviderApi(
       );
       return validate<ModelProviderCatalog>(
         await invoke(channels.saveModelProviderProfile, request),
+        isModelProviderCatalog,
+        "Invalid model provider catalog response",
+      );
+    },
+    saveVisualCriticSelection: async (
+      request: SaveVisualCriticSelectionRequest,
+    ) => {
+      validate(
+        request,
+        isSaveVisualCriticSelectionRequest,
+        "Invalid visual critic model selection request",
+      );
+      return validate<ModelProviderCatalog>(
+        await invoke(channels.saveVisualCriticSelection, request),
         isModelProviderCatalog,
         "Invalid model provider catalog response",
       );

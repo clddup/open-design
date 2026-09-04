@@ -12,6 +12,7 @@ import {
   profileDraft,
   selectionForModel,
   validProviderDraft,
+  visualCriticModelOptions,
   type ProviderDraft,
 } from "../model/model-provider-profile";
 
@@ -35,6 +36,7 @@ export function useModelProviderSettings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [savingVisualCritic, setSavingVisualCritic] = useState(false);
   const [status, setStatus] = useState<
     { tone: "success" | "error"; message: string } | undefined
   >();
@@ -220,7 +222,40 @@ export function useModelProviderSettings() {
     event.preventDefault();
     void save(false);
   };
-  const busy = loading || saving || testing;
+  const saveVisualCriticSelection = async (value: string) => {
+    const desktop = window.desktop;
+    if (
+      !catalog ||
+      !desktop ||
+      typeof desktop.saveVisualCriticSelection !== "function"
+    ) {
+      setStatus({ tone: "error", message: t("settings.serviceUnavailable") });
+      return;
+    }
+    const selected = visualCriticModelOptions(catalog).find(
+      (option) => option.value === value,
+    );
+    setSavingVisualCritic(true);
+    setStatus(undefined);
+    try {
+      const saved = await desktop.saveVisualCriticSelection({
+        selection: selected?.selection ?? null,
+      });
+      setCatalog(saved);
+      setStatus({ tone: "success", message: t("settings.visualCriticSaved") });
+    } catch (error) {
+      setStatus({
+        tone: "error",
+        message:
+          error instanceof Error
+            ? error.message
+            : t("settings.visualCriticSaveFailed"),
+      });
+    } finally {
+      setSavingVisualCritic(false);
+    }
+  };
+  const busy = loading || saving || testing || savingVisualCritic;
   const valid = draft !== null && validProviderDraft(draft);
 
   const cancelDraft = () => {
@@ -300,6 +335,8 @@ export function useModelProviderSettings() {
     loading,
     providerNameInputRef,
     save,
+    saveVisualCriticSelection,
+    savingVisualCritic,
     saving,
     selectedProviderId,
     setApiKey,

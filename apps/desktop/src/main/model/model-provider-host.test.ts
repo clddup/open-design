@@ -1328,6 +1328,124 @@ describe("ModelProviderHost", () => {
     store.close();
   });
 
+  it("uses an independent vision model for visual critique and falls back to the author", () => {
+    const store = new WorkspaceStore(":memory:");
+    const host = new ModelProviderHost(store, cipher);
+    host.saveProfile({ ...profile, apiKey: "provider-secret" });
+    host.saveProfile({
+      ...profile,
+      providerId: "critic_provider",
+      name: "Visual critic",
+      models: [
+        {
+          ...profile.models[0],
+          modelId: "vision-critic",
+          capabilities: {
+            ...profile.models[0].capabilities,
+            imageInput: true,
+          },
+        },
+      ],
+      setAsDefault: false,
+    });
+
+    expect(host.resolveVisualCriticSelection(selection)).toEqual(selection);
+    const saved = host.saveVisualCriticSelection({
+      selection: {
+        providerId: "critic_provider",
+        modelId: "vision-critic",
+      },
+    });
+    expect(saved.visualCriticSelection).toEqual({
+      providerId: "critic_provider",
+      modelId: "vision-critic",
+    });
+    expect(host.resolveVisualCriticSelection(selection)).toEqual(
+      saved.visualCriticSelection,
+    );
+    expect(JSON.stringify(saved)).not.toContain("provider-secret");
+
+    host.saveVisualCriticSelection({ selection: null });
+    expect(host.resolveVisualCriticSelection(selection)).toEqual(selection);
+    store.close();
+  });
+
+  it("rejects an incapable critic and clears a critic removed from its Provider", () => {
+    const store = new WorkspaceStore(":memory:");
+    const host = new ModelProviderHost(store, cipher);
+    host.saveProfile({ ...profile, apiKey: "provider-secret" });
+
+    expect(() => host.saveVisualCriticSelection({ selection })).toThrow(
+      "support image input and Agent tool use",
+    );
+
+    host.saveProfile({
+      ...profile,
+      providerId: "critic_provider",
+      models: [
+        {
+          ...profile.models[0],
+          modelId: "vision-critic",
+          capabilities: {
+            ...profile.models[0].capabilities,
+            imageInput: true,
+          },
+        },
+      ],
+      setAsDefault: false,
+    });
+    host.saveVisualCriticSelection({
+      selection: {
+        providerId: "critic_provider",
+        modelId: "vision-critic",
+      },
+    });
+
+    const capabilityChanged = host.saveProfile({
+      ...profile,
+      providerId: "critic_provider",
+      models: [
+        {
+          ...profile.models[0],
+          modelId: "vision-critic",
+          capabilities: {
+            ...profile.models[0].capabilities,
+            imageInput: false,
+          },
+        },
+      ],
+      setAsDefault: false,
+    });
+    expect(capabilityChanged.visualCriticSelection).toBeUndefined();
+
+    host.saveProfile({
+      ...profile,
+      providerId: "critic_provider",
+      models: [
+        {
+          ...profile.models[0],
+          modelId: "vision-critic",
+          capabilities: {
+            ...profile.models[0].capabilities,
+            imageInput: true,
+          },
+        },
+      ],
+      setAsDefault: false,
+    });
+    host.saveVisualCriticSelection({
+      selection: {
+        providerId: "critic_provider",
+        modelId: "vision-critic",
+      },
+    });
+
+    const catalog = host.deleteProfile({ providerId: "critic_provider" });
+    expect(catalog.visualCriticSelection).toBeUndefined();
+    expect(host.resolveVisualCriticSelection(selection)).toEqual(selection);
+    store.close();
+  });
+
   it("tests and completes the explicitly selected provider/model", async () => {
     const store = new WorkspaceStore(":memory:");
     const fetch = vi

@@ -1,5 +1,4 @@
 import {
-  ModelResponseAccumulator,
   MultiProtocolModelGateway,
   type CanonicalStreamEvent,
   type ModelGateway,
@@ -10,6 +9,7 @@ import type { AgentModelContext } from "@opendesign/agent-contracts";
 import {
   MODEL_PROVIDER_CATALOG_VERSION,
   isModelProviderCatalog,
+  isVisualCriticSelectionAvailable,
   normalizeProviderBaseUrl,
   type DeleteModelProviderProfileRequest,
   type ModelProfile,
@@ -17,10 +17,18 @@ import {
   type ModelProviderProfile,
   type ProviderConnectionResult,
   type SaveModelProviderProfileRequest,
+  type SaveVisualCriticSelectionRequest,
   type TestModelProviderConnectionRequest,
 } from "@/shared/desktop-api";
 import type { WorkspaceStore } from "../project/workspace-store";
-import { createHash } from "node:crypto";
+import {
+  defaultModelSelection,
+  emptyModelProviderCatalog,
+  modelProviderCredentialKey,
+  normalizeModelProviderCatalog,
+  snapshotModelProfile,
+} from "./model-provider-catalog.js";
+import { testModelProviderConnection } from "./model-provider-connection.js";
 import {
   assertModelStreamTimeouts,
   streamModelProvider,
@@ -29,11 +37,6 @@ import {
 } from "./model-provider-stream";
 
 const catalogKey = "model.provider.catalog.v3";
-const emptyCatalog: ModelProviderCatalog = {
-  version: MODEL_PROVIDER_CATALOG_VERSION,
-  providers: [],
-};
-
 const defaultModelStreamTimeouts: ModelStreamTimeouts = {
   firstResponseTimeoutMs: 180_000,
   idleTimeoutMs: 120_000,
@@ -104,7 +107,7 @@ export class ModelProviderHost {
         // Invalid persisted settings are ignored without exposing their contents.
       }
     }
-    return emptyCatalog;
+    return emptyModelProviderCatalog;
   }
 
   resolveModelContext(selection: ModelSelection): AgentModelContext {
@@ -139,7 +142,7 @@ export class ModelProviderHost {
       apiFormat: request.apiFormat,
       authMode: request.authMode,
       baseUrl: normalizeProviderBaseUrl(request.baseUrl),
-      models: request.models.map(snapshotModel),
+      models: request.models.map(snapshotModelProfile),
       hasApiKey:
         this.store.getPreference(
           modelProviderCredentialKey(request.providerId),
@@ -155,9 +158,9 @@ export class ModelProviderHost {
       : [...current.providers, profile];
     const requestedDefault =
       request.setAsDefault && profile.enabled
-        ? defaultSelection(profile)
+        ? defaultModelSelection(profile)
         : undefined;
-    const catalog = normalizeCatalog({
+    const catalog = normalizeModelProviderCatalog({
       version: MODEL_PROVIDER_CATALOG_VERSION,
       providers,
       ...(requestedDefault !== undefined
@@ -165,6 +168,9 @@ export class ModelProviderHost {
         : current.defaultSelection === undefined
           ? {}
           : { defaultSelection: current.defaultSelection }),
+      ...(current.visualCriticSelection === undefined
+        ? {}
+        : { visualCriticSelection: current.visualCriticSelection }),
     });
     this.persistCatalog(catalog);
     return this.withCredentialState(catalog);
@@ -180,7 +186,7 @@ export class ModelProviderHost {
       throw new Error("Model provider does not exist");
     }
     this.store.deletePreference(modelProviderCredentialKey(request.providerId));
-    const catalog = normalizeCatalog({
+    const catalog = normalizeModelProviderCatalog({
       version: MODEL_PROVIDER_CATALOG_VERSION,
       providers: current.providers.filter(
         (item) => item.providerId !== request.providerId,
@@ -188,133 +194,56 @@ export class ModelProviderHost {
       ...(current.defaultSelection === undefined
         ? {}
         : { defaultSelection: current.defaultSelection }),
+      ...(current.visualCriticSelection === undefined
+        ? {}
+        : { visualCriticSelection: current.visualCriticSelection }),
     });
     this.persistCatalog(catalog);
     return this.withCredentialState(catalog);
+  }
+
+  saveVisualCriticSelection(
+    request: SaveVisualCriticSelectionRequest,
+  ): ModelProviderCatalog {
+    const current = this.getCatalog();
+    if (
+      request.selection &&
+      !isVisualCriticSelectionAvailable(current, request.selection)
+    ) {
+      throw new Error(
+        "Selected visual critic model must be enabled and support image input and Agent tool use",
+      );
+    }
+    const catalog = normalizeModelProviderCatalog({
+      version: MODEL_PROVIDER_CATALOG_VERSION,
+      providers: current.providers,
+      ...(current.defaultSelection === undefined
+        ? {}
+        : { defaultSelection: current.defaultSelection }),
+      ...(request.selection
+        ? { visualCriticSelection: { ...request.selection } }
+        : {}),
+    });
+    this.persistCatalog(catalog);
+    return this.withCredentialState(catalog);
+  }
+
+  resolveVisualCriticSelection(
+    authorSelection: ModelSelection,
+  ): ModelSelection {
+    const selection = this.getCatalog().visualCriticSelection;
+    return { ...(selection ?? authorSelection) };
   }
 
   async testConnection(
     selection: TestModelProviderConnectionRequest,
     signal?: AbortSignal,
   ): Promise<ProviderConnectionResult> {
-    const startedAt = performance.now();
-    let textLatencyMs: number | undefined;
-    try {
-      await this.runConnectionProbe(
-        selection,
-        "connection_text_test",
-        "Reply with OK.",
-        [{ role: "user", content: "OK" }],
-        [],
-        signal,
-      );
-      textLatencyMs = elapsed(startedAt);
-    } catch (error) {
-      return connectionResult(
-        "unreachable",
-        error instanceof Error ? error.message : "Provider connection failed",
-      );
-    }
-
-    const toolStartedAt = performance.now();
-    try {
-      const response = await this.runConnectionProbe(
-        selection,
-        "connection_tool_test",
-        "Call opendesign_connection_probe exactly once with nonce opendesign-probe-v1, width 320, and height 240. Do not answer with text.",
-        [
-          {
-            role: "user",
-            content:
-              "Run the Agent tool compatibility probe with every required value.",
-          },
-        ],
-        [connectionProbeTool],
-        signal,
-      );
-      const toolLatencyMs = elapsed(toolStartedAt);
-      const call = response.blocks.find(
-        (block) =>
-          block.type === "tool_call" && block.name === connectionProbeTool.name,
-      );
-      if (
-        response.stopReason !== "tool_use" ||
-        call?.type !== "tool_call" ||
-        !isValidConnectionProbeInput(call.input)
-      ) {
-        return connectionResult(
-          "text-only",
-          "The endpoint returned text but did not produce the required parameterized tool call",
-          toolLatencyMs,
-        );
-      }
-      return connectionResult(
-        "compatible",
-        "Provider supports Agent tool calling",
-        toolLatencyMs,
-      );
-    } catch (error) {
-      return connectionResult(
-        "text-only",
-        error instanceof Error
-          ? error.message
-          : "Agent tool compatibility probe failed",
-        elapsed(toolStartedAt),
-      );
-    }
-
-    function connectionResult(
-      status: ProviderConnectionResult["status"],
-      message: string,
-      toolLatencyMs?: number,
-    ) {
-      return {
-        status,
-        ok: status === "compatible",
-        message,
-        providerId: selection.providerId,
-        modelId: selection.modelId,
-        latencyMs: elapsed(startedAt),
-        ...(textLatencyMs === undefined ? {} : { textLatencyMs }),
-        ...(toolLatencyMs === undefined ? {} : { toolLatencyMs }),
-      } satisfies ProviderConnectionResult;
-    }
-  }
-
-  private async runConnectionProbe(
-    selection: ModelSelection,
-    attemptId: string,
-    system: string,
-    messages: ModelRequest["messages"],
-    tools: ModelRequest["tools"],
-    externalSignal?: AbortSignal,
-  ) {
-    const accumulator = new ModelResponseAccumulator(attemptId);
-    const controller = new AbortController();
-    const abort = () => controller.abort();
-    if (externalSignal?.aborted) controller.abort();
-    else externalSignal?.addEventListener("abort", abort, { once: true });
-    const timeout = setTimeout(abort, 30_000);
-    try {
-      for await (const event of this.gateway(selection).stream({
-        attemptId,
-        sessionId: "connection_test",
-        modelSelection: {
-          providerId: selection.providerId,
-          modelId: selection.modelId,
-        },
-        system,
-        messages,
-        tools,
-        signal: controller.signal,
-      })) {
-        accumulator.add(event);
-      }
-      return accumulator.result();
-    } finally {
-      clearTimeout(timeout);
-      externalSignal?.removeEventListener("abort", abort);
-    }
+    return await testModelProviderConnection({
+      selection,
+      gateway: (selected) => this.gateway(selected),
+      ...(signal ? { signal } : {}),
+    });
   }
 
   async complete(
@@ -476,7 +405,7 @@ export class ModelProviderHost {
       ...catalog,
       providers: catalog.providers.map((provider) => ({
         ...provider,
-        models: provider.models.map(snapshotModel),
+        models: provider.models.map(snapshotModelProfile),
         hasApiKey:
           this.store.getPreference(
             modelProviderCredentialKey(provider.providerId),
@@ -485,6 +414,9 @@ export class ModelProviderHost {
       ...(catalog.defaultSelection === undefined
         ? {}
         : { defaultSelection: { ...catalog.defaultSelection } }),
+      ...(catalog.visualCriticSelection === undefined
+        ? {}
+        : { visualCriticSelection: { ...catalog.visualCriticSelection } }),
     };
   }
 
@@ -530,98 +462,4 @@ function documentContextBlock(
   ].join("\n");
 }
 
-function normalizeCatalog(catalog: ModelProviderCatalog): ModelProviderCatalog {
-  const validCurrent =
-    catalog.defaultSelection &&
-    catalog.providers.some(
-      (provider) =>
-        provider.enabled &&
-        provider.providerId === catalog.defaultSelection?.providerId &&
-        provider.models.some(
-          (model) =>
-            model.modelId === catalog.defaultSelection?.modelId &&
-            model.capabilities.toolUse &&
-            (catalog.defaultSelection?.reasoningEffort === undefined ||
-              model.reasoningEfforts.includes(
-                catalog.defaultSelection.reasoningEffort,
-              )),
-        ),
-    )
-      ? catalog.defaultSelection
-      : undefined;
-  const fallback = catalog.providers
-    .filter((provider) => provider.enabled)
-    .map(defaultSelection)
-    .find((selection) => selection !== undefined);
-  return {
-    version: MODEL_PROVIDER_CATALOG_VERSION,
-    providers: catalog.providers.map((provider) => ({
-      ...provider,
-      models: provider.models.map(snapshotModel),
-    })),
-    ...((validCurrent ?? fallback)
-      ? { defaultSelection: { ...(validCurrent ?? fallback)! } }
-      : {}),
-  };
-}
-
-function defaultSelection(
-  provider: ModelProviderProfile,
-): ModelSelection | undefined {
-  const model = provider.models.find(
-    (candidate) => candidate.capabilities.toolUse,
-  );
-  if (!model) return undefined;
-  const preferred = model.reasoningEfforts.includes("medium")
-    ? "medium"
-    : model.reasoningEfforts[0];
-  return {
-    providerId: provider.providerId,
-    modelId: model.modelId,
-    ...(preferred === undefined ? {} : { reasoningEffort: preferred }),
-  };
-}
-
-function snapshotModel(model: ModelProfile): ModelProfile {
-  return {
-    ...model,
-    capabilities: { ...model.capabilities },
-    reasoningEfforts: [...model.reasoningEfforts],
-  };
-}
-
-const connectionProbeTool = {
-  name: "opendesign_connection_probe",
-  description:
-    "Verify that this model can emit a structured, parameterized Agent tool call.",
-  inputSchema: {
-    type: "object",
-    properties: {
-      nonce: { type: "string", const: "opendesign-probe-v1" },
-      width: { type: "number", const: 320 },
-      height: { type: "number", const: 240 },
-    },
-    required: ["nonce", "width", "height"],
-    additionalProperties: false,
-  },
-} satisfies ModelRequest["tools"][number];
-
-function isValidConnectionProbeInput(value: unknown): boolean {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const input = value as Record<string, unknown>;
-  return (
-    input.nonce === "opendesign-probe-v1" &&
-    input.width === 320 &&
-    input.height === 240 &&
-    Object.keys(input).length === 3
-  );
-}
-
-function elapsed(startedAt: number): number {
-  return Math.max(0, Math.round(performance.now() - startedAt));
-}
-
-export function modelProviderCredentialKey(providerId: string): string {
-  const digest = createHash("sha256").update(providerId).digest("hex");
-  return `model.provider.credential.${digest.slice(0, 32)}`;
-}
+export { modelProviderCredentialKey } from "./model-provider-catalog.js";

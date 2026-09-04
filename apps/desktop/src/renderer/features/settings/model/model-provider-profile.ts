@@ -1,4 +1,9 @@
-import type { ModelProfile, ModelProviderProfile } from "@/shared/desktop-api";
+import type { ModelSelection } from "@opendesign/model-gateway";
+import type {
+  ModelProfile,
+  ModelProviderCatalog,
+  ModelProviderProfile,
+} from "@/shared/desktop-api";
 
 export type ProviderDraft = Omit<
   ModelProviderProfile,
@@ -78,4 +83,33 @@ export function selectionForModel(
     modelId: model.modelId,
     ...(preferred === undefined ? {} : { reasoningEffort: preferred }),
   };
+}
+
+export function visualCriticModelOptions(catalog: ModelProviderCatalog) {
+  return catalog.providers.flatMap((provider) =>
+    provider.enabled
+      ? provider.models
+          .filter(
+            (model) =>
+              model.capabilities.toolUse && model.capabilities.imageInput,
+          )
+          .map((model) => {
+            const selection = {
+              providerId: provider.providerId,
+              modelId: model.modelId,
+            } satisfies ModelSelection;
+            return {
+              label: `${provider.name}/${model.name}`,
+              selection,
+              value: modelSelectionValue(selection),
+            };
+          })
+      : [],
+  );
+}
+
+export function modelSelectionValue(
+  selection: Pick<ModelSelection, "providerId" | "modelId">,
+): string {
+  return JSON.stringify([selection.providerId, selection.modelId]);
 }

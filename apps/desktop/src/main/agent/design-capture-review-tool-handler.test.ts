@@ -101,7 +101,15 @@ function setup(options: { inspectionRevision?: number } = {}) {
     resolveVisualReviewSkillRefs: vi.fn(() => BUILTIN_UI_DESIGN_SKILL_REFS),
     registerVisualReview: vi.fn(),
   };
-  const getModelProviderHost = vi.fn(() => ({ complete: vi.fn() }) as never);
+  const criticSelection = {
+    providerId: "critic_provider",
+    modelId: "vision-critic",
+  };
+  const modelProviderHost = {
+    complete: vi.fn(),
+    resolveVisualCriticSelection: vi.fn(() => criticSelection),
+  };
+  const getModelProviderHost = vi.fn(() => modelProviderHost as never);
   const session = createDesignCaptureReviewSession({
     context,
     signal: new AbortController().signal,
@@ -117,12 +125,14 @@ function setup(options: { inspectionRevision?: number } = {}) {
   return {
     captureResult,
     coordinator,
+    criticSelection,
     delivery,
     deliveryStage,
     execute,
     getModelProviderHost,
     inspection,
     layoutQuality,
+    modelProviderHost,
     reviewWorkflow,
     session,
   };
@@ -309,7 +319,14 @@ describe("Design capture/review Main session", () => {
       mimeType: "image/jpeg" as const,
       name: "capture.jpg",
     };
-    const criticContext = { runId: context.runId, observedRevision: 7 };
+    const criticContext = {
+      runId: context.runId,
+      observedRevision: 7,
+      modelSelection: {
+        providerId: "author_provider",
+        modelId: "author-model",
+      },
+    };
     const criticResult = { passed: true, observedRevision: 7 };
     const reportProgress = vi.fn();
     vi.mocked(requireDesignVisualCriticAttachment).mockReturnValue(attachment);
@@ -330,9 +347,15 @@ describe("Design capture/review Main session", () => {
       attachment,
     );
     expect(state.getModelProviderHost).toHaveBeenCalledTimes(1);
+    expect(
+      state.modelProviderHost.resolveVisualCriticSelection,
+    ).toHaveBeenCalledWith(criticContext.modelSelection);
     expect(runIndependentDesignVisualCritic).toHaveBeenCalledWith(
-      state.getModelProviderHost.mock.results[0]?.value,
-      criticContext,
+      state.modelProviderHost,
+      {
+        ...criticContext,
+        modelSelection: state.criticSelection,
+      },
       expect.any(AbortSignal),
     );
     expect(state.coordinator.recordCanvasCapture).toHaveBeenCalledWith(

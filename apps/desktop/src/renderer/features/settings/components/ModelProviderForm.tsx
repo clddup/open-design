@@ -5,6 +5,7 @@ import formStyles from "../SettingsForms.module.scss";
 import { useModelProviderSettings } from "../hooks/use-model-provider-settings";
 import { ModelListEditor } from "./ModelListEditor";
 import { SettingsHeading } from "./SettingsPrimitives";
+import { VisualCriticModelSetting } from "./VisualCriticModelSetting";
 
 export function ModelProviderForm() {
   const { t } = useI18n();
@@ -26,6 +27,8 @@ export function ModelProviderForm() {
     loading,
     providerNameInputRef,
     save,
+    saveVisualCriticSelection,
+    savingVisualCritic,
     saving,
     selectedProviderId,
     setApiKey,
@@ -40,7 +43,6 @@ export function ModelProviderForm() {
     updateDraft,
     valid,
   } = useModelProviderSettings();
-
   return (
     <form
       className={formStyles.provider}
@@ -63,6 +65,11 @@ export function ModelProviderForm() {
           {status.message}
         </p>
       )}
+      <VisualCriticModelSetting
+        catalog={catalog}
+        disabled={loading || savingVisualCritic}
+        onSelectionChange={(value) => void saveVisualCriticSelection(value)}
+      />
       <div className={formStyles.providerWorkspace}>
         <aside className={formStyles.providerList}>
           <div className={formStyles.providerListHeading}>

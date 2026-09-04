@@ -108,9 +108,15 @@ export function createDesignCaptureReviewSession(
       );
       if (criticContext) {
         reportProgress?.("Running independent visual critic", 0.94);
+        const modelProviderHost = input.getModelProviderHost();
         visualCritic = await runIndependentDesignVisualCritic(
-          input.getModelProviderHost(),
-          criticContext,
+          modelProviderHost,
+          {
+            ...criticContext,
+            modelSelection: modelProviderHost.resolveVisualCriticSelection(
+              criticContext.modelSelection,
+            ),
+          },
           input.signal,
         );
       }

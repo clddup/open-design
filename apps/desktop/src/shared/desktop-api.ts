@@ -50,7 +50,9 @@ export {
   isProviderConnectionResult,
   isSaveGlobalImageGenerationSettingsRequest,
   isSaveModelProviderProfileRequest,
+  isSaveVisualCriticSelectionRequest,
   isTestModelProviderConnectionRequest,
+  isVisualCriticSelectionAvailable,
   MODEL_PROVIDER_CATALOG_VERSION,
   normalizeProviderBaseUrl,
   type DeleteModelProviderProfileRequest,
@@ -63,6 +65,7 @@ export {
   type ProviderConnectionResult,
   type SaveGlobalImageGenerationSettingsRequest,
   type SaveModelProviderProfileRequest,
+  type SaveVisualCriticSelectionRequest,
   type TestModelProviderConnectionRequest,
 } from "./provider-config-contract";
 import type {
@@ -72,6 +75,7 @@ import type {
   ProviderConnectionResult,
   SaveGlobalImageGenerationSettingsRequest,
   SaveModelProviderProfileRequest,
+  SaveVisualCriticSelectionRequest,
   TestModelProviderConnectionRequest,
 } from "./provider-config-contract";
 import type {
@@ -265,6 +269,9 @@ export interface DesktopApi {
   saveModelProviderProfile: (
     request: SaveModelProviderProfileRequest,
   ) => Promise<ModelProviderCatalog>;
+  saveVisualCriticSelection: (
+    request: SaveVisualCriticSelectionRequest,
+  ) => Promise<ModelProviderCatalog>;
   deleteModelProviderProfile: (
     request: DeleteModelProviderProfileRequest,
   ) => Promise<ModelProviderCatalog>;
@@ -394,6 +401,7 @@ export const channels = {
   getGlobalImageGenerationSettings: "image-generation:get-settings",
   saveGlobalImageGenerationSettings: "image-generation:save-settings",
   saveModelProviderProfile: "model-provider:save-profile",
+  saveVisualCriticSelection: "model-provider:save-visual-critic-selection",
   deleteModelProviderProfile: "model-provider:delete-profile",
   testModelProviderConnection: "model-provider:test-connection",
   modelProviderCatalogChanged: "model-provider:catalog-changed",
