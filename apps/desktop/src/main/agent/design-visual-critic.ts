@@ -175,8 +175,7 @@ export async function runIndependentDesignVisualCritic(
     calls.length !== 1 ||
     response.blocks.some(
       (block) =>
-        block.type === "text" ||
-        (block.type === "tool_call" && block.name !== SUBMIT_CRITIQUE_TOOL),
+        block.type === "tool_call" && block.name !== SUBMIT_CRITIQUE_TOOL,
     ) ||
     call?.type !== "tool_call"
   ) {

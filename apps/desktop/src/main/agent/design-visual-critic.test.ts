@@ -279,7 +279,7 @@ describe("independent design visual critic", () => {
     );
   });
 
-  it("fails closed when the Provider adds prose or duplicates the verdict", async () => {
+  it("accepts one valid verdict even when the Provider adds commentary", async () => {
     await expect(
       runIndependentDesignVisualCritic(
         {
@@ -300,8 +300,73 @@ describe("independent design visual critic", () => {
         criticContext("final"),
         new AbortController().signal,
       ),
-    ).rejects.toThrow("Independent critic did not submit");
+    ).resolves.toMatchObject({ passed: true });
+  });
 
+  it("does not let optimistic commentary override a failing structured score", async () => {
+    const verdict = scorecard(4);
+    verdict.criteria["craft-precision"] = {
+      score: 2,
+      evidence: "The contours are visibly unbalanced",
+      refinement: "Correct contour balance",
+    };
+    const result = await runIndependentDesignVisualCritic(
+      {
+        complete: (request) =>
+          Promise.resolve([
+            {
+              type: "block.completed",
+              attemptId: request.attemptId,
+              block: {
+                id: "prose",
+                type: "text",
+                text: "Everything is ready!",
+              },
+            },
+            ...responseEvents(request.attemptId, verdict),
+          ]),
+      },
+      criticContext("final"),
+      new AbortController().signal,
+    );
+    expect(result.passed).toBe(false);
+    expect(result.failedCriteria).toContain("craft-precision");
+    expect(result.refinements).toContain("Correct contour balance");
+  });
+
+  it("does not accept prose without a structured verdict", async () => {
+    await expect(
+      runIndependentDesignVisualCritic(
+        {
+          complete: (request) =>
+            Promise.resolve([
+              {
+                type: "block.completed",
+                attemptId: request.attemptId,
+                block: { id: "prose", type: "text", text: "Looks finished" },
+              },
+              {
+                type: "attempt.completed",
+                attemptId: request.attemptId,
+                stopReason: "complete",
+                usage: {
+                  inputTokens: 1,
+                  outputTokens: 1,
+                  cacheReadTokens: 0,
+                  cacheWriteTokens: 0,
+                  reasoningTokens: 0,
+                  totalTokens: 2,
+                },
+              },
+            ]),
+        },
+        criticContext("final"),
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow("Independent critic did not submit");
+  });
+
+  it("rejects duplicate verdicts rather than choosing one", async () => {
     await expect(
       runIndependentDesignVisualCritic(
         {
@@ -347,14 +412,17 @@ describe("independent design visual critic", () => {
                   text: "I will submit the scorecard next.",
                 },
               },
-              ...responseEvents(request.attemptId, scorecard(4)),
+              ...responseEvents(request.attemptId, {
+                criteria: {},
+                summary: "Incomplete verdict",
+              }),
             ]);
           },
         },
         criticContext("final"),
         new AbortController().signal,
       ),
-    ).rejects.toThrow("Independent critic did not submit");
+    ).rejects.toThrow("Invalid Independent visual critic");
 
     expect(requests).toHaveLength(1);
     expect(requests[0]?.latencyProfile).toBe("interactive");
