@@ -76,7 +76,7 @@ export async function handleDesignFirstSliceTool(
         normalizedApply,
         preparation,
       );
-  if (!authorization) {
+  if (!authorization?.plan || authorization.targetIds.length === 0) {
     throw designWorkflowError(
       "material_write_required",
       "Compiled first-slice content did not resolve to the registered delivery target",

@@ -996,6 +996,48 @@ describe("GlobalTaskCoordinator", () => {
       expect(() =>
         coordinator.assertImagePlacement(context, node.id),
       ).not.toThrow();
+      const sibling = { ...structuredClone(node), id: "second_container" };
+      const bound = coordinator.authorizeIndependentDesignEdit(context, {
+        label: "Prepare second container",
+        steps: [
+          { stepId: "old_step", label: "Old", commandIds: ["bound_insert"] },
+        ],
+        commands: [
+          {
+            commandId: "bound_insert",
+            type: "insert_element",
+            pageId,
+            parentId: sibling.parentId,
+            index: 0,
+            node: sibling,
+          },
+        ],
+      });
+      expect(bound).toMatchObject({
+        targetIds: [],
+        input: { commands: [{ index: 1 }] },
+      });
+      expect(bound).not.toHaveProperty("plan");
+      expect(bound).not.toHaveProperty("rebaseGuard");
+      expect(bound?.input).not.toHaveProperty("steps");
+
+      await apply(
+        [
+          {
+            commandId: "insert_second",
+            type: "insert_element",
+            pageId,
+            parentId: sibling.parentId,
+            index: 0,
+            node: sibling,
+          },
+        ],
+        "insert_second",
+      );
+      expect(
+        runtime.getSnapshot().document.nodesById.existing_nested_frame.childIds,
+      ).toEqual([node.id, sibling.id]);
+
       await apply(
         [{ commandId: "delete", type: "delete_element", nodeId: node.id }],
         "delete_container",
@@ -3682,7 +3724,7 @@ describe("GlobalTaskCoordinator", () => {
         context,
         draftTargets(pageId, plan.targets.slice(0, 1), true),
       ),
-    ).toBeUndefined();
+    ).toMatchObject({ targetIds: [] });
     expect(coordinator.prepareDesignPlan(context, plan)).toMatchObject({
       status: "accepted",
     });

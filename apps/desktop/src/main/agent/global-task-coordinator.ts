@@ -97,7 +97,7 @@ type RunStartRequest = Extract<AgentRequest, { type: "run.start" }>;
 
 export type DesignPlanApplyAuthorization = {
   input: DesignApplyToolInput;
-  plan: DesignPlanToolInput;
+  plan?: DesignPlanToolInput;
   rebaseGuard?: PlannedDesignRebaseGuard;
   targetIds: string[];
 };
@@ -1503,7 +1503,16 @@ export class GlobalTaskCoordinator {
         boundInput,
         this.#inspectionsByRunId.get(context.runId),
       );
-      return undefined;
+      return {
+        input: {
+          label: boundInput.label,
+          ...(boundInput.summary === undefined
+            ? {}
+            : { summary: boundInput.summary }),
+          commands: boundInput.commands,
+        },
+        targetIds: [],
+      };
     }
     const resolvedInput = bindDesignOperationStructure(
       resolvePlannedStructureGeometry(
