@@ -1178,48 +1178,32 @@ export class GlobalTaskCoordinator {
       visualCriticUnavailable !== undefined &&
       (target.delivery.status === "drafted" ||
         target.delivery.status === "captured" ||
+        target.delivery.status === "reviewed" ||
         target.delivery.status === "refined")
     ) {
-      const inspection = this.#inspectionsByRunId.get(context.runId);
-      if (!inspection || inspection.revision !== observedRevision) {
-        throw designWorkflowError(
-          "delivery_verification_required",
-          "Visual review fallback requires authoritative structure from the exact captured revision",
-        );
-      }
-      const componentStrategy = assertDeliveryTargetStructure(
-        inspection,
-        target,
-        state.plan,
-      );
       target.captureCount = captureSequence;
       target.lastCaptureRevision = observedRevision;
-      target.reviewedCaptureCount = captureSequence;
-      target.reviewedCaptureRevision = observedRevision;
-      completeReviewPlanStep(state, target.delivery.targetId, observedRevision);
       target.delivery = {
         ...target.delivery,
-        status: "verified",
-        captureRevision: observedRevision,
-        reviewRevision: observedRevision,
-        verifiedRevision: observedRevision,
+        status:
+          target.delivery.status === "drafted"
+            ? "captured"
+            : target.delivery.status,
+        ...(target.delivery.reviewRevision === undefined
+          ? { captureRevision: observedRevision }
+          : {}),
       };
       this.#persistDelivery(context.runId, state);
-      return {
-        captureSequence,
-        capturedRevision: observedRevision,
-        deliveryTargetId: target.delivery.targetId,
-        nextAction: nextIncompleteTarget(state)
-          ? "continue-next-target"
-          : this.#nextUnplannedScopeTarget(context.runId, state)
-            ? "generate-next-slice"
-            : "complete-delivery",
-        reviewEligible: false,
-        verified: true,
-        verification: "deterministic-structure-fallback",
-        criticUnavailable: visualCriticUnavailable,
-        ...(componentStrategy.issueCount === 0 ? {} : { componentStrategy }),
-      };
+      throw designWorkflowError(
+        "visual_critic_unavailable",
+        `Independent visual review is unavailable: ${visualCriticUnavailable.message}. The design and capture at revision ${observedRevision} are preserved, but visual delivery has not been verified.`,
+        {
+          terminal: true,
+          path: "/visualReview",
+          recovery:
+            "Preserve the current design. Report the unavailable review rather than redrawing or repeatedly capturing; resume verification when the review service or required input is available.",
+        },
+      );
     }
     let componentStrategy:
       ReturnType<typeof assertDeliveryTargetStructure> | undefined;

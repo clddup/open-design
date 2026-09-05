@@ -2652,113 +2652,148 @@ describe("GlobalTaskCoordinator", () => {
     store.close();
   });
 
-  it("finishes exact-revision structural verification when the critic is unavailable", async () => {
-    const { store, host, file, opened, pageId } = await setup();
-    const coordinator = new GlobalTaskCoordinator(host, store);
-    await coordinator.registerRun({
-      type: "run.start",
-      runId: "run_reviewed_delivery",
-      sessionId: "conversation_mobile",
-      prompt: "Design one focused logo",
-      documentId: file.documentId,
-      revision: opened.document.revision,
-      modelSelection,
-      scope: { kind: "page", pageId, selectedNodeIds: [] },
-      mutationTarget: { kind: "page", pageId },
-    });
-    const context = {
-      runId: "run_reviewed_delivery",
-      sessionId: "conversation_mobile",
-      documentId: file.documentId,
-      revision: opened.document.revision,
-      scope: { kind: "page" as const, pageId, selectedNodeIds: [] },
-      mutationTarget: { kind: "page" as const, pageId },
-    };
-    coordinator.recordDocumentInspection(
-      context,
-      inspectionResult(opened.document, pageId),
-    );
-    const plan: DesignPlanToolInput = {
-      ...designPlanForPage(pageId),
-      deliverable: "brand-asset",
-      designIntent: {
-        ...designPlanForPage(pageId).designIntent,
-        calibration: {
-          ...designPlanForPage(pageId).designIntent.calibration,
-          surfaceMode: "graphic",
-        },
-      },
-      rasterAssetRoles: [],
-      skillRefs: BUILTIN_GRAPHIC_DESIGN_SKILL_REFS.map((reference) => ({
-        ...reference,
-      })),
-      targets: designPlanForPage(pageId).targets.map((target) => ({
-        ...target,
-        composition: {
-          ...target.composition,
-          regions: target.composition.regions.slice(0, 1),
-        },
-        qualityProfile: { kind: "graphic" },
-      })),
-    };
-    const target = plan.targets[0];
-    if (!target) throw new Error("Delivery target is missing");
-    coordinator.registerDesignPlan(context, plan);
-    const allocation = coordinator.createDesignPlanAllocation(context.runId);
-    coordinator.recordDesignPlanAllocated(
-      context.runId,
-      allocation?.targetIds ?? [],
-      1,
-    );
-    const draft = draftTargets(pageId, plan.targets);
-    const authorization = coordinator.assertDesignPlanForApply(context, draft);
-    coordinator.recordDesignApplyCompleted(context.runId, authorization, 2);
-    const draftedDocument = withDraftedTargets(
-      opened.document,
-      pageId,
-      plan.targets,
-      2,
-    );
-    coordinator.recordDocumentInspection(
-      context,
-      inspectionResult(draftedDocument, pageId),
-    );
-
-    expect(
-      coordinator.recordCanvasCapture(
+  it.each(["drafted", "reviewed", "refined"] as const)(
+    "retains the capture without claiming verification when critic is unavailable; prior state=%s",
+    async (priorState) => {
+      const { store, host, file, opened, pageId } = await setup();
+      const coordinator = new GlobalTaskCoordinator(host, store);
+      await coordinator.registerRun({
+        type: "run.start",
+        runId: "run_reviewed_delivery",
+        sessionId: "conversation_mobile",
+        prompt: "Design one focused logo",
+        documentId: file.documentId,
+        revision: opened.document.revision,
+        modelSelection,
+        scope: { kind: "page", pageId, selectedNodeIds: [] },
+        mutationTarget: { kind: "page", pageId },
+      });
+      const context = {
+        runId: "run_reviewed_delivery",
+        sessionId: "conversation_mobile",
+        documentId: file.documentId,
+        revision: opened.document.revision,
+        scope: { kind: "page" as const, pageId, selectedNodeIds: [] },
+        mutationTarget: { kind: "page" as const, pageId },
+      };
+      coordinator.recordDocumentInspection(
         context,
+        inspectionResult(opened.document, pageId),
+      );
+      const plan: DesignPlanToolInput = {
+        ...designPlanForPage(pageId),
+        deliverable: "brand-asset",
+        designIntent: {
+          ...designPlanForPage(pageId).designIntent,
+          calibration: {
+            ...designPlanForPage(pageId).designIntent.calibration,
+            surfaceMode: "graphic",
+          },
+        },
+        rasterAssetRoles: [],
+        skillRefs: BUILTIN_GRAPHIC_DESIGN_SKILL_REFS.map((reference) => ({
+          ...reference,
+        })),
+        targets: designPlanForPage(pageId).targets.map((target) => ({
+          ...target,
+          composition: {
+            ...target.composition,
+            regions: target.composition.regions.slice(0, 1),
+          },
+          qualityProfile: { kind: "graphic" },
+        })),
+      };
+      const target = plan.targets[0];
+      if (!target) throw new Error("Delivery target is missing");
+      coordinator.registerDesignPlan(context, plan);
+      const allocation = coordinator.createDesignPlanAllocation(context.runId);
+      coordinator.recordDesignPlanAllocated(
+        context.runId,
+        allocation?.targetIds ?? [],
+        1,
+      );
+      const draft = draftTargets(pageId, plan.targets);
+      const authorization = coordinator.assertDesignPlanForApply(
+        context,
+        draft,
+      );
+      coordinator.recordDesignApplyCompleted(context.runId, authorization, 2);
+      const draftedDocument = withDraftedTargets(
+        opened.document,
+        pageId,
+        plan.targets,
         2,
-        diagnoseDesignTargetLayout(
-          draftedDocument,
-          pageId,
-          target.artboard.frameId,
-          target.qualityProfile,
+      );
+      coordinator.recordDocumentInspection(
+        context,
+        inspectionResult(draftedDocument, pageId),
+      );
+
+      if (priorState !== "drafted") {
+        coordinator.recordCanvasCapture(
+          context,
+          2,
+          diagnoseDesignTargetLayout(
+            draftedDocument,
+            pageId,
+            target.artboard.frameId,
+            target.qualityProfile,
+          ),
+          independentCritic(2, false),
+        );
+      }
+      const captureRevision = priorState === "refined" ? 3 : 2;
+      if (priorState === "refined") {
+        coordinator.recordMaterialDesignWriteCompleted(
+          context.runId,
+          [target.targetId],
+          3,
+        );
+        draftedDocument.revision = 3;
+        coordinator.recordDocumentInspection(
+          context,
+          inspectionResult(draftedDocument, pageId),
+        );
+      }
+      expect(() =>
+        coordinator.recordCanvasCapture(
+          context,
+          captureRevision,
+          diagnoseDesignTargetLayout(
+            draftedDocument,
+            pageId,
+            target.artboard.frameId,
+            target.qualityProfile,
+          ),
+          undefined,
+          { message: "critic provider timed out" },
         ),
-        undefined,
-        { message: "critic provider timed out" },
-      ),
-    ).toMatchObject({
-      nextAction: "complete-delivery",
-      reviewEligible: false,
-      verified: true,
-      verification: "deterministic-structure-fallback",
-      criticUnavailable: { message: "critic provider timed out" },
-    });
-    expect(
-      coordinator.getDeliveryLedger(context.runId)?.targets[0],
-    ).toMatchObject({
-      status: "verified",
-    });
-    expect(
-      coordinator.resolveVisualCriticContext(context, 2, {
-        attachmentId: "capture",
-        byteSize: 12_000,
-        mimeType: "image/jpeg",
-        name: "capture.jpg",
-      }),
-    ).toBeNull();
-    store.close();
-  });
+      ).toThrow("critic provider timed out");
+      expect(
+        coordinator.getDeliveryLedger(context.runId)?.targets[0],
+      ).toMatchObject({
+        status: priorState === "drafted" ? "captured" : priorState,
+        captureRevision: 2,
+      });
+      expect(
+        coordinator.getDeliveryLedger(context.runId)?.targets[0],
+      ).not.toHaveProperty("verifiedRevision");
+      expect(
+        coordinator
+          .getDeliveryLedger(context.runId)
+          ?.planExecution?.targets[0].steps.at(-1)?.status,
+      ).toBe("in_progress");
+      expect(
+        coordinator.resolveVisualCriticContext(context, captureRevision, {
+          attachmentId: "capture",
+          byteSize: 12_000,
+          mimeType: "image/jpeg",
+          name: "capture.jpg",
+        }),
+      ).not.toBeNull();
+      store.close();
+    },
+  );
 
   it("reviews every UI target without a lower-quality fast-mode bypass", async () => {
     const { store, host, file, opened, pageId } = await setup();

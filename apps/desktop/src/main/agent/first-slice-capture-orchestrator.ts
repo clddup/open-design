@@ -60,13 +60,15 @@ export async function captureCommittedFirstSlice(options: {
       },
     };
   } catch (error) {
+    const failure = trustedFailure(error);
+    if (failure.runTerminal) throw error;
     return {
       designRevision: revision,
       content: {
         ...(options.preserveAppliedContent ? appliedContent : {}),
         ok: false,
         materialRevisionPreserved: revision.revision,
-        captureFailure: trustedFailure(error),
+        captureFailure: failure,
         delivery: options.getDelivery(),
       },
     };

@@ -17,10 +17,59 @@ import {
   MemorySessionStore,
   RecordingGateway,
   textResponse,
+  toolResponse,
   collect,
 } from "./pi-runtime-test-support.js";
 
 describe("OpenDesign Pi production runtime", () => {
+  it("stops an unavailable review without another Provider round and permits the next user Run", async () => {
+    const gateway = new RecordingGateway(
+      new MockModelGateway([
+        toolResponse("capture", tool.name, {}),
+        textResponse("下一条用户消息仍可正常回复"),
+      ]),
+    );
+    const runtime = new OpenDesignPiRuntime({
+      modelGateway: gateway,
+      sessionStore: new MemorySessionStore(),
+      toolCatalog: { listTools: () => [tool] },
+      toolExecutor: {
+        async *execute(): AsyncIterable<ToolExecutionEvent> {
+          await Promise.resolve();
+          yield {
+            type: "failed",
+            error: {
+              code: "design_visual_critic_unavailable",
+              message: "Capture retained, review unavailable",
+              retryable: false,
+              recoverable: false,
+              runTerminal: true,
+            },
+          };
+        },
+      },
+    });
+    const failed = await collect(runtime, {
+      ...request,
+      runId: "review_failed",
+    });
+    expect(failed.at(-1)).toMatchObject({
+      type: "run.completed",
+      stopReason: "error",
+    });
+    expect(gateway.requests).toHaveLength(1);
+    const next = await collect(runtime, {
+      ...request,
+      runId: "next_user",
+      prompt: "继续对话",
+    });
+    expect(next.at(-1)).toMatchObject({
+      type: "run.completed",
+      stopReason: "complete",
+    });
+    expect(gateway.requests).toHaveLength(2);
+  });
+
   it("uses one interactive Provider profile without lowering the selected reasoning effort", async () => {
     const gateway = new RecordingGateway(
       new MockModelGateway(textResponse("Ready.")),

@@ -29,6 +29,7 @@ export interface DesignWorkflowFailureClassification {
 }
 
 type WorkflowFailureOptions = {
+  terminal?: true;
   commandId?: string;
   nodeId?: string;
   path?: string;
@@ -93,7 +94,8 @@ function workflowFailure(
     code: `design_${code}`,
     message,
     retryable: false,
-    recoverable: true,
+    recoverable: options.terminal !== true,
+    ...(options.terminal ? { runTerminal: true as const } : {}),
     details: {
       kind: "design-workflow",
       fingerprint: `workflow:${code}:${phase}:${path}`,

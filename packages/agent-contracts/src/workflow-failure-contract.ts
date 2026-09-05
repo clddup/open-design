@@ -58,7 +58,7 @@ export const DESIGN_WORKFLOW_FAILURE_DEFINITIONS = [
   definition("reference_strategy_invalid", "material-write", false),
   definition("reference_unavailable", "inspection", true),
   definition("ui_draft_structure_incomplete", "material-write", true),
-  definition("visual_critic_unavailable", "capture", true),
+  definition("visual_critic_unavailable", "capture", false),
   definition("visual_review_required", "capture", false),
   definition("visual_review_skill_binding_invalid", "capture", false),
 ] as const;

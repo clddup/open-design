@@ -1,3 +1,4 @@
+import { designWorkflowError } from "@/shared/design-workflow-failure-classification";
 import type {
   ToolCallRequest,
   TrustedToolContext,
@@ -340,7 +341,21 @@ describe("Design capture/review Main session", () => {
       new Error("critic provider timed out"),
     );
 
-    await expect(state.session.capture(captureCall)).resolves.toBeDefined();
+    state.coordinator.recordCanvasCapture.mockImplementation(() => {
+      throw designWorkflowError(
+        "visual_critic_unavailable",
+        "Captured revision retained; review unavailable",
+        { terminal: true },
+      );
+    });
+    await expect(state.session.capture(captureCall)).rejects.toMatchObject({
+      cause: {
+        code: "design_visual_critic_unavailable",
+        runTerminal: true,
+        recoverable: false,
+      },
+    });
+    expect(vi.mocked(runIndependentDesignVisualCritic)).toHaveBeenCalledOnce();
 
     expect(state.coordinator.recordCanvasCapture).toHaveBeenCalledWith(
       context,

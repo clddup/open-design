@@ -1,3 +1,4 @@
+import { designWorkflowError } from "@/shared/design-workflow-failure-classification";
 import type { TrustedToolResult } from "@opendesign/agent-contracts";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -27,6 +28,26 @@ const captured: TrustedToolResult = {
 };
 
 describe("first-slice capture orchestration", () => {
+  it("does not swallow a terminal review failure after committing the first slice", async () => {
+    const failure = designWorkflowError(
+      "visual_critic_unavailable",
+      "The committed design is preserved; review unavailable",
+      { terminal: true },
+    );
+    const firstSlice = vi.fn(() => Promise.resolve(applied));
+    const capture = vi.fn(() => Promise.reject(failure));
+    await expect(
+      applyFirstSliceAndCapture({
+        firstSlice,
+        capture,
+        getDelivery: () => ({ activeTargetId: "target_home" }),
+      }),
+    ).rejects.toBe(failure);
+    expect(firstSlice).toHaveBeenCalledOnce();
+    expect(capture).toHaveBeenCalledOnce();
+    expect(applied.designRevision?.revision).toBe(5);
+  });
+
   it("does not capture when the first slice committed no revision", async () => {
     const capture = vi.fn();
     await expect(

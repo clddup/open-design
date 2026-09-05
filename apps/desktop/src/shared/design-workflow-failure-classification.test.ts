@@ -7,6 +7,26 @@ import {
 } from "./design-workflow-failure-classification";
 
 describe("design workflow failure contract", () => {
+  it("can stop an unavailable review without asking for new canvas writes", () => {
+    const error = designWorkflowError(
+      "visual_critic_unavailable",
+      "Review service timed out",
+      {
+        terminal: true,
+        path: "/visualReview",
+        recovery:
+          "Keep the captured design and resume when the service is available.",
+      },
+    );
+    expect(isTrustedToolFailure(error.cause)).toBe(true);
+    expect(error.cause).toMatchObject({
+      code: "design_visual_critic_unavailable",
+      recoverable: false,
+      runTerminal: true,
+      details: { requiresInspection: false, recovery: { required: false } },
+    });
+  });
+
   it.each([
     ["inspection_required", "inspection", "applying-draft"],
     ["material_write_required", "material-write", "applying-draft"],
