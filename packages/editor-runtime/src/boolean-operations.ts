@@ -191,10 +191,7 @@ export function planSetBooleanOperation(
     return failure("locked", "Locked Boolean groups cannot be changed");
   }
   if (node.properties.operation === operation) {
-    return failure(
-      "invalid-operation",
-      `Boolean ${booleanId} already uses ${operation}`,
-    );
+    return failure("no-op", `Boolean ${booleanId} already uses ${operation}`);
   }
   return {
     ok: true,

@@ -49,6 +49,70 @@ function execute(
 }
 
 describe("already satisfied design arrangement", () => {
+  it("treats an already-frontmost layer as unchanged rather than invalid", async () => {
+    const runtime = setup();
+    const before = runtime.getSnapshot();
+    const result = await execute(runtime, [
+      {
+        kind: "hierarchy",
+        input: {
+          action: "reorder",
+          label: "Bring to front",
+          pageId: "page_welcome",
+          nodeIds: ["feature_group"],
+          order: "bring-to-front",
+        },
+      },
+    ]);
+    expect(result).toMatchObject({
+      ok: true,
+      result: { observedRevision: 0, content: { changed: false } },
+    });
+    expect(result).not.toHaveProperty("result.designRevision");
+    expect(runtime.getSnapshot()).toEqual(before);
+  });
+
+  it("keeps a property change when a following hierarchy step is already satisfied", async () => {
+    const runtime = setup();
+    const result = await execute(runtime, [
+      {
+        kind: "node",
+        input: {
+          label: "Opacity",
+          commands: [
+            {
+              commandId: "opacity",
+              type: "update_properties",
+              nodeId: "title_welcome",
+              opacity: 0.7,
+            },
+          ],
+        },
+      },
+      {
+        kind: "hierarchy",
+        input: {
+          action: "reorder",
+          label: "Front",
+          pageId: "page_welcome",
+          nodeIds: ["feature_group"],
+          order: "bring-to-front",
+        },
+      },
+    ]);
+    expect(result).toMatchObject({
+      ok: true,
+      result: { designRevision: { revision: 1 } },
+    });
+    expect(runtime.getSnapshot().document.nodesById.title_welcome.opacity).toBe(
+      0.7,
+    );
+    expect(runtime.undo().ok).toBe(true);
+    expect(runtime.getSnapshot().document.nodesById.title_welcome.opacity).toBe(
+      1,
+    );
+  });
+
   it("returns observed state without a revision or undo entry", async () => {
     const runtime = setup();
     const before = runtime.getSnapshot();

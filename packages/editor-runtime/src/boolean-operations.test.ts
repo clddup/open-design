@@ -177,6 +177,26 @@ function expectTransformClose(
 }
 
 describe("non-destructive Boolean operations", () => {
+  it("reports an unchanged Boolean operation separately from invalid operations", () => {
+    const runtime = new EditorRuntime(booleanDocument());
+    const plan = createPlan(runtime.getSnapshot().document);
+    if (!plan.ok) throw new Error(plan.message);
+    expect(
+      runtime.apply(transaction(runtime, "create_boolean", plan.commands)).ok,
+    ).toBe(true);
+    const before = runtime.getSnapshot();
+    expect(
+      planSetBooleanOperation(
+        before.document,
+        "page_boolean",
+        "boolean_union",
+        "union",
+        "same_operation",
+      ),
+    ).toMatchObject({ ok: false, code: "no-op" });
+    expect(runtime.getSnapshot()).toEqual(before);
+  });
+
   it("creates an ordered Boolean group and preserves source geometry", () => {
     const runtime = new EditorRuntime(booleanDocument());
     const before = runtime.getSnapshot().document;

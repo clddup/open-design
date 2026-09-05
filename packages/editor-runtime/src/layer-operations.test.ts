@@ -295,6 +295,15 @@ describe("layer hierarchy operations", () => {
       runtime.apply(transaction(runtime, "vector_title", direct.commands)).ok,
     ).toBe(true);
     expect(
+      planSetMaskType(
+        runtime.getSnapshot().document,
+        "page_welcome",
+        "title_welcome",
+        "vector",
+        "same_mask",
+      ),
+    ).toMatchObject({ ok: false, code: "no-op" });
+    expect(
       runtime.getSnapshot().document.nodesById.title_welcome?.maskMode,
     ).toBe("outline");
 
@@ -1251,6 +1260,14 @@ describe("layer hierarchy operations", () => {
   it("rejects no-op, mixed-parent, cross-page, and locked layer order requests", () => {
     const document = createWelcomeDocument();
     expect(
+      planReparentNodes(document, "page_welcome", ["feature_one"], {
+        parentId: "feature_group",
+        index:
+          document.nodesById.feature_group!.childIds.indexOf("feature_one"),
+        commandPrefix: "same_parent",
+      }),
+    ).toMatchObject({ ok: false, code: "no-op" });
+    expect(
       planReorderNodes(
         document,
         "page_welcome",
@@ -1258,7 +1275,7 @@ describe("layer hierarchy operations", () => {
         "bring-to-front",
         "noop_front",
       ),
-    ).toMatchObject({ ok: false, code: "invalid-selection" });
+    ).toMatchObject({ ok: false, code: "no-op" });
     expect(
       planReorderNodes(
         document,

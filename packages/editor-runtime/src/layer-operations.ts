@@ -18,6 +18,7 @@ import { normalizeGroupAncestorsInPlace } from "./group-bounds.js";
 import { nodeGeometryUpdate } from "./node-geometry-update.js";
 import { cleanReparentedLayoutProperties } from "./auto-layout-property-cleanup.js";
 export type LayerOperationFailureCode =
+  | "no-op"
   | "invalid-selection"
   | "invalid-target"
   | "locked"
@@ -170,10 +171,7 @@ export function planSetMaskType(
   if (!eligibility.ok) return eligibility;
   const maskMode = documentMaskMode(maskType);
   if (eligibility.node.maskMode === maskMode) {
-    return failure(
-      "invalid-selection",
-      `Layer ${nodeId} already uses this mask type`,
-    );
+    return failure("no-op", `Layer ${nodeId} already uses this mask type`);
   }
   return {
     ok: true,
@@ -431,8 +429,8 @@ export function planReorderNodes(
 
   if (moves.length === 0) {
     return failure(
-      "invalid-selection",
-      `Selected layers cannot move ${layerOrderDirection(action)}`,
+      "no-op",
+      `Selected layers already match the requested ${layerOrderDirection(action)} order`,
     );
   }
   if (moves.length > MAX_TRANSACTION_COMMANDS) {
@@ -577,7 +575,7 @@ export function planReparentNodes(
     arraysEqual(sourceSiblings, targetOrder)
   ) {
     return failure(
-      "invalid-selection",
+      "no-op",
       "Selected layers are already at the requested hierarchy position",
     );
   }

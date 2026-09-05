@@ -1527,6 +1527,15 @@ function executeAtomicEditDesign(
         edit.input,
         commandPrefix,
       );
+      if (!plan.ok && plan.code === "no-op") {
+        summaries.push({
+          kind: edit.kind,
+          action: edit.input.action,
+          label: edit.input.label,
+          changed: false,
+        });
+        return;
+      }
       if (!plan.ok) {
         throw designPlannerError(
           "edit-design.hierarchy",
