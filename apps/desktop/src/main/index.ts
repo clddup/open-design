@@ -1,3 +1,4 @@
+import { handleDesignCapabilityTool } from "./agent/design-capability-tool-handler";
 import type {
   AgentRequest,
   ToolCallRequest,
@@ -813,6 +814,8 @@ async function startDesktopApplication(
           "Global Task services are not initialized",
         );
       }
+      const capabilityResult = handleDesignCapabilityTool(call);
+      if (capabilityResult) return capabilityResult;
       const executionContext =
         globalTaskCoordinator.resolveExecutionContext(context);
       const executeRendererTool = (

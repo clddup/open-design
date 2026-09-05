@@ -9,6 +9,7 @@ import type {
 } from "@/shared/contract-validation.js";
 import {
   DESIGN_CAPABILITIES_TOOL_NAME,
+  DesignCapabilityQueryContract,
   DESIGN_CAPTURE_TOOL_NAME,
   DESIGN_DELIVERY_SCOPE_TOOL_NAME,
   DESIGN_EDIT_TOOL_NAME,
@@ -58,6 +59,7 @@ type InputContract = {
 };
 
 const CONTRACTS = new Map<string, InputContract>([
+  [DESIGN_CAPABILITIES_TOOL_NAME, DesignCapabilityQueryContract],
   [DESIGN_DELIVERY_SCOPE_TOOL_NAME, DeliveryScopeContract],
   [READ_IMAGE_TOOL_NAME, ReadImageContract],
   [GENERATE_IMAGE_TOOL_NAME, GenerateImageContract],
@@ -77,7 +79,6 @@ const CONTRACTS = new Map<string, InputContract>([
 ]);
 
 const EMPTY_INPUT_TOOLS = new Set([
-  DESIGN_CAPABILITIES_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
   DESIGN_CAPTURE_TOOL_NAME,
 ]);

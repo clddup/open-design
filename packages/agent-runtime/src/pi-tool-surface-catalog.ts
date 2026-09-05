@@ -14,7 +14,7 @@ type ToolFactory = (
 ) => AgentTool;
 
 export class PiToolSurfaceCatalog {
-  readonly #phases: Record<ModelToolDisclosurePhase, AgentTool[]>;
+  readonly #phases: Record<ModelToolDisclosurePhase, Map<string, AgentTool>>;
   readonly #initialInspection: boolean;
   readonly definitions = new Map<string, AgentToolDefinition>();
   readonly executionTools: AgentTool[];
@@ -31,15 +31,17 @@ export class PiToolSurfaceCatalog {
       this.definitions.set(definition.name, definition);
     }
     const materialize = (phase: ModelToolDisclosurePhase) =>
-      disclosedToolDefinitions(this.safeDefinitions, phase).map((model) => {
-        const execution = this.definitions.get(model.name);
-        if (!execution) {
-          throw new Error(
-            `Model tool ${model.name} is missing its trusted definition`,
-          );
-        }
-        return createTool(execution, model);
-      });
+      new Map(
+        disclosedToolDefinitions(this.safeDefinitions, phase).map((model) => {
+          const execution = this.definitions.get(model.name);
+          if (!execution) {
+            throw new Error(
+              `Model tool ${model.name} is missing its trusted definition`,
+            );
+          }
+          return [model.name, createTool(execution, model)] as const;
+        }),
+      );
     this.executionTools = this.safeDefinitions.map((definition) =>
       createTool(definition),
     );
@@ -48,7 +50,6 @@ export class PiToolSurfaceCatalog {
       "host-inspected": materialize("host-inspected"),
       inspected: materialize("inspected"),
       continuation: materialize("continuation"),
-      expanded: materialize("expanded"),
     };
   }
 
@@ -62,6 +63,26 @@ export class PiToolSurfaceCatalog {
       records,
       { initialInspection: this.#initialInspection },
     );
-    return this.#phases[phase];
+    const selected = new Set(this.#latestSelection(records));
+    const projected = this.#phases[phase];
+    return this.executionTools.flatMap((tool) => {
+      if (selected.has(tool.name)) return [tool];
+      const model = projected.get(tool.name);
+      return model ? [model] : [];
+    });
+  }
+
+  #latestSelection(records: readonly AgentToolCallRecord[]) {
+    for (let index = records.length - 1; index >= 0; index -= 1) {
+      const record = records[index];
+      if (
+        record?.modelToolSelection !== undefined &&
+        this.definition(record.toolName)?.modelDisclosure?.role ===
+          "capability-discovery"
+      ) {
+        return record.modelToolSelection;
+      }
+    }
+    return undefined;
   }
 }

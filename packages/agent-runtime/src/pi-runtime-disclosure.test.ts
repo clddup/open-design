@@ -180,7 +180,7 @@ describe("production runtime execution-fact disclosure", () => {
     ]);
   });
 
-  it("expands advanced tools only after explicit capability discovery", async () => {
+  it("discloses advanced tools only after explicit capability selection", async () => {
     const store = new MemorySessionStore();
     const definitions = disclosureProbeTools();
     const gateway = new RecordingGateway(
@@ -209,14 +209,19 @@ describe("production runtime execution-fact disclosure", () => {
                     content: { revision: context.revision },
                     observedRevision: context.revision,
                   }
-                : {
-                    content: { ok: true },
-                    designRevision: {
-                      previousRevision: context.revision,
-                      revision: context.revision + 1,
-                      transactionId: `transaction_${call.toolCallId}`,
+                : call.toolName === "opendesign_capabilities_probe"
+                  ? {
+                      content: { ok: true },
+                      modelToolSelection: ["opendesign_advanced_probe"],
+                    }
+                  : {
+                      content: { ok: true },
+                      designRevision: {
+                        previousRevision: context.revision,
+                        revision: context.revision + 1,
+                        transactionId: `transaction_${call.toolCallId}`,
+                      },
                     },
-                  },
           };
         },
       },

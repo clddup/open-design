@@ -100,9 +100,6 @@ describe("model tool disclosure", () => {
       "validateInputIssues",
       validateInputIssues,
     );
-    expect(disclosedToolDefinitions([definition], "expanded")[0]).toBe(
-      definition,
-    );
   });
 
   it("keeps all bootstrap tools available without expanding deferred tools", () => {
@@ -224,16 +221,25 @@ describe("model tool disclosure", () => {
     ).toBe("continuation");
   });
 
-  it("expands only after explicit successful discovery, before or after material writes", () => {
+  it("keeps capability discovery independent of execution-fact phases", () => {
     const write = record(material, { revisionAdvanced: true });
+    const selection = record(discovery, {
+      modelToolSelection: [advanced.name],
+    });
+    for (const records of [[record(discovery)], [selection]]) {
+      expect(resolveModelToolDisclosurePhase(definitions, records)).toBe(
+        "bootstrap",
+      );
+    }
     for (const records of [
-      [record(discovery)],
-      [write, record(discovery)],
-      [record(discovery), write],
+      [write, selection],
+      [selection, write],
     ]) {
       const phase = resolveModelToolDisclosurePhase(definitions, records);
-      expect(phase).toBe("expanded");
-      expect(disclosedToolDefinitions(definitions, phase)).toEqual(definitions);
+      expect(phase).toBe("continuation");
+      expect(disclosedToolDefinitions(definitions, phase)).not.toContain(
+        advanced,
+      );
     }
   });
 

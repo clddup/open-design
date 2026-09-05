@@ -2,14 +2,13 @@ import type { AgentToolCallRecord } from "./completion-guard.js";
 import type { AgentToolDefinition } from "./runtime-ports.js";
 
 export type ModelToolDisclosurePhase =
-  "bootstrap" | "host-inspected" | "inspected" | "continuation" | "expanded";
+  "bootstrap" | "host-inspected" | "inspected" | "continuation";
 
 /** Only the Provider view changes; execution metadata and validators are retained. */
 export function disclosedToolDefinitions(
   definitions: readonly AgentToolDefinition[],
   phase: ModelToolDisclosurePhase,
 ): AgentToolDefinition[] {
-  if (phase === "expanded") return [...definitions];
   return definitions
     .filter((definition) => {
       const disclosure = definition.modelDisclosure;
@@ -66,7 +65,6 @@ export function resolveModelToolDisclosurePhase(
   let materialWritten = false;
   for (const record of records) {
     const role = roles.get(record.toolName);
-    if (role === "capability-discovery") return "expanded";
     if (role === "material-write" && record.revisionAdvanced === true) {
       materialWritten = true;
     }

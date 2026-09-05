@@ -120,7 +120,7 @@ describe("design Agent tool contract", () => {
       }),
     ).toContainEqual(
       expect.objectContaining({
-        code: "design_tool.empty_input_invalid",
+        code: "design_capabilities.input_invalid",
         path: "/unexpected",
       }),
     );
@@ -1631,7 +1631,7 @@ describe("design Agent tool contract", () => {
 
     expect(capabilities).toMatchObject({ risk: "read", approval: "never" });
     expect(capabilities?.description).toContain(
-      "versioned OpenDesign professional design capability manifest",
+      "OpenDesign capability manifest and tool catalog",
     );
     expect(
       validateDesignAgentToolInput(DESIGN_CAPABILITIES_TOOL_NAME, {}),

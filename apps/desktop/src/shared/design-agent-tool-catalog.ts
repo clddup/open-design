@@ -113,7 +113,7 @@ const EmptyDesignToolInputContract = defineContract<
   clone: false,
 });
 
-export const DESIGN_AGENT_TOOL_SPECS = [
+const TOOL_DESCRIPTORS = [
   {
     name: DESIGN_DELIVERY_SCOPE_TOOL_NAME,
     modelDisclosure: {
@@ -152,11 +152,9 @@ export const DESIGN_AGENT_TOOL_SPECS = [
       role: "capability-discovery" as const,
     },
     description:
-      "Read the trusted, versioned OpenDesign professional design capability manifest. It reports available, degraded, and unavailable workflows across contract, runtime, human UI, Agent, render, and export surfaces, including providers, limitations, and evidence counts. Call this before planning work that may require Pen editing, boolean operations, Auto Layout, components, variables, rich typography, image crop, AI image editing, or export.",
-    inputSchema: EMPTY_DESIGN_TOOL_INPUT_SCHEMA,
+      "Read the trusted OpenDesign capability manifest and tool catalog. Set tools to the exact registered tool names whose complete schemas you need for the next response. Selection replaces the previous professional tool selection; an empty list returns to the basic tools. Omit tools to inspect capabilities without changing selection. Basic tools stay available. Requesting a schema does not grant Page, file, network, or write permissions. You can also request a basic tool such as opendesign_edit_design to see its complete operation schema.",
     risk: "read" as const,
     approval: "never" as const,
-    validateInputIssues: EmptyDesignToolInputContract.issues,
   },
   {
     name: DESIGN_INSPECT_TOOL_NAME,
@@ -410,6 +408,40 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     validateInputIssues: DesignFontContract.issues,
   },
 ] as const;
+
+export const DESIGN_CAPABILITY_QUERY_SCHEMA = Type.Object(
+  {
+    tools: Type.Optional(
+      Type.Array(
+        Type.Union(TOOL_DESCRIPTORS.map((tool) => Type.Literal(tool.name))),
+        { uniqueItems: true },
+      ),
+    ),
+  },
+  { additionalProperties: false },
+);
+export type DesignCapabilityQueryInput = Static<
+  typeof DESIGN_CAPABILITY_QUERY_SCHEMA
+>;
+export const DesignCapabilityQueryContract =
+  defineContract<DesignCapabilityQueryInput>({
+    schema: DESIGN_CAPABILITY_QUERY_SCHEMA,
+    code: "design_capabilities.input_invalid",
+    subject: "Design capability query",
+    recovery:
+      "Choose registered tool names from the tools enum. Omit tools to keep the current selection, or use [] for basic tools.",
+    clone: false,
+  });
+
+export const DESIGN_AGENT_TOOL_SPECS = TOOL_DESCRIPTORS.map((tool) =>
+  tool.name === DESIGN_CAPABILITIES_TOOL_NAME
+    ? {
+        ...tool,
+        inputSchema: DESIGN_CAPABILITY_QUERY_SCHEMA,
+        validateInputIssues: DesignCapabilityQueryContract.issues,
+      }
+    : tool,
+);
 
 type ToolInputIssues = (input: unknown) => readonly AgentToolFailureIssue[];
 

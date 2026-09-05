@@ -44,6 +44,38 @@ const request = {
 } as const;
 
 describe("agent tool wire contracts", () => {
+  it("carries a structured model tool selection without changing design authority", () => {
+    const result = {
+      content: { selectedTools: ["opendesign_edit_vector"] },
+      modelToolSelection: ["opendesign_edit_vector"],
+    };
+    expect(TrustedToolResultContract.parse(result)).toMatchObject({
+      ok: true,
+      value: result,
+    });
+    expect(
+      DesignToolBridgeResponseContract.parse({
+        type: "design-tool.response",
+        requestId: "selection",
+        ok: true,
+        result,
+      }).ok,
+    ).toBe(true);
+    expect(
+      TrustedToolResultContract.parse({ ...result, modelToolSelection: [] }).ok,
+    ).toBe(true);
+    expect(
+      TrustedToolResultContract.parse({
+        ...result,
+        modelToolSelection: ["duplicate", "duplicate"],
+      }).ok,
+    ).toBe(false);
+    expect(
+      TrustedToolResultContract.parse({ ...result, modelToolSelection: [42] })
+        .ok,
+    ).toBe(false);
+  });
+
   it("keeps wire validation structural and leaves opaque tool input to Main", () => {
     expect(isDesignToolBridgeRequest(request)).toBe(true);
     expect(DesignToolBridgeRequestContract.parse(request).ok).toBe(true);

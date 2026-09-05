@@ -9,6 +9,7 @@ export interface AgentToolCallRecord {
   result?: unknown;
   revision?: number;
   revisionAdvanced?: true;
+  modelToolSelection?: string[];
 }
 
 export interface AgentUnresolvedDesignWriteFailure {

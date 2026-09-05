@@ -11,8 +11,6 @@ import {
   isDesignToolBridgeResponse,
 } from "@opendesign/agent-contracts";
 import type { ToolExecutorPort } from "@opendesign/agent-runtime";
-import { capabilityManifestForAgent } from "@opendesign/design-capabilities";
-import { DESIGN_CAPABILITIES_TOOL_NAME } from "@/shared/design-agent-tools.js";
 
 interface ParentPortLike {
   postMessage(message: unknown): void;
@@ -74,17 +72,10 @@ export class ParentDesignToolExecutor implements ToolExecutorPort {
     context: TrustedToolContext,
     signal: AbortSignal,
   ): AsyncIterable<ToolExecutionEvent> {
-    if (call.toolName === DESIGN_CAPABILITIES_TOOL_NAME) {
-      if (signal.aborted) {
-        throw signal.reason instanceof Error
-          ? signal.reason
-          : new DOMException("Capability query cancelled", "AbortError");
-      }
-      yield {
-        type: "completed",
-        result: { content: capabilityManifestForAgent() },
-      };
-      return;
+    if (signal.aborted) {
+      throw signal.reason instanceof Error
+        ? signal.reason
+        : new DOMException("Design tool cancelled", "AbortError");
     }
     const requestId = `tool_${process.pid}_${Date.now()}_${++this.#sequence}`;
     const events = new AsyncEventQueue<

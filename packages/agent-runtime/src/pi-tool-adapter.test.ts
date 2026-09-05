@@ -181,6 +181,9 @@ describe("OpenDesign Pi tool adapter", () => {
             type: "completed",
             result: {
               content: { ok: true },
+              ...(call.toolName === discovery.name
+                ? { modelToolSelection: [advanced.name] }
+                : {}),
               ...(call.toolName === material.name
                 ? {
                     designRevision: {

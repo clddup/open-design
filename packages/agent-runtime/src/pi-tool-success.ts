@@ -88,6 +88,10 @@ export function projectPiToolSuccess(options: {
     input: options.input,
     status: "completed",
     result: options.result.content,
+    ...(options.definition.modelDisclosure?.role === "capability-discovery" &&
+    options.result.modelToolSelection !== undefined
+      ? { modelToolSelection: [...options.result.modelToolSelection] }
+      : {}),
     ...(nextRevision === undefined ? {} : { revision: nextRevision }),
     ...(revision === undefined ? {} : { revisionAdvanced: true as const }),
   };

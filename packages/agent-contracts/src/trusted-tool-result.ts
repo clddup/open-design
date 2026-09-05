@@ -26,6 +26,9 @@ export const TrustedToolFailureSchema = Type.Object(
 export const TrustedToolResultSchema = Type.Object(
   {
     content: Type.Unknown(),
+    modelToolSelection: Type.Optional(
+      Type.Array(AgentIdSchema, { uniqueItems: true }),
+    ),
     observedRevision: Type.Optional(RevisionSchema),
     designRevision: Type.Optional(
       Type.Object(

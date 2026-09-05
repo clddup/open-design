@@ -243,4 +243,7 @@ export {
   designAgentToolInputIssues,
   rendererDesignToolInputIssues,
   validateDesignAgentToolInput,
+  DesignCapabilityQueryContract,
+  DESIGN_CAPABILITY_QUERY_SCHEMA,
+  type DesignCapabilityQueryInput,
 } from "./design-agent-tool-catalog";

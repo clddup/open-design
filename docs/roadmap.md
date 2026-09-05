@@ -78,6 +78,8 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 
 ## P0-B：稳定 Leafer 迁移与 Agent 主流程
 
+- [x] 专业工具按模型显式选择披露：既有 capability query 使用从真实目录派生的可选 tools，Main 统一校验/审计，结构化 selection 贯穿共享桥。删除查询即 expanded 全目录的转换；选择替换、失败/省略保持、空列表恢复基础，权限不变。Provider 边界回归证明选中完整 Schema 与完整紧凑目录实际送达，见 ADR-0307。
+
 - [x] 混合 Edit Design 在精确 revision 下不再因潜在 rebase guard 误拒绝；用 EditorRuntime 的真实 ChangeSet 统一更新目标物理成员和材料状态，避免 node entry 漏记 hierarchy/arrange、跨画板串新节点、共享影响虚增步骤。精确基线时推进原只读 inspection 缓存，复用同一节点投影；Main→Renderer→Runtime 单 revision/undo 与跨目标记账已回归，见 ADR-0306。普通 node 的跨 Plan 授权限制仍未全部解除。
 
 - [x] 打通整批独立 node edit 修改既有非 Plan 画板的路径，不把普通修改当成计划创建。依 exact inspection 区分直接/祖先/组件影响，复用原有作用域/结构/namespace/runtime 约束，不带 steps 或 rebaseGuard，不推进 Plan ledger；Main→Renderer→Runtime、stale 与 undo 已回归。混合批次及跨 Plan/共享资源仍未完成，见 ADR-0305。
@@ -87,7 +89,7 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 - [x] 修复写入后 capability discovery 被早期 material-write 记录短路：成功发现专业能力后，下一次工具投影包含现有专业入口；未发现能力时仍使用原有基础集合，失败 discovery 不推进。覆盖写入→发现失败→发现成功→专业操作链。此修复不新增工具或授权，不代表现有全目录展开策略已完成按需重构。
 
 - [x] 移除工具入口的发送前意图分类：删除 initial surface resolver、deliveryScopeReview 请求字段与 Main 双 setter、scope-only 首轮和两套提示词分支。模型从中性基础工具选择创建/编辑/交付范围，完成与自动续跑使用真实 ledger/stage；不以消息关键词、选区或空页推断任务意图，不新增分类回合或创作门禁。保留资源授权与事务 invariant；见 ADR-0304。
-- [ ] 后续优化专业工具定向披露、已有 Plan 与普通编辑的边界，以及 parser 异常的结构化归因。当前 capability discovery 仍展开原有目录，不把意图路由移除描述为全部工具/流程问题解决。
+- [ ] 继续处理已有 Plan 与普通编辑的剩余边界，以及 parser 异常的结构化归因。专业工具定向披露已按 ADR-0307 接通，但不把单项整改描述为全部工具/流程问题解决。
 
 - [x] 移除系统提示词的最新消息关键词 Skill 分类及中英文字数语言预判。现有 planning 方法保持可用，由模型结合 Conversation 应用；Provider 边界回归保留连续消息与原文，不增加分类往返。工具入口后续移除见 ADR-0304；真实审美与耗时仍未验收，设计方法装配见 ADR-0303。
 
