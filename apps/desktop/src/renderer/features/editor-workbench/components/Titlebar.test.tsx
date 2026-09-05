@@ -71,15 +71,9 @@ describe("Titlebar behavior primitives", () => {
       name: "Toggle Agent and properties panel",
     });
     expect(navigator).toHaveAttribute("aria-pressed", "true");
-    expect(navigator).toHaveAttribute(
-      "aria-keyshortcuts",
-      "Control+Shift+1 Meta+Shift+1",
-    );
+    expect(navigator).toHaveAttribute("aria-keyshortcuts", "Meta+Shift+1");
     expect(utility).toHaveAttribute("aria-pressed", "true");
-    expect(utility).toHaveAttribute(
-      "aria-keyshortcuts",
-      "Control+Shift+2 Meta+Shift+2",
-    );
+    expect(utility).toHaveAttribute("aria-keyshortcuts", "Meta+Shift+2");
     await user.click(navigator);
     await user.click(utility);
     expect(onToggleLeftPanel).toHaveBeenCalledOnce();

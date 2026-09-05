@@ -231,9 +231,7 @@ beforeEach(() => {
     },
   });
   window.desktop = {
-    getPlatformInfo: vi
-      .fn()
-      .mockResolvedValue({ platform: "darwin", version: "0.0.0" }),
+    platform: "darwin",
     getPendingDiagnostics: vi.fn().mockResolvedValue([]),
     reportDiagnostic: vi.fn().mockResolvedValue(undefined),
     onDiagnosticEvent: vi
@@ -684,6 +682,19 @@ function globalTask(
 }
 
 describe("App", () => {
+  it("uses the preload platform on the first render", () => {
+    window.desktop = {
+      ...window.desktop!,
+      platform: "win32",
+    };
+
+    renderApp();
+
+    expect(
+      screen.getByRole("group", { name: "Window controls" }),
+    ).toBeVisible();
+  });
+
   it("replaces every exact file-font match in one undoable transaction", async () => {
     const user = userEvent.setup();
     renderApp();
@@ -4578,10 +4589,7 @@ describe("App", () => {
   });
 
   it("uses Windows Boolean shortcuts without stealing editable input", async () => {
-    vi.mocked(window.desktop!.getPlatformInfo).mockResolvedValueOnce({
-      platform: "win32",
-      version: "0.0.0",
-    });
+    window.desktop = { ...window.desktop!, platform: "win32" };
     renderApp();
     act(() =>
       runtime().setSelection(["feature_one", "feature_two"], "feature_one"),
@@ -5638,10 +5646,7 @@ describe("App", () => {
   });
 
   it("uses Windows layer-order shortcuts without stealing editable input", async () => {
-    vi.mocked(window.desktop!.getPlatformInfo).mockResolvedValueOnce({
-      platform: "win32",
-      version: "0.0.0",
-    });
+    window.desktop = { ...window.desktop!, platform: "win32" };
     renderApp();
     act(() => runtime().setSelection(["title_welcome"], "title_welcome"));
     await waitFor(() =>
@@ -5684,10 +5689,7 @@ describe("App", () => {
   it.each(["darwin", "win32"] as const)(
     "reparents a layer from the tree atomically on %s and restores it with one undo",
     async (platform) => {
-      vi.mocked(window.desktop!.getPlatformInfo).mockResolvedValueOnce({
-        platform,
-        version: "0.0.0",
-      });
+      window.desktop = { ...window.desktop!, platform };
       const user = userEvent.setup();
       renderApp();
       const before = runtime().getSnapshot();
@@ -5798,10 +5800,7 @@ describe("App", () => {
   });
 
   it("uses Windows hierarchy shortcuts and labels without stealing text input", async () => {
-    vi.mocked(window.desktop!.getPlatformInfo).mockResolvedValueOnce({
-      platform: "win32",
-      version: "0.0.0",
-    });
+    window.desktop = { ...window.desktop!, platform: "win32" };
     renderApp();
     act(() =>
       runtime().setSelection(
@@ -5839,10 +5838,7 @@ describe("App", () => {
   });
 
   it("uses the Windows mask shortcut without stealing editable input", async () => {
-    vi.mocked(window.desktop!.getPlatformInfo).mockResolvedValueOnce({
-      platform: "win32",
-      version: "0.0.0",
-    });
+    window.desktop = { ...window.desktop!, platform: "win32" };
     renderApp();
     act(() =>
       runtime().setSelection(
@@ -5925,10 +5921,7 @@ describe("App", () => {
   it.each(["darwin", "win32"] as const)(
     "distributes and sets exact negative spacing from the inspector on %s",
     async (platform) => {
-      vi.mocked(window.desktop!.getPlatformInfo).mockResolvedValueOnce({
-        platform,
-        version: "0.0.0",
-      });
+      window.desktop = { ...window.desktop!, platform };
       const user = userEvent.setup();
       renderApp();
       act(() =>
@@ -6000,10 +5993,7 @@ describe("App", () => {
   it.each(["darwin", "win32"] as const)(
     "tidies an inferred row from the inspector on %s",
     async (platform) => {
-      vi.mocked(window.desktop!.getPlatformInfo).mockResolvedValueOnce({
-        platform,
-        version: "0.0.0",
-      });
+      window.desktop = { ...window.desktop!, platform };
       const user = userEvent.setup();
       renderApp();
       act(() =>
@@ -6283,7 +6273,7 @@ describe("App", () => {
     fireEvent.keyDown(window, {
       code: "Digit2",
       key: "2",
-      ctrlKey: true,
+      metaKey: true,
       shiftKey: true,
     });
     expect(workspace).toHaveAttribute("data-left-panel", "hidden");

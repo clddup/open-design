@@ -34,6 +34,7 @@ describe("DesktopWindowHost", () => {
         title: "OpenDesign",
         icon: "/application/icon.png",
         titleBarStyle: "hidden",
+        trafficLightPosition: { x: 14, y: 15 },
         backgroundColor: "#191a1b",
       }),
     );
@@ -53,6 +54,16 @@ describe("DesktopWindowHost", () => {
     expect(fixture.window.loadFile).not.toHaveBeenCalled();
     expect(fixture.host.create()).toBe(window);
     expect(fixture.createWindow).toHaveBeenCalledOnce();
+  });
+
+  it("does not send macOS traffic-light geometry to Windows", () => {
+    const fixture = setup({ platform: "win32" });
+
+    fixture.host.create();
+
+    expect(fixture.createWindow.mock.calls[0]?.[0]).not.toHaveProperty(
+      "trafficLightPosition",
+    );
   });
 
   it("loads the packaged renderer and enforces navigation and external-link policy", () => {
@@ -292,6 +303,7 @@ function setup(
   overrides: {
     environment?: Readonly<Record<string, string | undefined>>;
     isPackaged?: boolean;
+    platform?: NodeJS.Platform;
   } = {},
 ) {
   const handlers: {
@@ -379,6 +391,7 @@ function setup(
     isPackaged: overrides.isPackaged ?? false,
     openExternal,
     packagedRendererPath: "/application/renderer/index.html",
+    platform: overrides.platform ?? "darwin",
     preloadPath: "/application/preload.cjs",
     showWindow,
   });

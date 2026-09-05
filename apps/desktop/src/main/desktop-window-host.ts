@@ -26,6 +26,7 @@ export interface DesktopWindowHostOptions {
   isPackaged: boolean;
   openExternal(url: string): Promise<void> | void;
   packagedRendererPath: string;
+  platform: NodeJS.Platform;
   preloadPath: string;
   showWindow(window: BrowserWindow): void;
 }
@@ -73,7 +74,9 @@ export class DesktopWindowHost {
       title: "OpenDesign",
       icon: this.#options.getIconPath(),
       titleBarStyle: "hidden",
-      trafficLightPosition: { x: 14, y: 15 },
+      ...(this.#options.platform === "darwin"
+        ? { trafficLightPosition: { x: 14, y: 15 } }
+        : {}),
       backgroundColor: this.#options.getBackgroundColor(),
       webPreferences: {
         preload: this.#options.preloadPath,

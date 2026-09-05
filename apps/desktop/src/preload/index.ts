@@ -80,7 +80,7 @@ import { createProviderApi } from "./provider-api";
 import { validate, validateArray } from "./value-parser";
 
 const desktopApi: DesktopApi = Object.freeze({
-  getPlatformInfo: () => ipcRenderer.invoke(channels.platformInfo),
+  platform: process.platform,
   getPendingDiagnostics: async () => {
     const result: unknown = await ipcRenderer.invoke(
       channels.getPendingDiagnostics,

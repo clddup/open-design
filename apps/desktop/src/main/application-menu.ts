@@ -53,6 +53,16 @@ export function createApplicationMenuTemplate(
           label: options.exportSvgLabel,
         },
         { type: "separator" },
+        ...(platform === "darwin"
+          ? []
+          : [
+              {
+                accelerator: "CommandOrControl+,",
+                click: options.onOpenSettings,
+                label: options.settingsLabel,
+              },
+              { type: "separator" as const },
+            ]),
         { role: platform === "darwin" ? "close" : "quit" },
       ],
     },

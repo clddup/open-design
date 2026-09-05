@@ -189,9 +189,13 @@ describe("useCanvasWorkspaceController", () => {
 
     fireEvent.keyDown(window, { code: "KeyE", key: "e", metaKey: true });
     expect(flattenSelection).toHaveBeenCalledTimes(1);
+    fireEvent.keyDown(window, { code: "KeyE", key: "e", ctrlKey: true });
+    expect(flattenSelection).toHaveBeenCalledTimes(1);
 
     rerender({ platform: "win32" });
     fireEvent.keyDown(window, { code: "KeyE", key: "e", ctrlKey: true });
+    expect(flattenSelection).toHaveBeenCalledTimes(2);
+    fireEvent.keyDown(window, { code: "KeyE", key: "e", metaKey: true });
     expect(flattenSelection).toHaveBeenCalledTimes(2);
 
     rerender({ platform: "win32" });

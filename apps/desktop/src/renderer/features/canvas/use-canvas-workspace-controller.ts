@@ -331,7 +331,7 @@ function handleCanvasShortcut(
   if (!context.editorActive || event.defaultPrevented || event.isComposing) {
     return;
   }
-  const modifier = event.metaKey || event.ctrlKey;
+  const modifier = isPrimaryModifier(event, context.platform);
   if (modifier && !event.altKey && !event.shiftKey && event.code === "KeyR") {
     event.preventDefault();
     if (!isEditableTarget(event.target) && context.canRenameSelection) {
@@ -487,6 +487,15 @@ function handleCanvasShortcut(
   }
   const next = toolForShortcut(event);
   if (next) runtime.setTool(next);
+}
+
+function isPrimaryModifier(
+  event: KeyboardEvent,
+  platform: NodeJS.Platform,
+): boolean {
+  return platform === "darwin"
+    ? event.metaKey && !event.ctrlKey
+    : event.ctrlKey && !event.metaKey;
 }
 
 function currentSmartSelectionMarkState(

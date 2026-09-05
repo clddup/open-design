@@ -118,6 +118,7 @@ const desktopWindowHost = new DesktopWindowHost({
   isPackaged: app.isPackaged,
   openExternal: (url) => shell.openExternal(url),
   packagedRendererPath: join(__dirname, "../renderer/index.html"),
+  platform: process.platform,
   preloadPath: join(__dirname, "../preload/index.cjs"),
   showWindow: (window) => window.show(),
 });
@@ -601,10 +602,6 @@ function registerIpc(fontBinaryService: FontBinaryMainService): () => void {
     fontBinaryService.register(ipc, assertMainRenderer, () =>
       desktopWindowHost.current(),
     );
-    ipc.handle(channels.platformInfo, () => ({
-      platform: process.platform,
-      version: app.getVersion(),
-    }));
     agentIpcRouter.register({
       ipc,
       assertRenderer: (event, message) =>

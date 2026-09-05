@@ -98,7 +98,7 @@
 }
 
 @media (max-width: 1100px) {
-  .root {
+  .root[data-platform="darwin"] {
     padding-left: 70px;
   }
 

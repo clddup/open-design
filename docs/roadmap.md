@@ -71,6 +71,7 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 - [ ] 分别验证干净安装、安装目录选择、首次启动、升级覆盖、卸载和用户数据保留策略。
 - [ ] 两个平台共同执行：窗口/菜单/快捷键、Leafer 画布鼠标与触控板/滚轮、文本输入、文件选择、Project 保存重开、Agent utilityProcess、`safeStorage`、附件、Provider 调用、取消和崩溃恢复 GUI smoke。当前只完成打包程序的无窗口 Agent smoke。
 - [ ] 审计并移除只在 macOS 成立的路径、菜单、图标、快捷键和 shell 假设；平台差异通过窄 adapter 处理。
+  - 已完成首个源码切片：`BrowserWindow` 只在 macOS 接收 traffic-light 几何，Preload 在 Renderer 首帧提供真实平台，Windows File 菜单提供 Settings，窄窗口标题栏不再套用 macOS 安全区。画布主修饰键与无障碍快捷键声明按平台使用 Command/Control，删除重复的平台查询 IPC。源码审计另发现无窗口时菜单命令丢失、Windows 最大化按钮状态未同步，以及项目路径可移植性待核实；这些问题及双平台产品 smoke 尚未完成，本项保持未完成。
 - [ ] Windows 安装后产品 smoke 未通过前，不得把桌面版描述为跨平台可发布。Linux 保留目标和构建边界，但当前不阻塞此里程碑。
 
 完成条件：macOS 与 Windows 的同一 commit 都有 `verify + native package + install/start/product smoke` 证据，并写入 `verification.md`。

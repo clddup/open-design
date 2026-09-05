@@ -100,7 +100,9 @@ export function Titlebar({
           <span className={styles.panelActions}>
             {onToggleLeftPanel && (
               <IconButton
-                aria-keyshortcuts="Control+Shift+1 Meta+Shift+1"
+                aria-keyshortcuts={
+                  platform === "darwin" ? "Meta+Shift+1" : "Control+Shift+1"
+                }
                 icon="lucide:layers"
                 label={t("title.toggleNavigator")}
                 onClick={onToggleLeftPanel}
@@ -109,7 +111,9 @@ export function Titlebar({
             )}
             {onToggleUtilityPanel && (
               <IconButton
-                aria-keyshortcuts="Control+Shift+2 Meta+Shift+2"
+                aria-keyshortcuts={
+                  platform === "darwin" ? "Meta+Shift+2" : "Control+Shift+2"
+                }
                 icon="lucide:bot"
                 label={t("title.toggleUtility")}
                 onClick={onToggleUtilityPanel}

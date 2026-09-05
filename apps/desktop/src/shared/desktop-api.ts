@@ -237,8 +237,6 @@ export {
 
 export type ThemePreference = "light" | "dark" | "system";
 
-export type PlatformInfo = { platform: NodeJS.Platform; version: string };
-
 export type WindowAction = "minimize" | "toggle-maximize" | "close";
 
 export type {
@@ -249,7 +247,7 @@ export type {
 };
 
 export interface DesktopApi {
-  getPlatformInfo: () => Promise<PlatformInfo>;
+  readonly platform: NodeJS.Platform;
   getPendingDiagnostics: () => Promise<DiagnosticEvent[]>;
   reportDiagnostic: (report: RendererDiagnosticReport) => Promise<void>;
   onDiagnosticEvent: (listener: (event: DiagnosticEvent) => void) => () => void;
@@ -384,7 +382,6 @@ export interface DesktopApi {
 }
 
 export const channels = {
-  platformInfo: "app:platform-info",
   getPendingDiagnostics: "diagnostic:get-pending",
   reportDiagnostic: "diagnostic:report",
   diagnosticEvent: "diagnostic:event",

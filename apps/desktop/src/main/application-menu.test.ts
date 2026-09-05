@@ -85,6 +85,11 @@ describe("createApplicationMenuTemplate", () => {
           accelerator: "CommandOrControl+Shift+E",
           click: windowsOptions.onExportSvg,
         }),
+        expect.objectContaining({
+          accelerator: "CommandOrControl+,",
+          click: windowsOptions.onOpenSettings,
+          label: "Settings…",
+        }),
         expect.objectContaining({ role: "quit" }),
       ]),
     );

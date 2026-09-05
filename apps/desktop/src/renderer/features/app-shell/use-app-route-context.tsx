@@ -45,7 +45,7 @@ export function useAppRouteContext() {
   const routeNavigateRef = useRef(routeNavigate);
   routeNavigateRef.current = routeNavigate;
   const [theme, setTheme] = useState<ThemePreference>("dark");
-  const [platform, setPlatform] = useState<NodeJS.Platform>("darwin");
+  const platform = window.desktop?.platform ?? "darwin";
   const [navigator] = useState(
     () =>
       new AppNavigationCoordinator({
@@ -153,9 +153,6 @@ export function useAppRouteContext() {
 
   useEffect(() => {
     void window.desktop?.getTheme().then(setTheme);
-    void window.desktop
-      ?.getPlatformInfo()
-      .then((info) => setPlatform(info.platform));
   }, []);
 
   useEffect(() => {
