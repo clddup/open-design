@@ -126,11 +126,11 @@ export async function runIndependentDesignVisualCritic(
         "You are OpenDesign's stateless independent visual delivery critic.",
         "You did not author this design. You receive no author conversation, reasoning, tool history, or self-review. Judge only the user brief, frozen target contract, and exact-revision capture.",
         "Call the critique tool exactly once. Do not answer with prose. Score anchors: 1 is broken or unusable; 2 has major defects; 3 is coherent but visibly not delivery-ready; 4 is delivery-ready with no material change required; 5 is exceptional. Attractive presentation cannot compensate for a failed criterion.",
-        "Judge visible pixels before labels or rationale. A refinement means a material change is still required, so never attach one to a delivery-ready score. Omit optional nice-to-have polish. At either phase, pass-quality evidence requires every criterion to be independently ready; a first draft may pass honestly, and a final capture with unresolved refinements must fail.",
+        "Infer visual intent from the pixels and user brief, not an author-supplied thesis, motif, or style rationale. Target metadata describes scope, not evidence that quality has been achieved. Judge visible pixels before labels or rationale. A refinement means a material change is still required, so never attach one to a delivery-ready score. Omit optional nice-to-have polish. At either phase, pass-quality evidence requires every criterion to be independently ready; a first draft may pass honestly, and a final capture with unresolved refinements must fail.",
         "For UI, score glance-legibility, composition, typography, template-avoidance, and craft at 3 or lower when the task area is visually subordinate to decoration, important copy loses contrast, or generic gradients, light beams, rings, HUD lines, and floating panels carry the composition without product-specific behavior.",
-        "For every logo-concept-*-quality criterion, judge that declared direction independently. It must have an ownable silhouette, visibly intentional construction, controlled contour or counterform, recognition at 32/24/16 px, anti-template originality, and visible agreement with its thesis. A caption cannot rescue an arbitrary shape, and stronger sibling concepts cannot compensate for one filler direction.",
+        "For every logo-concept-*-quality criterion, judge that declared direction independently. It must have an ownable silhouette, visibly intentional construction, controlled contour or counterform, recognition at 32/24/16 px, anti-template originality, and visible fit to the user brief. A caption cannot rescue an arbitrary shape, and stronger sibling concepts cannot compensate for one filler direction.",
         "For Logo color, treat monochrome as a required stress test rather than the default primary identity. brand-color-system fails when the main mark is only black/white/gray without an explicitly monochrome-only user brief, when color is decorative rather than semantic, or when light/dark adaptation is not visible. color-system-divergence requires explored directions to make materially different color decisions, not hue swaps. app-icon-ecosystem-distinction requires ownable color and optical weight among real macOS/Windows app icons.",
-        "When visual references are supplied, the first image is always the delivery capture and later images are the authorized references named in the JSON contract. Judge the declared transferable decisions and avoidances; do not demand literal copying or confuse a content asset with a style reference.",
+        "When visual references are supplied, the first image is always the delivery capture and later images are the authorized references named in the JSON contract. Judge reference use against the user brief and visible images; declared roles identify their use, not proof of quality. Do not demand literal copying or confuse a content asset with a style reference.",
         "Write summary, evidence, and refinements in the language of the user's request.",
         formatBuiltinDesignReviewSkillBundleForDeliverable(
           context.plan.deliverable,
@@ -241,10 +241,6 @@ function criticEvidenceContract(
   const logoEvidence =
     context.plan.deliverable === "logo"
       ? {
-          logoExploration:
-            context.plan.logoExploration?.targetId === context.target.targetId
-              ? context.plan.logoExploration
-              : undefined,
           logoDirectionCriteria,
         }
       : {};
@@ -259,15 +255,20 @@ function criticEvidenceContract(
       label: context.target.label,
       objective: context.target.objective,
       qualityProfile: context.target.qualityProfile,
-      composition: context.target.composition,
       editableLayers: context.target.editableLayers,
-      validationChecks: context.target.validationChecks,
     },
     briefFidelity: context.plan.briefFidelity,
-    designIntent: context.plan.designIntent,
-    visualSystem: context.plan.visualSystem,
     logoOutputs: context.plan.logoOutputs,
-    referenceStrategy: context.plan.referenceStrategy,
+    referenceStrategy: context.plan.referenceStrategy
+      ? {
+          references: context.plan.referenceStrategy.references.map(
+            (reference) => ({
+              attachmentId: reference.attachmentId,
+              decision: reference.decision,
+            }),
+          ),
+        }
+      : undefined,
     deliveryCaptureAttachmentId: context.attachment.attachmentId,
     visualReferenceAttachmentIds: context.referenceAttachments.map(
       (attachment) => attachment.attachmentId,
@@ -337,10 +338,6 @@ function logoDirectionCriterionContracts(
   criterionId: LogoDirectionCriterionId;
   conceptId: string;
   label: string;
-  principle: string;
-  thesis: string;
-  constructionLogic: string;
-  colorSystem: { palette: string[]; rationale: string };
   requiredEvidenceNodeIds: string[];
   rubric: readonly string[];
 }> {
@@ -352,10 +349,6 @@ function logoDirectionCriterionContracts(
     criterionId: `logo-concept-${direction.conceptId}-quality`,
     conceptId: direction.conceptId,
     label: direction.label,
-    principle: direction.principle,
-    thesis: direction.thesis,
-    constructionLogic: direction.constructionLogic,
-    colorSystem: structuredClone(direction.colorSystem),
     requiredEvidenceNodeIds: [direction.rootNodeId, direction.masterNodeId],
     rubric: [
       "ownable black silhouette",
@@ -365,7 +358,7 @@ function logoDirectionCriterionContracts(
       "no mechanically scaled clone presented as proof of small-size optimization",
       "anti-template originality",
       "a brief-specific primary color system whose role is visible in the mark rather than only in captions or presentation backgrounds",
-      "visible agreement between the form and declared thesis without relying on its caption",
+      "visible suitability for the user brief without relying on its caption",
     ],
   }));
 }

@@ -17,6 +17,15 @@ import {
 } from "./index.js";
 
 describe("built-in design skills", () => {
+  it("keeps critic reference judgment grounded in user requirements rather than author declarations", () => {
+    const review = formatBuiltinDesignReviewSkillBundleForDeliverable("ui");
+    expect(review).toContain(
+      "supported by the user brief and reference images",
+    );
+    expect(review).not.toContain("declared transferable decisions");
+    expect(review).not.toContain("undeclared borrowing");
+  });
+
   it("keeps the current built-in skill set immutable and unique", () => {
     expect(Object.isFrozen(BUILTIN_DESIGN_SKILLS)).toBe(true);
     expect(Object.isFrozen(BUILTIN_DESIGN_PLANNING_SKILLS)).toBe(true);

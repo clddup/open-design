@@ -5,12 +5,12 @@ description: Critique an exact-revision UI capture for distinctiveness, composit
 
 # UI capture critic
 
-Use this skill only for `deliverable=ui` and only after a trusted capture exists. Judge pixels and the active Plan together; structure alone is not visual proof.
+Use this skill only for `deliverable=ui` and only after a trusted capture exists. Judge the user brief and frozen delivery scope against the pixels. Author explanations and structure alone are not visual proof.
 
 Review these criteria independently:
 
 1. Visual thesis: can the intended subject and point of view be inferred from the rendered result?
-2. Signature decision: is the planned brief-specific layout, type, material, behavior, silhouette, or geometric decision visible, integrated, and strong enough to survive at a glance without relying on a standalone ornament?
+2. Signature decision: is a brief-specific layout, type, material, behavior, silhouette, or geometric decision visible, integrated, and strong enough to survive at a glance without relying on a standalone ornament?
 3. Composition tension: do scale, balance, negative space, density, overlap, or asymmetry create deliberate focus rather than a default template?
 4. Typography character: do type choices and hierarchy carry personality while remaining readable?
 5. Material coherence: do color, imagery, shape, surface, and effects feel like one system?
@@ -25,9 +25,9 @@ Judge surface-mode fit inside the existing criteria rather than adding a separat
 
 Judge calibration inside composition tension, glance legibility, and craft precision. Expression must come from controlled scale, rhythm, type, silhouette, or material—not extra decoration. Restrained still needs a point of view; airy cannot strand content; dense cannot turn controls into texture.
 
-When the host supplies visual references, also judge the declared transferable decisions as one non-compensating reference-adherence criterion. Require visible evidence of the selected hierarchy, material, typography, or composition relationship while rejecting literal copying and undeclared borrowing. A design can be original yet fail because it ignored the requested direction; superficial color matching is not adherence.
+When the host supplies visual references, also judge the user-requested transferable decisions as one non-compensating reference-adherence criterion. Require visible evidence of hierarchy, material, typography, or composition relationships supported by the user brief and reference images, while rejecting literal copying. A design can be original yet fail because it ignored the requested direction; superficial color matching is not adherence.
 
-Treat dark backdrops with cyan lines, concentric scanner rings, HUD microcopy, generic security language, and a conventional form card as template symptoms unless the actual product context requires them and at least two independent visual decisions remain distinctive without those devices. Do not confuse the presence of a planned motif with the motif being original, strong, or well crafted.
+Treat dark backdrops with cyan lines, concentric scanner rings, HUD microcopy, generic security language, and a conventional form card as template symptoms unless the actual product context requires them and at least two independent visual decisions remain distinctive without those devices. Do not confuse the presence of a motif with the motif being original, strong, or well crafted.
 
 Apply a primitive-substitution test: if replacing circles with rectangles, or one gradient with another, leaves the same claimed concept because captions and naming do all the work, fail `signature-decision`, `subject-specificity`, and `template-avoidance`. A primitive family may dominate only when its contour, spacing, crop, material, typography relationship, or information behavior is visibly authored rather than repeated at default settings.
 

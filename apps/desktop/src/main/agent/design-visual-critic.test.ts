@@ -541,18 +541,52 @@ describe("independent design visual critic", () => {
     expect(parsed).toMatchObject({
       userRequest: context.userRequest,
       deliverable: "ui",
-      designIntent: context.plan.designIntent,
-      visualSystem: context.plan.visualSystem,
       deliveryCaptureAttachmentId: context.attachment.attachmentId,
     });
+    expect(parsed).not.toHaveProperty("designIntent");
+    expect(parsed).not.toHaveProperty("visualSystem");
+    expect(parsed).not.toHaveProperty("target.composition");
+    expect(parsed).not.toHaveProperty("target.validationChecks");
+  });
+
+  it("keeps Logo direction identities but does not send the author's sales pitch", async () => {
+    const context = criticContext("final");
+    const sentinel = "AUTHOR_RATIONALE_MUST_NOT_BIAS_REVIEW";
+    context.plan.designIntent.visualThesis = sentinel;
+    context.plan.visualSystem.surfaceAndDepth = sentinel;
+    context.plan.logoExploration!.directions.forEach((direction) => {
+      direction.thesis = sentinel;
+      direction.constructionLogic = sentinel;
+      direction.colorSystem.rationale = sentinel;
+    });
+    let request: Omit<ModelRequest, "signal"> | undefined;
+    await runIndependentDesignVisualCritic(
+      {
+        complete: (value) => {
+          request = value;
+          return Promise.resolve(responseEvents(value.attemptId, scorecard(4)));
+        },
+      },
+      context,
+      new AbortController().signal,
+    );
+    expect(JSON.stringify(request?.messages)).not.toContain(sentinel);
+    for (const direction of context.plan.logoExploration!.directions) {
+      expect(JSON.stringify(request?.messages)).toContain(
+        direction.masterNodeId,
+      );
+      expect(JSON.stringify(request?.messages)).toContain(
+        `logo-concept-${direction.conceptId}-quality`,
+      );
+    }
+    expect(request?.system).toContain("Infer visual intent from the pixels");
   });
 
   it("reviews declared visual references as a non-compensating criterion", async () => {
     const attachmentId = `image_${"a".repeat(64)}`;
     const context = criticContext("final");
     context.plan.referenceStrategy = {
-      synthesis:
-        "Transfer the reference's editorial contrast without copying its subject or layout literally.",
+      synthesis: "AUTHOR_REFERENCE_RATIONALE_NOT_EVIDENCE",
       references: [
         {
           attachmentId,
@@ -601,6 +635,22 @@ describe("independent design visual critic", () => {
     );
 
     expect(result.failedCriteria).toContain("reference-adherence");
+    const sent = capturedRequest?.messages[0];
+    if (sent?.role !== "user" || !Array.isArray(sent.content))
+      throw new Error("Missing reference evidence");
+    const contractText = sent.content.find((block) => block.type === "text");
+    if (contractText?.type !== "text")
+      throw new Error("Missing reference contract");
+    const contract = JSON.parse(contractText.text) as {
+      referenceStrategy: unknown;
+    };
+    expect(contract.referenceStrategy).toEqual({
+      references: [{ attachmentId, decision: "style-reference" }],
+    });
+
+    expect(JSON.stringify(capturedRequest?.messages)).not.toContain(
+      "AUTHOR_REFERENCE_RATIONALE_NOT_EVIDENCE",
+    );
     const message = capturedRequest?.messages[0];
     if (message?.role !== "user" || !Array.isArray(message.content)) {
       throw new Error("Critic reference request is missing multimodal content");
