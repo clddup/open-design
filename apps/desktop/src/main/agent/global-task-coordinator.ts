@@ -1,3 +1,4 @@
+import { isNodeRelocation } from "./design-node-relocation.js";
 import {
   visualCriticUserRequirements,
   type VisualCriticUserRequirement,
@@ -1463,10 +1464,12 @@ export class GlobalTaskCoordinator {
     if (!state) return this.assertDesignPlanForApply(context, input);
     const inspection = this.#inspectionsByRunId.get(context.runId);
     const scoped = this.#bindApplyToRegisteredPage(context, input);
+    const relocation = isNodeRelocation(scoped.commands);
     if (
       !inspection ||
       inspection.revision !== context.revision ||
-      !isIndependentNodeEdit(scoped.commands, state, inspection)
+      (!relocation &&
+        !isIndependentNodeEdit(scoped.commands, state, inspection))
     ) {
       return this.assertDesignPlanForApply(context, input);
     }
@@ -1480,6 +1483,16 @@ export class GlobalTaskCoordinator {
       },
       plan: state.plan,
       targetIds: [],
+      ...(relocation
+        ? {
+            preservedFrames: [...state.targetsById.values()]
+              .filter((target) => target.artboardEstablished)
+              .map((target) => ({
+                frameId: target.planned.artboard.frameId,
+                pageId: target.planned.pageId,
+              })),
+          }
+        : {}),
     };
   }
 

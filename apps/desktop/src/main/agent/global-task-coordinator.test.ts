@@ -1500,6 +1500,19 @@ describe("GlobalTaskCoordinator", () => {
       second.transform[5] += 120;
       document.nodesById.profile_second = second;
       document.nodesById.frame_profile_content.childIds.push(second.id);
+      const foreign = {
+        ...structuredClone(document.nodesById.frame_home),
+        id: "foreign_frame",
+        childIds: [],
+      };
+      document.nodesById.foreign_frame = foreign;
+      document.pageOrder.push("foreign_page");
+      document.pagesById.foreign_page = {
+        id: "foreign_page",
+        name: "Other Page",
+        rootNodeIds: [foreign.id],
+        extensions: {},
+      };
       const runtime = new EditorRuntime(document);
       const coordinator = new GlobalTaskCoordinator(host, store);
       const context = {
@@ -1589,6 +1602,126 @@ describe("GlobalTaskCoordinator", () => {
         ?.targets;
       expect(steps?.[0]?.steps[0].status).toBe("completed");
       expect(steps?.[1]?.steps[0].status).toBe("pending");
+      coordinator.handleAgentEvent({
+        type: "tool.completed",
+        runId: context.runId,
+        toolCallId: "mixed_edit",
+        revision: 1,
+        result: { ok: true },
+      });
+      const moveContext = { ...context, revision: 1 };
+      const beforeMove = runtime.getSnapshot().document;
+      const beforeMoveLedger = coordinator.getDeliveryLedger(context.runId);
+      for (const parentId of ["profile_group", "foreign_frame"]) {
+        await expect(
+          handleEditDesignTool({
+            context: moveContext,
+            coordinator,
+            withDelivery: (value) => value,
+            execute: async (call) => {
+              const response = await executeDesignToolRequest(
+                { requestId: "invalid_move", call, context: moveContext },
+                runtime,
+                pageId,
+              );
+              if (!response.ok) throw new Error(response.error.message);
+              return response.result;
+            },
+            call: {
+              toolCallId: `invalid_${parentId}`,
+              toolName: "opendesign_edit_design",
+              input: {
+                label: "Invalid relocation",
+                edits: [
+                  {
+                    kind: "node",
+                    input: {
+                      label: "Invalid",
+                      commands: [
+                        {
+                          commandId: "move",
+                          type: "move_element",
+                          nodeId: "profile_group",
+                          pageId,
+                          parentId,
+                          index: 0,
+                        },
+                      ],
+                    },
+                  },
+                ],
+              },
+            },
+          }),
+        ).rejects.toThrow();
+        expect(runtime.getSnapshot().document).toEqual(beforeMove);
+        expect(coordinator.getDeliveryLedger(context.runId)).toEqual(
+          beforeMoveLedger,
+        );
+      }
+      const moved = await handleEditDesignTool({
+        context: moveContext,
+        coordinator,
+        withDelivery: (value) => value,
+        execute: async (call) => {
+          const response = await executeDesignToolRequest(
+            { requestId: "relocate_group", call, context: moveContext },
+            runtime,
+            pageId,
+          );
+          if (!response.ok) throw new Error(response.error.message);
+          return response.result;
+        },
+        call: {
+          toolCallId: "relocate_group",
+          toolName: "opendesign_edit_design",
+          input: {
+            label: "Move Profile group into Home",
+            edits: [
+              {
+                kind: "node",
+                input: {
+                  label: "Relocate group",
+                  commands: [
+                    {
+                      commandId: "move_transform",
+                      type: "update_properties",
+                      nodeId: "profile_group",
+                      transform: [1, 0, 0, 1, 60, 140],
+                    },
+                    {
+                      commandId: "move_group",
+                      type: "move_element",
+                      nodeId: "profile_group",
+                      pageId,
+                      parentId: "frame_home_content",
+                      index: 0,
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        },
+      });
+      expect(moved?.designRevision?.revision).toBe(2);
+      expect(
+        runtime.getSnapshot().document.nodesById.profile_group.parentId,
+      ).toBe("frame_home_content");
+      expect(
+        coordinator.resolveMaterialTargetIdsIfPlanned(moveContext, [
+          "profile_group",
+          "profile_second",
+        ]),
+      ).toEqual(["target_home"]);
+      expect(
+        coordinator.getDeliveryLedger(context.runId)?.planExecution?.targets,
+      ).toEqual(steps);
+      expect(runtime.undo().ok).toBe(true);
+      expect(
+        runtime.getSnapshot().document.nodesById.profile_group.parentId,
+      ).toBe("frame_profile_content");
+
       expect(runtime.undo().ok).toBe(true);
       expect(
         runtime.getSnapshot().document.nodesById.profile_group,
