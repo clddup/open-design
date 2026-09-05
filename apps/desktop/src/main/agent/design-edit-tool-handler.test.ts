@@ -47,8 +47,7 @@ describe("Edit Design Main boundary", () => {
       authorizeIndependentDesignEdit: vi.fn(() => authorization),
       assertDesignPlanForApply: vi.fn(() => authorization),
       assertDesignApplyResult: vi.fn(),
-      recordDesignApplyCompleted: vi.fn(),
-      recordMaterialDesignWriteCompleted: vi.fn(),
+      recordDesignEditCompleted: vi.fn(),
     };
 
     await expect(
@@ -75,12 +74,10 @@ describe("Edit Design Main boundary", () => {
         },
       }),
     );
-    expect(coordinator.recordDesignApplyCompleted).toHaveBeenCalledWith(
-      context.runId,
+    expect(coordinator.recordDesignEditCompleted).toHaveBeenCalledWith(
+      context,
       authorization,
-      5,
-      result.content,
-      [],
+      result,
     );
   });
 
@@ -124,8 +121,7 @@ describe("Edit Design Main boundary", () => {
       authorizeIndependentDesignEdit: vi.fn(() => authorization),
       assertDesignPlanForApply: vi.fn(() => authorization),
       assertDesignApplyResult: vi.fn(),
-      recordDesignApplyCompleted: vi.fn(),
-      recordMaterialDesignWriteCompleted: vi.fn(),
+      recordDesignEditCompleted: vi.fn(),
     };
 
     await handleEditDesignTool({
@@ -153,6 +149,75 @@ describe("Edit Design Main boundary", () => {
     );
   });
 
+  it("does not require rebase for a mixed edit at the exact revision", async () => {
+    const nodeInput = {
+      label: "Refine",
+      commands: [
+        {
+          commandId: "update",
+          type: "update_properties" as const,
+          nodeId: "a",
+          opacity: 0.9,
+        },
+      ],
+    };
+    const authorization = {
+      input: nodeInput,
+      plan: {} as never,
+      targetIds: ["target_a"],
+      rebaseGuard: {
+        fromRevision: 4,
+        targets: [
+          { frameId: "frame_a", pageId: "page_main", width: 100, height: 100 },
+        ],
+      },
+    };
+    const result = {
+      content: { ok: true },
+      designRevision: {
+        previousRevision: 4,
+        revision: 5,
+        transactionId: "mixed",
+      },
+    };
+    const execute = vi.fn().mockResolvedValue(result);
+    const coordinator = {
+      assertDesignPlanForApply: vi.fn(() => authorization),
+      assertDesignApplyResult: vi.fn(),
+      recordDesignEditCompleted: vi.fn(),
+    };
+    await handleEditDesignTool({
+      call: {
+        toolCallId: "mixed",
+        toolName: DESIGN_EDIT_TOOL_NAME,
+        input: {
+          label: "Refine and align",
+          edits: [
+            { kind: "node", input: nodeInput },
+            {
+              kind: "arrange",
+              input: {
+                action: "align-left",
+                label: "Align",
+                pageId: "page_main",
+                nodeIds: ["b", "c"],
+              },
+            },
+          ],
+        },
+      },
+      context,
+      coordinator: coordinator as never,
+      execute,
+      withDelivery: (value) => value,
+    });
+    expect(execute).toHaveBeenCalledOnce();
+    expect(JSON.stringify(execute.mock.calls)).not.toContain("rebaseGuard");
+    expect(
+      coordinator.assertDesignApplyResult.mock.calls[0]?.[1],
+    ).not.toHaveProperty("rebaseGuard");
+  });
+
   it("authorizes all entries against one delivery target and dispatches once", async () => {
     const result: TrustedToolResult = {
       content: { ok: true },
@@ -164,10 +229,8 @@ describe("Edit Design Main boundary", () => {
     };
     const execute = vi.fn().mockResolvedValue(result);
     const coordinator = {
-      resolveMaterialTargetIdsIfPlanned: vi.fn(() => ["target_main"]),
-      recordMaterialDesignWriteCompleted: vi.fn(),
+      recordDesignEditCompleted: vi.fn(),
       assertDesignApplyResult: vi.fn(),
-      recordDesignApplyCompleted: vi.fn(),
     };
     const withDelivery = vi.fn((value: TrustedToolResult) => value);
     const call = {
@@ -210,14 +273,10 @@ describe("Edit Design Main boundary", () => {
       }),
     ).resolves.toBe(result);
     expect(execute).toHaveBeenCalledOnce();
-    expect(coordinator.resolveMaterialTargetIdsIfPlanned).toHaveBeenCalledTimes(
-      2,
-    );
-    expect(coordinator.recordMaterialDesignWriteCompleted).toHaveBeenCalledWith(
-      context.runId,
-      ["target_main"],
-      5,
-      ["card_group"],
+    expect(coordinator.recordDesignEditCompleted).toHaveBeenCalledWith(
+      context,
+      undefined,
+      result,
     );
   });
 
@@ -232,10 +291,8 @@ describe("Edit Design Main boundary", () => {
     };
     const execute = vi.fn().mockResolvedValue(result);
     const coordinator = {
-      resolveMaterialTargetIdsIfPlanned: vi.fn(() => []),
-      recordMaterialDesignWriteCompleted: vi.fn(),
+      recordDesignEditCompleted: vi.fn(),
       assertDesignApplyResult: vi.fn(),
-      recordDesignApplyCompleted: vi.fn(),
     };
 
     await expect(
@@ -265,15 +322,10 @@ describe("Edit Design Main boundary", () => {
         withDelivery: (value) => value,
       }),
     ).resolves.toBe(result);
-    expect(coordinator.resolveMaterialTargetIdsIfPlanned).toHaveBeenCalledWith(
+    expect(coordinator.recordDesignEditCompleted).toHaveBeenCalledWith(
       context,
-      [],
-    );
-    expect(coordinator.recordMaterialDesignWriteCompleted).toHaveBeenCalledWith(
-      context.runId,
-      [],
-      5,
-      [],
+      undefined,
+      result,
     );
   });
 
@@ -288,11 +340,7 @@ describe("Edit Design Main boundary", () => {
     };
     const execute = vi.fn().mockResolvedValue(result);
     const coordinator = {
-      resolveMaterialTargetIdsIfPlanned: vi
-        .fn()
-        .mockReturnValueOnce(["target_a"])
-        .mockReturnValueOnce(["target_b"]),
-      recordMaterialDesignWriteCompleted: vi.fn(),
+      recordDesignEditCompleted: vi.fn(),
       assertDesignApplyResult: vi.fn(),
     };
 
@@ -334,11 +382,10 @@ describe("Edit Design Main boundary", () => {
       }),
     ).resolves.toBe(result);
     expect(execute).toHaveBeenCalledOnce();
-    expect(coordinator.recordMaterialDesignWriteCompleted).toHaveBeenCalledWith(
-      context.runId,
-      ["target_a", "target_b"],
-      5,
-      ["a_group"],
+    expect(coordinator.recordDesignEditCompleted).toHaveBeenCalledWith(
+      context,
+      undefined,
+      result,
     );
   });
 });

@@ -78,6 +78,8 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 
 ## P0-B：稳定 Leafer 迁移与 Agent 主流程
 
+- [x] 混合 Edit Design 在精确 revision 下不再因潜在 rebase guard 误拒绝；用 EditorRuntime 的真实 ChangeSet 统一更新目标物理成员和材料状态，避免 node entry 漏记 hierarchy/arrange、跨画板串新节点、共享影响虚增步骤。精确基线时推进原只读 inspection 缓存，复用同一节点投影；Main→Renderer→Runtime 单 revision/undo 与跨目标记账已回归，见 ADR-0306。普通 node 的跨 Plan 授权限制仍未全部解除。
+
 - [x] 打通整批独立 node edit 修改既有非 Plan 画板的路径，不把普通修改当成计划创建。依 exact inspection 区分直接/祖先/组件影响，复用原有作用域/结构/namespace/runtime 约束，不带 steps 或 rebaseGuard，不推进 Plan ledger；Main→Renderer→Runtime、stale 与 undo 已回归。混合批次及跨 Plan/共享资源仍未完成，见 ADR-0305。
 
 - [x] Main 参数解析不再把所有异常改写成 Run 致命上下文错误。Run 身份校验保留致命拒绝，结构化 revision/目标绑定错误原样进入工具响应；同 Run 失败后仍可检查文档。未授权或解析失败不进入 dispatcher，字段校验仍使用原有 Contract。此项修复错误归因，不代表所有 revision 恢复时序或生成失败已解决。

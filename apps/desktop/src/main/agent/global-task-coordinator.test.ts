@@ -1,3 +1,9 @@
+import { parseDesignToolInput } from "./design-tool-input-parser.js";
+import { handleDesignFirstSliceTool } from "./design-first-slice-tool-handler.js";
+import {
+  firstSliceInput,
+  firstSliceModelInput,
+} from "./design-first-slice-tool-handler.fixture.js";
 import type { ToolCallRequest } from "@opendesign/agent-contracts";
 import { handleEditDesignTool } from "./design-edit-tool-handler.js";
 import { executeDesignToolRequest } from "@/renderer/features/design-tools/design-tool-execution";
@@ -906,6 +912,321 @@ function withExistingArtboard(
 }
 
 describe("GlobalTaskCoordinator", () => {
+  it.each([false, true])(
+    "keeps new deep nodes editable after first-slice with cache gap=%s",
+    async (cacheGap) => {
+      const { store, host, file, opened, pageId, root } = await setup();
+      try {
+        const runtime = new EditorRuntime(opened.document);
+        const coordinator = new GlobalTaskCoordinator(host, store);
+        let context = {
+          runId: "run_deep_edit",
+          sessionId: "conversation_mobile",
+          documentId: file.documentId,
+          revision: 0,
+          scope: { kind: "page" as const, pageId, selectedNodeIds: [] },
+          mutationTarget: { kind: "page" as const, pageId },
+        };
+        await coordinator.registerRun({
+          type: "run.start",
+          ...context,
+          prompt: "Create and refine a home screen",
+          modelSelection,
+        });
+        const initial = inspectionResult(opened.document, pageId);
+        coordinator.recordDocumentInspection(context, {
+          ...initial,
+          content: {
+            ...initial.content,
+            idAllocation: createAgentDesignIdAllocation(context.runId),
+          },
+        });
+        const source = firstSliceInput();
+        source.firstSlice.stages[0].elements = [
+          {
+            id: "inner",
+            kind: "frame",
+            name: "Inner",
+            parentId: "home_hero",
+            x: 0,
+            y: 100,
+            width: 200,
+            height: 120,
+            fills: [],
+            strokes: [],
+            strokeWidth: 0,
+          },
+          {
+            id: "material",
+            kind: "rectangle",
+            name: "Material",
+            parentId: "inner",
+            x: 0,
+            y: 0,
+            width: 40,
+            height: 40,
+            fills: [{ type: "solid", color: "#336699", opacity: 1 }],
+            strokes: [],
+            strokeWidth: 0,
+          },
+        ];
+        const call: ToolCallRequest = {
+          toolCallId: "first_slice_deep",
+          toolName: "opendesign_generate_first_slice",
+          input: firstSliceModelInput(source),
+        };
+        const parsed = parseDesignToolInput(coordinator, call, context);
+        if (!parsed.ok) throw new Error(JSON.stringify(parsed.issues));
+        const execute = async (request: ToolCallRequest) => {
+          const response = await executeDesignToolRequest(
+            { requestId: request.toolCallId, call: request, context },
+            runtime,
+            pageId,
+          );
+          if (!response.ok)
+            throw new Error(response.error.message, { cause: response.error });
+          return response.result;
+        };
+        const first = await handleDesignFirstSliceTool(
+          coordinator,
+          { execute } as never,
+          { ...call, input: parsed.value },
+          context,
+          context,
+          new AbortController().signal,
+        );
+        const advance = (revision: number) => {
+          coordinator.handleAgentEvent({
+            type: "tool.completed",
+            runId: context.runId,
+            toolCallId: "advance",
+            revision,
+            result: { ok: true },
+          });
+          context = { ...context, revision };
+        };
+        advance(first.designRevision!.revision);
+        const plan = (first.content as { plan: DesignPlanToolInput }).plan;
+        const target = plan.targets[0];
+        coordinator.recordCanvasCapture(
+          context,
+          context.revision,
+          cleanLayoutQuality(
+            file.documentId,
+            pageId,
+            target.artboard.frameId,
+            context.revision,
+            target.qualityProfile,
+          ),
+          independentCritic(context.revision, false),
+        );
+        const inner = Object.values(
+          runtime.getSnapshot().document.nodesById,
+        ).find((node) => node.name === "Inner");
+        if (!inner) throw new Error("Expected nested first-slice Frame");
+        if (cacheGap) {
+          const extra = runtime.apply({
+            transactionId: "other_tool",
+            documentId: file.documentId,
+            baseRevision: context.revision,
+            actor: { type: "agent", id: "other_tool" },
+            commands: [
+              {
+                commandId: "other_opacity",
+                type: "update_properties",
+                nodeId: inner.id,
+                opacity: 0.99,
+              },
+            ],
+          });
+          if (!extra.ok) throw new Error(extra.error.message);
+          advance(extra.revision.revision);
+        }
+        const id = `${createAgentDesignIdAllocation(context.runId).newNodeIdPrefix}new_child`;
+        const inserted = await handleEditDesignTool({
+          context,
+          coordinator,
+          execute,
+          withDelivery: (value) => value,
+          call: {
+            toolCallId: "deep_insert",
+            toolName: "opendesign_edit_design",
+            input: {
+              label: "Insert child",
+              edits: [
+                {
+                  kind: "node",
+                  input: insertExistingChild(pageId, inner.id, id),
+                },
+              ],
+            },
+          },
+        });
+        advance(inserted!.designRevision!.revision);
+        expect(
+          coordinator.resolveMaterialTargetIdsIfPlanned(context, [id]),
+        ).toEqual([target.targetId]);
+        const edited = await handleEditDesignTool({
+          context,
+          coordinator,
+          execute,
+          withDelivery: (value) => value,
+          call: {
+            toolCallId: "deep_update",
+            toolName: "opendesign_edit_design",
+            input: {
+              label: "Edit child",
+              edits: [
+                {
+                  kind: "node",
+                  input: {
+                    label: "Change opacity",
+                    commands: [
+                      {
+                        commandId: "deep_opacity",
+                        type: "update_properties",
+                        nodeId: id,
+                        opacity: 0.7,
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        });
+        expect(edited?.designRevision?.revision).toBe(context.revision + 1);
+        expect(runtime.getSnapshot().document.nodesById[id].opacity).toBe(0.7);
+      } finally {
+        store.close();
+        await rm(root, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it("records both sides of a mixed edit from the committed document without cross-registering groups", async () => {
+    const { store, host, file, opened, pageId, root } = await setup();
+    try {
+      const plan = multiTargetPlan(pageId);
+      plan.targets.forEach((target) => {
+        target.artboard.mode = "existing";
+      });
+      const document = withDraftedTargets(
+        opened.document,
+        pageId,
+        plan.targets,
+        0,
+      );
+      const second = structuredClone(
+        document.nodesById.frame_profile_content_material,
+      );
+      second.id = "profile_second";
+      second.transform[5] += 120;
+      document.nodesById.profile_second = second;
+      document.nodesById.frame_profile_content.childIds.push(second.id);
+      const runtime = new EditorRuntime(document);
+      const coordinator = new GlobalTaskCoordinator(host, store);
+      const context = {
+        runId: "run_mixed_edit",
+        sessionId: "conversation_mobile",
+        documentId: file.documentId,
+        revision: 0,
+        scope: { kind: "page" as const, pageId, selectedNodeIds: [] },
+        mutationTarget: { kind: "page" as const, pageId },
+      };
+      await coordinator.registerRun({
+        type: "run.start",
+        ...context,
+        prompt: "Refine Home and group Profile content",
+        modelSelection,
+      });
+      coordinator.recordDocumentInspection(
+        context,
+        inspectionResult(document, pageId),
+      );
+      coordinator.registerDesignPlan(context, plan);
+      const execute = vi.fn(async (call: ToolCallRequest) => {
+        const response = await executeDesignToolRequest(
+          { requestId: "mixed_edit", call, context },
+          runtime,
+          pageId,
+        );
+        if (!response.ok)
+          throw new Error(response.error.message, { cause: response.error });
+        return response.result;
+      });
+      const result = await handleEditDesignTool({
+        context,
+        coordinator,
+        execute,
+        withDelivery: (value) => value,
+        call: {
+          toolCallId: "mixed_edit",
+          toolName: "opendesign_edit_design",
+          input: {
+            label: "Refine and group",
+            edits: [
+              {
+                kind: "node",
+                input: {
+                  label: "Refine Home",
+                  commands: [
+                    {
+                      commandId: "home_opacity",
+                      type: "update_properties",
+                      nodeId: "frame_home_content_material",
+                      opacity: 0.7,
+                    },
+                  ],
+                },
+              },
+              {
+                kind: "hierarchy",
+                input: {
+                  action: "group",
+                  label: "Group Profile",
+                  pageId,
+                  nodeIds: ["frame_profile_content_material", "profile_second"],
+                  groupId: "profile_group",
+                  name: "Profile group",
+                },
+              },
+            ],
+          },
+        },
+      });
+      expect(result?.designRevision?.revision).toBe(1);
+      expect(execute).toHaveBeenCalledOnce();
+      expect(JSON.stringify(execute.mock.calls)).not.toContain('"rebaseGuard"');
+      expect(
+        coordinator.resolveMaterialTargetIdsIfPlanned(context, [
+          "profile_group",
+        ]),
+      ).toEqual(["target_profile"]);
+      expect(
+        coordinator.getDeliveryLedger(context.runId)?.targets,
+      ).toMatchObject([
+        { targetId: "target_home", status: "drafted", draftRevision: 1 },
+        { targetId: "target_profile", status: "drafted", draftRevision: 1 },
+      ]);
+      const steps = coordinator.getDeliveryLedger(context.runId)?.planExecution
+        ?.targets;
+      expect(steps?.[0]?.steps[0].status).toBe("completed");
+      expect(steps?.[1]?.steps[0].status).toBe("pending");
+      expect(runtime.undo().ok).toBe(true);
+      expect(
+        runtime.getSnapshot().document.nodesById.profile_group,
+      ).toBeUndefined();
+      expect(
+        runtime.getSnapshot().document.nodesById.frame_home_content_material
+          .opacity,
+      ).toBe(1);
+    } finally {
+      store.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("edits an existing unrelated artboard without advancing an active delivery Plan", async () => {
     const { store, host, file, opened, pageId, root } = await setup();
     try {
@@ -1020,6 +1341,22 @@ describe("GlobalTaskCoordinator", () => {
         revision: document.revision + 1,
         result: { ok: true },
       });
+      expect(
+        coordinator.authorizeIndependentDesignEdit(
+          { ...context, revision: document.revision + 1 },
+          {
+            label: "Next independent edit",
+            commands: [
+              {
+                commandId: "next_opacity",
+                type: "update_properties",
+                nodeId: "existing_nested_frame",
+                opacity: 0.6,
+              },
+            ],
+          },
+        )?.targetIds,
+      ).toEqual([]);
       const strictPath = vi
         .spyOn(coordinator, "assertDesignPlanForApply")
         .mockReturnValue(undefined);

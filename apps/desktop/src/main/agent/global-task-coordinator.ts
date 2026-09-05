@@ -1,3 +1,6 @@
+import { advanceDesignEditInspection } from "./design-edit-inspection.js";
+import { committedEditChanges } from "./design-edit-change-set.js";
+import { computeCommittedDesignEditImpact } from "./design-edit-committed-impact.js";
 import { isIndependentNodeEdit } from "./design-edit-plan-impact.js";
 import { designWorkflowError } from "@/shared/design-workflow-failure-classification.js";
 import type {
@@ -1681,6 +1684,68 @@ export class GlobalTaskCoordinator {
         "Renderer returned an unauthorized planned design revision rebase",
       );
     }
+  }
+
+  recordDesignEditCompleted(
+    context: TrustedToolContext,
+    authorization: DesignPlanApplyAuthorization | undefined,
+    result: TrustedToolResult,
+  ): void {
+    this.assertDesignToolContext(context);
+    const state = this.#designPlansByRunId.get(context.runId);
+    if (!state) return;
+    const changes = committedEditChanges(context, result);
+    if (!changes) return;
+    const inspection = this.#inspectionsByRunId.get(context.runId);
+    const exactInspection =
+      inspection?.revision === changes.fromRevision ||
+      inspection?.revision === changes.toRevision
+        ? inspection
+        : undefined;
+    const impact = computeCommittedDesignEditImpact(
+      changes,
+      exactInspection,
+      state.targetsById,
+    );
+    const progressTargets =
+      authorization?.targetIds.filter(
+        (id) => impact.get(id)?.materialChanged === true,
+      ) ?? [];
+    if (authorization && progressTargets.length > 0) {
+      this.recordDesignApplyCompleted(
+        context.runId,
+        { ...authorization, targetIds: progressTargets },
+        changes.toRevision,
+        result.content,
+      );
+    }
+    const affected = [...impact]
+      .filter(([, value]) => value.affected)
+      .map(([id]) => id);
+    for (const [id, value] of impact) {
+      const target = state.targetsById.get(id);
+      if (!target) continue;
+      if (exactInspection) {
+        target.artboardDescendantIds = new Set(value.afterDescendantIds);
+      } else {
+        // Partial ancestry is not a complete replacement for validated members.
+        value.removedNodeIds.forEach((nodeId) =>
+          target.artboardDescendantIds.delete(nodeId),
+        );
+        value.addedNodeIds.forEach((nodeId) =>
+          target.artboardDescendantIds.add(nodeId),
+        );
+      }
+    }
+    this.#recordTargetWrites(
+      context.runId,
+      state,
+      affected,
+      changes.toRevision,
+    );
+    const nextInspection = advanceDesignEditInspection(inspection, changes);
+    if (nextInspection)
+      this.#inspectionsByRunId.set(context.runId, nextInspection);
   }
 
   recordDesignApplyCompleted(

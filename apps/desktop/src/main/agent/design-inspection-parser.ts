@@ -8,7 +8,15 @@ import type {
   TrustedToolContext,
   TrustedToolResult,
 } from "@opendesign/agent-contracts";
+import type { DesignNode } from "@opendesign/design-contracts";
 import type { InspectedHierarchy } from "./design-plan-registration.js";
+
+type InspectionWireNode =
+  DesignInspectionHierarchy["content"]["document"]["nodesById"][string];
+type InspectedNode =
+  InspectedHierarchy["nodesById"] extends Map<string, infer Node>
+    ? Node
+    : never;
 
 export function parseInspectedHierarchy(
   context: TrustedToolContext,
@@ -61,27 +69,34 @@ function nodeMap(
   return new Map(
     Object.entries(document.nodesById).map(([nodeId, node]) => [
       nodeId,
-      {
-        ...(node.kind === "image" && node.properties?.assetId
-          ? { assetId: node.properties.assetId }
-          : {}),
-        childIds: [...node.childIds],
-        componentId:
-          node.kind === "instance"
-            ? (node.properties?.componentId ?? null)
-            : null,
-        ...(node.kind === "image" && node.extensions?.designRole
-          ? { designRole: node.extensions.designRole }
-          : {}),
-        id: nodeId,
-        kind: node.kind,
-        locked: node.locked,
-        parentId: node.parentId,
-        size: { width: node.size.width, height: node.size.height },
-        transform: [...node.transform],
-      },
+      projectInspectedNode(nodeId, node),
     ]),
   );
+}
+
+/** Project either validated source type without re-parsing committed snapshots. */
+export function projectInspectedNode(
+  id: string,
+  node: DesignNode | InspectionWireNode,
+): InspectedNode {
+  const designRole = node.extensions?.designRole;
+  return {
+    ...(node.kind === "image" && node.properties?.assetId
+      ? { assetId: node.properties.assetId }
+      : {}),
+    childIds: [...node.childIds],
+    componentId:
+      node.kind === "instance" ? (node.properties?.componentId ?? null) : null,
+    ...(node.kind === "image" && typeof designRole === "string"
+      ? { designRole }
+      : {}),
+    id,
+    kind: node.kind,
+    locked: node.locked,
+    parentId: node.parentId,
+    size: { width: node.size.width, height: node.size.height },
+    transform: [...node.transform],
+  };
 }
 
 function componentMap(

@@ -157,12 +157,7 @@ export async function handleDesignFirstSliceTool(
       allocationRevision,
     );
   }
-  coordinator.recordDesignApplyCompleted(
-    context.runId,
-    authorization,
-    applied.designRevision?.revision,
-    applied.content,
-  );
+  coordinator.recordDesignEditCompleted(context, authorization, applied);
 
   const rendererContent = isRecord(applied.content) ? applied.content : {};
   return {

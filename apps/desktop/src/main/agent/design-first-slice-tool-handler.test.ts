@@ -83,7 +83,7 @@ describe("handleDesignFirstSliceTool", () => {
       ),
       assertDesignApplyResult: vi.fn(),
       recordDesignPlanAllocated: vi.fn(),
-      recordDesignApplyCompleted: vi.fn(),
+      recordDesignEditCompleted: vi.fn(),
       getDeliveryLedger: vi.fn().mockReturnValue(delivery),
       getDeliveryStageContext: vi.fn().mockReturnValue(undefined),
     };
@@ -167,21 +167,16 @@ describe("handleDesignFirstSliceTool", () => {
         parentId: "odr_run_slice_4_home_home_hero",
       },
     });
-    expect(coordinator.recordDesignApplyCompleted).toHaveBeenCalledWith(
-      "run_slice",
+    expect(coordinator.recordDesignEditCompleted).toHaveBeenCalledWith(
+      context,
       expect.objectContaining({ targetIds: ["home"] }),
-      5,
-      {
-        ok: true,
-        committedSteps: [
-          {
-            stepIds: ["allocate_artboards"],
-            label: "Create real artboard",
-            revision: 4,
-          },
-          { stepIds: ["hero"], label: "Build hero", revision: 5 },
-        ],
-      },
+      expect.objectContaining({
+        designRevision: {
+          previousRevision: 3,
+          revision: 5,
+          transactionId: "transaction_slice",
+        },
+      }),
     );
     expect(coordinator.prepareDesignPlan).toHaveBeenCalledWith(
       context,
@@ -233,7 +228,7 @@ describe("handleDesignFirstSliceTool", () => {
       }),
       assertDesignApplyResult: vi.fn(),
       recordDesignPlanAllocated: vi.fn(),
-      recordDesignApplyCompleted: vi.fn(),
+      recordDesignEditCompleted: vi.fn(),
     };
     const rendererHost = {
       execute: vi.fn().mockRejectedValue(new Error("stage rejected")),
@@ -254,7 +249,7 @@ describe("handleDesignFirstSliceTool", () => {
       ),
     ).rejects.toThrow("stage rejected");
     expect(coordinator.recordDesignPlanAllocated).not.toHaveBeenCalled();
-    expect(coordinator.recordDesignApplyCompleted).not.toHaveBeenCalled();
+    expect(coordinator.recordDesignEditCompleted).not.toHaveBeenCalled();
     expect(coordinator.commitDesignPlan).not.toHaveBeenCalled();
   });
 
@@ -283,7 +278,7 @@ describe("handleDesignFirstSliceTool", () => {
       })),
       assertDesignApplyResult: vi.fn(),
       recordDesignPlanAllocated: vi.fn(),
-      recordDesignApplyCompleted: vi.fn(),
+      recordDesignEditCompleted: vi.fn(),
       getDeliveryLedger: vi.fn(() => ({
         targets: [
           { targetId: "previous", allocatedRevision: 2 },

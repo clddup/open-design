@@ -1,4 +1,3 @@
-import { designWorkflowError } from "@/shared/design-workflow-failure-classification.js";
 import type {
   ToolCallRequest,
   TrustedToolContext,
@@ -7,8 +6,6 @@ import type {
 import {
   DESIGN_EDIT_TOOL_NAME,
   EditDesignContract,
-  type DesignArrangeToolInput,
-  type DesignHierarchyToolInput,
   type InternalDesignEditToolInput,
 } from "@/shared/design-agent-tools.js";
 import type {
@@ -36,8 +33,6 @@ export async function handleEditDesignTool(input: {
       >["input"]
     | undefined;
   const canonicalEdits: InternalDesignEditToolInput["edits"] = [];
-  const materialTargetIds = new Set<string>();
-  const createdNodeIds = new Set<string>();
 
   for (const edit of parsedInput.edits) {
     if (edit.kind === "node") {
@@ -46,35 +41,12 @@ export async function handleEditDesignTool(input: {
           ? coordinator.authorizeIndependentDesignEdit(context, edit.input)
           : coordinator.assertDesignPlanForApply(context, edit.input);
       nodeInput = authorization?.input ?? edit.input;
-      authorization?.targetIds.forEach((targetId) =>
-        materialTargetIds.add(targetId),
-      );
       canonicalEdits.push({ kind: edit.kind, input: nodeInput });
       continue;
     }
-    if (edit.kind === "hierarchy") {
-      const refs = hierarchyTargetRefs(edit.input);
-      coordinator
-        .resolveMaterialTargetIdsIfPlanned(context, refs.nodeIds, refs.parentId)
-        .forEach((targetId) => materialTargetIds.add(targetId));
-      hierarchyCreatedNodeIds(edit.input).forEach((nodeId) =>
-        createdNodeIds.add(nodeId),
-      );
-      canonicalEdits.push(edit);
-      continue;
-    }
-    coordinator
-      .resolveMaterialTargetIdsIfPlanned(context, arrangeTargetIds(edit.input))
-      .forEach((targetId) => materialTargetIds.add(targetId));
     canonicalEdits.push(edit);
   }
 
-  if (authorization?.rebaseGuard && canonicalEdits.length !== 1) {
-    throw designWorkflowError(
-      "edit_rebase_requires_inspection",
-      "A planned insert can rebase over a pure Frame translation only when it is the sole Edit Design entry; inspect the current document before combining hierarchy or layout changes",
-    );
-  }
   const rebaseGuard = canRebasePlannedInsert(
     authorization,
     canonicalEdits,
@@ -82,14 +54,15 @@ export async function handleEditDesignTool(input: {
   );
   const canonicalInput: InternalDesignEditToolInput = {
     label: parsedInput.label,
-    edits: canonicalEdits.map((edit) =>
-      edit.kind === "node" && rebaseGuard
-        ? {
-            kind: edit.kind,
-            input: { ...edit.input, rebaseGuard },
-          }
-        : edit,
-    ),
+    edits: canonicalEdits.map((edit) => {
+      if (edit.kind !== "node") return edit;
+      const { rebaseGuard: _unused, ...node } = edit.input;
+      void _unused;
+      return {
+        kind: edit.kind,
+        input: { ...node, ...(rebaseGuard ? { rebaseGuard } : {}) },
+      };
+    }),
   };
   const parsedCanonical = EditDesignContract.parse(canonicalInput, {
     internal: true,
@@ -104,23 +77,13 @@ export async function handleEditDesignTool(input: {
     ...input.call,
     input: parsedCanonical.value,
   });
-  coordinator.assertDesignApplyResult(context, authorization, result);
-  if (nodeInput !== undefined) {
-    coordinator.recordDesignApplyCompleted(
-      context.runId,
-      authorization,
-      result.designRevision?.revision,
-      result.content,
-      [...createdNodeIds],
-    );
-  } else {
-    coordinator.recordMaterialDesignWriteCompleted(
-      context.runId,
-      [...materialTargetIds],
-      result.designRevision?.revision,
-      [...createdNodeIds],
-    );
-  }
+  const executionAuthorization = authorizedRebase(authorization, rebaseGuard);
+  coordinator.assertDesignApplyResult(context, executionAuthorization, result);
+  coordinator.recordDesignEditCompleted(
+    context,
+    executionAuthorization,
+    result,
+  );
   return input.withDelivery(result, context.runId);
 }
 
@@ -144,30 +107,12 @@ function canRebasePlannedInsert(
     : undefined;
 }
 
-function hierarchyTargetRefs(input: DesignHierarchyToolInput): {
-  nodeIds: string[];
-  parentId?: string | null;
-} {
-  if ("nodeIds" in input) {
-    return {
-      nodeIds: [...input.nodeIds],
-      ...(input.action === "reparent" ? { parentId: input.parentId } : {}),
-    };
-  }
-  if ("maskNodeId" in input) return { nodeIds: [input.maskNodeId] };
-  if ("groupId" in input) return { nodeIds: [input.groupId] };
-  return { nodeIds: [input.booleanId] };
-}
-
-function hierarchyCreatedNodeIds(input: DesignHierarchyToolInput): string[] {
-  if (input.action === "group" || input.action === "create-mask") {
-    return [input.groupId];
-  }
-  return input.action === "create-boolean" ? [input.booleanId] : [];
-}
-
-function arrangeTargetIds(input: DesignArrangeToolInput): string[] {
-  if ("nodeId" in input) return [input.nodeId];
-  if ("frameId" in input) return [input.frameId];
-  return "nodeIds" in input ? [...input.nodeIds] : [];
+function authorizedRebase(
+  authorization: DesignPlanApplyAuthorization | undefined,
+  rebaseGuard: DesignPlanApplyAuthorization["rebaseGuard"],
+): DesignPlanApplyAuthorization | undefined {
+  if (!authorization) return undefined;
+  const { rebaseGuard: _unused, ...rest } = authorization;
+  void _unused;
+  return { ...rest, ...(rebaseGuard ? { rebaseGuard } : {}) };
 }
