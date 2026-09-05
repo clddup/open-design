@@ -1293,6 +1293,186 @@ describe("GlobalTaskCoordinator", () => {
         });
         expect(edited?.designRevision?.revision).toBe(context.revision + 1);
         expect(runtime.getSnapshot().document.nodesById[id].opacity).toBe(0.7);
+        if (!cacheGap) {
+          advance(edited!.designRevision!.revision);
+          const beforeRebuild = runtime.getSnapshot().document;
+          const rootId = target.artboard.frameId;
+          const nodeIds: string[] = [];
+          const visit = (nodeId: string) => {
+            nodeIds.push(nodeId);
+            beforeRebuild.nodesById[nodeId].childIds.forEach(visit);
+          };
+          visit(rootId);
+          const commands: DesignApplyToolInput["commands"] = [
+            {
+              commandId: "replace_root_delete",
+              type: "delete_element",
+              nodeId: rootId,
+            },
+          ];
+          for (const [index, nodeId] of nodeIds.entries()) {
+            const node = {
+              ...structuredClone(beforeRebuild.nodesById[nodeId]),
+              childIds: [],
+            };
+            if (nodeId === rootId) {
+              node.name = "Rebuilt Frame";
+              node.size.width += 80;
+            }
+            commands.push({
+              commandId: `replace_insert_${index}`,
+              type: "insert_element",
+              pageId,
+              parentId: node.parentId,
+              index: 0,
+              node,
+            });
+          }
+          const ledgerBeforeRebuild = coordinator.getDeliveryLedger(
+            context.runId,
+          );
+          const invalid = structuredClone(commands);
+          const rootInsert = invalid.find(
+            (command) =>
+              command.type === "insert_element" && command.node.id === rootId,
+          );
+          if (!rootInsert || rootInsert.type !== "insert_element")
+            throw new Error("Expected Frame reconstruction");
+          rootInsert.node = {
+            ...rootInsert.node,
+            kind: "group",
+            properties: {},
+          };
+          await expect(
+            handleEditDesignTool({
+              context,
+              coordinator,
+              execute,
+              withDelivery: (value) => value,
+              call: {
+                toolCallId: "wrong_root_kind",
+                toolName: "opendesign_edit_design",
+                input: {
+                  label: "Invalid reconstruction",
+                  edits: [
+                    {
+                      kind: "node",
+                      input: { label: "Invalid", commands: invalid },
+                    },
+                  ],
+                },
+              },
+            }),
+          ).rejects.toThrow("must leave the planned Frame");
+          expect(runtime.getSnapshot().document).toEqual(beforeRebuild);
+          expect(coordinator.getDeliveryLedger(context.runId)).toEqual(
+            ledgerBeforeRebuild,
+          );
+          await expect(
+            handleEditDesignTool({
+              context,
+              coordinator,
+              execute,
+              withDelivery: (value) => value,
+              call: {
+                toolCallId: "cyclic_rebuild",
+                toolName: "opendesign_edit_design",
+                input: {
+                  label: "Invalid cyclic reconstruction",
+                  edits: [
+                    {
+                      kind: "node",
+                      input: {
+                        label: "Invalid cycle",
+                        commands: [
+                          ...commands,
+                          {
+                            commandId: "cycle",
+                            type: "move_element",
+                            nodeId: rootId,
+                            parentId: inner.id,
+                            pageId,
+                            index: 0,
+                          },
+                        ],
+                      },
+                    },
+                  ],
+                },
+              },
+            }),
+          ).rejects.toThrow();
+          expect(runtime.getSnapshot().document).toEqual(beforeRebuild);
+          expect(coordinator.getDeliveryLedger(context.runId)).toEqual(
+            ledgerBeforeRebuild,
+          );
+
+          await expect(
+            handleEditDesignTool({
+              context,
+              coordinator,
+              execute,
+              withDelivery: (value) => value,
+              call: {
+                toolCallId: "missing_final_root",
+                toolName: "opendesign_edit_design",
+                input: {
+                  label: "Remove rebuilt root",
+                  edits: [
+                    {
+                      kind: "node",
+                      input: {
+                        label: "Invalid final state",
+                        commands: [
+                          ...commands,
+                          {
+                            commandId: "remove_final_root",
+                            type: "delete_element",
+                            nodeId: rootId,
+                          },
+                        ],
+                      },
+                    },
+                  ],
+                },
+              },
+            }),
+          ).rejects.toThrow("must leave the planned Frame");
+          expect(runtime.getSnapshot().document).toEqual(beforeRebuild);
+          expect(coordinator.getDeliveryLedger(context.runId)).toEqual(
+            ledgerBeforeRebuild,
+          );
+          const rebuilt = await handleEditDesignTool({
+            context,
+            coordinator,
+            execute,
+            withDelivery: (value) => value,
+            call: {
+              toolCallId: "atomic_rebuild",
+              toolName: "opendesign_edit_design",
+              input: {
+                label: "Rebuild Frame atomically",
+                edits: [
+                  { kind: "node", input: { label: "Rebuild", commands } },
+                ],
+              },
+            },
+          });
+          expect(rebuilt?.designRevision?.revision).toBe(context.revision + 1);
+          expect(runtime.getSnapshot().document.nodesById[rootId].name).toBe(
+            "Rebuilt Frame",
+          );
+          expect(
+            runtime.getSnapshot().document.nodesById[rootId].size.width,
+          ).toBe(beforeRebuild.nodesById[rootId].size.width + 80);
+          expect(runtime.getSnapshot().document.nodesById[id].opacity).toBe(
+            0.7,
+          );
+          expect(runtime.undo().ok).toBe(true);
+          expect(runtime.getSnapshot().document.nodesById[rootId]).toEqual(
+            beforeRebuild.nodesById[rootId],
+          );
+        }
       } finally {
         store.close();
         await rm(root, { recursive: true, force: true });

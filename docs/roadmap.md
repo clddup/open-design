@@ -78,6 +78,8 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 
 ## P0-B：稳定 Leafer 迁移与 Agent 主流程
 
+- [x] 同事务删除并重建已有计划 Frame 的同 ID 树不再被当作单独删除/重复创建。Main 只签发内部Frame身份，Renderer按整批可信预览检查末态再原子提交；重建尺寸、子树及一次undo通过，错类型/循环/重建后再删除保持原Doc与ledger。单独删除和跨计划移动仍未完成，见 ADR-0311。
+
 - [x] 删除独立视觉审核不可用时自动标记 verified 的结构回退：保留画布/capture 与此前 review/refinement，不补审核通过证据；结构化终态停止当前 Run 重试，不要求无意义 inspection，后续同 Conversation 消息仍可继续。见 ADR-0310。
 
 - [x] 独立视觉审核移除作者的视觉命题、材质/构图说明和 Logo 造型/颜色自证，只保留范围、定位及原始截图/参考图；审核方法同步以 brief 和像素为准。评分阈值与生成侧规划不变，见 ADR-0308。

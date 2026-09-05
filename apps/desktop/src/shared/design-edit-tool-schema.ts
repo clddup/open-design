@@ -33,6 +33,7 @@ function editDesignSchema(
     arrangeInput?: unknown;
     hierarchyInput?: unknown;
     nodeOnly?: boolean;
+    internal?: boolean;
   } = {},
 ) {
   const branches = [
@@ -63,6 +64,20 @@ function editDesignSchema(
     description:
       "Apply one ordered, atomic design edit through a single Provider tool. A node edit contains the canonical OpenDesign node transaction shape; hierarchy and arrange edits reuse their authoritative typed contracts. Edits execute in array order against one projected document and commit as one revision and one undo step. Use at most one node edit and place all of its direct commands together.",
     properties: {
+      ...(options.internal
+        ? {
+            preservedFrames: {
+              type: "array",
+              uniqueItems: true,
+              items: {
+                type: "object",
+                properties: { frameId: LABEL_SCHEMA, pageId: LABEL_SCHEMA },
+                required: ["frameId", "pageId"],
+                additionalProperties: false,
+              },
+            },
+          }
+        : {}),
       label: LABEL_SCHEMA,
       edits: {
         type: "array",
@@ -97,4 +112,5 @@ export const DESIGN_EDIT_TOOL_INPUT_SCHEMA = editDesignSchema(
 
 export const INTERNAL_DESIGN_EDIT_TOOL_INPUT_SCHEMA = editDesignSchema(
   INTERNAL_DESIGN_APPLY_TOOL_INPUT_SCHEMA,
+  { internal: true },
 );

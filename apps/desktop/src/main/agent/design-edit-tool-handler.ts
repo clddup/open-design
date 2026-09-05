@@ -54,6 +54,9 @@ export async function handleEditDesignTool(input: {
   );
   const canonicalInput: InternalDesignEditToolInput = {
     label: parsedInput.label,
+    ...(authorization?.preservedFrames
+      ? { preservedFrames: authorization.preservedFrames }
+      : {}),
     edits: canonicalEdits.map((edit) => {
       if (edit.kind !== "node") return edit;
       const { rebaseGuard: _unused, ...node } = edit.input;

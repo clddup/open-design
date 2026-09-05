@@ -38,6 +38,7 @@ export type DesignEditToolInput = {
 };
 
 export type InternalDesignEditToolInput = {
+  preservedFrames?: Array<{ frameId: string; pageId: string }>;
   label: string;
   edits: InternalDesignEditToolEdit[];
 };
@@ -67,6 +68,15 @@ function parseDesignEdit(
   const value = input as DesignEditToolInput | InternalDesignEditToolInput;
   const issues: ValidationIssue[] = [];
   const edits: InternalDesignEditToolEdit[] = [];
+  const preservedFrames = (value as InternalDesignEditToolInput)
+    .preservedFrames;
+  if (preservedFrames !== undefined && context.internal !== true) {
+    issues.push({
+      code: "design_edit.host_field_forbidden",
+      path: "/preservedFrames",
+      message: "Frame preservation is supplied by Main, not the model",
+    });
+  }
   let nodeEditCount = 0;
   value.edits.forEach((edit, index) => {
     const path = `/edits/${index}/input`;
@@ -114,7 +124,14 @@ function parseDesignEdit(
   }
   return issues.length > 0
     ? { ok: false, issues }
-    : { ok: true, value: structuredClone({ label: value.label, edits }) };
+    : {
+        ok: true,
+        value: structuredClone({
+          label: value.label,
+          edits,
+          ...(preservedFrames === undefined ? {} : { preservedFrames }),
+        }),
+      };
 }
 
 function prefixIssues(

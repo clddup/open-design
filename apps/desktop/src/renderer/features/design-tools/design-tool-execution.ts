@@ -1615,6 +1615,23 @@ function executeAtomicEditDesign(
     commands,
   );
   throwIfAgentGenerationAborted(options.signal);
+  for (const target of input.preservedFrames ?? []) {
+    if (
+      workingDocument.nodesById[target.frameId]?.kind !== "frame" ||
+      !pageNodeIds(workingDocument, target.pageId).has(target.frameId)
+    ) {
+      throw designWorkflowError(
+        "delivery_structure_incomplete",
+        "The atomic rebuild must leave the planned Frame on its declared Page",
+        {
+          nodeId: target.frameId,
+          path: "/edits",
+          recovery:
+            "Keep the replacement Frame and its valid hierarchy in the same transaction; do not delete it again later in the batch.",
+        },
+      );
+    }
+  }
   const result = runtime.apply(transaction);
   if (!result.ok) {
     throw designTransactionToolError(result.error, transaction.commands);

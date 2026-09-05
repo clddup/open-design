@@ -103,6 +103,7 @@ type RunStartRequest = Extract<AgentRequest, { type: "run.start" }>;
 export type DesignPlanApplyAuthorization = {
   input: DesignApplyToolInput;
   plan?: DesignPlanToolInput;
+  preservedFrames?: Array<{ frameId: string; pageId: string }>;
   rebaseGuard?: PlannedDesignRebaseGuard;
   targetIds: string[];
 };
@@ -1553,9 +1554,25 @@ export class GlobalTaskCoordinator {
         },
       ];
     });
+    const preservedFrames = targetIds.flatMap((targetId) => {
+      const target = state.targetsById.get(targetId);
+      if (!target?.artboardEstablished) return [];
+      const frameId = target.planned.artboard.frameId;
+      return boundInput.commands.some(
+        (command) =>
+          command.type === "delete_element" && command.nodeId === frameId,
+      ) &&
+        boundInput.commands.some(
+          (command) =>
+            command.type === "insert_element" && command.node.id === frameId,
+        )
+        ? [{ frameId, pageId: target.planned.pageId }]
+        : [];
+    });
     return {
       input: boundInput,
       plan: state.plan,
+      ...(preservedFrames.length > 0 ? { preservedFrames } : {}),
       ...(rebaseTargets.length === targetIds.length && rebaseTargets.length > 0
         ? {
             rebaseGuard: {
@@ -2312,6 +2329,18 @@ function resolvePlannedStructureGeometry(
   state: DesignWorkflowState,
   scopeReservations?: ReadonlyMap<string, DeliveryScopeArtboardReservation>,
 ): DesignApplyToolInput {
+  const deleted = new Set(
+    input.commands.flatMap((command) =>
+      command.type === "delete_element" ? [command.nodeId] : [],
+    ),
+  );
+  const rebuilt = new Set(
+    input.commands.flatMap((command) =>
+      command.type === "insert_element" && deleted.has(command.node.id)
+        ? [command.node.id]
+        : [],
+    ),
+  );
   const plannedNodes = new Map<
     string,
     | { kind: "artboard"; target: DesignDeliveryTargetState }
@@ -2329,6 +2358,13 @@ function resolvePlannedStructureGeometry(
     }
   >();
   for (const target of state.targetsById.values()) {
+    // A same-transaction rebuild is an existing Frame edit, not duplicate allocation.
+    if (
+      target.artboardEstablished &&
+      rebuilt.has(target.planned.artboard.frameId)
+    )
+      continue;
+
     registerPlannedNode(plannedNodes, target.planned.artboard.frameId, {
       kind: "artboard",
       target,
@@ -2752,7 +2788,12 @@ function assertPlannedArtboardWrite(
   const insertedParents = new Map(
     inserts.map((command) => [command.node.id, command.parentId]),
   );
+  const rebuildingRoot = input.commands.some(
+    (command) =>
+      command.type === "delete_element" && command.nodeId === artboard.frameId,
+  );
   for (const command of inserts) {
+    if (rebuildingRoot && command.node.id === artboard.frameId) continue;
     if (
       !parentChainReaches(
         command.parentId,
@@ -2768,7 +2809,7 @@ function assertPlannedArtboardWrite(
       );
     }
   }
-  if (artboard.mode === "create") {
+  if (artboard.mode === "create" && !rebuildingRoot) {
     assertPlannedRegionWrites(inserts, state.planned);
   }
 }
@@ -2961,7 +3002,8 @@ function targetForCommand(
   const target = findTargetForNode(state, nodeId);
   if (
     command.type === "delete_element" &&
-    target?.planned.artboard.frameId === nodeId
+    target?.planned.artboard.frameId === nodeId &&
+    !insertedParents.has(nodeId)
   ) {
     throw new Error(
       `Design command ${command.commandId} cannot delete a required delivery artboard`,
