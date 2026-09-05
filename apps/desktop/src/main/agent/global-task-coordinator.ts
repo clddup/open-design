@@ -1693,10 +1693,15 @@ export class GlobalTaskCoordinator {
   ): void {
     this.assertDesignToolContext(context);
     const state = this.#designPlansByRunId.get(context.runId);
-    if (!state) return;
     const changes = committedEditChanges(context, result);
     if (!changes) return;
     const inspection = this.#inspectionsByRunId.get(context.runId);
+    const nextInspection = advanceDesignEditInspection(inspection, changes);
+    if (!state) {
+      if (nextInspection)
+        this.#inspectionsByRunId.set(context.runId, nextInspection);
+      return;
+    }
     const exactInspection =
       inspection?.revision === changes.fromRevision ||
       inspection?.revision === changes.toRevision
@@ -1743,7 +1748,6 @@ export class GlobalTaskCoordinator {
       affected,
       changes.toRevision,
     );
-    const nextInspection = advanceDesignEditInspection(inspection, changes);
     if (nextInspection)
       this.#inspectionsByRunId.set(context.runId, nextInspection);
   }

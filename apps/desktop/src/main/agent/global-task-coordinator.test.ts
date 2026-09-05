@@ -912,6 +912,105 @@ function withExistingArtboard(
 }
 
 describe("GlobalTaskCoordinator", () => {
+  it("keeps ordinary no-Plan edits available to the next inspected operation", async () => {
+    const { store, host, file, opened, pageId, root } = await setup();
+    try {
+      const document = withExistingArtboard(opened.document, pageId);
+      Object.values(document.nodesById).forEach((node) => {
+        node.locked = false;
+      });
+      const runtime = new EditorRuntime(document);
+      const coordinator = new GlobalTaskCoordinator(host, store);
+      let context = {
+        runId: "run_plain_edit",
+        sessionId: "conversation_mobile",
+        documentId: file.documentId,
+        revision: 0,
+        scope: { kind: "page" as const, pageId, selectedNodeIds: [] },
+        mutationTarget: { kind: "page" as const, pageId },
+      };
+      await coordinator.registerRun({
+        type: "run.start",
+        ...context,
+        prompt: "Add a container then use it",
+        modelSelection,
+      });
+      coordinator.recordDocumentInspection(
+        context,
+        inspectionResult(document, pageId),
+      );
+      const node = structuredClone(document.nodesById.existing_nested_frame);
+      node.id = "new_container";
+      node.parentId = "existing_nested_frame";
+      const apply = async (
+        commands: DesignApplyToolInput["commands"],
+        id: string,
+      ) => {
+        const result = await handleEditDesignTool({
+          context,
+          coordinator,
+          withDelivery: (value) => value,
+          call: {
+            toolName: "opendesign_edit_design",
+            toolCallId: id,
+            input: {
+              label: id,
+              edits: [{ kind: "node", input: { label: id, commands } }],
+            },
+          },
+          execute: async (call) => {
+            const response = await executeDesignToolRequest(
+              { requestId: id, call, context },
+              runtime,
+              pageId,
+            );
+            if (!response.ok) throw new Error(response.error.message);
+            return response.result;
+          },
+        });
+        const revision = result?.designRevision?.revision;
+        if (revision === undefined) throw new Error("Expected committed edit");
+        coordinator.handleAgentEvent({
+          type: "tool.completed",
+          runId: context.runId,
+          toolCallId: id,
+          revision,
+          result: result?.content,
+        });
+        context = { ...context, revision };
+      };
+      await apply(
+        [
+          {
+            commandId: "insert",
+            type: "insert_element",
+            pageId,
+            parentId: node.parentId,
+            index: 0,
+            node,
+          },
+        ],
+        "insert_container",
+      );
+      expect(() => coordinator.assertDocumentInspected(context)).not.toThrow();
+      expect(() =>
+        coordinator.assertImagePlacement(context, node.id),
+      ).not.toThrow();
+      await apply(
+        [{ commandId: "delete", type: "delete_element", nodeId: node.id }],
+        "delete_container",
+      );
+      expect(() => coordinator.assertDocumentInspected(context)).not.toThrow();
+      expect(() => coordinator.assertImagePlacement(context, node.id)).toThrow(
+        "target_stale",
+      );
+      expect(coordinator.getDeliveryLedger(context.runId)).toBeUndefined();
+    } finally {
+      store.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it.each([false, true])(
     "keeps new deep nodes editable after first-slice with cache gap=%s",
     async (cacheGap) => {
