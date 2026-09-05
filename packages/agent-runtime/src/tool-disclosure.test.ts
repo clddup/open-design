@@ -239,6 +239,62 @@ describe("model tool disclosure", () => {
     ).toBe("expanded");
   });
 
+  it.each(["general", "new-design"] as const)(
+    "honors capability discovery after material writes on %s",
+    (surface) => {
+      const material: AgentToolDefinition = {
+        ...definition,
+        name: "opendesign_edit_design",
+        modelDisclosure: { bootstrap: "available", role: "material-write" },
+      };
+      const discovery: AgentToolDefinition = {
+        ...definition,
+        name: "opendesign_get_capabilities",
+        modelDisclosure: {
+          bootstrap: "available",
+          role: "capability-discovery",
+        },
+      };
+      const writes = [
+        {
+          toolCallId: "write_before_discovery",
+          toolName: material.name,
+          input: {},
+          status: "completed" as const,
+          revision: 2,
+          revisionAdvanced: true as const,
+        },
+      ];
+      const records = [
+        ...writes,
+        {
+          toolCallId: "discover_after_write",
+          toolName: discovery.name,
+          input: {},
+          status: "completed" as const,
+        },
+      ];
+      const options = { initialInspection: true, surface };
+      expect(
+        resolveModelToolDisclosurePhase([material, discovery], writes, options),
+      ).toBe("continuation");
+      expect(
+        resolveModelToolDisclosurePhase(
+          [material, discovery],
+          records,
+          options,
+        ),
+      ).toBe("expanded");
+      expect(
+        resolveModelToolDisclosurePhase(
+          [material, discovery],
+          [...records, ...writes],
+          options,
+        ),
+      ).toBe("expanded");
+    },
+  );
+
   it("allows a compact first material slice beside Plan on the host-inspected surface", () => {
     const inspection = {
       ...definition,

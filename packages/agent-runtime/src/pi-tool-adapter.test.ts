@@ -135,6 +135,93 @@ class RecordingGateway implements ModelGateway {
 }
 
 describe("OpenDesign Pi tool adapter", () => {
+  it("keeps discovery after a write effective and ignores failed discovery", async () => {
+    const material: AgentToolDefinition = {
+      ...moveTool,
+      modelDisclosure: { bootstrap: "available", role: "material-write" },
+    };
+    const discovery: AgentToolDefinition = {
+      ...inspectTool,
+      name: "opendesign_get_capabilities",
+      modelDisclosure: {
+        bootstrap: "available",
+        role: "capability-discovery",
+      },
+    };
+    const advanced: AgentToolDefinition = {
+      ...moveTool,
+      name: "opendesign_edit_vector",
+      modelDisclosure: { bootstrap: "deferred" },
+    };
+    const adapter = new OpenDesignPiToolAdapter({
+      request,
+      definitions: [material, discovery, advanced],
+      initialInspection: true,
+      maxToolCalls: 8,
+      lifecycle: {
+        approvalRequested: () => Promise.resolve(),
+        approvalResolved: () => Promise.resolve(),
+      },
+      toolExecutor: {
+        async *execute(call, context): AsyncIterable<ToolExecutionEvent> {
+          await Promise.resolve();
+          if (call.toolCallId === "discovery_failed") {
+            yield {
+              type: "failed",
+              error: {
+                code: "discovery_failed",
+                message: "Retry discovery",
+                retryable: true,
+                recoverable: true,
+              },
+            };
+            return;
+          }
+          yield {
+            type: "completed",
+            result: {
+              content: { ok: true },
+              ...(call.toolName === material.name
+                ? {
+                    designRevision: {
+                      previousRevision: context.revision,
+                      revision: context.revision + 1,
+                      transactionId: "transaction_discovery_test",
+                    },
+                  }
+                : {}),
+            },
+          };
+        },
+      },
+    });
+    const execute = async (name: string, id: string, input: unknown) => {
+      const tool = adapter.modelTools.find(
+        (candidate) => candidate.name === name,
+      );
+      if (!tool) throw new Error(`Expected visible tool: ${name}`);
+      return tool.execute(id, input, new AbortController().signal);
+    };
+    await execute(material.name, "write_1", { dx: 1 });
+    const compactTools = adapter.modelTools.map((tool) => tool.name);
+    expect(compactTools).not.toContain(advanced.name);
+    await expect(
+      execute(discovery.name, "discovery_failed", {}),
+    ).rejects.toThrow("discovery_failed");
+    expect(adapter.modelTools.map((tool) => tool.name)).toEqual(compactTools);
+    await execute(discovery.name, "discovery_succeeded", {});
+    expect(adapter.modelTools.map((tool) => tool.name)).toContain(
+      advanced.name,
+    );
+    await execute(advanced.name, "vector_edit", { dx: 2 });
+    expect(adapter.currentRevision).toBe(request.revision + 1);
+    expect(adapter.toolCallRecords.map((record) => record.toolCallId)).toEqual([
+      "write_1",
+      "discovery_succeeded",
+      "vector_edit",
+    ]);
+  });
+
   it("rejects parameters that change after the tracked tool call starts", async () => {
     const execute = vi.fn(
       async function* (): AsyncIterable<ToolExecutionEvent> {

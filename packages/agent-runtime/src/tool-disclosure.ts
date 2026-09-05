@@ -134,13 +134,14 @@ export function resolveModelToolDisclosurePhase(
   let inspected = options.initialInspection ?? false;
   let modelInspected = false;
   let planned = false;
+  let materialWritten = false;
   for (const record of records) {
     const role = roles.get(record.toolName);
     if (role === "capability-discovery" && record.status === "completed") {
       return "expanded";
     }
     if (role === "material-write" && record.revisionAdvanced === true) {
-      return "continuation";
+      materialWritten = true;
     }
     if (role === "plan") planned = true;
     if (role === "inspection") {
@@ -148,6 +149,7 @@ export function resolveModelToolDisclosurePhase(
       modelInspected = true;
     }
   }
+  if (materialWritten) return "continuation";
   if (options.initialInspection && !planned && !modelInspected) {
     return "host-inspected";
   }
