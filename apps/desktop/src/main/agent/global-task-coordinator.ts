@@ -1,3 +1,7 @@
+import {
+  visualCriticUserRequirements,
+  type VisualCriticUserRequirement,
+} from "./visual-critic-user-requirements.js";
 import { advanceDesignEditInspection } from "./design-edit-inspection.js";
 import { committedEditChanges } from "./design-edit-change-set.js";
 import { computeCommittedDesignEditImpact } from "./design-edit-committed-impact.js";
@@ -10,6 +14,7 @@ import type {
   AgentRequest,
   DesignMutationTarget,
   SelectionScope,
+  SessionTimelineItem,
   TrustedToolContext,
   TrustedToolResult,
 } from "@opendesign/agent-contracts";
@@ -114,6 +119,7 @@ type RunToolBinding = {
   scope: SelectionScope;
   mutationTarget: DesignMutationTarget;
   prompt: string;
+  userRequirements: VisualCriticUserRequirement[];
   modelSelection: ModelSelection;
   attachments: AgentAttachment[];
   imageAttachments: AgentImageAttachment[];
@@ -318,7 +324,11 @@ export class GlobalTaskCoordinator {
         continuationTransfer.rasterRoles,
       );
     }
-    const attachments = await this.#conversationAttachments(request);
+    const timeline = this.sessionStore
+      ? await this.sessionStore.readTimeline(request.sessionId)
+      : [];
+    const attachments = this.#conversationAttachments(request, timeline);
+    const userRequirements = visualCriticUserRequirements(request, timeline);
     this.#toolBindingsByRunId.set(request.runId, {
       conversationId: request.sessionId,
       documentId: request.documentId,
@@ -329,6 +339,7 @@ export class GlobalTaskCoordinator {
         ? { continuationParentRunId: request.continuation.parentRunId }
         : {}),
       prompt: request.prompt,
+      userRequirements,
       modelSelection: structuredClone(request.modelSelection),
       attachments,
       imageAttachments: attachments
@@ -356,23 +367,21 @@ export class GlobalTaskCoordinator {
     );
   }
 
-  async #conversationAttachments(
+  #conversationAttachments(
     request: RunStartRequest,
-  ): Promise<AgentAttachment[]> {
+    timeline: readonly SessionTimelineItem[],
+  ): AgentAttachment[] {
     const byId = new Map<string, AgentAttachment>();
-    if (this.sessionStore) {
-      const timeline = await this.sessionStore.readTimeline(request.sessionId);
-      for (const item of timeline) {
-        if (item.type === "user.message") {
-          for (const attachment of item.attachments ?? []) {
-            byId.set(attachment.attachmentId, structuredClone(attachment));
-          }
-          continue;
+    for (const item of timeline) {
+      if (item.type === "user.message") {
+        for (const attachment of item.attachments ?? []) {
+          byId.set(attachment.attachmentId, structuredClone(attachment));
         }
-        if (item.type === "tool" && item.status === "completed") {
-          for (const attachment of toolResultAttachments(item.result)) {
-            byId.set(attachment.attachmentId, structuredClone(attachment));
-          }
+        continue;
+      }
+      if (item.type === "tool" && item.status === "completed") {
+        for (const attachment of toolResultAttachments(item.result)) {
+          byId.set(attachment.attachmentId, structuredClone(attachment));
         }
       }
     }
@@ -1334,7 +1343,10 @@ export class GlobalTaskCoordinator {
     return {
       runId: context.runId,
       modelSelection: structuredClone(binding.modelSelection),
-      userRequest: binding.prompt,
+      userRequest: binding.continuationParentRunId
+        ? (binding.userRequirements.at(-1)?.content ?? "")
+        : binding.prompt,
+      userRequirements: structuredClone(binding.userRequirements),
       plan: structuredClone(state.plan),
       target: structuredClone(target.planned),
       observedRevision,

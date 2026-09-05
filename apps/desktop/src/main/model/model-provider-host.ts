@@ -6,6 +6,7 @@ import {
   type ModelSelection,
 } from "@opendesign/model-gateway";
 import type { AgentModelContext } from "@opendesign/agent-contracts";
+import { assertCompleteContextBudget } from "./model-provider-complete-budget";
 import {
   MODEL_PROVIDER_CATALOG_VERSION,
   isModelProviderCatalog,
@@ -251,8 +252,15 @@ export class ModelProviderHost {
     request: Omit<ModelRequest, "signal">,
     signal: AbortSignal,
   ): Promise<CanonicalStreamEvent[]> {
+    signal.throwIfAborted();
+    const resolved = await this.resolveAttachmentReferences(request);
+    signal.throwIfAborted();
+    assertCompleteContextBudget(
+      resolved,
+      this.resolveModelContext(resolved.modelSelection),
+    );
     const events: CanonicalStreamEvent[] = [];
-    for await (const event of this.stream(request, signal)) {
+    for await (const event of this.streamResolved(resolved, signal)) {
       events.push(event);
     }
     return events;
@@ -263,6 +271,13 @@ export class ModelProviderHost {
     signal: AbortSignal,
   ): AsyncIterable<CanonicalStreamEvent> {
     const resolved = await this.resolveAttachmentReferences(request);
+    yield* this.streamResolved(resolved, signal);
+  }
+
+  private async *streamResolved(
+    resolved: Omit<ModelRequest, "signal">,
+    signal: AbortSignal,
+  ): AsyncIterable<CanonicalStreamEvent> {
     const transport = observeModelTransport(this.fetch);
     yield* streamModelProvider({
       request: resolved,

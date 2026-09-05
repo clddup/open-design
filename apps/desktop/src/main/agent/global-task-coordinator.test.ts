@@ -1059,7 +1059,37 @@ describe("GlobalTaskCoordinator", () => {
       const { store, host, file, opened, pageId, root } = await setup();
       try {
         const runtime = new EditorRuntime(opened.document);
-        const coordinator = new GlobalTaskCoordinator(host, store);
+        const originalUser = {
+          type: "user.message" as const,
+          itemId: "brief_item",
+          messageId: "brief_user",
+          runId: "earlier_run",
+          sessionId: "conversation_mobile",
+          sequence: 1,
+          createdAt: "2026-09-06T00:00:00Z",
+          updatedAt: "2026-09-06T00:00:00Z",
+          documentId: file.documentId,
+          revision: 0,
+          scope: { kind: "page" as const, pageId, selectedNodeIds: [] },
+          content: "原始要求：做中文首页，重点展示夏令营活动。",
+          attachments: [
+            {
+              attachmentId: `file_${"e".repeat(64)}`,
+              name: "需求.md",
+              mimeType: "text/markdown" as const,
+              byteSize: 80,
+            },
+          ],
+        };
+        const timelineStore = {
+          readTimeline: vi.fn(() => Promise.resolve([originalUser])),
+        };
+        const coordinator = new GlobalTaskCoordinator(
+          host,
+          store,
+          undefined,
+          timelineStore,
+        );
         let context = {
           runId: "run_deep_edit",
           sessionId: "conversation_mobile",
@@ -1071,7 +1101,7 @@ describe("GlobalTaskCoordinator", () => {
         await coordinator.registerRun({
           type: "run.start",
           ...context,
-          prompt: "Create and refine a home screen",
+          prompt: "继续",
           modelSelection,
         });
         const initial = inspectionResult(opened.document, pageId);
@@ -1147,6 +1177,31 @@ describe("GlobalTaskCoordinator", () => {
           context = { ...context, revision };
         };
         advance(first.designRevision!.revision);
+        const reviewer = coordinator.resolveVisualCriticContext(
+          context,
+          context.revision,
+          {
+            attachmentId: "capture_current",
+            name: "capture.jpg",
+            mimeType: "image/jpeg",
+            byteSize: 12,
+          },
+        );
+        expect(reviewer?.userRequest).toBe("继续");
+        expect(reviewer?.userRequirements).toEqual([
+          {
+            messageId: originalUser.messageId,
+            content: originalUser.content,
+            documents: originalUser.attachments,
+          },
+          {
+            messageId: `${context.runId}_user`,
+            content: "继续",
+            documents: [],
+          },
+        ]);
+        expect(timelineStore.readTimeline).toHaveBeenCalledOnce();
+
         const plan = (first.content as { plan: DesignPlanToolInput }).plan;
         const target = plan.targets[0];
         coordinator.recordCanvasCapture(

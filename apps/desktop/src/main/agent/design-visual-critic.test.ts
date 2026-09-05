@@ -66,6 +66,76 @@ const genericCriterionIds = [
 ] as const;
 
 describe("independent design visual critic", () => {
+  it("does not replace missing original requirements with a host continuation instruction", async () => {
+    const context = criticContext();
+    context.userRequest = "";
+    context.userRequirements = [];
+    let calls = 0;
+    await expect(
+      runIndependentDesignVisualCritic(
+        {
+          complete: () => {
+            calls += 1;
+            return Promise.resolve([]);
+          },
+        },
+        context,
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow("Original user requirements are unavailable");
+    expect(calls).toBe(0);
+  });
+
+  it("sends original user requirements and document handles without author history", async () => {
+    const context = criticContext();
+    context.userRequest = "继续";
+    const document = {
+      attachmentId: `file_${"d".repeat(64)}`,
+      name: "原始需求.md",
+      mimeType: "text/markdown" as const,
+      byteSize: 240,
+    };
+    context.userRequirements = [
+      {
+        messageId: "user_1",
+        content: "为夏令营设计标识，保留中文名称。\n不能使用聊天气泡。",
+        documents: [document],
+      },
+      { messageId: "user_2", content: "继续", documents: [document] },
+    ];
+    let capturedRequest: Omit<ModelRequest, "signal"> | undefined;
+    await runIndependentDesignVisualCritic(
+      {
+        complete: (request) => {
+          capturedRequest = request;
+          return Promise.resolve(
+            responseEvents(request.attemptId, scorecard(4)),
+          );
+        },
+      },
+      context,
+      new AbortController().signal,
+    );
+    const message = capturedRequest?.messages[0];
+    if (message?.role !== "user" || !Array.isArray(message.content))
+      throw new Error("Missing critic context");
+    expect(
+      message.content.filter((block) => block.type === "document_ref"),
+    ).toEqual([{ type: "document_ref", ...document }]);
+    const evidence = message.content.find((block) => block.type === "text");
+    if (evidence?.type !== "text") throw new Error("Missing evidence text");
+    const parsed = JSON.parse(evidence.text) as { userRequirements: unknown };
+    expect(parsed.userRequirements).toEqual(context.userRequirements);
+    expect(parsed).not.toHaveProperty("userRequest");
+    expect(capturedRequest?.system).toContain("no author replies");
+    expect(capturedRequest?.system).toContain(
+      "resolve later corrections in context",
+    );
+    expect(
+      message.content.filter((block) => block.type === "image_ref")[0],
+    ).toHaveProperty("attachmentId", context.attachment.attachmentId);
+  });
+
   it("blocks a generic Logo when one non-compensating critical score fails", async () => {
     let capturedRequest: Omit<ModelRequest, "signal"> | undefined;
     const context = criticContext();
