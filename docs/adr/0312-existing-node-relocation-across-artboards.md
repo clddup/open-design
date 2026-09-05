@@ -6,7 +6,7 @@
 
 ## 决策
 
-独立 node entry 仅包含已有节点的 `move_element` 及这些被移动节点的属性更新时，按重新归组/移动处理，不再因为来源和目的地属于不同 Plan 目标而拒绝。
+node entry 仅包含已有节点的 `move_element` 及这些被移动节点的属性更新时，按重新归组/移动处理，不再因为来源和目的地属于不同 Plan 目标而拒绝。
 
 Main 复用精确 inspection、Page 绑定和结构位置处理，不推断用户文本，也不将移动记作目标创建。返回空步骤目标集合，去掉旧 steps/rebaseGuard；提交后用真实 ChangeSet 更新来源和目的画板的物理成员与材料状态，不自动完成实现步骤。
 
@@ -16,7 +16,7 @@ Main 复用精确 inspection、Page 绑定和结构位置处理，不推断用�
 
 ## 边界
 
-不把 insert/delete/shared-resource 混合批次当成纯移动，也不放开跨 Page 权限。无精确 inspection 的情况保持原执行路径，不新增第二套恢复门禁。
+node entry 可与现有 hierarchy/arrange entry 同笔执行，仍由整批最终预览与实际 ChangeSet 负责原子性和归属，不因 entry 数量切回另一套授权规则。node entry 内混合 insert/delete/shared-resource 时仍不作为纯移动，也不放开跨 Page 权限。无精确 inspection 的情况保持原执行路径，不新增第二套恢复门禁。
 
 ## 验证
 

@@ -1498,6 +1498,7 @@ describe("GlobalTaskCoordinator", () => {
       );
       second.id = "profile_second";
       second.transform[5] += 120;
+      second.transform[4] += 24;
       document.nodesById.profile_second = second;
       document.nodesById.frame_profile_content.childIds.push(second.id);
       const foreign = {
@@ -1698,6 +1699,15 @@ describe("GlobalTaskCoordinator", () => {
                       index: 0,
                     },
                   ],
+                },
+              },
+              {
+                kind: "arrange",
+                input: {
+                  action: "align-left",
+                  label: "Align moved content",
+                  pageId,
+                  nodeIds: ["frame_profile_content_material", "profile_second"],
                 },
               },
             ],

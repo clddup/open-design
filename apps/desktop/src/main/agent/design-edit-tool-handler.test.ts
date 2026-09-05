@@ -182,7 +182,7 @@ describe("Edit Design Main boundary", () => {
     };
     const execute = vi.fn().mockResolvedValue(result);
     const coordinator = {
-      assertDesignPlanForApply: vi.fn(() => authorization),
+      authorizeIndependentDesignEdit: vi.fn(() => authorization),
       assertDesignApplyResult: vi.fn(),
       recordDesignEditCompleted: vi.fn(),
     };
@@ -211,11 +211,72 @@ describe("Edit Design Main boundary", () => {
       execute,
       withDelivery: (value) => value,
     });
+    expect(coordinator.authorizeIndependentDesignEdit).toHaveBeenCalledWith(
+      context,
+      nodeInput,
+    );
     expect(execute).toHaveBeenCalledOnce();
     expect(JSON.stringify(execute.mock.calls)).not.toContain("rebaseGuard");
     expect(
       coordinator.assertDesignApplyResult.mock.calls[0]?.[1],
     ).not.toHaveProperty("rebaseGuard");
+  });
+
+  it("does not record a failed mixed operation after independent authorization", async () => {
+    const nodeInput = {
+      label: "Move",
+      commands: [
+        {
+          commandId: "move",
+          type: "move_element" as const,
+          nodeId: "a",
+          pageId: "page_main",
+          parentId: "b",
+          index: 0,
+        },
+      ],
+    };
+    const coordinator = {
+      authorizeIndependentDesignEdit: vi.fn(() => ({
+        input: nodeInput,
+        targetIds: [],
+      })),
+      assertDesignApplyResult: vi.fn(),
+      recordDesignEditCompleted: vi.fn(),
+    };
+    const error = new Error("Later layout entry failed");
+    await expect(
+      handleEditDesignTool({
+        call: {
+          toolCallId: "mixed_failure",
+          toolName: DESIGN_EDIT_TOOL_NAME,
+          input: {
+            label: "Move then align",
+            edits: [
+              { kind: "node", input: nodeInput },
+              {
+                kind: "arrange",
+                input: {
+                  action: "align-left",
+                  label: "Align",
+                  pageId: "page_main",
+                  nodeIds: ["missing", "a"],
+                },
+              },
+            ],
+          },
+        },
+        context,
+        coordinator: coordinator as never,
+        execute: () => Promise.reject(error),
+        withDelivery: (value) => value,
+      }),
+    ).rejects.toBe(error);
+    expect(coordinator.authorizeIndependentDesignEdit).toHaveBeenCalledWith(
+      context,
+      nodeInput,
+    );
+    expect(coordinator.recordDesignEditCompleted).not.toHaveBeenCalled();
   });
 
   it("authorizes all entries against one delivery target and dispatches once", async () => {

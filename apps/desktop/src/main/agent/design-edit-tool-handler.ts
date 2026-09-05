@@ -36,10 +36,10 @@ export async function handleEditDesignTool(input: {
 
   for (const edit of parsedInput.edits) {
     if (edit.kind === "node") {
-      authorization =
-        parsedInput.edits.length === 1
-          ? coordinator.authorizeIndependentDesignEdit(context, edit.input)
-          : coordinator.assertDesignPlanForApply(context, edit.input);
+      authorization = coordinator.authorizeIndependentDesignEdit(
+        context,
+        edit.input,
+      );
       nodeInput = authorization?.input ?? edit.input;
       canonicalEdits.push({ kind: edit.kind, input: nodeInput });
       continue;

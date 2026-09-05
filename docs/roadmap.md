@@ -78,6 +78,8 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 
 ## P0-B：稳定 Leafer 迁移与 Agent 主流程
 
+- [x] 统一 Edit Design 不再因批次含 hierarchy/arrange 就把 node entry 切回旧Plan授权规则。复用相同独立编辑/relocation判断，最终整批preview与ChangeSet记账不变；跨画板移动后布局同笔提交、失败批次不记账已有回归。
+
 - [x] 精确 inspection 下，独立 node relocation 可在同一授权页面跨 Plan 画板移动已有节点及其属性；不注入步骤或自动rebase，真实ChangeSet更新归属但不虚增Plan进度。自循环/其他Page目的地失败保持Doc与ledger，一次undo恢复，见 ADR-0312。混合新增删除等生命周期仍未完成。
 
 - [x] 同事务删除并重建已有计划 Frame 的同 ID 树不再被当作单独删除/重复创建。Main 只签发内部Frame身份，Renderer按整批可信预览检查末态再原子提交；重建尺寸、子树及一次undo通过，错类型/循环/重建后再删除保持原Doc与ledger。单独删除和跨计划移动仍未完成，见 ADR-0311。
