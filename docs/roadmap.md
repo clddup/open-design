@@ -78,6 +78,8 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 
 ## P0-B：稳定 Leafer 迁移与 Agent 主流程
 
+- [x] 修复 Renderer 规划器失败被降级为通用执行错误的路径：编组、排列、组件、Page、SVG 导入、矢量与图片编辑保留原始错误分类，合并编辑定位到具体 `/edits/{index}/input`。恢复按操作与根因区分，不把不同规划器失败累计成同一循环；同一根因仍有界停止，失败批次不产生部分提交。此项是错误传递整改，不代表真实模型生成或视觉质量已验收。
+
 - [x] 修复 Agent 骨架/光标在用户观察生成过程时拖动画布产生双重 viewport 的实机时序：删除第四个独立 presentation canvas，把不可命中的 skeleton/cursor Group 放入 Leafer 内置 editor `sky` 且位于 Editor selection child 下方；按 `sky⁻¹ × tree/screen` 投影，并在真实 child render 前幂等复核 tree/sky 的最终 transform。自动化不替代 macOS/Windows 打包触控板和鼠标实机验收。
 - [x] 为 host-only `put_asset + insert_element(image)` 内部事务补 Renderer 集成测试，验证单次 revision、Page/Selection scope 和一次 undo 同时移除 asset/node。
 - [x] 为 Agent composer 的剪贴板粘贴和文件拖放补交互测试，验证 Renderer 通过窄 Preload API 提交 bytes，最终 run 只携带安全附件元数据；纯文本路径粘贴不被拦截或提前读取。

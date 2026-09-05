@@ -71,6 +71,47 @@ describe("PiToolProgressCircuit", () => {
     }
   });
 
+  it("keeps different planner failures for the merged editing tool recoverable", () => {
+    const circuit = new PiToolProgressCircuit();
+    const failure = (
+      scope: string,
+      action: string,
+      code: string,
+    ): TrustedToolFailure => ({
+      ...invalidInput,
+      code: `${scope}.${code}`,
+      details: {
+        ...invalidInput.details!,
+        fingerprint: `planner:${scope}:${action}:${code}`,
+        issues: [
+          {
+            code: `${scope}.${code}`,
+            path: "/edits/0/input",
+            message: "Revise operation",
+          },
+        ],
+      },
+    });
+    const hierarchy = failure("edit-design.hierarchy", "group", "mixed-parent");
+    const arrange = failure(
+      "edit-design.arrange",
+      "align-left",
+      "invalid-target",
+    );
+    for (const error of [hierarchy, arrange]) {
+      expect(TrustedToolFailureContract.parse(error).ok).toBe(true);
+      expect(
+        circuit.recordFailure("opendesign_edit_design", error),
+      ).not.toHaveProperty("runTerminal");
+    }
+    expect(
+      circuit.recordFailure("opendesign_edit_design", hierarchy),
+    ).toMatchObject({
+      code: "design_recovery_no_progress",
+      runTerminal: true,
+    });
+  });
+
   it("stops one repeated recoverable root cause without a revision", () => {
     const circuit = new PiToolProgressCircuit();
     circuit.recordFailure("opendesign_edit_design", recoverableFailure);

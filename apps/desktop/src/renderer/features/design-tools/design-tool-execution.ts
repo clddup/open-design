@@ -1,3 +1,4 @@
+import { designPlannerError } from "./design-planner-error";
 import { designWorkflowError } from "@/shared/design-workflow-failure-classification";
 import {
   type AgentToolFailureIssue,
@@ -273,7 +274,7 @@ async function executeDesignToolRequestUnsafe(
     }
     const plan = planDesignComponentTool(document, input, operationId);
     if (!plan.ok) {
-      throw new Error(`component-operation.${plan.code}: ${plan.message}`);
+      throw designPlannerError("component-operation", plan, "/", input.action);
     }
     assertCommandsWithinMutationTarget(
       document,
@@ -530,7 +531,7 @@ async function executeDesignToolRequestUnsafe(
       };
     }
     if (!plan.ok) {
-      throw new Error(`page-operation.${plan.code}: ${plan.message}`);
+      throw designPlannerError("page-operation", plan, "/", input.action);
     }
     const transaction = {
       transactionId: `transaction_${operationId}`,
@@ -606,7 +607,7 @@ async function executeDesignToolRequestUnsafe(
       commandPrefix: input.idPrefix,
     });
     if (!plan.ok) {
-      throw new Error(`svg-import.${plan.code}: ${plan.message}`);
+      throw designPlannerError("svg-import", plan, "/", "import");
     }
     assertCommandsWithinMutationTarget(
       document,
@@ -995,7 +996,7 @@ async function executeDesignToolRequestUnsafe(
                                                       },
                         );
     if (!plan.ok) {
-      throw new Error(`vector-edit.${plan.code}: ${plan.message}`);
+      throw designPlannerError("vector-edit", plan, "/", input.action);
     }
     assertCommandsWithinMutationTarget(
       document,
@@ -1333,7 +1334,7 @@ async function executeDesignToolRequestUnsafe(
             commandPrefix,
           );
     if (!plan.ok) {
-      throw new Error(`image-update.${plan.code}: ${plan.message}`);
+      throw designPlannerError("image-update", plan, "/", input.action);
     }
     assertCommandsWithinMutationTarget(
       document,
@@ -1527,7 +1528,12 @@ function executeAtomicEditDesign(
         commandPrefix,
       );
       if (!plan.ok) {
-        throw new Error(`edit-design.hierarchy.${plan.code}: ${plan.message}`);
+        throw designPlannerError(
+          "edit-design.hierarchy",
+          plan,
+          `/edits/${index}/input`,
+          edit.input.action,
+        );
       }
       nextCommands = plan.commands;
       appendStringWarnings(
@@ -1551,7 +1557,12 @@ function executeAtomicEditDesign(
         commandPrefix,
       );
       if (!plan.ok) {
-        throw new Error(`edit-design.arrange.${plan.code}: ${plan.message}`);
+        throw designPlannerError(
+          "edit-design.arrange",
+          plan,
+          `/edits/${index}/input`,
+          edit.input.action,
+        );
       }
       nextCommands = plan.commands;
       appendStringWarnings(
