@@ -37,6 +37,7 @@ type RunState = {
   allVerifiedAtMs: number | null;
   hadAgentError: boolean;
   model: {
+    lastRequest: ModelProviderPerformanceSample | null;
     attempts: number;
     completed: number;
     failed: number;
@@ -90,6 +91,7 @@ export type DesignGenerationPerformanceSummary = {
     T1: null | "material-revision-not-observed";
   };
   provider: {
+    lastRequest: ModelProviderPerformanceSample | null;
     attempts: number;
     completed: number;
     failed: number;
@@ -233,6 +235,8 @@ export class DesignGenerationPerformanceTracker {
     if (!runId) return;
     const state = this.#runs.get(runId);
     if (!state) return;
+    // Keep one request (including its retries) separate from Run-wide aggregates.
+    state.model.lastRequest = structuredClone(sample);
     state.model.attempts += 1;
     state.model.retries += sample.retries;
     if (sample.status === "completed") state.model.completed += 1;
@@ -339,7 +343,11 @@ export class DesignGenerationPerformanceTracker {
     const state = this.#runs.get(runId);
     if (!state) return null;
     this.#runs.delete(runId);
-    if (!state.designActivityObserved && state.planAcceptedAtMs === null) {
+    if (
+      !state.designActivityObserved &&
+      state.planAcceptedAtMs === null &&
+      state.model.failed === 0
+    ) {
       return null;
     }
     return {
@@ -409,6 +417,7 @@ function createRunState(startedAtMs: number): RunState {
     allVerifiedAtMs: null,
     hadAgentError: false,
     model: {
+      lastRequest: null,
       attempts: 0,
       completed: 0,
       failed: 0,

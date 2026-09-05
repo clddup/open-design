@@ -930,53 +930,79 @@ describe("ModelProviderHost", () => {
     },
   );
 
-  it("aborts a production model stream that produces no response events", async () => {
-    vi.useFakeTimers();
-    const store = new WorkspaceStore(":memory:");
-    const fetch = vi.fn<typeof globalThis.fetch>(() => new Promise(() => {}));
-    const host = new ModelProviderHost(store, cipher, fetch, undefined, {
-      firstResponseTimeoutMs: 50,
-      idleTimeoutMs: 100,
-      totalTimeoutMs: 500,
-    });
-    host.saveProfile({ ...profile, apiKey: "provider-secret" });
-
-    try {
-      const pending = host.complete(
-        {
-          attemptId: "attempt_stalled",
-          sessionId: "session_stalled",
-          modelSelection: selection,
-          system: "System",
-          messages: [{ role: "user", content: "Design a settings page" }],
-          tools: [],
-        },
-        new AbortController().signal,
+  it.each([false, true])(
+    "diagnoses a stalled production stream with HTTP headers=%s",
+    async (hasHeaders) => {
+      vi.useFakeTimers();
+      const store = new WorkspaceStore(":memory:");
+      const fetch = vi.fn<typeof globalThis.fetch>(() =>
+        hasHeaders
+          ? Promise.resolve(
+              new Response(new ReadableStream(), {
+                headers: { "Content-Type": "text/event-stream" },
+              }),
+            )
+          : new Promise(() => {}),
       );
-      await vi.advanceTimersByTimeAsync(51);
-      await expect(pending).resolves.toContainEqual({
-        type: "attempt.failed",
-        attemptId: "attempt_stalled",
-        error: {
-          code: "provider_timeout",
-          message:
-            "Model provider timed out after 50 ms waiting for a response",
-          retryable: true,
-          provider: "provider_1",
-          timeout: { phase: "first-response", thresholdMs: 50 },
-        },
+      const host = new ModelProviderHost(store, cipher, fetch, undefined, {
+        firstResponseTimeoutMs: 50,
+        idleTimeoutMs: 100,
+        totalTimeoutMs: 500,
       });
-      await expect(pending).resolves.toMatchObject([
-        { type: "attempt.started", attemptId: "attempt_stalled" },
-        { type: "attempt.failed", attemptId: "attempt_stalled" },
-      ]);
-      expect(fetch).toHaveBeenCalledOnce();
-      expect(fetch.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
-    } finally {
-      store.close();
-      vi.useRealTimers();
-    }
-  });
+      const performance =
+        vi.fn<(sample: ModelProviderPerformanceSample) => void>();
+      host.setPerformanceObserver(performance);
+      host.saveProfile({ ...profile, apiKey: "provider-secret" });
+
+      try {
+        const pending = host.complete(
+          {
+            attemptId: "attempt_stalled",
+            sessionId: "session_stalled",
+            modelSelection: selection,
+            system: "System",
+            messages: [{ role: "user", content: "Design a settings page" }],
+            tools: [],
+          },
+          new AbortController().signal,
+        );
+        await vi.advanceTimersByTimeAsync(51);
+        await expect(pending).resolves.toContainEqual({
+          type: "attempt.failed",
+          attemptId: "attempt_stalled",
+          error: {
+            code: "provider_timeout",
+            message:
+              "Model provider timed out after 50 ms waiting for a response",
+            retryable: true,
+            provider: "provider_1",
+            timeout: { phase: "first-response", thresholdMs: 50 },
+          },
+        });
+        await expect(pending).resolves.toMatchObject([
+          { type: "attempt.started", attemptId: "attempt_stalled" },
+          { type: "attempt.failed", attemptId: "attempt_stalled" },
+        ]);
+        expect(fetch).toHaveBeenCalledOnce();
+        expect(fetch.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
+        expect(performance).toHaveBeenCalledOnce();
+        expect(performance.mock.calls[0]?.[0]).toMatchObject({
+          status: "failed",
+          firstProviderEventMs: null,
+          transport: {
+            fetchCalls: 1,
+            firstFetchMs: 0,
+            latestFetchMs: 0,
+            latestHeadersMs: hasHeaders ? 0 : null,
+            latestStatus: hasHeaders ? 200 : null,
+          },
+        });
+      } finally {
+        store.close();
+        vi.useRealTimers();
+      }
+    },
+  );
 
   it("aborts a production model stream that stops making progress", async () => {
     vi.useFakeTimers();

@@ -29,6 +29,7 @@ import {
   snapshotModelProfile,
 } from "./model-provider-catalog.js";
 import { testModelProviderConnection } from "./model-provider-connection.js";
+import { observeModelTransport } from "./model-provider-transport";
 import {
   assertModelStreamTimeouts,
   streamModelProvider,
@@ -262,6 +263,7 @@ export class ModelProviderHost {
     signal: AbortSignal,
   ): AsyncIterable<CanonicalStreamEvent> {
     const resolved = await this.resolveAttachmentReferences(request);
+    const transport = observeModelTransport(this.fetch);
     yield* streamModelProvider({
       request: resolved,
       signal,
@@ -269,9 +271,15 @@ export class ModelProviderHost {
         resolved.latencyProfile === "interactive"
           ? interactiveModelStreamTimeouts
           : this.streamTimeouts,
-      gateway: (selection) => this.gateway(selection),
+      gateway: (selection) => this.gateway(selection, transport.fetch),
       ...(this.#performanceObserver
-        ? { observePerformance: this.#performanceObserver }
+        ? {
+            observePerformance: (sample: ModelProviderPerformanceSample) =>
+              this.#performanceObserver?.({
+                ...sample,
+                transport: transport.snapshot(),
+              }),
+          }
         : {}),
     });
   }
@@ -348,7 +356,10 @@ export class ModelProviderHost {
     };
   }
 
-  private gateway(selection: ModelSelection): ModelGateway {
+  private gateway(
+    selection: ModelSelection,
+    fetch: typeof globalThis.fetch = this.fetch,
+  ): ModelGateway {
     if (this.gatewayFactory) return this.gatewayFactory(selection);
     const { provider, model } = this.resolveSelection(selection);
     const credential = this.credential(provider.providerId);
@@ -366,7 +377,7 @@ export class ModelProviderHost {
         reasoning: model.capabilities.reasoning,
         imageInput: model.capabilities.imageInput,
       },
-      fetch: this.fetch,
+      fetch,
     });
   }
 

@@ -85,6 +85,7 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 - [x] 为 Agent composer 的剪贴板粘贴和文件拖放补交互测试，验证 Renderer 通过窄 Preload API 提交 bytes，最终 run 只携带安全附件元数据；纯文本路径粘贴不被拦截或提前读取。
 - [x] 让 HTTP(S) 图片读取的超时和取消覆盖完整 body stream，而不只覆盖 response headers；慢 body、流式超过 16 MB 和用户取消已有自动化回归。
 - [x] 为生产模型流增加首响应、流空闲和总时限 watchdog；超时或 Agent 进程退出必须解除 Conversation 的 active Run，返回可重试错误并 abort Main-owned fetch。
+- [x] 首响应超时诊断区分 Fetch 调用与 HTTP headers 返回：现有本地性能日志保留最后模型请求的 attemptId、Fetch 调用耗时、HTTP 状态及同请求的 canonical/内容首事件指标（含该请求内重试），不混用 Run 聚合数据。尚未调用工具的模型失败也保留诊断，不记录 URL、请求/响应正文或凭据，不读取或缓存 body。回归覆盖未返回 headers、HTTP 200 后无模型事件及旧重试晚返回；Fetch 被调用不等于反代已收到，真实超时根因仍需运行证据。
 - [x] 为生产 Provider 流增加 Main-owned 有界自动重连：HTTP 200 后 SSE body `terminated`、`Connection error`、提前 EOF 和其他明确 `retryable` 的连接失败，在首次请求后最多重连 5 次，并用同一条 `正在重新连接 N/5` 状态覆盖展示。空 block start 与未完成 reasoning/tool 参数不构成语义提交，可重试失败时全部丢弃；非空 text delta 立即进入真实消息，从此不重放当前 turn。取消、确定性 4xx/context 等不可重试失败和三类精确 watchdog timeout 不进入重连。见 ADR-0043、ADR-0238。
 - [x] 修复 Provider 流失败后的持续 Conversation 生命周期：中断前已显示的 partial assistant text 持久化在原消息位置且不携带失败 response identity，空 completion 不再删除 live delta；durable item 到达后再去重。`agent.error/run.completed` 只收口当前 Run 的 message/tool/approval/lease，下一条消息在同一 Conversation 创建干净 Run并继续读取历史、历史用户附件与已提交设计 revision。Main 从 durable Timeline 为新 Run 重新签发同 Conversation 附件只读能力，并把稳定 attachmentId 与多模态内容一并提供给模型；另一 Conversation 不继承授权。无 run ID 的进程终态仍防御性回收孤儿活态。见 ADR-0238、ADR-0243。
 - [x] 启动时终结 JSONL 中未完成的 Run/pending tool，并同步恢复 Global Task；新 Run 和后续 Agent 活动更新 Conversation `updatedAt`，最近活动会话立即置顶且重启后顺序一致。

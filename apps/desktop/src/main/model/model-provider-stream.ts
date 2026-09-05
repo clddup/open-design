@@ -4,6 +4,7 @@ import type {
   ModelRequest,
   ModelSelection,
 } from "@opendesign/model-gateway";
+import type { ModelProviderTransportSample } from "./model-provider-transport";
 
 export type ModelStreamTimeouts = {
   firstResponseTimeoutMs: number;
@@ -12,6 +13,7 @@ export type ModelStreamTimeouts = {
 };
 
 export type ModelProviderPerformanceSample = {
+  transport?: ModelProviderTransportSample;
   attemptId: string;
   status: "completed" | "failed" | "cancelled";
   totalMs: number;

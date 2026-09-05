@@ -50,6 +50,13 @@ describe("DesignGenerationPerformanceTracker", () => {
         firstToolCallStartMs: 60,
         reasoningEffort: "low",
         retries: 1,
+        transport: {
+          fetchCalls: 2,
+          firstFetchMs: 1,
+          latestFetchMs: 10,
+          latestHeadersMs: 15,
+          latestStatus: 200,
+        },
       });
       tracker.recordRendererTool({
         runId,
@@ -132,6 +139,18 @@ describe("DesignGenerationPerformanceTracker", () => {
         },
         unavailable: { T0: null },
         provider: {
+          lastRequest: {
+            attemptId: `${runId}_attempt_1`,
+            firstProviderEventMs: 20,
+            firstContentEventMs: 35,
+            transport: {
+              fetchCalls: 2,
+              firstFetchMs: 1,
+              latestFetchMs: 10,
+              latestHeadersMs: 15,
+              latestStatus: 200,
+            },
+          },
           attempts: 1,
           completed: 1,
           retries: 1,
@@ -174,6 +193,73 @@ describe("DesignGenerationPerformanceTracker", () => {
       }),
     ).toBeNull();
   });
+
+  it.each([false, true])(
+    "retains a pre-tool timeout separately from earlier model output=%s",
+    (earlierOutput) => {
+      const tracker = new DesignGenerationPerformanceTracker(() => baseTime);
+      const runId = "run_transport_timeout";
+      tracker.recordAgentEvent({
+        type: "run.started",
+        runId,
+        startedAt: new Date(baseTime).toISOString(),
+      });
+      const failed = {
+        attemptId: `${runId}_attempt_2`,
+        status: "failed" as const,
+        totalMs: 60_000,
+        firstProviderEventMs: null,
+        firstContentEventMs: null,
+        firstTextDeltaMs: null,
+        firstToolCallStartMs: null,
+        reasoningEffort: "medium" as const,
+        retries: 0,
+        transport: {
+          fetchCalls: 1,
+          firstFetchMs: 1,
+          latestFetchMs: 1,
+          latestHeadersMs: 10,
+          latestStatus: 200,
+        },
+      };
+      if (earlierOutput)
+        tracker.recordModelProvider({
+          ...failed,
+          attemptId: `${runId}_attempt_1`,
+          status: "completed",
+          firstProviderEventMs: 20,
+          firstContentEventMs: 30,
+        });
+      tracker.recordModelProvider(failed);
+      tracker.recordAgentEvent({
+        type: "agent.error",
+        runId,
+        code: "provider_timeout",
+        message: "No response",
+        failure: {
+          code: "provider_timeout",
+          message: "No response",
+          retryable: true,
+        },
+      });
+      const summary = tracker.recordAgentEvent({
+        type: "run.completed",
+        runId,
+        stopReason: "error",
+        finishedAt: new Date(baseTime + 60_000).toISOString(),
+      });
+      expect(summary).toMatchObject({
+        terminal: "error",
+        milestonesMs: { T_plan: null, T1: null, T_tool_requested: null },
+        provider: {
+          lastRequest: failed,
+          firstProviderEventMs: { count: earlierOutput ? 1 : 0 },
+        },
+      });
+      failed.transport.latestStatus = 503;
+      expect(summary?.provider.lastRequest?.transport?.latestStatus).toBe(200);
+    },
+  );
 
   it("keeps a zero-revision failed first-slice run observable", () => {
     let now = baseTime;
