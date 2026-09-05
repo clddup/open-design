@@ -1556,6 +1556,15 @@ function executeAtomicEditDesign(
         edit.input,
         commandPrefix,
       );
+      if (!plan.ok && plan.code === "no-op") {
+        summaries.push({
+          kind: edit.kind,
+          action: edit.input.action,
+          label: edit.input.label,
+          changed: false,
+        });
+        return;
+      }
       if (!plan.ok) {
         throw designPlannerError(
           "edit-design.arrange",
@@ -1604,9 +1613,6 @@ function executeAtomicEditDesign(
     workingDocument = projected.document;
   });
 
-  if (commands.length === 0) {
-    throw new Error("Edit Design did not produce a valid projected document");
-  }
   const transaction = editDesignTransaction(
     request,
     input.label,
@@ -1631,6 +1637,24 @@ function executeAtomicEditDesign(
         },
       );
     }
+  }
+  if (commands.length === 0) {
+    return {
+      requestId: request.requestId,
+      ok: true,
+      result: {
+        observedRevision: document.revision,
+        content: {
+          ok: true,
+          action: "edit-design",
+          label: input.label,
+          edits: summaries,
+          changed: false,
+          revision: document.revision,
+          atomic: true,
+        },
+      },
+    };
   }
   const result = runtime.apply(transaction);
   if (!result.ok) {

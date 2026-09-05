@@ -78,6 +78,8 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 
 ## P0-B：稳定 Leafer 迁移与 Agent 主流程
 
+- [x] Edit Design 的布局 no-op 表示已满足，不再阻断同批有效编辑；全无变化返回observedRevision且无新revision/undo，混合操作仍原子提交。锁定/缺失/无效等错误和末态检查不变，真实移动+重复对齐回归通过，见 ADR-0313。
+
 - [x] 统一 Edit Design 不再因批次含 hierarchy/arrange 就把 node entry 切回旧Plan授权规则。复用相同独立编辑/relocation判断，最终整批preview与ChangeSet记账不变；跨画板移动后布局同笔提交、失败批次不记账已有回归。
 
 - [x] 精确 inspection 下，独立 node relocation 可在同一授权页面跨 Plan 画板移动已有节点及其属性；不注入步骤或自动rebase，真实ChangeSet更新归属但不虚增Plan进度。自循环/其他Page目的地失败保持Doc与ledger，一次undo恢复，见 ADR-0312。混合新增删除等生命周期仍未完成。

@@ -1710,11 +1710,27 @@ describe("GlobalTaskCoordinator", () => {
                   nodeIds: ["frame_profile_content_material", "profile_second"],
                 },
               },
+              {
+                kind: "arrange",
+                input: {
+                  action: "align-left",
+                  label: "Confirm alignment",
+                  pageId,
+                  nodeIds: ["frame_profile_content_material", "profile_second"],
+                },
+              },
             ],
           },
         },
       });
       expect(moved?.designRevision?.revision).toBe(2);
+      expect(moved?.content).toMatchObject({
+        edits: [
+          { kind: "node" },
+          { kind: "arrange" },
+          { kind: "arrange", changed: false },
+        ],
+      });
       expect(
         runtime.getSnapshot().document.nodesById.profile_group.parentId,
       ).toBe("frame_home_content");
