@@ -41,7 +41,10 @@ export async function handleEditDesignTool(input: {
 
   for (const edit of parsedInput.edits) {
     if (edit.kind === "node") {
-      authorization = coordinator.assertDesignPlanForApply(context, edit.input);
+      authorization =
+        parsedInput.edits.length === 1
+          ? coordinator.authorizeIndependentDesignEdit(context, edit.input)
+          : coordinator.assertDesignPlanForApply(context, edit.input);
       nodeInput = authorization?.input ?? edit.input;
       authorization?.targetIds.forEach((targetId) =>
         materialTargetIds.add(targetId),

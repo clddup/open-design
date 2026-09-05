@@ -1,14 +1,18 @@
+import type { ToolCallRequest } from "@opendesign/agent-contracts";
+import { handleEditDesignTool } from "./design-edit-tool-handler.js";
+import { executeDesignToolRequest } from "@/renderer/features/design-tools/design-tool-execution";
 import { createStarterProjectFiles } from "@/shared/project/starter-project.js";
 import {
   BUILTIN_GRAPHIC_DESIGN_SKILL_REFS,
   BUILTIN_UI_DESIGN_SKILL_REFS,
 } from "@opendesign/design-skills";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import type { DesignDocument } from "@opendesign/design-contracts";
 import {
+  EditorRuntime,
   diagnoseDesignTargetLayout,
   type DesignLayoutQualityReport,
 } from "@opendesign/editor-runtime";
@@ -729,7 +733,7 @@ async function setup() {
     updatedAt: "2026-08-07T12:00:00.000Z",
     lifecycle: "active",
   });
-  return { store, host, file, opened, pageId };
+  return { store, host, file, opened, pageId, root };
 }
 
 function inspectionResult(
@@ -902,6 +906,153 @@ function withExistingArtboard(
 }
 
 describe("GlobalTaskCoordinator", () => {
+  it("edits an existing unrelated artboard without advancing an active delivery Plan", async () => {
+    const { store, host, file, opened, pageId, root } = await setup();
+    try {
+      const document = withExistingArtboard(opened.document, pageId);
+      Object.values(document.nodesById).forEach((node) => {
+        node.locked = false;
+      });
+      const runtime = new EditorRuntime(document);
+      const coordinator = new GlobalTaskCoordinator(host, store);
+      const context = {
+        runId: "run_unrelated_edit",
+        sessionId: "conversation_mobile",
+        documentId: file.documentId,
+        revision: document.revision,
+        scope: { kind: "page" as const, pageId, selectedNodeIds: [] },
+        mutationTarget: { kind: "page" as const, pageId },
+      };
+      await coordinator.registerRun({
+        type: "run.start",
+        ...context,
+        prompt: "Design a new artboard and adjust the old one",
+        modelSelection,
+      });
+      coordinator.recordDocumentInspection(
+        context,
+        inspectionResult(document, pageId),
+      );
+      const plan = designPlanForPage(pageId);
+      plan.targets[0].artboard.x = 1_600;
+      coordinator.registerDesignPlan(context, plan);
+      const before = coordinator.getDeliveryLedger(context.runId);
+      const execute = vi.fn(async (call: ToolCallRequest) => {
+        const response = await executeDesignToolRequest(
+          { requestId: "outside_edit", call, context },
+          runtime,
+          pageId,
+        );
+        if (!response.ok)
+          throw new Error(response.error.message, { cause: response.error });
+        return response.result;
+      });
+      expect(() =>
+        coordinator.assertDesignPlanForApply(context, {
+          label: "Existing Frame opacity",
+          commands: [
+            {
+              commandId: "outside_opacity",
+              type: "update_properties",
+              nodeId: "existing_nested_frame",
+              opacity: 0.55,
+            },
+          ],
+        }),
+      ).toThrow("outside every declared delivery artboard");
+      const result = await handleEditDesignTool({
+        context,
+        coordinator,
+        execute,
+        withDelivery: (value) => value,
+        call: {
+          toolCallId: "outside_edit",
+          toolName: "opendesign_edit_design",
+          input: {
+            label: "Adjust the existing Frame",
+            edits: [
+              {
+                kind: "node",
+                input: {
+                  label: "Adjust opacity",
+                  steps: [
+                    {
+                      stepId: "stale_step",
+                      label: "Old metadata",
+                      commandIds: ["outside_opacity"],
+                    },
+                  ],
+                  commands: [
+                    {
+                      commandId: "outside_opacity",
+                      type: "update_properties",
+                      nodeId: "existing_nested_frame",
+                      opacity: 0.55,
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        },
+      });
+      expect(result?.designRevision?.revision).toBe(document.revision + 1);
+      expect(result).not.toHaveProperty("content.committedSteps");
+      expect(
+        runtime.getSnapshot().document.nodesById.existing_nested_frame.opacity,
+      ).toBe(0.55);
+      expect(coordinator.getDeliveryLedger(context.runId)).toEqual(before);
+      expect(JSON.stringify(execute.mock.calls[0])).not.toContain('"steps"');
+      expect(JSON.stringify(execute.mock.calls[0])).not.toContain(
+        '"rebaseGuard"',
+      );
+      const sent = execute.mock.calls[0]?.[0];
+      if (!sent) throw new Error("Expected a dispatched edit");
+      await expect(execute(sent)).rejects.toThrow("revision_conflict");
+      expect(
+        runtime.getSnapshot().document.nodesById.existing_nested_frame.opacity,
+      ).toBe(0.55);
+      expect(coordinator.getDeliveryLedger(context.runId)).toEqual(before);
+      coordinator.handleAgentEvent({
+        type: "tool.completed",
+        runId: context.runId,
+        toolCallId: "outside_edit",
+        revision: document.revision + 1,
+        result: { ok: true },
+      });
+      const strictPath = vi
+        .spyOn(coordinator, "assertDesignPlanForApply")
+        .mockReturnValue(undefined);
+      const nextContext = { ...context, revision: document.revision + 1 };
+      const pendingPlanEdit: DesignApplyToolInput = {
+        label: "Continue Plan",
+        commands: [
+          {
+            commandId: "plan_opacity",
+            type: "update_properties",
+            nodeId: "workspace_artboard",
+            opacity: 0.8,
+          },
+        ],
+      };
+      expect(() =>
+        coordinator.authorizeIndependentDesignEdit(
+          nextContext,
+          pendingPlanEdit,
+        ),
+      ).not.toThrow();
+      expect(strictPath).toHaveBeenCalledWith(nextContext, pendingPlanEdit);
+      strictPath.mockRestore();
+      expect(runtime.undo().ok).toBe(true);
+      expect(
+        runtime.getSnapshot().document.nodesById.existing_nested_frame.opacity,
+      ).toBe(1);
+    } finally {
+      store.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("revalidates the registered Design File revision after Run preflight", async () => {
     const { store, host, file, opened, pageId } = await setup();
     const coordinator = new GlobalTaskCoordinator(host, store);

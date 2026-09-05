@@ -44,6 +44,7 @@ describe("Edit Design Main boundary", () => {
     };
     const execute = vi.fn().mockResolvedValue(result);
     const coordinator = {
+      authorizeIndependentDesignEdit: vi.fn(() => authorization),
       assertDesignPlanForApply: vi.fn(() => authorization),
       assertDesignApplyResult: vi.fn(),
       recordDesignApplyCompleted: vi.fn(),
@@ -120,6 +121,7 @@ describe("Edit Design Main boundary", () => {
       },
     } satisfies TrustedToolResult);
     const coordinator = {
+      authorizeIndependentDesignEdit: vi.fn(() => authorization),
       assertDesignPlanForApply: vi.fn(() => authorization),
       assertDesignApplyResult: vi.fn(),
       recordDesignApplyCompleted: vi.fn(),

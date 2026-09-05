@@ -1,3 +1,4 @@
+import { isIndependentNodeEdit } from "./design-edit-plan-impact.js";
 import { designWorkflowError } from "@/shared/design-workflow-failure-classification.js";
 import type {
   AgentAttachment,
@@ -1451,6 +1452,35 @@ export class GlobalTaskCoordinator {
       nodeId,
       new Set(target?.delivery.reservedNodeIds ?? []),
     );
+  }
+
+  authorizeIndependentDesignEdit(
+    context: TrustedToolContext,
+    input: DesignApplyToolInput,
+  ): DesignPlanApplyAuthorization | undefined {
+    this.assertDesignToolContext(context);
+    const state = this.#designPlansByRunId.get(context.runId);
+    if (!state) return this.assertDesignPlanForApply(context, input);
+    const inspection = this.#inspectionsByRunId.get(context.runId);
+    const scoped = this.#bindApplyToRegisteredPage(context, input);
+    if (
+      !inspection ||
+      inspection.revision !== context.revision ||
+      !isIndependentNodeEdit(scoped.commands, state, inspection)
+    ) {
+      return this.assertDesignPlanForApply(context, input);
+    }
+    const bound = bindDesignOperationStructure(scoped, inspection);
+    assertApplyUsesNewNodeIdNamespace(bound, inspection);
+    return {
+      input: {
+        label: bound.label,
+        ...(bound.summary === undefined ? {} : { summary: bound.summary }),
+        commands: bound.commands,
+      },
+      plan: state.plan,
+      targetIds: [],
+    };
   }
 
   assertDesignPlanForApply(
