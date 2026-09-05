@@ -17,7 +17,8 @@ import {
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { homedir, tmpdir } from "node:os";
-import { AgentHost, FatalAgentRunError } from "./agent/agent-host";
+import { AgentHost } from "./agent/agent-host";
+import { FatalAgentRunError } from "./agent/fatal-agent-run-error";
 import { AgentAttachmentHost } from "./agent/agent-attachment-host";
 import { AgentReferenceHost } from "./agent/agent-reference-host";
 import { AgentSvgExportHost } from "./agent/agent-svg-export-host";
@@ -803,16 +804,7 @@ async function startDesktopApplication(
           "Global Task services are not initialized",
         );
       }
-      try {
-        return parseDesignToolInput(globalTaskCoordinator, call, context);
-      } catch (error) {
-        throw new FatalAgentRunError(
-          "run_context_invalid",
-          error instanceof Error
-            ? error.message
-            : "Design tool Run context is invalid",
-        );
-      }
+      return parseDesignToolInput(globalTaskCoordinator, call, context);
     },
     dispatch: async (call, context, signal, reportProgress) => {
       if (!globalTaskCoordinator) {

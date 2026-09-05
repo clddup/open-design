@@ -78,6 +78,8 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 
 ## P0-B：稳定 Leafer 迁移与 Agent 主流程
 
+- [x] Main 参数解析不再把所有异常改写成 Run 致命上下文错误。Run 身份校验保留致命拒绝，结构化 revision/目标绑定错误原样进入工具响应；同 Run 失败后仍可检查文档。未授权或解析失败不进入 dispatcher，字段校验仍使用原有 Contract。此项修复错误归因，不代表所有 revision 恢复时序或生成失败已解决。
+
 - [x] 修复写入后 capability discovery 被早期 material-write 记录短路：成功发现专业能力后，下一次工具投影包含现有专业入口；未发现能力时仍使用原有基础集合，失败 discovery 不推进。覆盖写入→发现失败→发现成功→专业操作链。此修复不新增工具或授权，不代表现有全目录展开策略已完成按需重构。
 
 - [x] 移除工具入口的发送前意图分类：删除 initial surface resolver、deliveryScopeReview 请求字段与 Main 双 setter、scope-only 首轮和两套提示词分支。模型从中性基础工具选择创建/编辑/交付范围，完成与自动续跑使用真实 ledger/stage；不以消息关键词、选区或空页推断任务意图，不新增分类回合或创作门禁。保留资源授权与事务 invariant；见 ADR-0304。

@@ -1,3 +1,5 @@
+import { FatalAgentRunError } from "./fatal-agent-run-error";
+import { designWorkflowError } from "@/shared/design-workflow-failure-classification";
 import type { TrustedToolContext } from "@opendesign/agent-contracts";
 import { describe, expect, it, vi } from "vitest";
 import type { DesignFirstSliceToolInput } from "@/shared/design-agent-tools.js";
@@ -44,6 +46,57 @@ function coordinator() {
 }
 
 describe("parseDesignToolInput", () => {
+  it("keeps missing or mismatched Run identity fatal before accessing tools", () => {
+    const host = coordinator();
+    host.assertDesignToolContext.mockImplementation(() => {
+      throw new Error("Run identity mismatch");
+    });
+    expect(() =>
+      parseDesignToolInput(
+        host as never,
+        {
+          toolCallId: "bad_context",
+          toolName: DESIGN_FIRST_SLICE_TOOL_NAME,
+          input: {},
+        },
+        context,
+      ),
+    ).toThrow(FatalAgentRunError);
+    expect(host.firstSliceTargetBinding).not.toHaveBeenCalled();
+  });
+
+  it.each(["context", "binding"])(
+    "preserves the exact recoverable %s failure",
+    (stage) => {
+      const host = coordinator();
+      const error = designWorkflowError(
+        stage === "context" ? "revision_conflict" : "delivery_scope_mismatch",
+        "Inspect the current target",
+      );
+      const reject = () => {
+        throw error;
+      };
+      if (stage === "context")
+        host.assertDesignToolContext.mockImplementation(reject);
+      else host.firstSliceTargetBinding.mockImplementation(reject);
+      let caught: unknown;
+      try {
+        parseDesignToolInput(
+          host as never,
+          {
+            toolCallId: "recoverable",
+            toolName: DESIGN_FIRST_SLICE_TOOL_NAME,
+            input: {},
+          },
+          context,
+        );
+      } catch (failure) {
+        caught = failure;
+      }
+      expect(caught).toBe(error);
+    },
+  );
+
   it("binds one First Slice to trusted Run identity before dispatch", () => {
     const host = coordinator();
     const result = parseDesignToolInput(

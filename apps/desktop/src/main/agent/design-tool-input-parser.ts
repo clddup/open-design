@@ -1,6 +1,7 @@
-import type {
-  ToolCallRequest,
-  TrustedToolContext,
+import {
+  isTrustedToolFailure,
+  type ToolCallRequest,
+  type TrustedToolContext,
 } from "@opendesign/agent-contracts";
 import type {
   ValidationIssue,
@@ -50,6 +51,7 @@ import {
 } from "@/shared/design-agent-tools.js";
 import { agentDesignNodeIdPrefix } from "@/shared/design-id-allocation.js";
 import type { GlobalTaskCoordinator } from "./global-task-coordinator.js";
+import { FatalAgentRunError } from "./fatal-agent-run-error.js";
 
 type InputContract = {
   parse(input: unknown): ValidationResult<unknown>;
@@ -85,7 +87,7 @@ export function parseDesignToolInput(
   call: ToolCallRequest,
   context: TrustedToolContext,
 ): ValidationResult<unknown> {
-  coordinator.assertDesignToolContext(context);
+  assertActiveDesignContext(coordinator, context);
   if (call.toolName === DESIGN_FIRST_SLICE_TOOL_NAME) {
     return FirstSliceContract.parse(call.input, {
       authoritativePrompt: coordinator.authoritativeDesignPrompt(context),
@@ -112,6 +114,25 @@ export function parseDesignToolInput(
       designAgentToolInputIssues(call.toolName, call.input),
     ),
   };
+}
+
+function assertActiveDesignContext(
+  coordinator: GlobalTaskCoordinator,
+  context: TrustedToolContext,
+): void {
+  try {
+    coordinator.assertDesignToolContext(context);
+  } catch (error) {
+    if (error instanceof Error && isTrustedToolFailure(error.cause)) {
+      throw error;
+    }
+    throw new FatalAgentRunError(
+      "run_context_invalid",
+      error instanceof Error
+        ? error.message
+        : "Design tool Run context is invalid",
+    );
+  }
 }
 
 function requiredCodes(

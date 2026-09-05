@@ -1,3 +1,4 @@
+import { FatalAgentRunError } from "./fatal-agent-run-error";
 import { app, utilityProcess } from "electron";
 import {
   agentEventRequestId,
@@ -76,16 +77,6 @@ export type PendingAgentApproval = {
   toolName: string;
   risk: "read" | "design_write" | "external" | "destructive";
 };
-
-export class FatalAgentRunError extends Error {
-  constructor(
-    readonly code: string,
-    message: string,
-  ) {
-    super(message);
-    this.name = "FatalAgentRunError";
-  }
-}
 
 const AGENT_ENVIRONMENT_ALLOWLIST = [
   "HOME",

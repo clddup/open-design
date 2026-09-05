@@ -2,11 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AGENT_PROTOCOL_VERSION } from "@opendesign/agent-contracts";
 import { modelBridgeRequestValidationError } from "@/shared/model-bridge";
 import type { SessionStoreBridgeRequest } from "@/shared/session-store-bridge";
-import {
-  AgentHost,
-  createAgentEnvironment,
-  FatalAgentRunError,
-} from "./agent-host";
+import { AgentHost, createAgentEnvironment } from "./agent-host";
+import { MainDesignToolRuntime } from "./main-design-tool-runtime";
+import { parseDesignToolInput } from "./design-tool-input-parser";
+import { designWorkflowError } from "@/shared/design-workflow-failure-classification";
 
 const electron = vi.hoisted(() => {
   const listeners = new Map<string, (...args: unknown[]) => void>();
@@ -309,12 +308,20 @@ describe("AgentHost model bridge", () => {
     const host = new AgentHost();
     const events: unknown[] = [];
     host.on((event) => events.push(event));
-    host.setDesignToolRequestHandler(() => {
-      throw new FatalAgentRunError(
-        "run_context_invalid",
-        "Design tool requires an active registered Run",
-      );
+    const dispatch = vi.fn(() => Promise.resolve({ content: { ok: true } }));
+    const coordinator = {
+      assertDesignToolContext: () => {
+        throw new Error("Design tool requires an active registered Run");
+      },
+    };
+    const runtime = new MainDesignToolRuntime({
+      parseInput: (call, context) =>
+        parseDesignToolInput(coordinator as never, call, context),
+      dispatch,
+      isPreauthorized: () => true,
+      recordAudit: () => undefined,
     });
+    host.setDesignToolRequestHandler((...args) => runtime.execute(...args));
     void host.start();
 
     postToHost({
@@ -347,6 +354,86 @@ describe("AgentHost model bridge", () => {
       message: "Design tool requires an active registered Run",
       runId: "run_fatal_1",
     });
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it("keeps a target-binding failure recoverable through Main parsing and the Agent bridge", async () => {
+    const host = new AgentHost();
+    const failure = designWorkflowError(
+      "delivery_scope_mismatch",
+      "The current target must be completed before creating the next artboard",
+      {
+        path: "/deliveryStage/nextTarget",
+        recovery: "Continue the current target.",
+      },
+    );
+    const coordinator = {
+      assertDesignToolContext: () => undefined,
+      authoritativeDesignPrompt: () => "Design a login page",
+      firstSliceTargetBinding: () => {
+        throw failure;
+      },
+    };
+    const dispatch = vi.fn(() => Promise.resolve({ content: { ok: true } }));
+    const runtime = new MainDesignToolRuntime({
+      parseInput: (call, context) =>
+        parseDesignToolInput(coordinator as never, call, context),
+      dispatch,
+      isPreauthorized: () => true,
+      recordAudit: () => undefined,
+    });
+    host.setDesignToolRequestHandler((...args) => runtime.execute(...args));
+    void host.start();
+    const context = {
+      runId: "run_binding_failure",
+      sessionId: "session_1",
+      documentId: "document_1",
+      revision: 0,
+      scope: { kind: "page", pageId: "page_1", selectedNodeIds: [] },
+      mutationTarget: { kind: "page", pageId: "page_1" },
+    };
+    postToHost({
+      type: "design-tool.request",
+      requestId: "binding_failure",
+      call: {
+        toolCallId: "slice_failed",
+        toolName: "opendesign_generate_first_slice",
+        input: {},
+      },
+      context,
+    });
+    await vi.waitFor(() => {
+      expect(electron.child.postMessage).toHaveBeenCalledWith({
+        type: "design-tool.response",
+        requestId: "binding_failure",
+        ok: false,
+        error: failure.cause,
+      });
+    });
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(electron.child.postMessage).not.toHaveBeenCalledWith({
+      type: "run.cancel",
+      runId: context.runId,
+    });
+    postToHost({
+      type: "design-tool.request",
+      requestId: "inspect_after_failure",
+      call: {
+        toolCallId: "inspect_recovery",
+        toolName: "opendesign_inspect_document",
+        input: {},
+      },
+      context,
+    });
+    await vi.waitFor(() => {
+      expect(electron.child.postMessage).toHaveBeenCalledWith({
+        type: "design-tool.response",
+        requestId: "inspect_after_failure",
+        ok: true,
+        result: { content: { ok: true } },
+      });
+    });
+    expect(dispatch).toHaveBeenCalledOnce();
   });
 
   it("keeps a reused request id cancellable after the prior request aborts", async () => {
