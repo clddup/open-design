@@ -113,7 +113,6 @@ type RunToolBinding = {
   modelSelection: ModelSelection;
   attachments: AgentAttachment[];
   imageAttachments: AgentImageAttachment[];
-  deliveryScopeReview: "direct" | "required";
   continuationParentRunId?: string;
 };
 
@@ -322,7 +321,6 @@ export class GlobalTaskCoordinator {
       revision: request.revision,
       scope: structuredClone(request.scope),
       mutationTarget: structuredClone(request.mutationTarget),
-      deliveryScopeReview: request.deliveryScopeReview ?? "direct",
       ...(request.continuation
         ? { continuationParentRunId: request.continuation.parentRunId }
         : {}),
@@ -352,16 +350,6 @@ export class GlobalTaskCoordinator {
     return structuredClone(
       this.#toolBindingsByRunId.get(runId)?.attachments ?? [],
     );
-  }
-
-  setDeliveryScopeReview(
-    runId: string,
-    deliveryScopeReview: "direct" | "required",
-  ): void {
-    const binding = this.#toolBindingsByRunId.get(runId);
-    if (!binding)
-      throw new Error("Delivery scope policy requires an active Run");
-    binding.deliveryScopeReview = deliveryScopeReview;
   }
 
   async #conversationAttachments(
@@ -560,20 +548,6 @@ export class GlobalTaskCoordinator {
     }
   }
 
-  assertDeliveryScopeReviewed(context: TrustedToolContext): void {
-    this.assertDesignToolContext(context);
-    const binding = this.#toolBindingsByRunId.get(context.runId);
-    if (
-      binding?.deliveryScopeReview === "required" &&
-      !this.#deliveryScopesByRunId.has(context.runId)
-    ) {
-      throw designWorkflowError(
-        "delivery_scope_review_required",
-        "This broad brief requires a host-recorded delivery plan before Page creation, executable planning, or canvas writes",
-      );
-    }
-  }
-
   grantPageStructureAccess(
     runId: string,
     approvalId: string,
@@ -646,7 +620,6 @@ export class GlobalTaskCoordinator {
     input: { action: string; pageId?: string },
   ): void {
     this.assertDesignToolContext(context);
-    this.assertDeliveryScopeReviewed(context);
     const binding = this.#toolBindingsByRunId.get(context.runId);
     if (!binding) throw new Error("Page tool requires an active Run");
     if (
@@ -674,7 +647,7 @@ export class GlobalTaskCoordinator {
   supersedeDesignDeliveryForClearedPage(
     context: TrustedToolContext,
     pageId: string,
-  ): void {
+  ): boolean {
     this.assertDesignToolContext(context);
     const binding = this.#toolBindingsByRunId.get(context.runId);
     if (!binding) throw new Error("Page clear requires an active Run");
@@ -684,15 +657,26 @@ export class GlobalTaskCoordinator {
     ) {
       throw new Error("Page clear cannot supersede another Page delivery");
     }
-    this.#designPlansByRunId.delete(context.runId);
     this.#inspectionsByRunId.delete(context.runId);
+    const delivery = this.getDeliveryLedger(context.runId);
+    if (
+      delivery &&
+      !delivery.targets.some((target) => target.pageId === pageId)
+    ) {
+      return false;
+    }
+    this.#designPlansByRunId.delete(context.runId);
+    this.#deliveryScopesByRunId.delete(context.runId);
+    this.#deliveryScopeReservationsByRunId.delete(context.runId);
 
     const timestamp = this.now().toISOString();
     for (const task of this.workspaceStore.listGlobalTasks()) {
       if (
+        (task.runId !== context.runId &&
+          task.runId !== binding.continuationParentRunId) ||
         task.conversationId !== context.sessionId ||
         task.targetSet.primaryTarget.documentId !== context.documentId ||
-        task.delivery === undefined
+        !task.delivery?.targets.some((target) => target.pageId === pageId)
       ) {
         continue;
       }
@@ -708,6 +692,7 @@ export class GlobalTaskCoordinator {
         this.#tasksByRunId.set(context.runId, updated);
       }
     }
+    return true;
   }
 
   assertComponentToolAccess(
@@ -750,7 +735,6 @@ export class GlobalTaskCoordinator {
     const binding = this.#toolBindingsByRunId.get(context.runId);
     if (!binding) throw new Error("Design plan requires an active Run");
     const executablePlan = bindPlanToReviewedScope(
-      binding.deliveryScopeReview,
       this.#deliveryScopesByRunId.get(context.runId),
       this.#deliveryScopeReservationsByRunId.get(context.runId),
       existingPlan,
@@ -3267,22 +3251,13 @@ function sameScope(left: SelectionScope, right: SelectionScope): boolean {
 }
 
 function bindPlanToReviewedScope(
-  reviewMode: "direct" | "required",
   scope: DesignDeliveryScope | undefined,
   reservations:
     ReadonlyMap<string, DeliveryScopeArtboardReservation> | undefined,
   existing: DesignWorkflowState | undefined,
   plan: DesignPlanToolInput,
 ): DesignPlanToolInput {
-  if (scope === undefined) {
-    if (reviewMode === "required") {
-      throw designWorkflowError(
-        "delivery_scope_review_required",
-        "This broad brief requires a host-recorded delivery plan before Page creation, executable planning, or canvas writes",
-      );
-    }
-    return plan;
-  }
+  if (scope === undefined) return plan;
   const mismatch = (message: string): never => {
     throw designWorkflowError(
       "delivery_scope_mismatch",

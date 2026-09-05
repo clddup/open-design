@@ -4,10 +4,7 @@ import type {
   AgentRequest,
   AgentRunFailure,
 } from "@opendesign/agent-contracts";
-import {
-  appendRunJournalEvent,
-  resolveDeliveryScopeReview,
-} from "@opendesign/agent-runtime";
+import { appendRunJournalEvent } from "@opendesign/agent-runtime";
 import type { SessionStore } from "@opendesign/session-store";
 import type { ModelProviderHost } from "../model/model-provider-host.js";
 import type { AgentContinuationScheduler } from "./agent-continuation-scheduler.js";
@@ -45,9 +42,6 @@ export async function handleAgentRunControlRequest(
     }
     if (request.initialDesignInspection !== undefined) {
       throw new TypeError("Renderer cannot supply initial design inspection");
-    }
-    if (request.deliveryScopeReview !== undefined) {
-      throw new TypeError("Renderer cannot supply delivery scope policy");
     }
     if (request.continuation === undefined) {
       for (const runId of dependencies.continuationScheduler.supersedeAutomaticContinuations(
@@ -138,32 +132,14 @@ export async function startAgentRun(
       continuationScheduler.forgetRun(request.runId);
       return false;
     }
-    const deliveryScopeReview = resolveDeliveryScopeReview({
-      ...trustedRequest,
-      ...(initialDesignInspection === undefined
-        ? {}
-        : { initialDesignInspection }),
-    });
-    const admittedRequest = {
-      ...trustedRequest,
-      deliveryScopeReview,
-    };
-    continuationScheduler.setDeliveryScopeReview(
-      request.runId,
-      deliveryScopeReview,
-    );
-    globalTaskCoordinator.setDeliveryScopeReview(
-      request.runId,
-      deliveryScopeReview,
-    );
     await globalTaskCoordinator.assertRunRevisionCurrent(request.runId);
     referenceHost.registerRun(
-      admittedRequest,
+      trustedRequest,
       globalTaskCoordinator.referenceAttachmentsForRun(request.runId),
     );
     conversationIdByRunId.set(request.runId, request.sessionId);
     agentHost.send({
-      ...admittedRequest,
+      ...trustedRequest,
       ...(initialDesignInspection === undefined
         ? {}
         : { initialDesignInspection }),

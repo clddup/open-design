@@ -14,10 +14,7 @@ import type {
 } from "@opendesign/model-gateway";
 import type { SessionStore } from "@opendesign/session-store";
 import type { CompletionGuardPort } from "./completion-guard.js";
-import type {
-  ModelToolDisclosure,
-  ModelToolSurface,
-} from "./model-tool-disclosure-contract.js";
+import type { ModelToolDisclosure } from "./model-tool-disclosure-contract.js";
 import type { AgentRunRequest } from "./run-request.js";
 
 export interface AgentToolDefinition extends CanonicalTool {
@@ -101,11 +98,8 @@ export interface AgentRuntimeOptions {
   limits?: Partial<AgentRuntimeLimits>;
   systemPrompt?: string;
   systemPromptForRequest?: (request: AgentRunRequest) => string;
-  newDesignSystemPrompt?: string;
-  newDesignSystemPromptForRequest?: (request: AgentRunRequest) => string;
   thinkingLevelForRequest?: (
     request: AgentRunRequest,
-    surface: ModelToolSurface,
   ) => NonNullable<ModelSelection["reasoningEffort"]>;
   now?: () => Date;
 }

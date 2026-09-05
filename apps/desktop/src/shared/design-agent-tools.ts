@@ -127,7 +127,7 @@ export { DESIGN_STYLE_TOOL_INPUT_SCHEMA } from "./design-style-tool-schema";
 export type { DesignStyleToolInput } from "./design-style-tool";
 export {
   DesignSystemContract,
-  DESIGN_SYSTEM_NEW_DESIGN_INPUT_SCHEMA,
+  DESIGN_SYSTEM_CONTINUATION_INPUT_SCHEMA,
   DESIGN_SYSTEM_TOOL_INPUT_SCHEMA,
 } from "./design-system-tool";
 export type { DesignSystemToolInput } from "./design-system-tool";

@@ -46,18 +46,6 @@ export class AgentContinuationScheduler {
     this.#pendingConversationIdByRunId.delete(request.runId);
   }
 
-  setDeliveryScopeReview(
-    runId: string,
-    deliveryScopeReview: "direct" | "required",
-  ): void {
-    const request = this.#requestsByRunId.get(runId);
-    if (!request) throw new Error(`Agent Run is not registered: ${runId}`);
-    this.#requestsByRunId.set(runId, {
-      ...request,
-      deliveryScopeReview,
-    });
-  }
-
   hasActiveConversationRun(conversationId: string): boolean {
     return (
       [...this.#requestsByRunId.values()].some(
@@ -163,7 +151,6 @@ export class AgentContinuationScheduler {
     if (
       cancellationRequested ||
       !source ||
-      source.deliveryScopeReview !== "required" ||
       !currentDelivery ||
       (!hasIncompleteTarget(currentDelivery) && !hasRemainingScope)
     )

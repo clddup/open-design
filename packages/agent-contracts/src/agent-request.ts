@@ -111,11 +111,6 @@ export const AgentModelContextSchema = Type.Object(
   { additionalProperties: false },
 );
 
-export const DeliveryScopeReviewSchema = Type.Union([
-  Type.Literal("direct"),
-  Type.Literal("required"),
-]);
-
 export const AgentRequestSchema = Type.Union([
   Type.Object(
     {
@@ -137,7 +132,6 @@ export const AgentRequestSchema = Type.Union([
       scope: SelectionScopeSchema,
       mutationTarget: DesignMutationTargetSchema,
       modelSelection: ModelSelectionSchema,
-      deliveryScopeReview: Type.Optional(DeliveryScopeReviewSchema),
       modelContext: Type.Optional(AgentModelContextSchema),
       initialDesignInspection: Type.Optional(
         AgentInitialDesignInspectionSchema,
@@ -178,7 +172,6 @@ export type AgentDocumentAttachment = Static<
 export type AgentSvgAttachment = Static<typeof AgentSvgAttachmentSchema>;
 export type AgentModelSelection = ModelSelection;
 export type AgentModelContext = Static<typeof AgentModelContextSchema>;
-export type DeliveryScopeReview = Static<typeof DeliveryScopeReviewSchema>;
 export type AgentRequest = Static<typeof AgentRequestSchema>;
 
 export const ModelSelectionContract = defineContract<AgentModelSelection>({

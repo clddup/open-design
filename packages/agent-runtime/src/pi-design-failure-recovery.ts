@@ -1,5 +1,6 @@
 import type { TrustedToolFailure } from "@opendesign/agent-contracts";
 import type { AgentUnresolvedDesignWriteFailure } from "./completion-guard.js";
+import type { AgentToolDefinition } from "./runtime-ports.js";
 
 export class PiDesignFailureRecovery {
   #inspectionRequiredFailure: TrustedToolFailure | undefined;
@@ -20,7 +21,11 @@ export class PiDesignFailureRecovery {
     input: unknown;
     failure: TrustedToolFailure;
     designWrite: boolean;
+    modelDisclosure: AgentToolDefinition["modelDisclosure"];
   }): TrustedToolFailure {
+    if (options.modelDisclosure?.role === "delivery-scope") {
+      return options.failure;
+    }
     const details = options.failure.details;
     const fingerprint = details?.fingerprint;
     if (options.designWrite && options.failure.recoverable) {
@@ -60,6 +65,23 @@ export class PiDesignFailureRecovery {
         inspectionCompleted: true,
       };
     }
+  }
+
+  recordPageClear(toolName: string, input: unknown, content: unknown): void {
+    if (
+      toolName !== "opendesign_manage_pages" ||
+      typeof input !== "object" ||
+      input === null ||
+      !("action" in input) ||
+      input.action !== "clear" ||
+      typeof content !== "object" ||
+      content === null ||
+      !("deliveryDisposition" in content) ||
+      content.deliveryDisposition !== "superseded"
+    )
+      return;
+    this.#inspectionRequiredFailure = undefined;
+    this.#unresolvedFailure = undefined;
   }
 
   recordRevisionWrite(): void {

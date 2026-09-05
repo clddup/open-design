@@ -6,7 +6,7 @@ import {
   DESIGN_CAPTURE_TOOL_NAME,
   DESIGN_CONTINUATION_EDIT_TOOL_INPUT_SCHEMA,
   DESIGN_SYSTEM_TOOL_INPUT_SCHEMA,
-  DESIGN_SYSTEM_NEW_DESIGN_INPUT_SCHEMA,
+  DESIGN_SYSTEM_CONTINUATION_INPUT_SCHEMA,
   DESIGN_SYSTEM_TOOL_NAME,
   DesignSystemContract,
   DESIGN_DELIVERY_SCOPE_TOOL_NAME,
@@ -140,14 +140,10 @@ describe("design Agent tool aggregation", () => {
     );
   });
 
-  it("keeps new-design continuation focused on the current visual stage", () => {
+  it("keeps continuation open to ordinary edits and explicit discovery", () => {
     const visibleTools = disclosedToolDefinitions(
       DESIGN_AGENT_TOOL_SPECS,
       "continuation",
-      {
-        surface: "new-design",
-        deliveryScopeReview: "direct",
-      },
     );
     const names = new Set(visibleTools.map((tool) => tool.name));
 
@@ -157,6 +153,8 @@ describe("design Agent tool aggregation", () => {
       DESIGN_CAPTURE_TOOL_NAME,
       DESIGN_EDIT_TOOL_NAME,
       DESIGN_SYSTEM_TOOL_NAME,
+      DESIGN_PAGE_TOOL_NAME,
+      DESIGN_CAPABILITIES_TOOL_NAME,
     ]) {
       expect(names.has(name), name).toBe(true);
     }
@@ -164,8 +162,6 @@ describe("design Agent tool aggregation", () => {
       DESIGN_VECTOR_TOOL_NAME,
       DESIGN_TEXT_RANGE_TOOL_NAME,
       DESIGN_FONT_TOOL_NAME,
-      DESIGN_PAGE_TOOL_NAME,
-      DESIGN_CAPABILITIES_TOOL_NAME,
     ]) {
       expect(names.has(name), name).toBe(false);
     }
@@ -174,17 +170,16 @@ describe("design Agent tool aggregation", () => {
       (tool) => tool.name === DESIGN_FIRST_SLICE_TOOL_NAME,
     );
     expect(firstSlice?.description).toContain(
-      "a new-design Run remains on a focused continuation surface",
+      "continuation keeps the current stage and ordinary editing tools available",
     );
 
     const system = disclosedToolDefinitions(
       DESIGN_AGENT_TOOL_SPECS,
       "continuation",
-      { surface: "new-design", deliveryScopeReview: "direct" },
     ).find((tool) => tool.name === DESIGN_SYSTEM_TOOL_NAME);
-    expect(system?.inputSchema).toBe(DESIGN_SYSTEM_NEW_DESIGN_INPUT_SCHEMA);
+    expect(system?.inputSchema).toBe(DESIGN_SYSTEM_CONTINUATION_INPUT_SCHEMA);
     const componentSchema = (
-      DESIGN_SYSTEM_NEW_DESIGN_INPUT_SCHEMA as unknown as {
+      DESIGN_SYSTEM_CONTINUATION_INPUT_SCHEMA as unknown as {
         anyOf?: readonly {
           properties?: {
             input?: {
@@ -206,7 +201,6 @@ describe("design Agent tool aggregation", () => {
     const edit = disclosedToolDefinitions(
       DESIGN_AGENT_TOOL_SPECS,
       "continuation",
-      { surface: "new-design", deliveryScopeReview: "direct" },
     ).find((tool) => tool.name === DESIGN_EDIT_TOOL_NAME);
 
     expect(edit?.inputSchema).toBe(DESIGN_CONTINUATION_EDIT_TOOL_INPUT_SCHEMA);

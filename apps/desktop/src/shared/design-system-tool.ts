@@ -75,12 +75,12 @@ export const DESIGN_SYSTEM_TOOL_INPUT_SCHEMA = executableJsonSchema({
 });
 
 /**
- * Provider projection for a new-design continuation. It is intentionally
+ * Provider projection for the compact continuation stage. It is intentionally
  * derived from the authoritative component branch above; Variable, Style,
  * variant-management and instance-edit operations remain available in the
- * complete general surface without burdening the first design run.
+ * explicitly discovered professional catalog.
  */
-export const DESIGN_SYSTEM_NEW_DESIGN_INPUT_SCHEMA = executableJsonSchema({
+export const DESIGN_SYSTEM_CONTINUATION_INPUT_SCHEMA = executableJsonSchema({
   type: "object",
   description:
     "Create a justified reusable Component Main or a linked Component Instance for the current design. Use stable inspected IDs and keep one semantic component operation per call.",

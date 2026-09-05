@@ -1,4 +1,4 @@
-import type { AgentRunRequest, ModelToolSurface } from "./run-request.js";
+import type { AgentRunRequest } from "./run-request.js";
 import type {
   AgentToolDefinition,
   ApprovalPort,
@@ -14,6 +14,5 @@ export interface OpenDesignPiToolAdapterOptions {
   lifecycle: PiToolLifecyclePort;
   maxToolCalls: number;
   initialInspection?: boolean;
-  initialModelToolSurface?: ModelToolSurface;
   now?: () => Date;
 }

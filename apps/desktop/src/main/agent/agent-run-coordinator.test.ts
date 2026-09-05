@@ -27,11 +27,6 @@ const source: RunStartRequest = {
   modelSelection: { providerId: "provider_1", modelId: "model_1" },
 };
 
-const trustedSource: RunStartRequest = {
-  ...source,
-  deliveryScopeReview: "required",
-};
-
 describe("AgentRunCoordinator", () => {
   it("owns registration, preflight, reference and conversation leases", async () => {
     const fixture = setup();
@@ -47,19 +42,13 @@ describe("AgentRunCoordinator", () => {
     expect(fixture.globalTaskCoordinator.registerRun).toHaveBeenCalledWith(
       source,
     );
-    expect(
-      fixture.globalTaskCoordinator.setDeliveryScopeReview,
-    ).toHaveBeenCalledWith(source.runId, "required");
     expect(fixture.prepareInitialDesignInspection).toHaveBeenCalledWith(
       source,
       expect.any(AbortSignal),
     );
-    expect(fixture.referenceHost.registerRun).toHaveBeenCalledWith(
-      trustedSource,
-      [],
-    );
+    expect(fixture.referenceHost.registerRun).toHaveBeenCalledWith(source, []);
     expect(fixture.send).toHaveBeenCalledWith({
-      ...trustedSource,
+      ...source,
       initialDesignInspection: inspection,
       modelContext: { contextWindow: 200_000, maxOutputTokens: 16_384 },
     });
@@ -447,7 +436,6 @@ function setup() {
     handleAgentEvent: vi.fn(),
     registerRun: vi.fn(() => Promise.resolve({})),
     disposeRun: vi.fn(),
-    setDeliveryScopeReview: vi.fn(),
     assertRunRevisionCurrent: vi.fn(() => Promise.resolve()),
     referenceAttachmentsForRun: vi.fn(() => []),
   };

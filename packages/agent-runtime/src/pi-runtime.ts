@@ -11,7 +11,6 @@ import type {
   AgentToolDefinition,
   ToolCatalogPort,
 } from "./runtime-ports.js";
-import { resolveInitialModelToolSurface } from "./model-tool-surface.js";
 import { createOpenDesignPiAgent } from "./pi-core-adapter.js";
 import { prepareOpenDesignPiContext } from "./pi-context-adapter.js";
 import {
@@ -22,8 +21,8 @@ import { PiRunEventAdapter } from "./pi-run-event-adapter.js";
 import { normalizeSessionHistory } from "./session-history.js";
 import { selectSafeDefinitions } from "./tool-definition-safety.js";
 import {
-  deliveryScopeReviewToolDefinitions,
   disclosedToolDefinitions,
+  resolveModelToolDisclosurePhase,
 } from "./tool-disclosure.js";
 
 const DEFAULT_LIMITS: AgentRuntimeLimits = {
@@ -126,26 +125,19 @@ export class OpenDesignPiRuntime {
         request.sessionId,
       );
       const toolDefinitions = await this.#loadSafeTools();
-      const initialModelToolSurface = resolveInitialModelToolSurface(request);
-      const initialPhase =
-        request.initialDesignInspection === undefined
-          ? "bootstrap"
-          : "host-inspected";
-      const initialToolDefinitions =
-        request.deliveryScopeReview === "required"
-          ? deliveryScopeReviewToolDefinitions(toolDefinitions, initialPhase, {
-              surface: initialModelToolSurface,
-            })
-          : disclosedToolDefinitions(toolDefinitions, initialPhase, {
-              surface: initialModelToolSurface,
-              deliveryScopeReview: "direct",
-            });
+      const initialPhase = resolveModelToolDisclosurePhase(
+        toolDefinitions,
+        [],
+        {
+          initialInspection: request.initialDesignInspection !== undefined,
+        },
+      );
+      const initialToolDefinitions = disclosedToolDefinitions(
+        toolDefinitions,
+        initialPhase,
+      );
       const systemPrompt =
-        (initialModelToolSurface === "new-design"
-          ? (this.options.newDesignSystemPromptForRequest?.(request) ??
-            this.options.newDesignSystemPrompt)
-          : (this.options.systemPromptForRequest?.(request) ??
-            this.options.systemPrompt)) ??
+        this.options.systemPromptForRequest?.(request) ??
         this.options.systemPrompt ??
         "You are the OpenDesign design agent. Use only the provided tools and respect the host-bound modification scope.";
       const model = createPiModel(request);
@@ -185,7 +177,6 @@ export class OpenDesignPiRuntime {
         maxTurns: this.#limits.maxTurns,
         maxGeneratedTokens: this.#limits.maxGeneratedTokens,
         maxCompletionGuardRejections: this.#limits.maxCompletionGuardRejections,
-        initialModelToolSurface,
         now: this.#now,
       });
       let attempt = 0;
@@ -195,10 +186,7 @@ export class OpenDesignPiRuntime {
           model,
           systemPrompt: prepared.systemPrompt,
           thinkingLevel:
-            this.options.thinkingLevelForRequest?.(
-              request,
-              initialModelToolSurface,
-            ) ??
+            this.options.thinkingLevelForRequest?.(request) ??
             request.modelSelection.reasoningEffort ??
             "off",
           tools: [...adapter.modelTools],

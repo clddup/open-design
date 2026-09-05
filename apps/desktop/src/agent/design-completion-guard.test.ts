@@ -1,3 +1,4 @@
+import type { DesignDeliveryLedger } from "@opendesign/workspace-contracts";
 import type {
   AgentCompletionContext,
   AgentToolCallRecord,
@@ -182,7 +183,9 @@ function expectBlocked(
   expect(result.message).toContain(message);
 }
 
-function deliveryResult(profileStatus: "pending" | "verified") {
+function deliveryResult(profileStatus: "pending" | "verified"): {
+  delivery: Required<DesignDeliveryLedger>;
+} {
   return {
     delivery: {
       version: 4,
@@ -357,12 +360,7 @@ describe("design completion guard", () => {
   });
 
   it("requires and enforces a host-recorded scope for a broad brief", () => {
-    const missing = reviewDesignCompletion(
-      context([], undefined, { deliveryScopeReview: "required" }),
-    );
-    expect(missing.allow).toBe(false);
-    if (missing.allow) throw new Error("Expected delivery scope review");
-    expect(missing.message).toContain("opendesign_review_delivery_scope");
+    expect(reviewDesignCompletion(context([]))).toEqual({ allow: true });
 
     const allTargetsVerified = {
       ...finalCapture,
@@ -371,9 +369,7 @@ describe("design completion guard", () => {
     };
     expect(
       reviewDesignCompletion(
-        context([deliveryScope, allTargetsVerified], undefined, {
-          deliveryScopeReview: "required",
-        }),
+        context([deliveryScope, allTargetsVerified], undefined, {}),
       ),
     ).toEqual({ allow: true });
 
@@ -387,9 +383,7 @@ describe("design completion guard", () => {
     reducedResult.deliveryScope.targets =
       reducedResult.deliveryScope.targets.slice(0, 1);
     const mismatch = reviewDesignCompletion(
-      context([reducedScope, allTargetsVerified], undefined, {
-        deliveryScopeReview: "required",
-      }),
+      context([reducedScope, allTargetsVerified], undefined, {}),
     );
     expect(mismatch.allow).toBe(false);
     if (mismatch.allow) throw new Error("Expected scope/ledger mismatch");
@@ -413,7 +407,7 @@ describe("design completion guard", () => {
           },
         ],
         undefined,
-        { deliveryScopeReview: "required" },
+        {},
       ),
     );
     expect(nextStage.allow).toBe(false);
@@ -432,7 +426,6 @@ describe("design completion guard", () => {
         ],
         undefined,
         {
-          deliveryScopeReview: "required",
           initialDesignInspection: {
             version: 1,
             observedRevision: 8,
@@ -509,9 +502,7 @@ describe("design completion guard", () => {
     };
 
     const result = reviewDesignCompletion(
-      context([reservedScope], undefined, {
-        deliveryScopeReview: "required",
-      }),
+      context([reservedScope], undefined, {}),
     );
 
     expect(result.allow).toBe(false);
@@ -575,7 +566,7 @@ describe("design completion guard", () => {
             materialWrite,
           ],
           undefined,
-          { deliveryScopeReview: "direct" },
+          {},
         ),
       ),
     ).toEqual({ allow: true });
@@ -584,9 +575,7 @@ describe("design completion guard", () => {
   it("does not upgrade a successful direct edit into capture and review ceremony", () => {
     expect(
       reviewDesignCompletion(
-        context([inspection, designPlan, materialWrite], undefined, {
-          deliveryScopeReview: "direct",
-        }),
+        context([inspection, materialWrite], undefined, {}),
       ),
     ).toEqual({ allow: true });
   });
@@ -595,33 +584,102 @@ describe("design completion guard", () => {
     const unfinished = deliveryResult("pending").delivery;
     expect(
       reviewDesignCompletion(
-        context(
-          [
-            { ...inspection, result: { unfinishedDelivery: unfinished } },
-            {
-              toolCallId: "clear_page",
-              toolName: DESIGN_PAGE_TOOL_NAME,
-              input: {
-                action: "clear",
-                label: "Clear current Page",
-                pageId: "page_1",
-              },
-              status: "completed",
-              revision: 5,
-              result: { deliveryDisposition: "superseded" },
-            },
-          ],
+        context([
+          { ...inspection, result: { unfinishedDelivery: unfinished } },
           {
-            toolCallId: "old_failure",
-            toolName: DESIGN_EDIT_TOOL_NAME,
-            code: "design.invalid",
-            message: "Old Main deletion failed",
-            inspectionCompleted: true,
+            toolCallId: "clear_page",
+            toolName: DESIGN_PAGE_TOOL_NAME,
+            input: {
+              action: "clear",
+              label: "Clear current Page",
+              pageId: "page_1",
+            },
+            status: "completed",
+            revision: 5,
+            result: { deliveryDisposition: "superseded" },
           },
-        ),
+        ]),
       ),
     ).toEqual({ allow: true });
   });
+
+  it("does not let an earlier Page clear bypass a new Plan or failed write", () => {
+    const clear: AgentToolCallRecord = {
+      toolCallId: "clear_page",
+      toolName: DESIGN_PAGE_TOOL_NAME,
+      input: { action: "clear" },
+      status: "completed",
+      revision: 5,
+      revisionAdvanced: true,
+      result: { deliveryDisposition: "superseded" },
+    };
+    expect(reviewDesignCompletion(context([clear, designPlan])).allow).toBe(
+      false,
+    );
+    expect(reviewDesignCompletion(context([clear, deliveryScope])).allow).toBe(
+      false,
+    );
+    expect(
+      reviewDesignCompletion(
+        context([clear], {
+          toolCallId: "write_after_clear",
+          toolName: DESIGN_EDIT_TOOL_NAME,
+          code: "invalid_tool_input",
+          message: "Invalid new write",
+          inspectionCompleted: false,
+        }),
+      ).allow,
+    ).toBe(false);
+    expect(
+      reviewDesignCompletion(context([deliveryScope, designPlan, clear])),
+    ).toEqual({ allow: true });
+  });
+
+  it.each(["ledger", "stage"])(
+    "keeps automatic continuation tied to the initial unfinished %s",
+    (evidence) => {
+      const result = reviewDesignCompletion(
+        context([], undefined, {
+          continuation: {
+            parentRunId: "parent",
+            rootRunId: "root",
+            attempt: 1,
+            maxAttempts: 3,
+            reason: "incomplete",
+          },
+          initialDesignInspection: {
+            version: 1,
+            observedRevision: 4,
+            content: {
+              inspection: { pageId: "page_1" },
+              ...(evidence === "ledger"
+                ? { unfinishedDelivery: deliveryResult("pending").delivery }
+                : {
+                    deliveryStage: {
+                      totalTargets: 2,
+                      plannedTargets: 1,
+                      verifiedTargets: 0,
+                      currentPlan: {
+                        stage: 1,
+                        status: "active" as const,
+                        targets: [
+                          {
+                            targetId: "target_home",
+                            label: "Home",
+                            objective: "Finish Home",
+                            requiredContent: [],
+                          },
+                        ],
+                      },
+                    },
+                  }),
+            },
+          },
+        }),
+      );
+      expect(result.allow).toBe(false);
+    },
+  );
 
   it("rejects completion after inspection until the failed design write is corrected", () => {
     const result = reviewDesignCompletion(

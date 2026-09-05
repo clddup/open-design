@@ -17,7 +17,7 @@ Conversation 历史正常发送，但系统提示词另外仅根据 `request.pro
 - 不根据最新消息的文字选择、撤下或切换 Skill；不预先用字数/正则指定画布语言。模型延续用户已经要求的内容语言，并尊重后续修改。对话回复语言与画布文字语言可以不同。
 - 不追加分类 Provider 调用、不新增工具、不复制历史到系统提示词，也不修改 Conversation 原始消息。现有上下文预算继续覆盖最终 system、tool schema 与历史。
 - Plan 中的 `deliverable` 仍由模型声明，Main 依该结构字段绑定内部 skill refs；独立 Critic 仍按声明的交付类型加载审核方法。该绑定不是对用户文本做意图分类。
-- 原有工具可见阶段与 `deliveryScopeReview` 的关键词路由尚待独立迁移；本次不得宣称整个宿主语义预判已删除。
+- 本 ADR 只处理设计方法与语言装配；工具可见阶段与 `deliveryScopeReview` 关键词路由的后续移除见 ADR-0304。
 
 ## 验证与代价
 

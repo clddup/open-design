@@ -3025,7 +3025,7 @@ describe("GlobalTaskCoordinator", () => {
     store.close();
   });
 
-  it("binds an approved broad-brief scope to the executable target ledger", async () => {
+  it("binds registered scope targets, geometry and order without an initial intent flag", async () => {
     const { store, host, file, opened, pageId } = await setup();
     const coordinator = new GlobalTaskCoordinator(host, store);
     await coordinator.registerRun({
@@ -3036,7 +3036,6 @@ describe("GlobalTaskCoordinator", () => {
       documentId: file.documentId,
       revision: opened.document.revision,
       modelSelection,
-      deliveryScopeReview: "required",
       scope: { kind: "page", pageId, selectedNodeIds: [] },
       mutationTarget: { kind: "page", pageId },
     });
@@ -3062,7 +3061,7 @@ describe("GlobalTaskCoordinator", () => {
     if (!targetTemplate) throw new Error("Target template is missing");
     plan.objective = "Design the complete 24-screen product suite";
     plan.targets = Array.from({ length: 24 }, (_, index) => {
-      const frameId = `frame_screen_${index + 1}`;
+      const frameId = `${idAllocation.newNodeIdPrefix}screen_${index + 1}`;
       const regionId = `${idAllocation.newNodeIdPrefix}screen_${index + 1}_content`;
       return {
         ...structuredClone(targetTemplate),
@@ -3091,9 +3090,16 @@ describe("GlobalTaskCoordinator", () => {
     plan.briefFidelity.requiredContent = plan.targets.map(
       (_, index) => `Screen ${index + 1} content`,
     );
-    expect(() => coordinator.registerDesignPlan(context, plan)).toThrow(
-      "delivery_scope_review_required",
-    );
+    expect(
+      coordinator.assertDesignPlanForApply(
+        context,
+        draftTargets(pageId, plan.targets.slice(0, 1), true),
+      ),
+    ).toBeUndefined();
+    expect(coordinator.prepareDesignPlan(context, plan)).toMatchObject({
+      status: "accepted",
+    });
+    expect(coordinator.getDeliveryLedger(context.runId)).toBeUndefined();
 
     const reviewedScope = {
       version: 1 as const,
@@ -3162,6 +3168,14 @@ describe("GlobalTaskCoordinator", () => {
       ...structuredClone(plan),
       targets: plan.targets.slice(0, 1),
     };
+    expect(() =>
+      coordinator.prepareDesignPlan(contextAfterScope, {
+        ...firstStagePlan,
+        targets: plan.targets.slice(1, 2),
+      }),
+    ).toThrow("delivery_scope_mismatch");
+    firstPlanTarget.artboard.x += 500;
+    firstPlanTarget.artboard.y += 500;
     const registration = coordinator.registerDesignPlan(
       contextAfterScope,
       firstStagePlan,
@@ -3172,8 +3186,17 @@ describe("GlobalTaskCoordinator", () => {
     });
     expect(registration.plan.objective).toBe(reviewedScope.objective);
     expect(registration.plan.targets[0]).toMatchObject({
+      targetId: reviewedScope.targets[0]?.targetId,
       label: reviewedScope.targets[0]?.label,
       objective: reviewedScope.targets[0]?.objective,
+      pageId: scopeReservation.artboards[0]?.pageId,
+      artboard: {
+        frameId: scopeReservation.artboards[0]?.frameId,
+        x: scopeReservation.artboards[0]?.x,
+        y: scopeReservation.artboards[0]?.y,
+        width: scopeReservation.artboards[0]?.width,
+        height: scopeReservation.artboards[0]?.height,
+      },
     });
     expect(registration.plan.briefFidelity).toMatchObject({
       requiredContent: reviewedScope.targets[0]?.requiredContent,
@@ -3348,7 +3371,6 @@ describe("GlobalTaskCoordinator", () => {
       documentId: context.documentId,
       revision: context.revision,
       modelSelection,
-      deliveryScopeReview: "required",
       scope: { kind: "page", pageId, selectedNodeIds: [] },
       mutationTarget: { kind: "page", pageId },
       continuation: {
@@ -3364,6 +3386,19 @@ describe("GlobalTaskCoordinator", () => {
       plannedTargets: 1,
       currentPlan: { stage: 1 },
     });
+    const continuedContext = { ...context, runId: nextRunId };
+    expect(
+      coordinator.supersedeDesignDeliveryForClearedPage(
+        continuedContext,
+        pageId,
+      ),
+    ).toBe(true);
+    expect(coordinator.recordCanvasCapture(continuedContext)).toMatchObject({
+      nextAction: "define-plan-write-capture",
+      reviewEligible: false,
+    });
+    expect(coordinator.getDeliveryLedger(nextRunId)).toBeUndefined();
+    expect(coordinator.getDeliveryStageContext(nextRunId)).toBeUndefined();
     store.close();
   });
 
@@ -4763,7 +4798,7 @@ describe("GlobalTaskCoordinator", () => {
     store.close();
   });
 
-  it("expands a Page Run only after one Main-recorded Page structure approval", async () => {
+  it("allows Page operations without delivery scope while preserving Main-recorded approval", async () => {
     const { store, host, file, opened, pageId } = await setup();
     const coordinator = new GlobalTaskCoordinator(host, store);
     await coordinator.registerRun({

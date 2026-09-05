@@ -16,11 +16,6 @@ export type {
   CompletionGuardPort,
 } from "./completion-guard.js";
 export {
-  resolveDeliveryScopeReview,
-  resolveInitialModelToolSurface,
-} from "./model-tool-surface.js";
-export {
-  deliveryScopeReviewToolDefinitions,
   disclosedToolDefinitions,
   resolveModelToolDisclosurePhase,
 } from "./tool-disclosure.js";

@@ -98,7 +98,6 @@ export class OpenDesignPiToolAdapter {
         ),
       {
         initialInspection: options.initialInspection ?? false,
-        initialSurface: options.initialModelToolSurface ?? "general",
       },
     );
     this.tools = this.#catalog.executionTools;
@@ -121,10 +120,7 @@ export class OpenDesignPiToolAdapter {
   }
 
   get modelTools(): readonly AgentTool[] {
-    return this.#catalog.modelTools(
-      this.#records,
-      this.#request.deliveryScopeReview,
-    );
+    return this.#catalog.modelTools(this.#records);
   }
 
   get unresolvedDesignWriteFailure() {
@@ -185,6 +181,7 @@ export class OpenDesignPiToolAdapter {
             input: active.input,
             failure: inferredFailure,
             designWrite: active.risk === "design_write",
+            modelDisclosure: definition?.modelDisclosure,
           }),
         );
       return {
@@ -244,6 +241,7 @@ export class OpenDesignPiToolAdapter {
         input: context.args,
         failure: baseFailure,
         designWrite: definition.risk === "design_write",
+        modelDisclosure: definition.modelDisclosure,
       });
       const schemaFailure = this.#recordProgressFailure(
         active.toolName,
@@ -380,6 +378,11 @@ export class OpenDesignPiToolAdapter {
       ) {
         this.#designFailureRecovery.recordRevisionWrite();
       }
+      this.#designFailureRecovery.recordPageClear(
+        definition.name,
+        input,
+        completedResult.content,
+      );
       this.#records.push(success.record);
       return success.modelResult;
     } catch (error) {
@@ -406,6 +409,7 @@ export class OpenDesignPiToolAdapter {
         input: parameters,
         failure: baseFailure,
         designWrite: definition.risk === "design_write",
+        modelDisclosure: definition.modelDisclosure,
       });
       const failure = this.#recordProgressFailure(
         definition.name,

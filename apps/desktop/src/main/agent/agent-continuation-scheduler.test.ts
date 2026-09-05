@@ -16,7 +16,6 @@ function request(
     scope: { kind: "page", pageId: "page_1", selectedNodeIds: [] },
     mutationTarget: { kind: "page", pageId: "page_1" },
     modelSelection: { providerId: "provider", modelId: "design" },
-    deliveryScopeReview: "required",
     ...(continuation ? { continuation } : {}),
   };
 }
@@ -131,16 +130,31 @@ describe("AgentContinuationScheduler", () => {
     });
   });
 
-  it("uses the admitted scope policy when creating a continuation request", () => {
+  it("continues a declared multi-target delivery without an initial intent flag", () => {
     const scheduler = new AgentContinuationScheduler(() => 2500);
     const initial = request();
     scheduler.registerRun(initial);
-    scheduler.setDeliveryScopeReview(initial.runId, "required");
-    recordDelivery(scheduler, initial.runId);
+    recordDelivery(scheduler, initial.runId, {
+      ...incomplete,
+      targets: [
+        ...incomplete.targets,
+        {
+          targetId: "target_2",
+          label: "Profile",
+          pageId: "page_1",
+          rootNodeId: "frame_2",
+          reservedNodeIds: ["frame_2"],
+          status: "pending",
+        },
+      ],
+    });
 
-    expect(scheduler.record(completed(initial.runId, "budget"))).toMatchObject({
+    expect(
+      scheduler.record(completed(initial.runId, "complete")),
+    ).toMatchObject({
       kind: "schedule",
-      source: { deliveryScopeReview: "required" },
+      source: initial,
+      continuation: { reason: "incomplete", attempt: 1 },
     });
   });
 
@@ -185,12 +199,11 @@ describe("AgentContinuationScheduler", () => {
     expect(fatal.activeRunIds()).toEqual([]);
   });
 
-  it("never auto-continues a direct edit from recovery context or a local Plan", () => {
+  it("does not auto-continue ordinary conversation from recovery context alone", () => {
     const scheduler = new AgentContinuationScheduler(() => 3500);
     const direct = {
       ...request(),
       runId: "run_direct",
-      deliveryScopeReview: "direct" as const,
     };
     scheduler.registerRun(direct);
     scheduler.record({
@@ -198,12 +211,6 @@ describe("AgentContinuationScheduler", () => {
       runId: direct.runId,
       toolCallId: "inspect_old_delivery",
       result: { unfinishedDelivery: incomplete },
-    });
-    scheduler.record({
-      type: "tool.completed",
-      runId: direct.runId,
-      toolCallId: "edit_delivery",
-      result: { delivery: incomplete },
     });
 
     expect(scheduler.record(completed(direct.runId, "complete"))).toBeNull();

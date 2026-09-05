@@ -68,7 +68,7 @@ function createMemorySessionStore(): SessionStore {
 }
 
 describe("Agent Run starter", () => {
-  it("injects a Main-prepared inspection before sending the Run to Agent", async () => {
+  it("sends Main-prepared inspection without injecting a delivery intent flag", async () => {
     const scheduler = new AgentContinuationScheduler(() => 1000);
     const send = vi.fn();
     const start = vi.fn().mockResolvedValue(undefined);
@@ -97,7 +97,6 @@ describe("Agent Run starter", () => {
       initialInspectionControllers: new Map(),
       globalTaskCoordinator: {
         registerRun: vi.fn().mockResolvedValue({}),
-        setDeliveryScopeReview: vi.fn(),
         assertRunRevisionCurrent: vi.fn().mockResolvedValue(undefined),
         referenceAttachmentsForRun: vi.fn().mockReturnValue([]),
       } as never,
@@ -121,7 +120,6 @@ describe("Agent Run starter", () => {
     expect(start).toHaveBeenCalledOnce();
     expect(send).toHaveBeenCalledWith({
       ...source,
-      deliveryScopeReview: "required",
       initialDesignInspection,
       modelContext: { contextWindow: 200_000, maxOutputTokens: 16_384 },
     });
@@ -149,7 +147,6 @@ describe("Agent Run starter", () => {
         initialInspectionControllers: new Map(),
         globalTaskCoordinator: {
           registerRun: vi.fn().mockResolvedValue({}),
-          setDeliveryScopeReview: vi.fn(),
           assertRunRevisionCurrent,
           handleAgentEvent,
           referenceAttachmentsForRun: vi.fn().mockReturnValue([]),
@@ -230,25 +227,6 @@ describe("Agent Run starter", () => {
     ).rejects.toThrow("Renderer cannot supply initial design inspection");
   });
 
-  it("rejects a Renderer-forged delivery scope policy", async () => {
-    await expect(
-      handleAgentRunControlRequest(
-        { ...source, deliveryScopeReview: "direct" },
-        {
-          agentHost: {} as never,
-          continuationScheduler: {} as never,
-          conversationIdByRunId: new Map(),
-          initialInspectionControllers: new Map(),
-          globalTaskCoordinator: {} as never,
-          modelProviderHost: {} as never,
-          sessionStore: createMemorySessionStore(),
-          referenceHost: {} as never,
-          publish: vi.fn(),
-        },
-      ),
-    ).rejects.toThrow("Renderer cannot supply delivery scope policy");
-  });
-
   it("cancels an automatic continuation before starting a new user Run", async () => {
     const scheduler = new AgentContinuationScheduler(() => 1000);
     scheduler.registerRun({
@@ -276,7 +254,6 @@ describe("Agent Run starter", () => {
         initialInspectionControllers: new Map(),
         globalTaskCoordinator: {
           registerRun: vi.fn().mockResolvedValue({}),
-          setDeliveryScopeReview: vi.fn(),
           assertRunRevisionCurrent: vi.fn().mockResolvedValue(undefined),
           referenceAttachmentsForRun: vi.fn().mockReturnValue([]),
         } as never,
@@ -326,7 +303,6 @@ describe("Agent Run starter", () => {
       initialInspectionControllers: new Map<string, AbortController>(),
       globalTaskCoordinator: {
         registerRun: vi.fn().mockResolvedValue({}),
-        setDeliveryScopeReview: vi.fn(),
         assertRunRevisionCurrent: vi.fn().mockResolvedValue(undefined),
         handleAgentEvent: vi.fn(),
         referenceAttachmentsForRun: vi.fn().mockReturnValue([]),
@@ -357,7 +333,6 @@ describe("Agent Run starter", () => {
   it("does not send a scheduled continuation after the user cancels it", async () => {
     const scheduler = new AgentContinuationScheduler(() => 1000);
     scheduler.registerRun(source);
-    scheduler.setDeliveryScopeReview(source.runId, "required");
     scheduler.record({
       type: "tool.completed",
       runId: source.runId,
@@ -396,7 +371,6 @@ describe("Agent Run starter", () => {
         initialInspectionControllers: new Map(),
         globalTaskCoordinator: {
           registerRun: vi.fn().mockResolvedValue({}),
-          setDeliveryScopeReview: vi.fn(),
           assertRunRevisionCurrent: vi.fn().mockResolvedValue(undefined),
           handleAgentEvent: (event: AgentEvent) => terminalEvents.push(event),
           referenceAttachmentsForRun: vi.fn().mockReturnValue([]),

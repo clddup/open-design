@@ -15,7 +15,7 @@ import type {
   AgentToolCallRecord,
   CompletionGuardPort,
 } from "./completion-guard.js";
-import type { AgentRunRequest, ModelToolSurface } from "./run-request.js";
+import type { AgentRunRequest } from "./run-request.js";
 import type {
   AgentToolDefinition,
   ApprovalPort,
@@ -45,7 +45,6 @@ export interface PiRunEventAdapterOptions {
   maxTurns?: number;
   maxGeneratedTokens?: number;
   maxCompletionGuardRejections?: number;
-  initialModelToolSurface?: ModelToolSurface;
   now?: () => Date;
 }
 
@@ -116,9 +115,6 @@ export class PiRunEventAdapter {
           : { approvalPort: options.approvalPort }),
         maxToolCalls: options.maxToolCalls ?? 32,
         initialInspection: this.#request.initialDesignInspection !== undefined,
-        ...(options.initialModelToolSurface === undefined
-          ? {}
-          : { initialModelToolSurface: options.initialModelToolSurface }),
         now: this.#now,
         lifecycle: {
           approvalRequested: async (approval) => {

@@ -10,11 +10,8 @@ import { ParentModelGateway } from "./parent-model-gateway.js";
 import { ParentDesignToolExecutor } from "./parent-design-tool-executor.js";
 import { DESIGN_AGENT_TOOL_SPECS } from "@/shared/design-agent-tools.js";
 import {
-  agentSystemPromptForRequest,
   designThinkingLevelForRequest,
-  newDesignSystemPromptForRequest,
   OPENDESIGN_AGENT_SYSTEM_PROMPT,
-  OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT,
 } from "./system-prompt.js";
 import { DESIGN_VISUAL_COMPLETION_GUARD } from "./design-completion-guard.js";
 import { UserApprovalController } from "./user-approval-controller.js";
@@ -48,9 +45,6 @@ const runtime = new OpenDesignPiRuntime({
   approvalPort: userApprovalController,
   completionGuard: DESIGN_VISUAL_COMPLETION_GUARD,
   systemPrompt: OPENDESIGN_AGENT_SYSTEM_PROMPT,
-  systemPromptForRequest: agentSystemPromptForRequest,
-  newDesignSystemPrompt: OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT,
-  newDesignSystemPromptForRequest,
   thinkingLevelForRequest: designThinkingLevelForRequest,
 });
 

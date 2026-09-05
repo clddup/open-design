@@ -96,7 +96,7 @@ import { DesignVariableContract } from "./design-variable-tool";
 import { DesignStyleContract } from "./design-style-tool";
 import {
   DesignSystemContract,
-  DESIGN_SYSTEM_NEW_DESIGN_INPUT_SCHEMA,
+  DESIGN_SYSTEM_CONTINUATION_INPUT_SCHEMA,
   DESIGN_SYSTEM_TOOL_INPUT_SCHEMA,
 } from "./design-system-tool";
 
@@ -118,10 +118,8 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     name: DESIGN_DELIVERY_SCOPE_TOOL_NAME,
     modelDisclosure: {
       bootstrap: "available" as const,
-      beforePlan: "available" as const,
-      role: "plan" as const,
-      surfaces: ["general" as const, "new-design" as const],
-      whenDeliveryScopeReview: "required" as const,
+
+      role: "delivery-scope" as const,
     },
     description:
       "Before creating a new composition, record its complete user-visible one-or-many artboard scope. A focused Logo or screen is one target; a product brief keeps every independently verifiable screen, flow, visual direction, or asset as its own target. Use the brief's real deliverables rather than prompt length, attachment count, or a representative sample. Every target includes its intended real width and height. Do not split headings, cards, or decorative regions into targets. Delivery targets are not document Pages: keep a product suite on the current Page and create one Frame/Artboard per target. Include concise required content, exclusions, and assumptions. The host records stable target identities and non-overlapping geometry without writing empty Frames. Each Frame is created atomically with its own first meaningful editable content when that target becomes active. Page creation and cross-Page organization are separate explicit lifecycle operations and are never inferred from target count. Focused edits to existing content do not call this tool.",
@@ -135,12 +133,11 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     name: DESIGN_FIRST_SLICE_TOOL_NAME,
     modelDisclosure: {
       bootstrap: "available" as const,
-      beforePlan: "available" as const,
+
       role: "material-write" as const,
-      surfaces: ["general" as const, "new-design" as const],
     },
     description:
-      "Create exactly one current target's real artboard and meaningful editable content in one rollback-safe call. For reviewed multi-target scope, design only deliveryStage.nextTarget and finish it before the next call. Include concise designIntent, requested artboard width/height, parent-first regions, visualSystem, raster roles, and an actual named hierarchy. Main already binds the target/Page/Frame identity, placement, objective, skills, fidelity, quality profile, and component defaults; do not echo those fields. When real subject evidence is essential, call opendesign_generate_image first and use its persistent assetId in an image element inside this same first slice instead of committing a geometric placeholder. The content must visibly prove the thesis and a brief-specific signature decision, not retrofit reasons to generic primitives. The signature may be structural, typographic, behavioral, material, or geometric; never default to concentric rings, light beams, HUD decoration, gradient blocks, or stacked rectangles as shorthand for “cool” or “technology”. Use canonical document fills/strokes, blend modes, shadows and blur only when they serve the chosen form. Complete one coherent target within the shared DesignTransaction safety limit rather than degrading it to satisfy an arbitrary first-slice element quota. Region and element IDs remain call-local, and Main binds those IDs to the Run namespace. When the user requests multiple Logo directions, author the requested number of genuinely independent form hypotheses under one shared brand invariant; apply each direction's brief-specific primary color treatment in the same slice and do not create uniformly scaled evidence clones. Later selected Logo/App Icon targets perform real optical redraws. Path commands use node-local coordinates and are not rescaled by width/height. Use semantic stages, one inspected Page, parent-local geometry, and exact fonts. After success, inspect the real hierarchy and promote justified roots to Components through the disclosed design-system tool, matching Figma's create-component-from-node workflow; a new-design Run remains on a focused continuation surface with complete node appearance and contour editing.",
+      "Create exactly one current target's real artboard and meaningful editable content in one rollback-safe call. For reviewed multi-target scope, design only deliveryStage.nextTarget and finish it before the next call. Include concise designIntent, requested artboard width/height, parent-first regions, visualSystem, raster roles, and an actual named hierarchy. Main already binds the target/Page/Frame identity, placement, objective, skills, fidelity, quality profile, and component defaults; do not echo those fields. When real subject evidence is essential, call opendesign_generate_image first and use its persistent assetId in an image element inside this same first slice instead of committing a geometric placeholder. The content must visibly prove the thesis and a brief-specific signature decision, not retrofit reasons to generic primitives. The signature may be structural, typographic, behavioral, material, or geometric; never default to concentric rings, light beams, HUD decoration, gradient blocks, or stacked rectangles as shorthand for “cool” or “technology”. Use canonical document fills/strokes, blend modes, shadows and blur only when they serve the chosen form. Complete one coherent target within the shared DesignTransaction safety limit rather than degrading it to satisfy an arbitrary first-slice element quota. Region and element IDs remain call-local, and Main binds those IDs to the Run namespace. When the user requests multiple Logo directions, author the requested number of genuinely independent form hypotheses under one shared brand invariant; apply each direction's brief-specific primary color treatment in the same slice and do not create uniformly scaled evidence clones. Later selected Logo/App Icon targets perform real optical redraws. Path commands use node-local coordinates and are not rescaled by width/height. Use semantic stages, one inspected Page, parent-local geometry, and exact fonts. After success, inspect the real hierarchy and promote justified roots to Components through the disclosed design-system tool, matching Figma's create-component-from-node workflow; continuation keeps the current stage and ordinary editing tools available with complete node appearance and contour editing.",
     inputSchema: DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA,
     risk: "design_write" as const,
     approval: "never" as const,
@@ -166,7 +163,6 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     modelDisclosure: {
       bootstrap: "available" as const,
       role: "inspection" as const,
-      surfaces: ["general" as const, "new-design" as const],
     },
     description:
       "Read the currently bound OpenDesign Design File, active Page, node tree, referenced asset metadata, selection, revision, a Run-scoped idAllocation.newNodeIdPrefix, and bounded structural/render diagnostics before planning a design change. Every newly authored document entity ID must start with that exact prefix because Node IDs are Design File-global even when Page-scoped inspection hides other Pages; existing IDs remain unchanged. Diagnostics identify empty paths/text, invisible nodes, missing assets, non-finite or clipped-out bounds, root-layer fragmentation, and actual Path/gradient/glow/blur/blend/mask/image/text usage. Asset source bytes and URIs are intentionally omitted; use opendesign_capture_canvas for bounded visual inspection. This does not inspect project files, source code, directories, or other Design Files. Call this instead of guessing canvas structure.",
@@ -180,7 +176,6 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     modelDisclosure: {
       bootstrap: "deferred" as const,
       continuation: "available" as const,
-      surfaces: ["general" as const, "new-design" as const],
     },
     description:
       "Capture the Main-selected target in the Run-bound OpenDesign document as a bounded image and return it as multimodal content together with captureTarget, the observed document revision, and reviewWorkflow. After the planned artboard exists, captureTarget is that exact Frame; otherwise it is the bound Page. Frame captures return layoutQuality, a trusted exact-revision report over the complete rendered Component projection, clipping ancestor chain, artboard containment, quality profile, and production text layout. A componentTarget is the stable instanceId + sourcePath repair identity; projection node IDs are capture-only and must never be reused as persistent mutation targets. Overflow issues include world-space bounds plus parent-local repair geometry. When reviewWorkflow.nextAction is repair-layout-overflow, call the returned opendesign_edit_design arrange repair-overflow entry first; it expands safe trailing-edge delivery and persistent clipping Frames in one undoable revision, then capture again. If that bounded repair fails, inspect and explicitly correct the unsafe structure. The first representative new UI target and identity work receive the stateless exact-revision critic; later UI targets reuse that reviewed visual system but still fail deterministic verification when they are empty, flattened into one Text layer, structurally incomplete, or geometrically invalid. Follow reviewWorkflow.nextAction; Main owns the independent review and delivery ledger, so do not call or invent a separate review/checkpoint tool. Final verification may include a bounded non-blocking componentStrategy report when actual Component/Instance bindings differ from the model-authored plan; it is maintainability guidance and does not invalidate an otherwise useful visual delivery. The capture uses an isolated Leafer projection of the captured revision, so user pan, zoom, selection, window size, or switching to another open Design File cannot change its pixels or mutation target. Use this after a successful material design write to evaluate the rendered composition, hierarchy, spacing, proportions, and effects before Main records the trusted verdict. A baseline capture before a write may inform planning but does not unlock review. This does not capture other applications, windows, files, or screens.",
@@ -206,7 +201,6 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     name: READ_IMAGE_TOOL_NAME,
     modelDisclosure: {
       bootstrap: "available" as const,
-      surfaces: ["general" as const, "new-design" as const],
     },
     description:
       "Read an image that the user explicitly referenced in the current prompt or attached to the current run. source must be the exact attachment ID, absolute local path, file URL, or HTTP(S) image URL written by the user. The host resolves it as a bounded, content-addressed image attachment and returns multimodal content. This tool cannot enumerate directories, discover neighboring files, use browser cookies, or read an unmentioned source.",
@@ -219,8 +213,6 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     name: GENERATE_IMAGE_TOOL_NAME,
     modelDisclosure: {
       bootstrap: "available" as const,
-      beforePlan: "available" as const,
-      surfaces: ["general" as const, "new-design" as const],
     },
     description:
       "Generate one original raster image with OpenDesign's globally configured image-generation model whenever real subject evidence, photography, texture, or illustration materially improves the requested design. The result is staged immediately as a persistent current-Design-File asset and returned with an assetId that can be used by the compact first-slice image element in the same Provider turn. This selection is application-wide and independent of the current conversation model. The tool never accepts a provider or model ID and fails explicitly when no global image-generation model is configured.",
@@ -235,7 +227,6 @@ export const DESIGN_AGENT_TOOL_SPECS = [
       bootstrap: "deferred" as const,
       continuation: "available" as const,
       role: "material-write" as const,
-      surfaces: ["general" as const, "new-design" as const],
     },
     description:
       "Place either an image attachment authorized by this Conversation or a persistent assetId returned by current Design File inspection. Supply exactly one source. A successful design plan must declare the image role. Existing assetId placement requires explicit width and height. Editable posters must first create their planned artboard Frame with meaningful editable shape/text content, then place the image inside that existing Frame or one of its inspected/current descendants; parentId may never be null for this flow. Do not copy attachmentId into image assetId. Editable posters cannot use final-single-image. The host inserts one image node through the same atomic OpenDesign transaction and revision history as every other design edit.",
@@ -314,10 +305,10 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     modelDisclosure: {
       bootstrap: "deferred" as const,
       afterInspection: "available" as const,
-      beforePlan: "deferred" as const,
+
       continuation: "available" as const,
       role: "material-write" as const,
-      surfaces: ["general" as const, "new-design" as const],
+
       bootstrapDescription:
         "Perform one coherent inspected node edit inside the active Run target. Use one node edit entry; it supports editable Path contours, gradients and effects as well as insert, property update, move and delete. Existing content remains editable whether or not a Plan created it; matching material revisions update the Plan ledger when one is active. New artboard roots still use opendesign_generate_first_slice. After a material revision, this same tool adds compact layout repair without changing tool names.",
       bootstrapInputSchema: DESIGN_BOOTSTRAP_EDIT_TOOL_INPUT_SCHEMA,
@@ -351,10 +342,10 @@ export const DESIGN_AGENT_TOOL_SPECS = [
       bootstrap: "deferred" as const,
       continuation: "available" as const,
       role: "material-write" as const,
-      surfaces: ["general" as const, "new-design" as const],
+
       continuationDescription:
         "Create a justified reusable Component Main or linked Component Instance for the current design. Use this only when the design intent identifies a repeated semantic object; otherwise keep the object as an ordinary named Frame/Group.",
-      continuationInputSchema: DESIGN_SYSTEM_NEW_DESIGN_INPUT_SCHEMA,
+      continuationInputSchema: DESIGN_SYSTEM_CONTINUATION_INPUT_SCHEMA,
     },
     description:
       "Manage the current Design File's reusable design system through one typed boundary. Choose kind=component for Component Mains, Instances, Variants, properties, Slots, overrides, detach, and Go to main; kind=variable for collections, modes, values, aliases, scopes, code syntax, bindings, and mode overrides; or kind=style for local Paint, Text, Effect, and Grid Style creation, metadata, ordering, references, detach, and deletion. Each kind preserves its dedicated versioned service, stable inspected IDs, Page scope, preview, atomic revision, and one undo step. Imported Library snapshots remain read-only. Do not write Component definitions, Style registries, Variable registries, or their references through generic node edits.",

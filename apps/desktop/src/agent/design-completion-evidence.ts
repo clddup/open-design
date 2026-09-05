@@ -68,15 +68,19 @@ export function latestDeliveryLedger(
   return undefined;
 }
 
-export function hasSupersededDelivery(
+export function designCallsAfterSupersession(
   toolCalls: readonly AgentToolCallRecord[],
-): boolean {
-  return toolCalls.some(
-    (call) =>
+): readonly AgentToolCallRecord[] {
+  for (let index = toolCalls.length - 1; index >= 0; index -= 1) {
+    const call = toolCalls[index];
+    if (
       call.toolName === DESIGN_PAGE_TOOL_NAME &&
       isRecord(call.result) &&
-      call.result.deliveryDisposition === "superseded",
-  );
+      call.result.deliveryDisposition === "superseded"
+    )
+      return toolCalls.slice(index + 1);
+  }
+  return toolCalls;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

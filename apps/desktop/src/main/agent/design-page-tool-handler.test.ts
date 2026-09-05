@@ -27,9 +27,8 @@ function setup(call: ToolCallRequest, result?: TrustedToolResult) {
     assertPageToolAccess: vi.fn(),
     assertPageLifecycleInspected: vi.fn(),
     recordPageToolCompleted: vi.fn(),
-    supersedeDesignDeliveryForClearedPage: vi.fn(),
+    supersedeDesignDeliveryForClearedPage: vi.fn(() => true),
     hasPageStructureAccess: vi.fn(() => true),
-    assertDeliveryScopeReviewed: vi.fn(),
     hasPageStructureAuthorization: vi.fn(() => true),
   };
   const execute = vi.fn().mockResolvedValue(
@@ -72,7 +71,7 @@ describe("Design Page Main tool handler", () => {
     expect(state.execute).not.toHaveBeenCalled();
   });
 
-  it("returns only approved Run-scoped Page structure capability", async () => {
+  it("returns approved Run-scoped Page structure capability without a delivery scope", async () => {
     const call: ToolCallRequest = {
       toolCallId: "page_structure_access",
       toolName: PAGE_STRUCTURE_ACCESS_TOOL_NAME,
@@ -95,8 +94,19 @@ describe("Design Page Main tool handler", () => {
     expect(state.coordinator.hasPageStructureAccess).toHaveBeenCalledWith(
       context.runId,
     );
-    expect(state.coordinator.assertDeliveryScopeReviewed).toHaveBeenCalledWith(
-      context,
+    expect(state.execute).not.toHaveBeenCalled();
+  });
+
+  it("rejects Page structure access without Main approval", async () => {
+    const state = setup({
+      toolCallId: "page_structure_access_unapproved",
+      toolName: PAGE_STRUCTURE_ACCESS_TOOL_NAME,
+      input: { actions: ["create-page"], reason: "Create a Page" },
+    });
+    state.coordinator.hasPageStructureAccess.mockReturnValue(false);
+
+    await expect(handleDesignPageTool(state.input)).rejects.toThrow(
+      "Page structure access was not approved for this Run",
     );
     expect(state.execute).not.toHaveBeenCalled();
   });
@@ -198,6 +208,26 @@ describe("Design Page Main tool handler", () => {
     expect(
       state.coordinator.supersedeDesignDeliveryForClearedPage,
     ).toHaveBeenCalledWith(context, "page_main");
+  });
+
+  it("does not supersede delivery belonging to another Page", async () => {
+    const state = setup({
+      toolCallId: "clear_other_page",
+      toolName: DESIGN_PAGE_TOOL_NAME,
+      input: {
+        action: "clear",
+        label: "Clear another Page",
+        pageId: "page_other",
+      },
+    });
+    state.coordinator.supersedeDesignDeliveryForClearedPage.mockReturnValue(
+      false,
+    );
+
+    const result = await handleDesignPageTool(state.input);
+
+    expect(result?.content).not.toHaveProperty("deliveryDisposition");
+    expect(result?.designRevision?.revision).toBe(5);
   });
 
   it("rejects an unstructured Page clear result", async () => {

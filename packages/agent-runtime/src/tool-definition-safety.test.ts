@@ -14,7 +14,6 @@ const validDefinition: AgentToolDefinition = {
   approval: "never",
   modelDisclosure: {
     bootstrap: "available",
-    surfaces: ["general"],
   },
   validateInputIssues: () => [],
 };
@@ -26,7 +25,7 @@ describe("tool definition safety", () => {
       name: "opendesign_malformed",
       modelDisclosure: {
         bootstrap: "available",
-        surfaces: ["general", "general"],
+        role: "unsupported",
       },
     } as unknown as AgentToolDefinition;
 

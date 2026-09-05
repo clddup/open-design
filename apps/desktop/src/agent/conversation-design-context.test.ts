@@ -6,7 +6,13 @@ import type { AgentRunRequest } from "@opendesign/agent-runtime";
 import { OpenDesignPiRuntime } from "@opendesign/agent-runtime/pi-migration";
 import { MockModelGateway, type ModelRequest } from "@opendesign/model-gateway";
 import { JsonlSessionStore } from "@opendesign/session-store";
-import { agentSystemPromptForRequest } from "./system-prompt";
+import {
+  DESIGN_AGENT_TOOL_SPECS,
+  DESIGN_EDIT_TOOL_NAME,
+  DESIGN_FIRST_SLICE_TOOL_NAME,
+  DESIGN_DELIVERY_SCOPE_TOOL_NAME,
+} from "@/shared/design-agent-tools";
+import { OPENDESIGN_AGENT_SYSTEM_PROMPT } from "./system-prompt";
 
 describe("Conversation design context at the Provider boundary", () => {
   it("sends unchanged history and stable design methods without a preflight model call", async () => {
@@ -19,7 +25,8 @@ describe("Conversation design context at the Provider boundary", () => {
       const store = new JsonlSessionStore(join(directory, "events.jsonl"));
       const runtime = new OpenDesignPiRuntime({
         sessionStore: store,
-        systemPromptForRequest: agentSystemPromptForRequest,
+        systemPrompt: OPENDESIGN_AGENT_SYSTEM_PROMPT,
+        toolCatalog: { listTools: () => DESIGN_AGENT_TOOL_SPECS },
         modelGateway: {
           stream(request) {
             requests.push(request);
@@ -38,6 +45,12 @@ describe("Conversation design context at the Provider boundary", () => {
           sessionId: "conversation_context",
           documentId: "document_context",
           revision: 0,
+          modelContext: { contextWindow: 200_000, maxOutputTokens: 16_384 },
+          initialDesignInspection: {
+            version: 1,
+            observedRevision: 0,
+            content: { inspection: { pageId: "page_context", revision: 0 } },
+          },
           scope: { kind: "document", selectedNodeIds: [] },
           mutationTarget: { kind: "document" },
           modelSelection: {
@@ -53,6 +66,14 @@ describe("Conversation design context at the Provider boundary", () => {
         expect(requests).toHaveLength(index + 1);
         const sent = requests[index];
         expect(sent.system).toBe(requests[0].system);
+        expect(sent.tools).toEqual(requests[0].tools);
+        expect(sent.tools.map((tool) => tool.name)).toEqual(
+          expect.arrayContaining([
+            DESIGN_EDIT_TOOL_NAME,
+            DESIGN_FIRST_SLICE_TOOL_NAME,
+            DESIGN_DELIVERY_SCOPE_TOOL_NAME,
+          ]),
+        );
         expect(sent.system).toContain('id="logo-visual-direction"');
         expect(sent.system).toContain('id="ui-visual-direction"');
         expect(sent.system).not.toContain("咖啡品牌");

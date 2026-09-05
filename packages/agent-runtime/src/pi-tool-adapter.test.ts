@@ -209,6 +209,9 @@ describe("OpenDesign Pi tool adapter", () => {
       execute(discovery.name, "discovery_failed", {}),
     ).rejects.toThrow("discovery_failed");
     expect(adapter.modelTools.map((tool) => tool.name)).toEqual(compactTools);
+    expect(adapter.toolCallRecords.map((record) => record.toolCallId)).toEqual([
+      "write_1",
+    ]);
     await execute(discovery.name, "discovery_succeeded", {});
     expect(adapter.modelTools.map((tool) => tool.name)).toContain(
       advanced.name,
@@ -265,7 +268,6 @@ describe("OpenDesign Pi tool adapter", () => {
       modelDisclosure: {
         bootstrap: "available",
         role: "material-write",
-        surfaces: ["new-design"],
       },
     };
     const planTool: AgentToolDefinition = {
@@ -285,12 +287,11 @@ describe("OpenDesign Pi tool adapter", () => {
         role: "material-write",
       },
     };
-    const newDesignInspectTool: AgentToolDefinition = {
+    const neutralInspectTool: AgentToolDefinition = {
       ...inspectTool,
       modelDisclosure: {
         bootstrap: "available",
         role: "inspection",
-        surfaces: ["general", "new-design"],
       },
     };
     const adapter = new OpenDesignPiToolAdapter({
@@ -299,7 +300,7 @@ describe("OpenDesign Pi tool adapter", () => {
         firstSliceTool,
         planTool,
         continuationEditTool,
-        newDesignInspectTool,
+        neutralInspectTool,
       ],
       toolExecutor: {
         async *execute(_call, context): AsyncIterable<ToolExecutionEvent> {
@@ -323,12 +324,13 @@ describe("OpenDesign Pi tool adapter", () => {
       },
       maxToolCalls: 8,
       initialInspection: true,
-      initialModelToolSurface: "new-design",
     });
 
     expect(adapter.modelTools.map((tool) => tool.name)).toEqual([
       firstSliceTool.name,
-      newDesignInspectTool.name,
+      planTool.name,
+      continuationEditTool.name,
+      neutralInspectTool.name,
     ]);
 
     const firstSlice = adapter.modelTools[0];
@@ -341,7 +343,8 @@ describe("OpenDesign Pi tool adapter", () => {
 
     expect(adapter.modelTools.map((tool) => tool.name)).toEqual([
       firstSliceTool.name,
-      newDesignInspectTool.name,
+      planTool.name,
+      neutralInspectTool.name,
     ]);
   });
 

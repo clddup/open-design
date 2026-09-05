@@ -18,7 +18,7 @@ import {
   type DesignDeliveryScope,
 } from "@/shared/design-agent-tools.js";
 import {
-  hasSupersededDelivery,
+  designCallsAfterSupersession,
   initialDeliveryStage,
   latestDeliveryLedger,
   latestDeliveryStage,
@@ -28,22 +28,14 @@ import {
 export function reviewDesignCompletion(
   context: AgentCompletionContext,
 ): AgentCompletionDecision {
-  if (hasSupersededDelivery(context.toolCalls)) return { allow: true };
-  const reviewedScope = latestReviewedDeliveryScope(context.toolCalls);
+  const toolCalls = designCallsAfterSupersession(context.toolCalls);
+  const initialContent =
+    toolCalls === context.toolCalls
+      ? context.request.initialDesignInspection?.content
+      : undefined;
+  const reviewedScope = latestReviewedDeliveryScope(toolCalls);
   const deliveryStage =
-    latestDeliveryStage(context.toolCalls) ??
-    initialDeliveryStage(context.request.initialDesignInspection?.content);
-  if (
-    context.request.deliveryScopeReview === "required" &&
-    reviewedScope === undefined &&
-    deliveryStage === undefined
-  ) {
-    return {
-      allow: false,
-      message:
-        "This broad brief requires a complete Delivery Plan before execution. Call opendesign_review_delivery_scope with every independently verifiable deliverable from the full brief and attachments; the host records it automatically. Do not finish, create representative-only targets, or write the canvas before the scope is defined.",
-    };
-  }
+    latestDeliveryStage(toolCalls) ?? initialDeliveryStage(initialContent);
   const unresolvedFailure = context.unresolvedDesignWriteFailure;
   if (unresolvedFailure) {
     if (unresolvedFailure.code === "invalid_tool_input") {
@@ -60,20 +52,27 @@ export function reviewDesignCompletion(
       message: `The latest design write is still unresolved (${unresolvedFailure.code}: ${unresolvedFailure.message}). ${recovery}`,
     };
   }
-  const delivery = latestDeliveryLedger(
-    context.toolCalls,
-    context.request.continuation !== undefined,
-  );
+  const delivery =
+    latestDeliveryLedger(
+      toolCalls,
+      context.request.continuation !== undefined,
+    ) ??
+    (context.request.continuation
+      ? initialContent?.unfinishedDelivery
+      : undefined);
   if (
-    context.request.deliveryScopeReview === "direct" &&
+    !reviewedScope &&
+    !deliveryStage &&
+    !delivery &&
+    !toolCalls.some(isExecutablePlanCall) &&
     context.request.continuation === undefined
   ) {
-    return reviewDirectEditCompletion(context.toolCalls);
+    return reviewDirectEditCompletion(toolCalls);
   }
   if (
     reviewedScope &&
     deliveryStage?.plannedTargets === 0 &&
-    !context.toolCalls.some(isExecutablePlanCall)
+    !toolCalls.some(isExecutablePlanCall)
   ) {
     const nextTarget = deliveryStage.nextTarget ?? reviewedScope.targets[0];
     return {
@@ -92,10 +91,7 @@ export function reviewDesignCompletion(
           "The host delivery ledger is not an ordered prefix of the recorded Delivery Plan. Preserve completed target IDs and plan only the next target instead of skipping, replacing, or reordering scope.",
       };
     }
-    if (
-      context.toolCalls.some(isExecutablePlanCall) &&
-      !delivery.planExecution
-    ) {
+    if (toolCalls.some(isExecutablePlanCall) && !delivery.planExecution) {
       return {
         allow: false,
         message:
@@ -140,12 +136,22 @@ export function reviewDesignCompletion(
     }
     return { allow: true };
   }
-  const generationIndex = context.toolCalls.findIndex(
+  if (
+    deliveryStage &&
+    deliveryStage.verifiedTargets < deliveryStage.totalTargets
+  ) {
+    return {
+      allow: false,
+      message:
+        "The trusted delivery stage still has unfinished targets. Continue the current target from the initial inspection instead of finishing with text only.",
+    };
+  }
+  const generationIndex = toolCalls.findIndex(
     (call) => call.toolName === GENERATE_IMAGE_TOOL_NAME,
   );
-  const materialWriteIndex = findMaterialWriteIndex(context.toolCalls);
+  const materialWriteIndex = findMaterialWriteIndex(toolCalls);
   if (materialWriteIndex < 0) {
-    if (generationIndex < 0 && !context.toolCalls.some(isPlanBearingCall)) {
+    if (generationIndex < 0 && !toolCalls.some(isPlanBearingCall)) {
       return { allow: true };
     }
     if (generationIndex < 0) {
@@ -162,19 +168,19 @@ export function reviewDesignCompletion(
     };
   }
 
-  const planIndex = context.toolCalls.findIndex(
+  const planIndex = toolCalls.findIndex(
     (call, index) => index <= materialWriteIndex && isPlanBearingCall(call),
   );
   if (planIndex < 0) {
     return { allow: true };
   }
 
-  const inspectionIndex = context.toolCalls.findIndex(
+  const inspectionIndex = toolCalls.findIndex(
     (call, index) =>
       index < planIndex && call.toolName === DESIGN_INSPECT_TOOL_NAME,
   );
   const usedTrustedInitialInspection =
-    context.toolCalls[planIndex]?.toolName === DESIGN_FIRST_SLICE_TOOL_NAME &&
+    toolCalls[planIndex]?.toolName === DESIGN_FIRST_SLICE_TOOL_NAME &&
     context.request.initialDesignInspection !== undefined;
   if (inspectionIndex < 0 && !usedTrustedInitialInspection) {
     return {
@@ -184,7 +190,7 @@ export function reviewDesignCompletion(
     };
   }
 
-  const firstCaptureIndex = context.toolCalls.findIndex(
+  const firstCaptureIndex = toolCalls.findIndex(
     (call, index) =>
       index > materialWriteIndex && call.toolName === DESIGN_CAPTURE_TOOL_NAME,
   );

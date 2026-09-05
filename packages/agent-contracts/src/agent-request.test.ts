@@ -38,6 +38,15 @@ const validStart = {
 } as const;
 
 describe("Agent request contract", () => {
+  it("rejects the removed host intent-classification field", () => {
+    expect(
+      AgentRequestContract.parse({
+        ...validStart,
+        deliveryScopeReview: "required",
+      }).ok,
+    ).toBe(false);
+  });
+
   it("reuses the canonical Model Gateway selection schema by identity", () => {
     expect(ModelSelectionSchema).toBe(GatewayModelSelectionSchema);
     expect(

@@ -22,7 +22,6 @@ export async function handleDesignPageTool(input: {
     if (!input.coordinator.hasPageStructureAccess(input.context.runId)) {
       throw new Error("Page structure access was not approved for this Run");
     }
-    input.coordinator.assertDeliveryScopeReviewed(input.context);
     return {
       content: {
         ok: true,
@@ -47,10 +46,11 @@ export async function handleDesignPageTool(input: {
   }
   if (pageInput.action !== "clear") return result;
 
-  input.coordinator.supersedeDesignDeliveryForClearedPage(
+  const superseded = input.coordinator.supersedeDesignDeliveryForClearedPage(
     input.context,
     pageInput.pageId,
   );
+  if (!superseded) return result;
   if (!isRecord(result.content)) {
     throw new TypeError("Page clear result must be structured");
   }
