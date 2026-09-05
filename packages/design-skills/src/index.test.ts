@@ -34,7 +34,9 @@ describe("built-in design skills", () => {
       expect(bundle).toContain(`id="${reference.id}"`);
     }
     expect(bundle).toContain("grants no tool");
-    expect(bundle).toContain("The host selects the applicable skill IDs");
+    expect(bundle).toContain(
+      "The host binds skill references to the model-declared deliverable",
+    );
     expect(bundle).toContain("do not send them");
 
     const allDeliverables = formatBuiltinDesignSkillBundle();
@@ -49,6 +51,10 @@ describe("built-in design skills", () => {
     expect(planning).toContain('id="graphic-visual-direction"');
     expect(planning).not.toContain('id="graphic-capture-critic"');
     expect(planning).not.toContain('id="ui-capture-critic"');
+
+    const critic = formatBuiltinDesignReviewSkillBundleForDeliverable("logo");
+    expect(critic).not.toContain("full Conversation");
+    expect(critic).toContain("critics only to trusted captures");
 
     const logoPlanning =
       formatBuiltinDesignPlanningSkillBundleForDeliverable("logo");

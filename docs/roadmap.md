@@ -78,6 +78,10 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 
 ## P0-B：稳定 Leafer 迁移与 Agent 主流程
 
+- [ ] 移除工具入口的发送前意图分类：以中性基础工具集供模型选择创建/编辑/交付范围，不以消息关键词、选区或空页推断任务意图。连同 scope 可见性、成功状态推进、写入后 discovery、自动续跑一起迁移；保留资源授权与事务 invariant，不额外增加分类回合或创作门禁。不能只把 resolver 固定为 general/direct 后宣称完成。
+
+- [x] 移除系统提示词的最新消息关键词 Skill 分类及中英文字数语言预判。现有 planning 方法保持可用，由模型结合 Conversation 应用；Provider 边界回归保留连续消息与原文，不增加分类往返。工具入口的意图路由尚未迁移，真实审美与耗时仍未验收；见 ADR-0303。
+
 - [x] 修复 Renderer 规划器失败被降级为通用执行错误的路径：编组、排列、组件、Page、SVG 导入、矢量与图片编辑保留原始错误分类，合并编辑定位到具体 `/edits/{index}/input`。恢复按操作与根因区分，不把不同规划器失败累计成同一循环；同一根因仍有界停止，失败批次不产生部分提交。此项是错误传递整改，不代表真实模型生成或视觉质量已验收。
 
 - [x] 修复 Agent 骨架/光标在用户观察生成过程时拖动画布产生双重 viewport 的实机时序：删除第四个独立 presentation canvas，把不可命中的 skeleton/cursor Group 放入 Leafer 内置 editor `sky` 且位于 Editor selection child 下方；按 `sky⁻¹ × tree/screen` 投影，并在真实 child render 前幂等复核 tree/sky 的最终 transform。自动化不替代 macOS/Windows 打包触控板和鼠标实机验收。

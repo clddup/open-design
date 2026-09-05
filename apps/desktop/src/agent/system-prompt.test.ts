@@ -2,8 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   agentSystemPromptForRequest,
   designThinkingLevelForRequest,
-  inferDesignContentLanguage,
-  inferNewDesignDeliverable,
   newDesignSystemPromptForRequest,
   OPENDESIGN_AGENT_SYSTEM_PROMPT,
   OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT,
@@ -83,31 +81,31 @@ describe("OpenDesign Agent system prompt", () => {
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain("persistent Image");
   });
 
-  it("routes compact planning skills by the requested deliverable", () => {
-    const logoPrompt = newDesignSystemPromptForRequest({
-      prompt:
-        "Design an OpenDesign logo, app icon, and previews in the desktop UI",
-    });
-    expect(inferNewDesignDeliverable("设计一套 Logo 和应用图标")).toBe("logo");
-    expect(logoPrompt).toContain('id="graphic-visual-direction"');
-    expect(logoPrompt).toContain('id="logo-visual-direction"');
-    expect(logoPrompt).not.toContain('id="ui-visual-direction"');
-
-    const uiPrompt = newDesignSystemPromptForRequest({
-      prompt: "设计一个桌面端登录注册页面",
-    });
-    expect(uiPrompt).toContain('id="ui-visual-direction"');
-    expect(uiPrompt).toContain('id="ui-ux-structure"');
-    expect(uiPrompt).not.toContain('id="graphic-visual-direction"');
-
-    expect(inferNewDesignDeliverable("创造一个新的视觉方向")).toBeUndefined();
-    const unclassified = newDesignSystemPromptForRequest({
-      prompt: "根据附件做一套新的视觉方向",
-    });
-    expect(unclassified).not.toContain('id="ui-visual-direction"');
-    expect(unclassified).not.toContain('id="graphic-visual-direction"');
-    expect(unclassified).not.toContain('id="logo-visual-direction"');
-  });
+  it.each([agentSystemPromptForRequest, newDesignSystemPromptForRequest])(
+    "keeps planning methods available without classifying the latest message",
+    (build) => {
+      const continuation = build({ prompt: "继续" });
+      for (const prompt of [
+        "Design a logo",
+        "做一个登录页",
+        "根据附件完成",
+        "再改一下",
+        "Continue",
+      ]) {
+        expect(build({ prompt })).toBe(continuation);
+      }
+      for (const id of [
+        "ui-visual-direction",
+        "ui-ux-structure",
+        "graphic-visual-direction",
+        "logo-visual-direction",
+      ]) {
+        expect(continuation).toContain(`id="${id}"`);
+      }
+      expect(continuation).not.toContain('id="logo-capture-critic"');
+      expect(continuation).toContain("full Conversation");
+    },
+  );
 
   it("uses one quality execution policy without a fast-mode bypass", () => {
     const newDesign = newDesignSystemPromptForRequest({
@@ -146,31 +144,14 @@ describe("OpenDesign Agent system prompt", () => {
     expect(direct).toContain("do not add a planning approval step");
   });
 
-  it("binds visible design content to the user's language without translating brands", () => {
-    expect(
-      inferDesignContentLanguage(
-        "为 OpenDesign 设计品牌 Logo，并提供 Concept Exploration 和说明。",
-      ),
-    ).toBe("zh-CN");
-    expect(inferDesignContentLanguage("Use Chinese for the canvas copy")).toBe(
-      "zh-CN",
+  it("leaves content language to the user's contextual requirements, not host word counting", () => {
+    const prompt = agentSystemPromptForRequest({ prompt: "继续" });
+    expect(prompt).toContain(
+      "Preserve the established canvas-content language",
     );
-    expect(inferDesignContentLanguage("请用英文输出画布文案")).toBe("en");
-
-    const chinese = newDesignSystemPromptForRequest({
-      prompt:
-        "为 OpenDesign 设计品牌 Logo，配套英文 Wordmark，其他说明使用中文。",
-    });
-    expect(chinese).toContain(
-      "trusted design-content language: Simplified Chinese",
-    );
-    expect(chinese).toContain("Translate scaffold labels");
-    expect(chinese).toContain("explicitly requested English wordmark");
-
-    const english = agentSystemPromptForRequest({
-      prompt: "Refine the current desktop dashboard",
-    });
-    expect(english).toContain("trusted design-content language: English");
+    expect(prompt).toContain("explicitly requested English wordmark");
+    expect(prompt).not.toContain("trusted design-content language:");
+    expect(agentSystemPromptForRequest({ prompt: "改用英文" })).toBe(prompt);
   });
 
   it("honors the user's selected reasoning effort on every design surface", () => {
@@ -223,15 +204,5 @@ describe("OpenDesign Agent system prompt", () => {
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).not.toContain(
       "exact fields action, label, pageId",
     );
-  });
-
-  it("adds only the applicable planning skills when the request is classifiable", () => {
-    const logo = agentSystemPromptForRequest({
-      prompt: "继续修改当前 OpenDesign Logo",
-    });
-    expect(logo).toContain('id="logo-visual-direction"');
-    expect(logo).toContain('id="graphic-visual-direction"');
-    expect(logo).not.toContain('id="ui-visual-direction"');
-    expect(logo).not.toContain('id="logo-capture-critic"');
   });
 });

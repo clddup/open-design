@@ -51,6 +51,10 @@ OpenDesign 是跨平台桌面产品。macOS 与 Windows 是同级一级支持平
 - OpenPencil 的单文件多页模型可以作为调研输入，但其 MCP 按调用接受任意 `filePath` 并直接加载或保存目标文件的方式不得照抄。完成 ADR-0005 与 ADR-0006 定义的移除门禁后，必须删除 OpenPencil 运行时、发行资源和 vendor 依赖，不能保留无期限 fallback 或双写路径。
 - 不要提交生成物、密钥、访问令牌、用户设计文件或模型会话内容。
 
+### 用户意图与上下文
+
+- 不得新增基于用户消息关键词、正则、字数或额外分类模型调用的宿主意图路由，以此判断继续/新任务、撤下设计方法或强制画布语言。用户意图由模型结合真实 Conversation 与设计上下文理解；宿主负责明确资源范围、能力、执行事实和安全边界。模型通过契约声明的设计类型可以用于选择对应实现或审核方法，不得与对自然语言的预判混为一谈。现有遗留预判应按调用链迁移，不用新的历史关键词回溯取代它。
+
 ### 契约与校验单一事实源
 
 - 该约束覆盖完整 Agent 生成链，而不只覆盖 first-slice 或首屏：Delivery Scope、Plan、First Slice、Apply、Checkpoint、Capture、Review、图片读写与放置、组件/层级/排版/矢量工具、Agent/Provider Event、Main/Preload IPC、Workspace/Conversation 持久化以及最终 DesignDocument/事务协议都必须按同一原则收敛。可以分阶段迁移，但不得把单个工具迁移完成描述为整个流程已解决。

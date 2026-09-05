@@ -1,48 +1,4 @@
-import {
-  type BuiltinDesignDeliverable,
-  formatBuiltinDesignPlanningSkillBundleForDeliverable,
-} from "@opendesign/design-skills";
-
-const DELIVERABLE_PATTERNS: readonly Readonly<{
-  deliverable: BuiltinDesignDeliverable;
-  pattern: RegExp;
-}>[] = [
-  {
-    deliverable: "logo",
-    pattern:
-      /(?:\blogo\b|\bwordmark\b|\bapp\s*icon\b|标志|标识|字标|品牌识别|应用图标)/iu,
-  },
-  {
-    deliverable: "poster",
-    pattern: /(?:\bposter\b|\bflyer\b|海报|宣传单|招贴)/iu,
-  },
-  {
-    deliverable: "illustration",
-    pattern: /(?:\billustration\b|\bmascot\b|插画|插图|吉祥物)/iu,
-  },
-  {
-    deliverable: "presentation-visual",
-    pattern:
-      /(?:\bpresentation\b|\bslide(?:s)?\b|\bdeck\b|演示文稿|幻灯片|演示视觉)/iu,
-  },
-  {
-    deliverable: "brand-asset",
-    pattern:
-      /(?:\bbrand(?:ing)?\s+asset\b|品牌物料|品牌资产|社交媒体图|social graphic)/iu,
-  },
-  {
-    deliverable: "ui",
-    pattern:
-      /(?:\bui\b|\bux\b|\buser interface\b|\bdashboard\b|\bscreen\b|\bweb\s*(?:site|page|app)\b|界面|页面|登录|注册|仪表盘|控制台|客户端|应用界面|网页)/iu,
-  },
-];
-
-export function inferNewDesignDeliverable(
-  prompt: string,
-): BuiltinDesignDeliverable | undefined {
-  return DELIVERABLE_PATTERNS.find(({ pattern }) => pattern.test(prompt))
-    ?.deliverable;
-}
+import { formatBuiltinDesignPlanningSkillBundle } from "@opendesign/design-skills";
 
 export function buildNewDesignSystemPrompt(skillBundle: string): string {
   return `
@@ -79,14 +35,9 @@ export function newDesignSystemPromptForRequest(request: {
   prompt: string;
   deliveryScopeReview?: "direct" | "required";
 }): string {
-  const deliverable = inferNewDesignDeliverable(request.prompt);
   return [
-    buildNewDesignSystemPrompt(
-      deliverable === undefined
-        ? ""
-        : formatBuiltinDesignPlanningSkillBundleForDeliverable(deliverable),
-    ),
-    designContentLanguageInstruction(request.prompt),
+    buildNewDesignSystemPrompt(formatBuiltinDesignPlanningSkillBundle()),
+    designContentLanguageInstruction(),
     deliveryScopeInstruction(request.deliveryScopeReview),
     designExecutionInstruction(),
   ].join("\n\n");
@@ -96,29 +47,13 @@ export function agentSystemPromptForRequest(request: {
   prompt: string;
   deliveryScopeReview?: "direct" | "required";
 }): string {
-  const deliverable = inferNewDesignDeliverable(request.prompt);
   return [
     OPENDESIGN_AGENT_SYSTEM_PROMPT,
-    deliverable === undefined
-      ? ""
-      : formatBuiltinDesignPlanningSkillBundleForDeliverable(deliverable),
-    designContentLanguageInstruction(request.prompt),
+    formatBuiltinDesignPlanningSkillBundle(),
+    designContentLanguageInstruction(),
     deliveryScopeInstruction(request.deliveryScopeReview),
     designExecutionInstruction(),
   ].join("\n\n");
-}
-
-export function inferDesignContentLanguage(prompt: string): "zh-CN" | "en" {
-  const explicitChinese =
-    /(?:使用|改用|请用|文案(?:为|用)|内容(?:为|用)|输出(?:为|用))\s*(?:简体)?中文|(?:in|use)\s+(?:simplified\s+)?chinese/iu;
-  const explicitEnglish =
-    /(?:使用|改用|请用|文案(?:为|用)|内容(?:为|用)|输出(?:为|用))\s*英文|(?:in|use)\s+english/iu;
-  if (explicitChinese.test(prompt)) return "zh-CN";
-  if (explicitEnglish.test(prompt)) return "en";
-
-  const hanCharacters = prompt.match(/[\p{Script=Han}]/gu)?.length ?? 0;
-  const latinWords = prompt.match(/[A-Za-z]+(?:[-'][A-Za-z]+)*/g)?.length ?? 0;
-  return hanCharacters >= Math.max(2, latinWords * 2) ? "zh-CN" : "en";
 }
 
 export function designThinkingLevelForRequest(
@@ -134,16 +69,10 @@ export function designThinkingLevelForRequest(
   return request.modelSelection.reasoningEffort ?? "off";
 }
 
-function designContentLanguageInstruction(prompt: string): string {
-  if (inferDesignContentLanguage(prompt) === "zh-CN") {
-    return [
-      "OpenDesign trusted design-content language: Simplified Chinese.",
-      "Use Simplified Chinese for every user-visible canvas string, concept or direction title, explanatory caption, semantic step label, and human-facing Frame, Group, Layer, Component, and asset name. Preserve brand and product names such as OpenDesign, an explicitly requested English wordmark, and any text the user explicitly says must remain in another language. Stable technical IDs remain concise ASCII. Translate scaffold labels such as Concept Exploration or Monochrome Tests unless the user explicitly requires those exact English strings. Image-generation prompts should request Chinese visible copy and must not invent English UI or presentation text. Assistant replies remain in the user's language.",
-    ].join("\n");
-  }
+function designContentLanguageInstruction(): string {
   return [
-    "OpenDesign trusted design-content language: English.",
-    "Use English for user-visible canvas copy, concept or direction titles, explanatory captions, semantic step labels, and human-facing layer names unless the user explicitly requires another language. Preserve exact brand names and requested text. Stable technical IDs remain concise ASCII.",
+    "Determine content language from the user's requirements in the full Conversation and current design, not from technical identifiers or isolated words in the latest message.",
+    "Preserve the established canvas-content language during continued work unless the user asks to change it. With no established preference, follow the language of the user's design brief. Preserve exact brand names, quoted copy, and an explicitly requested English wordmark. Localize explanatory captions and human-facing layer names consistently. Stable technical IDs remain concise ASCII. Assistant replies follow the user's conversational language, which can differ from canvas copy.",
   ].join("\n");
 }
 

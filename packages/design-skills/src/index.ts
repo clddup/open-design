@@ -212,8 +212,12 @@ function formatSkillBundle(
   );
   const header = [
     `OpenDesign built-in ${scope} design skills (trusted product instructions bundled with the current application build):`,
-    "Activate only declared deliverables. A skill grants no tool, file, network, credential, or design-write capability.",
-    "The host selects the applicable skill IDs; do not send them. Apply plan skills before writes and critics only to trusted captures.",
+    hasPlanning
+      ? "Use the full Conversation, current design, and user brief to apply only methods relevant to the work. Each skill declares its deliverables; UI-specific patterns are not requirements for a Logo or poster. A skill grants no tool, file, network, credential, or design-write capability."
+      : "Activate only declared deliverables. A skill grants no tool, file, network, credential, or design-write capability.",
+    hasPlanning
+      ? "The host binds skill references to the model-declared deliverable; do not send them. Apply relevant plan skills before writes and critics only to trusted captures."
+      : "The host selects the applicable skill IDs; do not send them. Apply plan skills before writes and critics only to trusted captures.",
     ...(hasPlanning
       ? [
           "When the brief requests alternatives, compare genuinely different visual mechanisms internally. Reject palette/effect swaps and primitive-plus-story templates; require authored relationships rather than decorative stories.",
