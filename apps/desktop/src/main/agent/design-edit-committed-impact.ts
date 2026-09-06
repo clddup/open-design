@@ -1,3 +1,4 @@
+import { createAncestryQuery } from "./design-ancestry-query.js";
 import { isDeepStrictEqual } from "node:util";
 import type { DesignChangeSet } from "@opendesign/design-contracts";
 import type {
@@ -26,7 +27,7 @@ export type CommittedDesignEditImpact = {
 type NodeView = { parentId: string | null; componentId: string | null };
 type ParentView = {
   nodes: ReadonlyMap<string, NodeView>;
-  absent: ReadonlySet<string>;
+  belongsTo: ReturnType<typeof createAncestryQuery>;
 };
 type NodeChange = DesignChangeSet["changes"][number];
 type SnapshotChange = { before?: unknown; after?: unknown };
@@ -106,28 +107,15 @@ function parentView(
       absent.add(change.nodeId);
     }
   }
-  return { nodes, absent };
+  return { nodes, belongsTo: createAncestryQuery(nodes, absent) };
 }
 
-/** undefined means missing ancestry or a cycle, not proof of membership. */
 function belongsTo(
   view: ParentView,
   nodeId: string,
   root: string,
 ): boolean | undefined {
-  if (view.absent.has(root)) return false;
-  const visited = new Set<string>();
-  let current: string | null = nodeId;
-  while (current !== null) {
-    if (view.absent.has(current)) return false;
-    if (visited.has(current)) return undefined;
-    visited.add(current);
-    if (current === root) return true;
-    const node = view.nodes.get(current);
-    if (!node) return undefined;
-    current = node.parentId;
-  }
-  return false;
+  return view.belongsTo(nodeId, root);
 }
 
 function members(
