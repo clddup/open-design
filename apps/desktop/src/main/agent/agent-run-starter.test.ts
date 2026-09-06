@@ -68,12 +68,19 @@ function createMemorySessionStore(): SessionStore {
 }
 
 describe("Agent Run starter", () => {
-  it.each([false, true])(
-    "does not dispatch a Run cancelled during the final revision check; rejected=%s",
-    async (rejected) => {
+  it.each([
+    { phase: "startup", rejected: false },
+    { phase: "startup", rejected: true },
+    { phase: "registration", rejected: false },
+    { phase: "registration", rejected: true },
+    { phase: "revision", rejected: false },
+    { phase: "revision", rejected: true },
+  ])(
+    "does not dispatch a Run cancelled during $phase; rejected=$rejected",
+    async ({ phase, rejected }) => {
       const scheduler = new AgentContinuationScheduler(() => 1000);
       let release!: () => void;
-      const assertRunRevisionCurrent = vi.fn(
+      const waitAtBoundary = vi.fn(
         () =>
           new Promise<void>((resolve, reject) => {
             release = () =>
@@ -87,13 +94,25 @@ describe("Agent Run starter", () => {
       const sessionStore = createMemorySessionStore();
       const handleAgentEvent = vi.fn();
       const conversationIdByRunId = new Map<string, string>();
+      const start =
+        phase === "startup"
+          ? waitAtBoundary
+          : vi.fn().mockResolvedValue(undefined);
+      const registerRun =
+        phase === "registration"
+          ? waitAtBoundary
+          : vi.fn().mockResolvedValue({});
+      const assertRunRevisionCurrent =
+        phase === "revision"
+          ? waitAtBoundary
+          : vi.fn().mockResolvedValue(undefined);
       const dependencies = {
-        agentHost: { send, start: vi.fn().mockResolvedValue(undefined) },
+        agentHost: { send, start },
         continuationScheduler: scheduler,
         conversationIdByRunId,
         initialInspectionControllers: new Map<string, AbortController>(),
         globalTaskCoordinator: {
-          registerRun: vi.fn().mockResolvedValue({}),
+          registerRun,
           assertRunRevisionCurrent,
           handleAgentEvent,
           referenceAttachmentsForRun: vi.fn(() => []),
@@ -108,14 +127,14 @@ describe("Agent Run starter", () => {
         referenceHost: references as never,
       };
       const pending = startAgentRun(source, dependencies);
-      await vi.waitFor(() =>
-        expect(assertRunRevisionCurrent).toHaveBeenCalledOnce(),
-      );
-      scheduler.requestCancellation(source.runId);
+      await vi.waitFor(() => expect(waitAtBoundary).toHaveBeenCalledOnce());
+      const cancellationTarget = scheduler.requestCancellation(source.runId);
       release();
-      expect(await pending).toBe(false);
+      await expect(pending).resolves.toBe(false);
+      expect(cancellationTarget).toBe(source.runId);
       expect(send).not.toHaveBeenCalled();
       expect(references.registerRun).not.toHaveBeenCalled();
+      if (phase === "startup") expect(registerRun).not.toHaveBeenCalled();
       expect(conversationIdByRunId.size).toBe(0);
       expect(scheduler.activeRunIds()).toEqual([]);
       expect(handleAgentEvent).toHaveBeenCalledWith(
