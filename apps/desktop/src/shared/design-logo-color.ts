@@ -73,6 +73,6 @@ function issue(
       ? {}
       : { actual: typeof actual === "string" ? actual : [...actual] }),
     recovery:
-      "Use color as part of the primary brand identity. Keep monochrome as a required test or variant unless the user's brief explicitly makes it the main identity.",
+      "Use color as part of the primary brand identity. Assess monochrome robustness without inventing extra outputs; create monochrome variants when the user's brief requests them.",
   };
 }

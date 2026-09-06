@@ -17,6 +17,27 @@ import {
 } from "./index.js";
 
 describe("built-in design skills", () => {
+  it("does not promise nonexistent host Logo specimens or expand a focused asset into a brand manual", () => {
+    const planning =
+      formatBuiltinDesignPlanningSkillBundleForDeliverable("logo");
+    expect(planning).not.toContain("The host derives black/white evidence");
+    expect(planning).not.toContain("let the host derive monochrome");
+    expect(planning).toContain(
+      "Do not expand a single requested mark into a brand manual",
+    );
+    const review = formatBuiltinDesignReviewSkillBundleForDeliverable("logo");
+    expect(review).toContain("Do not claim exact pixel-size testing");
+    expect(review).toContain(
+      "Missing unrequested presentation boards are not a defect",
+    );
+    expect(planning).toContain(
+      "wordmark spacing and lockups only when those outputs were requested",
+    );
+    expect(review).toContain(
+      "light/dark variant completeness only when those variants were requested",
+    );
+  });
+
   it("keeps critic reference judgment grounded in user requirements rather than author declarations", () => {
     const review = formatBuiltinDesignReviewSkillBundleForDeliverable("ui");
     expect(review).toContain(
