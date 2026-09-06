@@ -68,6 +68,72 @@ function createMemorySessionStore(): SessionStore {
 }
 
 describe("Agent Run starter", () => {
+  it.each([false, true])(
+    "does not dispatch a Run cancelled during the final revision check; rejected=%s",
+    async (rejected) => {
+      const scheduler = new AgentContinuationScheduler(() => 1000);
+      let release!: () => void;
+      const assertRunRevisionCurrent = vi.fn(
+        () =>
+          new Promise<void>((resolve, reject) => {
+            release = () =>
+              rejected
+                ? reject(new Error("Revision read ended after cancellation"))
+                : resolve();
+          }),
+      );
+      const send = vi.fn();
+      const references = { registerRun: vi.fn(), releaseRun: vi.fn() };
+      const sessionStore = createMemorySessionStore();
+      const handleAgentEvent = vi.fn();
+      const conversationIdByRunId = new Map<string, string>();
+      const dependencies = {
+        agentHost: { send, start: vi.fn().mockResolvedValue(undefined) },
+        continuationScheduler: scheduler,
+        conversationIdByRunId,
+        initialInspectionControllers: new Map<string, AbortController>(),
+        globalTaskCoordinator: {
+          registerRun: vi.fn().mockResolvedValue({}),
+          assertRunRevisionCurrent,
+          handleAgentEvent,
+          referenceAttachmentsForRun: vi.fn(() => []),
+        } as never,
+        modelProviderHost: {
+          resolveModelContext: vi.fn(() => ({
+            contextWindow: 200_000,
+            maxOutputTokens: 16_384,
+          })),
+        } as never,
+        sessionStore,
+        referenceHost: references as never,
+      };
+      const pending = startAgentRun(source, dependencies);
+      await vi.waitFor(() =>
+        expect(assertRunRevisionCurrent).toHaveBeenCalledOnce(),
+      );
+      scheduler.requestCancellation(source.runId);
+      release();
+      expect(await pending).toBe(false);
+      expect(send).not.toHaveBeenCalled();
+      expect(references.registerRun).not.toHaveBeenCalled();
+      expect(conversationIdByRunId.size).toBe(0);
+      expect(scheduler.activeRunIds()).toEqual([]);
+      expect(handleAgentEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "run.completed",
+          stopReason: "cancelled",
+        }),
+      );
+      const journal = await sessionStore.read(source.sessionId);
+      expect(
+        journal.filter((event) => event.type === "message.user"),
+      ).toHaveLength(1);
+      expect(
+        journal.filter((event) => event.type === "run.state"),
+      ).toMatchObject([{ payload: { status: "cancelled" } }]);
+    },
+  );
+
   it("sends Main-prepared inspection without injecting a delivery intent flag", async () => {
     const scheduler = new AgentContinuationScheduler(() => 1000);
     const send = vi.fn();

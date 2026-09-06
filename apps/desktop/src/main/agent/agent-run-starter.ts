@@ -96,11 +96,7 @@ export async function startAgentRun(
     continuationScheduler.registerRun(trustedRequest);
     await globalTaskCoordinator.registerRun(trustedRequest);
     if (continuationScheduler.isCancellationRequested(request.runId)) {
-      const completed = cancelledRun(request.runId);
-      await persistUnsentRun(dependencies.sessionStore, request, completed);
-      globalTaskCoordinator.handleAgentEvent(completed);
-      continuationScheduler.forgetRun(request.runId);
-      return false;
+      return await finishCancelledStart(request, dependencies);
     }
     let initialDesignInspection: AgentInitialDesignInspection | undefined;
     if (dependencies.prepareInitialDesignInspection) {
@@ -126,13 +122,12 @@ export async function startAgentRun(
       }
     }
     if (continuationScheduler.isCancellationRequested(request.runId)) {
-      const completed = cancelledRun(request.runId);
-      await persistUnsentRun(dependencies.sessionStore, request, completed);
-      globalTaskCoordinator.handleAgentEvent(completed);
-      continuationScheduler.forgetRun(request.runId);
-      return false;
+      return await finishCancelledStart(request, dependencies);
     }
     await globalTaskCoordinator.assertRunRevisionCurrent(request.runId);
+    if (continuationScheduler.isCancellationRequested(request.runId)) {
+      return await finishCancelledStart(request, dependencies);
+    }
     referenceHost.registerRun(
       trustedRequest,
       globalTaskCoordinator.referenceAttachmentsForRun(request.runId),
@@ -151,6 +146,9 @@ export async function startAgentRun(
   } catch (error) {
     conversationIdByRunId.delete(request.runId);
     referenceHost.releaseRun(request.runId);
+    if (continuationScheduler.isCancellationRequested(request.runId)) {
+      return await finishCancelledStart(request, dependencies);
+    }
     continuationScheduler.forgetRun(request.runId);
     const failure = requestFailure(error);
     const completed = failedRun(request.runId);
@@ -174,6 +172,17 @@ export async function startAgentRun(
     globalTaskCoordinator.handleAgentEvent(completed);
     throw error;
   }
+}
+
+async function finishCancelledStart(
+  request: RunStartRequest,
+  dependencies: AgentRunStarterDependencies,
+): Promise<false> {
+  const completed = cancelledRun(request.runId);
+  await persistUnsentRun(dependencies.sessionStore, request, completed);
+  dependencies.globalTaskCoordinator.handleAgentEvent(completed);
+  dependencies.continuationScheduler.forgetRun(request.runId);
+  return false;
 }
 
 async function persistUnsentRun(
