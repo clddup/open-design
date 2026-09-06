@@ -54,20 +54,23 @@ function createHierarchyState(inspection: InspectedHierarchy | undefined) {
   const locations = new Map<string, NodeLocation>();
   for (const [pageId, roots] of inspection?.pageRootsById ?? []) {
     childCounts.set(containerKey(pageId, null), roots.size);
-    for (const rootId of roots) visitInspectedNode(rootId, pageId, null);
-  }
-
-  function visitInspectedNode(
-    nodeId: string,
-    pageId: string,
-    parentId: string | null,
-  ): void {
-    const node = inspection?.nodesById.get(nodeId);
-    if (!node) return;
-    locations.set(nodeId, { pageId, parentId });
-    childCounts.set(containerKey(pageId, nodeId), node.childIds.length);
-    for (const childId of node.childIds) {
-      visitInspectedNode(childId, pageId, nodeId);
+    const pending = [...roots].map((nodeId) => ({
+      nodeId,
+      parentId: null as string | null,
+    }));
+    while (pending.length > 0) {
+      const current = pending.pop();
+      if (!current || locations.has(current.nodeId)) continue;
+      const node = inspection?.nodesById.get(current.nodeId);
+      if (!node) continue;
+      locations.set(current.nodeId, { pageId, parentId: current.parentId });
+      childCounts.set(
+        containerKey(pageId, current.nodeId),
+        node.childIds.length,
+      );
+      for (const childId of node.childIds) {
+        pending.push({ nodeId: childId, parentId: current.nodeId });
+      }
     }
   }
 

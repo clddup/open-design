@@ -4,6 +4,47 @@ import type { InspectedHierarchy } from "./design-plan-registration.js";
 import { bindDesignOperationStructure } from "./design-apply-structure-binding.js";
 
 describe("bindDesignOperationStructure", () => {
+  it("binds deep valid hierarchies without exhausting the call stack", () => {
+    const source = inspection();
+    const template = source.nodesById.get("root_a");
+    if (!template) throw new Error("Missing fixture node");
+    const depth = 12_000;
+    source.nodesById.clear();
+    source.pageRootsById.set("page_1", new Set(["deep_0"]));
+    for (let index = 0; index < depth; index += 1) {
+      const id = `deep_${index}`;
+      source.nodesById.set(id, {
+        ...template,
+        id,
+        parentId: index === 0 ? null : `deep_${index - 1}`,
+        childIds: index + 1 < depth ? [`deep_${index + 1}`] : [],
+      });
+    }
+    const input = {
+      label: "Append to deepest Frame",
+      commands: [insert("new_child", `deep_${depth - 1}`, 99)],
+    };
+    const bound = bindDesignOperationStructure(input, source);
+    expect(bound.commands[0]).toMatchObject({
+      parentId: `deep_${depth - 1}`,
+      index: 0,
+    });
+    expect(source.nodesById.get(`deep_${depth - 1}`)?.childIds).toEqual([]);
+    expect(input.commands[0].index).toBe(99);
+  });
+
+  it("does not recurse indefinitely on a repeated node in a defensive cache projection", () => {
+    const source = inspection();
+    const node = source.nodesById.get("root_a");
+    if (!node) throw new Error("Missing fixture node");
+    node.childIds = ["root_a"];
+    const input = { label: "Append", commands: [insert("new_root", null, 99)] };
+    expect(
+      bindDesignOperationStructure(input, source).commands[0],
+    ).toMatchObject({ index: 2 });
+    expect(source.nodesById.get("root_a")?.childIds).toEqual(["root_a"]);
+  });
+
   it("appends siblings and nested children from trusted hierarchy state", () => {
     const input = {
       label: "Create material hierarchy",
