@@ -129,6 +129,43 @@ function body(fetch: ReturnType<typeof setup>["fetch"]) {
 }
 
 describe("ModelProviderHost.complete request budget", () => {
+  it.each(["complete", "stream"] as const)(
+    "cancels %s while attachment extraction is pending, without waiting for it",
+    async (mode) => {
+      const { host, resolve, fetch } = setup();
+      let release!: (value: ResolvedModelAttachment) => void;
+      resolve.mockImplementation(
+        () =>
+          new Promise((done) => {
+            release = done;
+          }),
+      );
+      const controller = new AbortController();
+      const reason = new Error("Stop while reading attachment");
+      const stream = host.stream(request(), controller.signal);
+      const pending =
+        mode === "complete"
+          ? host.complete(request(), controller.signal)
+          : stream[Symbol.asyncIterator]().next();
+      let rejection: unknown;
+      const observed = pending.catch((error: unknown) => {
+        rejection = error;
+      });
+      controller.abort(reason);
+      try {
+        await vi.waitFor(() => expect(rejection).toBe(reason), {
+          timeout: 100,
+        });
+        expect(fetch).not.toHaveBeenCalled();
+      } finally {
+        release(document("Late extraction result"));
+        await observed;
+      }
+      await Promise.resolve();
+      expect(fetch).not.toHaveBeenCalled();
+    },
+  );
+
   it("reuses attachment extraction within one request without dropping repeated user references", async () => {
     const text = "Original requirement remains present";
     const { host, resolve, fetch } = setup(document(text));

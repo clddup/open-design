@@ -1,3 +1,4 @@
+import { awaitAbortable } from "../abortable-operation";
 import type { SessionStore } from "@opendesign/session-store";
 import type {
   SessionStoreBridgeRequest,
@@ -19,7 +20,7 @@ export class AgentSessionStoreHost {
   ): Promise<SuccessfulSessionStoreResponse> {
     throwIfAborted(signal);
     const operation = this.executeOperation(request);
-    return raceAbort(operation, signal);
+    return awaitAbortable(operation, signal);
   }
 
   private async executeOperation(
@@ -66,20 +67,4 @@ export class AgentSessionStoreHost {
 function throwIfAborted(signal: AbortSignal): void {
   if (signal.aborted)
     throw new DOMException("Session request cancelled", "AbortError");
-}
-
-function raceAbort<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
-  if (signal.aborted) {
-    return Promise.reject(
-      new DOMException("Session request cancelled", "AbortError"),
-    );
-  }
-  return new Promise<T>((resolve, reject) => {
-    const abort = () =>
-      reject(new DOMException("Session request cancelled", "AbortError"));
-    signal.addEventListener("abort", abort, { once: true });
-    void operation.then(resolve, reject).finally(() => {
-      signal.removeEventListener("abort", abort);
-    });
-  });
 }

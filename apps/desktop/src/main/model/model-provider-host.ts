@@ -1,3 +1,4 @@
+import { awaitAbortable } from "../abortable-operation";
 import {
   MultiProtocolModelGateway,
   type CanonicalStreamEvent,
@@ -253,7 +254,7 @@ export class ModelProviderHost {
     signal: AbortSignal,
   ): Promise<CanonicalStreamEvent[]> {
     signal.throwIfAborted();
-    const resolved = await this.resolveAttachmentReferences(request);
+    const resolved = await this.resolveAttachmentReferences(request, signal);
     signal.throwIfAborted();
     assertCompleteContextBudget(
       resolved,
@@ -270,7 +271,9 @@ export class ModelProviderHost {
     request: Omit<ModelRequest, "signal">,
     signal: AbortSignal,
   ): AsyncIterable<CanonicalStreamEvent> {
-    const resolved = await this.resolveAttachmentReferences(request);
+    signal.throwIfAborted();
+    const resolved = await this.resolveAttachmentReferences(request, signal);
+    signal.throwIfAborted();
     yield* this.streamResolved(resolved, signal);
   }
 
@@ -301,6 +304,7 @@ export class ModelProviderHost {
 
   private async resolveAttachmentReferences(
     request: Omit<ModelRequest, "signal">,
+    signal: AbortSignal,
   ): Promise<Omit<ModelRequest, "signal">> {
     const references = request.messages.flatMap((message) =>
       message.role === "user" && Array.isArray(message.content)
@@ -325,51 +329,54 @@ export class ModelProviderHost {
     const resolvedById = new Map<string, Promise<ResolvedModelAttachment>>();
     return {
       ...request,
-      messages: await Promise.all(
-        request.messages.map(async (message) => {
-          if (message.role !== "user" || !Array.isArray(message.content)) {
-            return message;
-          }
-          return {
-            ...message,
-            content: await Promise.all(
-              message.content.map(async (block) => {
-                if (
-                  block.type !== "image_ref" &&
-                  block.type !== "document_ref"
-                ) {
-                  return block;
-                }
-                const pending =
-                  resolvedById.get(block.attachmentId) ??
-                  attachmentResolver.resolve(block.attachmentId);
-                resolvedById.set(block.attachmentId, pending);
-                const resolved = await pending;
-                if (
-                  resolved.mimeType !== block.mimeType ||
-                  resolved.byteSize !== block.byteSize ||
-                  resolved.kind !==
-                    (block.type === "image_ref" ? "image" : "document")
-                ) {
-                  throw new Error(
-                    `Agent attachment metadata mismatch: ${block.attachmentId}`,
-                  );
-                }
-                if (resolved.kind === "image") {
+      messages: await awaitAbortable(
+        Promise.all(
+          request.messages.map(async (message) => {
+            if (message.role !== "user" || !Array.isArray(message.content)) {
+              return message;
+            }
+            return {
+              ...message,
+              content: await Promise.all(
+                message.content.map(async (block) => {
+                  if (
+                    block.type !== "image_ref" &&
+                    block.type !== "document_ref"
+                  ) {
+                    return block;
+                  }
+                  const pending =
+                    resolvedById.get(block.attachmentId) ??
+                    attachmentResolver.resolve(block.attachmentId);
+                  resolvedById.set(block.attachmentId, pending);
+                  const resolved = await pending;
+                  if (
+                    resolved.mimeType !== block.mimeType ||
+                    resolved.byteSize !== block.byteSize ||
+                    resolved.kind !==
+                      (block.type === "image_ref" ? "image" : "document")
+                  ) {
+                    throw new Error(
+                      `Agent attachment metadata mismatch: ${block.attachmentId}`,
+                    );
+                  }
+                  if (resolved.kind === "image") {
+                    return {
+                      type: "image" as const,
+                      data: resolved.data,
+                      mimeType: resolved.mimeType,
+                    };
+                  }
                   return {
-                    type: "image" as const,
-                    data: resolved.data,
-                    mimeType: resolved.mimeType,
+                    type: "text" as const,
+                    text: documentContextBlock(block.name, resolved),
                   };
-                }
-                return {
-                  type: "text" as const,
-                  text: documentContextBlock(block.name, resolved),
-                };
-              }),
-            ),
-          };
-        }),
+                }),
+              ),
+            };
+          }),
+        ),
+        signal,
       ),
     };
   }
