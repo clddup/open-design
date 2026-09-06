@@ -91,8 +91,8 @@ export async function startAgentRun(
     referenceHost,
   } = dependencies;
   const trustedRequest: RunStartRequest = { ...request };
+  continuationScheduler.registerRun(trustedRequest);
   try {
-    continuationScheduler.registerRun(trustedRequest);
     await agentHost.start();
     if (continuationScheduler.isCancellationRequested(request.runId)) {
       return await finishCancelledStart(request, dependencies);

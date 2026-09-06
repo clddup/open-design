@@ -68,6 +68,78 @@ function createMemorySessionStore(): SessionStore {
 }
 
 describe("Agent Run starter", () => {
+  it("rejects duplicate Run identity without cleaning up the existing Run", async () => {
+    const scheduler = new AgentContinuationScheduler(() => 1000);
+    scheduler.registerRun(source);
+    const conversationIdByRunId = new Map([[source.runId, source.sessionId]]);
+    const start = vi.fn().mockResolvedValue(undefined);
+    const releaseRun = vi.fn();
+    const handleAgentEvent = vi.fn();
+    const sessionStore = createMemorySessionStore();
+    await expect(
+      startAgentRun(source, {
+        agentHost: { start, send: vi.fn() },
+        continuationScheduler: scheduler,
+        conversationIdByRunId,
+        initialInspectionControllers: new Map(),
+        globalTaskCoordinator: {
+          registerRun: vi.fn(),
+          handleAgentEvent,
+        } as never,
+        modelProviderHost: {} as never,
+        sessionStore,
+        referenceHost: { releaseRun } as never,
+      }),
+    ).rejects.toThrow("already registered");
+    expect(scheduler.activeRunIds()).toEqual([source.runId]);
+    expect(conversationIdByRunId.get(source.runId)).toBe(source.sessionId);
+    expect(releaseRun).not.toHaveBeenCalled();
+    expect(handleAgentEvent).not.toHaveBeenCalled();
+    expect(start).not.toHaveBeenCalled();
+    expect(await sessionStore.read(source.sessionId)).toEqual([]);
+  });
+
+  it("lets the original pending startup finish after a duplicate is rejected", async () => {
+    const scheduler = new AgentContinuationScheduler(() => 1000);
+    let ready!: () => void;
+    const start = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          ready = resolve;
+        }),
+    );
+    const send = vi.fn();
+    const dependencies = {
+      agentHost: { start, send },
+      continuationScheduler: scheduler,
+      conversationIdByRunId: new Map<string, string>(),
+      initialInspectionControllers: new Map<string, AbortController>(),
+      globalTaskCoordinator: {
+        registerRun: vi.fn().mockResolvedValue({}),
+        assertRunRevisionCurrent: vi.fn().mockResolvedValue(undefined),
+        referenceAttachmentsForRun: vi.fn(() => []),
+        handleAgentEvent: vi.fn(),
+      } as never,
+      referenceHost: { registerRun: vi.fn(), releaseRun: vi.fn() } as never,
+      modelProviderHost: {
+        resolveModelContext: () => ({
+          contextWindow: 200_000,
+          maxOutputTokens: 16_384,
+        }),
+      } as never,
+      sessionStore: createMemorySessionStore(),
+    };
+    const first = startAgentRun(source, dependencies);
+    await expect(startAgentRun(source, dependencies)).rejects.toThrow(
+      "already registered",
+    );
+    expect(start).toHaveBeenCalledOnce();
+    ready();
+    await expect(first).resolves.toBe(true);
+    expect(send).toHaveBeenCalledOnce();
+    expect(scheduler.activeRunIds()).toEqual([source.runId]);
+  });
+
   it.each([
     { phase: "startup", rejected: false },
     { phase: "startup", rejected: true },
