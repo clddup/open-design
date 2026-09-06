@@ -322,6 +322,7 @@ export class ModelProviderHost {
     if (!attachmentResolver) {
       throw new Error("Agent attachment services are unavailable");
     }
+    const resolvedById = new Map<string, Promise<ResolvedModelAttachment>>();
     return {
       ...request,
       messages: await Promise.all(
@@ -339,9 +340,11 @@ export class ModelProviderHost {
                 ) {
                   return block;
                 }
-                const resolved = await attachmentResolver.resolve(
-                  block.attachmentId,
-                );
+                const pending =
+                  resolvedById.get(block.attachmentId) ??
+                  attachmentResolver.resolve(block.attachmentId);
+                resolvedById.set(block.attachmentId, pending);
+                const resolved = await pending;
                 if (
                   resolved.mimeType !== block.mimeType ||
                   resolved.byteSize !== block.byteSize ||

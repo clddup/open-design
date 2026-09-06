@@ -129,6 +129,67 @@ function body(fetch: ReturnType<typeof setup>["fetch"]) {
 }
 
 describe("ModelProviderHost.complete request budget", () => {
+  it("reuses attachment extraction within one request without dropping repeated user references", async () => {
+    const text = "Original requirement remains present";
+    const { host, resolve, fetch } = setup(document(text));
+    const input = request();
+    input.messages.push({
+      role: "user",
+      content: [
+        { type: "text", text: "Continue using the same document" },
+        { ...documentRef, name: "same-brief.pdf" },
+      ],
+    });
+    const before = structuredClone(input);
+    await host.complete(input, new AbortController().signal);
+    expect(resolve).toHaveBeenCalledTimes(1);
+    expect(input).toEqual(before);
+    const messages = body(fetch).messages;
+    expect(JSON.stringify(messages)).toContain(
+      "Continue using the same document",
+    );
+    expect(JSON.stringify(messages).split(text)).toHaveLength(3);
+    await host.complete(
+      { ...input, attemptId: "later_attempt" },
+      new AbortController().signal,
+    );
+    expect(resolve).toHaveBeenCalledTimes(2);
+  });
+
+  it("checks metadata on every reference even when extraction is shared", async () => {
+    const { host, resolve, fetch } = setup();
+    const input = request();
+    input.messages.push({
+      role: "user",
+      content: [{ ...documentRef, byteSize: documentRef.byteSize + 1 }],
+    });
+    await expect(
+      host.complete(input, new AbortController().signal),
+    ).rejects.toThrow("metadata mismatch");
+    expect(resolve).toHaveBeenCalledTimes(1);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("does not cache an extraction failure into the next request", async () => {
+    const { host, resolve, fetch } = setup();
+    resolve.mockRejectedValueOnce(
+      new Error("Attachment temporarily unavailable"),
+    );
+    const input = request();
+    input.messages.push({ role: "user", content: [documentRef] });
+    await expect(
+      host.complete(input, new AbortController().signal),
+    ).rejects.toThrow("temporarily unavailable");
+    expect(resolve).toHaveBeenCalledTimes(1);
+    expect(fetch).not.toHaveBeenCalled();
+    await host.complete(
+      { ...input, attemptId: "recovered" },
+      new AbortController().signal,
+    );
+    expect(resolve).toHaveBeenCalledTimes(2);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
   it("rejects expanded documents against the selected critic, before any fetch", async () => {
     const { host, resolve, fetch } = setup(document("原始要求".repeat(8_000)));
     const input = request();
