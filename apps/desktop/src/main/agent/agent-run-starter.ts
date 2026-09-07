@@ -182,9 +182,18 @@ async function finishCancelledStart(
   dependencies: AgentRunStarterDependencies,
 ): Promise<false> {
   const completed = cancelledRun(request.runId);
-  await persistUnsentRun(dependencies.sessionStore, request, completed);
-  dependencies.globalTaskCoordinator.handleAgentEvent(completed);
-  dependencies.continuationScheduler.forgetRun(request.runId);
+  try {
+    await persistUnsentRun(dependencies.sessionStore, request, completed);
+  } catch (error) {
+    console.error("Failed to persist cancelled Agent Run", error);
+  }
+  try {
+    dependencies.globalTaskCoordinator.handleAgentEvent(completed);
+  } catch (error) {
+    console.error("Failed to finalize cancelled Agent Run", error);
+  } finally {
+    dependencies.continuationScheduler.forgetRun(request.runId);
+  }
   return false;
 }
 

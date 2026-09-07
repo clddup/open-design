@@ -68,6 +68,65 @@ function createMemorySessionStore(): SessionStore {
 }
 
 describe("Agent Run starter", () => {
+  it("finishes cancellation without duplicating a user message when the terminal journal write fails", async () => {
+    const scheduler = new AgentContinuationScheduler(() => 1000);
+    const sessionStore = createMemorySessionStore();
+    const append = sessionStore.appendNext?.bind(sessionStore);
+    if (!append) throw new Error("Missing fixture append");
+    const error = new Error("Disk full during cancellation");
+    let attempts = 0;
+    sessionStore.appendNext = (...args) => {
+      attempts += 1;
+      return attempts === 2 ? Promise.reject(error) : append(...args);
+    };
+    const logged = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const send = vi.fn();
+    const handleAgentEvent = vi.fn();
+    try {
+      const result = await startAgentRun(source, {
+        agentHost: {
+          send,
+          start: () => {
+            scheduler.requestCancellation(source.runId);
+            return Promise.resolve();
+          },
+        },
+        continuationScheduler: scheduler,
+        conversationIdByRunId: new Map(),
+        initialInspectionControllers: new Map(),
+        globalTaskCoordinator: { handleAgentEvent } as never,
+        referenceHost: { releaseRun: vi.fn() } as never,
+        modelProviderHost: {} as never,
+        sessionStore,
+      });
+      expect(result).toBe(false);
+      expect(attempts).toBe(2);
+      expect(send).not.toHaveBeenCalled();
+      expect(scheduler.activeRunIds()).toEqual([]);
+      expect(handleAgentEvent).toHaveBeenCalledOnce();
+      expect(handleAgentEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "run.completed",
+          stopReason: "cancelled",
+        }),
+      );
+      expect(logged).toHaveBeenCalledWith(
+        "Failed to persist cancelled Agent Run",
+        error,
+      );
+      const events = await sessionStore.read(source.sessionId);
+      expect(events).toHaveLength(1);
+      expect(events[0]).toMatchObject({
+        type: "message.user",
+        payload: { content: source.prompt },
+      });
+    } finally {
+      logged.mockRestore();
+    }
+  });
+
   it("rejects duplicate Run identity without cleaning up the existing Run", async () => {
     const scheduler = new AgentContinuationScheduler(() => 1000);
     scheduler.registerRun(source);
