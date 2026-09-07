@@ -4,7 +4,6 @@ import type {
   TrustedToolResult,
 } from "@opendesign/agent-contracts";
 import type { DesignAsset } from "@opendesign/design-contracts";
-import { nativeImage } from "electron";
 import {
   EDIT_IMAGE_TOOL_NAME,
   GENERATE_IMAGE_TOOL_NAME,
@@ -28,6 +27,7 @@ import type { ImageGenerationHost } from "../model/image-generation-host.js";
 import { contractValidationError } from "./contract-validation-error.js";
 import type { DesignImageEditService } from "./design-image-edit-service.js";
 import { designWorkflowError } from "@/shared/design-workflow-failure-classification.js";
+import { readRasterImageMetadata } from "../raster/raster-image-metadata.js";
 
 export type DesignImageToolHandlerInput = {
   call: ToolCallRequest;
@@ -72,8 +72,12 @@ export async function handleDesignImageTool(
     const input = call.input as GenerateImageToolInput;
     globalTaskCoordinator.assertDesignPlanForRaster(context, input.role);
     const generated = await imageGenerationHost.generateImage(input, signal);
+    const metadata = readRasterImageMetadata(generated.bytes);
+    if (!metadata || metadata.format === "gif") {
+      throw new TypeError("Generated image is not a supported raster image");
+    }
     const attachment = await attachmentHost.importImageBytes(
-      `generated-image.${generated.outputFormat}`,
+      `generated-image.${metadata.format === "jpeg" ? "jpg" : metadata.format}`,
       generated.bytes,
     );
     const authorized = referenceHost.registerGeneratedImage(
@@ -90,12 +94,7 @@ export async function handleDesignImageTool(
       authorized.attachmentId,
       input.role,
     );
-    const intrinsic = nativeImage
-      .createFromBuffer(Buffer.from(generated.bytes))
-      .getSize();
-    if (intrinsic.width <= 0 || intrinsic.height <= 0) {
-      throw new TypeError("Generated image has invalid dimensions");
-    }
+    const intrinsic = metadata.size;
     const digest = authorized.attachmentId.slice("image_".length);
     const assetId = `asset_${digest}`;
     const staged = await executeRendererTool({
@@ -145,7 +144,7 @@ export async function handleDesignImageTool(
         size: generated.size,
         quality: generated.quality,
         role: input.role,
-        outputFormat: generated.outputFormat,
+        outputFormat: metadata.format,
         attachment: authorized,
         attachments: [authorized],
         asset: {
@@ -196,11 +195,13 @@ export async function handleDesignImageTool(
     const image = attachmentId
       ? await referenceHost.materializeImage(attachmentId, context)
       : undefined;
-    const intrinsic = image
-      ? nativeImage
-          .createFromBuffer(Buffer.from(image.data, "base64"))
-          .getSize()
+    const metadata = image
+      ? readRasterImageMetadata(Buffer.from(image.data, "base64"))
       : undefined;
+    if (image && !metadata) {
+      throw new TypeError("Placed image has invalid dimensions");
+    }
+    const intrinsic = metadata?.size;
     const persistentAssetInput =
       "assetId" in input && input.assetId !== undefined ? input : undefined;
     const intrinsicWidth = Math.max(
@@ -323,12 +324,13 @@ export async function handleDesignImageTool(
         input.attachmentId,
         context,
       );
-      const intrinsic = nativeImage
-        .createFromBuffer(Buffer.from(image.data, "base64"))
-        .getSize();
-      if (intrinsic.width <= 0 || intrinsic.height <= 0) {
+      const metadata = readRasterImageMetadata(
+        Buffer.from(image.data, "base64"),
+      );
+      if (!metadata) {
         throw new TypeError("Replacement image has invalid dimensions");
       }
+      const intrinsic = metadata.size;
       const digest = image.attachment.attachmentId.slice("image_".length);
       const assetId = `asset_${digest}`;
       const result = await executeRendererTool({
@@ -539,8 +541,8 @@ async function materializeAgentImageAsset(
 ): Promise<DesignAsset> {
   const image = await referenceHost.materializeImage(attachmentId, context);
   const bytes = Buffer.from(image.data, "base64");
-  const intrinsic = nativeImage.createFromBuffer(bytes).getSize();
-  if (intrinsic.width <= 0 || intrinsic.height <= 0) {
+  const metadata = readRasterImageMetadata(bytes);
+  if (!metadata) {
     throw new TypeError("Image edit reference has invalid dimensions");
   }
   const digest = image.attachment.attachmentId.slice("image_".length);
@@ -550,7 +552,7 @@ async function materializeAgentImageAsset(
     name: image.attachment.name,
     mimeType: image.mimeType,
     source: { type: "data", value: image.data },
-    size: intrinsic,
+    size: metadata.size,
     extensions: { attachmentId, importedBy },
   };
 }

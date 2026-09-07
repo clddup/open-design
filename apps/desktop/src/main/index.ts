@@ -11,7 +11,6 @@ import {
   ipcMain,
   Menu,
   nativeTheme,
-  nativeImage,
   safeStorage,
   shell,
 } from "electron";
@@ -64,6 +63,7 @@ import { registerSvgFileIpc } from "./svg/svg-file-ipc";
 import { SvgFileService } from "./svg/svg-file-service";
 import { registerRasterFileIpc } from "./raster/raster-file-ipc";
 import { RasterFileService } from "./raster/raster-file-service";
+import { readRasterImageMetadata } from "./raster/raster-image-metadata";
 import { FontBinaryMainService } from "./font/font-binary-main";
 import type { RasterExportFormat } from "@opendesign/import-export-service/raster";
 import type { SessionStore } from "@opendesign/session-store";
@@ -177,7 +177,8 @@ const designImageEditService = new DesignImageEditService({
   getImageGenerationHost: requireImageGenerationHost,
 });
 const mediaInputIpcHost = new MediaInputIpcHost({
-  decodeImageSize: (bytes) => nativeImage.createFromBuffer(bytes).getSize(),
+  decodeImageSize: (bytes) =>
+    readRasterImageMetadata(bytes)?.size ?? { width: 0, height: 0 },
   editImage: designImageEditService.edit,
   getAttachmentHost: requireAgentAttachmentHost,
   getLocale: () => applicationPreferences.locale(),

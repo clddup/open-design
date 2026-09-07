@@ -78,6 +78,10 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 
 ## P0-B：稳定 Leafer 迁移与 Agent 主流程
 
+- [x] 图片生成、历史图片放置/替换/参考图和人工图片导入统一从真实文件头读取 PNG/JPEG/GIF/WebP 尺寸，不再用只保证 PNG/JPEG 的 Electron `nativeImage` 误判合法 lossless WebP 为 `0×0`。生成结果在写入附件与 Design File asset 前验证并使用真实格式/尺寸，Provider 返回非图片字节时零 revision、零孤儿附件；真实 `1536×1024` VP8L 回归通过。
+
+- [x] Run 在启动阶段取消时，即使 terminal journal 写入中途失败，也只尝试记录一次用户消息；持久化异常显式记录后仍完成 Global Task 与 scheduler 清理，不再由外层取消分支二次进入收尾、重复消息或残留 active Run。
+
 - [x] 重复Run ID的启动请求在取得本次生命周期所有权前拒绝，不进入清理已有Run的失败分支。已运行任务的取消跟踪、会话映射和附件授权不被重复请求删除，不向原journal追加伪造失败；专项回归通过。
 
 - [x] Agent进程启动等待前登记Run取消意图，启动后先处理取消再进行资源登记。启动/Run登记/最终revision检查三个异步阶段的成功或拒绝均覆盖取消不派发，未取消错误路径不变。
