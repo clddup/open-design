@@ -16,6 +16,23 @@ import {
 } from "./design-generation-tool";
 import { DesignApplyContract, DesignPlanContract } from "./design-agent-tools";
 
+type GenerationFixture = Omit<DesignGenerationToolInput, "targets"> & {
+  targets: Array<
+    DesignGenerationToolInput["targets"][number] & {
+      regions: Array<{
+        nodeId: string;
+        name: string;
+        role: "content" | "interaction" | "typography";
+        parentId: string;
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+      }>;
+    }
+  >;
+};
+
 describe("design-generation tool", () => {
   it("uses the shared transaction safety limit instead of a design-generation quota", () => {
     type SchemaNode = {
@@ -84,6 +101,11 @@ describe("design-generation tool", () => {
       ),
     ).toContain('"graphic"');
     expect(properties.targets.items.properties.layout).toBeUndefined();
+    expect(properties.targets.items.properties.regions).toBeUndefined();
+    expect(elementSchema.required).not.toContain("parentId");
+    expect(properties.designGeneration.properties.elements.maxItems).toBe(
+      MAX_TRANSACTION_COMMANDS - 1,
+    );
     expect(properties.visualSystem.properties.typography.maxItems).toBe(4);
     expect(schema.required).toEqual([
       "deliverable",
@@ -158,13 +180,13 @@ describe("design-generation tool", () => {
     expect(normalized?.visualSystem.palette).toContain("#0F172A");
     expect(normalized?.targets[0]).toMatchObject({
       objective: "A focused product overview",
-      layout: "Authored from the submitted region geometry",
+      layout: "Authored from the submitted element hierarchy",
       spacing: "Defined by authored coordinates and Auto Layout",
     });
     expect(normalized?.targets[0]?.qualityProfile).toMatchObject({
       kind: "ui",
       platform: "other",
-      safeNodeIds: ["home_hero"],
+      safeNodeIds: ["frame_home"],
     });
     expect(
       normalized &&
@@ -189,27 +211,26 @@ describe("design-generation tool", () => {
       targetId: "home",
       pageId: "page_1",
       frame: { frameId: "frame_home" },
-      regions: [
-        {
-          nodeId: "odr_run_slice_4_home_home_hero",
-          parentId: "frame_home",
-        },
-      ],
-      qualityProfile: { safeNodeIds: ["odr_run_slice_4_home_home_hero"] },
+      qualityProfile: { safeNodeIds: ["frame_home"] },
     });
-    expect(result.value.designGeneration).toMatchObject({
-      targetId: "home",
-      elements: [
-        {
+    expect(result.value.designGeneration.targetId).toBe("home");
+    expect(result.value.designGeneration.elements).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "odr_run_slice_4_home_home_hero",
+          parentId: "frame_home",
+          kind: "frame",
+        }),
+        expect.objectContaining({
           id: "odr_run_slice_4_home_hero_panel",
           parentId: "odr_run_slice_4_home_home_hero",
-        },
-        {
+        }),
+        expect.objectContaining({
           id: "odr_run_slice_4_home_hero_title",
           parentId: "odr_run_slice_4_home_home_hero",
-        },
-      ],
-    });
+        }),
+      ]),
+    );
   });
 
   it("rejects more than the current rolling target at the schema boundary", () => {
@@ -265,14 +286,14 @@ describe("design-generation tool", () => {
     });
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("Expected host-derived planning metadata");
-    expect(result.value.version).toBe(1);
+    expect(result.value.version).toBe(2);
     expect(result.value.designIntent.signatureDecision).toContain(
       "submitted composition",
     );
     expect(result.value.visualSystem.typography[0]).toContain("Inter");
     expect(result.value.targets[0]).toMatchObject({
       label: "Home",
-      layout: "Authored from the submitted region geometry",
+      layout: "Authored from the submitted element hierarchy",
     });
   });
 
@@ -359,7 +380,11 @@ describe("design-generation tool", () => {
     const normalized = parsedDesignGeneration(providerInput(input));
     expect(normalized).toBeDefined();
     const command = normalized
-      ? compileDesignGenerationToolInput(normalized).apply.commands[0]
+      ? compileDesignGenerationToolInput(normalized).apply.commands.find(
+          (candidate) =>
+            candidate.type === "insert_element" &&
+            candidate.node.id === "hero_image",
+        )
       : undefined;
     expect(command).toMatchObject({
       type: "insert_element",
@@ -410,27 +435,33 @@ describe("design-generation tool", () => {
     const compiled = normalized
       ? compileDesignGenerationToolInput(normalized)
       : undefined;
-    expect(compiled?.apply.commands).toMatchObject([
-      {
-        node: {
-          kind: "frame",
-          properties: {
-            autoLayout: {
-              mode: "vertical",
-              gap: 16,
-              padding: { top: 24, right: 24, bottom: 24, left: 24 },
-            },
+    const stack = compiled?.apply.commands.find(
+      (command) =>
+        command.type === "insert_element" && command.node.id === "hero_stack",
+    );
+    const compiledTitle = compiled?.apply.commands.find(
+      (command) =>
+        command.type === "insert_element" && command.node.id === "hero_title",
+    );
+    expect(stack).toMatchObject({
+      node: {
+        kind: "frame",
+        properties: {
+          autoLayout: {
+            mode: "vertical",
+            gap: 16,
+            padding: { top: 24, right: 24, bottom: 24, left: 24 },
           },
         },
       },
-      {
-        node: {
-          kind: "text",
-          parentId: "hero_stack",
-          layoutSizing: { horizontal: "fill", vertical: "fixed" },
-        },
+    });
+    expect(compiledTitle).toMatchObject({
+      node: {
+        kind: "text",
+        parentId: "hero_stack",
+        layoutSizing: { horizontal: "fill", vertical: "fixed" },
       },
-    ]);
+    });
     expect(
       compiled &&
         DesignApplyContract.parse(compiled.apply, {
@@ -508,15 +539,15 @@ describe("design-generation tool", () => {
       expect.arrayContaining([
         expect.objectContaining({
           code: "design_generation.group_fills_unsupported",
-          path: "/designGeneration/elements/0/fills",
+          path: "/designGeneration/elements/1/fills",
         }),
         expect.objectContaining({
           code: "design_generation.group_strokes_unsupported",
-          path: "/designGeneration/elements/0/strokes",
+          path: "/designGeneration/elements/1/strokes",
         }),
         expect.objectContaining({
           code: "design_generation.group_stroke_width_unsupported",
-          path: "/designGeneration/elements/0/strokeWidth",
+          path: "/designGeneration/elements/1/strokeWidth",
         }),
       ]),
     );
@@ -540,8 +571,8 @@ describe("design-generation tool", () => {
     if (result.ok) throw new Error("Expected invisible material failure");
     expect(result.issues).toContainEqual(
       expect.objectContaining({
-        code: "design_generation.empty_referenced_region",
-        path: "/targets/0/regions/0",
+        code: "design_generation.material_required",
+        path: "/designGeneration/elements",
       }),
     );
   });
@@ -718,7 +749,15 @@ describe("design-generation tool", () => {
         internal: true,
       }).ok,
     ).toBe(true);
-    expect(compiled.apply.commands[0]).toMatchObject({
+    const compiledPanel = compiled.apply.commands.find(
+      (command) =>
+        command.type === "insert_element" && command.node.id === "hero_panel",
+    );
+    const compiledTitle = compiled.apply.commands.find(
+      (command) =>
+        command.type === "insert_element" && command.node.id === "hero_title",
+    );
+    expect(compiledPanel).toMatchObject({
       node: {
         blendMode: "screen",
         effects: [
@@ -732,7 +771,7 @@ describe("design-generation tool", () => {
         },
       },
     });
-    expect(compiled.apply.commands[1]).toMatchObject({
+    expect(compiledTitle).toMatchObject({
       node: {
         properties: {
           fills: [{ type: "linear-gradient" }],
@@ -851,7 +890,11 @@ describe("design-generation tool", () => {
     expect(normalized?.skillRefs).toEqual(BUILTIN_LOGO_DESIGN_SKILL_REFS);
     expect(
       normalized &&
-        compileDesignGenerationToolInput(normalized).apply.commands[0],
+        compileDesignGenerationToolInput(normalized).apply.commands.find(
+          (command) =>
+            command.type === "insert_element" &&
+            command.node.id === "negative_root",
+        ),
     ).toMatchObject({
       node: {
         kind: "frame",
@@ -1033,44 +1076,9 @@ describe("design-generation tool", () => {
     if (collisionResult.ok) throw new Error("Expected ID collision");
     expect(collisionResult.issues).toContainEqual(
       expect.objectContaining({
-        code: "design_generation.region_frame_id_conflict",
-        path: "/targets/0/regions/0/nodeId",
+        code: "design_generation.element_frame_id_conflict",
+        path: "/designGeneration/elements/0/id",
         actual: "frame_home",
-      }),
-    );
-
-    const invalidRegionGraph = fixture();
-    invalidRegionGraph.targets[0].regions[0].parentId = "later_region";
-    invalidRegionGraph.targets[0].regions.push({
-      nodeId: "later_region",
-      name: "Later Region",
-      role: "content",
-      parentId: "frame_home",
-      x: 0,
-      y: 0,
-      width: 100,
-      height: 100,
-    });
-    const graphResult = parseCanonicalProjection(invalidRegionGraph);
-    expect(graphResult.ok).toBe(false);
-    if (graphResult.ok) throw new Error("Expected region graph failure");
-    expect(graphResult.issues).toContainEqual(
-      expect.objectContaining({
-        code: "design_generation.region_parent_not_available",
-        path: "/targets/0/regions/0/parentId",
-        actual: "later_region",
-      }),
-    );
-
-    const overflowingRegion = fixture();
-    overflowingRegion.targets[0].regions[0].width = 400;
-    const overflowResult = parseCanonicalProjection(overflowingRegion);
-    expect(overflowResult.ok).toBe(false);
-    if (overflowResult.ok) throw new Error("Expected region overflow");
-    expect(overflowResult.issues).toContainEqual(
-      expect.objectContaining({
-        code: "design_generation.region_bounds_exceeded",
-        path: "/targets/0/regions/0",
       }),
     );
 
@@ -1084,7 +1092,7 @@ describe("design-generation tool", () => {
     expect(unplannedResult.issues).toContainEqual(
       expect.objectContaining({
         code: "design_generation.parent_not_available",
-        path: "/designGeneration/elements/0/parentId",
+        path: "/designGeneration/elements/1/parentId",
         actual: "home_intro",
       }),
     );
@@ -1181,15 +1189,9 @@ describe("design-generation tool", () => {
     if (!normalized) throw new Error("Expected parsed 35-element input");
     const compiled = compileDesignGenerationToolInput(normalized);
     const compiledRegions = compiled.plan.targets[0]?.composition.regions ?? [];
-    expect(compiledRegions).toMatchObject([
-      { nodeId: "auth_region" },
-      { nodeId: "form_region", parentId: "auth_region" },
-      { nodeId: "footer_region" },
-    ]);
-    expect(compiledRegions[0]).not.toHaveProperty("parentId");
-    expect(compiledRegions[2]).not.toHaveProperty("parentId");
-    expect(compiled.apply.commands).toHaveLength(35);
-    expect(compiled.apply.commands[0]).toMatchObject({
+    expect(compiledRegions).toEqual([]);
+    expect(compiled.apply.commands).toHaveLength(38);
+    expect(compiled.apply.commands[3]).toMatchObject({
       parentId: "auth_region",
       node: { id: "auth_title" },
     });
@@ -1234,10 +1236,8 @@ describe("design-generation tool", () => {
       throw new Error("Expected transaction limit failure");
     expect(overflowResult.issues).toContainEqual(
       expect.objectContaining({
-        code: "design_generation.transaction_limit_exceeded",
+        code: "design_generation.schema_invalid",
         path: "/designGeneration/elements",
-        expected: MAX_TRANSACTION_COMMANDS,
-        actual: MAX_TRANSACTION_COMMANDS + 1,
       }),
     );
 
@@ -1267,9 +1267,7 @@ describe("design-generation tool", () => {
   });
 });
 
-function providerInput(
-  input: DesignGenerationToolInput,
-): Record<string, unknown> {
+function providerInput(input: GenerationFixture): Record<string, unknown> {
   const value = structuredClone(input) as unknown as Record<string, unknown>;
   for (const key of [
     "version",
@@ -1293,10 +1291,27 @@ function providerInput(
     Reflect.deleteProperty(frame, "frameId");
     Reflect.deleteProperty(frame, "x");
     Reflect.deleteProperty(frame, "y");
-    for (const region of target.regions as Array<Record<string, unknown>>) {
-      if (region.parentId === frameId)
-        Reflect.deleteProperty(region, "parentId");
-    }
+    const regions = target.regions as Array<Record<string, unknown>>;
+    const designGeneration = value.designGeneration as {
+      elements: Array<Record<string, unknown>>;
+    };
+    designGeneration.elements = [
+      ...regions.map((region) => ({
+        id: region.nodeId,
+        kind: "frame",
+        name: region.name,
+        ...(region.parentId === frameId ? {} : { parentId: region.parentId }),
+        x: region.x,
+        y: region.y,
+        width: region.width,
+        height: region.height,
+        fills: [],
+        strokes: [],
+        strokeWidth: 0,
+      })),
+      ...designGeneration.elements,
+    ];
+    Reflect.deleteProperty(target, "regions");
   }
   Reflect.deleteProperty(
     value.designGeneration as Record<string, unknown>,
@@ -1309,12 +1324,12 @@ function providerInput(
 }
 
 function providerInputWithoutHostFields(
-  input: DesignGenerationToolInput,
+  input: GenerationFixture,
 ): Record<string, unknown> {
   return providerInput(input);
 }
 
-function hostTarget(input: DesignGenerationToolInput) {
+function hostTarget(input: GenerationFixture) {
   const target = input.targets[0];
   return {
     targetId: target.targetId,
@@ -1357,15 +1372,15 @@ function parsedDesignGeneration(
   return result.ok ? result.value : undefined;
 }
 
-function parseCanonicalProjection(input: DesignGenerationToolInput) {
+function parseCanonicalProjection(input: GenerationFixture) {
   return DesignGenerationContract.parse(providerInput(input), {
     target: hostTarget(input),
   });
 }
 
-export function fixture(): DesignGenerationToolInput {
+export function fixture(): GenerationFixture {
   return {
-    version: 1,
+    version: 2,
     deliverable: "ui",
     objective: "Create the Home screen",
     designIntent: {

@@ -29,6 +29,8 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 
 治理按完整业务所有权逐步执行，不按行数机械拆分，也不一次性重写画布、Agent 或 Runtime。根 verify 只保留格式、lint、typecheck、行为测试与 build；独立 package/process allowlist、源码正则和仓库形状扫描已退休。边界变化通过公共契约、拥有者测试、构建与评审验证，不能为了满足清单而复制依赖事实。
 
+- [x] 生成主链收敛到单一作者层级：Main 绑定输入 v2 移除区域表，新 Plan 不再派生/预建区域容器；生产分发删除生成后的隐式 capture/Critic，真实材料 revision 立即返回，显式 capture 才进入审核。Provider/Runtime 结构同源，非法父引用定位原始字段，Group/兄弟顺序和逐批撤销有集成回归。真实模型审美、耗时及双平台产品验收仍待完成。见 [ADR-0316](adr/0316-authored-generation-hierarchy-and-explicit-capture.md)。
+
 - [x] Phase 1：从 Renderer `App.tsx` 提取完整 Import/Export feature 和共享诊断模块。feature 自己拥有 SVG/PNG/JPEG/WebP 设置、operation/feedback、互斥、AbortController、原生命令订阅、切出 editor/unmount 取消和诊断；操作开始时读取唯一 EditorRuntime 的最新 snapshot，不复制文档状态。`App.tsx` 当前从 3278 行降至 2882 行，定向 feature/App/Properties 测试覆盖行为。
 - [x] Phase 2：Agent Conversation 已拆为纯 durable/live Timeline projection、受控 Composer view 与每 Conversation controller。Timeline 继续独占“贴近底部才跟随”的滚动语义；controller 独占 draft、附件、模型选择、submit/stop，并用 Conversation epoch 丢弃切换后迟到的附件选择、导入和提交结果。可见历史、模型上下文和文档 revision 仍是三条独立事实链，没有新增会话或文档镜像状态。`AgentTimeline.tsx` 从历史 1994 行降至 555 行；竞态、审批、取消、历史单调合并和自动滚动已有定向测试。
 - [x] Phase 3：Page、Layer 与 editor command controllers 已提取到 `renderer/features/editor`。所有命令在执行时读取唯一 `EditorRuntime` 的最新 snapshot，并经同一 `runtime.apply` 写入 revision/history；Page controller 拥有 create/rename/duplicate/reorder/delete，Layer controller 拥有 capability derivation、duplicate/group/Boolean/reorder/reparent/arrange，view 只消费语义回调且没有 UI mirror store。`App.tsx` 从 2882 行降至 2222 行，定向 controller 测试和完整 Desktop 测试覆盖单事务、selection 与 undo 行为。

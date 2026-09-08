@@ -1,3 +1,4 @@
+import { isVisibleDesignMaterial } from "@/shared/design-material";
 import { isNodeRelocation } from "./design-node-relocation.js";
 import {
   visualCriticUserRequirements,
@@ -2856,42 +2857,13 @@ function insertedSubtreeHasMaterialNode(
   return inserts.some(
     (command) =>
       command.node.id !== rootNodeId &&
-      isVisibleMaterialDraftNode(command.node) &&
+      isVisibleDesignMaterial(command.node) &&
       parentChainReaches(
         command.parentId,
         rootNodeId,
         insertedParents,
         new Set(),
       ),
-  );
-}
-
-function isVisibleMaterialDraftNode(
-  node: Extract<
-    DesignApplyToolInput["commands"][number],
-    { type: "insert_element" }
-  >["node"],
-): boolean {
-  if (
-    node.kind === "group" ||
-    node.kind === "frame" ||
-    node.kind === "slice" ||
-    !node.visible ||
-    node.opacity <= 0 ||
-    node.size.width <= 0 ||
-    node.size.height <= 0
-  ) {
-    return false;
-  }
-  if (node.kind === "text") return node.properties.content.trim().length > 0;
-  if (node.kind === "image") return true;
-  if (node.kind === "instance") return false;
-  const visiblePaint = (paint: (typeof node.properties.fills)[number]) =>
-    paint.visible !== false && paint.opacity > 0;
-  return (
-    node.properties.fills.some(visiblePaint) ||
-    (node.properties.strokeWidth > 0 &&
-      node.properties.strokes.some(visiblePaint))
   );
 }
 

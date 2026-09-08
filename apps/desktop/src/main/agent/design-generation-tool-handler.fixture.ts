@@ -1,8 +1,24 @@
 import { BUILTIN_UI_DESIGN_SKILL_REFS } from "@opendesign/design-skills";
 import type { DesignGenerationToolInput } from "@/shared/design-agent-tools.js";
+type GenerationFixture = Omit<DesignGenerationToolInput, "targets"> & {
+  targets: Array<
+    DesignGenerationToolInput["targets"][number] & {
+      regions: Array<{
+        nodeId: string;
+        name: string;
+        role: "content" | "interaction" | "typography";
+        parentId: string;
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+      }>;
+    }
+  >;
+};
 
 export function designGenerationModelInput(
-  input: DesignGenerationToolInput,
+  input: GenerationFixture,
 ): Record<string, unknown> {
   const value = structuredClone(input) as unknown as Record<string, unknown>;
   for (const key of [
@@ -27,10 +43,27 @@ export function designGenerationModelInput(
     Reflect.deleteProperty(frame, "frameId");
     Reflect.deleteProperty(frame, "x");
     Reflect.deleteProperty(frame, "y");
-    for (const region of target.regions as Array<Record<string, unknown>>) {
-      if (region.parentId === frameId)
-        Reflect.deleteProperty(region, "parentId");
-    }
+    const regions = target.regions as Array<Record<string, unknown>>;
+    const designGeneration = value.designGeneration as {
+      elements: Array<Record<string, unknown>>;
+    };
+    designGeneration.elements = [
+      ...regions.map((region) => ({
+        id: region.nodeId,
+        kind: "frame",
+        name: region.name,
+        ...(region.parentId === frameId ? {} : { parentId: region.parentId }),
+        x: region.x,
+        y: region.y,
+        width: region.width,
+        height: region.height,
+        fills: [],
+        strokes: [],
+        strokeWidth: 0,
+      })),
+      ...designGeneration.elements,
+    ];
+    Reflect.deleteProperty(target, "regions");
   }
   const designGeneration = value.designGeneration as Record<string, unknown>;
   Reflect.deleteProperty(designGeneration, "targetId");
@@ -40,9 +73,9 @@ export function designGenerationModelInput(
   return value;
 }
 
-export function designGenerationInput(): DesignGenerationToolInput {
+export function designGenerationInput(): GenerationFixture {
   return {
-    version: 1,
+    version: 2,
     deliverable: "ui",
     objective: "Create a focused home screen",
     designIntent: {

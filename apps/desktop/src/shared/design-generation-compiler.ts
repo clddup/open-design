@@ -92,7 +92,7 @@ export function compileValidatedDesignGenerationToolInput(
       pageId: targets[0].pageId,
       parentId: element.parentId,
       index,
-      node: compileElement(element),
+      node: compileDesignGenerationElement(element),
     });
   }
   return {
@@ -119,7 +119,6 @@ function compileTarget(
   target: DesignGenerationToolInput["targets"][number],
   designGenerationStep: DesignPlanTarget["implementationSteps"][number],
 ): DesignPlanTarget {
-  const regionNames = target.regions.map((region) => region.name);
   return {
     targetId: target.targetId,
     label: target.label,
@@ -128,24 +127,13 @@ function compileTarget(
     artboard: { mode: "create", ...target.frame },
     composition: {
       direction: target.layout,
-      hierarchy: [target.label, ...regionNames],
-      regions: target.regions.map((region) => ({
-        nodeId: region.nodeId,
-        name: region.name,
-        role: region.role,
-        ...(region.parentId === target.frame.frameId
-          ? {}
-          : { parentId: region.parentId }),
-        x: region.x,
-        y: region.y,
-        width: region.width,
-        height: region.height,
-      })),
+      hierarchy: [target.label],
+      regions: [],
       assetIntegration:
         "Use editable typography, native vectors and shapes; raster assets are limited to the explicitly declared roles.",
       spacingRhythm: target.spacing,
     },
-    editableLayers: unique([...regionNames, "Typography and controls"]),
+    editableLayers: ["Authored editable layers"],
     implementationSteps: [{ ...designGenerationStep }],
     validationChecks: [
       "All visible material remains inside the delivery artboard with intentional spacing.",
@@ -170,7 +158,9 @@ function compileQualityProfile(
   };
 }
 
-function compileElement(element: DesignGenerationElement): DesignNode {
+export function compileDesignGenerationElement(
+  element: DesignGenerationElement,
+): DesignNode {
   const base = {
     id: element.id,
     name: element.name,
@@ -315,8 +305,4 @@ function compileElement(element: DesignGenerationElement): DesignNode {
     };
   }
   return { ...base, kind: "ellipse" as const, properties: shape };
-}
-
-function unique(values: string[]): string[] {
-  return [...new Set(values)];
 }

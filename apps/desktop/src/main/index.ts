@@ -37,7 +37,7 @@ import { AgentRunCoordinator } from "./agent/agent-run-coordinator";
 import { handleDeliveryScopeTool } from "./agent/delivery-scope-tool-handler";
 import { handleDesignGenerationTool } from "./agent/design-generation-tool-handler";
 import { parseDesignToolInput } from "./agent/design-tool-input-parser";
-import { applyDesignGenerationAndCapture } from "./agent/design-generation-capture-orchestrator";
+import { dispatchDesignGenerationOrCapture } from "./agent/design-generation-dispatcher";
 import {
   MainDesignToolRuntime,
   mainDesignToolAuditDiagnostic,
@@ -92,10 +92,8 @@ import {
 } from "./agent/design-page-tool-handler.js";
 import { translate } from "@/shared/i18n/messages";
 import {
-  DESIGN_CAPTURE_TOOL_NAME,
   DESIGN_DELIVERY_SCOPE_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
-  DESIGN_GENERATION_TOOL_NAME,
 } from "@/shared/design-agent-tools";
 
 const designGenerationPerformance = new DesignGenerationPerformanceTracker();
@@ -847,37 +845,23 @@ async function startDesktopApplication(
       if (call.toolName === DESIGN_DELIVERY_SCOPE_TOOL_NAME) {
         return handleDeliveryScopeTool(globalTaskCoordinator, call, context);
       }
-      if (call.toolName === DESIGN_GENERATION_TOOL_NAME) {
-        return await applyDesignGenerationAndCapture(
-          {
-            designGeneration: (stageProgress) =>
-              handleDesignGenerationTool(
-                globalTaskCoordinator!,
-                rendererDesignToolHost,
-                call,
-                context,
-                executionContext,
-                signal,
-                stageProgress,
-              ),
-            capture: (stageProgress) =>
-              captureReviewSession.capture(
-                {
-                  ...call,
-                  toolCallId: `${call.toolCallId.slice(0, 248)}_capture`,
-                  toolName: DESIGN_CAPTURE_TOOL_NAME,
-                  input: {},
-                },
-                stageProgress,
-              ),
-            getDelivery: () =>
-              globalTaskCoordinator!.getDeliveryLedger(context.runId),
-          },
-          reportProgress,
-        );
-      }
-      const captureReviewResult = await captureReviewSession.handle(call);
-      if (captureReviewResult) return captureReviewResult;
+      const generationOrCapture = await dispatchDesignGenerationOrCapture(
+        call,
+        {
+          generate: () =>
+            handleDesignGenerationTool(
+              globalTaskCoordinator!,
+              rendererDesignToolHost,
+              call,
+              context,
+              executionContext,
+              signal,
+              reportProgress,
+            ),
+          captureReview: captureReviewSession,
+        },
+      );
+      if (generationOrCapture) return generationOrCapture;
       const importExportResult = await handleDesignImportExportTool({
         call,
         context,

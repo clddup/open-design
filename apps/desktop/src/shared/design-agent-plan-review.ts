@@ -254,10 +254,10 @@ const DESIGN_PLAN_COMPOSITION_SCHEMA = {
     },
     regions: {
       type: "array",
-      minItems: 1,
+      minItems: 0,
       maxItems: 16,
       description:
-        "Parent-first major composition regions. Omitted parentId means the target artboard; otherwise bounds are local to an earlier region parent. Main owns create-target region containers.",
+        "Legacy parent-first composition regions; newly generated plans use an empty list and author all containers as ordinary elements. Omitted parentId means the target artboard; otherwise bounds are local to an earlier region parent. Main owns create-target region containers.",
       items: {
         type: "object",
         properties: {

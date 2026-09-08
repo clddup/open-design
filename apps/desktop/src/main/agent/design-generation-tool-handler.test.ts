@@ -143,6 +143,7 @@ describe("handleDesignGenerationTool", () => {
         commands: [
           { commandId: "allocate_home" },
           { commandId: "design_generation_1" },
+          { commandId: "design_generation_2" },
         ],
       },
     });
@@ -154,14 +155,10 @@ describe("handleDesignGenerationTool", () => {
     expect(registeredPlan?.targets[0]).toMatchObject({
       artboard: { frameId: "frame_home" },
       composition: {
-        regions: [
-          {
-            nodeId: "odr_run_slice_4_home_home_hero",
-          },
-        ],
+        regions: [],
       },
     });
-    expect(authorizedApply?.commands[0]).toMatchObject({
+    expect(authorizedApply?.commands[1]).toMatchObject({
       node: {
         id: "odr_run_slice_4_home_hero_title",
         parentId: "odr_run_slice_4_home_home_hero",
@@ -325,7 +322,7 @@ describe("handleDesignGenerationTool", () => {
 });
 
 function canonicalDesignGeneration(
-  input: DesignGenerationToolInput,
+  input: ReturnType<typeof designGenerationInput>,
 ): DesignGenerationToolInput {
   const parsed = DesignGenerationContract.parse(
     designGenerationModelInput(input),

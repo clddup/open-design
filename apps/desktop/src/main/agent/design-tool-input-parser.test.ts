@@ -117,7 +117,9 @@ describe("parseDesignToolInput", () => {
       frame: { frameId: "frame_home", x: 80, y: 40 },
       qualityProfile: { kind: "ui" },
     });
-    const element = value.designGeneration.elements[0];
+    const element = value.designGeneration.elements.find((candidate) =>
+      candidate.id.endsWith("hero_title"),
+    );
     expect(element?.id).toMatch(/^odr_run_parser_/);
     expect(element?.parentId).toMatch(/^odr_run_parser_/);
     expect(host.assertDesignToolContext).toHaveBeenCalledWith(context);

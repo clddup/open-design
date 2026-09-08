@@ -1,25 +1,25 @@
 import {
-  AngularGradientPaintSchema,
-  BackgroundBlurEffectSchema,
-  BlendModeSchema,
-  DropShadowEffectSchema,
-  InnerShadowEffectSchema,
-  ImagePlacementSchema,
-  LayerBlurEffectSchema,
-  LayoutPositioningSchema,
-  LayoutSizingSchema,
-  LinearAutoLayoutSchema,
-  LinearGradientPaintSchema,
-  OuterGlowEffectSchema,
-  RadialGradientPaintSchema,
-  SolidPaintSchema,
   MAX_TRANSACTION_COMMANDS,
   executableJsonSchema,
   Type,
   type Static,
   type TSchema,
 } from "@opendesign/design-contracts";
-import type { TObject, TUnion } from "@sinclair/typebox";
+import type { TObject } from "@sinclair/typebox";
+import {
+  CLOSED,
+  COORDINATE_SCHEMA,
+  DIMENSION_SCHEMA,
+  idSchema,
+  localIdSchema,
+  textSchema,
+} from "./design-generation-schema-primitives";
+import {
+  DESIGN_GENERATION_ELEMENT_SCHEMA,
+  DESIGN_GENERATION_CANONICAL_ELEMENT_SCHEMA,
+} from "./design-generation-element-schema";
+export type { DesignGenerationElementInput } from "./design-generation-element-schema";
+
 import {
   DESIGN_LOGO_OUTPUTS,
   LOGO_CONCEPT_PRINCIPLES,
@@ -31,50 +31,6 @@ import {
   DESIGN_INTENT_SCHEMA,
 } from "./design-intent-contract";
 
-const CLOSED = { additionalProperties: false } as const;
-const ID_PATTERN = "^[^\\u0000-\\u001F\\u007F]+$";
-const LOCAL_ID_PATTERN = "^(?!odr_)[A-Za-z][A-Za-z0-9_-]{0,63}$";
-const NON_WHITESPACE_PATTERN = "\\S";
-
-function idSchema(maxLength = 256) {
-  return Type.String({
-    minLength: 1,
-    maxLength,
-    pattern: ID_PATTERN,
-  });
-}
-
-function localIdSchema() {
-  return Type.String({
-    minLength: 1,
-    maxLength: 64,
-    pattern: LOCAL_ID_PATTERN,
-    description:
-      "Short call-local identity. Main binds it to a globally stable document ID; never include the Run prefix.",
-  });
-}
-
-function textSchema(maxLength: number) {
-  return Type.String({
-    minLength: 1,
-    maxLength,
-    pattern: NON_WHITESPACE_PATTERN,
-  });
-}
-
-const COORDINATE_SCHEMA = Type.Number({
-  minimum: -1_000_000,
-  maximum: 1_000_000,
-});
-const NONNEGATIVE_COORDINATE_SCHEMA = Type.Number({
-  minimum: 0,
-  maximum: 100_000,
-});
-const DIMENSION_SCHEMA = Type.Number({
-  exclusiveMinimum: 0,
-  maximum: 100_000,
-});
-const UNIT_SCHEMA = Type.Number({ minimum: 0, maximum: 1 });
 const COMPACT_DESIGN_INTENT_SCHEMA = createDesignIntentSchema(
   COMPACT_DESIGN_INTENT_LIMITS,
 );
@@ -87,280 +43,6 @@ const DELIVERABLE_SCHEMA = Type.Union([
   Type.Literal("presentation-visual"),
   Type.Literal("other"),
 ]);
-
-const DESIGN_GENERATION_PAINT_SCHEMA = Type.Union([
-  Type.Omit(SolidPaintSchema, ["boundVariables", "blendMode", "visible"]),
-  Type.Omit(LinearGradientPaintSchema, ["blendMode", "visible"]),
-  Type.Omit(RadialGradientPaintSchema, ["blendMode", "visible"]),
-  Type.Omit(AngularGradientPaintSchema, ["blendMode", "visible"]),
-]);
-
-const DESIGN_GENERATION_EFFECT_SCHEMA = Type.Union([
-  Type.Omit(DropShadowEffectSchema, ["blendMode", "visible"]),
-  Type.Omit(InnerShadowEffectSchema, ["blendMode", "visible"]),
-  Type.Omit(OuterGlowEffectSchema, ["blendMode", "visible"]),
-  Type.Omit(LayerBlurEffectSchema, ["visible"]),
-  Type.Omit(BackgroundBlurEffectSchema, ["visible"]),
-]);
-
-const SHAPE_APPEARANCE_PROPERTIES = {
-  fills: Type.Array(DESIGN_GENERATION_PAINT_SCHEMA, { maxItems: 4 }),
-  strokes: Type.Array(DESIGN_GENERATION_PAINT_SCHEMA, { maxItems: 4 }),
-  strokeWidth: Type.Number({ minimum: 0, maximum: 10_000 }),
-};
-
-const ELEMENT_BASE_PROPERTIES = {
-  id: idSchema(),
-  name: idSchema(),
-  parentId: idSchema(),
-  x: COORDINATE_SCHEMA,
-  y: COORDINATE_SCHEMA,
-  width: DIMENSION_SCHEMA,
-  height: DIMENSION_SCHEMA,
-  opacity: Type.Optional(UNIT_SCHEMA),
-  blendMode: Type.Optional(BlendModeSchema),
-  effects: Type.Optional(
-    Type.Array(DESIGN_GENERATION_EFFECT_SCHEMA, { maxItems: 4 }),
-  ),
-  layoutPositioning: Type.Optional(LayoutPositioningSchema),
-  layoutSizing: Type.Optional(LayoutSizingSchema),
-  ...SHAPE_APPEARANCE_PROPERTIES,
-};
-
-const MODEL_ELEMENT_BASE_PROPERTIES = {
-  ...ELEMENT_BASE_PROPERTIES,
-  id: localIdSchema(),
-  parentId: localIdSchema(),
-  strokes: Type.Optional(SHAPE_APPEARANCE_PROPERTIES.strokes),
-  strokeWidth: Type.Optional(SHAPE_APPEARANCE_PROPERTIES.strokeWidth),
-};
-
-const GROUP_ELEMENT_SCHEMA = Type.Object(
-  {
-    ...ELEMENT_BASE_PROPERTIES,
-    kind: Type.Literal("group"),
-  },
-  CLOSED,
-);
-
-const FRAME_ELEMENT_SCHEMA = Type.Object(
-  {
-    ...ELEMENT_BASE_PROPERTIES,
-    kind: Type.Literal("frame"),
-    cornerRadius: Type.Optional(Type.Number({ minimum: 0, maximum: 100_000 })),
-    clipsContent: Type.Optional(Type.Boolean()),
-    autoLayout: Type.Optional(LinearAutoLayoutSchema),
-  },
-  CLOSED,
-);
-
-const RECTANGLE_ELEMENT_SCHEMA = Type.Object(
-  {
-    ...ELEMENT_BASE_PROPERTIES,
-    kind: Type.Literal("rectangle"),
-    cornerRadius: Type.Optional(Type.Number({ minimum: 0, maximum: 100_000 })),
-  },
-  CLOSED,
-);
-
-const ELLIPSE_ELEMENT_SCHEMA = Type.Object(
-  {
-    ...ELEMENT_BASE_PROPERTIES,
-    kind: Type.Literal("ellipse"),
-  },
-  CLOSED,
-);
-
-const PATH_ELEMENT_SCHEMA = Type.Object(
-  {
-    ...ELEMENT_BASE_PROPERTIES,
-    kind: Type.Literal("path"),
-    path: Type.String({
-      minLength: 1,
-      maxLength: 20_000,
-      description:
-        "Editable SVG path commands in node-local coordinates. width and height do not rescale these coordinates; keep the authored path inside the declared local bounds or provide the matching transform.",
-    }),
-  },
-  CLOSED,
-);
-
-const TEXT_ELEMENT_SCHEMA = Type.Object(
-  {
-    ...ELEMENT_BASE_PROPERTIES,
-    kind: Type.Literal("text"),
-    text: Type.Object(
-      {
-        content: Type.String({ minLength: 1, maxLength: 100_000 }),
-        fontFamily: idSchema(4_096),
-        fontStyleName: textSchema(512),
-        fontWeight: Type.Integer({ minimum: 1, maximum: 1_000 }),
-        fontSlant: Type.Union([Type.Literal("normal"), Type.Literal("italic")]),
-        fontSize: DIMENSION_SCHEMA,
-        lineHeight: DIMENSION_SCHEMA,
-        letterSpacing: Type.Optional(Type.Number()),
-        textResize: Type.Union([
-          Type.Literal("auto-width"),
-          Type.Literal("auto-height"),
-          Type.Literal("fixed"),
-        ]),
-        align: Type.Optional(
-          Type.Union([
-            Type.Literal("left"),
-            Type.Literal("center"),
-            Type.Literal("right"),
-            Type.Literal("justify"),
-          ]),
-        ),
-      },
-      CLOSED,
-    ),
-  },
-  CLOSED,
-);
-
-const IMAGE_ELEMENT_SCHEMA = Type.Object(
-  {
-    ...ELEMENT_BASE_PROPERTIES,
-    kind: Type.Literal("image"),
-    assetId: idSchema(),
-    placement: Type.Optional(ImagePlacementSchema),
-    altText: Type.Optional(Type.String({ maxLength: 2_000 })),
-    cornerRadius: Type.Optional(Type.Number({ minimum: 0, maximum: 100_000 })),
-  },
-  CLOSED,
-);
-
-const ELEMENT_KIND_SCHEMA = Type.Union([
-  Type.Literal("group"),
-  Type.Literal("frame"),
-  Type.Literal("rectangle"),
-  Type.Literal("ellipse"),
-  Type.Literal("path"),
-  Type.Literal("text"),
-  Type.Literal("image"),
-]);
-
-function executableElementSchema(
-  baseProperties: typeof ELEMENT_BASE_PROPERTIES,
-) {
-  return executableJsonSchema({
-    type: "object",
-    description:
-      "One editable document node. Frames may define canonical horizontal or vertical Auto Layout; direct children participate in flow by default and may define layoutSizing, or opt out with layoutPositioning=absolute. Every node uses canonical Figma-shaped fills, strokes, opacity, blendMode and effects at node level. Group appearance must be empty; Path additionally requires path; Text additionally requires text.",
-    properties: {
-      ...baseProperties,
-      kind: ELEMENT_KIND_SCHEMA,
-      cornerRadius: Type.Optional(
-        Type.Number({ minimum: 0, maximum: 100_000 }),
-      ),
-      clipsContent: Type.Optional(Type.Boolean()),
-      autoLayout: Type.Optional(FRAME_ELEMENT_SCHEMA.properties.autoLayout),
-      path: Type.Optional(PATH_ELEMENT_SCHEMA.properties.path),
-      text: Type.Optional(TEXT_ELEMENT_SCHEMA.properties.text),
-      assetId: Type.Optional(IMAGE_ELEMENT_SCHEMA.properties.assetId),
-      placement: IMAGE_ELEMENT_SCHEMA.properties.placement,
-      altText: IMAGE_ELEMENT_SCHEMA.properties.altText,
-    },
-    required: [
-      "id",
-      "name",
-      "parentId",
-      "x",
-      "y",
-      "width",
-      "height",
-      "fills",
-      "kind",
-    ],
-    additionalProperties: false,
-    anyOf: [
-      elementKindBranch(GROUP_ELEMENT_SCHEMA),
-      elementKindBranch(FRAME_ELEMENT_SCHEMA),
-      elementKindBranch(RECTANGLE_ELEMENT_SCHEMA),
-      elementKindBranch(ELLIPSE_ELEMENT_SCHEMA),
-      elementKindBranch(PATH_ELEMENT_SCHEMA, ["path"]),
-      elementKindBranch(TEXT_ELEMENT_SCHEMA, ["text"]),
-      elementKindBranch(IMAGE_ELEMENT_SCHEMA, ["assetId"]),
-    ],
-  }) as unknown as TUnion<
-    [
-      typeof GROUP_ELEMENT_SCHEMA,
-      typeof FRAME_ELEMENT_SCHEMA,
-      typeof RECTANGLE_ELEMENT_SCHEMA,
-      typeof ELLIPSE_ELEMENT_SCHEMA,
-      typeof PATH_ELEMENT_SCHEMA,
-      typeof TEXT_ELEMENT_SCHEMA,
-      typeof IMAGE_ELEMENT_SCHEMA,
-    ]
-  >;
-}
-
-export const DESIGN_GENERATION_ELEMENT_SCHEMA = executableElementSchema(
-  MODEL_ELEMENT_BASE_PROPERTIES,
-);
-const DESIGN_GENERATION_CANONICAL_ELEMENT_SCHEMA = executableElementSchema(
-  ELEMENT_BASE_PROPERTIES,
-);
-
-function elementKindBranch<TProperties extends { kind: TSchema }>(
-  schema: TObject<TProperties>,
-  required: string[] = [],
-) {
-  return {
-    type: "object" as const,
-    properties: { kind: schema.properties.kind },
-    required: ["kind", ...required],
-  };
-}
-
-const REGION_SCHEMA = Type.Object(
-  {
-    nodeId: idSchema(),
-    name: textSchema(128),
-    parentId: idSchema(),
-    role: Type.Union([
-      Type.Literal("structure"),
-      Type.Literal("content"),
-      Type.Literal("typography"),
-      Type.Literal("media"),
-      Type.Literal("graphic"),
-      Type.Literal("decoration"),
-      Type.Literal("interaction"),
-      Type.Literal("other"),
-    ]),
-    x: NONNEGATIVE_COORDINATE_SCHEMA,
-    y: NONNEGATIVE_COORDINATE_SCHEMA,
-    width: DIMENSION_SCHEMA,
-    height: DIMENSION_SCHEMA,
-  },
-  {
-    ...CLOSED,
-    description:
-      "Parent-first planned region with bounds local to parentId. Main creates the real Frame; designGeneration elements only reference this ID.",
-  },
-);
-
-const REGION_MODEL_SCHEMA = Type.Object(
-  {
-    ...REGION_SCHEMA.properties,
-    nodeId: localIdSchema(),
-    parentId: Type.Optional(
-      Type.String({
-        minLength: 1,
-        maxLength: 64,
-        pattern: LOCAL_ID_PATTERN,
-        description:
-          "Earlier call-local region nodeId for a nested region. Omit for a root region; Main binds the current artboard Frame.",
-      }),
-    ),
-  },
-  {
-    ...CLOSED,
-    description:
-      "Parent-first planned region with call-local IDs and bounds local to parentId. Main creates the real stable Frame.",
-  },
-);
 
 const FRAME_SCHEMA = Type.Object(
   {
@@ -388,12 +70,11 @@ const FRAME_MODEL_SCHEMA = Type.Object(
 const TARGET_MODEL_SCHEMA = Type.Object(
   {
     frame: FRAME_MODEL_SCHEMA,
-    regions: Type.Array(REGION_MODEL_SCHEMA, { minItems: 1, maxItems: 12 }),
   },
   {
     ...CLOSED,
     description:
-      "Geometry for the one Main-bound current target. Do not repeat target identity or explanatory planning text.",
+      "Artboard size for the one Main-bound current target. The editable element hierarchy is the only authored structure; do not submit a parallel region plan.",
   },
 );
 
@@ -451,7 +132,6 @@ const TARGET_CANONICAL_SCHEMA = Type.Object(
       GRAPHIC_QUALITY_PROFILE_SCHEMA,
       UI_QUALITY_PROFILE_SCHEMA,
     ]),
-    regions: Type.Array(REGION_SCHEMA, { minItems: 1, maxItems: 12 }),
   },
   CLOSED,
 );
@@ -466,15 +146,15 @@ function designGenerationPayloadSchema<
       label: idSchema(),
       elements: Type.Array(elementSchema, {
         minItems: 1,
-        maxItems: MAX_TRANSACTION_COMMANDS,
+        maxItems: MAX_TRANSACTION_COMMANDS - 1,
         description:
-          "One coherent material batch committed immediately as a real design revision. Stop this call once the artboard and one complete, useful visual section are ready; do not serialize every remaining detail of a larger target into the initial call. Elements plus the host-created artboard and regions must fit the shared DesignTransaction command safety limit. Use later edit calls for additional progressive batches instead of inventing stage metadata.",
+          "One coherent material batch committed immediately as a real design revision. Author one parent-first editable hierarchy: omit parentId for artboard children and use an earlier element ID for nested children. Stop once one complete, useful visual section is ready; use later edit calls for additional progressive batches. The element bound leaves room for the host-created artboard inside the shared DesignTransaction command safety limit.",
       }),
     },
     {
       ...CLOSED,
       description:
-        "Materialize targets[0]. targetId must equal targets[0].targetId. Element parentId must name a declared targets[0] region or an earlier element in this call.",
+        "Materialize targets[0] from one editable parent-first element hierarchy. targetId must equal targets[0].targetId. Element parentId must name an earlier element or the host-bound artboard.",
     },
   );
 }
@@ -674,7 +354,7 @@ const DESIGN_GENERATION_MODEL_PROPERTIES = {
 };
 
 const DESIGN_GENERATION_CANONICAL_PROPERTIES = {
-  version: Type.Literal(1),
+  version: Type.Literal(2),
   deliverable: DELIVERABLE_SCHEMA,
   objective: textSchema(2_000),
   designIntent: DESIGN_INTENT_SCHEMA,
@@ -717,7 +397,7 @@ const DESIGN_GENERATION_LOGO_DESCRIPTION =
 
 export const DESIGN_GENERATION_TOOL_INPUT_SCHEMA = designGenerationSchema(
   DESIGN_GENERATION_MODEL_PROPERTIES_SCHEMA,
-  `Generate one Main-bound target as progressive editable design. This call commits one coherent material batch immediately; continue with ordinary edit calls when more batches are needed instead of waiting to submit the entire design at once. Submit requested artboard size, parent-first regions, image roles, and actual content layers; do not repeat target identity, planning prose, visual rationale, host state, or artificial stage metadata. Frame, Rectangle, Ellipse, Path, Text and persistent Image appearance uses the same canonical document semantics; use an assetId returned by image generation when real subject evidence is required instead of a geometric placeholder. Use canonical paints and effects directly instead of approximating depth with extra flat rectangles. Reusable Component decisions happen after this real hierarchy exists, using inspected Frame/Group roots like Figma's create-component-from-node flow. ${DESIGN_GENERATION_LOGO_DESCRIPTION} Main derives the executable Plan metadata, binds stable identities, skills, brief fidelity, and quality defaults, then validates the authored geometry.`,
+  `Generate one Main-bound target as progressive editable design. This call commits one coherent material batch immediately; continue with ordinary edit calls when more batches are needed instead of waiting to submit the entire design at once. Submit the artboard size, image roles, and one parent-first editable element hierarchy; omit parentId for artboard children and never duplicate that hierarchy in a separate region plan. Do not repeat target identity, planning prose, visual rationale, host state, or artificial stage metadata. Frame, Rectangle, Ellipse, Path, Text and persistent Image appearance uses the same canonical document semantics; use an assetId returned by image generation when real subject evidence is required instead of a geometric placeholder. Use canonical paints and effects directly instead of approximating depth with extra flat rectangles. Reusable Component decisions happen after this real hierarchy exists, using inspected Frame/Group roots like Figma's create-component-from-node flow. ${DESIGN_GENERATION_LOGO_DESCRIPTION} Main derives the executable Plan metadata, binds stable identities, skills, brief fidelity and quality defaults from that same hierarchy, then validates the authored geometry.`,
 );
 
 export const DESIGN_GENERATION_CANONICAL_INPUT_SCHEMA = designGenerationSchema(
@@ -730,11 +410,3 @@ export type DesignGenerationModelInput = Static<
 export type DesignGenerationCanonicalInput = Static<
   typeof DESIGN_GENERATION_CANONICAL_PROPERTIES_SCHEMA
 >;
-export type DesignGenerationElementInput =
-  | Static<typeof GROUP_ELEMENT_SCHEMA>
-  | Static<typeof FRAME_ELEMENT_SCHEMA>
-  | Static<typeof RECTANGLE_ELEMENT_SCHEMA>
-  | Static<typeof ELLIPSE_ELEMENT_SCHEMA>
-  | Static<typeof PATH_ELEMENT_SCHEMA>
-  | Static<typeof TEXT_ELEMENT_SCHEMA>
-  | Static<typeof IMAGE_ELEMENT_SCHEMA>;

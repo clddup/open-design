@@ -10,9 +10,9 @@ import {
 import { OpenDesignPiRuntime } from "@opendesign/agent-runtime/pi-migration";
 import { JsonlSessionStore } from "@opendesign/session-store";
 import { designWorkflowError } from "@/shared/design-workflow-failure-classification";
-import { applyDesignGenerationAndCapture } from "./design-generation-capture-orchestrator";
+import { dispatchDesignGenerationOrCapture } from "./design-generation-dispatcher";
 
-it("does not replay a committed design generation or request another model turn after terminal review failure", async () => {
+it("returns the committed generation before explicit capture and preserves it after terminal review failure", async () => {
   const root = await mkdtemp(join(tmpdir(), "opendesign-review-failure-"));
   try {
     const requests: ModelRequest[] = [];
@@ -25,6 +25,18 @@ it("does not replay a committed design generation or request another model turn 
             type: "tool_call",
             toolCallId: "slice",
             name: "opendesign_generate_design",
+            input: {},
+          },
+        ],
+        stopReason: "tool_use",
+      },
+      {
+        blocks: [
+          {
+            id: "capture",
+            type: "tool_call",
+            toolCallId: "capture",
+            name: "opendesign_capture_canvas",
             input: {},
           },
         ],
@@ -44,26 +56,27 @@ it("does not replay a committed design generation or request another model turn 
         },
       },
       toolCatalog: {
-        listTools: () => [
-          {
-            name: "opendesign_generate_design",
-            description: "Design generation orchestration test",
-            inputSchema: {
-              type: "object",
-              properties: {},
-              additionalProperties: false,
-            },
-            risk: "design_write",
-            approval: "never",
-            validateInputIssues: () => [],
-          },
-        ],
+        listTools: () =>
+          ["opendesign_generate_design", "opendesign_capture_canvas"].map(
+            (name) => ({
+              name,
+              description: "Generation and explicit capture test",
+              inputSchema: {
+                type: "object",
+                properties: {},
+                additionalProperties: false,
+              },
+              risk: "design_write" as const,
+              approval: "never" as const,
+              validateInputIssues: () => [],
+            }),
+          ),
       },
       toolExecutor: {
-        async *execute(): AsyncIterable<ToolExecutionEvent> {
+        async *execute(call): AsyncIterable<ToolExecutionEvent> {
           try {
-            const result = await applyDesignGenerationAndCapture({
-              designGeneration: () => {
+            const result = await dispatchDesignGenerationOrCapture(call, {
+              generate: () => {
                 writes += 1;
                 return Promise.resolve({
                   content: { ok: true },
@@ -74,16 +87,18 @@ it("does not replay a committed design generation or request another model turn 
                   },
                 });
               },
-              capture: () =>
-                Promise.reject(
-                  designWorkflowError(
-                    "visual_critic_unavailable",
-                    "Committed revision 5 retained; review timed out",
-                    { terminal: true },
+              captureReview: {
+                handle: () =>
+                  Promise.reject(
+                    designWorkflowError(
+                      "visual_critic_unavailable",
+                      "Committed revision 5 retained; review timed out",
+                      { terminal: true },
+                    ),
                   ),
-                ),
-              getDelivery: () => ({ activeTargetId: "target" }),
+              },
             });
+            if (!result) throw new Error("Unexpected tool");
             yield { type: "completed", result };
           } catch (error) {
             if (!(error instanceof Error) || !isTrustedToolFailure(error.cause))
@@ -109,7 +124,14 @@ it("does not replay a committed design generation or request another model turn 
       type: "run.completed",
       stopReason: "error",
     });
-    expect(requests).toHaveLength(1);
+    expect(requests).toHaveLength(2);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "tool.completed",
+        toolCallId: "slice",
+        revision: 5,
+      }),
+    );
     expect(writes).toBe(1);
     const nextEvents = [];
     for await (const event of runtime.run({
@@ -123,7 +145,7 @@ it("does not replay a committed design generation or request another model turn 
       type: "run.completed",
       stopReason: "complete",
     });
-    expect(requests).toHaveLength(2);
+    expect(requests).toHaveLength(3);
     expect(writes).toBe(1);
   } finally {
     await rm(root, { recursive: true, force: true });

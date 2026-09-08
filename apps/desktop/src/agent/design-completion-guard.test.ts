@@ -303,62 +303,71 @@ describe("design completion guard", () => {
     expect(reviewDesignCompletion(context([]))).toEqual({ allow: true });
   });
 
-  it("blocks Run completion while the Main Plan ledger has an unfinished step", () => {
-    const result = reviewDesignCompletion(
-      context([
-        {
-          ...finalCapture,
-          toolCallId: "capture_plan_incomplete",
-          result: {
-            delivery: {
-              version: 4,
-              targets: [
-                {
-                  targetId: "target_home",
-                  label: "Home",
-                  pageId: "page_1",
-                  rootNodeId: "frame_home",
-                  reservedNodeIds: ["frame_home"],
-                  status: "drafted",
-                  allocatedRevision: 4,
-                  draftRevision: 5,
-                },
-              ],
-              activeTargetId: "target_home",
-              planExecution: {
-                planRevision: 1,
+  it.each([
+    {},
+    { postCommitStatus: "capture-unavailable" },
+    { reviewWorkflow: { nextAction: "review-unavailable" } },
+  ])(
+    "blocks completion with an unfinished Main Plan even when verification is interrupted: %j",
+    (interruption) => {
+      const result = reviewDesignCompletion(
+        context([
+          materialWrite,
+          {
+            ...finalCapture,
+            toolCallId: "capture_plan_incomplete",
+            result: {
+              ...interruption,
+              delivery: {
+                version: 4,
                 targets: [
                   {
                     targetId: "target_home",
-                    steps: [
-                      {
-                        stepId: "build_content",
-                        label: "Build content",
-                        kind: "implementation",
-                        status: "in_progress",
-                        startedRevision: 4,
-                      },
-                      {
-                        stepId: "target_home.review-refine",
-                        label: "Review and refine",
-                        kind: "review-refine",
-                        status: "pending",
-                      },
-                    ],
+                    label: "Home",
+                    pageId: "page_1",
+                    rootNodeId: "frame_home",
+                    reservedNodeIds: ["frame_home"],
+                    status: "drafted",
+                    allocatedRevision: 4,
+                    draftRevision: 5,
                   },
                 ],
+                activeTargetId: "target_home",
+                planExecution: {
+                  planRevision: 1,
+                  targets: [
+                    {
+                      targetId: "target_home",
+                      steps: [
+                        {
+                          stepId: "build_content",
+                          label: "Build content",
+                          kind: "implementation",
+                          status: "in_progress",
+                          startedRevision: 4,
+                        },
+                        {
+                          stepId: "target_home.review-refine",
+                          label: "Review and refine",
+                          kind: "review-refine",
+                          status: "pending",
+                        },
+                      ],
+                    },
+                  ],
+                },
               },
             },
           },
-        },
-      ]),
-    );
+        ]),
+      );
 
-    expect(result.allow).toBe(false);
-    if (result.allow) throw new Error("Expected incomplete Plan rejection");
-    expect(result.message).toContain("committed and visible");
-    expect(result.message).toContain("Capture the rendered artboard");
-  });
+      expect(result.allow).toBe(false);
+      if (result.allow) throw new Error("Expected incomplete Plan rejection");
+      expect(result.message).toContain("committed and visible");
+      expect(result.message).toContain("Capture the rendered artboard");
+    },
+  );
 
   it("requires and enforces a host-recorded scope for a broad brief", () => {
     expect(reviewDesignCompletion(context([]))).toEqual({ allow: true });
