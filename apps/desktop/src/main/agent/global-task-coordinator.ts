@@ -1206,7 +1206,6 @@ export class GlobalTaskCoordinator {
         "visual_critic_unavailable",
         `Independent visual review is unavailable: ${visualCriticUnavailable.message}. The design and capture at revision ${observedRevision} are preserved, but visual delivery has not been verified.`,
         {
-          terminal: true,
           path: "/visualReview",
           recovery:
             "Preserve the current design. Report the unavailable review rather than redrawing or repeatedly capturing; resume verification when the review service or required input is available.",
@@ -2094,15 +2093,10 @@ export class GlobalTaskCoordinator {
     }
     const activityAt = conversationActivityAt(event, this.now);
     if (activityAt) this.#touchConversation(task.conversationId, activityAt);
-    const projectedLifecycle = projectGlobalTaskLifecycle(
+    const lifecycle = projectGlobalTaskLifecycle(
       { ...event, runId },
       task.lifecycle,
     );
-    const lifecycle =
-      projectedLifecycle === "completed" &&
-      !designDeliveryCanComplete(task.delivery)
-        ? "needs_attention"
-        : projectedLifecycle;
     if (lifecycle === task.lifecycle) {
       if (event.type === "run.completed") {
         this.disposeRun(runId);
@@ -3187,19 +3181,6 @@ function deliveryLedger(state: DesignWorkflowState): DesignDeliveryLedger {
     activeTargetId: nextIncompleteTarget(state)?.delivery.targetId ?? null,
     planExecution: structuredClone(state.planExecution),
   };
-}
-
-function designDeliveryCanComplete(
-  delivery: DesignDeliveryLedger | undefined,
-): boolean {
-  if (!delivery) return true;
-  return (
-    delivery.targets.every((target) => target.status === "verified") &&
-    delivery.planExecution !== undefined &&
-    delivery.planExecution.targets.every((target) =>
-      target.steps.every((step) => step.status === "completed"),
-    )
-  );
 }
 
 function activateNextPlanStep(

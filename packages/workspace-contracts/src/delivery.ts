@@ -484,23 +484,6 @@ function globalTaskProjectionDomainIssues(
         "/delivery",
       ),
     );
-    if (value.lifecycle === "completed") {
-      if (
-        value.delivery.targets.some((target) => target.status !== "verified") ||
-        !value.delivery.planExecution ||
-        value.delivery.planExecution.targets.some((target) =>
-          target.steps.some((step) => step.status !== "completed"),
-        )
-      ) {
-        issues.push(
-          issue(
-            "workspace.completed_task_delivery_incomplete",
-            "/lifecycle",
-            "A completed design task requires verified delivery and completed Plan execution",
-          ),
-        );
-      }
-    }
   }
   return issues;
 }

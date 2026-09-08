@@ -12,7 +12,7 @@ import { JsonlSessionStore } from "@opendesign/session-store";
 import { designWorkflowError } from "@/shared/design-workflow-failure-classification";
 import { dispatchDesignGenerationOrCapture } from "./design-generation-dispatcher";
 
-it("returns the committed generation before explicit capture and preserves it after terminal review failure", async () => {
+it("returns the committed generation before explicit capture and preserves it while the Agent reports an unavailable review", async () => {
   const root = await mkdtemp(join(tmpdir(), "opendesign-review-failure-"));
   try {
     const requests: ModelRequest[] = [];
@@ -41,6 +41,16 @@ it("returns the committed generation before explicit capture and preserves it af
           },
         ],
         stopReason: "tool_use",
+      },
+      {
+        blocks: [
+          {
+            id: "review_unavailable",
+            type: "text",
+            text: "设计与截图已保留，但审核连接失败，尚未验证。",
+          },
+        ],
+        stopReason: "complete",
       },
       {
         blocks: [{ id: "next", type: "text", text: "下一条消息仍可继续" }],
@@ -93,7 +103,6 @@ it("returns the committed generation before explicit capture and preserves it af
                     designWorkflowError(
                       "visual_critic_unavailable",
                       "Committed revision 5 retained; review timed out",
-                      { terminal: true },
                     ),
                   ),
               },
@@ -122,9 +131,12 @@ it("returns the committed generation before explicit capture and preserves it af
     for await (const event of runtime.run(request)) events.push(event);
     expect(events.at(-1)).toMatchObject({
       type: "run.completed",
-      stopReason: "error",
+      stopReason: "complete",
     });
-    expect(requests).toHaveLength(2);
+    expect(requests).toHaveLength(3);
+    expect(JSON.stringify(events)).toContain("审核连接失败，尚未验证");
+    expect(JSON.stringify(requests[2])).toContain("review timed out");
+    expect(events.some((event) => event.type === "agent.error")).toBe(false);
     expect(events).toContainEqual(
       expect.objectContaining({
         type: "tool.completed",
@@ -145,7 +157,7 @@ it("returns the committed generation before explicit capture and preserves it af
       type: "run.completed",
       stopReason: "complete",
     });
-    expect(requests).toHaveLength(3);
+    expect(requests).toHaveLength(4);
     expect(writes).toBe(1);
   } finally {
     await rm(root, { recursive: true, force: true });

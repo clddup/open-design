@@ -25,7 +25,7 @@ export type AgentContinuationDecision =
 
 const MAX_CONTINUATION_ATTEMPTS = 3 as const;
 export const AGENT_CONTINUATION_PROMPT =
-  "Automatically continue the unfinished design delivery from the previous Run. First inspect the current document and its unfinishedDelivery ledger, preserve every stable target/Page/Frame identity and committed revision, then resume from the first incomplete target. Do not ask the user to send continue and do not declare completion until every target is verified.";
+  "The previous Run reached its execution budget. Continue the user's request using the Conversation, current document, and committed revisions. Treat unfinishedDelivery as execution evidence, not a prescribed workflow. Decide which edits or reviews are useful and report actual results and remaining limitations accurately.";
 
 export class AgentContinuationScheduler {
   readonly #cancellationRequestedRunIds = new Set<string>();
@@ -155,12 +155,8 @@ export class AgentContinuationScheduler {
       (!hasIncompleteTarget(currentDelivery) && !hasRemainingScope)
     )
       return null;
-    if (event.stopReason === "cancelled" || event.stopReason === "error") {
-      return null;
-    }
-
-    const reason = continuationReason(event.stopReason);
-    if (!reason) return null;
+    if (event.stopReason !== "budget") return null;
+    const reason = "budget" as const;
     const previousAttempt = source.continuation?.attempt ?? 0;
     const nextAttempt = previousAttempt + 1;
     if (nextAttempt > MAX_CONTINUATION_ATTEMPTS) {
@@ -227,14 +223,6 @@ function hasIncompleteTarget(delivery: DesignDeliveryLedger | undefined) {
     delivery.activeTargetId !== null &&
     delivery.targets.some((target) => target.status !== "verified"),
   );
-}
-
-function continuationReason(
-  stopReason: Extract<AgentEvent, { type: "run.completed" }>["stopReason"],
-): AgentContinuationReason | null {
-  if (stopReason === "complete") return "incomplete";
-  if (stopReason === "budget") return "budget";
-  return null;
 }
 
 function clampAttempt(value: number): 1 | 2 | 3 {

@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { isTrustedToolFailure } from "@opendesign/agent-contracts";
+import { designWorkflowError } from "@/shared/design-workflow-failure-classification";
 import {
   DESIGN_SYSTEM_TOOL_NAME,
   DESIGN_DELIVERY_SCOPE_TOOL_NAME,
@@ -77,6 +79,36 @@ describe("Agent design-system timeline presentation", () => {
         "agent.failureNeedsChange",
       ].join("\n"),
     });
+  });
+
+  it("shows a critic connection failure as unavailable review rather than active capture", () => {
+    const message =
+      "Independent visual review is unavailable: Connection error. Revision 656 is preserved.";
+    const result = runFailurePresentation(
+      { code: "design_visual_critic_unavailable", message, retryable: false },
+      "fallback",
+      "zh-CN",
+      t,
+    );
+    expect(result.detail).toContain(message);
+    expect(result.detail).toContain("agent.visualReviewUnavailable");
+    expect(result.detail).toContain("agent.visualReviewUnavailableRecovery");
+    expect(result.detail).not.toContain("agent.workflowCapturingCanvas");
+    expect(result.detail).not.toContain("agent.failureNeedsChange");
+    const failure = designWorkflowError(
+      "visual_critic_unavailable",
+      message,
+    ).cause;
+    if (!isTrustedToolFailure(failure)) throw new Error("Invalid test failure");
+    const detail = structuredToolFailureDetail(
+      failure.code,
+      failure.message,
+      failure.details,
+      t,
+    );
+    expect(detail).toContain(message);
+    expect(detail).toContain("agent.visualReviewUnavailable");
+    expect(detail).not.toContain("agent.workflowCapturingCanvas");
   });
 
   it("presents structured tool validation by stable code and field path", () => {

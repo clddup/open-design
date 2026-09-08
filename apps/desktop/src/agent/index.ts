@@ -13,7 +13,6 @@ import {
   designThinkingLevelForRequest,
   OPENDESIGN_AGENT_SYSTEM_PROMPT,
 } from "./system-prompt.js";
-import { DESIGN_VISUAL_COMPLETION_GUARD } from "./design-completion-guard.js";
 import { UserApprovalController } from "./user-approval-controller.js";
 import { ParentSessionStore } from "./parent-session-store.js";
 
@@ -43,7 +42,6 @@ const runtime = new OpenDesignPiRuntime({
   },
   toolExecutor: parentDesignToolExecutor,
   approvalPort: userApprovalController,
-  completionGuard: DESIGN_VISUAL_COMPLETION_GUARD,
   systemPrompt: OPENDESIGN_AGENT_SYSTEM_PROMPT,
   thinkingLevelForRequest: designThinkingLevelForRequest,
 });

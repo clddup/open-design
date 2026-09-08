@@ -3103,7 +3103,14 @@ describe("GlobalTaskCoordinator", () => {
           undefined,
           { message: "critic provider timed out" },
         ),
-      ).toThrow("critic provider timed out");
+      ).toThrow(
+        expect.objectContaining({
+          cause: expect.objectContaining({
+            code: "design_visual_critic_unavailable",
+            recoverable: true,
+          }) as unknown,
+        }),
+      );
       expect(
         coordinator.getDeliveryLedger(context.runId)?.targets[0],
       ).toMatchObject({

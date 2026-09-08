@@ -345,14 +345,12 @@ describe("Design capture/review Main session", () => {
       throw designWorkflowError(
         "visual_critic_unavailable",
         "Captured revision retained; review unavailable",
-        { terminal: true },
       );
     });
     await expect(state.session.capture(captureCall)).rejects.toMatchObject({
       cause: {
         code: "design_visual_critic_unavailable",
-        runTerminal: true,
-        recoverable: false,
+        recoverable: true,
       },
     });
     expect(vi.mocked(runIndependentDesignVisualCritic)).toHaveBeenCalledOnce();

@@ -112,6 +112,9 @@ export const agentConversationMessages = {
   "agent.canvasPhaseRecovering": "Adjusting the next step",
   "agent.workflowApplyingDraft":
     "The Agent is applying the planned draft before visual review.",
+  "agent.visualReviewUnavailable": "Independent visual review is unavailable",
+  "agent.visualReviewUnavailableRecovery":
+    "The current design is preserved but has not passed visual verification. You can continue editing and retry the review later.",
   "agent.workflowCapturingCanvas":
     "The Agent is capturing the latest design revision before visual review.",
   "agent.workflowRepairingComponents":

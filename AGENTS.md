@@ -75,7 +75,7 @@ OpenDesign 是跨平台桌面产品。macOS 与 Windows 是同级一级支持平
 - 用户可见 Plan 必须代表真实执行状态，不能作为装饰性说明或根据聊天文案猜造。Main 是 Plan execution ledger 的唯一事实源；Renderer 只能按稳定 `stepId` 投影 ledger，不得解析 label、message、revision 文案或工具名称推断步骤状态。
 - Plan 状态固定为 `pending → in_progress → completed`。全部 target 按声明顺序形成一条串行执行链：已完成步骤必须构成连续前缀，未完成步骤必须构成后缀，未完成时恰好一个步骤为 `in_progress`；禁止跳步、倒退、跨步骤并行和直接 `pending → completed`。
 - 设计事务只有在命中当前步骤并产生真实 material revision 后才能完成实现步骤；review/refine 步骤只能由可信 capture、review、refinement 与 verified revision 证据完成。失败事务、消息文本和仅有工具请求不能推进 Plan。
-- 修改 Plan 必须显式生成新的 `planRevision`，已经开始的步骤保持稳定 ID、顺序和语义。Run completion 必须与 ledger 一致；仍有 `pending` 或 `in_progress` 步骤时不得宣称完成，也不得让 UI 显示完成。
+- 修改 Plan 必须显式生成新的 `planRevision`，已经开始的步骤保持稳定 ID、顺序和语义。Run 结束只代表当前消息执行结束，不等于设计或审核完成。模型根据用户要求、当前设计和工具反馈判断是否继续编辑、审核或结束回复；宿主不得因 Plan 未完成而拒绝结束、制造任务错误或自动重启正常结束的 Run。未完成步骤和未通过的审核保持真实状态，不能随 Run 结束被标为完成或 verified。
 
 ## UI 质量基线
 

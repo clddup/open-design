@@ -106,6 +106,9 @@ export const agentConversationMessages = {
   "agent.canvasPhaseRecovering": "正在调整下一步操作",
   "agent.workflowApplyingDraft":
     "Agent 正在先应用计划中的设计，再进行视觉审查。",
+  "agent.visualReviewUnavailable": "独立视觉审核暂不可用",
+  "agent.visualReviewUnavailableRecovery":
+    "当前设计已保留，尚未通过视觉验证；可继续编辑，稍后重试审核。",
   "agent.workflowCapturingCanvas":
     "Agent 正在先截图当前设计 revision，再进行视觉审查。",
   "agent.workflowRepairingComponents":

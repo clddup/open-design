@@ -1014,16 +1014,9 @@ describe("workspace contract schemas", () => {
       createdAt: now,
       updatedAt: now,
     });
-    expect(completedProjection.ok).toBe(false);
-    if (!completedProjection.ok) {
-      expect(completedProjection.issues).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            code: "workspace.completed_task_delivery_incomplete",
-            path: "/lifecycle",
-          }),
-        ]),
-      );
+    expect(completedProjection.ok).toBe(true);
+    if (completedProjection.ok) {
+      expect(completedProjection.value.delivery).toEqual(ledger);
     }
   });
 });

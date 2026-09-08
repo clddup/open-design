@@ -58,6 +58,9 @@ export function friendlyAgentError(
   t: Translate,
   code?: string,
 ): string {
+  if (code === "design_visual_critic_unavailable") {
+    return `${t("agent.visualReviewUnavailable")}\n${message}`;
+  }
   const workflowFailure = designWorkflowClassificationFromFailureCode(code);
   if (workflowFailure) {
     return workflowFailurePresentation(workflowFailure.presentation, t);
@@ -161,9 +164,11 @@ export function runFailurePresentation(
     title,
     detail: [
       primary,
-      failure.retryable
-        ? t("agent.failureRetryable")
-        : t("agent.failureNeedsChange"),
+      failure.code === "design_visual_critic_unavailable"
+        ? t("agent.visualReviewUnavailableRecovery")
+        : failure.retryable
+          ? t("agent.failureRetryable")
+          : t("agent.failureNeedsChange"),
       ...correlation,
     ].join("\n"),
   };
@@ -191,6 +196,14 @@ function structuredFailureIssueDetail(
       issue.path || null,
       issue.recovery ?? null,
     ]
+      .filter(Boolean)
+      .join("\n");
+  }
+  if (
+    details.kind === "design-workflow" &&
+    details.workflowCode === "visual_critic_unavailable"
+  ) {
+    return [t("agent.visualReviewUnavailable"), issue.message, issue.recovery]
       .filter(Boolean)
       .join("\n");
   }

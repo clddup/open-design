@@ -118,19 +118,19 @@ describe("AgentContinuationScheduler", () => {
     recordDelivery(scheduler, continued.runId);
 
     expect(
-      scheduler.record(completed(continued.runId, "complete")),
+      scheduler.record(completed(continued.runId, "budget")),
     ).toMatchObject({
       kind: "schedule",
       continuation: {
         parentRunId: continued.runId,
         rootRunId: "run_initial",
         attempt: 2,
-        reason: "incomplete",
+        reason: "budget",
       },
     });
   });
 
-  it("continues a declared multi-target delivery without an initial intent flag", () => {
+  it("respects a normal response ending with an incomplete multi-target delivery", () => {
     const scheduler = new AgentContinuationScheduler(() => 2500);
     const initial = request();
     scheduler.registerRun(initial);
@@ -149,13 +149,8 @@ describe("AgentContinuationScheduler", () => {
       ],
     });
 
-    expect(
-      scheduler.record(completed(initial.runId, "complete")),
-    ).toMatchObject({
-      kind: "schedule",
-      source: initial,
-      continuation: { reason: "incomplete", attempt: 1 },
-    });
+    expect(scheduler.record(completed(initial.runId, "complete"))).toBeNull();
+    expect(scheduler.activeRunIds()).toEqual([]);
   });
 
   it("waits for run.completed before ending a failed Run", () => {
