@@ -12,7 +12,7 @@ import { describe, expect, it } from "vitest";
 import {
   DESIGN_CAPTURE_TOOL_NAME,
   DESIGN_EDIT_TOOL_NAME,
-  DESIGN_PLAN_TOOL_NAME,
+  DESIGN_GENERATION_TOOL_NAME,
   type DesignPlanToolInput,
 } from "@/shared/design-agent-tools";
 import {
@@ -365,14 +365,14 @@ describe("Renderer Agent generation presentation", () => {
 });
 
 describe("Renderer typed plan skeleton presentation", () => {
-  it("only accepts a plan after the matching Main tool completion", () => {
+  it("accepts the host-compiled Plan only after the atomic design-generation completion", () => {
     const requested = {
       type: "tool.requested" as const,
       runId: "run_plan",
       toolCallId: "tool_plan",
-      toolName: DESIGN_PLAN_TOOL_NAME,
-      input: generationPlan,
-      risk: "read" as const,
+      toolName: DESIGN_GENERATION_TOOL_NAME,
+      input: {},
+      risk: "design_write" as const,
     };
     const afterRequest = projectGenerationPlanPresentationEvent(
       EMPTY_GENERATION_PLAN_PRESENTATION_STATE,
@@ -401,7 +401,6 @@ describe("Renderer typed plan skeleton presentation", () => {
       runId: "run_plan",
       toolCallId: "tool_plan",
     });
-    expect(afterCompletion.requestedByCallId).toEqual({});
 
     expect(
       projectGenerationPlanPresentationEvent(afterCompletion, {
@@ -422,8 +421,7 @@ describe("Renderer typed plan skeleton presentation", () => {
     ).toEqual(EMPTY_GENERATION_PLAN_PRESENTATION_STATE);
   });
 
-  it("replaces the visible skeleton with the authoritative amended plan", () => {
-    const requestedPlan = structuredClone(generationPlan);
+  it("uses the authoritative host-compiled Plan returned by design-generation", () => {
     const amendedPlan: DesignPlanToolInput = {
       ...structuredClone(generationPlan),
       objective: "Create a stronger editorial launch poster",
@@ -441,9 +439,9 @@ describe("Renderer typed plan skeleton presentation", () => {
         type: "tool.requested",
         runId: "run_amended_plan",
         toolCallId: "tool_amended_plan",
-        toolName: DESIGN_PLAN_TOOL_NAME,
-        input: requestedPlan,
-        risk: "read",
+        toolName: DESIGN_GENERATION_TOOL_NAME,
+        input: {},
+        risk: "design_write",
       },
     );
     const accepted = projectGenerationPlanPresentationEvent(requested, {
@@ -464,19 +462,25 @@ describe("Renderer typed plan skeleton presentation", () => {
     );
   });
 
-  it("rejects failed, malformed, or mismatched plan events", () => {
-    const malformed = projectGenerationPlanPresentationEvent(
+  it("rejects malformed or mismatched host-compiled Plan results", () => {
+    const malformedRequest = projectGenerationPlanPresentationEvent(
       EMPTY_GENERATION_PLAN_PRESENTATION_STATE,
       {
         type: "tool.requested",
         runId: "run_bad",
         toolCallId: "tool_bad",
-        toolName: DESIGN_PLAN_TOOL_NAME,
-        input: { ...generationPlan, version: 7 },
-        risk: "read",
+        toolName: DESIGN_GENERATION_TOOL_NAME,
+        input: {},
+        risk: "design_write",
       },
     );
-    expect(malformed).toBe(EMPTY_GENERATION_PLAN_PRESENTATION_STATE);
+    const malformed = projectGenerationPlanPresentationEvent(malformedRequest, {
+      type: "tool.completed",
+      runId: "run_bad",
+      toolCallId: "tool_bad",
+      result: acceptedPlanResult({ ...generationPlan, version: 7 } as never),
+    });
+    expect(malformed.acceptedByRunId.run_bad).toBeUndefined();
 
     const requested = projectGenerationPlanPresentationEvent(
       EMPTY_GENERATION_PLAN_PRESENTATION_STATE,
@@ -484,9 +488,9 @@ describe("Renderer typed plan skeleton presentation", () => {
         type: "tool.requested",
         runId: "run_bad",
         toolCallId: "tool_bad",
-        toolName: DESIGN_PLAN_TOOL_NAME,
-        input: generationPlan,
-        risk: "read",
+        toolName: DESIGN_GENERATION_TOOL_NAME,
+        input: {},
+        risk: "design_write",
       },
     );
     const mismatched = projectGenerationPlanPresentationEvent(requested, {
@@ -502,7 +506,6 @@ describe("Renderer typed plan skeleton presentation", () => {
       },
     });
     expect(mismatched.acceptedByRunId.run_bad).toBeUndefined();
-    expect(mismatched.requestedByCallId).toEqual({});
   });
 
   it("projects trusted design tools into semantic stages without using progress prose", () => {
@@ -939,9 +942,9 @@ function acceptPlanPresentation(runId: string, toolCallId: string) {
       type: "tool.requested",
       runId,
       toolCallId,
-      toolName: DESIGN_PLAN_TOOL_NAME,
-      input: generationPlan,
-      risk: "read",
+      toolName: DESIGN_GENERATION_TOOL_NAME,
+      input: {},
+      risk: "design_write",
     },
   );
   return projectGenerationPlanPresentationEvent(requested, {
@@ -956,6 +959,7 @@ function acceptedPlanResult(plan: DesignPlanToolInput) {
   return {
     ok: true,
     status: "accepted",
+    plan,
     version: plan.version,
     deliverable: plan.deliverable,
     outputMode: plan.outputMode,

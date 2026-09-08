@@ -185,12 +185,31 @@ function validationIssuesMessage(
 
 function validationFingerprint(
   toolName: string,
-  issues: readonly { code?: string; path: string }[],
+  issues: readonly {
+    code?: string;
+    path: string;
+    actual?: unknown;
+  }[],
 ): string {
   const first = issues[0];
-  return ["validation", toolName, first?.code ?? "invalid", first?.path || "/"]
+  return [
+    "validation",
+    toolName,
+    first?.code ?? "invalid",
+    first?.path || "/",
+    compactFingerprintValue(first?.actual),
+  ]
     .join(":")
     .slice(0, 256);
+}
+
+function compactFingerprintValue(value: unknown): string {
+  if (value === undefined) return "unknown";
+  try {
+    return (JSON.stringify(value) ?? typeof value).slice(0, 96);
+  } catch {
+    return typeof value;
+  }
 }
 
 function toolResultErrorText(value: unknown): string {

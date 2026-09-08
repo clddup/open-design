@@ -20,7 +20,6 @@ export const ModelToolDisclosureSchema = Type.Object(
     role: Type.Optional(
       Type.Union([
         Type.Literal("inspection"),
-        Type.Literal("plan"),
         Type.Literal("delivery-scope"),
         Type.Literal("material-write"),
         Type.Literal("capability-discovery"),

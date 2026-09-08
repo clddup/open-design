@@ -13,10 +13,9 @@ import {
   DESIGN_SYSTEM_TOOL_NAME,
   DESIGN_DELIVERY_SCOPE_TOOL_NAME,
   DESIGN_EDIT_TOOL_NAME,
-  DESIGN_FIRST_SLICE_TOOL_NAME,
+  DESIGN_GENERATION_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
   DESIGN_PAGE_TOOL_NAME,
-  DESIGN_PLAN_TOOL_NAME,
   PAGE_STRUCTURE_ACCESS_TOOL_NAME,
 } from "@/shared/design-agent-tools";
 import type { AgentTimelineItem, Translate } from "./timeline-types";
@@ -42,8 +41,7 @@ export function isNativeDesignTool(toolName: string | undefined): boolean {
     toolName === DESIGN_INSPECT_TOOL_NAME ||
     toolName === DESIGN_EDIT_TOOL_NAME ||
     toolName === DESIGN_DELIVERY_SCOPE_TOOL_NAME ||
-    toolName === DESIGN_FIRST_SLICE_TOOL_NAME ||
-    toolName === DESIGN_PLAN_TOOL_NAME ||
+    toolName === DESIGN_GENERATION_TOOL_NAME ||
     toolName === DESIGN_SYSTEM_TOOL_NAME ||
     toolName === DESIGN_PAGE_TOOL_NAME
   );
@@ -334,16 +332,11 @@ export function toolTitle(
   }
   if (
     toolName === DESIGN_EDIT_TOOL_NAME ||
-    toolName === DESIGN_FIRST_SLICE_TOOL_NAME
+    toolName === DESIGN_GENERATION_TOOL_NAME
   ) {
     return state === "done"
       ? t("agent.canvasUpdated")
       : t("agent.buildingCanvas");
-  }
-  if (toolName === DESIGN_PLAN_TOOL_NAME) {
-    return state === "done"
-      ? t("agent.designPlanReady")
-      : t("agent.planningDesign");
   }
   if (toolName === DESIGN_SYSTEM_TOOL_NAME) {
     return state === "done"

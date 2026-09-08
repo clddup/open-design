@@ -10,9 +10,9 @@ import {
 import { OpenDesignPiRuntime } from "@opendesign/agent-runtime/pi-migration";
 import { JsonlSessionStore } from "@opendesign/session-store";
 import { designWorkflowError } from "@/shared/design-workflow-failure-classification";
-import { applyFirstSliceAndCapture } from "./first-slice-capture-orchestrator";
+import { applyDesignGenerationAndCapture } from "./design-generation-capture-orchestrator";
 
-it("does not replay a committed first slice or request another model turn after terminal review failure", async () => {
+it("does not replay a committed design generation or request another model turn after terminal review failure", async () => {
   const root = await mkdtemp(join(tmpdir(), "opendesign-review-failure-"));
   try {
     const requests: ModelRequest[] = [];
@@ -24,7 +24,7 @@ it("does not replay a committed first slice or request another model turn after 
             id: "slice",
             type: "tool_call",
             toolCallId: "slice",
-            name: "opendesign_generate_first_slice",
+            name: "opendesign_generate_design",
             input: {},
           },
         ],
@@ -46,8 +46,8 @@ it("does not replay a committed first slice or request another model turn after 
       toolCatalog: {
         listTools: () => [
           {
-            name: "opendesign_generate_first_slice",
-            description: "First-slice orchestration test",
+            name: "opendesign_generate_design",
+            description: "Design generation orchestration test",
             inputSchema: {
               type: "object",
               properties: {},
@@ -62,8 +62,8 @@ it("does not replay a committed first slice or request another model turn after 
       toolExecutor: {
         async *execute(): AsyncIterable<ToolExecutionEvent> {
           try {
-            const result = await applyFirstSliceAndCapture({
-              firstSlice: () => {
+            const result = await applyDesignGenerationAndCapture({
+              designGeneration: () => {
                 writes += 1;
                 return Promise.resolve({
                   content: { ok: true },

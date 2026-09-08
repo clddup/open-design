@@ -6,7 +6,7 @@ import type {
 import { describe, expect, it } from "vitest";
 import {
   DESIGN_CAPTURE_TOOL_NAME,
-  DESIGN_PLAN_TOOL_NAME,
+  DESIGN_GENERATION_TOOL_NAME,
 } from "@/shared/design-agent-tools";
 import { DesignGenerationPerformanceTracker } from "./design-generation-performance";
 
@@ -36,7 +36,7 @@ describe("DesignGenerationPerformanceTracker", () => {
         delta: "开始设计",
       });
       now = baseTime + 10;
-      requested(tracker, runId, "plan", DESIGN_PLAN_TOOL_NAME);
+      requested(tracker, runId, "plan", DESIGN_GENERATION_TOOL_NAME);
       now = baseTime + 100;
       completed(tracker, runId, "plan", ledger(targetCount, 0, "allocated"), 1);
 
@@ -177,7 +177,7 @@ describe("DesignGenerationPerformanceTracker", () => {
     },
   );
 
-  it("does not emit a design-generation sample for a run without a plan", () => {
+  it("does not emit a design-generation sample for a run without design activity", () => {
     const tracker = new DesignGenerationPerformanceTracker(() => baseTime);
     tracker.recordAgentEvent({
       type: "run.started",
@@ -261,21 +261,26 @@ describe("DesignGenerationPerformanceTracker", () => {
     },
   );
 
-  it("keeps a zero-revision failed first-slice run observable", () => {
+  it("keeps a zero-revision failed design-generation run observable", () => {
     let now = baseTime;
     const tracker = new DesignGenerationPerformanceTracker(() => now);
-    const runId = "run_failed_first_slice";
+    const runId = "run_failed_design_generation";
     tracker.recordAgentEvent({
       type: "run.started",
       runId,
       startedAt: new Date(now).toISOString(),
     });
     now += 80_000;
-    requested(tracker, runId, "first_slice", "opendesign_generate_first_slice");
+    requested(
+      tracker,
+      runId,
+      "design_generation",
+      "opendesign_generate_design",
+    );
     tracker.recordAgentEvent({
       type: "tool.failed",
       runId,
-      toolCallId: "first_slice",
+      toolCallId: "design_generation",
       code: "invalid_tool_input",
       message: "35 elements exceeded the old budget",
       retryable: true,
@@ -325,7 +330,7 @@ describe("DesignGenerationPerformanceTracker", () => {
         reasoningEfforts: ["low"],
         firstTextDeltaMs: { count: 1, totalMs: 75_100 },
       },
-      agentTools: { plan: { count: 1 } },
+      agentTools: { mutation: { count: 1 } },
     });
   });
 
@@ -363,7 +368,7 @@ describe("DesignGenerationPerformanceTracker", () => {
       startedAt: new Date(now).toISOString(),
     });
     now = baseTime + 210;
-    requested(tracker, runId, "plan", DESIGN_PLAN_TOOL_NAME);
+    requested(tracker, runId, "plan", DESIGN_GENERATION_TOOL_NAME);
     completed(tracker, runId, "plan", ledger(1, 0, "allocated"), 1);
     now = baseTime + 220;
     const summary = tracker.recordAgentEvent({

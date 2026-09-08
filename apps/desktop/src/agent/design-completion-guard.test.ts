@@ -8,10 +8,9 @@ import {
   DESIGN_CAPTURE_TOOL_NAME,
   DESIGN_DELIVERY_SCOPE_TOOL_NAME,
   DESIGN_EDIT_TOOL_NAME,
-  DESIGN_FIRST_SLICE_TOOL_NAME,
+  DESIGN_GENERATION_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
   DESIGN_PAGE_TOOL_NAME,
-  DESIGN_PLAN_TOOL_NAME,
   GENERATE_IMAGE_TOOL_NAME,
   IMPORT_SVG_TOOL_NAME,
   PLACE_IMAGE_TOOL_NAME,
@@ -38,14 +37,16 @@ const materialWrite: AgentToolCallRecord = {
   revisionAdvanced: true,
 };
 
-const designPlan: AgentToolCallRecord = {
-  toolCallId: "plan_1",
-  toolName: DESIGN_PLAN_TOOL_NAME,
+const designGenerationWrite: AgentToolCallRecord = {
+  toolCallId: "design_generation_1",
+  toolName: DESIGN_GENERATION_TOOL_NAME,
   input: {
     outputMode: "editable-composition",
     artboard: { mode: "existing", frameId: "artboard_1" },
   },
   status: "completed",
+  revision: 5,
+  revisionAdvanced: true,
 };
 
 const inspection: AgentToolCallRecord = {
@@ -355,8 +356,8 @@ describe("design completion guard", () => {
 
     expect(result.allow).toBe(false);
     if (result.allow) throw new Error("Expected incomplete Plan rejection");
-    expect(result.message).toContain("build_content");
-    expect(result.message).toContain("do not skip pending steps");
+    expect(result.message).toContain("committed and visible");
+    expect(result.message).toContain("Capture the rendered artboard");
   });
 
   it("requires and enforces a host-recorded scope for a broad brief", () => {
@@ -413,7 +414,7 @@ describe("design completion guard", () => {
     expect(nextStage.allow).toBe(false);
     if (nextStage.allow) throw new Error("Expected the next rolling Plan");
     expect(nextStage.message).toContain("target_profile");
-    expect(nextStage.message).toContain("opendesign_generate_first_slice");
+    expect(nextStage.message).toContain("opendesign_generate_design");
 
     const continuedStage = reviewDesignCompletion(
       context(
@@ -511,18 +512,14 @@ describe("design completion guard", () => {
     expect(result.message).toContain("target_home");
   });
 
-  it("rejects a completion claim when planning never produced a design write", () => {
-    expectBlocked([inspection, designPlan], "not a completed design");
-  });
-
-  it("rejects text-only completion after an invalid first-slice structure", () => {
+  it("rejects text-only completion after an invalid design-generation structure", () => {
     const result = reviewDesignCompletion(
       context([], {
-        toolCallId: "invalid_first_slice",
-        toolName: DESIGN_FIRST_SLICE_TOOL_NAME,
+        toolCallId: "invalid_design_generation",
+        toolName: DESIGN_GENERATION_TOOL_NAME,
         code: "invalid_tool_input",
         message:
-          "/firstSlice/stages contains 33 elements; combined maximum is 32",
+          "/designGeneration/elements contains 33 elements; combined maximum is 32",
         inspectionCompleted: false,
       }),
     );
@@ -613,9 +610,9 @@ describe("design completion guard", () => {
       revisionAdvanced: true,
       result: { deliveryDisposition: "superseded" },
     };
-    expect(reviewDesignCompletion(context([clear, designPlan])).allow).toBe(
-      false,
-    );
+    expect(
+      reviewDesignCompletion(context([clear, designGenerationWrite])).allow,
+    ).toBe(false);
     expect(reviewDesignCompletion(context([clear, deliveryScope])).allow).toBe(
       false,
     );
@@ -631,7 +628,9 @@ describe("design completion guard", () => {
       ).allow,
     ).toBe(false);
     expect(
-      reviewDesignCompletion(context([deliveryScope, designPlan, clear])),
+      reviewDesignCompletion(
+        context([deliveryScope, designGenerationWrite, clear]),
+      ),
     ).toEqual({ allow: true });
   });
 
@@ -686,7 +685,7 @@ describe("design completion guard", () => {
       context(
         [
           inspection,
-          designPlan,
+          designGenerationWrite,
           materialWrite,
           firstCapture,
           visualReview,
@@ -719,42 +718,39 @@ describe("design completion guard", () => {
       allow: true,
     });
     expectBlocked(
-      [
-        inspection,
-        designPlan,
-        { ...materialWrite, revisionAdvanced: undefined },
-      ],
-      "No material design transaction reached",
+      [designGenerationWrite, materialWrite],
+      "document inspection",
     );
-    expectBlocked([designPlan, materialWrite], "document inspection");
     expectBlocked(
-      [inspection, designPlan, materialWrite],
+      [inspection, designGenerationWrite, materialWrite],
       "opendesign_capture_canvas",
     );
     expectBlocked(
-      [inspection, designPlan, materialWrite, firstCapture],
+      [inspection, designGenerationWrite, materialWrite, firstCapture],
       "Main-owned delivery ledger and visual verdict",
     );
     expectBlocked(
-      [inspection, designPlan, materialWrite, firstCapture, visualReview],
+      [
+        inspection,
+        designGenerationWrite,
+        materialWrite,
+        firstCapture,
+        visualReview,
+      ],
       "Main-owned delivery ledger and visual verdict",
     );
   });
 
-  it("accepts trusted host inspection plus the combined plan and first-slice write", () => {
+  it("accepts trusted host inspection plus the combined plan and design-generation write", () => {
     const compact: AgentToolCallRecord = {
       toolCallId: "slice_1",
-      toolName: DESIGN_FIRST_SLICE_TOOL_NAME,
+      toolName: DESIGN_GENERATION_TOOL_NAME,
       input: {
-        firstSlice: {
-          stages: [
-            {
-              elements: [
-                { kind: "frame" },
-                { kind: "rectangle" },
-                { kind: "text" },
-              ],
-            },
+        designGeneration: {
+          elements: [
+            { kind: "frame" },
+            { kind: "rectangle" },
+            { kind: "text" },
           ],
         },
       },
@@ -796,7 +792,7 @@ describe("design completion guard", () => {
     expectBlocked(
       [
         inspection,
-        designPlan,
+        designGenerationWrite,
         materialWrite,
         firstCapture,
         visualReview,
@@ -814,7 +810,7 @@ describe("design completion guard", () => {
       reviewDesignCompletion(
         context([
           inspection,
-          designPlan,
+          designGenerationWrite,
           materialWrite,
           firstCapture,
           visualReview,
@@ -852,8 +848,8 @@ describe("design completion guard", () => {
       status: "completed",
     };
     expectBlocked(
-      [inspection, designPlan, generated],
-      "did not change the design",
+      [inspection, designGenerationWrite, generated],
+      "opendesign_capture_canvas",
     );
   });
 
@@ -871,7 +867,7 @@ describe("design completion guard", () => {
     };
 
     const singleRasterPlan: AgentToolCallRecord = {
-      ...designPlan,
+      ...designGenerationWrite,
       input: {
         outputMode: "single-raster",
         artboard: { mode: "create", frameId: "artboard_1" },
@@ -899,7 +895,7 @@ describe("design completion guard", () => {
 
   it("requires rendered review after a raster-backed editable write without counting layers", () => {
     const editablePlan: AgentToolCallRecord = {
-      ...designPlan,
+      ...designGenerationWrite,
       input: {
         outputMode: "editable-composition",
         artboard: { mode: "create", frameId: "artboard_1" },
@@ -972,7 +968,7 @@ describe("design completion guard", () => {
       reviewDesignCompletion(
         context([
           inspection,
-          designPlan,
+          designGenerationWrite,
           materialWrite,
           firstCapture,
           visualReview,
@@ -1005,7 +1001,7 @@ describe("design completion guard", () => {
       reviewDesignCompletion(
         context([
           inspection,
-          designPlan,
+          designGenerationWrite,
           materialWrite,
           firstCapture,
           visualReview,
@@ -1045,7 +1041,7 @@ describe("design completion guard", () => {
       reviewDesignCompletion(
         context([
           inspection,
-          designPlan,
+          designGenerationWrite,
           materialWrite,
           firstCapture,
           visualReview,
@@ -1080,7 +1076,7 @@ describe("design completion guard", () => {
       reviewDesignCompletion(
         context([
           inspection,
-          designPlan,
+          designGenerationWrite,
           materialWrite,
           firstCapture,
           visualReview,

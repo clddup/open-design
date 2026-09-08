@@ -88,14 +88,14 @@ const DELIVERABLE_SCHEMA = Type.Union([
   Type.Literal("other"),
 ]);
 
-const FIRST_SLICE_PAINT_SCHEMA = Type.Union([
+const DESIGN_GENERATION_PAINT_SCHEMA = Type.Union([
   Type.Omit(SolidPaintSchema, ["boundVariables", "blendMode", "visible"]),
   Type.Omit(LinearGradientPaintSchema, ["blendMode", "visible"]),
   Type.Omit(RadialGradientPaintSchema, ["blendMode", "visible"]),
   Type.Omit(AngularGradientPaintSchema, ["blendMode", "visible"]),
 ]);
 
-const FIRST_SLICE_EFFECT_SCHEMA = Type.Union([
+const DESIGN_GENERATION_EFFECT_SCHEMA = Type.Union([
   Type.Omit(DropShadowEffectSchema, ["blendMode", "visible"]),
   Type.Omit(InnerShadowEffectSchema, ["blendMode", "visible"]),
   Type.Omit(OuterGlowEffectSchema, ["blendMode", "visible"]),
@@ -104,8 +104,8 @@ const FIRST_SLICE_EFFECT_SCHEMA = Type.Union([
 ]);
 
 const SHAPE_APPEARANCE_PROPERTIES = {
-  fills: Type.Array(FIRST_SLICE_PAINT_SCHEMA, { maxItems: 4 }),
-  strokes: Type.Array(FIRST_SLICE_PAINT_SCHEMA, { maxItems: 4 }),
+  fills: Type.Array(DESIGN_GENERATION_PAINT_SCHEMA, { maxItems: 4 }),
+  strokes: Type.Array(DESIGN_GENERATION_PAINT_SCHEMA, { maxItems: 4 }),
   strokeWidth: Type.Number({ minimum: 0, maximum: 10_000 }),
 };
 
@@ -120,7 +120,7 @@ const ELEMENT_BASE_PROPERTIES = {
   opacity: Type.Optional(UNIT_SCHEMA),
   blendMode: Type.Optional(BlendModeSchema),
   effects: Type.Optional(
-    Type.Array(FIRST_SLICE_EFFECT_SCHEMA, { maxItems: 4 }),
+    Type.Array(DESIGN_GENERATION_EFFECT_SCHEMA, { maxItems: 4 }),
   ),
   layoutPositioning: Type.Optional(LayoutPositioningSchema),
   layoutSizing: Type.Optional(LayoutSizingSchema),
@@ -296,10 +296,10 @@ function executableElementSchema(
   >;
 }
 
-export const DESIGN_FIRST_SLICE_ELEMENT_SCHEMA = executableElementSchema(
+export const DESIGN_GENERATION_ELEMENT_SCHEMA = executableElementSchema(
   MODEL_ELEMENT_BASE_PROPERTIES,
 );
-const DESIGN_FIRST_SLICE_CANONICAL_ELEMENT_SCHEMA = executableElementSchema(
+const DESIGN_GENERATION_CANONICAL_ELEMENT_SCHEMA = executableElementSchema(
   ELEMENT_BASE_PROPERTIES,
 );
 
@@ -337,7 +337,7 @@ const REGION_SCHEMA = Type.Object(
   {
     ...CLOSED,
     description:
-      "Parent-first planned region with bounds local to parentId. Main creates the real Frame; firstSlice elements only reference this ID.",
+      "Parent-first planned region with bounds local to parentId. Main creates the real Frame; designGeneration elements only reference this ID.",
   },
 );
 
@@ -456,7 +456,7 @@ const TARGET_CANONICAL_SCHEMA = Type.Object(
   CLOSED,
 );
 
-function firstSlicePayloadSchema<
+function designGenerationPayloadSchema<
   TElement extends TSchema,
   TTargetId extends TSchema,
 >(elementSchema: TElement, targetIdSchema: TTargetId) {
@@ -464,25 +464,12 @@ function firstSlicePayloadSchema<
     {
       targetId: targetIdSchema,
       label: idSchema(),
-      stages: Type.Array(
-        Type.Object(
-          {
-            stageId: idSchema(128),
-            label: idSchema(),
-            elements: Type.Array(elementSchema, {
-              minItems: 1,
-              maxItems: MAX_TRANSACTION_COMMANDS,
-            }),
-          },
-          CLOSED,
-        ),
-        {
-          minItems: 1,
-          maxItems: MAX_TRANSACTION_COMMANDS,
-          description:
-            "Semantic implementation groups, not animation batches. The compiled operation uses the shared DesignTransaction command safety limit.",
-        },
-      ),
+      elements: Type.Array(elementSchema, {
+        minItems: 1,
+        maxItems: MAX_TRANSACTION_COMMANDS,
+        description:
+          "One coherent material batch committed immediately as a real design revision. Stop this call once the artboard and one complete, useful visual section are ready; do not serialize every remaining detail of a larger target into the initial call. Elements plus the host-created artboard and regions must fit the shared DesignTransaction command safety limit. Use later edit calls for additional progressive batches instead of inventing stage metadata.",
+      }),
     },
     {
       ...CLOSED,
@@ -492,12 +479,15 @@ function firstSlicePayloadSchema<
   );
 }
 
-const FIRST_SLICE_MODEL_SCHEMA = Type.Omit(
-  firstSlicePayloadSchema(DESIGN_FIRST_SLICE_ELEMENT_SCHEMA, idSchema(128)),
+const DESIGN_GENERATION_MODEL_SCHEMA = Type.Omit(
+  designGenerationPayloadSchema(
+    DESIGN_GENERATION_ELEMENT_SCHEMA,
+    idSchema(128),
+  ),
   ["targetId"],
 );
-const FIRST_SLICE_CANONICAL_SCHEMA = firstSlicePayloadSchema(
-  DESIGN_FIRST_SLICE_CANONICAL_ELEMENT_SCHEMA,
+const DESIGN_GENERATION_CANONICAL_SCHEMA = designGenerationPayloadSchema(
+  DESIGN_GENERATION_CANONICAL_ELEMENT_SCHEMA,
   idSchema(128),
 );
 
@@ -567,7 +557,7 @@ function logoExplorationSchema<
             colorSystem: LOGO_DIRECTION_COLOR_SYSTEM_SCHEMA,
             rootNodeId: Type.Intersect([documentIdSchema], {
               description:
-                "ID of this direction's actual Frame/Group element in firstSlice, not a planned region ID.",
+                "ID of this direction's actual Frame/Group element in designGeneration, not a planned region ID.",
             }),
             masterNodeId: Type.Intersect([documentIdSchema], {
               description:
@@ -620,7 +610,7 @@ const VISUAL_SYSTEM_SCHEMA = Type.Object(
   {
     ...CLOSED,
     description:
-      "Compact executable visual tokens and relationships. Keep only decisions that affect the first real slice.",
+      "Executable visual tokens and relationships. Keep only decisions that affect the current committed design batch.",
   },
 );
 
@@ -671,7 +661,7 @@ const SKILL_REFS_SCHEMA = Type.Array(Type.Object({ id: idSchema() }, CLOSED), {
   maxItems: 8,
 });
 
-const FIRST_SLICE_MODEL_PROPERTIES = {
+const DESIGN_GENERATION_MODEL_PROPERTIES = {
   deliverable: DELIVERABLE_SCHEMA,
   designIntent: Type.Optional(COMPACT_DESIGN_INTENT_SCHEMA),
   targets: Type.Array(TARGET_MODEL_SCHEMA, { minItems: 1, maxItems: 1 }),
@@ -680,10 +670,10 @@ const FIRST_SLICE_MODEL_PROPERTIES = {
   logoOutputs: Type.Optional(LOGO_OUTPUTS_SCHEMA),
   logoExploration: Type.Optional(LOGO_EXPLORATION_MODEL_SCHEMA),
   logoColorStrategy: Type.Optional(LOGO_COLOR_STRATEGY_SCHEMA),
-  firstSlice: FIRST_SLICE_MODEL_SCHEMA,
+  designGeneration: DESIGN_GENERATION_MODEL_SCHEMA,
 };
 
-const FIRST_SLICE_CANONICAL_PROPERTIES = {
+const DESIGN_GENERATION_CANONICAL_PROPERTIES = {
   version: Type.Literal(1),
   deliverable: DELIVERABLE_SCHEMA,
   objective: textSchema(2_000),
@@ -700,19 +690,19 @@ const FIRST_SLICE_CANONICAL_PROPERTIES = {
   logoOutputs: Type.Optional(LOGO_OUTPUTS_SCHEMA),
   logoExploration: Type.Optional(LOGO_EXPLORATION_CANONICAL_SCHEMA),
   logoColorStrategy: Type.Optional(LOGO_COLOR_STRATEGY_SCHEMA),
-  firstSlice: FIRST_SLICE_CANONICAL_SCHEMA,
+  designGeneration: DESIGN_GENERATION_CANONICAL_SCHEMA,
 };
 
-const FIRST_SLICE_MODEL_PROPERTIES_SCHEMA = Type.Object(
-  FIRST_SLICE_MODEL_PROPERTIES,
+const DESIGN_GENERATION_MODEL_PROPERTIES_SCHEMA = Type.Object(
+  DESIGN_GENERATION_MODEL_PROPERTIES,
   CLOSED,
 );
-const FIRST_SLICE_CANONICAL_PROPERTIES_SCHEMA = Type.Object(
-  FIRST_SLICE_CANONICAL_PROPERTIES,
+const DESIGN_GENERATION_CANONICAL_PROPERTIES_SCHEMA = Type.Object(
+  DESIGN_GENERATION_CANONICAL_PROPERTIES,
   CLOSED,
 );
 
-function firstSliceSchema<TProperties extends Record<string, TSchema>>(
+function designGenerationSchema<TProperties extends Record<string, TSchema>>(
   base: TObject<TProperties>,
   description?: string,
 ): TSchema {
@@ -722,25 +712,25 @@ function firstSliceSchema<TProperties extends Record<string, TSchema>>(
   });
 }
 
-const FIRST_SLICE_LOGO_DESCRIPTION =
+const DESIGN_GENERATION_LOGO_DESCRIPTION =
   "Logo work should establish a brief-specific primary color treatment, with monochrome kept as evidence unless explicitly requested as the identity; logoColorStrategy is optional guidance, not a write gate.";
 
-export const DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA = firstSliceSchema(
-  FIRST_SLICE_MODEL_PROPERTIES_SCHEMA,
-  `Create exactly one Main-bound target's real artboard and editable first slice. Submit requested artboard size, parent-first regions, image roles, and actual content layers; do not repeat target identity, planning prose, visual rationale, or host state. Frame, Rectangle, Ellipse, Path, Text and persistent Image appearance uses the same canonical document semantics; use an assetId returned by image generation when real subject evidence is required instead of a geometric placeholder. Use canonical paints and effects directly instead of approximating depth with extra flat rectangles. Reusable Component decisions happen after this real hierarchy exists, using inspected Frame/Group roots like Figma's create-component-from-node flow. ${FIRST_SLICE_LOGO_DESCRIPTION} Main derives the executable Plan metadata, binds stable identities, skills, brief fidelity, and quality defaults, then validates the authored geometry.`,
+export const DESIGN_GENERATION_TOOL_INPUT_SCHEMA = designGenerationSchema(
+  DESIGN_GENERATION_MODEL_PROPERTIES_SCHEMA,
+  `Generate one Main-bound target as progressive editable design. This call commits one coherent material batch immediately; continue with ordinary edit calls when more batches are needed instead of waiting to submit the entire design at once. Submit requested artboard size, parent-first regions, image roles, and actual content layers; do not repeat target identity, planning prose, visual rationale, host state, or artificial stage metadata. Frame, Rectangle, Ellipse, Path, Text and persistent Image appearance uses the same canonical document semantics; use an assetId returned by image generation when real subject evidence is required instead of a geometric placeholder. Use canonical paints and effects directly instead of approximating depth with extra flat rectangles. Reusable Component decisions happen after this real hierarchy exists, using inspected Frame/Group roots like Figma's create-component-from-node flow. ${DESIGN_GENERATION_LOGO_DESCRIPTION} Main derives the executable Plan metadata, binds stable identities, skills, brief fidelity, and quality defaults, then validates the authored geometry.`,
 );
 
-export const DESIGN_FIRST_SLICE_CANONICAL_INPUT_SCHEMA = firstSliceSchema(
-  FIRST_SLICE_CANONICAL_PROPERTIES_SCHEMA,
+export const DESIGN_GENERATION_CANONICAL_INPUT_SCHEMA = designGenerationSchema(
+  DESIGN_GENERATION_CANONICAL_PROPERTIES_SCHEMA,
 );
 
-export type DesignFirstSliceModelInput = Static<
-  typeof FIRST_SLICE_MODEL_PROPERTIES_SCHEMA
+export type DesignGenerationModelInput = Static<
+  typeof DESIGN_GENERATION_MODEL_PROPERTIES_SCHEMA
 >;
-export type DesignFirstSliceCanonicalInput = Static<
-  typeof FIRST_SLICE_CANONICAL_PROPERTIES_SCHEMA
+export type DesignGenerationCanonicalInput = Static<
+  typeof DESIGN_GENERATION_CANONICAL_PROPERTIES_SCHEMA
 >;
-export type DesignFirstSliceElementInput =
+export type DesignGenerationElementInput =
   | Static<typeof GROUP_ELEMENT_SCHEMA>
   | Static<typeof FRAME_ELEMENT_SCHEMA>
   | Static<typeof RECTANGLE_ELEMENT_SCHEMA>

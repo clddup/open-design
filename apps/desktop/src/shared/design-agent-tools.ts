@@ -35,16 +35,16 @@ export type {
   DesignTargetQualityProfile,
 } from "./design-plan-quality-profile";
 export {
-  compileDesignFirstSliceToolInput,
-  DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA,
-  FirstSliceContract,
-} from "./design-first-slice-tool";
+  compileDesignGenerationToolInput,
+  DESIGN_GENERATION_TOOL_INPUT_SCHEMA,
+  DesignGenerationContract,
+} from "./design-generation-tool";
 export type {
-  DesignFirstSliceElement,
-  DesignFirstSliceToolInput,
-  FirstSliceContractContext,
-  FirstSliceTargetBinding,
-} from "./design-first-slice-tool";
+  DesignGenerationElement,
+  DesignGenerationToolInput,
+  DesignGenerationContractContext,
+  DesignGenerationTargetBinding,
+} from "./design-generation-tool";
 export type {
   DesignApplyToolInput,
   DesignApplyContractContext,

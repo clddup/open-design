@@ -209,7 +209,11 @@ describe("production Pi runtime directed tool selection", () => {
       expect(selectedTool(current.tools, vectorName)).toBeUndefined();
       expect(selectedTool(current.tools, imageName)).toBeUndefined();
     }
-    expect(requests[6]!.tools).toEqual(requests[0]!.tools);
+    expect(requests[6]!.tools).toEqual(
+      requests[0]!.tools.filter(
+        (candidate) => candidate.name !== "opendesign_scope_probe",
+      ),
+    );
     expect(
       events.filter((event) => event.type === "tool.completed"),
     ).toHaveLength(5);

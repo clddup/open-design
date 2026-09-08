@@ -11,9 +11,8 @@ import {
 import {
   DESIGN_CAPTURE_TOOL_NAME,
   DESIGN_DELIVERY_SCOPE_TOOL_NAME,
-  DESIGN_FIRST_SLICE_TOOL_NAME,
+  DESIGN_GENERATION_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
-  DESIGN_PLAN_TOOL_NAME,
   GENERATE_IMAGE_TOOL_NAME,
   type DesignDeliveryScope,
 } from "@/shared/design-agent-tools.js";
@@ -77,7 +76,7 @@ export function reviewDesignCompletion(
     const nextTarget = deliveryStage.nextTarget ?? reviewedScope.targets[0];
     return {
       allow: false,
-      message: `The Delivery Scope is reserved but no executable target exists yet. Call opendesign_generate_first_slice for ${nextTarget?.targetId ?? "the first target"} using its host-owned artboard reservation; that call registers the bounded Plan and creates the Frame with meaningful editable content atomically. A reservation is not completed design.`,
+      message: `The Delivery Scope is reserved but no executable target exists yet. Call opendesign_generate_design for ${nextTarget?.targetId ?? "the first target"} using its host-owned artboard reservation; that call registers the bounded Plan and creates the Frame with meaningful editable content atomically. A reservation is not completed design.`,
     };
   }
   if (delivery) {
@@ -105,6 +104,18 @@ export function reviewDesignCompletion(
       )
       .find((step) => step.status !== "completed");
     if (incompletePlanStep) {
+      const target = delivery.targets.find(
+        (candidate) => candidate.targetId === incompletePlanStep.targetId,
+      );
+      if (
+        incompletePlanStep.kind === "implementation" &&
+        target?.status === "drafted"
+      ) {
+        return {
+          allow: false,
+          message: `The current design batch for ${target.label} is committed and visible. Capture the rendered artboard now to close implementation and start exact-revision review; do not wait to serialize the whole design into one tool call.`,
+        };
+      }
       return {
         allow: false,
         message: `The executable Plan is not complete. Continue the current serial step ${incompletePlanStep.stepId} (${incompletePlanStep.label}) for target ${incompletePlanStep.targetId}; do not skip pending steps or finish the Run before Main records their execution evidence.`,
@@ -121,7 +132,7 @@ export function reviewDesignCompletion(
       const nextTarget = reviewedScope.targets[delivery.targets.length];
       return {
         allow: false,
-        message: `The current executable Plan is verified, but the recorded delivery scope still has ${reviewedScope.targets.length - delivery.targets.length} unplanned target(s). Call opendesign_generate_first_slice for target ${nextTarget?.targetId ?? "at the next scope position"}; it registers that bounded stage and creates its first real editable slice atomically. Do not repeat completed targets or claim total completion yet.`,
+        message: `The current executable Plan is verified, but the recorded delivery scope still has ${reviewedScope.targets.length - delivery.targets.length} unplanned target(s). Call opendesign_generate_design for target ${nextTarget?.targetId ?? "at the next scope position"}; it registers that target and commits its first coherent editable batch atomically. Do not repeat completed targets or claim total completion yet.`,
       };
     }
     if (
@@ -131,7 +142,7 @@ export function reviewDesignCompletion(
     ) {
       return {
         allow: false,
-        message: `The current executable Plan is verified, but the trusted delivery scope still has ${deliveryStage.totalTargets - deliveryStage.plannedTargets} unplanned target(s). Call opendesign_generate_first_slice${deliveryStage.nextTarget ? ` for target ${deliveryStage.nextTarget.targetId}` : " with deliveryStage.nextTarget"}; it registers the next bounded stage and creates its first real editable slice atomically without repeating completed targets.`,
+        message: `The current executable Plan is verified, but the trusted delivery scope still has ${deliveryStage.totalTargets - deliveryStage.plannedTargets} unplanned target(s). Call opendesign_generate_design${deliveryStage.nextTarget ? ` for target ${deliveryStage.nextTarget.targetId}` : " with deliveryStage.nextTarget"}; it registers the next target and commits its first coherent editable batch atomically without repeating completed targets.`,
       };
     }
     return { allow: true };
@@ -180,7 +191,7 @@ export function reviewDesignCompletion(
       index < planIndex && call.toolName === DESIGN_INSPECT_TOOL_NAME,
   );
   const usedTrustedInitialInspection =
-    toolCalls[planIndex]?.toolName === DESIGN_FIRST_SLICE_TOOL_NAME &&
+    toolCalls[planIndex]?.toolName === DESIGN_GENERATION_TOOL_NAME &&
     context.request.initialDesignInspection !== undefined;
   if (inspectionIndex < 0 && !usedTrustedInitialInspection) {
     return {
@@ -286,14 +297,10 @@ function findMaterialWriteIndex(
 function isPlanBearingCall(call: AgentToolCallRecord): boolean {
   return (
     call.toolName === DESIGN_DELIVERY_SCOPE_TOOL_NAME ||
-    call.toolName === DESIGN_PLAN_TOOL_NAME ||
-    call.toolName === DESIGN_FIRST_SLICE_TOOL_NAME
+    call.toolName === DESIGN_GENERATION_TOOL_NAME
   );
 }
 
 function isExecutablePlanCall(call: AgentToolCallRecord): boolean {
-  return (
-    call.toolName === DESIGN_PLAN_TOOL_NAME ||
-    call.toolName === DESIGN_FIRST_SLICE_TOOL_NAME
-  );
+  return call.toolName === DESIGN_GENERATION_TOOL_NAME;
 }

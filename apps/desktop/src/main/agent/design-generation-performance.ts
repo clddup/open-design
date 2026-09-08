@@ -5,9 +5,8 @@ import {
 } from "@opendesign/workspace-contracts";
 import {
   DESIGN_CAPTURE_TOOL_NAME,
-  DESIGN_FIRST_SLICE_TOOL_NAME,
+  DESIGN_GENERATION_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
-  DESIGN_PLAN_TOOL_NAME,
 } from "@/shared/design-agent-tools.js";
 import type { RendererDesignToolPerformanceSample } from "./renderer-design-tool-host.js";
 import type { ModelProviderPerformanceSample } from "../model/model-provider-stream.js";
@@ -16,8 +15,7 @@ import type { DiagnosticInput } from "@/shared/diagnostics.js";
 const MAX_ACTIVE_RUNS = 64;
 const MAX_TRACKED_TOOL_CALLS = 512;
 
-type ToolKind =
-  "plan" | "mutation" | "capture" | "review" | "inspect" | "other";
+type ToolKind = "mutation" | "capture" | "review" | "inspect" | "other";
 
 type DurationAggregate = {
   count: number;
@@ -64,7 +62,10 @@ type RunState = {
   };
   startedAtMs: number;
   targetCount: number | null;
-  toolCalls: Map<string, { kind: ToolKind; requestedAtMs: number }>;
+  toolCalls: Map<
+    string,
+    { kind: ToolKind; requestedAtMs: number; toolName: string }
+  >;
   toolCallsDropped: number;
 };
 
@@ -177,6 +178,7 @@ export class DesignGenerationPerformanceTracker {
         state.toolCalls.set(event.toolCallId, {
           kind,
           requestedAtMs: observedAtMs,
+          toolName: event.toolName,
         });
       } else {
         state.toolCallsDropped += 1;
@@ -193,9 +195,9 @@ export class DesignGenerationPerformanceTracker {
         );
       }
       const delivery = deliveryFromResult(event.result);
-      if (tracked?.kind === "plan") {
+      if (tracked?.toolName === DESIGN_GENERATION_TOOL_NAME && delivery) {
         state.planAcceptedAtMs ??= observedAtMs;
-        if (delivery) state.targetCount = delivery.targets.length;
+        state.targetCount = delivery.targets.length;
       }
       this.#recordDeliveryMilestones(
         state,
@@ -401,7 +403,6 @@ function createRunState(startedAtMs: number): RunState {
   return {
     allAllocatedAtMs: null,
     agentTools: {
-      plan: emptyAggregate(),
       mutation: emptyAggregate(),
       capture: emptyAggregate(),
       review: emptyAggregate(),
@@ -460,11 +461,6 @@ function createRunState(startedAtMs: number): RunState {
 }
 
 function classifyTool(toolName: string): ToolKind {
-  if (
-    toolName === DESIGN_PLAN_TOOL_NAME ||
-    toolName === DESIGN_FIRST_SLICE_TOOL_NAME
-  )
-    return "plan";
   if (toolName === DESIGN_CAPTURE_TOOL_NAME) return "capture";
   if (toolName === DESIGN_INSPECT_TOOL_NAME) return "inspect";
   if (

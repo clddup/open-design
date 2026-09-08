@@ -53,19 +53,19 @@ describe("Agent diagnostic reporter", () => {
       {
         type: "tool.failed",
         runId: "run_validation",
-        toolCallId: "first_slice_invalid",
+        toolCallId: "design_generation_invalid",
         code: "invalid_tool_input",
-        message: "Correct the first-slice element budget",
+        message: "Correct the design-generation element budget",
         retryable: false,
         recoverable: true,
         details: {
           kind: "tool-validation",
-          fingerprint: "validation_first_slice",
+          fingerprint: "validation_design_generation",
           issues: [
             {
-              code: "first_slice.element_limit_exceeded",
-              path: "/firstSlice/stages",
-              message: "49 elements exceed the first-slice budget",
+              code: "design_generation.element_limit_exceeded",
+              path: "/designGeneration/elements",
+              message: "49 elements exceed the design-generation budget",
               expected: 48,
               actual: 49,
             },

@@ -12,15 +12,13 @@ import {
   DESIGN_DELIVERY_SCOPE_TOOL_NAME,
   DESIGN_EDIT_TOOL_INPUT_SCHEMA,
   DESIGN_EDIT_TOOL_NAME,
-  DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA,
-  DESIGN_FIRST_SLICE_TOOL_NAME,
+  DESIGN_GENERATION_TOOL_INPUT_SCHEMA,
+  DESIGN_GENERATION_TOOL_NAME,
   DESIGN_FONT_TOOL_INPUT_SCHEMA,
   DESIGN_FONT_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
   DESIGN_PAGE_TOOL_INPUT_SCHEMA,
   DESIGN_PAGE_TOOL_NAME,
-  DESIGN_PLAN_TOOL_INPUT_SCHEMA,
-  DESIGN_PLAN_TOOL_NAME,
   DESIGN_TEXT_RANGE_TOOL_INPUT_SCHEMA,
   DESIGN_TEXT_RANGE_TOOL_NAME,
   DESIGN_VECTOR_TOOL_INPUT_SCHEMA,
@@ -52,11 +50,10 @@ describe("design Agent tool aggregation", () => {
   it("keeps the public tool order stable", () => {
     expect(DESIGN_AGENT_TOOL_SPECS.map((tool) => tool.name)).toEqual([
       DESIGN_DELIVERY_SCOPE_TOOL_NAME,
-      DESIGN_FIRST_SLICE_TOOL_NAME,
+      DESIGN_GENERATION_TOOL_NAME,
       DESIGN_CAPABILITIES_TOOL_NAME,
       DESIGN_INSPECT_TOOL_NAME,
       DESIGN_CAPTURE_TOOL_NAME,
-      DESIGN_PLAN_TOOL_NAME,
       READ_IMAGE_TOOL_NAME,
       GENERATE_IMAGE_TOOL_NAME,
       PLACE_IMAGE_TOOL_NAME,
@@ -80,8 +77,7 @@ describe("design Agent tool aggregation", () => {
       DESIGN_AGENT_TOOL_SPECS.map((tool) => [tool.name, tool.inputSchema]),
     );
     const expected: ReadonlyArray<readonly [string, unknown]> = [
-      [DESIGN_PLAN_TOOL_NAME, DESIGN_PLAN_TOOL_INPUT_SCHEMA],
-      [DESIGN_FIRST_SLICE_TOOL_NAME, DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA],
+      [DESIGN_GENERATION_TOOL_NAME, DESIGN_GENERATION_TOOL_INPUT_SCHEMA],
       [READ_IMAGE_TOOL_NAME, READ_IMAGE_TOOL_INPUT_SCHEMA],
       [GENERATE_IMAGE_TOOL_NAME, GENERATE_IMAGE_TOOL_INPUT_SCHEMA],
       [PLACE_IMAGE_TOOL_NAME, PLACE_IMAGE_TOOL_INPUT_SCHEMA],
@@ -148,7 +144,7 @@ describe("design Agent tool aggregation", () => {
     const names = new Set(visibleTools.map((tool) => tool.name));
 
     for (const name of [
-      DESIGN_FIRST_SLICE_TOOL_NAME,
+      DESIGN_GENERATION_TOOL_NAME,
       DESIGN_INSPECT_TOOL_NAME,
       DESIGN_CAPTURE_TOOL_NAME,
       DESIGN_EDIT_TOOL_NAME,
@@ -166,11 +162,11 @@ describe("design Agent tool aggregation", () => {
       expect(names.has(name), name).toBe(false);
     }
 
-    const firstSlice = visibleTools.find(
-      (tool) => tool.name === DESIGN_FIRST_SLICE_TOOL_NAME,
+    const designGeneration = visibleTools.find(
+      (tool) => tool.name === DESIGN_GENERATION_TOOL_NAME,
     );
-    expect(firstSlice?.description).toContain(
-      "continuation keeps the current stage and ordinary editing tools available",
+    expect(designGeneration?.description).toContain(
+      "continuation keeps ordinary editing tools available",
     );
 
     const system = disclosedToolDefinitions(

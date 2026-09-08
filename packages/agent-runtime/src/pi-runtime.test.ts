@@ -170,14 +170,14 @@ describe("OpenDesign Pi production runtime", () => {
             type: "attempt.retrying",
             attemptId: modelRequest.attemptId,
             retry: 1,
-            maxRetries: 5,
+            maxRetries: 1,
             delayMs: 400,
           };
           yield {
             type: "attempt.recovered",
             attemptId: modelRequest.attemptId,
             retriesUsed: 1,
-            maxRetries: 5,
+            maxRetries: 1,
           };
           yield attemptStarted(modelRequest);
           yield {
@@ -222,14 +222,14 @@ describe("OpenDesign Pi production runtime", () => {
       type: "model.retrying",
       runId: "run_pi_reconnect",
       retry: 1,
-      maxRetries: 5,
+      maxRetries: 1,
       delayMs: 400,
     });
     expect(events).toContainEqual({
       type: "model.recovered",
       runId: "run_pi_reconnect",
       retriesUsed: 1,
-      maxRetries: 5,
+      maxRetries: 1,
     });
     expect(events.at(-1)).toMatchObject({
       type: "run.completed",

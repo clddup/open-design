@@ -1,20 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { schemaValidationIssues } from "@opendesign/design-contracts";
-import { BUILTIN_UI_DESIGN_SKILL_REFS } from "@opendesign/design-skills";
 import {
   DESIGN_AGENT_TOOL_SPECS,
   DESIGN_BOOTSTRAP_EDIT_TOOL_INPUT_SCHEMA,
   DESIGN_CAPABILITIES_TOOL_NAME,
   DESIGN_SYSTEM_TOOL_NAME,
   INTERNAL_DESIGN_COMPONENT_TOOL_NAME as DESIGN_COMPONENT_TOOL_NAME,
-  DESIGN_FIRST_SLICE_TOOL_NAME,
+  DESIGN_GENERATION_TOOL_NAME,
   DESIGN_EDIT_TOOL_NAME,
   DESIGN_FONT_TOOL_NAME,
   DESIGN_TEXT_RANGE_TOOL_NAME,
   DESIGN_VECTOR_TOOL_NAME,
   DESIGN_PAGE_TOOL_NAME,
   PAGE_STRUCTURE_ACCESS_TOOL_NAME,
-  DESIGN_PLAN_TOOL_NAME,
   EXPORT_SVG_TOOL_NAME,
   EXPORT_RASTER_TOOL_NAME,
   EDIT_IMAGE_TOOL_NAME,
@@ -29,9 +27,8 @@ import {
   DesignArrangeContract,
   DesignComponentContract,
   DesignPageContract,
-  DesignPlanContract,
   DesignHierarchyContract,
-  FirstSliceContract,
+  DesignGenerationContract,
   designAgentToolInputIssues,
   isAgentSvgImportResult,
   isPreparedAgentSvgExport,
@@ -41,14 +38,6 @@ import {
 
 function parsedApply(input: unknown) {
   const result = DesignApplyContract.parse(input);
-  if (!result.ok) {
-    throw new Error(JSON.stringify(result.issues));
-  }
-  return result.value;
-}
-
-function parsedPlan(input: unknown) {
-  const result = DesignPlanContract.parse(input);
   if (!result.ok) {
     throw new Error(JSON.stringify(result.issues));
   }
@@ -132,14 +121,14 @@ describe("design Agent tool contract", () => {
     ]);
   });
 
-  it("wires first-slice validation into the production tool definition", () => {
-    const firstSlice = DESIGN_AGENT_TOOL_SPECS.find(
-      (tool) => tool.name === DESIGN_FIRST_SLICE_TOOL_NAME,
+  it("wires design-generation validation into the production tool definition", () => {
+    const designGeneration = DESIGN_AGENT_TOOL_SPECS.find(
+      (tool) => tool.name === DESIGN_GENERATION_TOOL_NAME,
     );
-    expect(firstSlice).not.toHaveProperty("explainInvalidInput");
-    expect(firstSlice).toHaveProperty(
+    expect(designGeneration).not.toHaveProperty("explainInvalidInput");
+    expect(designGeneration).toHaveProperty(
       "validateInputIssues",
-      FirstSliceContract.modelIssues,
+      DesignGenerationContract.modelIssues,
     );
   });
 
@@ -1255,371 +1244,6 @@ describe("design Agent tool contract", () => {
           ...input.rebaseGuard,
           targets: [...input.rebaseGuard.targets, input.rebaseGuard.targets[0]],
         },
-      }),
-    ).toBe(false);
-  });
-
-  it("requires a bounded executable design plan and rendered critique", () => {
-    const target = (suffix: string, x: number) => ({
-      targetId: `target_${suffix}`,
-      label: suffix === "home" ? "Home" : "Profile",
-      pageId: "page_1",
-      objective: `Design the ${suffix} analytics screen`,
-      artboard: {
-        mode: "create",
-        frameId: `artboard_${suffix}`,
-        x,
-        y: 80,
-        width: 1_440,
-        height: 1_024,
-      },
-      composition: {
-        direction: "Dense desktop workspace with one dominant data plane",
-        hierarchy: ["Navigation", "Primary analysis", "Contextual detail"],
-        regions: [
-          {
-            nodeId: `analytics_navigation_${suffix}`,
-            name: "Navigation",
-            role: "structure",
-            x: 32,
-            y: 32,
-            width: 1_376,
-            height: 72,
-          },
-          {
-            nodeId: `analytics_primary_${suffix}`,
-            name: "Primary analysis",
-            role: "content",
-            x: 32,
-            y: 128,
-            width: 960,
-            height: 864,
-          },
-          {
-            nodeId: `analytics_inspector_${suffix}`,
-            name: "Contextual detail",
-            role: "interaction",
-            x: 1_016,
-            y: 128,
-            width: 392,
-            height: 864,
-          },
-        ],
-        assetIntegration:
-          "Use native icons and restrained vector data accents without a raster asset",
-        spacingRhythm: "4/8/12/20/32 px rhythm",
-      },
-      editableLayers: ["Navigation", "Charts", "Inspector"],
-      implementationSteps: [
-        { stepId: `create_artboard_${suffix}`, label: "Create the artboard" },
-        { stepId: `build_hierarchy_${suffix}`, label: "Build the hierarchy" },
-        {
-          stepId: `add_interaction_states_${suffix}`,
-          label: "Add interaction states",
-        },
-      ],
-      validationChecks: ["Check hierarchy", "Check density", "Check focus"],
-      qualityProfile: {
-        kind: "ui",
-        platform: "web",
-        interactionMode: "pointer",
-        safeAreaInsets: { top: 0, right: 0, bottom: 0, left: 0 },
-        safeAreaNodeIds: [
-          `analytics_navigation_${suffix}`,
-          `analytics_primary_${suffix}`,
-        ],
-        interactiveNodeIds: [],
-      },
-    });
-    const plan = {
-      version: 1,
-      deliverable: "ui",
-      objective: "Design the requested Home and Profile analytics screens",
-      outputMode: "editable-composition",
-      targets: [target("home", 120), target("profile", 1_680)],
-      visualSystem: {
-        avoidances: [
-          "Do not wrap every region in the same rounded card",
-          "Do not use borders as the only hierarchy signal",
-        ],
-        formLanguage: "Compact controls, precise edges, restrained 6 px radii",
-        palette: ["#0F172A ink", "#F8FAFC canvas", "#2563EB action"],
-        surfaceAndDepth:
-          "Use surface contrast and one elevation tier instead of card soup",
-        typography: ["Inter 12/16 body", "Inter 24/30 semibold heading"],
-        effects: ["Subtle 1 px separators", "Focused blue selection halo"],
-      },
-      rasterAssetRoles: [],
-      componentStrategy: {
-        summary:
-          "Use one linked navigation identity across both screens and keep the one-off hero ordinary.",
-        candidates: [
-          {
-            decisionId: "shared-navigation",
-            label: "Shared navigation",
-            decision: "component",
-            rationale:
-              "The navigation repeats with one stable structure and centralized visual updates.",
-            componentId: "component_navigation",
-            main: {
-              mode: "create",
-              targetId: "target_home",
-              nodeId: "navigation_main",
-            },
-            instances: [
-              {
-                targetId: "target_profile",
-                nodeId: "navigation_profile_instance",
-              },
-            ],
-          },
-          {
-            decisionId: "home-hero",
-            label: "Home hero",
-            decision: "ordinary",
-            rationale:
-              "The hero is a one-off composition with no shared semantic identity.",
-            occurrences: [
-              { targetId: "target_home", nodeId: "home_hero_group" },
-            ],
-          },
-        ],
-      },
-      briefFidelity: {
-        requiredContent: ["Home and Profile analytics screens"],
-        preservedSemantics: ["Existing navigation labels and destinations"],
-        prohibitedAdditions: ["No unrequested product capabilities"],
-        assumptions: [],
-      },
-      designIntent: {
-        subject: "A desktop analytics workspace for operational decisions",
-        audience: "Operations teams monitoring time-sensitive product signals",
-        primaryJob:
-          "Identify the most important change and act without losing context",
-        calibration: {
-          surfaceMode: "operate",
-          expressiveness: "balanced",
-          density: "dense",
-        },
-        visualThesis:
-          "A precise signal room uses directional data bands and controlled density instead of a generic dashboard grid.",
-        signatureDecision:
-          "One continuous signal rail links navigation, primary metric, and active decision across the canvas.",
-        typographyLanguage:
-          "Condensed display numerals contrast with calm utilitarian labels and readable body copy.",
-        colorMaterialLanguage:
-          "Tinted graphite planes carry dense data while one high-chroma signal color marks action.",
-        compositionTension:
-          "An asymmetric primary plane and narrow contextual edge create deliberate focus and forward motion.",
-        antiPatterns: [
-          "No equal-weight grid of interchangeable metric cards",
-          "No purple gradient used as a substitute for identity",
-          "No decorative icon tiles above every section label",
-        ],
-      },
-      skillRefs: structuredClone(BUILTIN_UI_DESIGN_SKILL_REFS),
-    };
-    const planSpec = DESIGN_AGENT_TOOL_SPECS.find(
-      (tool) => tool.name === DESIGN_PLAN_TOOL_NAME,
-    );
-    expect(planSpec).toMatchObject({
-      risk: "design_write",
-      approval: "never",
-      inputSchema: {
-        properties: {
-          version: { const: 1 },
-          targets: { type: "array" },
-          componentStrategy: { type: "object" },
-          briefFidelity: { type: "object" },
-          referenceStrategy: { type: "object" },
-        },
-      },
-    });
-    expect(planSpec).toHaveProperty(
-      "validateInputIssues",
-      DesignPlanContract.issues,
-    );
-    expect(JSON.stringify(planSpec?.inputSchema)).toContain(
-      '"safeAreaNodeIds"',
-    );
-    expect(JSON.stringify(planSpec?.inputSchema)).toContain(
-      '"interactiveNodeIds"',
-    );
-    expect(JSON.stringify(planSpec?.inputSchema)).not.toContain('"skillRefs"');
-    const { skillRefs: _planSkillRefs, ...modelPlan } = plan;
-    expect(_planSkillRefs).toEqual(BUILTIN_UI_DESIGN_SKILL_REFS);
-    expect(validateDesignAgentToolInput(DESIGN_PLAN_TOOL_NAME, modelPlan)).toBe(
-      true,
-    );
-    expect(parsedPlan(modelPlan).skillRefs).toEqual(
-      BUILTIN_UI_DESIGN_SKILL_REFS,
-    );
-    expect(validateDesignAgentToolInput(DESIGN_PLAN_TOOL_NAME, plan)).toBe(
-      true,
-    );
-    const reference = (hex: string) => ({
-      attachmentId: `image_${hex.repeat(64)}`,
-      decision: "style-reference" as const,
-      application:
-        "Transfer the reference's tonal hierarchy without copying its subject.",
-      preserve: ["tonal hierarchy"],
-      avoid: ["literal subject copy"],
-    });
-    expect(
-      validateDesignAgentToolInput(DESIGN_PLAN_TOOL_NAME, {
-        ...plan,
-        referenceStrategy: {
-          synthesis:
-            "Combine the reference's transferable visual decisions with the current product semantics.",
-          references: [reference("a")],
-        },
-      }),
-    ).toBe(true);
-    expect(
-      validateDesignAgentToolInput(DESIGN_PLAN_TOOL_NAME, {
-        ...plan,
-        referenceStrategy: {
-          synthesis:
-            "Use all three user-authorized references when each contributes a distinct relevant decision.",
-          references: [reference("a"), reference("b"), reference("c")],
-        },
-      }),
-    ).toBe(true);
-    expect(
-      validateDesignAgentToolInput(DESIGN_PLAN_TOOL_NAME, {
-        ...plan,
-        componentStrategy: {
-          summary:
-            "Reuse the existing navigation Component and keep the unique hero ordinary.",
-          candidates: [
-            {
-              decisionId: "catalog-navigation",
-              label: "Product navigation",
-              decision: "reuse-component",
-              rationale:
-                "The catalog Component has the same navigation job and supported variation surface.",
-              componentId: "component_catalog_navigation",
-              instances: [
-                {
-                  targetId: "target_home",
-                  nodeId: "catalog_navigation_instance",
-                },
-              ],
-            },
-          ],
-        },
-      }),
-    ).toBe(true);
-    expect(
-      validateDesignAgentToolInput(DESIGN_PLAN_TOOL_NAME, {
-        ...plan,
-        version: 7,
-      }),
-    ).toBe(false);
-    expect(
-      validateDesignAgentToolInput(DESIGN_PLAN_TOOL_NAME, {
-        ...plan,
-        targets: plan.targets.map((item, index) =>
-          index === 0
-            ? {
-                ...item,
-                composition: {
-                  ...item.composition,
-                  regions: item.composition.regions.map(
-                    (region, regionIndex) =>
-                      regionIndex === 2
-                        ? { ...region, x: 1_200, width: 392 }
-                        : region,
-                  ),
-                },
-              }
-            : item,
-        ),
-      }),
-    ).toBe(false);
-    expect(
-      validateDesignAgentToolInput(DESIGN_PLAN_TOOL_NAME, {
-        ...plan,
-        targets: [
-          plan.targets[0],
-          { ...plan.targets[1], targetId: "target_home" },
-        ],
-      }),
-    ).toBe(false);
-    expect(
-      validateDesignAgentToolInput(DESIGN_PLAN_TOOL_NAME, {
-        ...plan,
-        visualSystem: {
-          ...plan.visualSystem,
-          avoidances: ["Make it good"],
-        },
-      }),
-    ).toBe(true);
-    expect(
-      validateDesignAgentToolInput(DESIGN_PLAN_TOOL_NAME, {
-        ...plan,
-        visualSystem: {
-          ...plan.visualSystem,
-          avoidances: [""],
-        },
-      }),
-    ).toBe(false);
-    expect(
-      validateDesignAgentToolInput(DESIGN_PLAN_TOOL_NAME, {
-        ...plan,
-        skillRefs: plan.skillRefs.slice(1),
-      }),
-    ).toBe(true);
-    expect(
-      parsedPlan({
-        ...plan,
-        skillRefs: plan.skillRefs.slice(1),
-      }).skillRefs,
-    ).toEqual(BUILTIN_UI_DESIGN_SKILL_REFS);
-    expect(
-      validateDesignAgentToolInput(DESIGN_PLAN_TOOL_NAME, {
-        ...plan,
-        designIntent: { ...plan.designIntent, signatureDecision: " " },
-      }),
-    ).toBe(false);
-    expect(
-      validateDesignAgentToolInput(DESIGN_PLAN_TOOL_NAME, {
-        ...plan,
-        targets: plan.targets.map((item, index) =>
-          index === 0
-            ? {
-                ...item,
-                qualityProfile: { kind: "graphic" },
-              }
-            : item,
-        ),
-      }),
-    ).toBe(false);
-    expect(
-      validateDesignAgentToolInput(DESIGN_PLAN_TOOL_NAME, {
-        ...plan,
-        componentStrategy: {
-          ...plan.componentStrategy,
-          candidates: [
-            plan.componentStrategy.candidates[0],
-            {
-              ...plan.componentStrategy.candidates[1],
-              occurrences: [
-                {
-                  targetId: "target_home",
-                  nodeId: "navigation_main",
-                },
-              ],
-            },
-          ],
-        },
-      }),
-    ).toBe(false);
-    expect(
-      validateDesignAgentToolInput(DESIGN_PLAN_TOOL_NAME, {
-        ...plan,
-        outputMode: "single-raster",
-        rasterAssetRoles: ["final-single-image"],
       }),
     ).toBe(false);
   });

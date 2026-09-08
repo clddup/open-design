@@ -17,7 +17,7 @@ function designContentLanguageInstruction(): string {
 }
 
 function designExecutionInstruction(): string {
-  return "OpenDesign execution policy: produce a strong first meaningful revision immediately, then use exact-revision independent visual review and refine only material findings. Use the requested scope exactly; do not add unrequested alternatives or ceremonial refinement. Before the first tool call, emit one concise request-specific Assistant text stating the immediate action. Emit it in the same response as the tool call when possible; never use a fixed acknowledgement or delay execution for narration.";
+  return "OpenDesign execution policy: commit and render a strong coherent design batch as soon as it is ready, then continue through exact revisions and refine only material review findings. Use the requested scope exactly; do not add unrequested alternatives or ceremonial refinement. Before the first tool call, emit one concise request-specific Assistant text stating the immediate action. Emit it in the same response as the tool call when possible; never use a fixed acknowledgement or delay execution for narration.";
 }
 
 const DESIGN_AGENT_CORE_PROMPT = `
@@ -37,9 +37,9 @@ Conversation and execution:
 
 Workflow:
 - Use the smallest disclosed tool set that completes the request. Tool schemas and descriptions are the authoritative operation instructions; do not rely on remembered hidden fields or repeat their documentation in prose.
-- For a new composition, define its complete one-or-many artboard delivery scope once. A focused asset is one target; a broad brief retains every real deliverable instead of collapsing to a representative sample. Execute one real artboard target at a time on the current Page unless the user explicitly requests Page organization. Focused edits to existing content do not invent a new suite or approval pause.
-- For a planned composition, register one bounded target Plan unless a successful first-slice call already registered it. Ordinary inspected edits and Page operations do not require a new Plan. A Plan is a real serial execution ledger owned by Main, not explanatory text. Never invent, skip, reorder, or mark steps complete yourself.
-- New targets must create a real artboard and meaningful editable content atomically. Existing-artboard Plans edit the inspected hierarchy in place; logical regions are review guidance, not containers that must be recreated.
+- For a focused one-target composition, generate it directly; do not add a separate scope or Plan round. For a true multi-target deliverable, define the complete artboard delivery scope once. A flow, requirement, state transition, section, or component is not another target unless the user explicitly requests it as a separately rendered artboard. Execute one real artboard target at a time on the current Page unless the user explicitly requests Page organization. Focused edits to existing content do not invent a new suite or approval pause.
+- Start each new target with one coherent material batch after the exact-revision inspection. Main atomically compiles the execution ledger, creates the real artboard, commits the revision, and renders it immediately. Continue larger designs through ordinary edit calls at coherent visual boundaries so the canvas progresses revision by revision; never wait to submit the entire design at once, and never add a separate model-authored Plan call.
+- Plan state is execution evidence owned by Main, not explanatory model text. Never invent, skip, reorder, or mark steps complete yourself. Logical regions guide composition and review; they are not empty containers that must be committed before content.
 - Group a coherent visual change into one transaction. Capture the exact committed revision, follow the returned review action, and materially fix concrete findings. Do not repeat a successful write because capture failed, and do not perform ceremonial refinement after a passing review.
 - A successful mutation, structural inspection, or confident explanation is not visual proof. Claim completion only when trusted results show every requested target completed and verified.
 

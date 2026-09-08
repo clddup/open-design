@@ -64,7 +64,7 @@ export const AgentEventSchema = Type.Union([
       type: Type.Literal("model.retrying"),
       runId: RunIdSchema,
       retry: Type.Integer({ minimum: 1, maximum: 5 }),
-      maxRetries: Type.Literal(5),
+      maxRetries: Type.Integer({ minimum: 1, maximum: 5 }),
       delayMs: Type.Integer({ minimum: 1, maximum: 60_000 }),
     },
     { additionalProperties: false },
@@ -74,7 +74,7 @@ export const AgentEventSchema = Type.Union([
       type: Type.Literal("model.recovered"),
       runId: RunIdSchema,
       retriesUsed: Type.Integer({ minimum: 1, maximum: 5 }),
-      maxRetries: Type.Literal(5),
+      maxRetries: Type.Integer({ minimum: 1, maximum: 5 }),
     },
     { additionalProperties: false },
   ),
@@ -231,6 +231,27 @@ export function agentEventRequestId(value: unknown): string | null {
 
 function agentEventDomainIssues(value: AgentEvent): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
+  if (value.type === "model.retrying" && value.retry > value.maxRetries) {
+    issues.push(
+      agentEventIssue(
+        "agent_event.retry_exceeds_limit",
+        "/retry",
+        "Retry number must not exceed maxRetries",
+      ),
+    );
+  }
+  if (
+    value.type === "model.recovered" &&
+    value.retriesUsed > value.maxRetries
+  ) {
+    issues.push(
+      agentEventIssue(
+        "agent_event.retries_used_exceeds_limit",
+        "/retriesUsed",
+        "Used retries must not exceed maxRetries",
+      ),
+    );
+  }
   if (value.type === "tool.failed") {
     issues.push(...designWorkflowFailureDomainIssues(value, ""));
   }

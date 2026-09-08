@@ -209,7 +209,7 @@ export class OpenDesignPiRuntime {
                 type: "model.retrying",
                 runId: request.runId,
                 retry: event.retry,
-                maxRetries: 5,
+                maxRetries: event.maxRetries,
                 delayMs: event.delayMs,
               });
               return;
@@ -218,7 +218,7 @@ export class OpenDesignPiRuntime {
               type: "model.recovered",
               runId: request.runId,
               retriesUsed: event.retriesUsed,
-              maxRetries: 5,
+              maxRetries: event.maxRetries,
             });
           },
         }),

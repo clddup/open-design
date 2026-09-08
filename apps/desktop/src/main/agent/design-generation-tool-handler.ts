@@ -5,18 +5,18 @@ import type {
   TrustedToolResult,
 } from "@opendesign/agent-contracts";
 import {
-  compileDesignFirstSliceToolInput,
+  compileDesignGenerationToolInput,
   DesignApplyContract,
   DesignPlanContract,
   designPlanTargets,
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
-  type DesignFirstSliceToolInput,
+  type DesignGenerationToolInput,
 } from "@/shared/design-agent-tools.js";
 import { contractValidationError } from "./contract-validation-error.js";
 import type { GlobalTaskCoordinator } from "./global-task-coordinator.js";
 import type { RendererDesignToolHost } from "./renderer-design-tool-host.js";
 
-export async function handleDesignFirstSliceTool(
+export async function handleDesignGenerationTool(
   coordinator: GlobalTaskCoordinator,
   rendererHost: RendererDesignToolHost,
   call: ToolCallRequest,
@@ -26,15 +26,15 @@ export async function handleDesignFirstSliceTool(
   reportProgress?: (message: string, progress: number) => void,
 ): Promise<TrustedToolResult> {
   const authoritativePrompt = coordinator.authoritativeDesignPrompt(context);
-  const input = call.input as DesignFirstSliceToolInput;
-  const compiled = compileDesignFirstSliceToolInput(input);
+  const input = call.input as DesignGenerationToolInput;
+  const compiled = compileDesignGenerationToolInput(input);
   const parsedPlan = DesignPlanContract.parse(compiled.plan, {
     authoritativePrompt,
     canonical: true,
   });
   if (!parsedPlan.ok) {
     throw contractValidationError(
-      "compiled first-slice Plan",
+      "compiled design-generation Plan",
       parsedPlan.issues,
     );
   }
@@ -44,7 +44,7 @@ export async function handleDesignFirstSliceTool(
   });
   if (!parsedApply.ok) {
     throw contractValidationError(
-      "compiled first-slice transaction",
+      "compiled design-generation transaction",
       parsedApply.issues,
     );
   }
@@ -61,7 +61,7 @@ export async function handleDesignFirstSliceTool(
   ) {
     throw designWorkflowError(
       "allocation_state_invalid",
-      "Compact first-slice generation requires the current target to be pending real Frame creation",
+      "Design generation requires the current target to be pending real Frame creation",
     );
   }
   const authorization = allocation
@@ -79,7 +79,7 @@ export async function handleDesignFirstSliceTool(
   if (!authorization?.plan || authorization.targetIds.length === 0) {
     throw designWorkflowError(
       "material_write_required",
-      "Compiled first-slice content did not resolve to the registered delivery target",
+      "Compiled design-generation content did not resolve to the registered delivery target",
     );
   }
   const resolvedApply = authorization.input;
@@ -93,7 +93,7 @@ export async function handleDesignFirstSliceTool(
     ? {
         label: `Create artboard and ${resolvedApply.label}`,
         summary:
-          "Create the current delivery Frame and its first meaningful editable content atomically",
+          "Create the current delivery Frame and its initial meaningful editable content atomically",
         executionMode: "atomic" as const,
         steps: [
           {
@@ -105,7 +105,7 @@ export async function handleDesignFirstSliceTool(
           },
           ...(resolvedApply.steps ?? [
             {
-              stepId: "first_slice",
+              stepId: "design_generation",
               label: resolvedApply.label,
               commandIds: resolvedApply.commands.map(
                 (command) => command.commandId,
@@ -122,7 +122,7 @@ export async function handleDesignFirstSliceTool(
   });
   if (!parsedCombinedInput.ok) {
     throw contractValidationError(
-      "host-bound first-slice transaction",
+      "host-bound design-generation transaction",
       parsedCombinedInput.issues,
     );
   }
@@ -148,7 +148,7 @@ export async function handleDesignFirstSliceTool(
     : coordinator
         .getDeliveryLedger(context.runId)
         ?.targets.find(
-          (target) => target.targetId === input.firstSlice.targetId,
+          (target) => target.targetId === input.designGeneration.targetId,
         )?.allocatedRevision;
   if (allocation && allocationRevision !== undefined) {
     coordinator.recordDesignPlanAllocated(
@@ -175,12 +175,12 @@ export async function handleDesignFirstSliceTool(
       targets: designPlanTargets(registration.plan),
       rasterAssetRoles: registration.plan.rasterAssetRoles,
       allocation: {
-        targetIds: allocation?.targetIds ?? [input.firstSlice.targetId],
+        targetIds: allocation?.targetIds ?? [input.designGeneration.targetId],
         revision: allocationRevision,
       },
-      firstSlice: {
-        targetId: input.firstSlice.targetId,
-        label: input.firstSlice.label,
+      designGeneration: {
+        targetId: input.designGeneration.targetId,
+        label: input.designGeneration.label,
         insertedNodeIds: resolvedApply.commands.flatMap((command) =>
           command.type === "insert_element" ? [command.node.id] : [],
         ),

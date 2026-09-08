@@ -1,8 +1,8 @@
 import { BUILTIN_UI_DESIGN_SKILL_REFS } from "@opendesign/design-skills";
-import type { DesignFirstSliceToolInput } from "@/shared/design-agent-tools.js";
+import type { DesignGenerationToolInput } from "@/shared/design-agent-tools.js";
 
-export function firstSliceModelInput(
-  input: DesignFirstSliceToolInput,
+export function designGenerationModelInput(
+  input: DesignGenerationToolInput,
 ): Record<string, unknown> {
   const value = structuredClone(input) as unknown as Record<string, unknown>;
   for (const key of [
@@ -32,15 +32,15 @@ export function firstSliceModelInput(
         Reflect.deleteProperty(region, "parentId");
     }
   }
-  const firstSlice = value.firstSlice as Record<string, unknown>;
-  Reflect.deleteProperty(firstSlice, "targetId");
+  const designGeneration = value.designGeneration as Record<string, unknown>;
+  Reflect.deleteProperty(designGeneration, "targetId");
   if (value.logoExploration) {
     Reflect.deleteProperty(value.logoExploration, "targetId");
   }
   return value;
 }
 
-export function firstSliceInput(): DesignFirstSliceToolInput {
+export function designGenerationInput(): DesignGenerationToolInput {
   return {
     version: 1,
     deliverable: "ui",
@@ -123,38 +123,32 @@ export function firstSliceInput(): DesignFirstSliceToolInput {
       typography: ["Inter Bold 32/38", "Inter Regular 16/24"],
     },
     rasterAssetRoles: [],
-    firstSlice: {
+    designGeneration: {
       targetId: "home",
       label: "Create Home hero",
-      stages: [
+      elements: [
         {
-          stageId: "hero",
-          label: "Build hero",
-          elements: [
-            {
-              id: "hero_title",
-              kind: "text",
-              name: "Hero Title",
-              parentId: "home_hero",
-              x: 24,
-              y: 24,
-              width: 294,
-              height: 84,
-              fills: [{ type: "solid", color: "#0F172A", opacity: 1 }],
-              strokes: [],
-              strokeWidth: 0,
-              text: {
-                content: "Design with momentum",
-                fontFamily: "Inter",
-                fontStyleName: "Bold",
-                fontWeight: 700,
-                fontSlant: "normal",
-                fontSize: 32,
-                lineHeight: 38,
-                textResize: "auto-height",
-              },
-            },
-          ],
+          id: "hero_title",
+          kind: "text",
+          name: "Hero Title",
+          parentId: "home_hero",
+          x: 24,
+          y: 24,
+          width: 294,
+          height: 84,
+          fills: [{ type: "solid", color: "#0F172A", opacity: 1 }],
+          strokes: [],
+          strokeWidth: 0,
+          text: {
+            content: "Design with momentum",
+            fontFamily: "Inter",
+            fontStyleName: "Bold",
+            fontWeight: 700,
+            fontSlant: "normal",
+            fontSize: 32,
+            lineHeight: 38,
+            textResize: "auto-height",
+          },
         },
       ],
     },

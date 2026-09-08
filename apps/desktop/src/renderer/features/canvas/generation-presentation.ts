@@ -16,8 +16,7 @@ import type {
 import {
   DESIGN_CAPTURE_TOOL_NAME,
   DESIGN_EDIT_TOOL_NAME,
-  DESIGN_FIRST_SLICE_TOOL_NAME,
-  DESIGN_PLAN_TOOL_NAME,
+  DESIGN_GENERATION_TOOL_NAME,
   DESIGN_VECTOR_TOOL_NAME,
   GENERATE_IMAGE_TOOL_NAME,
   IMPORT_SVG_TOOL_NAME,
@@ -40,12 +39,6 @@ export interface AcceptedGenerationPlan {
   toolCallId: string;
 }
 
-interface RequestedGenerationPlan {
-  plan: DesignPlanToolInput;
-  runId: string;
-  toolCallId: string;
-}
-
 interface RequestedGenerationTool {
   runId: string;
   toolName: string;
@@ -62,7 +55,6 @@ export interface GenerationActivityState {
 export interface GenerationPlanPresentationState {
   acceptedByRunId: Readonly<Record<string, AcceptedGenerationPlan>>;
   activityByRunId: Readonly<Record<string, GenerationActivityState>>;
-  requestedByCallId: Readonly<Record<string, RequestedGenerationPlan>>;
   requestedToolByCallId: Readonly<Record<string, RequestedGenerationTool>>;
   reviewedByRunId: Readonly<Record<string, true>>;
 }
@@ -71,7 +63,6 @@ export const EMPTY_GENERATION_PLAN_PRESENTATION_STATE: GenerationPlanPresentatio
   {
     acceptedByRunId: {},
     activityByRunId: {},
-    requestedByCallId: {},
     requestedToolByCallId: {},
     reviewedByRunId: {},
   };
@@ -103,30 +94,10 @@ export function projectGenerationPlanPresentationEvent(
       },
     };
   }
-  if (
-    event.type === "tool.requested" &&
-    event.toolName === DESIGN_PLAN_TOOL_NAME
-  ) {
-    const parsed = DesignPlanContract.parse(event.input);
-    const plan = parsed.ok ? parsed.value : undefined;
-    if (!plan) return state;
-    const callId = generationPlanCallId(event.runId, event.toolCallId);
-    return {
-      ...state,
-      requestedByCallId: {
-        ...state.requestedByCallId,
-        [callId]: {
-          plan: structuredClone(plan),
-          runId: event.runId,
-          toolCallId: event.toolCallId,
-        },
-      },
-    };
-  }
   if (event.type === "tool.requested") {
     if (
       !state.acceptedByRunId[event.runId] &&
-      event.toolName !== DESIGN_FIRST_SLICE_TOOL_NAME
+      event.toolName !== DESIGN_GENERATION_TOOL_NAME
     ) {
       return state;
     }
@@ -160,51 +131,6 @@ export function projectGenerationPlanPresentationEvent(
     return state;
   }
   const callId = generationPlanCallId(event.runId, event.toolCallId);
-  const requestedPlan = state.requestedByCallId[callId];
-  if (requestedPlan) {
-    const requestedByCallId = { ...state.requestedByCallId };
-    const requestedToolByCallId = { ...state.requestedToolByCallId };
-    delete requestedByCallId[callId];
-    delete requestedToolByCallId[callId];
-    if (
-      event.type === "tool.failed" ||
-      !acceptedGenerationPlan(event.result, requestedPlan.plan)
-    ) {
-      return { ...state, requestedByCallId, requestedToolByCallId };
-    }
-    const independentReviewCompleted = hasIndependentVisualCritic(event.result);
-    const reviewedByRunId = { ...state.reviewedByRunId };
-    if (independentReviewCompleted) reviewedByRunId[event.runId] = true;
-    else delete reviewedByRunId[event.runId];
-    return {
-      ...state,
-      acceptedByRunId: {
-        ...state.acceptedByRunId,
-        [event.runId]: {
-          id: callId,
-          plan: structuredClone(
-            acceptedGenerationPlan(event.result, requestedPlan.plan) ??
-              requestedPlan.plan,
-          ),
-          runId: event.runId,
-          toolCallId: event.toolCallId,
-        },
-      },
-      activityByRunId: {
-        ...state.activityByRunId,
-        [event.runId]: {
-          id: `${callId}:accepted`,
-          phase: independentReviewCompleted ? "refining" : "structuring",
-          runId: event.runId,
-          toolCallId: event.toolCallId,
-        },
-      },
-      requestedByCallId,
-      requestedToolByCallId,
-      reviewedByRunId,
-    };
-  }
-
   const requestedTool = state.requestedToolByCallId[callId];
   if (!requestedTool) return state;
   const requestedToolByCallId = { ...state.requestedToolByCallId };
@@ -225,18 +151,18 @@ export function projectGenerationPlanPresentationEvent(
     };
   }
 
-  const firstSlicePlan =
-    requestedTool.toolName === DESIGN_FIRST_SLICE_TOOL_NAME
+  const designGenerationPlan =
+    requestedTool.toolName === DESIGN_GENERATION_TOOL_NAME
       ? acceptedGenerationPlan(event.result)
       : undefined;
-  if (firstSlicePlan) {
+  if (designGenerationPlan) {
     return {
       ...state,
       acceptedByRunId: {
         ...state.acceptedByRunId,
         [event.runId]: {
           id: callId,
-          plan: firstSlicePlan,
+          plan: designGenerationPlan,
           runId: event.runId,
           toolCallId: event.toolCallId,
         },
@@ -296,11 +222,6 @@ export function clearGenerationPlanPresentationRun(
   delete acceptedByRunId[runId];
   delete activityByRunId[runId];
   delete reviewedByRunId[runId];
-  const requestedByCallId = Object.fromEntries(
-    Object.entries(state.requestedByCallId).filter(
-      ([, requested]) => requested.runId !== runId,
-    ),
-  );
   const requestedToolByCallId = Object.fromEntries(
     Object.entries(state.requestedToolByCallId).filter(
       ([, requested]) => requested.runId !== runId,
@@ -308,8 +229,6 @@ export function clearGenerationPlanPresentationRun(
   );
   if (
     !hadRunState &&
-    Object.keys(requestedByCallId).length ===
-      Object.keys(state.requestedByCallId).length &&
     Object.keys(requestedToolByCallId).length ===
       Object.keys(state.requestedToolByCallId).length
   ) {
@@ -318,7 +237,6 @@ export function clearGenerationPlanPresentationRun(
   return {
     acceptedByRunId,
     activityByRunId,
-    requestedByCallId,
     requestedToolByCallId,
     reviewedByRunId,
   };
@@ -627,7 +545,7 @@ function generationPhaseForTool(
   }
   if (
     toolName === DESIGN_EDIT_TOOL_NAME ||
-    toolName === DESIGN_FIRST_SLICE_TOOL_NAME ||
+    toolName === DESIGN_GENERATION_TOOL_NAME ||
     toolName === INTERNAL_DESIGN_APPLY_TOOL_NAME ||
     toolName === DESIGN_VECTOR_TOOL_NAME ||
     toolName === PLACE_IMAGE_TOOL_NAME ||
@@ -654,12 +572,11 @@ function generationPlanCallId(runId: string, toolCallId: string): string {
 
 function acceptedGenerationPlan(
   value: unknown,
-  plan?: DesignPlanToolInput,
 ): DesignPlanToolInput | undefined {
   if (!isRecord(value)) return undefined;
   const parsed = DesignPlanContract.parse(value.plan, { canonical: true });
-  const authoritative = parsed.ok ? parsed.value : plan;
-  if (!authoritative) return undefined;
+  if (!parsed.ok) return undefined;
+  const authoritative = parsed.value;
   const common =
     value.ok === true &&
     (value.status === "accepted" ||

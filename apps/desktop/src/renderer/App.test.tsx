@@ -53,11 +53,7 @@ import type { RendererDesignToolRequest } from "@/shared/design-tool-bridge";
 import type { TextLayoutRequest } from "@opendesign/text-service";
 import type { ProjectDesignFile } from "@/shared/desktop-api";
 import type { DiagnosticEvent } from "@/shared/diagnostics";
-import {
-  DESIGN_PLAN_TOOL_NAME,
-  PAGE_STRUCTURE_ACCESS_TOOL_NAME,
-  type DesignPlanToolInput,
-} from "@/shared/design-agent-tools";
+import { PAGE_STRUCTURE_ACCESS_TOOL_NAME } from "@/shared/design-agent-tools";
 
 const leaferHarness = vi.hoisted(() => ({
   callbacks: null as LeaferEngineCallbacks | null,
@@ -6424,96 +6420,6 @@ describe("App", () => {
     expect(screen.getByLabelText("Continue the task")).toBeEnabled();
   });
 
-  it("keeps an accepted typed plan off canvas until real design exists", async () => {
-    const { user, conversation } = await openProjectConversation();
-    await user.type(
-      screen.getByLabelText("Continue the task"),
-      "Create an editorial poster",
-    );
-    await user.click(screen.getByRole("button", { name: "Send" }));
-    const request = runRequests(conversation.conversationId).at(-1);
-    if (!request) throw new Error("Agent run request is missing");
-    const plan = rendererGenerationPlan();
-
-    act(() => {
-      emitAgentEvent?.({
-        type: "run.started",
-        runId: request.runId,
-        startedAt: now,
-      });
-      emitAgentEvent?.({
-        type: "tool.requested",
-        runId: request.runId,
-        toolCallId: "tool_plan_poster",
-        toolName: DESIGN_PLAN_TOOL_NAME,
-        input: plan,
-        risk: "read",
-      });
-    });
-    expect(leaferHarness.input?.generationSkeleton).toBeUndefined();
-
-    act(() => {
-      emitAgentEvent?.({
-        type: "tool.completed",
-        runId: request.runId,
-        toolCallId: "tool_plan_poster",
-        result: rendererAcceptedPlanResult(plan),
-      });
-    });
-    await waitFor(() =>
-      expect(leaferHarness.input?.generationSkeleton).toBeUndefined(),
-    );
-    expect(leaferHarness.input?.generationActivity).toBeUndefined();
-    expect(screen.queryByText("AI · Structuring the layout")).toBeNull();
-
-    act(() => {
-      emitAgentEvent?.({
-        type: "tool.requested",
-        runId: request.runId,
-        toolCallId: "tool_apply_poster",
-        toolName: "opendesign_edit_design",
-        input: { label: "Build poster", edits: [] },
-        risk: "design_write",
-      });
-      emitAgentEvent?.({
-        type: "tool.progress",
-        runId: request.runId,
-        toolCallId: "tool_apply_poster",
-        message: "Untrusted progress prose",
-        progress: 0.15,
-      });
-    });
-    expect(leaferHarness.input?.generationActivity).toBeUndefined();
-    expect(screen.queryByText("Untrusted progress prose")).toBeNull();
-
-    act(() => {
-      emitAgentEvent?.({
-        type: "tool.completed",
-        runId: request.runId,
-        toolCallId: "tool_apply_poster",
-        result: { ok: true },
-      });
-    });
-    expect(leaferHarness.input?.generationActivity).toBeUndefined();
-    expect(screen.queryByText("Untrusted progress prose")).toBeNull();
-
-    act(() => {
-      emitAgentEvent?.({
-        type: "run.completed",
-        runId: request.runId,
-        finishedAt: now,
-        stopReason: "complete",
-      });
-    });
-    await waitFor(() =>
-      expect(leaferHarness.input?.generationSkeleton).toBeUndefined(),
-    );
-    expect(leaferHarness.input?.generationActivity).toBeUndefined();
-    expect(
-      screen.queryByText("AI · Structuring the layout"),
-    ).not.toBeInTheDocument();
-  });
-
   it("fits a newly generated artboard with canvas breathing room", async () => {
     const { user, conversation } = await openProjectConversation();
     await user.type(
@@ -6618,55 +6524,6 @@ describe("App", () => {
       expect(result.ok).toBe(true);
     });
     expect(runtime().getSnapshot().state.viewport).toEqual(manualViewport);
-  });
-
-  it("keeps plan-only canvas presentation absent when the user stops", async () => {
-    const { user, conversation } = await openProjectConversation();
-    await user.type(
-      screen.getByLabelText("Continue the task"),
-      "Create an editorial poster",
-    );
-    await user.click(screen.getByRole("button", { name: "Send" }));
-    const request = runRequests(conversation.conversationId).at(-1);
-    if (!request) throw new Error("Agent run request is missing");
-    const plan = rendererGenerationPlan();
-
-    act(() => {
-      emitAgentEvent?.({
-        type: "run.started",
-        runId: request.runId,
-        startedAt: now,
-      });
-      emitAgentEvent?.({
-        type: "tool.requested",
-        runId: request.runId,
-        toolCallId: "tool_plan_stop",
-        toolName: DESIGN_PLAN_TOOL_NAME,
-        input: plan,
-        risk: "read",
-      });
-      emitAgentEvent?.({
-        type: "tool.completed",
-        runId: request.runId,
-        toolCallId: "tool_plan_stop",
-        result: rendererAcceptedPlanResult(plan),
-      });
-    });
-    await waitFor(() =>
-      expect(leaferHarness.input?.generationSkeleton).toBeUndefined(),
-    );
-    expect(leaferHarness.input?.generationActivity).toBeUndefined();
-
-    await user.click(screen.getByRole("button", { name: "Stop" }));
-
-    expect(window.desktop?.sendAgentRequest).toHaveBeenCalledWith({
-      type: "run.cancel",
-      runId: request.runId,
-    });
-    await waitFor(() =>
-      expect(leaferHarness.input?.generationSkeleton).toBeUndefined(),
-    );
-    expect(leaferHarness.input?.generationActivity).toBeUndefined();
   });
 
   it("keeps the prompt and reports an Agent connection error", async () => {
@@ -7170,26 +7027,11 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "Send" }));
     const run = runRequests(conversation.conversationId).at(-1);
     if (!run) throw new Error("Agent run request is missing");
-    const plan = rendererGenerationPlan();
     act(() => {
       emitAgentEvent?.({
         type: "run.started",
         runId: run.runId,
         startedAt: now,
-      });
-      emitAgentEvent?.({
-        type: "tool.requested",
-        runId: run.runId,
-        toolCallId: "tool_background_plan_a",
-        toolName: DESIGN_PLAN_TOOL_NAME,
-        input: plan,
-        risk: "read",
-      });
-      emitAgentEvent?.({
-        type: "tool.completed",
-        runId: run.runId,
-        toolCallId: "tool_background_plan_a",
-        result: rendererAcceptedPlanResult(plan),
       });
     });
     await waitFor(() =>
@@ -7391,26 +7233,11 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "Send" }));
     const run = runRequests(conversation.conversationId).at(-1);
     if (!run) throw new Error("Agent run request is missing");
-    const plan = rendererGenerationPlan();
     act(() => {
       emitAgentEvent?.({
         type: "run.started",
         runId: run.runId,
         startedAt: now,
-      });
-      emitAgentEvent?.({
-        type: "tool.requested",
-        runId: run.runId,
-        toolCallId: "tool_plan_capture",
-        toolName: DESIGN_PLAN_TOOL_NAME,
-        input: plan,
-        risk: "read",
-      });
-      emitAgentEvent?.({
-        type: "tool.completed",
-        runId: run.runId,
-        toolCallId: "tool_plan_capture",
-        result: rendererAcceptedPlanResult(plan),
       });
     });
     await waitFor(() =>
@@ -7539,126 +7366,6 @@ describe("App", () => {
     expect(screen.getByText("Opened canvas")).toBeInTheDocument();
   });
 });
-
-function rendererGenerationPlan(): DesignPlanToolInput {
-  return {
-    version: 1,
-    deliverable: "poster",
-    objective: "Create an editorial launch poster",
-    outputMode: "editable-composition",
-    targets: [
-      {
-        targetId: "poster",
-        label: "Launch poster",
-        pageId: "page_welcome",
-        objective: "Create an editorial launch poster",
-        artboard: {
-          mode: "create",
-          frameId: "poster_artboard",
-          x: 1_240,
-          y: 80,
-          width: 800,
-          height: 1_000,
-        },
-        composition: {
-          direction: "Asymmetric editorial composition",
-          hierarchy: ["Hero visual", "Launch typography"],
-          regions: [
-            {
-              nodeId: "poster_hero",
-              name: "Hero visual",
-              role: "graphic",
-              x: 48,
-              y: 80,
-              width: 704,
-              height: 560,
-            },
-            {
-              nodeId: "poster_title",
-              name: "Launch typography",
-              role: "typography",
-              x: 48,
-              y: 688,
-              width: 704,
-              height: 200,
-            },
-          ],
-          assetIntegration:
-            "Use editable vector artwork with intentional overlap and negative space",
-          spacingRhythm: "8/16/24/48 px editorial rhythm",
-        },
-        editableLayers: ["Hero visual", "Title", "Supporting copy"],
-        implementationSteps: [
-          { stepId: "create_artboard", label: "Create the artboard" },
-          { stepId: "build_regions", label: "Build the planned regions" },
-          {
-            stepId: "refine_depth_hierarchy",
-            label: "Refine depth and hierarchy",
-          },
-        ],
-        validationChecks: ["Check silhouette", "Check type hierarchy"],
-        qualityProfile: { kind: "graphic" },
-      },
-    ],
-    visualSystem: {
-      avoidances: ["No generic text slab", "No centered card stack"],
-      formLanguage: "Sharp editorial geometry with one organic hero",
-      palette: ["#111111", "#F4F0E8", "#7C6EE6"],
-      surfaceAndDepth: "Overlap and tonal contrast without generic cards",
-      typography: ["Display 72/76", "Body 18/26"],
-      effects: ["Tight outer glow"],
-    },
-    rasterAssetRoles: [],
-    componentStrategy: {
-      summary: "A single poster does not need a reusable component.",
-      candidates: [],
-    },
-    briefFidelity: {
-      requiredContent: ["Editorial launch poster"],
-      preservedSemantics: [],
-      prohibitedAdditions: ["No unrequested product capability"],
-      assumptions: ["Use a portrait poster format"],
-    },
-    designIntent: {
-      subject: "An editorial poster for a focused product launch",
-      audience: "Design-aware launch viewers",
-      primaryJob: "Recognize the launch identity and message immediately",
-      calibration: {
-        surfaceMode: "graphic",
-        expressiveness: "expressive",
-        density: "balanced",
-      },
-      visualThesis:
-        "An asymmetric editorial collision makes the launch message memorable.",
-      signatureDecision:
-        "One organic hero silhouette cuts through a rigid typographic grid.",
-      typographyLanguage:
-        "Large editorial display type contrasts with controlled supporting copy.",
-      colorMaterialLanguage:
-        "Warm paper, deep ink, and one violet signal create tactile contrast.",
-      compositionTension:
-        "Cropping, overlap, and asymmetric mass create a decisive focal path.",
-      antiPatterns: [
-        "No generic centered text slab",
-        "No repeated rounded cards",
-        "No decorative gradient without purpose",
-      ],
-    },
-    skillRefs: [],
-  };
-}
-
-function rendererAcceptedPlanResult(plan: DesignPlanToolInput) {
-  return {
-    ok: true,
-    status: "accepted",
-    version: plan.version,
-    deliverable: plan.deliverable,
-    outputMode: plan.outputMode,
-    targets: plan.targets,
-    rasterAssetRoles: plan.rasterAssetRoles,
-  };
-}
 
 function compoundCanvasVector(parentId: string): VectorNode {
   return {

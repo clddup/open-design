@@ -111,12 +111,13 @@ export function disclosureProbeTools(): AgentToolDefinition[] {
       name: "opendesign_inspect_probe",
       modelDisclosure: {
         bootstrap: "available",
+        continuation: "available",
         role: "inspection",
       },
     },
     {
       ...tool,
-      name: "opendesign_plan_probe",
+      name: "opendesign_scope_probe",
       risk: "design_write",
       inputSchema: {
         type: "object",
@@ -140,7 +141,10 @@ export function disclosureProbeTools(): AgentToolDefinition[] {
         },
         additionalProperties: false,
       },
-      modelDisclosure: { bootstrap: "available", role: "plan" },
+      modelDisclosure: {
+        bootstrap: "available",
+        role: "delivery-scope",
+      },
     },
     {
       ...tool,

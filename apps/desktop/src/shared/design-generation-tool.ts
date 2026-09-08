@@ -13,25 +13,25 @@ import type {
   DesignLogoOutput,
 } from "./design-agent-plan-review";
 import type { DesignBriefFidelity } from "./design-brief-fidelity";
-import { compileValidatedDesignFirstSliceToolInput } from "./design-first-slice-compiler";
+import { compileValidatedDesignGenerationToolInput } from "./design-generation-compiler";
 import {
-  DESIGN_FIRST_SLICE_CANONICAL_INPUT_SCHEMA,
-  DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA,
-  type DesignFirstSliceCanonicalInput,
-  type DesignFirstSliceElementInput,
-  type DesignFirstSliceModelInput,
-} from "./design-first-slice-tool-schema";
+  DESIGN_GENERATION_CANONICAL_INPUT_SCHEMA,
+  DESIGN_GENERATION_TOOL_INPUT_SCHEMA,
+  type DesignGenerationCanonicalInput,
+  type DesignGenerationElementInput,
+  type DesignGenerationModelInput,
+} from "./design-generation-tool-schema";
 import { type DesignReferenceStrategy } from "./design-reference-strategy";
 import {
   logoColorDomainIssues,
   type DesignLogoColorStrategy,
 } from "./design-logo-color";
 
-export { DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA } from "./design-first-slice-tool-schema";
+export { DESIGN_GENERATION_TOOL_INPUT_SCHEMA } from "./design-generation-tool-schema";
 
-export type DesignFirstSliceElement = DesignFirstSliceElementInput;
-export type DesignFirstSliceToolInput = Omit<
-  DesignFirstSliceCanonicalInput,
+export type DesignGenerationElement = DesignGenerationElementInput;
+export type DesignGenerationToolInput = Omit<
+  DesignGenerationCanonicalInput,
   "logoColorStrategy" | "logoOutputs" | "logoExploration"
 > & {
   logoColorStrategy?: DesignLogoColorStrategy;
@@ -53,13 +53,13 @@ export type DesignFirstSliceToolInput = Omit<
   };
 };
 
-export type FirstSliceContractContext = {
+export type DesignGenerationContractContext = {
   authoritativePrompt?: string;
   newNodeIdPrefix?: string;
-  target?: FirstSliceTargetBinding;
+  target?: DesignGenerationTargetBinding;
 };
 
-export type FirstSliceTargetBinding = {
+export type DesignGenerationTargetBinding = {
   targetId: string;
   pageId: string;
   frame: {
@@ -73,36 +73,40 @@ export type FirstSliceTargetBinding = {
   objective?: string;
 };
 
-export const FirstSliceContract = defineContract<
-  DesignFirstSliceModelInput,
-  DesignFirstSliceToolInput,
-  FirstSliceContractContext
+export const DesignGenerationContract = defineContract<
+  DesignGenerationModelInput,
+  DesignGenerationToolInput,
+  DesignGenerationContractContext
 >(
   {
-    schema: DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA,
-    code: "first_slice.schema_invalid",
-    subject: "First Slice",
+    schema: DESIGN_GENERATION_TOOL_INPUT_SCHEMA,
+    code: "design_generation.schema_invalid",
+    subject: "Design Generation",
     maximum: 32,
     canonical: {
-      schema: DESIGN_FIRST_SLICE_CANONICAL_INPUT_SCHEMA,
-      code: "first_slice.host_binding_invalid",
-      subject: "host-bound First Slice",
+      schema: DESIGN_GENERATION_CANONICAL_INPUT_SCHEMA,
+      code: "design_generation.host_binding_invalid",
+      subject: "host-bound Design Generation",
       maximum: 32,
     },
-    bind: bindFirstSliceHostContext,
-    refine: refineFirstSlice,
+    bind: bindDesignGenerationHostContext,
+    refine: refineDesignGeneration,
   },
   () => ({}),
 );
 
-function bindFirstSliceHostContext(
-  input: DesignFirstSliceModelInput,
-  context: FirstSliceContractContext,
-): DesignFirstSliceToolInput {
+function bindDesignGenerationHostContext(
+  input: DesignGenerationModelInput,
+  context: DesignGenerationContractContext,
+): DesignGenerationToolInput {
   const objective = (
     context.authoritativePrompt ?? "Create the requested visual deliverable"
   ).trim();
-  const target = bindFirstSliceTarget(input.targets[0], context, objective);
+  const target = bindDesignGenerationTarget(
+    input.targets[0],
+    context,
+    objective,
+  );
   const targetId = target.targetId;
   const stableId = (localId: string) =>
     context.newNodeIdPrefix && !localId.startsWith("odr_")
@@ -137,18 +141,15 @@ function bindFirstSliceHostContext(
         qualityProfile: defaultQualityProfile(input.deliverable, regions),
       },
     ],
-    firstSlice: {
-      ...input.firstSlice,
+    designGeneration: {
+      ...input.designGeneration,
       targetId,
-      stages: input.firstSlice.stages.map((stage) => ({
-        ...stage,
-        elements: stage.elements.map((element) => ({
-          ...element,
-          id: stableId(element.id),
-          parentId: stableId(element.parentId),
-          strokes: element.strokes ?? [],
-          strokeWidth: element.strokeWidth ?? 0,
-        })),
+      elements: input.designGeneration.elements.map((element) => ({
+        ...element,
+        id: stableId(element.id),
+        parentId: stableId(element.parentId),
+        strokes: element.strokes ?? [],
+        strokeWidth: element.strokeWidth ?? 0,
       })),
     },
     ...(input.logoExploration === undefined
@@ -165,15 +166,15 @@ function bindFirstSliceHostContext(
           },
         }),
     rasterAssetRoles: [...input.rasterAssetRoles],
-  } as DesignFirstSliceToolInput;
+  } as DesignGenerationToolInput;
 }
 
-function bindFirstSliceTarget(
-  submitted: DesignFirstSliceModelInput["targets"][number] | undefined,
-  context: FirstSliceContractContext,
+function bindDesignGenerationTarget(
+  submitted: DesignGenerationModelInput["targets"][number] | undefined,
+  context: DesignGenerationContractContext,
   fallbackObjective: string,
 ): Omit<
-  DesignFirstSliceToolInput["targets"][number],
+  DesignGenerationToolInput["targets"][number],
   "regions" | "qualityProfile"
 > {
   const host = context.target;
@@ -195,9 +196,9 @@ function bindFirstSliceTarget(
 }
 
 function defaultDesignIntent(
-  deliverable: DesignFirstSliceToolInput["deliverable"],
+  deliverable: DesignGenerationToolInput["deliverable"],
   objective: string,
-): DesignFirstSliceToolInput["designIntent"] {
+): DesignGenerationToolInput["designIntent"] {
   const subject = objective.slice(0, 500);
   return {
     subject,
@@ -219,11 +220,10 @@ function defaultDesignIntent(
 }
 
 function defaultVisualSystem(
-  input: DesignFirstSliceModelInput,
-  deliverable: DesignFirstSliceToolInput["deliverable"],
-): DesignFirstSliceToolInput["visualSystem"] {
-  const textStyles = input.firstSlice.stages
-    .flatMap((stage) => stage.elements)
+  input: DesignGenerationModelInput,
+  deliverable: DesignGenerationToolInput["deliverable"],
+): DesignGenerationToolInput["visualSystem"] {
+  const textStyles = input.designGeneration.elements
     .filter((element) => element.kind === "text")
     .map(
       (element) =>
@@ -246,9 +246,9 @@ function defaultVisualSystem(
 }
 
 function defaultQualityProfile(
-  deliverable: DesignFirstSliceToolInput["deliverable"],
-  regions: DesignFirstSliceToolInput["targets"][number]["regions"],
-): DesignFirstSliceToolInput["targets"][number]["qualityProfile"] {
+  deliverable: DesignGenerationToolInput["deliverable"],
+  regions: DesignGenerationToolInput["targets"][number]["regions"],
+): DesignGenerationToolInput["targets"][number]["qualityProfile"] {
   if (deliverable !== "ui") return { kind: "graphic" };
   const safeNodeId = regions[0]?.nodeId;
   return {
@@ -304,14 +304,16 @@ function chunkRequiredContent(value: string): string[] {
   return chunks.slice(0, 24);
 }
 
-function refineFirstSlice(input: DesignFirstSliceToolInput): ValidationIssue[] {
+function refineDesignGeneration(
+  input: DesignGenerationToolInput,
+): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
   if (
     !isBuiltinDesignSkillRefsForDeliverable(input.deliverable, input.skillRefs)
   ) {
     issues.push(
       issue(
-        "first_slice.host_skill_binding_invalid",
+        "design_generation.host_skill_binding_invalid",
         "/skillRefs",
         "Host-bound design skills do not match the deliverable",
       ),
@@ -323,7 +325,7 @@ function refineFirstSlice(input: DesignFirstSliceToolInput): ValidationIssue[] {
   ) {
     issues.push(
       issue(
-        "first_slice.ui_surface_mode_invalid",
+        "design_generation.ui_surface_mode_invalid",
         "/designIntent/calibration/surfaceMode",
         "UI delivery must classify the surface as persuade, operate, read, or experience",
       ),
@@ -335,7 +337,7 @@ function refineFirstSlice(input: DesignFirstSliceToolInput): ValidationIssue[] {
   ) {
     issues.push(
       issue(
-        "first_slice.graphic_surface_mode_invalid",
+        "design_generation.graphic_surface_mode_invalid",
         "/designIntent/calibration/surfaceMode",
         "Non-UI delivery must use the graphic surface mode",
       ),
@@ -344,7 +346,7 @@ function refineFirstSlice(input: DesignFirstSliceToolInput): ValidationIssue[] {
   if (input.logoOutputs && input.deliverable !== "logo") {
     issues.push(
       issue(
-        "first_slice.logo_outputs_wrong_deliverable",
+        "design_generation.logo_outputs_wrong_deliverable",
         "/logoOutputs",
         "Logo outputs are only valid for a logo deliverable",
         "logo",
@@ -354,7 +356,7 @@ function refineFirstSlice(input: DesignFirstSliceToolInput): ValidationIssue[] {
   }
   issues.push(
     ...logoColorDomainIssues({
-      codePrefix: "first_slice",
+      codePrefix: "design_generation",
       deliverable: input.deliverable,
       ...(input.logoExploration === undefined
         ? {}
@@ -380,7 +382,7 @@ function refineFirstSlice(input: DesignFirstSliceToolInput): ValidationIssue[] {
       targetIds,
       target.targetId,
       `/targets/${targetIndex}/targetId`,
-      "first_slice.duplicate_target_id",
+      "design_generation.duplicate_target_id",
       "Target ID",
       issues,
     );
@@ -388,7 +390,7 @@ function refineFirstSlice(input: DesignFirstSliceToolInput): ValidationIssue[] {
       frameIds,
       target.frame.frameId,
       `/targets/${targetIndex}/frame/frameId`,
-      "first_slice.duplicate_frame_id",
+      "design_generation.duplicate_frame_id",
       "Delivery Frame ID",
       issues,
     );
@@ -407,38 +409,30 @@ function refineFirstSlice(input: DesignFirstSliceToolInput): ValidationIssue[] {
 
   const firstTarget = input.targets[0];
   if (!firstTarget) return issues;
-  if (input.firstSlice.targetId !== firstTarget.targetId) {
+  if (input.designGeneration.targetId !== firstTarget.targetId) {
     issues.push(
       issue(
-        "first_slice.target_mismatch",
-        "/firstSlice/targetId",
-        "The first slice must materialize targets[0]",
+        "design_generation.target_mismatch",
+        "/designGeneration/targetId",
+        "The design generation must materialize targets[0]",
         firstTarget.targetId,
-        input.firstSlice.targetId,
+        input.designGeneration.targetId,
       ),
     );
   }
 
-  const stageIds = new Map<string, string>();
   const flattened: Array<{
-    element: DesignFirstSliceElementInput;
+    element: DesignGenerationElementInput;
     path: string;
   }> = [];
-  for (const [stageIndex, stage] of input.firstSlice.stages.entries()) {
-    registerUniqueId(
-      stageIds,
-      stage.stageId,
-      `/firstSlice/stages/${stageIndex}/stageId`,
-      "first_slice.duplicate_stage_id",
-      "Stage ID",
-      issues,
-    );
-    for (const [elementIndex, element] of stage.elements.entries()) {
-      flattened.push({
-        element,
-        path: `/firstSlice/stages/${stageIndex}/elements/${elementIndex}`,
-      });
-    }
+  for (const [
+    elementIndex,
+    element,
+  ] of input.designGeneration.elements.entries()) {
+    flattened.push({
+      element,
+      path: `/designGeneration/elements/${elementIndex}`,
+    });
   }
   const firstTargetRegionIds = new Set(
     firstTarget.regions.map((region) => region.nodeId),
@@ -446,7 +440,7 @@ function refineFirstSlice(input: DesignFirstSliceToolInput): ValidationIssue[] {
   const allFrameIds = new Set(frameIds.keys());
   const allRegionIds = new Set(regionIds.keys());
   const elementIds = new Map<string, string>();
-  const elementsById = new Map<string, DesignFirstSliceElementInput>();
+  const elementsById = new Map<string, DesignGenerationElementInput>();
   const parentById = new Map(
     firstTarget.regions.map((region) => [region.nodeId, region.parentId]),
   );
@@ -456,7 +450,7 @@ function refineFirstSlice(input: DesignFirstSliceToolInput): ValidationIssue[] {
       elementIds,
       element.id,
       `${path}/id`,
-      "first_slice.duplicate_element_id",
+      "design_generation.duplicate_element_id",
       "Element ID",
       issues,
     );
@@ -464,7 +458,7 @@ function refineFirstSlice(input: DesignFirstSliceToolInput): ValidationIssue[] {
     if (allFrameIds.has(element.id)) {
       issues.push(
         issue(
-          "first_slice.element_frame_id_conflict",
+          "design_generation.element_frame_id_conflict",
           `${path}/id`,
           "Element ID collides with a declared delivery Frame ID",
           "a globally unique content node ID",
@@ -475,7 +469,7 @@ function refineFirstSlice(input: DesignFirstSliceToolInput): ValidationIssue[] {
     if (allRegionIds.has(element.id)) {
       issues.push(
         issue(
-          "first_slice.planned_region_id_reserved",
+          "design_generation.planned_region_id_reserved",
           `${path}/id`,
           "Planned region IDs are host-owned Frame identities",
           "a unique content node ID parented to the region",
@@ -489,7 +483,7 @@ function refineFirstSlice(input: DesignFirstSliceToolInput): ValidationIssue[] {
     ) {
       issues.push(
         issue(
-          "first_slice.parent_not_available",
+          "design_generation.parent_not_available",
           `${path}/parentId`,
           "Element parent must be a first-target region or an earlier element",
           "declared region ID or earlier element ID",
@@ -516,8 +510,8 @@ function refineFirstSlice(input: DesignFirstSliceToolInput): ValidationIssue[] {
   if (referencedRegions.size === 0) {
     issues.push(
       issue(
-        "first_slice.material_region_required",
-        "/firstSlice/stages",
+        "design_generation.material_region_required",
+        "/designGeneration/elements",
         "At least one first-target planned region must contain editable material",
       ),
     );
@@ -529,7 +523,7 @@ function refineFirstSlice(input: DesignFirstSliceToolInput): ValidationIssue[] {
       );
       issues.push(
         issue(
-          "first_slice.empty_referenced_region",
+          "design_generation.empty_referenced_region",
           `/targets/0/regions/${regionIndex}`,
           "Referenced planned region contains only empty containers",
           "at least one visible editable material descendant",
@@ -543,12 +537,12 @@ function refineFirstSlice(input: DesignFirstSliceToolInput): ValidationIssue[] {
   refineReferenceStrategy(input.referenceStrategy, issues);
   if (issues.length === 0) {
     const commandCount =
-      compileValidatedDesignFirstSliceToolInput(input).apply.commands.length;
+      input.designGeneration.elements.length + firstTarget.regions.length + 1;
     if (commandCount > MAX_TRANSACTION_COMMANDS) {
       issues.push(
         issue(
-          "first_slice.transaction_limit_exceeded",
-          "/firstSlice/stages",
+          "design_generation.transaction_limit_exceeded",
+          "/designGeneration/elements",
           `${commandCount} compiled operations exceed the shared DesignTransaction safety limit`,
           MAX_TRANSACTION_COMMANDS,
           commandCount,
@@ -561,7 +555,7 @@ function refineFirstSlice(input: DesignFirstSliceToolInput): ValidationIssue[] {
 }
 
 function refineElementAppearance(
-  element: DesignFirstSliceElementInput,
+  element: DesignGenerationElementInput,
   path: string,
   issues: ValidationIssue[],
 ): void {
@@ -569,7 +563,7 @@ function refineElementAppearance(
   if (element.fills.length > 0) {
     issues.push(
       issue(
-        "first_slice.group_fills_unsupported",
+        "design_generation.group_fills_unsupported",
         `${path}/fills`,
         "Group does not own shape fills; apply appearance to a child shape or use a Frame",
         0,
@@ -580,7 +574,7 @@ function refineElementAppearance(
   if (element.strokes.length > 0) {
     issues.push(
       issue(
-        "first_slice.group_strokes_unsupported",
+        "design_generation.group_strokes_unsupported",
         `${path}/strokes`,
         "Group does not own shape strokes; apply appearance to a child shape or use a Frame",
         0,
@@ -591,7 +585,7 @@ function refineElementAppearance(
   if (element.strokeWidth !== 0) {
     issues.push(
       issue(
-        "first_slice.group_stroke_width_unsupported",
+        "design_generation.group_stroke_width_unsupported",
         `${path}/strokeWidth`,
         "Group strokeWidth must remain zero because Group has no shape stroke",
         0,
@@ -602,16 +596,16 @@ function refineElementAppearance(
 }
 
 function refineQualityProfile(
-  target: DesignFirstSliceCanonicalInput["targets"][number],
+  target: DesignGenerationCanonicalInput["targets"][number],
   targetIndex: number,
-  deliverable: DesignFirstSliceToolInput["deliverable"],
+  deliverable: DesignGenerationToolInput["deliverable"],
   issues: ValidationIssue[],
 ): void {
   const expectedKind = deliverable === "ui" ? "ui" : "graphic";
   if (target.qualityProfile.kind !== expectedKind) {
     issues.push(
       issue(
-        "first_slice.quality_profile_mismatch",
+        "design_generation.quality_profile_mismatch",
         `/targets/${targetIndex}/qualityProfile/kind`,
         "Quality profile does not match the deliverable",
         expectedKind,
@@ -628,7 +622,7 @@ function refineQualityProfile(
   ) {
     issues.push(
       issue(
-        "first_slice.safe_area_exceeds_frame",
+        "design_generation.safe_area_exceeds_frame",
         `/targets/${targetIndex}/qualityProfile/insets`,
         "Safe-area insets leave no positive content area",
         {
@@ -642,7 +636,7 @@ function refineQualityProfile(
 }
 
 function refineRegionHierarchy(
-  target: DesignFirstSliceCanonicalInput["targets"][number],
+  target: DesignGenerationCanonicalInput["targets"][number],
   targetIndex: number,
   declaredFrameIds: ReadonlySet<string>,
   globalRegionIds: Map<string, string>,
@@ -657,14 +651,14 @@ function refineRegionHierarchy(
       globalRegionIds,
       region.nodeId,
       `${path}/nodeId`,
-      "first_slice.duplicate_region_id",
+      "design_generation.duplicate_region_id",
       "Planned region ID",
       issues,
     );
     if (declaredFrameIds.has(region.nodeId)) {
       issues.push(
         issue(
-          "first_slice.region_frame_id_conflict",
+          "design_generation.region_frame_id_conflict",
           `${path}/nodeId`,
           "Region ID must not reuse any declared delivery Frame ID",
           "a unique region ID",
@@ -676,7 +670,7 @@ function refineRegionHierarchy(
     if (!parent) {
       issues.push(
         issue(
-          "first_slice.region_parent_not_available",
+          "design_generation.region_parent_not_available",
           `${path}/parentId`,
           "Region parent must be the target Frame or an earlier region",
           "target frameId or earlier region nodeId",
@@ -689,7 +683,7 @@ function refineRegionHierarchy(
     ) {
       issues.push(
         issue(
-          "first_slice.region_bounds_exceeded",
+          "design_generation.region_bounds_exceeded",
           path,
           "Parent-local region bounds exceed the declared parent",
           { width: parent.width, height: parent.height },
@@ -705,8 +699,8 @@ function refineRegionHierarchy(
 }
 
 function refineLogoExploration(
-  input: DesignFirstSliceCanonicalInput,
-  elementsById: ReadonlyMap<string, DesignFirstSliceElementInput>,
+  input: DesignGenerationCanonicalInput,
+  elementsById: ReadonlyMap<string, DesignGenerationElementInput>,
   parentById: ReadonlyMap<string, string>,
   issues: ValidationIssue[],
 ): void {
@@ -715,7 +709,7 @@ function refineLogoExploration(
   if (input.deliverable !== "logo") {
     issues.push(
       issue(
-        "first_slice.logo_exploration_wrong_deliverable",
+        "design_generation.logo_exploration_wrong_deliverable",
         "/logoExploration",
         "Logo exploration is only valid for a logo deliverable",
         "logo",
@@ -727,7 +721,7 @@ function refineLogoExploration(
   if (exploration.targetId !== expectedTargetId) {
     issues.push(
       issue(
-        "first_slice.logo_exploration_target_mismatch",
+        "design_generation.logo_exploration_target_mismatch",
         "/logoExploration/targetId",
         "Logo exploration must target targets[0]",
         expectedTargetId,
@@ -742,10 +736,10 @@ function refineLogoExploration(
     if (!root || (root.kind !== "frame" && root.kind !== "group")) {
       issues.push(
         issue(
-          "first_slice.logo_root_not_materialized",
+          "design_generation.logo_root_not_materialized",
           `${path}/rootNodeId`,
-          "Logo concept root must be an actual first-slice Frame or Group",
-          "firstSlice Frame/Group element ID",
+          "Logo concept root must be an actual design-generation Frame or Group",
+          "designGeneration Frame/Group element ID",
           direction.rootNodeId,
         ),
       );
@@ -759,7 +753,7 @@ function refineLogoExploration(
         identities,
         id,
         idPath,
-        "first_slice.duplicate_logo_identity",
+        "design_generation.duplicate_logo_identity",
         "Logo concept/evidence ID",
         issues,
       );
@@ -771,10 +765,10 @@ function refineLogoExploration(
     ) {
       issues.push(
         issue(
-          "first_slice.logo_master_not_materialized",
+          "design_generation.logo_master_not_materialized",
           `${path}/masterNodeId`,
           "Logo master must be an actual descendant of the concept root",
-          `firstSlice descendant of ${direction.rootNodeId}`,
+          `designGeneration descendant of ${direction.rootNodeId}`,
           direction.masterNodeId,
         ),
       );
@@ -794,9 +788,9 @@ function refineLogoExploration(
     if (!hasMaterial) {
       issues.push(
         issue(
-          "first_slice.logo_direction_material_required",
+          "design_generation.logo_direction_material_required",
           `${path}/masterNodeId`,
-          "Logo master must contain editable material in this first slice",
+          "Logo master must contain editable material in this design generation",
           "visible editable master geometry",
           direction.masterNodeId,
         ),
@@ -816,7 +810,7 @@ function refineReferenceStrategy(
       attachments,
       reference.attachmentId,
       `/referenceStrategy/references/${index}/attachmentId`,
-      "first_slice.duplicate_reference_attachment",
+      "design_generation.duplicate_reference_attachment",
       "Reference attachment ID",
       issues,
     );
@@ -865,14 +859,14 @@ function issue(
   };
 }
 
-/** Input must come from FirstSliceContract.parse. */
-export function compileDesignFirstSliceToolInput(
-  input: DesignFirstSliceToolInput,
-): ReturnType<typeof compileValidatedDesignFirstSliceToolInput> {
-  return compileValidatedDesignFirstSliceToolInput(input);
+/** Input must come from DesignGenerationContract.parse. */
+export function compileDesignGenerationToolInput(
+  input: DesignGenerationToolInput,
+): ReturnType<typeof compileValidatedDesignGenerationToolInput> {
+  return compileValidatedDesignGenerationToolInput(input);
 }
 
-function isMaterialElement(element: DesignFirstSliceElementInput): boolean {
+function isMaterialElement(element: DesignGenerationElementInput): boolean {
   if (element.kind === "group") return false;
   if (element.kind === "image") return true;
   return element.fills.length > 0 || element.strokes.length > 0;

@@ -19,4 +19,4 @@ Build each screen as an editable target-specific hierarchy; never fake rows, con
 
 Choose components for semantic reuse, stable identity, centralized updates, and controlled variation; repeated shapes are not automatically components. Preserve meaningful one-off groups. Inspect the current file's Components, Styles, and Variables before creating a parallel system. Reuse a catalog Component only when its semantic job and properties fit, then create a linked Instance; visual similarity alone is insufficient.
 
-Keep hit targets, focus order, safe areas, text, contrast, and status meaning visible. Do not wrap every region in a card or give every action equal prominence. The first meaningful slice must establish the actionable hierarchy before decoration.
+Keep hit targets, focus order, safe areas, text, contrast, and status meaning visible. Do not wrap every region in a card or give every action equal prominence. The initial visible committed revision must establish the actionable hierarchy before decoration.

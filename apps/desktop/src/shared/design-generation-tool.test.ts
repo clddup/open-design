@@ -9,15 +9,15 @@ import {
   BUILTIN_UI_DESIGN_SKILL_REFS,
 } from "@opendesign/design-skills";
 import {
-  compileDesignFirstSliceToolInput,
-  DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA,
-  FirstSliceContract,
-  type DesignFirstSliceToolInput,
-} from "./design-first-slice-tool";
+  compileDesignGenerationToolInput,
+  DESIGN_GENERATION_TOOL_INPUT_SCHEMA,
+  DesignGenerationContract,
+  type DesignGenerationToolInput,
+} from "./design-generation-tool";
 import { DesignApplyContract, DesignPlanContract } from "./design-agent-tools";
 
-describe("compact first-slice tool", () => {
-  it("uses the shared transaction safety limit instead of a first-slice quota", () => {
+describe("design-generation tool", () => {
+  it("uses the shared transaction safety limit instead of a design-generation quota", () => {
     type SchemaNode = {
       anyOf?: readonly SchemaNode[];
       const?: unknown;
@@ -28,17 +28,16 @@ describe("compact first-slice tool", () => {
       properties: Record<string, SchemaNode>;
       required?: readonly string[];
     };
-    const schema =
-      DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA as unknown as SchemaNode;
+    const schema = DESIGN_GENERATION_TOOL_INPUT_SCHEMA as unknown as SchemaNode;
     const properties = schema.properties;
-    expect(properties.firstSlice.properties.stages.maxItems).toBe(
-      MAX_TRANSACTION_COMMANDS,
-    );
+    expect(
+      properties.designGeneration.properties.elements.description,
+    ).toContain("DesignTransaction command safety limit");
     expect(Object.keys(properties).sort()).toEqual(
       [
         "deliverable",
         "designIntent",
-        "firstSlice",
+        "designGeneration",
         "logoColorStrategy",
         "logoExploration",
         "logoOutputs",
@@ -50,12 +49,7 @@ describe("compact first-slice tool", () => {
     expect(JSON.stringify(properties)).not.toContain('"qualityProfile"');
     expect(JSON.stringify(properties)).not.toContain('"briefFidelity"');
     expect(JSON.stringify(properties)).not.toContain('"skillRefs"');
-    expect(
-      properties.firstSlice.properties.stages.items.properties.elements
-        .maxItems,
-    ).toBe(MAX_TRANSACTION_COMMANDS);
-    const elementSchema =
-      properties.firstSlice.properties.stages.items.properties.elements.items;
+    const elementSchema = properties.designGeneration.properties.elements.items;
     expect(elementSchema.required).toEqual(
       expect.arrayContaining(["fills", "kind"]),
     );
@@ -73,9 +67,6 @@ describe("compact first-slice tool", () => {
         "layoutSizing",
         "autoLayout",
       ]),
-    );
-    expect(properties.firstSlice.properties.stages.description).toContain(
-      "DesignTransaction command safety limit",
     );
     expect(properties.designIntent.description).toContain(
       "not a per-element rationale",
@@ -98,34 +89,35 @@ describe("compact first-slice tool", () => {
       "deliverable",
       "targets",
       "rasterAssetRoles",
-      "firstSlice",
+      "designGeneration",
     ]);
     expect(properties.logoColorStrategy).toBeDefined();
     const valid = providerInput(fixture());
     expect(
-      schemaValidationIssues(DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA, valid),
+      schemaValidationIssues(DESIGN_GENERATION_TOOL_INPUT_SCHEMA, valid),
     ).toHaveLength(0);
     expect(
-      FirstSliceContract.parse(valid, { target: hostTarget(fixture()) }).ok,
+      DesignGenerationContract.parse(valid, { target: hostTarget(fixture()) })
+        .ok,
     ).toBe(true);
     const withoutHostFields = providerInputWithoutHostFields(fixture());
     expect(
       schemaValidationIssues(
-        DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA,
+        DESIGN_GENERATION_TOOL_INPUT_SCHEMA,
         withoutHostFields,
       ),
     ).toHaveLength(0);
-    expect(FirstSliceContract.modelIssues(withoutHostFields)).toEqual([]);
+    expect(DesignGenerationContract.modelIssues(withoutHostFields)).toEqual([]);
     expect(
-      FirstSliceContract.parse(withoutHostFields, {
+      DesignGenerationContract.parse(withoutHostFields, {
         target: hostTarget(fixture()),
       }).ok,
     ).toBe(true);
     const unexpected = { ...valid, hiddenLimit: 32 };
     expect(
-      schemaValidationIssues(DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA, unexpected),
+      schemaValidationIssues(DESIGN_GENERATION_TOOL_INPUT_SCHEMA, unexpected),
     ).not.toHaveLength(0);
-    expect(FirstSliceContract.parse(unexpected).ok).toBe(false);
+    expect(DesignGenerationContract.parse(unexpected).ok).toBe(false);
 
     const logo = fixture();
     logo.deliverable = "logo";
@@ -137,12 +129,12 @@ describe("compact first-slice tool", () => {
     const missingLogoStrategy = providerInput(logo);
     expect(
       schemaValidationIssues(
-        DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA,
+        DESIGN_GENERATION_TOOL_INPUT_SCHEMA,
         missingLogoStrategy,
       ),
     ).toEqual([]);
     expect(
-      FirstSliceContract.parse(missingLogoStrategy, {
+      DesignGenerationContract.parse(missingLogoStrategy, {
         target: hostTarget(logo),
       }).ok,
     ).toBe(true);
@@ -150,7 +142,7 @@ describe("compact first-slice tool", () => {
 
   it("preserves the model's brief-specific direction while binding only trusted host metadata", () => {
     const modelInput = providerInput(fixture());
-    const normalized = parsedFirstSlice(modelInput);
+    const normalized = parsedDesignGeneration(modelInput);
     expect(normalized).toBeDefined();
     expect(normalized?.designIntent.visualThesis).toBe(
       fixture().designIntent.visualThesis,
@@ -177,7 +169,7 @@ describe("compact first-slice tool", () => {
     expect(
       normalized &&
         DesignPlanContract.parse(
-          compileDesignFirstSliceToolInput(normalized).plan,
+          compileDesignGenerationToolInput(normalized).plan,
           { canonical: true },
         ).ok,
     ).toBe(true);
@@ -185,14 +177,14 @@ describe("compact first-slice tool", () => {
 
   it("binds call-local document identities once while preserving target and stage identities", () => {
     const modelInput = providerInputWithoutHostFields(fixture());
-    const result = FirstSliceContract.parse(modelInput, {
+    const result = DesignGenerationContract.parse(modelInput, {
       authoritativePrompt: "Create Home and Profile screens",
       newNodeIdPrefix: "odr_run_slice_",
       target: hostTarget(fixture()),
     });
 
     expect(result.ok).toBe(true);
-    if (!result.ok) throw new Error("Expected host-bound First Slice");
+    if (!result.ok) throw new Error("Expected host-bound Design Generation");
     expect(result.value.targets[0]).toMatchObject({
       targetId: "home",
       pageId: "page_1",
@@ -205,21 +197,16 @@ describe("compact first-slice tool", () => {
       ],
       qualityProfile: { safeNodeIds: ["odr_run_slice_4_home_home_hero"] },
     });
-    expect(result.value.firstSlice).toMatchObject({
+    expect(result.value.designGeneration).toMatchObject({
       targetId: "home",
-      stages: [
+      elements: [
         {
-          stageId: "hero_stage",
-          elements: [
-            {
-              id: "odr_run_slice_4_home_hero_panel",
-              parentId: "odr_run_slice_4_home_home_hero",
-            },
-            {
-              id: "odr_run_slice_4_home_hero_title",
-              parentId: "odr_run_slice_4_home_home_hero",
-            },
-          ],
+          id: "odr_run_slice_4_home_hero_panel",
+          parentId: "odr_run_slice_4_home_home_hero",
+        },
+        {
+          id: "odr_run_slice_4_home_hero_title",
+          parentId: "odr_run_slice_4_home_home_hero",
         },
       ],
     });
@@ -229,7 +216,7 @@ describe("compact first-slice tool", () => {
     const input = fixture();
     input.targets.push(structuredClone(input.targets[0]));
 
-    const result = FirstSliceContract.parse(providerInput(input), {
+    const result = DesignGenerationContract.parse(providerInput(input), {
       target: hostTarget(input),
     });
 
@@ -244,7 +231,7 @@ describe("compact first-slice tool", () => {
     const stable = providerInputWithoutHostFields(input);
     const binding = hostTarget(input);
     binding.frame.frameId = "odr_run_slice_frame_home";
-    const parsed = FirstSliceContract.parse(stable, {
+    const parsed = DesignGenerationContract.parse(stable, {
       newNodeIdPrefix: "odr_run_slice_",
       target: binding,
     });
@@ -257,7 +244,7 @@ describe("compact first-slice tool", () => {
     const oversized = hostTarget(input);
     oversized.frame.frameId = `f${"x".repeat(256)}`;
     expect(
-      FirstSliceContract.parse(stable, { target: oversized }),
+      DesignGenerationContract.parse(stable, { target: oversized }),
     ).toMatchObject({ ok: false });
   });
 
@@ -273,7 +260,7 @@ describe("compact first-slice tool", () => {
     Reflect.deleteProperty(target, "layout");
     Reflect.deleteProperty(target, "spacing");
 
-    const result = FirstSliceContract.parse(modelInput, {
+    const result = DesignGenerationContract.parse(modelInput, {
       target: hostTarget(fixture()),
     });
     expect(result.ok).toBe(true);
@@ -289,38 +276,38 @@ describe("compact first-slice tool", () => {
     });
   });
 
-  it("rejects a UI first slice classified as graphic", () => {
+  it("rejects a UI design generation classified as graphic", () => {
     const input = fixture();
     input.designIntent.calibration.surfaceMode = "graphic";
     const modelInput = providerInput(input);
-    const result = FirstSliceContract.parse(modelInput, {
+    const result = DesignGenerationContract.parse(modelInput, {
       target: hostTarget(fixture()),
     });
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("Expected UI calibration failure");
     expect(result.issues).toContainEqual(
       expect.objectContaining({
-        code: "first_slice.ui_surface_mode_invalid",
+        code: "design_generation.ui_surface_mode_invalid",
         path: "/designIntent/calibration/surfaceMode",
       }),
     );
   });
 
-  it("rejects a non-UI first slice classified as a UI surface", () => {
+  it("rejects a non-UI design generation classified as a UI surface", () => {
     const input = fixture();
     input.deliverable = "poster";
     input.targets = input.targets.map((target) => ({
       ...target,
       qualityProfile: { kind: "graphic" },
     }));
-    const result = FirstSliceContract.parse(providerInput(input), {
+    const result = DesignGenerationContract.parse(providerInput(input), {
       target: hostTarget(input),
     });
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("Expected graphic calibration failure");
     expect(result.issues).toContainEqual(
       expect.objectContaining({
-        code: "first_slice.graphic_surface_mode_invalid",
+        code: "design_generation.graphic_surface_mode_invalid",
         path: "/designIntent/calibration/surfaceMode",
       }),
     );
@@ -330,13 +317,13 @@ describe("compact first-slice tool", () => {
     const modelInput = providerInput(fixture());
     modelInput.rasterAssetRoles = ["hero", "supporting-content"];
 
-    const normalized = parsedFirstSlice(modelInput);
+    const normalized = parsedDesignGeneration(modelInput);
     expect(normalized?.rasterAssetRoles).toEqual([
       "hero",
       "supporting-content",
     ]);
     expect(
-      normalized && compileDesignFirstSliceToolInput(normalized).plan,
+      normalized && compileDesignGenerationToolInput(normalized).plan,
     ).toMatchObject({
       rasterAssetRoles: ["hero", "supporting-content"],
       componentStrategy: {
@@ -348,7 +335,7 @@ describe("compact first-slice tool", () => {
   it("places a generated persistent image in the first material slice", () => {
     const input = fixture();
     input.rasterAssetRoles = ["hero"];
-    input.firstSlice.stages[0].elements[0] = {
+    input.designGeneration.elements[0] = {
       id: "hero_image",
       kind: "image",
       name: "Summer camp hero",
@@ -369,10 +356,10 @@ describe("compact first-slice tool", () => {
       cornerRadius: 24,
     };
 
-    const normalized = parsedFirstSlice(providerInput(input));
+    const normalized = parsedDesignGeneration(providerInput(input));
     expect(normalized).toBeDefined();
     const command = normalized
-      ? compileDesignFirstSliceToolInput(normalized).apply.commands[0]
+      ? compileDesignGenerationToolInput(normalized).apply.commands[0]
       : undefined;
     expect(command).toMatchObject({
       type: "insert_element",
@@ -389,7 +376,7 @@ describe("compact first-slice tool", () => {
 
   it("compiles editable row and stack relationships instead of flattening layout to coordinates", () => {
     const input = fixture();
-    input.firstSlice.stages[0].elements[0] = {
+    input.designGeneration.elements[0] = {
       id: "hero_stack",
       kind: "frame",
       name: "Hero Stack",
@@ -410,18 +397,18 @@ describe("compact first-slice tool", () => {
         sizing: { horizontal: "fixed", vertical: "fixed" },
       },
     };
-    const title = input.firstSlice.stages[0].elements[1];
+    const title = input.designGeneration.elements[1];
     if (title?.kind !== "text") throw new Error("Expected Text fixture");
-    input.firstSlice.stages[0].elements[1] = {
+    input.designGeneration.elements[1] = {
       ...title,
       parentId: "hero_stack",
       layoutSizing: { horizontal: "fill", vertical: "fixed" },
     };
 
-    const normalized = parsedFirstSlice(providerInput(input));
+    const normalized = parsedDesignGeneration(providerInput(input));
     expect(normalized).toBeDefined();
     const compiled = normalized
-      ? compileDesignFirstSliceToolInput(normalized)
+      ? compileDesignGenerationToolInput(normalized)
       : undefined;
     expect(compiled?.apply.commands).toMatchObject([
       {
@@ -464,14 +451,14 @@ describe("compact first-slice tool", () => {
       },
     ];
 
-    const result = FirstSliceContract.parse(modelInput, {
+    const result = DesignGenerationContract.parse(modelInput, {
       target: hostTarget(fixture()),
     });
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("Expected removed semantic payload failure");
     expect(result.issues).toContainEqual(
       expect.objectContaining({
-        code: "first_slice.schema_invalid",
+        code: "design_generation.schema_invalid",
         path: "/semanticObjects",
       }),
     );
@@ -479,26 +466,26 @@ describe("compact first-slice tool", () => {
 
   it("uses the element kind discriminator to report the concrete invalid field", () => {
     const modelInput = providerInput(fixture());
-    const firstSlice = modelInput.firstSlice as {
-      stages: Array<{ elements: Array<Record<string, unknown>> }>;
+    const designGeneration = modelInput.designGeneration as {
+      elements: Array<Record<string, unknown>>;
     };
-    Reflect.deleteProperty(firstSlice.stages[0].elements[0], "fills");
+    Reflect.deleteProperty(designGeneration.elements[0], "fills");
 
-    const result = FirstSliceContract.parse(modelInput, {
+    const result = DesignGenerationContract.parse(modelInput, {
       target: hostTarget(fixture()),
     });
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("Expected element schema failure");
     expect(result.issues[0]).toMatchObject({
-      code: "first_slice.schema_invalid",
-      path: "/firstSlice/stages/0/elements/0/fills",
+      code: "design_generation.schema_invalid",
+      path: "/designGeneration/elements/0/fills",
     });
     expect(result.issues[0]?.message).not.toContain("union");
   });
 
   it("rejects Group shape appearance without discarding node effects", () => {
     const input = fixture();
-    input.firstSlice.stages[0].elements.unshift({
+    input.designGeneration.elements.unshift({
       id: "hero_group",
       kind: "group",
       name: "Hero Group",
@@ -520,31 +507,31 @@ describe("compact first-slice tool", () => {
     expect(result.issues).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          code: "first_slice.group_fills_unsupported",
-          path: "/firstSlice/stages/0/elements/0/fills",
+          code: "design_generation.group_fills_unsupported",
+          path: "/designGeneration/elements/0/fills",
         }),
         expect.objectContaining({
-          code: "first_slice.group_strokes_unsupported",
-          path: "/firstSlice/stages/0/elements/0/strokes",
+          code: "design_generation.group_strokes_unsupported",
+          path: "/designGeneration/elements/0/strokes",
         }),
         expect.objectContaining({
-          code: "first_slice.group_stroke_width_unsupported",
-          path: "/firstSlice/stages/0/elements/0/strokeWidth",
+          code: "design_generation.group_stroke_width_unsupported",
+          path: "/designGeneration/elements/0/strokeWidth",
         }),
       ]),
     );
     expect(result.issues).not.toContainEqual(
       expect.objectContaining({
-        path: "/firstSlice/stages/0/elements/0/effects",
+        path: "/designGeneration/elements/0/effects",
       }),
     );
   });
 
-  it("does not count invisible Text as first-slice material", () => {
+  it("does not count invisible Text as design-generation material", () => {
     const input = fixture();
-    const title = input.firstSlice.stages[0].elements[1];
+    const title = input.designGeneration.elements[1];
     if (title?.kind !== "text") throw new Error("Expected Text fixture");
-    input.firstSlice.stages[0].elements = [
+    input.designGeneration.elements = [
       { ...title, fills: [], strokes: [], strokeWidth: 0 },
     ];
 
@@ -553,7 +540,7 @@ describe("compact first-slice tool", () => {
     if (result.ok) throw new Error("Expected invisible material failure");
     expect(result.issues).toContainEqual(
       expect.objectContaining({
-        code: "first_slice.empty_referenced_region",
+        code: "design_generation.empty_referenced_region",
         path: "/targets/0/regions/0",
       }),
     );
@@ -569,7 +556,7 @@ describe("compact first-slice tool", () => {
       "Brand Usage Preview must include title bar, launch screen, app list, and light/dark canvas.",
     ].join("\n");
 
-    const normalized = parsedFirstSlice(modelInput, {
+    const normalized = parsedDesignGeneration(modelInput, {
       authoritativePrompt,
     });
 
@@ -589,14 +576,14 @@ describe("compact first-slice tool", () => {
 
     expect(profile.safeNodeIds).not.toContain("hero_panel");
     expect(
-      compileDesignFirstSliceToolInput(input).plan.targets[0]?.qualityProfile,
+      compileDesignGenerationToolInput(input).plan.targets[0]?.qualityProfile,
     ).toMatchObject({
       safeAreaNodeIds: ["hero_title"],
       interactiveNodeIds: ["hero_panel"],
     });
   });
 
-  it("compiles all targets into the current Plan with pinned skills and a canonical first slice", () => {
+  it("compiles all targets into the current Plan with pinned skills and a canonical design generation", () => {
     const input = fixture();
     input.referenceStrategy = {
       synthesis:
@@ -612,7 +599,7 @@ describe("compact first-slice tool", () => {
         },
       ],
     };
-    const compiled = compileDesignFirstSliceToolInput(input);
+    const compiled = compileDesignGenerationToolInput(input);
     expect(
       DesignPlanContract.parse(compiled.plan, { canonical: true }).ok,
     ).toBe(true);
@@ -650,9 +637,9 @@ describe("compact first-slice tool", () => {
     });
     expect(compiled.apply.steps).toEqual([
       {
-        stepId: "hero_stage",
-        label: "Build real hero",
-        commandIds: ["first_slice_1", "first_slice_2"],
+        stepId: "home.generate",
+        label: "Create Home hero",
+        commandIds: ["design_generation_1", "design_generation_2"],
       },
     ]);
     expect(compiled.apply.commands).toMatchObject([
@@ -678,7 +665,7 @@ describe("compact first-slice tool", () => {
 
   it("preserves canonical gradient, stroke, blend and effect appearance in the first real revision", () => {
     const input = fixture();
-    const [panel, title] = input.firstSlice.stages[0].elements;
+    const [panel, title] = input.designGeneration.elements;
     if (panel?.kind !== "rectangle" || title?.kind !== "text") {
       throw new Error("Expected rectangle and text fixture elements");
     }
@@ -721,10 +708,10 @@ describe("compact first-slice tool", () => {
       },
     ];
 
-    const normalized = parsedFirstSlice(providerInput(input));
+    const normalized = parsedDesignGeneration(providerInput(input));
     expect(normalized).toBeDefined();
     if (!normalized) throw new Error("Expected canonical appearance input");
-    const compiled = compileDesignFirstSliceToolInput(normalized);
+    const compiled = compileDesignGenerationToolInput(normalized);
     expect(
       DesignApplyContract.parse(compiled.apply, {
         canonical: true,
@@ -758,14 +745,14 @@ describe("compact first-slice tool", () => {
     const input = fixture();
     const modelInput = providerInput(input);
 
-    const normalized = parsedFirstSlice(modelInput);
+    const normalized = parsedDesignGeneration(modelInput);
     expect(normalized?.skillRefs).toEqual(BUILTIN_UI_DESIGN_SKILL_REFS);
 
     const staleHostEcho = {
       ...modelInput,
       skillRefs: [{ id: "model-controlled" }],
     };
-    const rejected = FirstSliceContract.parse(staleHostEcho);
+    const rejected = DesignGenerationContract.parse(staleHostEcho);
     expect(rejected.ok).toBe(false);
     if (rejected.ok) throw new Error("Expected host echo rejection");
     expect(rejected.issues[0]?.path).toBe("/skillRefs");
@@ -781,11 +768,11 @@ describe("compact first-slice tool", () => {
     }));
     const modelInput = providerInput(input);
 
-    const normalized = parsedFirstSlice(modelInput);
+    const normalized = parsedDesignGeneration(modelInput);
     expect(normalized?.skillRefs).toEqual(BUILTIN_GRAPHIC_DESIGN_SKILL_REFS);
     expect(normalized?.rasterAssetRoles).toEqual([]);
     expect(
-      normalized && compileDesignFirstSliceToolInput(normalized).plan,
+      normalized && compileDesignGenerationToolInput(normalized).plan,
     ).toMatchObject({
       deliverable: "poster",
       rasterAssetRoles: [],
@@ -853,18 +840,18 @@ describe("compact first-slice tool", () => {
         ),
       ],
     };
-    input.firstSlice.stages[0].elements = [
+    input.designGeneration.elements = [
       ...logoDirectionElements("negative", "negative_region", "#FF5A5F"),
       ...logoDirectionElements("modular", "modular_region", "#2563EB"),
       ...logoDirectionElements("typographic", "typographic_region", "#7C3AED"),
     ];
 
     const modelInput = providerInput(input);
-    const normalized = parsedFirstSlice(modelInput);
+    const normalized = parsedDesignGeneration(modelInput);
     expect(normalized?.skillRefs).toEqual(BUILTIN_LOGO_DESIGN_SKILL_REFS);
     expect(
       normalized &&
-        compileDesignFirstSliceToolInput(normalized).apply.commands[0],
+        compileDesignGenerationToolInput(normalized).apply.commands[0],
     ).toMatchObject({
       node: {
         kind: "frame",
@@ -873,7 +860,7 @@ describe("compact first-slice tool", () => {
         },
       },
     });
-    const hostBound = parsedFirstSlice(modelInput, {
+    const hostBound = parsedDesignGeneration(modelInput, {
       newNodeIdPrefix: "odr_run_logo_",
     });
     expect(hostBound?.logoExploration?.directions[0]).toMatchObject({
@@ -883,7 +870,7 @@ describe("compact first-slice tool", () => {
     });
 
     if (!normalized) throw new Error("Expected parsed Logo input");
-    const aliasedPlan = compileDesignFirstSliceToolInput(normalized).plan;
+    const aliasedPlan = compileDesignGenerationToolInput(normalized).plan;
     const firstDirection = aliasedPlan.logoExploration?.directions[0];
     if (!firstDirection) throw new Error("Expected compiled Logo exploration");
     expect(firstDirection).toMatchObject({
@@ -891,7 +878,7 @@ describe("compact first-slice tool", () => {
       masterNodeId: "negative_master",
     });
     expect(
-      compileDesignFirstSliceToolInput(normalized).apply.commands.some(
+      compileDesignGenerationToolInput(normalized).apply.commands.some(
         (command) =>
           command.type === "insert_element" &&
           command.node.id.includes("__evidence_"),
@@ -904,7 +891,7 @@ describe("compact first-slice tool", () => {
 
     const duplicatePrinciple = structuredClone(modelInput) as {
       logoExploration?: NonNullable<
-        DesignFirstSliceToolInput["logoExploration"]
+        DesignGenerationToolInput["logoExploration"]
       >;
     };
     if (!duplicatePrinciple.logoExploration) {
@@ -913,14 +900,14 @@ describe("compact first-slice tool", () => {
     duplicatePrinciple.logoExploration.directions[1].principle =
       "negative-space";
     expect(
-      FirstSliceContract.parse(duplicatePrinciple, {
+      DesignGenerationContract.parse(duplicatePrinciple, {
         target: hostTarget(input),
       }).ok,
     ).toBe(true);
 
     const duplicateColorSystem = structuredClone(modelInput) as {
       logoExploration?: NonNullable<
-        DesignFirstSliceToolInput["logoExploration"]
+        DesignGenerationToolInput["logoExploration"]
       >;
     };
     if (!duplicateColorSystem.logoExploration) {
@@ -931,14 +918,14 @@ describe("compact first-slice tool", () => {
         duplicateColorSystem.logoExploration.directions[0].colorSystem,
       );
     expect(
-      FirstSliceContract.parse(duplicateColorSystem, {
+      DesignGenerationContract.parse(duplicateColorSystem, {
         target: hostTarget(input),
       }).ok,
     ).toBe(true);
 
     const unplannedConceptRoot = structuredClone(modelInput) as {
       logoExploration?: NonNullable<
-        DesignFirstSliceToolInput["logoExploration"]
+        DesignGenerationToolInput["logoExploration"]
       >;
     };
     if (!unplannedConceptRoot.logoExploration) {
@@ -947,14 +934,14 @@ describe("compact first-slice tool", () => {
     unplannedConceptRoot.logoExploration.directions[0].rootNodeId =
       "unplanned_concept_root";
     expect(
-      FirstSliceContract.parse(unplannedConceptRoot, {
+      DesignGenerationContract.parse(unplannedConceptRoot, {
         target: hostTarget(input),
       }).ok,
     ).toBe(false);
 
     const laterTargetExploration = structuredClone(modelInput) as {
       logoExploration?: NonNullable<
-        DesignFirstSliceToolInput["logoExploration"]
+        DesignGenerationToolInput["logoExploration"]
       >;
     };
     if (!laterTargetExploration.logoExploration) {
@@ -962,7 +949,7 @@ describe("compact first-slice tool", () => {
     }
     laterTargetExploration.logoExploration.targetId = "profile";
     expect(
-      FirstSliceContract.parse(laterTargetExploration, {
+      DesignGenerationContract.parse(laterTargetExploration, {
         target: hostTarget(input),
       }).ok,
     ).toBe(false);
@@ -970,14 +957,14 @@ describe("compact first-slice tool", () => {
     const missingExploration = structuredClone(modelInput);
     delete missingExploration.logoExploration;
     missingExploration.logoOutputs = ["symbol"];
-    const focused = parsedFirstSlice(missingExploration);
+    const focused = parsedDesignGeneration(missingExploration);
     expect(focused).toMatchObject({
       deliverable: "logo",
       logoOutputs: ["symbol"],
     });
     expect(focused?.logoExploration).toBeUndefined();
     expect(
-      focused && compileDesignFirstSliceToolInput(focused).plan,
+      focused && compileDesignGenerationToolInput(focused).plan,
     ).toMatchObject({
       deliverable: "logo",
       logoOutputs: ["symbol"],
@@ -987,8 +974,8 @@ describe("compact first-slice tool", () => {
       string,
       unknown
     > & {
-      logoColorStrategy?: DesignFirstSliceToolInput["logoColorStrategy"];
-      visualSystem: DesignFirstSliceToolInput["visualSystem"];
+      logoColorStrategy?: DesignGenerationToolInput["logoColorStrategy"];
+      visualSystem: DesignGenerationToolInput["visualSystem"];
     };
     monochromeFocused.visualSystem.palette = ["#111111", "#FFFFFF"];
     monochromeFocused.logoColorStrategy = {
@@ -999,14 +986,14 @@ describe("compact first-slice tool", () => {
         "Reverse foreground and background while preserving the same optical counterform.",
     };
     expect(
-      FirstSliceContract.parse(monochromeFocused, {
+      DesignGenerationContract.parse(monochromeFocused, {
         authoritativePrompt:
           "Include monochrome tests alongside the primary color Logo.",
         target: hostTarget(input),
       }).ok,
     ).toBe(true);
     expect(
-      FirstSliceContract.parse(monochromeFocused, {
+      DesignGenerationContract.parse(monochromeFocused, {
         authoritativePrompt: "The primary Logo must be monochrome only.",
         target: hostTarget(input),
       }).ok,
@@ -1014,32 +1001,31 @@ describe("compact first-slice tool", () => {
 
     const omittedOutputs = structuredClone(missingExploration);
     delete omittedOutputs.logoOutputs;
-    const omitted = parsedFirstSlice(omittedOutputs);
+    const omitted = parsedDesignGeneration(omittedOutputs);
     expect(omitted?.deliverable).toBe("logo");
     expect(omitted?.logoOutputs).toBeUndefined();
   });
 
   it("rejects duplicate IDs, forward parents, empty regions and a slice for a later target", () => {
     const duplicate = fixture();
-    duplicate.firstSlice.stages[0].elements[1].id = "home_hero";
+    duplicate.designGeneration.elements[1].id = "home_hero";
     expect(parseCanonicalProjection(duplicate).ok).toBe(false);
 
     const forwardParent = fixture();
-    forwardParent.firstSlice.stages[0].elements[0].parentId = "hero_title";
+    forwardParent.designGeneration.elements[0].parentId = "hero_title";
     expect(parseCanonicalProjection(forwardParent).ok).toBe(false);
 
     const emptyRegion = fixture();
-    emptyRegion.firstSlice.stages[0].elements.splice(0);
+    emptyRegion.designGeneration.elements.splice(0);
     expect(parseCanonicalProjection(emptyRegion).ok).toBe(false);
 
     const wrongTarget = fixture();
-    wrongTarget.firstSlice.targetId = "profile";
+    wrongTarget.designGeneration.targetId = "profile";
     expect(parseCanonicalProjection(wrongTarget).ok).toBe(true);
 
     const crossTargetFrameCollision = fixture();
     crossTargetFrameCollision.targets[0].regions[0].nodeId = "frame_home";
-    for (const element of crossTargetFrameCollision.firstSlice.stages[0]
-      .elements) {
+    for (const element of crossTargetFrameCollision.designGeneration.elements) {
       element.parentId = "frame_home";
     }
     const collisionResult = parseCanonicalProjection(crossTargetFrameCollision);
@@ -1047,7 +1033,7 @@ describe("compact first-slice tool", () => {
     if (collisionResult.ok) throw new Error("Expected ID collision");
     expect(collisionResult.issues).toContainEqual(
       expect.objectContaining({
-        code: "first_slice.region_frame_id_conflict",
+        code: "design_generation.region_frame_id_conflict",
         path: "/targets/0/regions/0/nodeId",
         actual: "frame_home",
       }),
@@ -1070,7 +1056,7 @@ describe("compact first-slice tool", () => {
     if (graphResult.ok) throw new Error("Expected region graph failure");
     expect(graphResult.issues).toContainEqual(
       expect.objectContaining({
-        code: "first_slice.region_parent_not_available",
+        code: "design_generation.region_parent_not_available",
         path: "/targets/0/regions/0/parentId",
         actual: "later_region",
       }),
@@ -1083,13 +1069,13 @@ describe("compact first-slice tool", () => {
     if (overflowResult.ok) throw new Error("Expected region overflow");
     expect(overflowResult.issues).toContainEqual(
       expect.objectContaining({
-        code: "first_slice.region_bounds_exceeded",
+        code: "design_generation.region_bounds_exceeded",
         path: "/targets/0/regions/0",
       }),
     );
 
     const unplannedRegion = fixture();
-    for (const element of unplannedRegion.firstSlice.stages[0].elements) {
+    for (const element of unplannedRegion.designGeneration.elements) {
       element.parentId = "home_intro";
     }
     const unplannedResult = parseCanonicalProjection(unplannedRegion);
@@ -1097,19 +1083,17 @@ describe("compact first-slice tool", () => {
     if (unplannedResult.ok) throw new Error("Expected parent failure");
     expect(unplannedResult.issues).toContainEqual(
       expect.objectContaining({
-        code: "first_slice.parent_not_available",
-        path: "/firstSlice/stages/0/elements/0/parentId",
+        code: "design_generation.parent_not_available",
+        path: "/designGeneration/elements/0/parentId",
         actual: "home_intro",
       }),
     );
   });
 
-  it("accepts the 25-element two-stage production login slice that previously failed before any revision", () => {
+  it("accepts the 25-element production login batch that previously failed before any revision", () => {
     const input = fixture();
-    input.firstSlice.stages.push({
-      stageId: "auth_stage",
-      label: "Build editable authentication controls",
-      elements: Array.from({ length: 23 }, (_, index) => ({
+    input.designGeneration.elements.push(
+      ...Array.from({ length: 23 }, (_, index) => ({
         id: `auth_control_${index}`,
         kind: "rectangle" as const,
         name: `Auth Control ${index}`,
@@ -1120,18 +1104,13 @@ describe("compact first-slice tool", () => {
         height: 16,
         ...solidAppearance("#7C3AED"),
       })),
-    });
+    );
 
-    expect(
-      input.firstSlice.stages.reduce(
-        (total, stage) => total + stage.elements.length,
-        0,
-      ),
-    ).toBe(25);
+    expect(input.designGeneration.elements).toHaveLength(25);
     expect(parseCanonicalProjection(input).ok).toBe(true);
   });
 
-  it("compiles a 35-element login first screen with nested host-owned regions in one call", () => {
+  it("compiles a 35-element login design with nested host-owned regions in one call", () => {
     const input = fixture();
     input.targets[0].regions = [
       {
@@ -1165,48 +1144,42 @@ describe("compact first-slice tool", () => {
         height: 72,
       },
     ];
-    input.firstSlice.stages = [
+    input.designGeneration.elements = [
       {
-        stageId: "login_screen",
-        label: "Build the real login screen",
-        elements: [
-          {
-            ...input.firstSlice.stages[0].elements[1],
-            id: "auth_title",
-            name: "Authentication Title",
-            parentId: "auth_region",
-          },
-          ...Array.from({ length: 33 }, (_, index) => ({
-            id: `form_element_${index}`,
-            kind: "rectangle" as const,
-            name: `Form Element ${index}`,
-            parentId: "form_region",
-            x: (index % 3) * 92,
-            y: Math.floor(index / 3) * 30,
-            width: 80,
-            height: 24,
-            ...solidAppearance("#F8FAFC"),
-            cornerRadius: 6,
-          })),
-          {
-            ...input.firstSlice.stages[0].elements[1],
-            id: "footer_copy",
-            name: "Footer Copy",
-            parentId: "footer_region",
-            x: 0,
-            y: 0,
-            width: 342,
-            height: 24,
-          },
-        ],
+        ...input.designGeneration.elements[1],
+        id: "auth_title",
+        name: "Authentication Title",
+        parentId: "auth_region",
+      },
+      ...Array.from({ length: 33 }, (_, index) => ({
+        id: `form_element_${index}`,
+        kind: "rectangle" as const,
+        name: `Form Element ${index}`,
+        parentId: "form_region",
+        x: (index % 3) * 92,
+        y: Math.floor(index / 3) * 30,
+        width: 80,
+        height: 24,
+        ...solidAppearance("#F8FAFC"),
+        cornerRadius: 6,
+      })),
+      {
+        ...input.designGeneration.elements[1],
+        id: "footer_copy",
+        name: "Footer Copy",
+        parentId: "footer_region",
+        x: 0,
+        y: 0,
+        width: 342,
+        height: 24,
       },
     ];
 
-    expect(input.firstSlice.stages[0].elements).toHaveLength(35);
-    const normalized = parsedFirstSlice(providerInput(input));
+    expect(input.designGeneration.elements).toHaveLength(35);
+    const normalized = parsedDesignGeneration(providerInput(input));
     expect(normalized).toBeDefined();
     if (!normalized) throw new Error("Expected parsed 35-element input");
-    const compiled = compileDesignFirstSliceToolInput(normalized);
+    const compiled = compileDesignGenerationToolInput(normalized);
     const compiledRegions = compiled.plan.targets[0]?.composition.regions ?? [];
     expect(compiledRegions).toMatchObject([
       { nodeId: "auth_region" },
@@ -1223,11 +1196,10 @@ describe("compact first-slice tool", () => {
     expect(compiled.insertedNodeIds).toContain("footer_copy");
   });
 
-  it("accepts a coherent 49-element first slice and rejects only the shared transaction overflow", () => {
+  it("accepts a coherent 49-element design generation and rejects only the shared transaction overflow", () => {
     const beyondLegacyQuota = fixture();
-    const stage = beyondLegacyQuota.firstSlice.stages[0];
     for (let index = 0; index < 47; index += 1) {
-      stage.elements.push({
+      beyondLegacyQuota.designGeneration.elements.push({
         id: `support_${index}`,
         kind: "rectangle",
         name: `Support ${index}`,
@@ -1242,32 +1214,28 @@ describe("compact first-slice tool", () => {
     expect(parseCanonicalProjection(beyondLegacyQuota).ok).toBe(true);
 
     const overTransactionLimit = fixture();
-    overTransactionLimit.firstSlice.stages.push({
-      stageId: "overflow_content",
-      label: "Overflow content",
-      elements: Array.from(
-        { length: MAX_TRANSACTION_COMMANDS - 1 },
-        (_, index) => ({
-          id: `overflow_${index}`,
-          kind: "rectangle" as const,
-          name: `Overflow ${index}`,
-          parentId: "home_hero",
-          x: 8 + index,
-          y: 180,
-          width: 8,
-          height: 8,
-          ...solidAppearance("#7C3AED"),
-        }),
-      ),
-    });
+    overTransactionLimit.designGeneration.elements = Array.from(
+      { length: MAX_TRANSACTION_COMMANDS - 1 },
+      (_, index) => ({
+        id: `overflow_${index}`,
+        kind: "rectangle" as const,
+        name: `Overflow ${index}`,
+        parentId: "home_hero",
+        x: 8 + index,
+        y: 180,
+        width: 8,
+        height: 8,
+        ...solidAppearance("#7C3AED"),
+      }),
+    );
     const overflowResult = parseCanonicalProjection(overTransactionLimit);
     expect(overflowResult.ok).toBe(false);
     if (overflowResult.ok)
       throw new Error("Expected transaction limit failure");
     expect(overflowResult.issues).toContainEqual(
       expect.objectContaining({
-        code: "first_slice.transaction_limit_exceeded",
-        path: "/firstSlice/stages",
+        code: "design_generation.transaction_limit_exceeded",
+        path: "/designGeneration/elements",
         expected: MAX_TRANSACTION_COMMANDS,
         actual: MAX_TRANSACTION_COMMANDS + 1,
       }),
@@ -1284,29 +1252,23 @@ describe("compact first-slice tool", () => {
       width: 342,
       height: 40,
     });
-    multipleRegions.firstSlice.stages.push({
-      stageId: "navigation_stage",
-      label: "Build navigation",
-      elements: [
-        {
-          id: "navigation_mark",
-          kind: "rectangle",
-          name: "Navigation Mark",
-          parentId: "home_navigation",
-          x: 0,
-          y: 0,
-          width: 40,
-          height: 40,
-          ...solidAppearance("#7C3AED"),
-        },
-      ],
+    multipleRegions.designGeneration.elements.push({
+      id: "navigation_mark",
+      kind: "rectangle",
+      name: "Navigation Mark",
+      parentId: "home_navigation",
+      x: 0,
+      y: 0,
+      width: 40,
+      height: 40,
+      ...solidAppearance("#7C3AED"),
     });
     expect(parseCanonicalProjection(multipleRegions).ok).toBe(true);
   });
 });
 
 function providerInput(
-  input: DesignFirstSliceToolInput,
+  input: DesignGenerationToolInput,
 ): Record<string, unknown> {
   const value = structuredClone(input) as unknown as Record<string, unknown>;
   for (const key of [
@@ -1337,7 +1299,7 @@ function providerInput(
     }
   }
   Reflect.deleteProperty(
-    value.firstSlice as Record<string, unknown>,
+    value.designGeneration as Record<string, unknown>,
     "targetId",
   );
   if (value.logoExploration) {
@@ -1347,12 +1309,12 @@ function providerInput(
 }
 
 function providerInputWithoutHostFields(
-  input: DesignFirstSliceToolInput,
+  input: DesignGenerationToolInput,
 ): Record<string, unknown> {
   return providerInput(input);
 }
 
-function hostTarget(input: DesignFirstSliceToolInput) {
+function hostTarget(input: DesignGenerationToolInput) {
   const target = input.targets[0];
   return {
     targetId: target.targetId,
@@ -1363,14 +1325,14 @@ function hostTarget(input: DesignFirstSliceToolInput) {
   };
 }
 
-function parsedFirstSlice(
+function parsedDesignGeneration(
   input: unknown,
   context: {
     authoritativePrompt?: string;
     newNodeIdPrefix?: string;
     target?: ReturnType<typeof hostTarget>;
   } = {},
-): DesignFirstSliceToolInput | undefined {
+): DesignGenerationToolInput | undefined {
   const modelTarget = (
     input && typeof input === "object" && "targets" in input
       ? (
@@ -1381,7 +1343,7 @@ function parsedFirstSlice(
       : undefined
   )?.frame;
   const fallback = hostTarget(fixture());
-  const result = FirstSliceContract.parse(input, {
+  const result = DesignGenerationContract.parse(input, {
     ...context,
     target: context.target ?? {
       ...fallback,
@@ -1395,13 +1357,13 @@ function parsedFirstSlice(
   return result.ok ? result.value : undefined;
 }
 
-function parseCanonicalProjection(input: DesignFirstSliceToolInput) {
-  return FirstSliceContract.parse(providerInput(input), {
+function parseCanonicalProjection(input: DesignGenerationToolInput) {
+  return DesignGenerationContract.parse(providerInput(input), {
     target: hostTarget(input),
   });
 }
 
-export function fixture(): DesignFirstSliceToolInput {
+export function fixture(): DesignGenerationToolInput {
   return {
     version: 1,
     deliverable: "ui",
@@ -1486,48 +1448,42 @@ export function fixture(): DesignFirstSliceToolInput {
       typography: ["Inter Bold 32/38", "Inter Regular 16/24"],
     },
     rasterAssetRoles: [],
-    firstSlice: {
+    designGeneration: {
       targetId: "home",
       label: "Create Home hero",
-      stages: [
+      elements: [
         {
-          stageId: "hero_stage",
-          label: "Build real hero",
-          elements: [
-            {
-              id: "hero_panel",
-              kind: "rectangle",
-              name: "Hero Panel",
-              parentId: "home_hero",
-              x: 0,
-              y: 0,
-              width: 342,
-              height: 260,
-              ...solidAppearance("#EDE9FE"),
-              cornerRadius: 24,
-            },
-            {
-              id: "hero_title",
-              kind: "text",
-              name: "Hero Title",
-              parentId: "home_hero",
-              x: 24,
-              y: 28,
-              width: 294,
-              height: 92,
-              ...solidAppearance("#0F172A"),
-              text: {
-                content: "Design with momentum",
-                fontFamily: "Inter",
-                fontStyleName: "Bold",
-                fontWeight: 700,
-                fontSlant: "normal",
-                fontSize: 32,
-                lineHeight: 38,
-                textResize: "auto-height",
-              },
-            },
-          ],
+          id: "hero_panel",
+          kind: "rectangle",
+          name: "Hero Panel",
+          parentId: "home_hero",
+          x: 0,
+          y: 0,
+          width: 342,
+          height: 260,
+          ...solidAppearance("#EDE9FE"),
+          cornerRadius: 24,
+        },
+        {
+          id: "hero_title",
+          kind: "text",
+          name: "Hero Title",
+          parentId: "home_hero",
+          x: 24,
+          y: 28,
+          width: 294,
+          height: 92,
+          ...solidAppearance("#0F172A"),
+          text: {
+            content: "Design with momentum",
+            fontFamily: "Inter",
+            fontStyleName: "Bold",
+            fontWeight: 700,
+            fontSlant: "normal",
+            fontSize: 32,
+            lineHeight: 38,
+            textResize: "auto-height",
+          },
         },
       ],
     },
@@ -1562,7 +1518,7 @@ function logoDirectionElements(
   prefix: string,
   regionId: string,
   color: string,
-): DesignFirstSliceToolInput["firstSlice"]["stages"][number]["elements"] {
+): DesignGenerationToolInput["designGeneration"]["elements"] {
   return [
     {
       id: `${prefix}_root`,

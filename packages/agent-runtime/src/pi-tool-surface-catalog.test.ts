@@ -59,10 +59,12 @@ describe("Pi directed tool surface catalog", () => {
     expect(factory).toHaveBeenCalledWith(material);
     expect(names(selected)).not.toContain("opendesign_advanced_probe");
     expect(names(selected)).toContain(vectorName);
-    expect(selected.find((tool) => tool.name === "opendesign_plan_probe")).toBe(
+    expect(
+      selected.find((tool) => tool.name === "opendesign_scope_probe"),
+    ).toBe(
       surface
         .modelTools([])
-        .find((tool) => tool.name === "opendesign_plan_probe"),
+        .find((tool) => tool.name === "opendesign_scope_probe"),
     );
   });
 

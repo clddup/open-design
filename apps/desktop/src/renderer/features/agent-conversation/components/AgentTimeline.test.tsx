@@ -50,15 +50,15 @@ describe("AgentTimeline", () => {
   it("shows the current executable Plan as a real collapsible checklist", () => {
     const timeline: SessionTimelineItem[] = [
       {
-        itemId: "tool:first_slice_plan",
+        itemId: "tool:design_generation_plan",
         sessionId: "conversation_1",
         runId: "run_1",
         sequence: 1,
         createdAt: now,
         updatedAt: now,
         type: "tool",
-        toolCallId: "first_slice_plan",
-        toolName: "opendesign_generate_first_slice",
+        toolCallId: "design_generation_plan",
+        toolName: "opendesign_generate_design",
         input: {},
         risk: "design_write",
         status: "completed",
@@ -156,7 +156,7 @@ describe("AgentTimeline", () => {
           },
         },
         revision: 2,
-        transactionId: "transaction_first_slice",
+        transactionId: "transaction_design_generation",
       },
     ];
 
@@ -1717,7 +1717,7 @@ describe("AgentTimeline", () => {
         updatedAt: now,
         type: "tool",
         toolCallId: "plan",
-        toolName: "opendesign_define_design_plan",
+        toolName: "opendesign_generate_design",
         input: {},
         risk: "design_write",
         status: "completed",
@@ -1761,7 +1761,7 @@ describe("AgentTimeline", () => {
     fireEvent.click(screen.getByText("Ran 2 operations"));
     expect(group).toHaveAttribute("open");
     expect(group).toHaveTextContent("Canvas read");
-    expect(group).toHaveTextContent("Design plan ready");
+    expect(group).toHaveTextContent("Canvas updated");
     const timelineItems = container.querySelectorAll("[data-agent-item]");
     expect(timelineItems[0]).toHaveTextContent("先读取并整理画布。");
     expect(timelineItems[1]).toHaveAttribute("data-kind", "tool-group");

@@ -34,11 +34,10 @@ import { reportAgentDiagnostic } from "./agent/agent-diagnostic-reporter";
 import { prepareInitialDesignInspection } from "./agent/agent-initial-design-inspection";
 import { AgentIpcRouter } from "./agent/agent-ipc-router";
 import { AgentRunCoordinator } from "./agent/agent-run-coordinator";
-import { handleDesignPlanTool } from "./agent/design-plan-tool-handler";
 import { handleDeliveryScopeTool } from "./agent/delivery-scope-tool-handler";
-import { handleDesignFirstSliceTool } from "./agent/design-first-slice-tool-handler";
+import { handleDesignGenerationTool } from "./agent/design-generation-tool-handler";
 import { parseDesignToolInput } from "./agent/design-tool-input-parser";
-import { applyFirstSliceAndCapture } from "./agent/first-slice-capture-orchestrator";
+import { applyDesignGenerationAndCapture } from "./agent/design-generation-capture-orchestrator";
 import {
   MainDesignToolRuntime,
   mainDesignToolAuditDiagnostic,
@@ -96,8 +95,7 @@ import {
   DESIGN_CAPTURE_TOOL_NAME,
   DESIGN_DELIVERY_SCOPE_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
-  DESIGN_FIRST_SLICE_TOOL_NAME,
-  DESIGN_PLAN_TOOL_NAME,
+  DESIGN_GENERATION_TOOL_NAME,
 } from "@/shared/design-agent-tools";
 
 const designGenerationPerformance = new DesignGenerationPerformanceTracker();
@@ -849,11 +847,11 @@ async function startDesktopApplication(
       if (call.toolName === DESIGN_DELIVERY_SCOPE_TOOL_NAME) {
         return handleDeliveryScopeTool(globalTaskCoordinator, call, context);
       }
-      if (call.toolName === DESIGN_FIRST_SLICE_TOOL_NAME) {
-        return await applyFirstSliceAndCapture(
+      if (call.toolName === DESIGN_GENERATION_TOOL_NAME) {
+        return await applyDesignGenerationAndCapture(
           {
-            firstSlice: (stageProgress) =>
-              handleDesignFirstSliceTool(
+            designGeneration: (stageProgress) =>
+              handleDesignGenerationTool(
                 globalTaskCoordinator!,
                 rendererDesignToolHost,
                 call,
@@ -877,9 +875,6 @@ async function startDesktopApplication(
           },
           reportProgress,
         );
-      }
-      if (call.toolName === DESIGN_PLAN_TOOL_NAME) {
-        return handleDesignPlanTool(globalTaskCoordinator, call, context);
       }
       const captureReviewResult = await captureReviewSession.handle(call);
       if (captureReviewResult) return captureReviewResult;

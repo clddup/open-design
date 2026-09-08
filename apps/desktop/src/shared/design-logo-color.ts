@@ -37,7 +37,7 @@ export type DesignLogoDirectionColor = {
 };
 
 export function logoColorDomainIssues(input: {
-  codePrefix?: "design_plan" | "first_slice";
+  codePrefix?: "design_plan" | "design_generation";
   deliverable: string;
   directionColors?: readonly DesignLogoDirectionColor[];
   palette: readonly string[];

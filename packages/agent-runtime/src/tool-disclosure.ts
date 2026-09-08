@@ -12,15 +12,15 @@ export function disclosedToolDefinitions(
   return definitions
     .filter((definition) => {
       const disclosure = definition.modelDisclosure;
-      if (disclosure === undefined || disclosure.bootstrap === "available") {
-        return true;
-      }
+      if (disclosure === undefined) return true;
+      if (phase === "bootstrap") return disclosure.bootstrap === "available";
       if (phase === "continuation") {
         return disclosure.continuation === "available";
       }
       return (
-        (phase === "host-inspected" || phase === "inspected") &&
-        disclosure.afterInspection === "available"
+        disclosure.bootstrap === "available" ||
+        ((phase === "host-inspected" || phase === "inspected") &&
+          disclosure.afterInspection === "available")
       );
     })
     .map((definition) => projectDisclosure(definition, phase));

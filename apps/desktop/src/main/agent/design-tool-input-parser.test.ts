@@ -2,22 +2,21 @@ import { FatalAgentRunError } from "./fatal-agent-run-error";
 import { designWorkflowError } from "@/shared/design-workflow-failure-classification";
 import type { TrustedToolContext } from "@opendesign/agent-contracts";
 import { describe, expect, it, vi } from "vitest";
-import type { DesignFirstSliceToolInput } from "@/shared/design-agent-tools.js";
+import type { DesignGenerationToolInput } from "@/shared/design-agent-tools.js";
 import {
   DESIGN_EDIT_TOOL_NAME,
-  DESIGN_FIRST_SLICE_TOOL_NAME,
+  DESIGN_GENERATION_TOOL_NAME,
   DESIGN_FONT_TOOL_NAME,
   DESIGN_PAGE_TOOL_NAME,
-  DESIGN_PLAN_TOOL_NAME,
   DESIGN_SYSTEM_TOOL_NAME,
   DESIGN_VECTOR_TOOL_NAME,
   EXPORT_SVG_TOOL_NAME,
   GENERATE_IMAGE_TOOL_NAME,
 } from "@/shared/design-agent-tools.js";
 import {
-  firstSliceInput,
-  firstSliceModelInput,
-} from "./design-first-slice-tool-handler.fixture.js";
+  designGenerationInput,
+  designGenerationModelInput,
+} from "./design-generation-tool-handler.fixture.js";
 import { parseDesignToolInput } from "./design-tool-input-parser.js";
 
 const context: TrustedToolContext = {
@@ -30,11 +29,11 @@ const context: TrustedToolContext = {
 };
 
 function coordinator() {
-  const input = firstSliceInput();
+  const input = designGenerationInput();
   return {
     assertDesignToolContext: vi.fn(),
     authoritativeDesignPrompt: vi.fn(() => "Create a focused home screen"),
-    firstSliceTargetBinding: vi.fn(() => ({
+    designGenerationTargetBinding: vi.fn(() => ({
       targetId: "home",
       label: "Home",
       objective: "Show the product value immediately",
@@ -56,13 +55,13 @@ describe("parseDesignToolInput", () => {
         host as never,
         {
           toolCallId: "bad_context",
-          toolName: DESIGN_FIRST_SLICE_TOOL_NAME,
+          toolName: DESIGN_GENERATION_TOOL_NAME,
           input: {},
         },
         context,
       ),
     ).toThrow(FatalAgentRunError);
-    expect(host.firstSliceTargetBinding).not.toHaveBeenCalled();
+    expect(host.designGenerationTargetBinding).not.toHaveBeenCalled();
   });
 
   it.each(["context", "binding"])(
@@ -78,14 +77,14 @@ describe("parseDesignToolInput", () => {
       };
       if (stage === "context")
         host.assertDesignToolContext.mockImplementation(reject);
-      else host.firstSliceTargetBinding.mockImplementation(reject);
+      else host.designGenerationTargetBinding.mockImplementation(reject);
       let caught: unknown;
       try {
         parseDesignToolInput(
           host as never,
           {
             toolCallId: "recoverable",
-            toolName: DESIGN_FIRST_SLICE_TOOL_NAME,
+            toolName: DESIGN_GENERATION_TOOL_NAME,
             input: {},
           },
           context,
@@ -97,40 +96,34 @@ describe("parseDesignToolInput", () => {
     },
   );
 
-  it("binds one First Slice to trusted Run identity before dispatch", () => {
+  it("binds one Design Generation to trusted Run identity before dispatch", () => {
     const host = coordinator();
     const result = parseDesignToolInput(
       host as never,
       {
-        toolCallId: "first_slice",
-        toolName: DESIGN_FIRST_SLICE_TOOL_NAME,
-        input: firstSliceModelInput(host.input),
+        toolCallId: "design_generation",
+        toolName: DESIGN_GENERATION_TOOL_NAME,
+        input: designGenerationModelInput(host.input),
       },
       context,
     );
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    const value = result.value as DesignFirstSliceToolInput;
+    const value = result.value as DesignGenerationToolInput;
     expect(value.targets[0]).toMatchObject({
       targetId: "home",
       pageId: "page_1",
       frame: { frameId: "frame_home", x: 80, y: 40 },
       qualityProfile: { kind: "ui" },
     });
-    const element = value.firstSlice.stages[0]?.elements[0];
+    const element = value.designGeneration.elements[0];
     expect(element?.id).toMatch(/^odr_run_parser_/);
     expect(element?.parentId).toMatch(/^odr_run_parser_/);
     expect(host.assertDesignToolContext).toHaveBeenCalledWith(context);
   });
 
   it.each([
-    {
-      name: "Plan unknown field",
-      toolName: DESIGN_PLAN_TOOL_NAME,
-      input: { unexpectedField: true },
-      path: "/unexpectedField",
-    },
     {
       name: "nested Edit geometry",
       toolName: DESIGN_EDIT_TOOL_NAME,

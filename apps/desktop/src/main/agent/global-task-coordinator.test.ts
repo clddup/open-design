@@ -1,9 +1,9 @@
 import { parseDesignToolInput } from "./design-tool-input-parser.js";
-import { handleDesignFirstSliceTool } from "./design-first-slice-tool-handler.js";
+import { handleDesignGenerationTool } from "./design-generation-tool-handler.js";
 import {
-  firstSliceInput,
-  firstSliceModelInput,
-} from "./design-first-slice-tool-handler.fixture.js";
+  designGenerationInput,
+  designGenerationModelInput,
+} from "./design-generation-tool-handler.fixture.js";
 import type { ToolCallRequest } from "@opendesign/agent-contracts";
 import { handleEditDesignTool } from "./design-edit-tool-handler.js";
 import { executeDesignToolRequest } from "@/renderer/features/design-tools/design-tool-execution";
@@ -1054,7 +1054,7 @@ describe("GlobalTaskCoordinator", () => {
   });
 
   it.each([false, true])(
-    "keeps new deep nodes editable after first-slice with cache gap=%s",
+    "keeps new deep nodes editable after design-generation with cache gap=%s",
     async (cacheGap) => {
       const { store, host, file, opened, pageId, root } = await setup();
       try {
@@ -1112,8 +1112,8 @@ describe("GlobalTaskCoordinator", () => {
             idAllocation: createAgentDesignIdAllocation(context.runId),
           },
         });
-        const source = firstSliceInput();
-        source.firstSlice.stages[0].elements = [
+        const source = designGenerationInput();
+        source.designGeneration.elements = [
           {
             id: "inner",
             kind: "frame",
@@ -1142,9 +1142,9 @@ describe("GlobalTaskCoordinator", () => {
           },
         ];
         const call: ToolCallRequest = {
-          toolCallId: "first_slice_deep",
-          toolName: "opendesign_generate_first_slice",
-          input: firstSliceModelInput(source),
+          toolCallId: "design_generation_deep",
+          toolName: "opendesign_generate_design",
+          input: designGenerationModelInput(source),
         };
         const parsed = parseDesignToolInput(coordinator, call, context);
         if (!parsed.ok) throw new Error(JSON.stringify(parsed.issues));
@@ -1158,7 +1158,7 @@ describe("GlobalTaskCoordinator", () => {
             throw new Error(response.error.message, { cause: response.error });
           return response.result;
         };
-        const first = await handleDesignFirstSliceTool(
+        const first = await handleDesignGenerationTool(
           coordinator,
           { execute } as never,
           { ...call, input: parsed.value },
@@ -1219,7 +1219,7 @@ describe("GlobalTaskCoordinator", () => {
         const inner = Object.values(
           runtime.getSnapshot().document.nodesById,
         ).find((node) => node.name === "Inner");
-        if (!inner) throw new Error("Expected nested first-slice Frame");
+        if (!inner) throw new Error("Expected nested design-generation Frame");
         if (cacheGap) {
           const extra = runtime.apply({
             transactionId: "other_tool",
@@ -1601,7 +1601,7 @@ describe("GlobalTaskCoordinator", () => {
       ]);
       const steps = coordinator.getDeliveryLedger(context.runId)?.planExecution
         ?.targets;
-      expect(steps?.[0]?.steps[0].status).toBe("completed");
+      expect(steps?.[0]?.steps[0].status).toBe("in_progress");
       expect(steps?.[1]?.steps[0].status).toBe("pending");
       coordinator.handleAgentEvent({
         type: "tool.completed",
@@ -1995,7 +1995,7 @@ describe("GlobalTaskCoordinator", () => {
     });
   });
 
-  it("records a staged Apply through trusted final revision when semantic telemetry is absent", async () => {
+  it("keeps staged implementation active until a rendered capture closes it", async () => {
     const { store, host, file, opened, pageId } = await setup();
     const coordinator = new GlobalTaskCoordinator(host, store);
     const runId = "run_staged_plan";
@@ -2053,20 +2053,16 @@ describe("GlobalTaskCoordinator", () => {
     ).toMatchObject([
       {
         stepId: "build_hierarchy",
-        status: "completed",
+        status: "in_progress",
         startedRevision: 0,
-        completedRevision: 2,
       },
       {
         stepId: "add_states",
-        status: "completed",
-        startedRevision: 2,
-        completedRevision: 2,
+        status: "pending",
       },
       {
         kind: "review-refine",
-        status: "in_progress",
-        startedRevision: 2,
+        status: "pending",
       },
     ]);
     store.close();

@@ -2,9 +2,9 @@ import { designWorkflowError } from "@/shared/design-workflow-failure-classifica
 import type { TrustedToolResult } from "@opendesign/agent-contracts";
 import { describe, expect, it, vi } from "vitest";
 import {
-  applyFirstSliceAndCapture,
-  captureCommittedFirstSlice,
-} from "./first-slice-capture-orchestrator";
+  applyDesignGenerationAndCapture,
+  captureCommittedDesignGeneration,
+} from "./design-generation-capture-orchestrator";
 
 const applied: TrustedToolResult = {
   content: {
@@ -14,7 +14,7 @@ const applied: TrustedToolResult = {
   designRevision: {
     previousRevision: 4,
     revision: 5,
-    transactionId: "transaction_first_slice",
+    transactionId: "transaction_design_generation",
   },
 };
 
@@ -27,31 +27,31 @@ const captured: TrustedToolResult = {
   },
 };
 
-describe("first-slice capture orchestration", () => {
-  it("does not swallow a terminal review failure after committing the first slice", async () => {
+describe("design-generation capture orchestration", () => {
+  it("does not swallow a terminal review failure after committing the design generation", async () => {
     const failure = designWorkflowError(
       "visual_critic_unavailable",
       "The committed design is preserved; review unavailable",
       { terminal: true },
     );
-    const firstSlice = vi.fn(() => Promise.resolve(applied));
+    const designGeneration = vi.fn(() => Promise.resolve(applied));
     const capture = vi.fn(() => Promise.reject(failure));
     await expect(
-      applyFirstSliceAndCapture({
-        firstSlice,
+      applyDesignGenerationAndCapture({
+        designGeneration,
         capture,
         getDelivery: () => ({ activeTargetId: "target_home" }),
       }),
     ).rejects.toBe(failure);
-    expect(firstSlice).toHaveBeenCalledOnce();
+    expect(designGeneration).toHaveBeenCalledOnce();
     expect(capture).toHaveBeenCalledOnce();
     expect(applied.designRevision?.revision).toBe(5);
   });
 
-  it("does not capture when the first slice committed no revision", async () => {
+  it("does not capture when the design generation committed no revision", async () => {
     const capture = vi.fn();
     await expect(
-      captureCommittedFirstSlice({
+      captureCommittedDesignGeneration({
         applied: { content: { ok: true } },
         capture,
         getDelivery: () => undefined,
@@ -69,7 +69,7 @@ describe("first-slice capture orchestration", () => {
         recoverable: true,
       },
     });
-    const result = await captureCommittedFirstSlice({
+    const result = await captureCommittedDesignGeneration({
       applied,
       capture: vi.fn().mockRejectedValue(captureError),
       getDelivery: () => ({ activeTargetId: "target_home" }),
@@ -87,8 +87,8 @@ describe("first-slice capture orchestration", () => {
   });
 
   it("preserves material metadata and returns the captured attachment", async () => {
-    const result = await applyFirstSliceAndCapture({
-      firstSlice: () => Promise.resolve(applied),
+    const result = await applyDesignGenerationAndCapture({
+      designGeneration: () => Promise.resolve(applied),
       capture: () => Promise.resolve(captured),
       getDelivery: () => undefined,
     });
@@ -103,11 +103,11 @@ describe("first-slice capture orchestration", () => {
     });
   });
 
-  it("projects first-slice and capture progress monotonically", async () => {
+  it("projects design-generation and capture progress monotonically", async () => {
     const progress: number[] = [];
-    await applyFirstSliceAndCapture(
+    await applyDesignGenerationAndCapture(
       {
-        firstSlice: (report) => {
+        designGeneration: (report) => {
           report?.("material late", 0.9);
           report?.("material stale", 0.2);
           return Promise.resolve(applied);

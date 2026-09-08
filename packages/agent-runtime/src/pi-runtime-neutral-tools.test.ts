@@ -5,7 +5,6 @@ import type { AgentRunRequest, AgentRuntimeOptions } from "./index.js";
 import { OpenDesignPiRuntime } from "./pi-runtime.js";
 import {
   request,
-  tool,
   MemorySessionStore,
   RecordingGateway,
   disclosureProbeTools,
@@ -14,12 +13,7 @@ import {
   collect,
 } from "./pi-runtime-test-support.js";
 
-const scopeTool = {
-  ...tool,
-  name: "opendesign_scope_probe",
-  modelDisclosure: { bootstrap: "available", role: "delivery-scope" },
-} as const;
-const definitions = [...disclosureProbeTools(), scopeTool];
+const definitions = disclosureProbeTools();
 const pageRequest: AgentRunRequest = {
   ...request,
   prompt: "Create a polished dashboard",
@@ -45,15 +39,10 @@ const inspectedRequest: AgentRunRequest = {
 };
 const bootstrapNames = [
   "opendesign_inspect_probe",
-  "opendesign_plan_probe",
+  "opendesign_scope_probe",
   "opendesign_material_probe",
-  scopeTool.name,
 ];
-const inspectedNames = [
-  ...bootstrapNames.slice(0, -1),
-  "opendesign_capabilities_probe",
-  scopeTool.name,
-];
+const inspectedNames = [...bootstrapNames, "opendesign_capabilities_probe"];
 
 async function firstTurn(
   runRequest: AgentRunRequest,
@@ -165,10 +154,10 @@ describe("production runtime neutral first-turn tools", () => {
     );
   });
 
-  it("keeps scope and Plan available after scope and material execution", async () => {
+  it("removes bootstrap-only scope after the first material revision", async () => {
     const gateway = new RecordingGateway(
       new MockModelGateway([
-        toolResponse("scope_call", scopeTool.name, {}),
+        toolResponse("scope_call", "opendesign_scope_probe", {}),
         toolResponse("material_call", "opendesign_material_probe", {
           basic: "hero",
         }),
@@ -206,11 +195,19 @@ describe("production runtime neutral first-turn tools", () => {
       stopReason: "complete",
     });
     expect(gateway.requests).toHaveLength(3);
-    for (const turn of gateway.requests) {
-      expect(turn.tools.map((candidate) => candidate.name)).toEqual(
-        inspectedNames,
-      );
-    }
+    expect(
+      gateway.requests[0]?.tools.map((candidate) => candidate.name),
+    ).toEqual(inspectedNames);
+    expect(
+      gateway.requests[1]?.tools.map((candidate) => candidate.name),
+    ).toEqual(inspectedNames);
+    expect(
+      gateway.requests[2]?.tools.map((candidate) => candidate.name),
+    ).toEqual([
+      "opendesign_inspect_probe",
+      "opendesign_material_probe",
+      "opendesign_capabilities_probe",
+    ]);
     expect(
       events.filter((event) => event.type === "tool.completed"),
     ).toHaveLength(2);

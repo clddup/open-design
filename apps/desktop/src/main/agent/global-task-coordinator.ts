@@ -49,7 +49,7 @@ import {
   type DesignApplyToolInput,
   type DesignDeliveryScope,
   type DesignComponentToolInput,
-  type FirstSliceTargetBinding,
+  type DesignGenerationTargetBinding,
   type DesignPlanTarget,
   type DesignPlanToolInput,
   type DesignReferenceStrategy,
@@ -440,9 +440,9 @@ export class GlobalTaskCoordinator {
     return binding.prompt;
   }
 
-  firstSliceTargetBinding(
+  designGenerationTargetBinding(
     context: TrustedToolContext,
-  ): FirstSliceTargetBinding {
+  ): DesignGenerationTargetBinding {
     this.assertDesignToolContext(context);
     const scope = this.#deliveryScopesByRunId.get(context.runId);
     if (scope) {
@@ -450,7 +450,7 @@ export class GlobalTaskCoordinator {
       if (!next) {
         throw designWorkflowError(
           "delivery_scope_mismatch",
-          "The recorded delivery scope has no unplanned target available for a new first slice",
+          "The recorded delivery scope has no unplanned target available for a new design generation",
         );
       }
       return {
@@ -476,18 +476,18 @@ export class GlobalTaskCoordinator {
     if (!pageId || !inspection.pageRootsById.has(pageId)) {
       throw designWorkflowError(
         "allocated_artboard_invalid",
-        "First Slice requires the current inspected Page",
+        "Design Generation requires the current inspected Page",
       );
     }
     if (!inspection.newNodeIdPrefix) {
       throw designWorkflowError(
         "allocated_artboard_invalid",
-        "First Slice requires the current Run node ID allocation",
+        "Design Generation requires the current Run node ID allocation",
       );
     }
     const origin = nextArtboardOrigin(pageId, inspection);
     return {
-      targetId: "first_slice",
+      targetId: "design_generation",
       pageId,
       frame: {
         frameId: `${inspection.newNodeIdPrefix}artboard`,
@@ -1057,6 +1057,11 @@ export class GlobalTaskCoordinator {
           : { critic: publicCriticResult(visualCritic) }),
       };
     }
+    completeActiveImplementationPlanStep(
+      state,
+      target.delivery.targetId,
+      observedRevision,
+    );
     if (!implementationPlanCompleted(state, target.delivery.targetId)) {
       target.captureCount = captureSequence;
       target.lastCaptureRevision = observedRevision;
@@ -1117,7 +1122,7 @@ export class GlobalTaskCoordinator {
         nextAction: nextIncompleteTarget(state)
           ? "continue-next-target"
           : this.#nextUnplannedScopeTarget(context.runId, state)
-            ? "generate-next-slice"
+            ? "generate-next-target"
             : "complete-delivery",
         reviewEligible: false,
         verified: true,
@@ -1246,7 +1251,7 @@ export class GlobalTaskCoordinator {
         nextAction: nextIncompleteTarget(state)
           ? "continue-next-target"
           : this.#nextUnplannedScopeTarget(context.runId, state)
-            ? "generate-next-slice"
+            ? "generate-next-target"
             : "complete-delivery",
         reviewEligible: false,
         verified: true,
@@ -1323,7 +1328,7 @@ export class GlobalTaskCoordinator {
     ) {
       return null;
     }
-    if (!implementationPlanCompleted(state, target.delivery.targetId)) {
+    if (!implementationReviewReady(state, target.delivery.targetId)) {
       return null;
     }
     return {
@@ -1636,7 +1641,7 @@ export class GlobalTaskCoordinator {
     if (assumedAllocatedTargetIds.size !== allocationTargetIds.length) {
       throw designWorkflowError(
         "allocation_state_invalid",
-        "Compact allocation target IDs must be unique",
+        "Design generation allocation target IDs must be unique",
       );
     }
     for (const targetId of assumedAllocatedTargetIds) {
@@ -1676,7 +1681,7 @@ export class GlobalTaskCoordinator {
     if (targetIds.length === 0) {
       throw designWorkflowError(
         "material_write_required",
-        "Compact first-slice input must create real editable content inside the first allocated target",
+        "Design generation must create real editable content inside the current allocated target",
       );
     }
     assertFocusedUiTargetWrites(state, targetIds);
@@ -1855,14 +1860,7 @@ export class GlobalTaskCoordinator {
       });
     }
     this.#recordTargetWrites(runId, state, authorization.targetIds, revision);
-    this.#recordCommittedPlanSteps(
-      runId,
-      state,
-      authorization.targetIds,
-      input.steps,
-      revision,
-      resultContent,
-    );
+    void resultContent;
   }
 
   recordMaterialDesignWriteCompleted(
@@ -1983,38 +1981,6 @@ export class GlobalTaskCoordinator {
         allocatedRevision: target.delivery.allocatedRevision ?? revision,
         draftRevision: revision,
       };
-    }
-    this.#persistDelivery(runId, state);
-  }
-
-  #recordCommittedPlanSteps(
-    runId: string,
-    state: DesignWorkflowState,
-    targetIds: readonly string[],
-    steps: DesignApplyToolInput["steps"],
-    revision?: number,
-    resultContent?: unknown,
-  ): void {
-    const completions = resolveCommittedPlanStepEvidence(
-      state,
-      targetIds,
-      steps,
-      revision,
-      resultContent,
-    );
-    if (!completions) return;
-    for (const completed of completions) {
-      const owner = state.planExecution.targets.find((target) =>
-        target.steps.some((step) => step.status === "in_progress"),
-      );
-      const step = owner?.steps.find(
-        (candidate) => candidate.status === "in_progress",
-      );
-      if (!owner || !step || step.stepId !== completed.stepId) return;
-      if (step.kind === "review-refine") continue;
-      step.status = "completed";
-      step.completedRevision = completed.revision;
-      activateNextPlanStep(state, completed.revision);
     }
     this.#persistDelivery(runId, state);
   }
@@ -3251,79 +3217,6 @@ function deliveryLedger(state: DesignWorkflowState): DesignDeliveryLedger {
   };
 }
 
-function committedPlanStepRevisions(content: unknown): Map<string, number> {
-  if (!isPlainRecord(content) || !Array.isArray(content.committedSteps)) {
-    return new Map();
-  }
-  const revisions = new Map<string, number>();
-  for (const candidate of content.committedSteps) {
-    if (
-      !isPlainRecord(candidate) ||
-      !Array.isArray(candidate.stepIds) ||
-      !Number.isSafeInteger(candidate.revision) ||
-      Number(candidate.revision) < 0
-    ) {
-      continue;
-    }
-    for (const stepId of candidate.stepIds) {
-      if (typeof stepId === "string") {
-        revisions.set(stepId, Number(candidate.revision));
-      }
-    }
-  }
-  return revisions;
-}
-
-type CommittedPlanStep = { stepId: string; revision: number };
-
-function resolveCommittedPlanStepEvidence(
-  state: DesignWorkflowState,
-  targetIds: readonly string[],
-  steps: DesignApplyToolInput["steps"],
-  revision: number | undefined,
-  resultContent: unknown,
-): CommittedPlanStep[] | undefined {
-  if (!validRevision(revision) || !steps || steps.length === 0) return [];
-  const flattened = state.planExecution.targets.flatMap((target) =>
-    target.steps.map((step) => ({ ...step, targetId: target.targetId })),
-  );
-  const activeIndex = flattened.findIndex(
-    (step) => step.status === "in_progress",
-  );
-  const allowedTargets = new Set(targetIds);
-  const reported = committedPlanStepRevisions(resultContent);
-  const completions: CommittedPlanStep[] = [];
-  const initialRevision = flattened[activeIndex]?.startedRevision;
-  let previousRevision = initialRevision;
-  for (const [offset, submitted] of steps.entries()) {
-    const expected = flattened[activeIndex + offset];
-    const completedRevision = reported.get(submitted.stepId) ?? revision;
-    if (
-      !expected ||
-      !allowedTargets.has(expected.targetId) ||
-      expected.stepId !== submitted.stepId ||
-      (offset === 0
-        ? expected.status !== "in_progress"
-        : expected.status !== "pending") ||
-      (expected.kind === "review-refine" && steps.length > 1) ||
-      initialRevision === undefined ||
-      previousRevision === undefined ||
-      completedRevision <= initialRevision ||
-      completedRevision < previousRevision ||
-      completedRevision > revision
-    ) {
-      return undefined;
-    }
-    completions.push({ stepId: submitted.stepId, revision: completedRevision });
-    previousRevision = completedRevision;
-  }
-  return completions;
-}
-
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 function designDeliveryCanComplete(
   delivery: DesignDeliveryLedger | undefined,
 ): boolean {
@@ -3359,6 +3252,39 @@ function implementationPlanCompleted(
       ?.steps.filter((step) => step.kind === "implementation")
       .every((step) => step.status === "completed") ?? false
   );
+}
+
+function implementationReviewReady(
+  state: DesignWorkflowState,
+  targetId: string,
+): boolean {
+  const steps =
+    state.planExecution.targets
+      .find((target) => target.targetId === targetId)
+      ?.steps.filter((step) => step.kind === "implementation") ?? [];
+  const open = steps.filter((step) => step.status !== "completed");
+  return (
+    open.length === 0 ||
+    (open.length === 1 && open[0]?.status === "in_progress")
+  );
+}
+
+function completeActiveImplementationPlanStep(
+  state: DesignWorkflowState,
+  targetId: string,
+  revision: number,
+): void {
+  const step = state.planExecution.targets
+    .find((target) => target.targetId === targetId)
+    ?.steps.find(
+      (candidate) =>
+        candidate.kind === "implementation" &&
+        candidate.status === "in_progress",
+    );
+  if (!step) return;
+  step.status = "completed";
+  step.completedRevision = revision;
+  activateNextPlanStep(state, revision);
 }
 
 function completeReviewPlanStep(

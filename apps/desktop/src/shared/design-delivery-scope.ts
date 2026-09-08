@@ -71,7 +71,7 @@ export const DESIGN_DELIVERY_SCOPE_TOOL_INPUT_SCHEMA = Type.Object(
   {
     ...CLOSED,
     description:
-      "User-visible delivery scope for a broad brief. Each target is one independently verifiable artboard deliverable, not a document Page, section, layer, or decorative variant. Delivery scope never grants or requests Page lifecycle changes.",
+      "User-visible delivery scope for a broad brief. Each target is one separately rendered artboard deliverable, not a flow, requirement, state transition, document Page, section, component, layer, or decorative variant. Flows and states belong in requiredContent unless the user explicitly requests separate rendered artboards. Delivery scope never grants or requests Page lifecycle changes.",
   },
 );
 

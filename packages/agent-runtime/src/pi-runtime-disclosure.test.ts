@@ -13,12 +13,12 @@ import {
 } from "./pi-runtime-test-support.js";
 
 describe("production runtime execution-fact disclosure", () => {
-  it("keeps Plan allocation and post-write continuation compact", async () => {
+  it("keeps delivery scope bootstrap and post-write continuation compact", async () => {
     const store = new MemorySessionStore();
     const definitions = disclosureProbeTools();
     const gateway = new RecordingGateway(
       new MockModelGateway([
-        toolResponse("plan_call", "opendesign_plan_probe", {}),
+        toolResponse("scope_call", "opendesign_scope_probe", {}),
         toolResponse("material_call", "opendesign_material_probe", {
           basic: "hero",
         }),
@@ -57,14 +57,14 @@ describe("production runtime execution-fact disclosure", () => {
       gateway.requests[0]?.tools.map((candidate) => candidate.name),
     ).toEqual([
       "opendesign_inspect_probe",
-      "opendesign_plan_probe",
+      "opendesign_scope_probe",
       "opendesign_material_probe",
     ]);
     expect(
       gateway.requests[1]?.tools.map((candidate) => candidate.name),
     ).toEqual([
       "opendesign_inspect_probe",
-      "opendesign_plan_probe",
+      "opendesign_scope_probe",
       "opendesign_material_probe",
     ]);
     expect(
@@ -78,7 +78,6 @@ describe("production runtime execution-fact disclosure", () => {
       gateway.requests[2]?.tools.map((candidate) => candidate.name),
     ).toEqual([
       "opendesign_inspect_probe",
-      "opendesign_plan_probe",
       "opendesign_material_probe",
       "opendesign_capabilities_probe",
     ]);
@@ -91,7 +90,7 @@ describe("production runtime execution-fact disclosure", () => {
     ).toContain('"basic"');
   });
 
-  it("executes host-inspected Plan and the first material slice sequentially in one Provider turn", async () => {
+  it("executes host-inspected scope and the first material slice sequentially in one Provider turn", async () => {
     const store = new MemorySessionStore();
     const definitions = disclosureProbeTools();
     const gateway = new RecordingGateway(
@@ -99,10 +98,10 @@ describe("production runtime execution-fact disclosure", () => {
         {
           blocks: [
             {
-              id: "same_turn_plan_block",
+              id: "same_turn_scope_block",
               type: "tool_call",
-              toolCallId: "same_turn_plan",
-              name: "opendesign_plan_probe",
+              toolCallId: "same_turn_scope",
+              name: "opendesign_scope_probe",
               input: { targets: [{ artboard: { mode: "create" } }] },
             },
             {
@@ -162,19 +161,18 @@ describe("production runtime execution-fact disclosure", () => {
       gateway.requests[0]?.tools.map((candidate) => candidate.name),
     ).toEqual([
       "opendesign_inspect_probe",
-      "opendesign_plan_probe",
+      "opendesign_scope_probe",
       "opendesign_material_probe",
       "opendesign_capabilities_probe",
     ]);
     expect(executions).toEqual([
-      { toolName: "opendesign_plan_probe", revision: 7 },
+      { toolName: "opendesign_scope_probe", revision: 7 },
       { toolName: "opendesign_material_probe", revision: 8 },
     ]);
     expect(
       gateway.requests[1]?.tools.map((candidate) => candidate.name),
     ).toEqual([
       "opendesign_inspect_probe",
-      "opendesign_plan_probe",
       "opendesign_material_probe",
       "opendesign_capabilities_probe",
     ]);
@@ -186,7 +184,7 @@ describe("production runtime execution-fact disclosure", () => {
     const gateway = new RecordingGateway(
       new MockModelGateway([
         toolResponse("inspect_call", "opendesign_inspect_probe", {}),
-        toolResponse("existing_plan_call", "opendesign_plan_probe", {
+        toolResponse("existing_scope_call", "opendesign_scope_probe", {
           targets: [{ artboard: { mode: "existing" } }],
         }),
         toolResponse("capabilities_call", "opendesign_capabilities_probe", {}),
@@ -238,7 +236,7 @@ describe("production runtime execution-fact disclosure", () => {
       gateway.requests[2]?.tools.map((candidate) => candidate.name),
     ).toEqual([
       "opendesign_inspect_probe",
-      "opendesign_plan_probe",
+      "opendesign_scope_probe",
       "opendesign_material_probe",
       "opendesign_capabilities_probe",
     ]);

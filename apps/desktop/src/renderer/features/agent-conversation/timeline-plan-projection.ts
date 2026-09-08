@@ -1,7 +1,4 @@
-import {
-  DESIGN_FIRST_SLICE_TOOL_NAME,
-  DESIGN_PLAN_TOOL_NAME,
-} from "@/shared/design-agent-tools";
+import { DESIGN_GENERATION_TOOL_NAME } from "@/shared/design-agent-tools";
 import { DesignDeliveryStageContract } from "@opendesign/agent-contracts";
 import {
   DesignDeliveryLedgerContract,
@@ -16,10 +13,7 @@ export function projectDesignPlanTimeline(
   result: unknown,
   t: Translate,
 ): TimelinePlan | undefined {
-  if (
-    toolName !== DESIGN_PLAN_TOOL_NAME &&
-    toolName !== DESIGN_FIRST_SLICE_TOOL_NAME
-  ) {
+  if (toolName !== DESIGN_GENERATION_TOOL_NAME) {
     return undefined;
   }
   const record = asRecord(result);

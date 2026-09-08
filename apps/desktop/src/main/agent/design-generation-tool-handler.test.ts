@@ -1,17 +1,17 @@
 import type { ToolCallRequest } from "@opendesign/agent-contracts";
 import { describe, expect, it, vi } from "vitest";
 import {
-  compileDesignFirstSliceToolInput,
-  DESIGN_FIRST_SLICE_TOOL_NAME,
-  FirstSliceContract,
+  compileDesignGenerationToolInput,
+  DESIGN_GENERATION_TOOL_NAME,
+  DesignGenerationContract,
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
-  type DesignFirstSliceToolInput,
+  type DesignGenerationToolInput,
 } from "@/shared/design-agent-tools.js";
-import { handleDesignFirstSliceTool } from "./design-first-slice-tool-handler.js";
+import { handleDesignGenerationTool } from "./design-generation-tool-handler.js";
 import {
-  firstSliceInput,
-  firstSliceModelInput,
-} from "./design-first-slice-tool-handler.fixture.js";
+  designGenerationInput,
+  designGenerationModelInput,
+} from "./design-generation-tool-handler.fixture.js";
 
 const context = {
   runId: "run_slice",
@@ -22,13 +22,13 @@ const context = {
   mutationTarget: { kind: "page" as const, pageId: "page_1" },
 };
 
-describe("handleDesignFirstSliceTool", () => {
-  it("commits allocation and the first real slice through one semantic history group", async () => {
-    const input = firstSliceInput();
+describe("handleDesignGenerationTool", () => {
+  it("commits allocation and the initial design batch through one semantic history group", async () => {
+    const input = designGenerationInput();
     let authorizedApply:
-      ReturnType<typeof compileDesignFirstSliceToolInput>["apply"] | undefined;
+      ReturnType<typeof compileDesignGenerationToolInput>["apply"] | undefined;
     let registeredPlan:
-      ReturnType<typeof compileDesignFirstSliceToolInput>["plan"] | undefined;
+      ReturnType<typeof compileDesignGenerationToolInput>["plan"] | undefined;
     const delivery = {
       version: 2 as const,
       targets: [
@@ -48,11 +48,11 @@ describe("handleDesignFirstSliceTool", () => {
       authoritativeDesignPrompt: vi
         .fn()
         .mockReturnValue("Create a focused home screen"),
-      firstSliceTargetBinding: vi.fn(() => targetBinding(input)),
+      designGenerationTargetBinding: vi.fn(() => targetBinding(input)),
       prepareDesignPlan: vi.fn(
         (
           _context: unknown,
-          plan: ReturnType<typeof compileDesignFirstSliceToolInput>["plan"],
+          plan: ReturnType<typeof compileDesignGenerationToolInput>["plan"],
         ) => {
           registeredPlan = plan;
           return {
@@ -75,7 +75,7 @@ describe("handleDesignFirstSliceTool", () => {
       assertDesignPlanForAllocatedApply: vi.fn(
         (
           _context: unknown,
-          apply: ReturnType<typeof compileDesignFirstSliceToolInput>["apply"],
+          apply: ReturnType<typeof compileDesignGenerationToolInput>["apply"],
         ) => {
           authorizedApply = apply;
           return { input: apply, plan: registeredPlan, targetIds: ["home"] };
@@ -117,11 +117,11 @@ describe("handleDesignFirstSliceTool", () => {
     };
     const call = {
       toolCallId: "slice_1",
-      toolName: DESIGN_FIRST_SLICE_TOOL_NAME,
-      input: canonicalFirstSlice(input),
+      toolName: DESIGN_GENERATION_TOOL_NAME,
+      input: canonicalDesignGeneration(input),
     };
 
-    const result = await handleDesignFirstSliceTool(
+    const result = await handleDesignGenerationTool(
       coordinator as never,
       rendererHost as never,
       call,
@@ -138,11 +138,11 @@ describe("handleDesignFirstSliceTool", () => {
             stepId: "allocate_artboards",
             commandIds: ["allocate_home"],
           },
-          { stepId: "hero" },
+          { stepId: "home.generate" },
         ],
         commands: [
           { commandId: "allocate_home" },
-          { commandId: "first_slice_1" },
+          { commandId: "design_generation_1" },
         ],
       },
     });
@@ -194,7 +194,7 @@ describe("handleDesignFirstSliceTool", () => {
     expect(result).toMatchObject({
       content: {
         allocation: { targetIds: ["home"], revision: 4 },
-        firstSlice: { targetId: "home", revision: 5 },
+        designGeneration: { targetId: "home", revision: 5 },
         delivery,
       },
       designRevision: { previousRevision: 3, revision: 5 },
@@ -202,13 +202,13 @@ describe("handleDesignFirstSliceTool", () => {
   });
 
   it("does not advance allocation or delivery state when the combined renderer transaction fails", async () => {
-    const input = firstSliceInput();
-    const compiled = compileDesignFirstSliceToolInput(input);
+    const input = designGenerationInput();
+    const compiled = compileDesignGenerationToolInput(input);
     const coordinator = {
       authoritativeDesignPrompt: vi
         .fn()
         .mockReturnValue("Create a focused home screen"),
-      firstSliceTargetBinding: vi.fn(() => targetBinding(input)),
+      designGenerationTargetBinding: vi.fn(() => targetBinding(input)),
       prepareDesignPlan: vi.fn().mockReturnValue({
         status: "accepted",
         planRevision: 1,
@@ -235,13 +235,13 @@ describe("handleDesignFirstSliceTool", () => {
     };
 
     await expect(
-      handleDesignFirstSliceTool(
+      handleDesignGenerationTool(
         coordinator as never,
         rendererHost as never,
         {
           toolCallId: "slice_failed",
-          toolName: DESIGN_FIRST_SLICE_TOOL_NAME,
-          input: canonicalFirstSlice(input),
+          toolName: DESIGN_GENERATION_TOOL_NAME,
+          input: canonicalDesignGeneration(input),
         },
         context,
         context,
@@ -254,11 +254,11 @@ describe("handleDesignFirstSliceTool", () => {
   });
 
   it("fills an allocated scope Frame without inserting the root again", async () => {
-    const input = firstSliceInput();
-    const compiled = compileDesignFirstSliceToolInput(input);
+    const input = designGenerationInput();
+    const compiled = compileDesignGenerationToolInput(input);
     const coordinator = {
       authoritativeDesignPrompt: vi.fn(() => "Create a focused home screen"),
-      firstSliceTargetBinding: vi.fn(() => targetBinding(input)),
+      designGenerationTargetBinding: vi.fn(() => targetBinding(input)),
       prepareDesignPlan: vi.fn(() => ({
         status: "accepted",
         planRevision: 1,
@@ -298,13 +298,13 @@ describe("handleDesignFirstSliceTool", () => {
       }),
     };
 
-    const result = await handleDesignFirstSliceTool(
+    const result = await handleDesignGenerationTool(
       coordinator as never,
       rendererHost as never,
       {
         toolCallId: "slice_scope",
-        toolName: DESIGN_FIRST_SLICE_TOOL_NAME,
-        input: canonicalFirstSlice(input),
+        toolName: DESIGN_GENERATION_TOOL_NAME,
+        input: canonicalDesignGeneration(input),
       },
       context,
       context,
@@ -324,19 +324,22 @@ describe("handleDesignFirstSliceTool", () => {
   });
 });
 
-function canonicalFirstSlice(
-  input: DesignFirstSliceToolInput,
-): DesignFirstSliceToolInput {
-  const parsed = FirstSliceContract.parse(firstSliceModelInput(input), {
-    authoritativePrompt: "Create a focused home screen",
-    newNodeIdPrefix: "odr_run_slice_",
-    target: targetBinding(input),
-  });
+function canonicalDesignGeneration(
+  input: DesignGenerationToolInput,
+): DesignGenerationToolInput {
+  const parsed = DesignGenerationContract.parse(
+    designGenerationModelInput(input),
+    {
+      authoritativePrompt: "Create a focused home screen",
+      newNodeIdPrefix: "odr_run_slice_",
+      target: targetBinding(input),
+    },
+  );
   if (!parsed.ok) throw new Error(JSON.stringify(parsed.issues));
   return parsed.value;
 }
 
-function targetBinding(input: DesignFirstSliceToolInput) {
+function targetBinding(input: DesignGenerationToolInput) {
   const target = input.targets[0];
   return {
     targetId: target.targetId,

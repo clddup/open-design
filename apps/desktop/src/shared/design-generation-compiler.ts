@@ -6,31 +6,27 @@ import type {
   DesignPlanToolInput,
 } from "./design-agent-tools";
 import type {
-  DesignFirstSliceElement,
-  DesignFirstSliceToolInput,
-} from "./design-first-slice-tool";
+  DesignGenerationElement,
+  DesignGenerationToolInput,
+} from "./design-generation-tool";
 
-export function compileValidatedDesignFirstSliceToolInput(
-  input: DesignFirstSliceToolInput,
+export function compileValidatedDesignGenerationToolInput(
+  input: DesignGenerationToolInput,
 ): {
   plan: DesignPlanToolInput;
   apply: DesignApplyToolInput;
   insertedNodeIds: string[];
 } {
-  const targets = input.targets.map((target, index) =>
-    compileTarget(
-      target,
-      index === 0
-        ? input.firstSlice.stages.map((stage) => ({
-            stepId: stage.stageId,
-            label: stage.label,
-          }))
-        : undefined,
-    ),
+  const draftStep = {
+    stepId: `${input.targets[0]?.targetId ?? "target"}.generate`,
+    label: input.designGeneration.label,
+  };
+  const targets = input.targets.map((target) =>
+    compileTarget(target, draftStep),
   );
   const componentStrategy: DesignPlanComponentStrategy = {
     summary:
-      "Component decisions are made from the inspected real hierarchy after the first material revision.",
+      "Component decisions are made from the inspected real hierarchy after the initial committed revision.",
     candidates: [],
   };
   const plan: DesignPlanToolInput = {
@@ -84,51 +80,44 @@ export function compileValidatedDesignFirstSliceToolInput(
   };
   const childCounts = new Map<string, number>();
   const commands: DesignOperation[] = [];
-  const steps: NonNullable<DesignApplyToolInput["steps"]> = [];
   let ordinal = 0;
-  for (const stage of input.firstSlice.stages) {
-    const commandIds: string[] = [];
-    for (const element of stage.elements) {
-      ordinal += 1;
-      const commandId = `first_slice_${ordinal}`;
-      commandIds.push(commandId);
-      const index = childCounts.get(element.parentId) ?? 0;
-      childCounts.set(element.parentId, index + 1);
-      commands.push({
-        commandId,
-        type: "insert_element",
-        pageId: targets[0].pageId,
-        parentId: element.parentId,
-        index,
-        node: compileElement(element),
-      });
-    }
-    steps.push({
-      stepId: stage.stageId,
-      label: stage.label,
-      commandIds,
+  for (const element of input.designGeneration.elements) {
+    ordinal += 1;
+    const commandId = `design_generation_${ordinal}`;
+    const index = childCounts.get(element.parentId) ?? 0;
+    childCounts.set(element.parentId, index + 1);
+    commands.push({
+      commandId,
+      type: "insert_element",
+      pageId: targets[0].pageId,
+      parentId: element.parentId,
+      index,
+      node: compileElement(element),
     });
   }
   return {
     plan,
     apply: {
-      label: input.firstSlice.label,
+      label: input.designGeneration.label,
       summary:
-        "Create the first meaningful editable design slice inside the current artboard",
-      steps,
+        "Generate one coherent editable design batch inside the current artboard",
+      steps: [
+        {
+          ...draftStep,
+          commandIds: commands.map((command) => command.commandId),
+        },
+      ],
       commands,
     },
-    insertedNodeIds: [
-      ...input.firstSlice.stages.flatMap((stage) =>
-        stage.elements.map((element) => element.id),
-      ),
-    ],
+    insertedNodeIds: input.designGeneration.elements.map(
+      (element) => element.id,
+    ),
   };
 }
 
 function compileTarget(
-  target: DesignFirstSliceToolInput["targets"][number],
-  firstSliceSteps?: readonly DesignPlanTarget["implementationSteps"][number][],
+  target: DesignGenerationToolInput["targets"][number],
+  designGenerationStep: DesignPlanTarget["implementationSteps"][number],
 ): DesignPlanTarget {
   const regionNames = target.regions.map((region) => region.name);
   return {
@@ -157,12 +146,7 @@ function compileTarget(
       spacingRhythm: target.spacing,
     },
     editableLayers: unique([...regionNames, "Typography and controls"]),
-    implementationSteps:
-      firstSliceSteps?.map((step) => ({ ...step })) ??
-      regionNames.map((name, index) => ({
-        stepId: `${target.targetId}.region.${index + 1}`,
-        label: `Build ${name}`,
-      })),
+    implementationSteps: [{ ...designGenerationStep }],
     validationChecks: [
       "All visible material remains inside the delivery artboard with intentional spacing.",
       "Typography, hierarchy, reusable structure and contrast remain coherent after rendering.",
@@ -172,7 +156,7 @@ function compileTarget(
 }
 
 function compileQualityProfile(
-  profile: DesignFirstSliceToolInput["targets"][number]["qualityProfile"],
+  profile: DesignGenerationToolInput["targets"][number]["qualityProfile"],
 ): DesignPlanTarget["qualityProfile"] {
   if (profile.kind === "graphic") return { kind: "graphic" };
   const [top, right, bottom, left] = profile.insets;
@@ -186,7 +170,7 @@ function compileQualityProfile(
   };
 }
 
-function compileElement(element: DesignFirstSliceElement): DesignNode {
+function compileElement(element: DesignGenerationElement): DesignNode {
   const base = {
     id: element.id,
     name: element.name,
@@ -217,7 +201,7 @@ function compileElement(element: DesignFirstSliceElement): DesignNode {
     ...(element.layoutSizing === undefined
       ? {}
       : { layoutSizing: structuredClone(element.layoutSizing) }),
-    extensions: { generatedBy: "compact-first-slice" },
+    extensions: { generatedBy: "design-generation" },
   };
   if (element.kind === "group") {
     return { ...base, kind: "group" as const, properties: {} };

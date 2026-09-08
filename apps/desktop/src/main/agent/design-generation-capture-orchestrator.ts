@@ -7,20 +7,22 @@ import { designWorkflowError } from "@/shared/design-workflow-failure-classifica
 
 type ReportProgress = (message: string, progress: number) => void;
 
-export type FirstSliceCaptureDependencies = {
-  firstSlice: (reportProgress?: ReportProgress) => Promise<TrustedToolResult>;
+export type DesignGenerationCaptureDependencies = {
+  designGeneration: (
+    reportProgress?: ReportProgress,
+  ) => Promise<TrustedToolResult>;
   capture: (reportProgress?: ReportProgress) => Promise<TrustedToolResult>;
   getDelivery: () => unknown;
 };
 
-export async function applyFirstSliceAndCapture(
-  dependencies: FirstSliceCaptureDependencies,
+export async function applyDesignGenerationAndCapture(
+  dependencies: DesignGenerationCaptureDependencies,
   reportProgress?: ReportProgress,
 ): Promise<TrustedToolResult> {
-  const applied = await dependencies.firstSlice(
+  const applied = await dependencies.designGeneration(
     scaleProgress(reportProgress, 0, 0.62),
   );
-  return await captureCommittedFirstSlice({
+  return await captureCommittedDesignGeneration({
     applied,
     capture: () => dependencies.capture(scaleProgress(reportProgress, 0.62, 1)),
     getDelivery: dependencies.getDelivery,
@@ -28,7 +30,7 @@ export async function applyFirstSliceAndCapture(
   });
 }
 
-export async function captureCommittedFirstSlice(options: {
+export async function captureCommittedDesignGeneration(options: {
   applied: TrustedToolResult;
   capture: () => Promise<TrustedToolResult>;
   getDelivery: () => unknown;
@@ -38,7 +40,7 @@ export async function captureCommittedFirstSlice(options: {
   if (!revision) {
     throw designWorkflowError(
       "material_write_required",
-      "The first-slice transaction did not commit a new design revision, so capture was not started",
+      "The design-generation transaction did not commit a new design revision, so capture was not started",
     );
   }
   const appliedContent = record(options.applied.content);
@@ -48,7 +50,7 @@ export async function captureCommittedFirstSlice(options: {
     if (captured.observedRevision !== revision.revision) {
       throw designWorkflowError(
         "capture_revision_invalid",
-        "The rendered capture did not observe the committed first-slice revision",
+        "The rendered capture did not observe the committed design-generation revision",
       );
     }
     return {
@@ -100,7 +102,9 @@ function trustedFailure(error: unknown): TrustedToolFailure {
   return {
     code: "design_capture_failed",
     message:
-      error instanceof Error ? error.message : "First-slice capture failed",
+      error instanceof Error
+        ? error.message
+        : "Design generation capture failed",
     retryable: true,
     recoverable: true,
   };

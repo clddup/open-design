@@ -33,13 +33,13 @@ describe("OpenDesign Agent system prompt", () => {
 
   it("lets the model select actual operations without a host-selected workflow mode", () => {
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
-      "For a new composition, define its complete",
+      "For a focused one-target composition, generate it directly",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
-      "Ordinary inspected edits and Page operations do not require a new Plan",
+      "never add a separate model-authored Plan call",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
-      "Plan is a real serial execution ledger owned by Main",
+      "Plan state is execution evidence owned by Main",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).not.toContain(
       "delivery-scope policy:",
@@ -52,9 +52,11 @@ describe("OpenDesign Agent system prompt", () => {
         modelSelection: { reasoningEffort: "high" },
       }),
     ).toBe("high");
-    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain("produce a strong first");
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
-      "exact-revision independent visual review",
+      "commit and render a strong coherent design batch as soon as it is ready",
+    );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "Capture the exact committed revision",
     );
   });
 

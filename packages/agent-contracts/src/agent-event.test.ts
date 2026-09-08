@@ -386,12 +386,12 @@ describe("Agent event and timeline contracts", () => {
         ...failure,
         details: {
           kind: "tool-validation",
-          fingerprint: "validation_first_slice",
+          fingerprint: "validation_design_generation",
           issues: [
             {
-              code: "first_slice.element_limit_exceeded",
-              path: "/firstSlice/stages",
-              message: "49 elements exceed the first-slice budget",
+              code: "design_generation.element_limit_exceeded",
+              path: "/designGeneration/stages",
+              message: "49 elements exceed the design-generation budget",
               expected: 48,
               actual: 49,
               recovery: "Defer secondary elements to continuation.",
@@ -484,7 +484,7 @@ describe("Agent event and timeline contracts", () => {
     ).toBe(false);
   });
 
-  it("accepts only bounded five-retry model reconnect lifecycle events", () => {
+  it("accepts bounded model reconnect lifecycle events with a truthful limit", () => {
     expect(
       isAgentEvent({
         type: "model.retrying",
@@ -502,6 +502,32 @@ describe("Agent event and timeline contracts", () => {
         maxRetries: 5,
       }),
     ).toBe(true);
+    expect(
+      isAgentEvent({
+        type: "model.retrying",
+        runId: "run_1",
+        retry: 1,
+        maxRetries: 1,
+        delayMs: 400,
+      }),
+    ).toBe(true);
+    expect(
+      isAgentEvent({
+        type: "model.recovered",
+        runId: "run_1",
+        retriesUsed: 1,
+        maxRetries: 1,
+      }),
+    ).toBe(true);
+    expect(
+      isAgentEvent({
+        type: "model.retrying",
+        runId: "run_1",
+        retry: 2,
+        maxRetries: 1,
+        delayMs: 400,
+      }),
+    ).toBe(false);
     expect(
       isAgentEvent({
         type: "model.retrying",

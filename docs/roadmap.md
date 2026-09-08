@@ -78,6 +78,8 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 
 ## P0-B：稳定 Leafer 迁移与 Agent 主流程
 
+- [x] 设计生成收敛为 `opendesign_generate_design` 与普通连续编辑：删除公开 Plan、首切片工具和模型 stage 元数据；单目标直接生成，多目标只保留一次真实画板 Scope。每个完整可见批次立即原子提交并渲染 revision，后续批次继续写入同一目标；实现步骤在材料写入期间保持进行中，只有 capture 才以精确 revision 结束实现并进入审核，避免一笔写入后计划提前变绿或阻塞后续编辑。Provider Schema、Main 解析与错误路径来自同一 `DesignGenerationContract`，同指纹错误有界停止当前 Run且不污染后续 Conversation。见 [ADR-0315](adr/0315-progressive-design-generation.md)。真实打包产品的首个 revision 时延、失败率与视觉质量仍需持续验收。
+
 - [x] 图片生成、历史图片放置/替换/参考图和人工图片导入统一从真实文件头读取 PNG/JPEG/GIF/WebP 尺寸，不再用只保证 PNG/JPEG 的 Electron `nativeImage` 误判合法 lossless WebP 为 `0×0`。生成结果在写入附件与 Design File asset 前验证并使用真实格式/尺寸，Provider 返回非图片字节时零 revision、零孤儿附件；真实 `1536×1024` VP8L 回归通过。
 
 - [x] Run 在启动阶段取消时，即使 terminal journal 写入中途失败，也只尝试记录一次用户消息；持久化异常显式记录后仍完成 Global Task 与 scheduler 清理，不再由外层取消分支二次进入收尾、重复消息或残留 active Run。
@@ -115,7 +117,7 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 
 - [x] 独立视觉审核不再因合法结构化结论附带文字而整轮失败。仅结构化评分决定通过/失败；普通说明不覆盖低分、不替代结论。保留重复/错误工具、缺失或非法评分拒绝和单次请求边界，不增加审核往返。
 
-- [x] 修复无 Plan 时丢弃 Main 已绑定输入的问题：普通编辑返回实际页面/层级位置绑定结果及空 targetIds，不伪造 Plan、不携带旧 steps/rebaseGuard。连续新增同容器子节点按当前真实层级顺序落地；first-slice 仍要求真正计划授权，现有创建与编辑回归继续通过。
+- [x] 修复无 Plan 时丢弃 Main 已绑定输入的问题：普通编辑返回实际页面/层级位置绑定结果及空 targetIds，不伪造 Plan、不携带旧 steps/rebaseGuard。连续新增同容器子节点按当前真实层级顺序落地；新目标生成仍要求 Main 编译并授权真实执行账本，现有创建与编辑回归继续通过。
 
 - [x] 没有 Plan 的普通 Edit Design 也按已提交 ChangeSet 推进原只读层级缓存；不再因缺少交付账本而跳过更新。Main→Renderer→Runtime 回归覆盖新增容器供后续操作使用、删除后不再引用和无 Plan ledger；仍只在精确基线时推进缓存，不额外调用 inspect。
 

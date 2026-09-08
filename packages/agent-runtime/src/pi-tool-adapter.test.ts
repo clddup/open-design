@@ -145,6 +145,7 @@ describe("OpenDesign Pi tool adapter", () => {
       name: "opendesign_get_capabilities",
       modelDisclosure: {
         bootstrap: "available",
+        continuation: "available",
         role: "capability-discovery",
       },
     };
@@ -265,20 +266,20 @@ describe("OpenDesign Pi tool adapter", () => {
   });
 
   it("keeps the next compact stage available after a material revision", async () => {
-    const firstSliceTool: AgentToolDefinition = {
+    const designGenerationTool: AgentToolDefinition = {
       ...moveTool,
-      name: "opendesign_generate_first_slice",
+      name: "opendesign_generate_design",
       modelDisclosure: {
         bootstrap: "available",
         role: "material-write",
       },
     };
-    const planTool: AgentToolDefinition = {
+    const scopeTool: AgentToolDefinition = {
       ...moveTool,
-      name: "opendesign_define_design_plan",
+      name: "opendesign_review_delivery_scope",
       modelDisclosure: {
         bootstrap: "available",
-        role: "plan",
+        role: "delivery-scope",
       },
     };
     const continuationEditTool: AgentToolDefinition = {
@@ -294,14 +295,15 @@ describe("OpenDesign Pi tool adapter", () => {
       ...inspectTool,
       modelDisclosure: {
         bootstrap: "available",
+        continuation: "available",
         role: "inspection",
       },
     };
     const adapter = new OpenDesignPiToolAdapter({
       request,
       definitions: [
-        firstSliceTool,
-        planTool,
+        designGenerationTool,
+        scopeTool,
         continuationEditTool,
         neutralInspectTool,
       ],
@@ -315,7 +317,7 @@ describe("OpenDesign Pi tool adapter", () => {
               designRevision: {
                 previousRevision: context.revision,
                 revision: context.revision + 1,
-                transactionId: "transaction_first_slice",
+                transactionId: "transaction_design_generation",
               },
             },
           };
@@ -330,23 +332,21 @@ describe("OpenDesign Pi tool adapter", () => {
     });
 
     expect(adapter.modelTools.map((tool) => tool.name)).toEqual([
-      firstSliceTool.name,
-      planTool.name,
+      designGenerationTool.name,
+      scopeTool.name,
       continuationEditTool.name,
       neutralInspectTool.name,
     ]);
 
-    const firstSlice = adapter.modelTools[0];
-    expect(firstSlice).toBeDefined();
-    await firstSlice?.execute(
-      "first_slice_1",
+    const designGeneration = adapter.modelTools[0];
+    expect(designGeneration).toBeDefined();
+    await designGeneration?.execute(
+      "design_generation_1",
       { dx: 0 },
       new AbortController().signal,
     );
 
     expect(adapter.modelTools.map((tool) => tool.name)).toEqual([
-      firstSliceTool.name,
-      planTool.name,
       neutralInspectTool.name,
     ]);
   });

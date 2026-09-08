@@ -40,15 +40,16 @@ function probe(
 
 const inspection = probe("inspect", {
   bootstrap: "available",
+  continuation: "available",
   role: "inspection",
 });
-const plan = probe("plan", { bootstrap: "available", role: "plan" });
 const scope = probe("scope", {
   bootstrap: "available",
   role: "delivery-scope",
 });
 const material = probe("material", {
   bootstrap: "available",
+  continuation: "available",
   role: "material-write",
 });
 const edit = probe("edit", {
@@ -64,15 +65,7 @@ const discovery = probe("discovery", {
   role: "capability-discovery",
 });
 const advanced = probe("advanced", { bootstrap: "deferred" });
-const definitions = [
-  inspection,
-  plan,
-  scope,
-  material,
-  edit,
-  discovery,
-  advanced,
-];
+const definitions = [inspection, scope, material, edit, discovery, advanced];
 const names = (tools: readonly AgentToolDefinition[]) =>
   tools.map((tool) => tool.name);
 const record = (
@@ -104,7 +97,7 @@ describe("model tool disclosure", () => {
 
   it("keeps all bootstrap tools available without expanding deferred tools", () => {
     expect(names(disclosedToolDefinitions(definitions, "bootstrap"))).toEqual(
-      names([inspection, plan, scope, material]),
+      names([inspection, scope, material]),
     );
   });
 
@@ -112,12 +105,12 @@ describe("model tool disclosure", () => {
     "uses the same inspection availability for %s",
     (phase) => {
       expect(names(disclosedToolDefinitions(definitions, phase))).toEqual(
-        names([inspection, plan, scope, material, edit, discovery]),
+        names([inspection, scope, material, edit, discovery]),
       );
     },
   );
 
-  it("keeps bootstrap Plan and scope alongside explicitly available continuation tools", () => {
+  it("keeps only explicitly available continuation tools", () => {
     const inspectionOnly = probe("inspection_only", {
       bootstrap: "deferred",
       afterInspection: "available",
@@ -133,17 +126,7 @@ describe("model tool disclosure", () => {
           "continuation",
         ),
       ),
-    ).toEqual(
-      names([
-        inspection,
-        plan,
-        scope,
-        material,
-        edit,
-        discovery,
-        continuationOnly,
-      ]),
-    );
+    ).toEqual(names([inspection, material, edit, discovery, continuationOnly]));
   });
 
   it("uses a continuation Provider schema without replacing its validator", () => {
@@ -169,9 +152,16 @@ describe("model tool disclosure", () => {
       "validateInputIssues",
       validateInputIssues,
     );
-    const [fallback] = disclosedToolDefinitions([definition], "continuation");
+    const fallbackDefinition = probe("continuation_fallback", {
+      ...definition.modelDisclosure!,
+      continuation: "available",
+    });
+    const [fallback] = disclosedToolDefinitions(
+      [fallbackDefinition],
+      "continuation",
+    );
     expect(fallback?.inputSchema).toBe(
-      definition.modelDisclosure?.bootstrapInputSchema,
+      fallbackDefinition.modelDisclosure?.bootstrapInputSchema,
     );
   });
 
@@ -186,13 +176,9 @@ describe("model tool disclosure", () => {
   });
 
   it.each([false, true])(
-    "ignores Plan, scope, and observed revisions with initialInspection=%s",
+    "ignores scope and observed revisions with initialInspection=%s",
     (initialInspection) => {
-      const records = [
-        record(plan, { revisionAdvanced: true }),
-        record(scope),
-        record(material, { revision: 4 }),
-      ];
+      const records = [record(scope), record(material, { revision: 4 })];
       expect(
         resolveModelToolDisclosurePhase(definitions, records, {
           initialInspection,

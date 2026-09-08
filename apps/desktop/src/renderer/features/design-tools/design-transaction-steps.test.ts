@@ -14,13 +14,13 @@ describe("executeSemanticDesignTransaction", () => {
     };
     const commands = [
       {
-        commandId: "first_slice_1",
+        commandId: "design_generation_1",
         type: "update_properties" as const,
         nodeId: "footer_region",
         name: "Footer",
       },
       {
-        commandId: "first_slice_2",
+        commandId: "design_generation_2",
         type: "update_properties" as const,
         nodeId: "footer_copy",
         name: "Footer Copy",
@@ -53,12 +53,12 @@ describe("executeSemanticDesignTransaction", () => {
                 {
                   stepId: "footer",
                   label: "Build footer",
-                  commandIds: ["first_slice_1"],
+                  commandIds: ["design_generation_1"],
                 },
                 {
                   stepId: "copy",
                   label: "Add copy",
-                  commandIds: ["first_slice_2"],
+                  commandIds: ["design_generation_2"],
                 },
               ],
               commands,
@@ -79,12 +79,12 @@ describe("executeSemanticDesignTransaction", () => {
             {
               stepId: "footer",
               label: "Build footer",
-              commandIds: ["first_slice_1"],
+              commandIds: ["design_generation_1"],
             },
             {
               stepId: "copy",
               label: "Add copy",
-              commandIds: ["first_slice_2"],
+              commandIds: ["design_generation_2"],
             },
           ],
           commands,
@@ -103,7 +103,7 @@ describe("executeSemanticDesignTransaction", () => {
         createFailure: createFailure as never,
       }),
     ).rejects.toThrow(
-      "Planned region footer_region has the wrong node kind · first_slice_1",
+      "Planned region footer_region has the wrong node kind · design_generation_1",
     );
     expect(createFailure).toHaveBeenCalledWith(firstError, [commands[0]]);
   });

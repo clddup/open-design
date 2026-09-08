@@ -930,6 +930,83 @@ describe("ModelProviderHost", () => {
     },
   );
 
+  it("reconnects once when the Provider produces no first event", async () => {
+    vi.useFakeTimers();
+    const store = new WorkspaceStore(":memory:");
+    let callCount = 0;
+    const attemptSignals: AbortSignal[] = [];
+    const host = new ModelProviderHost(
+      store,
+      cipher,
+      globalThis.fetch,
+      undefined,
+      {
+        firstResponseTimeoutMs: 50,
+        idleTimeoutMs: 100,
+        totalTimeoutMs: 500,
+      },
+      () => ({
+        async *stream(request): AsyncIterable<CanonicalStreamEvent> {
+          callCount += 1;
+          attemptSignals.push(request.signal);
+          yield startedEvent(request.attemptId);
+          if (callCount === 1) {
+            await new Promise(() => undefined);
+            return;
+          }
+          yield {
+            type: "block.started",
+            attemptId: request.attemptId,
+            blockId: "text",
+            kind: "text",
+          };
+          yield {
+            type: "block.completed",
+            attemptId: request.attemptId,
+            block: { id: "text", type: "text", text: "Recovered" },
+          };
+          yield completedEvent(request.attemptId, "resp_after_timeout");
+        },
+      }),
+    );
+    host.saveProfile({ ...profile, apiKey: "provider-secret" });
+
+    try {
+      const pending = host.complete(
+        baseRequest("attempt_first_response_retry"),
+        new AbortController().signal,
+      );
+      await vi.advanceTimersByTimeAsync(451);
+      const events = await pending;
+
+      expect(callCount).toBe(2);
+      expect(attemptSignals[0]?.aborted).toBe(true);
+      expect(events).toContainEqual({
+        type: "attempt.retrying",
+        attemptId: "attempt_first_response_retry",
+        retry: 1,
+        maxRetries: 1,
+        delayMs: 400,
+      });
+      expect(events).toContainEqual({
+        type: "attempt.recovered",
+        attemptId: "attempt_first_response_retry",
+        retriesUsed: 1,
+        maxRetries: 1,
+      });
+      expect(events).not.toContainEqual(
+        expect.objectContaining({ type: "attempt.failed" }),
+      );
+      expect(events.at(-1)).toMatchObject({
+        type: "attempt.completed",
+        providerRequestId: "resp_after_timeout",
+      });
+    } finally {
+      store.close();
+      vi.useRealTimers();
+    }
+  });
+
   it.each([false, true])(
     "diagnoses a stalled production stream with HTTP headers=%s",
     async (hasHeaders) => {
@@ -947,7 +1024,7 @@ describe("ModelProviderHost", () => {
       const host = new ModelProviderHost(store, cipher, fetch, undefined, {
         firstResponseTimeoutMs: 50,
         idleTimeoutMs: 100,
-        totalTimeoutMs: 500,
+        totalTimeoutMs: 700,
       });
       const performance =
         vi.fn<(sample: ModelProviderPerformanceSample) => void>();
@@ -966,7 +1043,7 @@ describe("ModelProviderHost", () => {
           },
           new AbortController().signal,
         );
-        await vi.advanceTimersByTimeAsync(51);
+        await vi.advanceTimersByTimeAsync(501);
         await expect(pending).resolves.toContainEqual({
           type: "attempt.failed",
           attemptId: "attempt_stalled",
@@ -980,20 +1057,27 @@ describe("ModelProviderHost", () => {
           },
         });
         await expect(pending).resolves.toMatchObject([
+          {
+            type: "attempt.retrying",
+            attemptId: "attempt_stalled",
+            retry: 1,
+            maxRetries: 1,
+          },
           { type: "attempt.started", attemptId: "attempt_stalled" },
           { type: "attempt.failed", attemptId: "attempt_stalled" },
         ]);
-        expect(fetch).toHaveBeenCalledOnce();
+        expect(fetch).toHaveBeenCalledTimes(2);
         expect(fetch.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
+        expect(fetch.mock.calls[1]?.[1]?.signal?.aborted).toBe(true);
         expect(performance).toHaveBeenCalledOnce();
         expect(performance.mock.calls[0]?.[0]).toMatchObject({
           status: "failed",
           firstProviderEventMs: null,
           transport: {
-            fetchCalls: 1,
+            fetchCalls: 2,
             firstFetchMs: 0,
-            latestFetchMs: 0,
-            latestHeadersMs: hasHeaders ? 0 : null,
+            latestFetchMs: 450,
+            latestHeadersMs: hasHeaders ? 450 : null,
             latestStatus: hasHeaders ? 200 : null,
           },
         });
@@ -1064,7 +1148,7 @@ describe("ModelProviderHost", () => {
       {
         firstResponseTimeoutMs: 50,
         idleTimeoutMs: 100,
-        totalTimeoutMs: 500,
+        totalTimeoutMs: 700,
       },
       () => ({
         stream(request) {
@@ -1112,7 +1196,7 @@ describe("ModelProviderHost", () => {
         },
         new AbortController().signal,
       );
-      await vi.advanceTimersByTimeAsync(51);
+      await vi.advanceTimersByTimeAsync(501);
       const events = await pending;
       expect(events.at(-1)).toMatchObject({
         type: "attempt.failed",
@@ -1121,7 +1205,7 @@ describe("ModelProviderHost", () => {
         },
       });
       expect(sourceSignal?.aborted).toBe(true);
-      expect(closeIterator).toHaveBeenCalledOnce();
+      expect(closeIterator).toHaveBeenCalledTimes(2);
     } finally {
       store.close();
       vi.useRealTimers();

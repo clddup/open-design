@@ -9,7 +9,7 @@ import { JsonlSessionStore } from "@opendesign/session-store";
 import {
   DESIGN_AGENT_TOOL_SPECS,
   DESIGN_EDIT_TOOL_NAME,
-  DESIGN_FIRST_SLICE_TOOL_NAME,
+  DESIGN_GENERATION_TOOL_NAME,
   DESIGN_DELIVERY_SCOPE_TOOL_NAME,
 } from "@/shared/design-agent-tools";
 import { OPENDESIGN_AGENT_SYSTEM_PROMPT } from "./system-prompt";
@@ -70,7 +70,7 @@ describe("Conversation design context at the Provider boundary", () => {
         expect(sent.tools.map((tool) => tool.name)).toEqual(
           expect.arrayContaining([
             DESIGN_EDIT_TOOL_NAME,
-            DESIGN_FIRST_SLICE_TOOL_NAME,
+            DESIGN_GENERATION_TOOL_NAME,
             DESIGN_DELIVERY_SCOPE_TOOL_NAME,
           ]),
         );

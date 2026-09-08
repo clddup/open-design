@@ -76,7 +76,7 @@ describe("Agent continuation timeline projection", () => {
         updatedAt: now,
         type: "tool",
         toolCallId: "plan_visible",
-        toolName: "opendesign_generate_first_slice",
+        toolName: "opendesign_generate_design",
         input: {},
         risk: "design_write",
         status: "completed",
@@ -121,7 +121,7 @@ describe("Agent continuation timeline projection", () => {
           },
         },
         revision: 2,
-        transactionId: "transaction_first_slice",
+        transactionId: "transaction_design_generation",
       },
       {
         itemId: "tool:capture_visible",
@@ -221,7 +221,7 @@ describe("Agent continuation timeline projection", () => {
         updatedAt: now,
         type: "tool",
         toolCallId: "plan_step_state",
-        toolName: "opendesign_generate_first_slice",
+        toolName: "opendesign_generate_design",
         input: {},
         risk: "design_write",
         status: "completed",
@@ -410,7 +410,7 @@ describe("Agent continuation timeline projection", () => {
         updatedAt: now,
         type: "tool",
         toolCallId: "old_plan",
-        toolName: "opendesign_define_design_plan",
+        toolName: "opendesign_generate_design",
         input: {},
         risk: "design_write",
         status: "completed",
@@ -477,7 +477,7 @@ describe("Agent continuation timeline projection", () => {
         updatedAt: now,
         type: "tool",
         toolCallId: "new_plan",
-        toolName: "opendesign_define_design_plan",
+        toolName: "opendesign_generate_design",
         input: {},
         risk: "design_write",
         status: "completed",
@@ -639,7 +639,7 @@ describe("Agent continuation timeline projection", () => {
         updatedAt: "2026-08-25T08:30:47.209Z",
         type: "tool",
         toolCallId: "terminal_plan",
-        toolName: "opendesign_define_design_plan",
+        toolName: "opendesign_generate_design",
         input: {},
         risk: "design_write",
         status: "failed",
@@ -960,7 +960,7 @@ describe("Agent continuation timeline projection", () => {
         type: "tool.requested",
         runId: "run_recovery",
         toolCallId: "amend_plan",
-        toolName: "opendesign_define_design_plan",
+        toolName: "opendesign_generate_design",
         input: {},
         risk: "design_write",
       },
@@ -989,12 +989,12 @@ describe("Agent continuation timeline projection", () => {
   });
 
   it("collapses repeated recoverable design failures into one active correction", () => {
-    const runId = "run_first_slice_recovery";
+    const runId = "run_design_generation_recovery";
     const events: AgentEvent[] = [
       {
         type: "tool.failed",
         runId,
-        toolCallId: "first_slice_budget",
+        toolCallId: "design_generation_budget",
         code: "invalid_tool_input",
         message: "35 elements exceeded the compact first-screen budget",
         retryable: false,
@@ -1003,7 +1003,7 @@ describe("Agent continuation timeline projection", () => {
       {
         type: "tool.failed",
         runId,
-        toolCallId: "first_slice_region",
+        toolCallId: "design_generation_region",
         code: "design.invalid",
         message: "Planned region footer_region must be a Frame",
         retryable: false,

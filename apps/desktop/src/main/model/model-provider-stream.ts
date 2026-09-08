@@ -34,6 +34,7 @@ type StreamModelProviderOptions = {
 };
 
 const transientRetryDelaysMs = [400, 900, 1_800, 3_200, 5_000] as const;
+const firstResponseTimeoutRetryLimit = 1;
 
 export async function* streamModelProvider(
   options: StreamModelProviderOptions,
@@ -52,6 +53,7 @@ export async function* streamModelProvider(
   let firstToolCallStartAt: number | undefined;
   let providerRequestId: string | undefined;
   let retries = 0;
+  let retryBudget: number = transientRetryDelaysMs.length;
   let latestAttemptStarted:
     Extract<CanonicalStreamEvent, { type: "attempt.started" }> | undefined;
   let latestAttemptPublished = false;
@@ -123,6 +125,7 @@ export async function* streamModelProvider(
         Extract<CanonicalStreamEvent, { type: "block.started" }>["kind"]
       >();
       let retry = false;
+      let retryLimit = retryBudget;
       let waitingForFirstResponse = true;
       try {
         while (true) {
@@ -191,7 +194,9 @@ export async function* streamModelProvider(
             continue;
           }
           if (event.type === "attempt.failed") {
-            retry = !attemptPublished && shouldRetry(event.error, retryIndex);
+            retry =
+              !attemptPublished &&
+              shouldRetry(event.error, retryIndex, retryBudget);
             if (retry) break;
             completed = true;
             reportPerformance("failed");
@@ -210,7 +215,7 @@ export async function* streamModelProvider(
                 type: "attempt.recovered",
                 attemptId: request.attemptId,
                 retriesUsed: retryIndex,
-                maxRetries: transientRetryDelaysMs.length,
+                maxRetries: retryBudget,
               };
             }
             if (!attemptPublished && attemptStarted) {
@@ -258,6 +263,19 @@ export async function* streamModelProvider(
           attemptPublished = true;
           yield event;
         }
+      } catch (error) {
+        if (
+          error instanceof ModelStreamTimeoutError &&
+          error.phase === "first-response" &&
+          !attemptPublished &&
+          retryIndex < firstResponseTimeoutRetryLimit
+        ) {
+          retry = true;
+          retryLimit = firstResponseTimeoutRetryLimit;
+          retryBudget = retryLimit;
+        } else {
+          throw error;
+        }
       } finally {
         controller.signal.removeEventListener("abort", abortAttempt);
         if (!completed && !attemptController.signal.aborted) {
@@ -274,7 +292,7 @@ export async function* streamModelProvider(
         type: "attempt.retrying",
         attemptId: request.attemptId,
         retry: retryIndex + 1,
-        maxRetries: transientRetryDelaysMs.length,
+        maxRetries: retryLimit,
         delayMs: retryDelay,
       };
       await waitForProviderRetry(retryDelay, signal);
@@ -415,13 +433,14 @@ function nextModelEvent(
 function shouldRetry(
   error: Extract<CanonicalStreamEvent, { type: "attempt.failed" }>["error"],
   retryIndex: number,
+  retryLimit: number = transientRetryDelaysMs.length,
 ): boolean {
   return (
     error.retryable &&
     error.timeout === undefined &&
     (error.code === "provider_error" ||
       error.code === "provider_request_failed") &&
-    retryIndex < transientRetryDelaysMs.length
+    retryIndex < retryLimit
   );
 }
 

@@ -70,6 +70,8 @@ OpenDesign 是跨平台桌面产品。macOS 与 Windows 是同级一级支持平
 
 ### Agent Plan 执行事实
 
+- 新建设计没有公开的“首屏/首切片”流程阶段。模型应通过统一生成工具尽快提交一个完整、可见、可撤销的设计批次，Main 立即形成并渲染真实 revision；较大目标随后通过普通编辑工具按有意义的视觉边界继续提交，不得等待整套设计完成后一次性写入，也不得重新增加模型编写的 Plan/stage 元数据。
+- 材料 revision 只证明画布已变化，不自动代表实现步骤结束。连续材料写入期间当前实现步骤保持 `in_progress`；capture 是模型将当前实现交给精确 revision 审核的明确边界，Main 此时才完成实现步骤并进入 review/refine。布局错误或必需素材缺失时保持实现未完成并返回准确恢复动作。
 - 用户可见 Plan 必须代表真实执行状态，不能作为装饰性说明或根据聊天文案猜造。Main 是 Plan execution ledger 的唯一事实源；Renderer 只能按稳定 `stepId` 投影 ledger，不得解析 label、message、revision 文案或工具名称推断步骤状态。
 - Plan 状态固定为 `pending → in_progress → completed`。全部 target 按声明顺序形成一条串行执行链：已完成步骤必须构成连续前缀，未完成步骤必须构成后缀，未完成时恰好一个步骤为 `in_progress`；禁止跳步、倒退、跨步骤并行和直接 `pending → completed`。
 - 设计事务只有在命中当前步骤并产生真实 material revision 后才能完成实现步骤；review/refine 步骤只能由可信 capture、review、refinement 与 verified revision 证据完成。失败事务、消息文本和仅有工具请求不能推进 Plan。

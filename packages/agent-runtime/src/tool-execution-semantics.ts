@@ -104,8 +104,8 @@ function projectToolResultValue(value: unknown, depth = 0): unknown {
     return value.map((item) => projectToolResultValue(item, depth + 1));
   }
   if (typeof value === "object") {
-    if (isFirstSliceCaptureResult(value)) {
-      return projectRecordValue(compactFirstSliceResult(value), depth);
+    if (isDesignGenerationCaptureResult(value)) {
+      return projectRecordValue(compactDesignGenerationResult(value), depth);
     }
     if (isDesignChangeSetResult(value)) {
       return projectToolResultValue(compactDesignChangeSet(value), depth + 1);
@@ -127,14 +127,14 @@ function projectRecordValue(
   );
 }
 
-function isFirstSliceCaptureResult(
+function isDesignGenerationCaptureResult(
   value: object,
 ): value is Record<string, unknown> {
   const record = value as Record<string, unknown>;
-  return isRecord(record.firstSlice) && isRecord(record.delivery);
+  return isRecord(record.designGeneration) && isRecord(record.delivery);
 }
 
-function compactFirstSliceResult(
+function compactDesignGenerationResult(
   value: Record<string, unknown>,
 ): Record<string, unknown> {
   const plan = isRecord(value.plan) ? value.plan : undefined;
@@ -186,7 +186,7 @@ function compactFirstSliceResult(
         }
       : undefined,
     allocation: value.allocation,
-    firstSlice: value.firstSlice,
+    designGeneration: value.designGeneration,
     delivery: value.delivery,
     captureTarget: value.captureTarget,
     layoutQuality,

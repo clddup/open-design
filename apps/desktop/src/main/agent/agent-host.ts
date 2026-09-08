@@ -627,10 +627,23 @@ function designToolRequestFingerprint(
   issues: readonly RuntimeContractIssue[],
 ): string {
   const issue = issues[0];
-  return `design_tool_bridge:${issue?.code ?? "invalid"}:${issue?.path ?? "/"}`.slice(
-    0,
-    256,
-  );
+  return [
+    "design_tool_bridge",
+    issue?.code ?? "invalid",
+    issue?.path ?? "/",
+    fingerprintValue(issue?.actual),
+  ]
+    .join(":")
+    .slice(0, 256);
+}
+
+function fingerprintValue(value: unknown): string {
+  if (value === undefined) return "unknown";
+  try {
+    return (JSON.stringify(value) ?? typeof value).slice(0, 96);
+  } catch {
+    return typeof value;
+  }
 }
 
 function trustedToolFailureFromError(error: unknown): TrustedToolFailure {

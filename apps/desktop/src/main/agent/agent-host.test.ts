@@ -370,7 +370,7 @@ describe("AgentHost model bridge", () => {
     const coordinator = {
       assertDesignToolContext: () => undefined,
       authoritativeDesignPrompt: () => "Design a login page",
-      firstSliceTargetBinding: () => {
+      designGenerationTargetBinding: () => {
         throw failure;
       },
     };
@@ -397,7 +397,7 @@ describe("AgentHost model bridge", () => {
       requestId: "binding_failure",
       call: {
         toolCallId: "slice_failed",
-        toolName: "opendesign_generate_first_slice",
+        toolName: "opendesign_generate_design",
         input: {},
       },
       context,

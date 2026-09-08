@@ -76,7 +76,7 @@ describe("tool result model projection", () => {
     ).toMatchObject({ unfinishedDelivery });
   });
 
-  it("projects a first-slice checkpoint as compact continuation context", () => {
+  it("projects a design-generation checkpoint as compact continuation context", () => {
     const projected = projectToolResultForModel({
       ok: true,
       revision: 12,
@@ -105,7 +105,7 @@ describe("tool result model projection", () => {
         logoExploration: { targetId: "concepts", directions: [] },
       },
       delivery: { version: 3, activeTargetId: "concepts" },
-      firstSlice: { targetId: "concepts", revision: 12 },
+      designGeneration: { targetId: "concepts", revision: 12 },
       changes: { changes: Array.from({ length: 100 }, () => ({})) },
     });
 

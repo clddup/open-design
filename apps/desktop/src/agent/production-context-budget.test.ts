@@ -31,12 +31,11 @@ import {
   DESIGN_CAPTURE_TOOL_NAME,
   DESIGN_SYSTEM_TOOL_NAME,
   DESIGN_DELIVERY_SCOPE_TOOL_NAME,
-  DESIGN_FIRST_SLICE_TOOL_NAME,
+  DESIGN_GENERATION_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
   READ_IMAGE_TOOL_NAME,
   DESIGN_PAGE_TOOL_NAME,
   PAGE_STRUCTURE_ACCESS_TOOL_NAME,
-  DESIGN_PLAN_TOOL_NAME,
   EXPORT_RASTER_TOOL_NAME,
   EXPORT_SVG_TOOL_NAME,
   GENERATE_IMAGE_TOOL_NAME,
@@ -45,10 +44,9 @@ import { OPENDESIGN_AGENT_SYSTEM_PROMPT } from "./system-prompt";
 
 const initialInspectedTools = [
   DESIGN_DELIVERY_SCOPE_TOOL_NAME,
-  DESIGN_FIRST_SLICE_TOOL_NAME,
+  DESIGN_GENERATION_TOOL_NAME,
   DESIGN_CAPABILITIES_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
-  DESIGN_PLAN_TOOL_NAME,
   READ_IMAGE_TOOL_NAME,
   GENERATE_IMAGE_TOOL_NAME,
   EXPORT_SVG_TOOL_NAME,
@@ -226,10 +224,10 @@ describe("production Agent context budget", () => {
       expect(
         JSON.stringify(
           gateway.requests[0]?.tools.find(
-            (tool) => tool.name === DESIGN_FIRST_SLICE_TOOL_NAME,
+            (tool) => tool.name === DESIGN_GENERATION_TOOL_NAME,
           )?.inputSchema,
         ),
-      ).toContain('"firstSlice"');
+      ).toContain('"designGeneration"');
       // Exercise the configured model budget through Runtime, not a second
       // hard-coded character threshold unrelated to that model's context window.
       expect(events.at(-1)).toMatchObject({
@@ -651,12 +649,7 @@ describe("production Agent context budget", () => {
               request.tools.some(
                 (tool) => tool.name === DESIGN_CAPTURE_TOOL_NAME,
               ) &&
-              request.tools.some(
-                (tool) => tool.name === DESIGN_PAGE_TOOL_NAME,
-              ) &&
-              request.tools.some(
-                (tool) => tool.name === DESIGN_DELIVERY_SCOPE_TOOL_NAME,
-              ),
+              request.tools.some((tool) => tool.name === DESIGN_PAGE_TOOL_NAME),
           ),
       ).toBe(true);
       expect(

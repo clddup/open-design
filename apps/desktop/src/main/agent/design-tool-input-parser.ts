@@ -13,11 +13,10 @@ import {
   DESIGN_CAPTURE_TOOL_NAME,
   DESIGN_DELIVERY_SCOPE_TOOL_NAME,
   DESIGN_EDIT_TOOL_NAME,
-  DESIGN_FIRST_SLICE_TOOL_NAME,
+  DESIGN_GENERATION_TOOL_NAME,
   DESIGN_FONT_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
   DESIGN_PAGE_TOOL_NAME,
-  DESIGN_PLAN_TOOL_NAME,
   DESIGN_SYSTEM_TOOL_NAME,
   DESIGN_TEXT_RANGE_TOOL_NAME,
   DESIGN_VECTOR_TOOL_NAME,
@@ -33,7 +32,6 @@ import {
   DeliveryScopeContract,
   DesignFontContract,
   DesignPageContract,
-  DesignPlanContract,
   DesignSystemContract,
   DesignTextRangeContract,
   DesignVectorContract,
@@ -41,7 +39,7 @@ import {
   EditImageContract,
   ExportRasterContract,
   ExportSvgContract,
-  FirstSliceContract,
+  DesignGenerationContract,
   GenerateImageContract,
   ImportSvgContract,
   PageStructureAccessContract,
@@ -89,16 +87,11 @@ export function parseDesignToolInput(
   context: TrustedToolContext,
 ): ValidationResult<unknown> {
   assertActiveDesignContext(coordinator, context);
-  if (call.toolName === DESIGN_FIRST_SLICE_TOOL_NAME) {
-    return FirstSliceContract.parse(call.input, {
+  if (call.toolName === DESIGN_GENERATION_TOOL_NAME) {
+    return DesignGenerationContract.parse(call.input, {
       authoritativePrompt: coordinator.authoritativeDesignPrompt(context),
       newNodeIdPrefix: agentDesignNodeIdPrefix(context.runId),
-      target: coordinator.firstSliceTargetBinding(context),
-    });
-  }
-  if (call.toolName === DESIGN_PLAN_TOOL_NAME) {
-    return DesignPlanContract.parse(call.input, {
-      authoritativePrompt: coordinator.authoritativeDesignPrompt(context),
+      target: coordinator.designGenerationTargetBinding(context),
     });
   }
   const contract = CONTRACTS.get(call.toolName);
