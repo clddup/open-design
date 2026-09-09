@@ -145,6 +145,8 @@ describe("Titlebar behavior primitives", () => {
       getLocale: vi.fn().mockResolvedValue("en"),
       onLocaleChange: vi.fn().mockReturnValue(() => undefined),
       setLocale: vi.fn().mockResolvedValue("en"),
+      getWindowMaximized: vi.fn().mockResolvedValue(false),
+      onWindowMaximized: vi.fn().mockReturnValue(() => undefined),
       windowAction,
     } as unknown as DesktopApi;
 
