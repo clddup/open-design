@@ -63,6 +63,7 @@ import type { RendererDesignCaptureTarget } from "@/shared/design-tool-bridge.js
 import type { DesignDeliveryStage } from "@opendesign/agent-contracts";
 import {
   registerDesignWorkflowPlan,
+  designPlanForTarget,
   reconcileEstablishedArtboardDescendants,
   inspectedSubtreeIds,
   plannedNodeIdsForTarget,
@@ -94,10 +95,9 @@ import {
   type DeliveryScopeReservation,
   type DeliveryScopeArtboardReservation,
 } from "./delivery-scope-artboard-reservation.js";
-import {
-  assertApplyPlanSteps,
-  bindApplyToActivePlanSteps,
-} from "./design-plan-apply-execution.js";
+import type { ExplicitCaptureTarget } from "@/shared/design-capture-tool.js";
+import { resolveExplicitCanvasReview } from "./explicit-canvas-review.js";
+import { bindApplyToActivePlanSteps } from "./design-plan-apply-execution.js";
 import { bindDesignOperationStructure } from "./design-apply-structure-binding.js";
 
 type RunStartRequest = Extract<AgentRequest, { type: "run.start" }>;
@@ -951,6 +951,8 @@ export class GlobalTaskCoordinator {
     layoutQuality?: DesignLayoutQualityReport,
     visualCritic?: DesignVisualCriticResult,
     visualCriticUnavailable?: { message: string },
+    frameId?: string,
+    captureQualityProfile?: DesignLayoutQualityReport["qualityProfile"],
   ) {
     this.assertDesignToolContext(context);
     if (!Number.isSafeInteger(observedRevision) || observedRevision < 0) {
@@ -960,7 +962,7 @@ export class GlobalTaskCoordinator {
       );
     }
     const state = this.#designPlansByRunId.get(context.runId);
-    const target = state ? nextCaptureTarget(state) : undefined;
+    const target = state ? captureTargetForFrame(state, frameId) : undefined;
     if (
       !state ||
       !target ||
@@ -971,7 +973,13 @@ export class GlobalTaskCoordinator {
         capturedRevision: observedRevision,
         nextAction: state
           ? "write-material-content"
-          : "define-plan-write-capture",
+          : "capture-existing-frame-for-review",
+        ...(!state
+          ? {
+              message:
+                "This is a Page preview. To independently review an existing design, pass target.frameId from inspection and its deliverable to capture; no new Plan or design write is required.",
+            }
+          : {}),
         reviewEligible: false,
       };
     }
@@ -992,10 +1000,26 @@ export class GlobalTaskCoordinator {
     }
     assertLayoutQualityMatchesCapture(
       context,
-      target,
+      captureQualityProfile
+        ? {
+            ...target,
+            planned: {
+              ...target.planned,
+              qualityProfile: captureQualityProfile,
+            },
+          }
+        : target,
       observedRevision,
       layoutQuality,
     );
+    if (
+      target.delivery.status === "verified" &&
+      (target.delivery.verifiedRevision !== observedRevision ||
+        visualCritic?.passed === false ||
+        layoutQuality.errorCount > 0)
+    ) {
+      invalidateVerifiedTargetReview(state, target, observedRevision);
+    }
     const captureSequence = target.captureCount + 1;
     if (layoutQuality.errorCount > 0) {
       target.captureCount = captureSequence;
@@ -1037,7 +1061,6 @@ export class GlobalTaskCoordinator {
       );
     }
     const pendingRasterRoles = pendingPlaceableRasterRoles(
-      state,
       target,
       this.#inspectionsByRunId.get(context.runId),
       observedRevision,
@@ -1089,7 +1112,9 @@ export class GlobalTaskCoordinator {
     if (
       visualCritic?.passed === true &&
       (target.delivery.status === "drafted" ||
-        target.delivery.status === "captured")
+        target.delivery.status === "captured" ||
+        target.delivery.status === "reviewed" ||
+        target.delivery.status === "verified")
     ) {
       const inspection = this.#inspectionsByRunId.get(context.runId);
       if (!inspection || inspection.revision !== observedRevision) {
@@ -1101,7 +1126,7 @@ export class GlobalTaskCoordinator {
       const componentStrategy = assertDeliveryTargetStructure(
         inspection,
         target,
-        state.plan,
+        designPlanForTarget(target),
       );
       target.captureCount = captureSequence;
       target.lastCaptureRevision = observedRevision;
@@ -1187,7 +1212,8 @@ export class GlobalTaskCoordinator {
       (target.delivery.status === "drafted" ||
         target.delivery.status === "captured" ||
         target.delivery.status === "reviewed" ||
-        target.delivery.status === "refined")
+        target.delivery.status === "refined" ||
+        target.delivery.status === "verified")
     ) {
       target.captureCount = captureSequence;
       target.lastCaptureRevision = observedRevision;
@@ -1204,11 +1230,11 @@ export class GlobalTaskCoordinator {
       this.#persistDelivery(context.runId, state);
       throw designWorkflowError(
         "visual_critic_unavailable",
-        `Independent visual review is unavailable: ${visualCriticUnavailable.message}. The design and capture at revision ${observedRevision} are preserved, but visual delivery has not been verified.`,
+        `Independent visual review is unavailable: ${visualCriticUnavailable.message}. The design and capture at revision ${observedRevision} are preserved. This review attempt did not establish a new visual verification.`,
         {
           path: "/visualReview",
           recovery:
-            "Preserve the current design. Report the unavailable review rather than redrawing or repeatedly capturing; resume verification when the review service or required input is available.",
+            "The design is preserved. Decide whether to continue editing, retry review, or report that review is unavailable. An unavailable review does not establish a visual defect.",
         },
       );
     }
@@ -1231,7 +1257,7 @@ export class GlobalTaskCoordinator {
       componentStrategy = assertDeliveryTargetStructure(
         inspection,
         target,
-        state.plan,
+        designPlanForTarget(target),
       );
     }
     target.captureCount = captureSequence;
@@ -1279,6 +1305,96 @@ export class GlobalTaskCoordinator {
     };
   }
 
+  resolveExplicitCanvasReview(
+    context: TrustedToolContext,
+    target: ExplicitCaptureTarget,
+  ) {
+    this.assertDesignToolContext(context);
+    const binding = this.#toolBindingsByRunId.get(context.runId);
+    if (!binding) throw new Error("Review requires an active Run");
+    const state = this.#designPlansByRunId.get(context.runId);
+    const plannedTarget = state
+      ? captureTargetForFrame(state, target.frameId)
+      : undefined;
+    const planned = plannedTarget?.planned;
+    const inheritedReferences = activeVisualReferenceIds(
+      plannedTarget?.reviewPlan.referenceStrategy,
+    );
+    return resolveExplicitCanvasReview({
+      context,
+      binding,
+      inspection: this.#requireDocumentInspection(context),
+      target: {
+        ...target,
+        ...((target.qualityProfile ?? planned?.qualityProfile)
+          ? { qualityProfile: target.qualityProfile ?? planned?.qualityProfile }
+          : {}),
+        referenceAttachmentIds:
+          target.referenceAttachmentIds ?? inheritedReferences,
+      },
+    });
+  }
+
+  invalidateCanvasReview(
+    context: TrustedToolContext,
+    frameId: string,
+    revision: number,
+  ): void {
+    this.assertDesignToolContext(context);
+    const state = this.#designPlansByRunId.get(context.runId);
+    const target = state && captureTargetForFrame(state, frameId);
+    if (!state || !target || target.delivery.status !== "verified") return;
+    invalidateVerifiedTargetReview(state, target, revision);
+    this.#persistDelivery(context.runId, state);
+  }
+
+  recordExplicitCanvasReview(
+    context: TrustedToolContext,
+    frameId: string,
+    observedRevision: number,
+    layoutQuality: DesignLayoutQualityReport | undefined,
+    critic: DesignVisualCriticResult | undefined,
+    unavailable: { message: string } | undefined,
+  ) {
+    this.assertDesignToolContext(context);
+    const state = this.#designPlansByRunId.get(context.runId);
+    if (state && captureTargetForFrame(state, frameId)) {
+      return this.recordCanvasCapture(
+        context,
+        observedRevision,
+        layoutQuality,
+        critic,
+        unavailable,
+        frameId,
+        layoutQuality?.qualityProfile,
+      );
+    }
+    if (unavailable) {
+      throw designWorkflowError(
+        "visual_critic_unavailable",
+        unavailable.message,
+        {
+          path: "/visualReview",
+          recovery:
+            "The existing design is preserved. Decide whether to retry review, continue editing, or report the unavailable review.",
+        },
+      );
+    }
+    return {
+      capturedRevision: observedRevision,
+      frameId,
+      reviewEligible: false,
+      verified: critic?.passed === true && layoutQuality?.errorCount === 0,
+      nextAction:
+        layoutQuality && layoutQuality.errorCount > 0
+          ? "repair-layout-overflow"
+          : critic?.passed
+            ? "complete-delivery"
+            : "refine-independent-critic-findings",
+      ...(critic ? { critic: publicCriticResult(critic) } : {}),
+    };
+  }
+
   resolveCanvasCaptureTarget(
     context: TrustedToolContext,
   ): RendererDesignCaptureTarget {
@@ -1313,18 +1429,18 @@ export class GlobalTaskCoordinator {
     context: TrustedToolContext,
     observedRevision: number,
     attachment: DesignVisualCriticContext["attachment"],
+    frameId?: string,
   ): DesignVisualCriticContext | null {
     this.assertDesignToolContext(context);
     const state = this.#designPlansByRunId.get(context.runId);
-    const target = state ? nextCaptureTarget(state) : undefined;
+    const target = state ? captureTargetForFrame(state, frameId) : undefined;
     const binding = this.#toolBindingsByRunId.get(context.runId);
     if (
       !state ||
       !target ||
       !binding ||
       target.delivery.status === "pending" ||
-      target.delivery.status === "allocated" ||
-      target.delivery.status === "verified"
+      target.delivery.status === "allocated"
     ) {
       return null;
     }
@@ -1338,13 +1454,13 @@ export class GlobalTaskCoordinator {
         ? (binding.userRequirements.at(-1)?.content ?? "")
         : binding.prompt,
       userRequirements: structuredClone(binding.userRequirements),
-      plan: structuredClone(state.plan),
+      plan: designPlanForTarget(target),
       target: structuredClone(target.planned),
       observedRevision,
       phase: target.delivery.status === "refined" ? "final" : "draft",
       attachment: structuredClone(attachment),
       referenceAttachments: activeVisualReferenceIds(
-        state.plan.referenceStrategy,
+        target.reviewPlan.referenceStrategy,
       ).map((attachmentId) => {
         const reference = binding.imageAttachments.find(
           (candidate) => candidate.attachmentId === attachmentId,
@@ -1554,12 +1670,6 @@ export class GlobalTaskCoordinator {
       this.#inspectionsByRunId.get(context.runId),
       reservedNodeIdsForTargets(state, targetIds),
     );
-    if (
-      hasActivePlanStepForTargets(state, targetIds) &&
-      (designApplyRequiresPlan(boundInput) || boundInput.steps !== undefined)
-    ) {
-      assertApplyPlanSteps(state, targetIds, boundInput.steps);
-    }
     const rebaseTargets = targetIds.flatMap((targetId) => {
       const target = state.targetsById.get(targetId);
       if (!target?.artboardEstablished) return [];
@@ -1684,13 +1794,11 @@ export class GlobalTaskCoordinator {
         "Design generation must create real editable content inside the current allocated target",
       );
     }
-    assertFocusedUiTargetWrites(state, targetIds);
     assertApplyUsesNewNodeIdNamespace(
       boundInput,
       this.#inspectionsByRunId.get(context.runId),
       reservedNodeIdsForTargets(state, targetIds),
     );
-    assertApplyPlanSteps(state, targetIds, boundInput.steps);
     return {
       input: boundInput,
       plan: state.plan,
@@ -1955,6 +2063,8 @@ export class GlobalTaskCoordinator {
       const target = state.targetsById.get(targetId);
       if (!target) continue;
       target.lastMaterialWriteRevision = revision;
+      reopenEditedReviewPlanStep(state, targetId, revision);
+      activateNextPlanStep(state, revision, targetId);
       if (
         target.delivery.status === "reviewed" ||
         target.delivery.status === "refined"
@@ -3066,6 +3176,17 @@ function nextCaptureTarget(
   return undefined;
 }
 
+function captureTargetForFrame(
+  state: DesignWorkflowState,
+  frameId: string | undefined,
+): DesignDeliveryTargetState | undefined {
+  return frameId === undefined
+    ? nextCaptureTarget(state)
+    : [...state.targetsById.values()].find(
+        (target) => target.planned.artboard.frameId === frameId,
+      );
+}
+
 function nextIncompleteTarget(
   state: DesignWorkflowState,
 ): DesignDeliveryTargetState | undefined {
@@ -3075,12 +3196,11 @@ function nextIncompleteTarget(
 }
 
 function pendingPlaceableRasterRoles(
-  state: DesignWorkflowState,
   target: DesignDeliveryTargetState,
   inspection: InspectedHierarchy | undefined,
   expectedRevision: number | null,
 ): PlaceableRasterAssetRole[] {
-  const required = state.plan.rasterAssetRoles.filter(
+  const required = target.reviewPlan.rasterAssetRoles.filter(
     (role): role is PlaceableRasterAssetRole => role !== "reference",
   );
   if (required.length === 0) return [];
@@ -3099,37 +3219,6 @@ function pendingPlaceableRasterRoles(
     }
   }
   return required.filter((role) => !placed.has(role));
-}
-
-function assertFocusedUiTargetWrites(
-  state: DesignWorkflowState,
-  targetIds: readonly string[],
-): void {
-  if (state.plan.deliverable !== "ui" || targetIds.length === 0) return;
-  const activeTarget = nextIncompleteTarget(state);
-  if (!activeTarget) return;
-  if (
-    targetIds.length === 1 &&
-    activeTarget.delivery.targetId === targetIds[0]
-  ) {
-    return;
-  }
-  throw designWorkflowError(
-    "active_ui_target_required",
-    `Complete the current UI target ${activeTarget.delivery.targetId} before writing another artboard; create one target-specific editable hierarchy, capture it, and then continue to the next target instead of bulk-filling several screens`,
-  );
-}
-
-function hasActivePlanStepForTargets(
-  state: DesignWorkflowState,
-  targetIds: readonly string[],
-): boolean {
-  const targets = new Set(targetIds);
-  return state.planExecution.targets.some(
-    (target) =>
-      targets.has(target.targetId) &&
-      target.steps.some((step) => step.status === "in_progress"),
-  );
 }
 
 function assertDeclaredReferencesAuthorizedForRun(
@@ -3186,7 +3275,20 @@ function deliveryLedger(state: DesignWorkflowState): DesignDeliveryLedger {
 function activateNextPlanStep(
   state: DesignWorkflowState,
   revision: number,
+  targetId?: string,
 ): void {
+  const targetSteps = state.planExecution.targets.find(
+    (target) => target.targetId === targetId,
+  )?.steps;
+  const targetNext = targetSteps?.find((step) => step.status === "pending");
+  if (
+    targetNext &&
+    !targetSteps?.some((step) => step.status === "in_progress")
+  ) {
+    targetNext.status = "in_progress";
+    targetNext.startedRevision = revision;
+    return;
+  }
   const steps = state.planExecution.targets.flatMap((target) => target.steps);
   if (steps.some((step) => step.status === "in_progress")) return;
   const next = steps.find((step) => step.status === "pending");
@@ -3203,7 +3305,7 @@ function implementationPlanCompleted(
     state.planExecution.targets
       .find((target) => target.targetId === targetId)
       ?.steps.filter((step) => step.kind === "implementation")
-      .every((step) => step.status === "completed") ?? false
+      .every((step) => step.status === "completed") ?? true
   );
 }
 
@@ -3237,7 +3339,39 @@ function completeActiveImplementationPlanStep(
   if (!step) return;
   step.status = "completed";
   step.completedRevision = revision;
-  activateNextPlanStep(state, revision);
+  activateNextPlanStep(state, revision, targetId);
+}
+
+function invalidateVerifiedTargetReview(
+  state: DesignWorkflowState,
+  target: DesignDeliveryTargetState,
+  revision: number,
+): void {
+  reopenEditedReviewPlanStep(state, target.delivery.targetId, revision);
+  target.delivery = { ...target.delivery, status: "drafted" };
+  delete target.delivery.captureRevision;
+  delete target.delivery.verifiedRevision;
+  delete target.delivery.reviewRevision;
+  delete target.delivery.refinementRevision;
+  target.lastReview = null;
+  target.reviewedCaptureCount = 0;
+  target.reviewedCaptureRevision = null;
+}
+
+function reopenEditedReviewPlanStep(
+  state: DesignWorkflowState,
+  targetId: string,
+  revision: number,
+): void {
+  const step = state.planExecution.targets
+    .find((target) => target.targetId === targetId)
+    ?.steps.find((candidate) => candidate.kind === "review-refine");
+  if (step?.status !== "completed") return;
+  state.planRevision += 1;
+  state.planExecution.planRevision = state.planRevision;
+  step.status = "in_progress";
+  step.startedRevision = revision;
+  delete step.completedRevision;
 }
 
 function completeReviewPlanStep(
@@ -3248,12 +3382,9 @@ function completeReviewPlanStep(
   const step = state.planExecution.targets
     .find((target) => target.targetId === targetId)
     ?.steps.find((candidate) => candidate.kind === "review-refine");
-  if (!step || step.status !== "in_progress") {
-    throw designWorkflowError(
-      "plan_review_step_invalid",
-      `Target ${targetId} cannot be verified before its review Plan step is active`,
-    );
-  }
+  // Recovered historical targets can have no step ledger; keep that history honest.
+  if (!step) return;
+  step.startedRevision ??= revision;
   step.status = "completed";
   step.completedRevision = revision;
   activateNextPlanStep(state, revision);
@@ -3309,12 +3440,13 @@ function bindPlanToReviewedScope(
   }
   const targets = designPlanTargets(plan);
   const previousStageTargets = existing ? designPlanTargets(existing.plan) : [];
-  const previousStageIncomplete = previousStageTargets.some(
-    (target) =>
-      existing?.targetsById.get(target.targetId)?.delivery.status !==
-      "verified",
-  );
-  const expectedTargets = previousStageIncomplete
+  const amendingCurrentTargets =
+    targets.length === previousStageTargets.length &&
+    targets.every(
+      (target, index) =>
+        target.targetId === previousStageTargets[index]?.targetId,
+    );
+  const expectedTargets = amendingCurrentTargets
     ? previousStageTargets.map((target) =>
         scope.targets.find(
           (confirmed) => confirmed.targetId === target.targetId,
@@ -3334,9 +3466,7 @@ function bindPlanToReviewedScope(
   );
   if (targets.length !== confirmedTargets.length) {
     mismatch(
-      previousStageIncomplete
-        ? `The current stage has ${confirmedTargets.length} target(s) and must be amended in place before advancing`
-        : `The next executable stage must contain only ${confirmedTargets[0]?.label ?? "the next recorded target"}`,
+      `The submitted generation must contain only ${confirmedTargets[0]?.label ?? "the next recorded target"}`,
     );
   }
   for (const [index, confirmed] of confirmedTargets.entries()) {

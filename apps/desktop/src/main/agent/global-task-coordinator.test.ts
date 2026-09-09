@@ -1602,7 +1602,7 @@ describe("GlobalTaskCoordinator", () => {
       const steps = coordinator.getDeliveryLedger(context.runId)?.planExecution
         ?.targets;
       expect(steps?.[0]?.steps[0].status).toBe("in_progress");
-      expect(steps?.[1]?.steps[0].status).toBe("pending");
+      expect(steps?.[1]?.steps[0].status).toBe("in_progress");
       coordinator.handleAgentEvent({
         type: "tool.completed",
         runId: context.runId,
@@ -2529,9 +2529,9 @@ describe("GlobalTaskCoordinator", () => {
       inspectionResult(opened.document, pageId),
     );
     expect(() => coordinator.assertDocumentInspected(context)).not.toThrow();
-    expect(coordinator.recordCanvasCapture(context)).toEqual({
+    expect(coordinator.recordCanvasCapture(context)).toMatchObject({
       capturedRevision: 0,
-      nextAction: "define-plan-write-capture",
+      nextAction: "capture-existing-frame-for-review",
       reviewEligible: false,
     });
     expect(coordinator.resolveCanvasCaptureTarget(context)).toEqual({
@@ -3711,9 +3711,9 @@ describe("GlobalTaskCoordinator", () => {
     });
 
     const draft = draftTargets(pageId, plan.targets);
-    expect(() => coordinator.assertDesignPlanForApply(context, draft)).toThrow(
-      "design_workflow.plan_step_order_invalid",
-    );
+    expect(coordinator.assertDesignPlanForApply(context, draft)).toMatchObject({
+      targetIds: ["target_home", "target_profile"],
+    });
     expect(() =>
       coordinator.assertDesignPlanForApply(
         context,
@@ -4407,10 +4407,10 @@ describe("GlobalTaskCoordinator", () => {
     });
     expect(
       coordinator.getDeliveryStageContext(context.runId)?.nextTarget,
-    ).toBeUndefined();
+    ).toMatchObject({ targetId: "target_screen_2" });
     expect(() =>
       coordinator.registerDesignPlan(contextAfterScope, plan),
-    ).toThrow("current stage has 1 target(s)");
+    ).toThrow("delivery_scope_mismatch");
     expect(new Set(plan.targets.map((target) => target.pageId))).toEqual(
       new Set([pageId]),
     );
@@ -4455,7 +4455,7 @@ describe("GlobalTaskCoordinator", () => {
       ),
     ).toBe(true);
     expect(coordinator.recordCanvasCapture(continuedContext)).toMatchObject({
-      nextAction: "define-plan-write-capture",
+      nextAction: "capture-existing-frame-for-review",
       reviewEligible: false,
     });
     expect(coordinator.getDeliveryLedger(nextRunId)).toBeUndefined();
@@ -4605,14 +4605,20 @@ describe("GlobalTaskCoordinator", () => {
       ],
     });
 
-    expect(() =>
-      coordinator.registerDesignPlan(contextAtRevision1, {
-        ...amended,
-        targets: amended.targets.filter(
-          (target) => target.targetId !== "target_home",
-        ),
-      }),
-    ).toThrow("Material target target_home cannot be removed");
+    coordinator.registerDesignPlan(contextAtRevision1, {
+      ...amended,
+      targets: amended.targets.filter(
+        (target) => target.targetId !== "target_home",
+      ),
+    });
+    expect(
+      coordinator.getDeliveryLedger(context.runId)?.targets[0],
+    ).toMatchObject({
+      targetId: "target_home",
+      rootNodeId: "frame_home",
+      status: "drafted",
+      draftRevision: 1,
+    });
     expect(() =>
       coordinator.registerDesignPlan(contextAtRevision1, {
         ...amended,

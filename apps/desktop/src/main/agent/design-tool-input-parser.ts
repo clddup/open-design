@@ -50,6 +50,7 @@ import {
 } from "@/shared/design-agent-tools.js";
 import { agentDesignNodeIdPrefix } from "@/shared/design-id-allocation.js";
 import type { GlobalTaskCoordinator } from "./global-task-coordinator.js";
+import { CaptureCanvasContract } from "@/shared/design-capture-tool.js";
 import { FatalAgentRunError } from "./fatal-agent-run-error.js";
 
 type InputContract = {
@@ -57,6 +58,7 @@ type InputContract = {
 };
 
 const CONTRACTS = new Map<string, InputContract>([
+  [DESIGN_CAPTURE_TOOL_NAME, CaptureCanvasContract],
   [DESIGN_CAPABILITIES_TOOL_NAME, DesignCapabilityQueryContract],
   [DESIGN_DELIVERY_SCOPE_TOOL_NAME, DeliveryScopeContract],
   [READ_IMAGE_TOOL_NAME, ReadImageContract],
@@ -76,10 +78,7 @@ const CONTRACTS = new Map<string, InputContract>([
   [DESIGN_FONT_TOOL_NAME, DesignFontContract],
 ]);
 
-const EMPTY_INPUT_TOOLS = new Set([
-  DESIGN_INSPECT_TOOL_NAME,
-  DESIGN_CAPTURE_TOOL_NAME,
-]);
+const EMPTY_INPUT_TOOLS = new Set([DESIGN_INSPECT_TOOL_NAME]);
 
 export function parseDesignToolInput(
   coordinator: GlobalTaskCoordinator,

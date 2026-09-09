@@ -567,7 +567,7 @@ describe("current Design Plan amendments", () => {
     });
   });
 
-  it("advances to a bounded next Plan without carrying verified targets into its execution", () => {
+  it("advances to a bounded next Plan while preserving verified targets and their execution evidence", () => {
     const firstPlan = plan();
     firstPlan.targets[0]?.implementationSteps.push({
       stepId: "polish_visual_system",
@@ -643,11 +643,12 @@ describe("current Design Plan amendments", () => {
     expect(
       advanced.state.targetsById.get("target_profile")?.delivery.status,
     ).toBe("pending");
-    expect(advanced.state.planExecution.targets).toHaveLength(1);
-    expect(advanced.state.planExecution.targets[0]?.targetId).toBe(
+    expect(advanced.state.planExecution.targets).toHaveLength(2);
+    expect(advanced.state.planExecution.targets[0]).toEqual(completedExecution);
+    expect(advanced.state.planExecution.targets[1]?.targetId).toBe(
       "target_profile",
     );
-    expect(advanced.state.planExecution.targets[0]?.steps[0]?.status).toBe(
+    expect(advanced.state.planExecution.targets[1]?.steps[0]?.status).toBe(
       "in_progress",
     );
     expect(advanced.changedTargetIds).toEqual(["target_profile"]);

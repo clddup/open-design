@@ -143,7 +143,7 @@ function compileTarget(
   };
 }
 
-function compileQualityProfile(
+export function compileQualityProfile(
   profile: DesignGenerationToolInput["targets"][number]["qualityProfile"],
 ): DesignPlanTarget["qualityProfile"] {
   if (profile.kind === "graphic") return { kind: "graphic" };

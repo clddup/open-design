@@ -2,6 +2,8 @@
 
 本路线图按架构依赖组织，不按临时反馈逐项追加。完整产品边界由 [`design-capability-baseline.md`](design-capability-baseline.md) 定义；每个实施切片必须同时覆盖公共语义、事务、人工 UI、Agent、渲染/导出、持久化和验证。
 
+当前 Agent 编辑与审核规则见 [ADR-0318](adr/0318-agent-editing-and-existing-frame-review.md)：普通编辑不依赖 Plan 阶段许可；现有 Frame 可以跨 Run 审核，独立审核必须重新核对当前 revision。历史 first-slice 与强制串行阶段条目不再代表当前工作流。独立文件保存与窗口状态修复见 [ADR-0319](adr/0319-standalone-file-save-and-window-state.md)；自动化回归不等同于双平台实机发布验收。
+
 ## 执行与验收模型
 
 路线图中的能力只有在以下链路全部打通后才能标记完成。单独增加 schema、属性面板控件、Agent 提示词或 Leafer 映射都不构成产品交付。

@@ -198,15 +198,6 @@ function nextTargetIssues(value: DesignDeliveryStage): ValidationIssue[] {
       ),
     );
   }
-  if (value.currentPlan?.status === "active") {
-    issues.push({
-      code: "design_delivery_stage.next_target_while_active",
-      path: "/nextTarget",
-      message: "Next target is unavailable until the current Plan is verified",
-      actual: next.targetId,
-      recovery: "Verify the current Plan before projecting its next target.",
-    });
-  }
   if (
     value.currentPlan?.targets.some(
       (target) => target.targetId === next.targetId,

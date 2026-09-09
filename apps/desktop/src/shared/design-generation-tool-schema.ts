@@ -1,5 +1,6 @@
 import {
   MAX_TRANSACTION_COMMANDS,
+  DesignTargetQualityProfileSchema,
   executableJsonSchema,
   Type,
   type Static,
@@ -26,6 +27,10 @@ import {
 } from "./design-agent-plan-review";
 import { DESIGN_LOGO_COLOR_MODES } from "./design-logo-color";
 import {
+  DESIGN_REFERENCE_STRATEGY_SCHEMA,
+  type DesignReferenceStrategy,
+} from "./design-reference-strategy";
+import {
   COMPACT_DESIGN_INTENT_LIMITS,
   createDesignIntentSchema,
   DESIGN_INTENT_SCHEMA,
@@ -34,7 +39,7 @@ import {
 const COMPACT_DESIGN_INTENT_SCHEMA = createDesignIntentSchema(
   COMPACT_DESIGN_INTENT_LIMITS,
 );
-const DELIVERABLE_SCHEMA = Type.Union([
+export const DELIVERABLE_SCHEMA = Type.Union([
   Type.Literal("ui"),
   Type.Literal("poster"),
   Type.Literal("logo"),
@@ -70,6 +75,7 @@ const FRAME_MODEL_SCHEMA = Type.Object(
 const TARGET_MODEL_SCHEMA = Type.Object(
   {
     frame: FRAME_MODEL_SCHEMA,
+    qualityProfile: Type.Optional(DesignTargetQualityProfileSchema),
   },
   {
     ...CLOSED,
@@ -78,43 +84,21 @@ const TARGET_MODEL_SCHEMA = Type.Object(
   },
 );
 
-const GRAPHIC_QUALITY_PROFILE_SCHEMA = Type.Object(
-  { kind: Type.Literal("graphic") },
-  CLOSED,
-);
-
-const UI_QUALITY_PROFILE_SCHEMA = Type.Object(
+const [GRAPHIC_QUALITY_PROFILE_SCHEMA, UI_QUALITY_PROFILE_SCHEMA] =
+  DesignTargetQualityProfileSchema.anyOf;
+const COMPACT_UI_QUALITY_PROFILE_SCHEMA = Type.Object(
   {
-    kind: Type.Literal("ui"),
-    platform: Type.Union([
-      Type.Literal("web"),
-      Type.Literal("macos"),
-      Type.Literal("windows"),
-      Type.Literal("ios"),
-      Type.Literal("ipados"),
-      Type.Literal("android"),
-      Type.Literal("other"),
-    ]),
-    input: Type.Union([
-      Type.Literal("pointer"),
-      Type.Literal("touch"),
-      Type.Literal("mixed"),
-    ]),
+    kind: UI_QUALITY_PROFILE_SCHEMA.properties.kind,
+    platform: UI_QUALITY_PROFILE_SCHEMA.properties.platform,
+    input: UI_QUALITY_PROFILE_SCHEMA.properties.interactionMode,
     insets: Type.Tuple([
-      Type.Number({ minimum: 0, maximum: 10_000 }),
-      Type.Number({ minimum: 0, maximum: 10_000 }),
-      Type.Number({ minimum: 0, maximum: 10_000 }),
-      Type.Number({ minimum: 0, maximum: 10_000 }),
+      UI_QUALITY_PROFILE_SCHEMA.properties.safeAreaInsets.properties.top,
+      UI_QUALITY_PROFILE_SCHEMA.properties.safeAreaInsets.properties.right,
+      UI_QUALITY_PROFILE_SCHEMA.properties.safeAreaInsets.properties.bottom,
+      UI_QUALITY_PROFILE_SCHEMA.properties.safeAreaInsets.properties.left,
     ]),
-    safeNodeIds: Type.Array(idSchema(), {
-      minItems: 1,
-      maxItems: 64,
-      uniqueItems: true,
-    }),
-    hitNodeIds: Type.Array(idSchema(), {
-      maxItems: 64,
-      uniqueItems: true,
-    }),
+    safeNodeIds: UI_QUALITY_PROFILE_SCHEMA.properties.safeAreaNodeIds,
+    hitNodeIds: UI_QUALITY_PROFILE_SCHEMA.properties.interactiveNodeIds,
   },
   CLOSED,
 );
@@ -130,7 +114,7 @@ const TARGET_CANONICAL_SCHEMA = Type.Object(
     spacing: textSchema(500),
     qualityProfile: Type.Union([
       GRAPHIC_QUALITY_PROFILE_SCHEMA,
-      UI_QUALITY_PROFILE_SCHEMA,
+      COMPACT_UI_QUALITY_PROFILE_SCHEMA,
     ]),
   },
   CLOSED,
@@ -304,36 +288,8 @@ const RASTER_ASSET_ROLES_SCHEMA = Type.Array(
   { maxItems: 4, uniqueItems: true },
 );
 
-const REFERENCE_STRATEGY_SCHEMA = Type.Object(
-  {
-    synthesis: textSchema(1_000),
-    references: Type.Array(
-      Type.Object(
-        {
-          attachmentId: Type.String({ pattern: "^image_[a-f0-9]{64}$" }),
-          decision: Type.Union([
-            Type.Literal("style-reference"),
-            Type.Literal("composition-reference"),
-            Type.Literal("brand-reference"),
-            Type.Literal("content-asset"),
-            Type.Literal("ignore"),
-          ]),
-          application: textSchema(1_000),
-          preserve: Type.Array(textSchema(256), {
-            maxItems: 6,
-            uniqueItems: true,
-          }),
-          avoid: Type.Array(textSchema(256), {
-            maxItems: 6,
-            uniqueItems: true,
-          }),
-        },
-        CLOSED,
-      ),
-      { maxItems: 6 },
-    ),
-  },
-  CLOSED,
+const REFERENCE_STRATEGY_SCHEMA = Type.Unsafe<DesignReferenceStrategy>(
+  DESIGN_REFERENCE_STRATEGY_SCHEMA,
 );
 
 const SKILL_REFS_SCHEMA = Type.Array(Type.Object({ id: idSchema() }, CLOSED), {
@@ -347,6 +303,7 @@ const DESIGN_GENERATION_MODEL_PROPERTIES = {
   targets: Type.Array(TARGET_MODEL_SCHEMA, { minItems: 1, maxItems: 1 }),
   visualSystem: Type.Optional(VISUAL_SYSTEM_SCHEMA),
   rasterAssetRoles: RASTER_ASSET_ROLES_SCHEMA,
+  referenceStrategy: Type.Optional(REFERENCE_STRATEGY_SCHEMA),
   logoOutputs: Type.Optional(LOGO_OUTPUTS_SCHEMA),
   logoExploration: Type.Optional(LOGO_EXPLORATION_MODEL_SCHEMA),
   logoColorStrategy: Type.Optional(LOGO_COLOR_STRATEGY_SCHEMA),
@@ -397,7 +354,7 @@ const DESIGN_GENERATION_LOGO_DESCRIPTION =
 
 export const DESIGN_GENERATION_TOOL_INPUT_SCHEMA = designGenerationSchema(
   DESIGN_GENERATION_MODEL_PROPERTIES_SCHEMA,
-  `Generate one Main-bound target as progressive editable design. This call commits one coherent material batch immediately; continue with ordinary edit calls when more batches are needed instead of waiting to submit the entire design at once. Submit the artboard size, image roles, and one parent-first editable element hierarchy; omit parentId for artboard children and never duplicate that hierarchy in a separate region plan. Do not repeat target identity, planning prose, visual rationale, host state, or artificial stage metadata. Frame, Rectangle, Ellipse, Path, Text and persistent Image appearance uses the same canonical document semantics; use an assetId returned by image generation when real subject evidence is required instead of a geometric placeholder. Use canonical paints and effects directly instead of approximating depth with extra flat rectangles. Reusable Component decisions happen after this real hierarchy exists, using inspected Frame/Group roots like Figma's create-component-from-node flow. ${DESIGN_GENERATION_LOGO_DESCRIPTION} Main derives the executable Plan metadata, binds stable identities, skills, brief fidelity and quality defaults from that same hierarchy, then validates the authored geometry.`,
+  `Generate one Main-bound target as progressive editable design. This call commits one coherent material batch immediately; continue with ordinary edit calls when more batches are needed instead of waiting to submit the entire design at once. Submit the artboard size, image roles, and one parent-first editable element hierarchy. Optionally declare referenceStrategy using authorized Conversation attachment IDs, and targets[].qualityProfile using authored element IDs for safe-area and hit-area checks; omit unknown quality semantics instead of inventing platform defaults; omit parentId for artboard children and never duplicate that hierarchy in a separate region plan. Do not repeat target identity, planning prose, visual rationale, host state, or artificial stage metadata. Frame, Rectangle, Ellipse, Path, Text and persistent Image appearance uses the same canonical document semantics; use an assetId returned by image generation when real subject evidence is required instead of a geometric placeholder. Use canonical paints and effects directly instead of approximating depth with extra flat rectangles. Reusable Component decisions happen after this real hierarchy exists, using inspected Frame/Group roots like Figma's create-component-from-node flow. ${DESIGN_GENERATION_LOGO_DESCRIPTION} Main derives the executable Plan metadata, binds stable identities, skills, brief fidelity and quality defaults from that same hierarchy, then validates the authored geometry.`,
 );
 
 export const DESIGN_GENERATION_CANONICAL_INPUT_SCHEMA = designGenerationSchema(

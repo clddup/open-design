@@ -47,7 +47,7 @@ export function bindDesignGenerationHostContext(
     targets: [
       {
         ...target,
-        qualityProfile: defaultQualityProfile(input.deliverable, frameId),
+        qualityProfile: bindQualityProfile(input, stableId),
       },
     ],
     designGeneration: {
@@ -145,17 +145,30 @@ function defaultVisualSystem(
   };
 }
 
-function defaultQualityProfile(
-  deliverable: DesignGenerationToolInput["deliverable"],
-  frameId: string,
+function bindQualityProfile(
+  input: DesignGenerationModelInput,
+  stableId: (localId: string) => string,
 ): DesignGenerationToolInput["targets"][number]["qualityProfile"] {
-  if (deliverable !== "ui") return { kind: "graphic" };
+  const profile = input.targets[0]?.qualityProfile;
+  if (profile?.kind === "graphic") return { kind: "graphic" };
+  if (profile?.kind === "ui") {
+    const { top, right, bottom, left } = profile.safeAreaInsets;
+    return {
+      kind: "ui",
+      platform: profile.platform,
+      input: profile.interactionMode,
+      insets: [top, right, bottom, left],
+      safeNodeIds: profile.safeAreaNodeIds.map(stableId),
+      hitNodeIds: profile.interactiveNodeIds.map(stableId),
+    };
+  }
+  if (input.deliverable !== "ui") return { kind: "graphic" };
   return {
     kind: "ui",
     platform: "other",
     input: "mixed",
     insets: [0, 0, 0, 0],
-    safeNodeIds: [frameId],
+    safeNodeIds: [],
     hitNodeIds: [],
   };
 }

@@ -836,7 +836,7 @@ describe("workspace contract schemas", () => {
     }
   });
 
-  it("enforces one serial Main-owned Plan execution state", () => {
+  it("validates each target's execution evidence without requiring global serial progress", () => {
     const ledger: DesignDeliveryLedger & {
       planExecution: NonNullable<DesignDeliveryLedger["planExecution"]>;
     } = {
@@ -903,6 +903,82 @@ describe("workspace contract schemas", () => {
       verifiedRevision: 1,
     });
     expect(DesignDeliveryLedgerContract.parse(continuedStage).ok).toBe(true);
+
+    const reeditingEarlierTarget = structuredClone(ledger);
+    reeditingEarlierTarget.planExecution.planRevision = 2;
+    const earlierSteps = reeditingEarlierTarget.planExecution.targets[0]!.steps;
+    earlierSteps[1] = {
+      ...earlierSteps[1]!,
+      status: "completed",
+      completedRevision: 3,
+    };
+    earlierSteps[2] = {
+      ...earlierSteps[2]!,
+      status: "in_progress",
+      startedRevision: 7,
+    };
+    reeditingEarlierTarget.targets[0]!.draftRevision = 7;
+    reeditingEarlierTarget.targets.push({
+      targetId: "target_details",
+      label: "Details",
+      pageId: "page_1",
+      rootNodeId: "frame_details",
+      reservedNodeIds: ["frame_details"],
+      status: "drafted",
+      allocatedRevision: 4,
+      draftRevision: 5,
+    });
+    reeditingEarlierTarget.planExecution.targets.push({
+      targetId: "target_details",
+      steps: [
+        {
+          stepId: "details",
+          label: "Build details",
+          kind: "implementation",
+          status: "in_progress",
+          startedRevision: 4,
+        },
+        {
+          stepId: "details.review",
+          label: "Review details",
+          kind: "review-refine",
+          status: "pending",
+        },
+      ],
+    });
+    expect(DesignDeliveryLedgerContract.parse(reeditingEarlierTarget).ok).toBe(
+      true,
+    );
+
+    const completedLaterTarget = structuredClone(reeditingEarlierTarget);
+    completedLaterTarget.planExecution.targets[1]!.steps = [
+      {
+        stepId: "details",
+        label: "Build details",
+        kind: "implementation",
+        status: "completed",
+        startedRevision: 4,
+        completedRevision: 5,
+      },
+      {
+        stepId: "details.review",
+        label: "Review details",
+        kind: "review-refine",
+        status: "completed",
+        startedRevision: 5,
+        completedRevision: 6,
+      },
+    ];
+    completedLaterTarget.targets[1] = {
+      ...completedLaterTarget.targets[1]!,
+      status: "verified",
+      captureRevision: 6,
+      reviewRevision: 6,
+      verifiedRevision: 6,
+    };
+    expect(DesignDeliveryLedgerContract.parse(completedLaterTarget).ok).toBe(
+      true,
+    );
 
     const issueCodes = (value: unknown) => {
       const result = DesignDeliveryLedgerContract.parse(value);

@@ -1,4 +1,8 @@
-import { compileDesignGenerationElement } from "./design-generation-compiler";
+import {
+  compileDesignGenerationElement,
+  compileQualityProfile,
+} from "./design-generation-compiler";
+import { DesignTargetQualityProfileContract } from "@opendesign/design-contracts";
 import { isVisibleDesignMaterial } from "./design-material";
 import { isBuiltinDesignSkillRefsForDeliverable } from "@opendesign/design-skills";
 import type {
@@ -120,9 +124,60 @@ export function refineDesignGeneration(
     );
   }
 
+  refineQualityProfile(input, elementsById, issues);
   refineLogoExploration(input, elementsById, parentById, issues);
   refineReferenceStrategy(input.referenceStrategy, issues);
   return issues.slice(0, 64);
+}
+
+function refineQualityProfile(
+  input: DesignGenerationToolInput,
+  elementsById: ReadonlyMap<string, DesignGenerationElementInput>,
+  issues: ValidationIssue[],
+): void {
+  const target = input.targets[0];
+  const profile = compileQualityProfile(target.qualityProfile);
+  const path = "/targets/0/qualityProfile";
+  const expectedKind = input.deliverable === "ui" ? "ui" : "graphic";
+  if (profile.kind !== expectedKind) {
+    issues.push(
+      issue(
+        "design_generation.quality_profile_kind_mismatch",
+        `${path}/kind`,
+        "Quality profile must match the declared deliverable",
+        expectedKind,
+        profile.kind,
+      ),
+    );
+  }
+  const parsed = DesignTargetQualityProfileContract.parse(
+    profile,
+    target.frame,
+  );
+  if (!parsed.ok) {
+    issues.push(
+      ...parsed.issues.map((failure) => ({
+        ...failure,
+        path: `${path}${failure.path}`,
+      })),
+    );
+  }
+  if (profile.kind !== "ui") return;
+  for (const field of ["safeAreaNodeIds", "interactiveNodeIds"] as const) {
+    for (const [index, nodeId] of profile[field].entries()) {
+      if (!elementsById.has(nodeId)) {
+        issues.push(
+          issue(
+            "design_generation.quality_node_missing",
+            `${path}/${field}/${index}`,
+            "Quality checks must reference an authored element in this batch",
+            "authored element ID",
+            nodeId,
+          ),
+        );
+      }
+    }
+  }
 }
 
 function refineElementAppearance(

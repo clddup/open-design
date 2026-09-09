@@ -243,10 +243,10 @@ function appendPlanExecutionIssues(
   );
   const executionTargetIds = new Set<string>();
   let previousDeliveryTargetIndex = -1;
-  let sequence: "completed" | "active" | "pending" = "completed";
-  let previousCompletedRevision: number | undefined;
 
   ledger.planExecution.targets.forEach((target, targetIndex) => {
+    let sequence: "completed" | "active" | "pending" = "completed";
+    let previousCompletedRevision: number | undefined;
     const stepIds = new Set<string>();
     if (executionTargetIds.has(target.targetId)) {
       issues.push(
@@ -320,7 +320,7 @@ function appendPlanExecutionIssues(
           issue(
             "workspace.plan_execution_order_invalid",
             `${path}/status`,
-            "Completed Plan steps must form one contiguous prefix",
+            "Completed Plan steps must form one contiguous prefix within their target",
           ),
         );
       }
@@ -368,6 +368,31 @@ function appendPlanExecutionIssues(
         ),
       );
     }
+    const activeCount = target.steps.filter(
+      (step) => step.status === "in_progress",
+    ).length;
+    if (activeCount > 1) {
+      issues.push(
+        issue(
+          "workspace.plan_execution_active_step_count_invalid",
+          `/planExecution/targets/${targetIndex}/steps`,
+          "At most one Plan step per target may be in progress",
+        ),
+      );
+    }
+    if (
+      target.steps.some((step) => step.status === "pending") &&
+      target.steps.some((step) => step.status === "completed") &&
+      activeCount === 0
+    ) {
+      issues.push(
+        issue(
+          "workspace.plan_execution_active_step_required",
+          `/planExecution/targets/${targetIndex}/steps`,
+          "An unfinished target with completed steps must expose its next in-progress step",
+        ),
+      );
+    }
   });
 
   if (
@@ -382,27 +407,16 @@ function appendPlanExecutionIssues(
       ),
     );
   }
-  const activeCount = ledger.planExecution.targets
-    .flatMap((target) => target.steps)
-    .filter((step) => step.status === "in_progress").length;
-  if (activeCount > 1) {
-    issues.push(
-      issue(
-        "workspace.plan_execution_active_step_count_invalid",
-        "/planExecution/targets",
-        "At most one Plan step may be in progress",
-      ),
-    );
-  }
-  const hasPending = ledger.planExecution.targets.some((target) =>
-    target.steps.some((step) => step.status === "pending"),
-  );
-  if (hasPending && activeCount === 0) {
+  const steps = ledger.planExecution.targets.flatMap((target) => target.steps);
+  if (
+    steps.some((step) => step.status === "pending") &&
+    !steps.some((step) => step.status === "in_progress")
+  ) {
     issues.push(
       issue(
         "workspace.plan_execution_active_step_required",
         "/planExecution/targets",
-        "An unfinished Plan must expose exactly one in-progress step",
+        "An unfinished Plan must expose an in-progress step",
       ),
     );
   }

@@ -18,6 +18,12 @@ describe("Design Delivery Stage contract", () => {
     expect(
       DesignDeliveryStageContract.parse({
         ...activeStage(),
+        nextTarget: target("target_profile", 2),
+      }).ok,
+    ).toBe(true);
+    expect(
+      DesignDeliveryStageContract.parse({
+        ...activeStage(),
         verifiedTargets: 1,
         currentPlan: {
           ...activeStage().currentPlan!,
@@ -63,10 +69,6 @@ describe("Design Delivery Stage contract", () => {
         expect.objectContaining({
           code: "design_delivery_stage.next_stage_invalid",
           path: "/nextTarget/stage",
-        }),
-        expect.objectContaining({
-          code: "design_delivery_stage.next_target_while_active",
-          path: "/nextTarget",
         }),
         expect.objectContaining({
           code: "design_delivery_stage.next_target_duplicate",

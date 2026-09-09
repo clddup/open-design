@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DesignApplyToolInput } from "@/shared/design-agent-tools.js";
-import {
-  assertApplyPlanSteps,
-  bindApplyToActivePlanSteps,
-} from "./design-plan-apply-execution.js";
+import { bindApplyToActivePlanSteps } from "./design-plan-apply-execution.js";
 import type { DesignWorkflowState } from "./design-plan-registration.js";
 
 type PlanExecutionState = Pick<
@@ -93,9 +90,6 @@ describe("design Plan Apply execution", () => {
         commandIds: ["command_1"],
       },
     ]);
-    expect(() =>
-      assertApplyPlanSteps(state, ["target_a"], bound.steps),
-    ).not.toThrow();
   });
 
   it("consolidates invented model steps into the current authoritative implementation step", () => {
@@ -114,9 +108,6 @@ describe("design Plan Apply execution", () => {
         commandIds: ["command_1", "command_2"],
       },
     ]);
-    expect(() =>
-      assertApplyPlanSteps(state, ["target_a"], bound.steps),
-    ).not.toThrow();
   });
 
   it("keeps explicitly correct consecutive implementation steps", () => {
@@ -139,9 +130,6 @@ describe("design Plan Apply execution", () => {
         commandIds: ["command_2"],
       },
     ]);
-    expect(() =>
-      assertApplyPlanSteps(state, ["target_a"], bound.steps),
-    ).not.toThrow();
   });
 
   it("consolidates rather than advancing across a review boundary", () => {
@@ -161,12 +149,9 @@ describe("design Plan Apply execution", () => {
         commandIds: ["command_1", "command_2", "command_3"],
       },
     ]);
-    expect(() =>
-      assertApplyPlanSteps(state, ["target_a"], bound.steps),
-    ).not.toThrow();
   });
 
-  it("does not bind an implementation step to an unauthorized target", () => {
+  it("binds the authorized target independently of another target’s active step", () => {
     const state = executionState();
     const bound = bindApplyToActivePlanSteps(
       state,
@@ -174,9 +159,9 @@ describe("design Plan Apply execution", () => {
       applyInput(["invented_structure"]),
     );
 
-    expect(bound.steps?.[0]?.stepId).toBe("invented_structure");
-    expect(() =>
-      assertApplyPlanSteps(state, ["target_b"], bound.steps),
-    ).toThrow("design_workflow.plan_step_order_invalid");
+    expect(bound.steps?.[0]?.stepId).toBe("details");
+    expect(state.planExecution.targets[0]?.steps[0]?.status).toBe(
+      "in_progress",
+    );
   });
 });

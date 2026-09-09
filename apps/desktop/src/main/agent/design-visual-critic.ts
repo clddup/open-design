@@ -1,3 +1,7 @@
+import {
+  criticDocumentReferences,
+  criticEvidenceContract,
+} from "./design-visual-critic-evidence";
 import type { VisualCriticUserRequirement } from "./visual-critic-user-requirements.js";
 import type { AgentImageAttachment } from "@opendesign/agent-contracts";
 import type { ModelSelection } from "@opendesign/model-gateway";
@@ -87,17 +91,39 @@ export type DesignVisualCriticResult = {
   review: DesignVisualReviewToolInput | null;
 };
 
+export type VisualCriticDesign = Pick<
+  DesignPlanToolInput,
+  "deliverable" | "objective" | "skillRefs"
+> &
+  Partial<
+    Pick<
+      DesignPlanToolInput,
+      | "briefFidelity"
+      | "logoOutputs"
+      | "referenceStrategy"
+      | "logoExploration"
+      | "designIntent"
+      | "visualSystem"
+    >
+  >;
+export type VisualCriticTarget = Pick<
+  DesignPlanTarget,
+  "targetId" | "label" | "objective"
+> &
+  Partial<Pick<DesignPlanTarget, "qualityProfile" | "editableLayers">>;
+
 export type DesignVisualCriticContext = {
   runId: string;
   modelSelection: ModelSelection;
   userRequest: string;
   userRequirements?: VisualCriticUserRequirement[];
-  plan: DesignPlanToolInput;
-  target: DesignPlanTarget;
+  plan: VisualCriticDesign;
+  target: VisualCriticTarget;
   observedRevision: number;
   phase: "draft" | "final";
   attachment: DesignVisualCriticAttachment;
   referenceAttachments: AgentImageAttachment[];
+  checkedQualityNodeCount?: number;
 };
 
 const SUBMIT_CRITIQUE_TOOL = "opendesign_submit_independent_visual_critique";
@@ -122,6 +148,11 @@ export async function runIndependentDesignVisualCritic(
     );
   }
   const criterionIds = criticCriteria(context.plan, context.target);
+  if (
+    context.referenceAttachments.length > 0 &&
+    !criterionIds.includes(REFERENCE_CRITERION)
+  )
+    criterionIds.push(REFERENCE_CRITERION);
   const verdictContract = createDesignVisualCriticVerdictContract(criterionIds);
   const logoDirectionCriteria = logoDirectionCriterionContracts(
     context.plan,
@@ -250,70 +281,9 @@ export async function runIndependentDesignVisualCritic(
   };
 }
 
-function criticDocumentReferences(context: DesignVisualCriticContext) {
-  const documents = new Map(
-    (context.userRequirements ?? []).flatMap((requirement) =>
-      requirement.documents.map(
-        (document) => [document.attachmentId, document] as const,
-      ),
-    ),
-  );
-  return [...documents.values()].map((document) => ({
-    type: "document_ref" as const,
-    ...document,
-  }));
-}
-
-function criticEvidenceContract(
-  context: DesignVisualCriticContext,
-  requiredCriteria: readonly CriticCriterionId[],
-  logoDirectionCriteria: ReturnType<typeof logoDirectionCriterionContracts>,
-) {
-  const logoEvidence =
-    context.plan.deliverable === "logo"
-      ? {
-          logoDirectionCriteria,
-        }
-      : {};
-  return {
-    phase: context.phase,
-    observedRevision: context.observedRevision,
-    ...(context.userRequirements?.length
-      ? { userRequirements: context.userRequirements }
-      : { userRequest: context.userRequest }),
-    deliverable: context.plan.deliverable,
-    objective: context.plan.objective,
-    target: {
-      targetId: context.target.targetId,
-      label: context.target.label,
-      objective: context.target.objective,
-      qualityProfile: context.target.qualityProfile,
-      editableLayers: context.target.editableLayers,
-    },
-    briefFidelity: context.plan.briefFidelity,
-    logoOutputs: context.plan.logoOutputs,
-    referenceStrategy: context.plan.referenceStrategy
-      ? {
-          references: context.plan.referenceStrategy.references.map(
-            (reference) => ({
-              attachmentId: reference.attachmentId,
-              decision: reference.decision,
-            }),
-          ),
-        }
-      : undefined,
-    deliveryCaptureAttachmentId: context.attachment.attachmentId,
-    visualReferenceAttachmentIds: context.referenceAttachments.map(
-      (attachment) => attachment.attachmentId,
-    ),
-    ...logoEvidence,
-    requiredCriteria,
-  };
-}
-
 function criticCriteria(
-  plan: DesignPlanToolInput,
-  target: DesignPlanTarget,
+  plan: VisualCriticDesign,
+  target: VisualCriticTarget,
 ): CriticCriterionId[] {
   const logoOutputs = new Set(plan.logoOutputs ?? []);
   const directionCriteria = logoDirectionCriterionContracts(plan, target).map(
@@ -365,8 +335,8 @@ function criticCriteria(
 }
 
 function logoDirectionCriterionContracts(
-  plan: DesignPlanToolInput,
-  target: DesignPlanTarget,
+  plan: VisualCriticDesign,
+  target: VisualCriticTarget,
 ): Array<{
   criterionId: LogoDirectionCriterionId;
   conceptId: string;
@@ -410,7 +380,7 @@ function criticTool(
 }
 
 function toLedgerVisualReview(
-  plan: DesignPlanToolInput,
+  plan: VisualCriticDesign,
   critic: {
     summary: string;
     criteria: Record<

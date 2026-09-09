@@ -547,6 +547,8 @@ function target(
 }
 
 function targetState(planned: DesignPlanTarget): DesignDeliveryTargetState {
+  const { targets, ...reviewPlan } = plan;
+  void targets;
   return {
     artboardDescendantIds: new Set(),
     artboardEstablished: true,
@@ -571,6 +573,7 @@ function targetState(planned: DesignPlanTarget): DesignDeliveryTargetState {
     lastMaterialWriteRevision: 3,
     lastReview: null,
     planned,
+    reviewPlan,
     reviewedCaptureCount: 1,
     reviewedCaptureRevision: 2,
   };

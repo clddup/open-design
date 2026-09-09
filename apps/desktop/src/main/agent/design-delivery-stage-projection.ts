@@ -40,12 +40,9 @@ export function projectDesignDeliveryStage(
       (target) =>
         state?.targetsById.get(target.targetId)?.delivery.status === "verified",
     );
-  const next =
-    !state || currentPlanVerified
-      ? scope?.targets.find(
-          (target) => !state?.targetsById.has(target.targetId),
-        )
-      : undefined;
+  const next = scope?.targets.find(
+    (target) => !state?.targetsById.has(target.targetId),
+  );
   const nextIndex = next
     ? (scope?.targets.findIndex(
         (target) => target.targetId === next.targetId,

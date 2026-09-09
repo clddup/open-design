@@ -22,12 +22,6 @@ export function createPlanExecutionStateProjector(source: {
 function projectPlanExecutionState(
   input: ProjectPlanExecutionStateInput,
 ): Plan {
-  if (
-    input.delivery?.planExecution &&
-    input.delivery.planExecution.planRevision !== input.plan.planRevision
-  ) {
-    return input.plan;
-  }
   const executionByTargetId = new Map(
     input.delivery?.planExecution?.targets.map((target) => [
       target.targetId,
@@ -40,6 +34,16 @@ function projectPlanExecutionState(
   );
   const targets = input.plan.targets.map((target) => {
     const execution = executionByTargetId.get(target.targetId);
+    if (
+      execution &&
+      input.delivery?.planExecution?.planRevision !== input.plan.planRevision &&
+      target.implementationSteps.some(
+        (step) =>
+          !execution.steps.some((current) => current.stepId === step.stepId),
+      )
+    ) {
+      return target;
+    }
     const labelsByStepId = new Map(
       target.implementationSteps.map((step) => [step.stepId, step.label]),
     );

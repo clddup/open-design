@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   MAX_TRANSACTION_COMMANDS,
+  DesignTargetQualityProfileSchema,
   schemaValidationIssues,
 } from "@opendesign/design-contracts";
 import {
@@ -15,6 +16,7 @@ import {
   type DesignGenerationToolInput,
 } from "./design-generation-tool";
 import { DesignApplyContract, DesignPlanContract } from "./design-agent-tools";
+import { activeVisualReferenceIds } from "./design-reference-strategy";
 
 type GenerationFixture = Omit<DesignGenerationToolInput, "targets"> & {
   targets: Array<
@@ -59,11 +61,14 @@ describe("design-generation tool", () => {
         "logoExploration",
         "logoOutputs",
         "rasterAssetRoles",
+        "referenceStrategy",
         "targets",
         "visualSystem",
       ].sort(),
     );
-    expect(JSON.stringify(properties)).not.toContain('"qualityProfile"');
+    expect(properties.targets.items.properties.qualityProfile).toEqual(
+      JSON.parse(JSON.stringify(DesignTargetQualityProfileSchema)) as unknown,
+    );
     expect(JSON.stringify(properties)).not.toContain('"briefFidelity"');
     expect(JSON.stringify(properties)).not.toContain('"skillRefs"');
     const elementSchema = properties.designGeneration.properties.elements.items;
@@ -186,7 +191,7 @@ describe("design-generation tool", () => {
     expect(normalized?.targets[0]?.qualityProfile).toMatchObject({
       kind: "ui",
       platform: "other",
-      safeNodeIds: ["frame_home"],
+      safeNodeIds: [],
     });
     expect(
       normalized &&
@@ -211,7 +216,7 @@ describe("design-generation tool", () => {
       targetId: "home",
       pageId: "page_1",
       frame: { frameId: "frame_home" },
-      qualityProfile: { safeNodeIds: ["frame_home"] },
+      qualityProfile: { safeNodeIds: [] },
     });
     expect(result.value.designGeneration.targetId).toBe("home");
     expect(result.value.designGeneration.elements).toEqual(
@@ -597,6 +602,151 @@ describe("design-generation tool", () => {
     expect(normalized?.briefFidelity.requiredContent.join("\n")).not.toBe(
       modelInput.objective,
     );
+  });
+
+  it("carries authorized reference identities from model input into critic selection", () => {
+    const model = providerInput(fixture());
+    const attachmentId = `image_${"a".repeat(64)}`;
+    model.referenceStrategy = {
+      synthesis: "Use the supplied brand reference",
+      references: [
+        {
+          attachmentId,
+          decision: "brand-reference",
+          application: "Match brand colors",
+          preserve: [],
+          avoid: [],
+        },
+      ],
+    };
+    const result = DesignGenerationContract.parse(model, {
+      newNodeIdPrefix: "odr_reference_",
+      target: hostTarget(fixture()),
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("Expected reference generation");
+    const plan = compileDesignGenerationToolInput(result.value).plan;
+    expect(activeVisualReferenceIds(plan.referenceStrategy)).toEqual([
+      attachmentId,
+    ]);
+    expect(DesignPlanContract.parse(plan, { canonical: true }).ok).toBe(true);
+  });
+
+  it("rejects duplicate reference IDs without changing their attachment identity", () => {
+    const model = providerInput(fixture());
+    const reference = {
+      attachmentId: `image_${"b".repeat(64)}`,
+      decision: "style-reference",
+      application: "Match the supplied palette",
+      preserve: [],
+      avoid: [],
+    };
+    model.referenceStrategy = {
+      synthesis: "Use supplied references",
+      references: [reference, { ...reference }],
+    };
+    const result = DesignGenerationContract.parse(model, {
+      target: hostTarget(fixture()),
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("Expected duplicate reference failure");
+    expect(result.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "design_generation.duplicate_reference_attachment",
+          path: "/referenceStrategy/references/1/attachmentId",
+        }),
+      ]),
+    );
+  });
+
+  it("binds declared quality semantics to the same stable IDs as generated layers", () => {
+    const model = providerInput(fixture());
+    const target = (model.targets as Array<Record<string, unknown>>)[0];
+    target.qualityProfile = {
+      kind: "ui",
+      platform: "ios",
+      interactionMode: "touch",
+      safeAreaInsets: { top: 24, right: 8, bottom: 16, left: 8 },
+      safeAreaNodeIds: ["hero_title"],
+      interactiveNodeIds: ["hero_panel"],
+    };
+    expect(DesignGenerationContract.modelIssues(model)).toEqual([]);
+    const result = DesignGenerationContract.parse(model, {
+      newNodeIdPrefix: "odr_quality_",
+      target: hostTarget(fixture()),
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("Expected declared quality generation");
+    const plan = compileDesignGenerationToolInput(result.value).plan;
+    expect(plan.targets[0].qualityProfile).toEqual({
+      kind: "ui",
+      platform: "ios",
+      interactionMode: "touch",
+      safeAreaInsets: { top: 24, right: 8, bottom: 16, left: 8 },
+      safeAreaNodeIds: ["odr_quality_4_home_hero_title"],
+      interactiveNodeIds: ["odr_quality_4_home_hero_panel"],
+    });
+    const elementIds = result.value.designGeneration.elements.map(
+      (element) => element.id,
+    );
+    expect(elementIds).toEqual(
+      expect.arrayContaining([
+        "odr_quality_4_home_hero_title",
+        "odr_quality_4_home_hero_panel",
+      ]),
+    );
+    expect(DesignPlanContract.parse(plan, { canonical: true }).ok).toBe(true);
+  });
+
+  it.each([
+    [
+      "missing",
+      { safeAreaNodeIds: ["missing"] },
+      "/targets/0/qualityProfile/safeAreaNodeIds/0",
+    ],
+    ["wrong kind", { kind: "graphic" }, "/targets/0/qualityProfile/kind"],
+    [
+      "oversized",
+      { safeAreaInsets: { top: 10000, right: 0, bottom: 0, left: 0 } },
+      "/targets/0/qualityProfile/safeAreaInsets",
+    ],
+  ])(
+    "rejects %s quality geometry with the model field path",
+    (_name, patch, path) => {
+      const model = providerInput(fixture());
+      const target = (model.targets as Array<Record<string, unknown>>)[0];
+      target.qualityProfile = {
+        kind: "ui",
+        platform: "ios",
+        interactionMode: "touch",
+        safeAreaInsets: { top: 24, right: 8, bottom: 16, left: 8 },
+        safeAreaNodeIds: ["hero_title"],
+        interactiveNodeIds: [],
+        ...patch,
+      };
+      if (_name === "wrong kind") target.qualityProfile = { kind: "graphic" };
+      const result = DesignGenerationContract.parse(model, {
+        target: hostTarget(fixture()),
+      });
+      expect(result.ok).toBe(false);
+      if (result.ok) throw new Error("Expected quality validation error");
+      expect(result.issues).toEqual(
+        expect.arrayContaining([expect.objectContaining({ path })]),
+      );
+    },
+  );
+
+  it("does not invent checked UI nodes when quality semantics are omitted", () => {
+    const result = parsedDesignGeneration(providerInput(fixture()));
+    if (!result)
+      throw new Error("Expected generation without quality declaration");
+    expect(
+      compileDesignGenerationToolInput(result).plan.targets[0].qualityProfile,
+    ).toMatchObject({
+      safeAreaNodeIds: [],
+      interactiveNodeIds: [],
+    });
   });
 
   it("accepts distinct safe-area foreground and interactive hit-area IDs", () => {

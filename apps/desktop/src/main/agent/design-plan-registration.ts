@@ -55,6 +55,7 @@ export type DesignDeliveryTargetState = {
   lastMaterialWriteRevision: number | null;
   lastReview: DesignVisualReviewToolInput | null;
   planned: DesignPlanTarget;
+  reviewPlan: Omit<DesignPlanToolInput, "targets">;
   reviewedCaptureCount: number;
   reviewedCaptureRevision: number | null;
 };
@@ -153,7 +154,7 @@ export function registerDesignWorkflowPlan(options: {
   const targetsById = new Map<string, DesignDeliveryTargetState>(
     [...(existing?.targetsById ?? [])].filter(
       ([targetId, target]) =>
-        currentTargetIds.has(targetId) || target.delivery.status === "verified",
+        currentTargetIds.has(targetId) || target.delivery.status !== "pending",
     ),
   );
   const changedTargetIds: string[] = [];
@@ -163,7 +164,7 @@ export function registerDesignWorkflowPlan(options: {
     if (current && current.delivery.status !== "pending") {
       const targetChanged = !sameJson(current.planned, target);
       const componentStrategyChanged = !sameJson(
-        existing ? componentOccurrences(existing.plan, target.targetId) : [],
+        componentOccurrences(designPlanForTarget(current), target.targetId),
         componentOccurrences(plan, target.targetId),
       );
       const targetNeedsRework = targetChanged || componentStrategyChanged;
@@ -179,6 +180,7 @@ export function registerDesignWorkflowPlan(options: {
           inspection,
           reservedNodeIds,
           shouldReopen,
+          plan,
         ),
       );
       continue;
@@ -190,6 +192,7 @@ export function registerDesignWorkflowPlan(options: {
         inspection,
         recoverableTargets.get(target.targetId),
         reservedNodeIds,
+        plan,
       ),
     );
     if (
@@ -214,14 +217,16 @@ export function registerDesignWorkflowPlan(options: {
       plan,
       planRevision,
       inspection.revision,
+      targetsById,
     ),
     planRevision,
     targetOrder,
     targetsById,
   };
-  state.planExecution.targets = state.planExecution.targets.filter(
-    (execution) =>
-      state.targetsById.get(execution.targetId)?.delivery.status !== "verified",
+  state.planExecution.targets.sort(
+    (left, right) =>
+      state.targetOrder.indexOf(left.targetId) -
+      state.targetOrder.indexOf(right.targetId),
   );
   normalizePlanExecution(state, inspection.revision);
   return {
@@ -237,8 +242,9 @@ function normalizePlanExecution(
   state: DesignWorkflowState,
   currentRevision: number,
 ): void {
-  let activeAssigned = false;
   for (const execution of state.planExecution.targets) {
+    if (execution.steps.every((step) => step.status === "pending")) continue;
+    let activeAssigned = false;
     let openSeen = false;
     for (const step of execution.steps) {
       if (!openSeen && step.status === "completed") continue;
@@ -262,22 +268,43 @@ function reconcilePlanExecution(
   plan: DesignPlanToolInput,
   planRevision: number,
   currentRevision: number,
+  retainedTargets: ReadonlyMap<string, DesignDeliveryTargetState>,
 ): DesignPlanExecution {
   const fresh = createInitialPlanExecution(plan, planRevision, currentRevision);
+  fresh.targets = fresh.targets.filter(
+    (target) =>
+      retainedTargets.get(target.targetId)?.delivery.status !== "verified" ||
+      existing?.planExecution.targets.some(
+        (previous) => previous.targetId === target.targetId,
+      ),
+  );
+  activateFirstOpenImplementationStep(fresh.targets, currentRevision);
   if (!existing) return fresh;
 
-  const nextTargets: DesignPlanExecution["targets"] = [];
+  const freshTargetIds = new Set(
+    fresh.targets.map((target) => target.targetId),
+  );
+  const nextTargets: DesignPlanExecution["targets"] =
+    existing.planExecution.targets
+      .filter(
+        (target) =>
+          !freshTargetIds.has(target.targetId) &&
+          retainedTargets.has(target.targetId),
+      )
+      .map((target) => structuredClone(target));
   for (const target of fresh.targets) {
     const previous = existing.planExecution.targets.find(
       (candidate) => candidate.targetId === target.targetId,
     );
     nextTargets.push(
       previous
-        ? reconcileTargetExecution(
-            target.targetId,
-            previous.steps,
-            target.steps,
-          )
+        ? retainedTargets.get(target.targetId)?.delivery.status === "verified"
+          ? structuredClone(previous)
+          : reconcileTargetExecution(
+              target.targetId,
+              previous.steps,
+              target.steps,
+            )
         : structuredClone(target),
     );
   }
@@ -372,7 +399,7 @@ function assertMaterialComponentDecisionsRemainStable(
     if (!isMaterialDelivery(target.delivery)) continue;
     if (!nextTargetIds.has(target.delivery.targetId)) continue;
     const previous = componentOccurrences(
-      existing.plan,
+      designPlanForTarget(target),
       target.delivery.targetId,
     );
     const next = new Map(
@@ -416,6 +443,7 @@ function preserveMaterialTarget(
   inspection: InspectedHierarchy,
   reservedNodeIds: readonly string[],
   intentChanged: boolean,
+  plan: DesignPlanToolInput,
 ): DesignDeliveryTargetState {
   if (current.delivery.status === "allocated") {
     assertAllocatedArtboardMatchesInspection(inspection, target);
@@ -451,6 +479,7 @@ function preserveMaterialTarget(
     lastCaptureRevision: intentChanged ? null : current.lastCaptureRevision,
     lastReview: intentChanged ? null : current.lastReview,
     planned: structuredClone(target),
+    reviewPlan: reviewPlanMetadata(plan),
     reviewedCaptureCount: intentChanged ? 0 : current.reviewedCaptureCount,
     reviewedCaptureRevision: intentChanged
       ? null
@@ -463,6 +492,7 @@ function createTargetState(
   inspection: InspectedHierarchy,
   recoverableTarget: DesignDeliveryTarget | undefined,
   reservedNodeIds: readonly string[],
+  plan: DesignPlanToolInput,
 ): DesignDeliveryTargetState {
   const inspectedArtboard = inspection.nodesById.get(target.artboard.frameId);
   const recovered =
@@ -513,8 +543,26 @@ function createTargetState(
       : null,
     lastReview: null,
     planned: structuredClone(target),
+    reviewPlan: reviewPlanMetadata(plan),
     reviewedCaptureCount: 0,
     reviewedCaptureRevision: null,
+  };
+}
+
+function reviewPlanMetadata(
+  plan: DesignPlanToolInput,
+): Omit<DesignPlanToolInput, "targets"> {
+  const { targets, ...metadata } = structuredClone(plan);
+  void targets;
+  return metadata;
+}
+
+export function designPlanForTarget(
+  target: DesignDeliveryTargetState,
+): DesignPlanToolInput {
+  return {
+    ...structuredClone(target.reviewPlan),
+    targets: [structuredClone(target.planned)],
   };
 }
 
@@ -541,13 +589,7 @@ function assertMaterialTargetsRemainStable(
   );
   for (const current of materialTargets) {
     const next = nextTargets.get(current.delivery.targetId);
-    if (!next) {
-      if (current.delivery.status === "verified") continue;
-      throw designWorkflowError(
-        "plan_amendment_invalid",
-        `Material target ${current.delivery.targetId} cannot be removed from an amended plan`,
-      );
-    }
+    if (!next) continue;
     if (
       next.pageId !== current.planned.pageId ||
       next.artboard.frameId !== current.planned.artboard.frameId
