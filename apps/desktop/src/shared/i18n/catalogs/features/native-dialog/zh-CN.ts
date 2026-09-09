@@ -1,6 +1,10 @@
 import type { nativeDialogMessages as englishMessages } from "./en";
 
 export const nativeDialogMessages = {
+  "main.unsavedDesignMessage": "要保存对“{{name}}”的更改吗？",
+  "main.unsavedDesignDetail": "如果不保存，你的更改将会丢失。",
+  "main.discardDesign": "不保存",
+  "main.cancelDesign": "取消",
   "main.createProjectTitle": "创建 OpenDesign 项目",
   "main.createHere": "在此创建",
   "main.openProjectTitle": "打开项目",

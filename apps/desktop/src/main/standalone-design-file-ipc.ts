@@ -1,3 +1,8 @@
+import { requireContract } from "./contract-parser";
+import {
+  UnsavedDesignNameContract,
+  type UnsavedDesignDecision,
+} from "@/shared/window-contract";
 import { randomUUID } from "node:crypto";
 import { readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import {
@@ -14,6 +19,8 @@ import type {
   OpenDialogReturnValue,
   SaveDialogOptions,
   SaveDialogReturnValue,
+  MessageBoxOptions,
+  MessageBoxReturnValue,
 } from "electron";
 import {
   channels,
@@ -60,6 +67,10 @@ export interface StandaloneDesignFileIpcHostOptions {
     options: OpenDialogOptions,
   ): Promise<OpenDialogReturnValue>;
   pathOperations?: DesignFilePathOperations;
+  confirmUnsaved?(
+    window: BrowserWindow,
+    options: MessageBoxOptions,
+  ): Promise<MessageBoxReturnValue>;
   saveDialog(
     window: BrowserWindow,
     options: SaveDialogOptions,
@@ -74,7 +85,7 @@ export interface StandaloneDesignFileIpcHostOptions {
 export class StandaloneDesignFileIpcHost {
   readonly #options: StandaloneDesignFileIpcHostOptions;
   readonly #path: DesignFilePathOperations;
-  #activePath: string | null = null;
+  readonly #pathsByDocument = new Map<string, Set<string>>();
 
   constructor(options: StandaloneDesignFileIpcHostOptions) {
     this.#options = options;
@@ -85,6 +96,16 @@ export class StandaloneDesignFileIpcHost {
     assertRenderer(event: IpcMainInvokeEvent): void;
     ipc: StandaloneDesignFileIpcRegistrar;
   }): void {
+    options.ipc.handle(channels.confirmUnsavedDesign, (event, ...args) => {
+      options.assertRenderer(event);
+      assertArgumentCount(args, 1);
+      const name = requireContract(
+        UnsavedDesignNameContract,
+        args[0],
+        "Unsaved design name",
+      );
+      return this.confirmUnsaved(name);
+    });
     options.ipc.handle(channels.openDesignFile, (event, ...args) => {
       options.assertRenderer(event);
       assertArgumentCount(args, 0);
@@ -98,7 +119,37 @@ export class StandaloneDesignFileIpcHost {
   }
 
   clear(): void {
-    this.#activePath = null;
+    this.#pathsByDocument.clear();
+  }
+
+  private rememberPath(documentId: string, path: string): void {
+    const paths = this.#pathsByDocument.get(documentId) ?? new Set<string>();
+    paths.add(path);
+    this.#pathsByDocument.set(documentId, paths);
+  }
+
+  private async confirmUnsaved(name: string): Promise<UnsavedDesignDecision> {
+    const window = this.#options.getWindow();
+    if (!window || !this.#options.confirmUnsaved) return "cancel";
+    const locale = this.#options.getLocale();
+    const result = await this.#options.confirmUnsaved(window, {
+      type: "question",
+      message: translate(locale, "main.unsavedDesignMessage", { name }),
+      detail: translate(locale, "main.unsavedDesignDetail"),
+      buttons: [
+        translate(locale, "main.saveDocumentButton"),
+        translate(locale, "main.discardDesign"),
+        translate(locale, "main.cancelDesign"),
+      ],
+      defaultId: 0,
+      cancelId: 2,
+      noLink: true,
+    });
+    return result.response === 0
+      ? "save"
+      : result.response === 1
+        ? "discard"
+        : "cancel";
   }
 
   private async open(): Promise<OpenDesignFile | null> {
@@ -124,7 +175,8 @@ export class StandaloneDesignFileIpcHost {
     assertDesignFileByteSize(bytes.byteLength);
     const contents = decodeDesignFileUtf8(bytes);
     const name = designFileName(filePath, this.#path);
-    this.#activePath = filePath;
+    const documentId = serializedDocumentId(contents);
+    if (documentId) this.rememberPath(documentId, filePath);
     return { name, contents };
   }
 
@@ -134,7 +186,11 @@ export class StandaloneDesignFileIpcHost {
     }
     assertDesignFileByteSize(Buffer.byteLength(request.contents, "utf8"));
 
-    let filePath = request.saveAs ? null : this.#activePath;
+    const documentId = serializedDocumentId(request.contents);
+    const paths = documentId
+      ? this.#pathsByDocument.get(documentId)
+      : undefined;
+    let filePath = !request.saveAs && paths?.size === 1 ? [...paths][0] : null;
     if (!filePath) {
       const window = this.#options.getWindow();
       if (!window) return null;
@@ -150,7 +206,7 @@ export class StandaloneDesignFileIpcHost {
     assertDesignFilePath(filePath, this.#path);
     await writeDesignFileAtomically(filePath, request.contents, this.#path);
     const name = designFileName(filePath, this.#path);
-    this.#activePath = filePath;
+    if (documentId) this.rememberPath(documentId, filePath);
     return { name };
   }
 }
@@ -295,4 +351,19 @@ function hasControlCharacter(value: string): boolean {
 
 function assertArgumentCount(args: unknown[], count: number): void {
   if (args.length !== count) throw new TypeError("Unexpected IPC arguments");
+}
+
+function serializedDocumentId(contents: string): string | null {
+  try {
+    const value: unknown = JSON.parse(contents);
+    return typeof value === "object" &&
+      value !== null &&
+      "documentId" in value &&
+      typeof value.documentId === "string"
+      ? value.documentId
+      : null;
+  } catch {
+    // Renderer reports invalid imported documents; they never acquire a save path.
+    return null;
+  }
 }

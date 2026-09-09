@@ -1,3 +1,8 @@
+import {
+  WindowCommandContract,
+  type WindowCommand,
+} from "@/shared/window-contract";
+import { requireContract } from "./contract-parser";
 import type {
   BrowserWindow,
   BrowserWindowConstructorOptions,
@@ -45,6 +50,8 @@ export class DesktopWindowHost {
   #readyToShow = false;
   #releasePermissionPolicy: (() => void) | null = null;
   #window: BrowserWindow | null = null;
+  readonly #readyCommands = new Set<WindowCommand>();
+  readonly #pendingCommands = new Set<WindowCommand>();
 
   constructor(options: DesktopWindowHostOptions) {
     this.#options = options;
@@ -91,6 +98,13 @@ export class DesktopWindowHost {
       },
     });
     this.#window = window;
+    this.#readyCommands.clear();
+    window.on("maximize", () => {
+      if (this.current() === window) this.send(channels.windowMaximized, true);
+    });
+    window.on("unmaximize", () => {
+      if (this.current() === window) this.send(channels.windowMaximized, false);
+    });
     this.#releasePermissionPolicy = installRendererPermissionPolicy(
       window,
       rendererUrl,
@@ -131,6 +145,8 @@ export class DesktopWindowHost {
         this.#releasePermissionPolicy?.();
         this.#releasePermissionPolicy = null;
         this.#window = null;
+        this.#readyCommands.clear();
+        this.#pendingCommands.clear();
         this.#loadPromise = null;
         this.#presentationDeferred = false;
         this.#readyToShow = false;
@@ -171,6 +187,8 @@ export class DesktopWindowHost {
   dispose(): void {
     const window = this.#window;
     this.#window = null;
+    this.#readyCommands.clear();
+    this.#pendingCommands.clear();
     this.#loadPromise = null;
     this.#presentationDeferred = false;
     this.#readyToShow = false;
@@ -179,7 +197,29 @@ export class DesktopWindowHost {
     if (window && !window.isDestroyed()) window.destroy();
   }
 
+  sendCommand(command: WindowCommand): void {
+    if (!this.current()) this.create();
+    if (this.#readyCommands.has(command)) this.send(command);
+    else this.#pendingCommands.add(command);
+  }
+
   registerIpc(ipc: DesktopWindowIpcRegistrar): void {
+    ipc.handle(channels.getWindowMaximized, (event, ...args) => {
+      this.assertRenderer(event);
+      if (args.length !== 0) throw new TypeError("Unexpected IPC arguments");
+      return this.current()?.isMaximized() ?? false;
+    });
+    ipc.handle(channels.windowCommandReady, (event, ...args) => {
+      this.assertRenderer(event);
+      if (args.length !== 1) throw new TypeError("Unexpected IPC arguments");
+      const command = requireContract(
+        WindowCommandContract,
+        args[0],
+        "Window command",
+      );
+      this.#readyCommands.add(command);
+      if (this.#pendingCommands.delete(command)) this.send(command);
+    });
     ipc.handle(channels.windowAction, (event, ...args) => {
       if (args.length !== 1) throw new TypeError("Unexpected IPC arguments");
       const action = args[0];

@@ -28,6 +28,7 @@ export const appShellMessages = {
   "theme.useLight": "Use light theme",
   "window.close": "Close window",
   "window.controls": "Window controls",
+  "window.restore": "Restore window",
   "window.maximize": "Maximize window",
   "window.minimize": "Minimize window",
 } as const;

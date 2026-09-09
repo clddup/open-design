@@ -186,6 +186,7 @@ const standaloneDesignFileIpcHost = new StandaloneDesignFileIpcHost({
   getWindow: () => desktopWindowHost.current(),
   openDialog: (window, options) => dialog.showOpenDialog(window, options),
   saveDialog: (window, options) => dialog.showSaveDialog(window, options),
+  confirmUnsaved: (window, options) => dialog.showMessageBox(window, options),
 });
 const agentRunCoordinator = new AgentRunCoordinator({
   agentHost,
@@ -429,13 +430,13 @@ function installApplicationMenu() {
     process.platform,
     {
       onOpenSettings: () => {
-        desktopWindowHost.send(channels.openSettings);
+        desktopWindowHost.sendCommand(channels.openSettings);
       },
       onImportSvg: () => {
-        desktopWindowHost.send(channels.importSvgCommand);
+        desktopWindowHost.sendCommand(channels.importSvgCommand);
       },
       onExportSvg: () => {
-        desktopWindowHost.send(channels.exportSvgCommand);
+        desktopWindowHost.sendCommand(channels.exportSvgCommand);
       },
       settingsLabel: translate(
         applicationPreferences.locale(),

@@ -327,6 +327,9 @@ beforeEach(() => {
     onNativeThemeChange: vi.fn().mockReturnValue(() => undefined),
     openDesignFile: vi.fn().mockResolvedValue(null),
     saveDesignFile: vi.fn().mockResolvedValue(null),
+    confirmUnsavedDesign: vi.fn().mockResolvedValue("cancel"),
+    getWindowMaximized: vi.fn().mockResolvedValue(false),
+    onWindowMaximized: vi.fn().mockReturnValue(() => undefined),
     openSvgFile: vi.fn().mockResolvedValue(null),
     saveSvgFile: vi.fn().mockResolvedValue(null),
     saveRasterFile: vi.fn().mockResolvedValue(null),
@@ -6745,6 +6748,36 @@ describe("App", () => {
         1,
       ),
     );
+  });
+
+  it("blocks standalone window close until unsaved changes are resolved", async () => {
+    const user = userEvent.setup();
+    const close = vi.spyOn(window, "close").mockImplementation(() => undefined);
+    renderApp();
+    await user.click(screen.getByRole("button", { name: "Hide Subtitle" }));
+    const cancelClose = new Event("beforeunload", { cancelable: true });
+    act(() => {
+      window.dispatchEvent(cancelClose);
+    });
+    expect(cancelClose.defaultPrevented).toBe(true);
+    await waitFor(() =>
+      expect(window.desktop!.confirmUnsavedDesign).toHaveBeenCalledOnce(),
+    );
+    expect(close).not.toHaveBeenCalled();
+    expect(runtimeOutput()).toHaveAttribute("data-dirty", "true");
+    vi.mocked(window.desktop!.confirmUnsavedDesign).mockResolvedValueOnce(
+      "save",
+    );
+    vi.mocked(window.desktop!.saveDesignFile).mockResolvedValueOnce({
+      name: "Saved.opendesign",
+    });
+    await act(() => {
+      window.dispatchEvent(new Event("beforeunload", { cancelable: true }));
+      return Promise.resolve();
+    });
+    await waitFor(() => expect(close).toHaveBeenCalledOnce());
+    expect(runtimeOutput()).toHaveAttribute("data-dirty", "false");
+    close.mockRestore();
   });
 
   it("saves the structured document and checkpoints only on success", async () => {

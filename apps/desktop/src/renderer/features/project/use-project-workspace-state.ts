@@ -1,3 +1,7 @@
+import {
+  confirmStandaloneChanges,
+  dirtyStandaloneFiles,
+} from "./standalone-unsaved-changes";
 import type { ProjectManifest } from "@opendesign/workspace-contracts";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ProjectDesignFile, RecentProject } from "@/shared/desktop-api";
@@ -125,24 +129,49 @@ export function useProjectWorkspaceState({
     let closeAfterFlush = false;
     let flushing = false;
     const beforeUnload = (event: BeforeUnloadEvent) => {
-      if (closeAfterFlush || !projectAutosave.hasPendingWork()) return;
+      if (
+        closeAfterFlush ||
+        (!projectAutosave.hasPendingWork() &&
+          dirtyStandaloneFiles(workspace).length === 0)
+      )
+        return;
       event.preventDefault();
       event.returnValue = false;
       if (flushing) return;
       flushing = true;
-      void projectAutosave.flushAll().then(
-        () => {
-          closeAfterFlush = true;
-          window.close();
-        },
-        () => {
+      void (async () => {
+        await projectAutosave.flushAll();
+        const desktop = window.desktop;
+        if (
+          dirtyStandaloneFiles(workspace).length > 0 &&
+          (!desktop || !(await confirmStandaloneChanges(workspace, desktop)))
+        )
+          return;
+        // Project edits may continue while a native confirmation is open.
+        if (projectAutosave.hasPendingWork()) {
           flushing = false;
-        },
-      );
+          window.close();
+          return;
+        }
+        closeAfterFlush = true;
+        window.close();
+      })()
+        .catch((error: unknown) => {
+          setEditorError(
+            reportRendererError(
+              "design_document_save_failed",
+              error,
+              t("error.saveDesignDocument"),
+            ),
+          );
+        })
+        .finally(() => {
+          flushing = false;
+        });
     };
     window.addEventListener("beforeunload", beforeUnload);
     return () => window.removeEventListener("beforeunload", beforeUnload);
-  }, [projectAutosave]);
+  }, [projectAutosave, setEditorError, t, workspace]);
 
   return {
     applySavedProjectFile,

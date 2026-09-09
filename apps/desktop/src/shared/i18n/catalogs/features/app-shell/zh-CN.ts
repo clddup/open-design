@@ -30,6 +30,7 @@ export const appShellMessages = {
   "theme.useLight": "使用浅色主题",
   "window.close": "关闭窗口",
   "window.controls": "窗口控制",
+  "window.restore": "还原窗口",
   "window.maximize": "最大化窗口",
   "window.minimize": "最小化窗口",
 } satisfies Record<keyof typeof englishMessages, string>;

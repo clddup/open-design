@@ -1,3 +1,4 @@
+import type { UnsavedDesignDecision } from "./window-contract";
 import type { AgentEvent, AgentRequest } from "@opendesign/agent-contracts";
 import type { LibraryReleaseSnapshot } from "@opendesign/design-contracts";
 import {
@@ -311,6 +312,9 @@ export interface DesktopApi {
     response: RendererDesignToolResponse,
   ) => Promise<void>;
   windowAction: (action: WindowAction) => Promise<void>;
+  getWindowMaximized: () => Promise<boolean>;
+  onWindowMaximized: (listener: (maximized: boolean) => void) => () => void;
+  confirmUnsavedDesign: (name: string) => Promise<UnsavedDesignDecision>;
   onNativeThemeChange: (listener: (isDark: boolean) => void) => () => void;
   openDesignFile: () => Promise<OpenDesignFile | null>;
   saveDesignFile: (
@@ -416,6 +420,10 @@ export const channels = {
   designToolProgress: "design-tool:progress",
   resolveDesignToolRequest: "design-tool:resolve",
   windowAction: "window:action",
+  windowMaximized: "window:maximized",
+  getWindowMaximized: "window:get-maximized",
+  windowCommandReady: "window:command-ready",
+  confirmUnsavedDesign: "window:confirm-unsaved-design",
   openDesignFile: "design-file:open",
   saveDesignFile: "design-file:save",
   openSvgFile: "svg-file:open",

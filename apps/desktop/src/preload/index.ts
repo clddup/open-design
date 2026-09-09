@@ -1,3 +1,9 @@
+import {
+  MaximizedWindowContract,
+  UnsavedDesignDecisionContract,
+  UnsavedDesignNameContract,
+} from "@/shared/window-contract";
+import { parseContract } from "./contract-parser";
 import { contextBridge, ipcRenderer } from "electron";
 import {
   isLibraryReleaseSnapshot,
@@ -109,18 +115,33 @@ const desktopApi: DesktopApi = Object.freeze({
   onOpenSettings: (listener: () => void) => {
     const subscription = () => listener();
     ipcRenderer.on(channels.openSettings, subscription);
+    void ipcRenderer
+      .invoke(channels.windowCommandReady, channels.openSettings)
+      .catch((error: unknown) => {
+        console.error("Window command subscription failed", error);
+      });
     return () =>
       ipcRenderer.removeListener(channels.openSettings, subscription);
   },
   onImportSvgCommand: (listener: () => void) => {
     const subscription = () => listener();
     ipcRenderer.on(channels.importSvgCommand, subscription);
+    void ipcRenderer
+      .invoke(channels.windowCommandReady, channels.importSvgCommand)
+      .catch((error: unknown) => {
+        console.error("Window command subscription failed", error);
+      });
     return () =>
       ipcRenderer.removeListener(channels.importSvgCommand, subscription);
   },
   onExportSvgCommand: (listener: () => void) => {
     const subscription = () => listener();
     ipcRenderer.on(channels.exportSvgCommand, subscription);
+    void ipcRenderer
+      .invoke(channels.windowCommandReady, channels.exportSvgCommand)
+      .catch((error: unknown) => {
+        console.error("Window command subscription failed", error);
+      });
     return () =>
       ipcRenderer.removeListener(channels.exportSvgCommand, subscription);
   },
@@ -251,6 +272,28 @@ const desktopApi: DesktopApi = Object.freeze({
       "Invalid design tool response",
     );
     await ipcRenderer.invoke(channels.resolveDesignToolRequest, response);
+  },
+  confirmUnsavedDesign: async (name: string) => {
+    parseContract(UnsavedDesignNameContract, name, "Unsaved design name");
+    return parseContract(
+      UnsavedDesignDecisionContract,
+      await ipcRenderer.invoke(channels.confirmUnsavedDesign, name),
+      "Unsaved design decision",
+    );
+  },
+  getWindowMaximized: async () =>
+    parseContract(
+      MaximizedWindowContract,
+      await ipcRenderer.invoke(channels.getWindowMaximized),
+      "Window maximized state",
+    ),
+  onWindowMaximized: (listener: (maximized: boolean) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, value: unknown) =>
+      listener(
+        parseContract(MaximizedWindowContract, value, "Window maximized state"),
+      );
+    ipcRenderer.on(channels.windowMaximized, handler);
+    return () => ipcRenderer.removeListener(channels.windowMaximized, handler);
   },
   windowAction: (action: WindowAction) =>
     ipcRenderer.invoke(channels.windowAction, action),

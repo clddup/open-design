@@ -1,3 +1,7 @@
+import {
+  confirmStandaloneChanges,
+  saveStandaloneFile,
+} from "./standalone-unsaved-changes";
 import type { DesignDocument } from "@opendesign/design-contracts";
 import type { EditorRuntime } from "@opendesign/editor-runtime";
 import type {
@@ -77,9 +81,6 @@ export function useProjectNavigationController({
   workspaceSnapshot: WorkspaceSnapshot;
 }) {
   const activeProject = projectsById[projectContextId] ?? null;
-  const activeFileName =
-    workspaceSnapshot.files[workspaceSnapshot.activeFileKey]?.name ??
-    t("file.untitled");
   const refreshRecentProjects = useCallback(async () => {
     const projects = await window.desktop?.listRecentProjects();
     if (projects) setRecentProjects(projects);
@@ -491,6 +492,20 @@ export function useProjectNavigationController({
       }
       if (!navigator.isCurrent(transition)) return;
       const value: unknown = JSON.parse(file.contents);
+      const desktop = window.desktop;
+      const fileKey = workspace.getSnapshot().activeFileKey;
+      if (
+        !desktop ||
+        !(await confirmStandaloneChanges(workspace, desktop, fileKey))
+      ) {
+        navigator.cancel(transition);
+        return;
+      }
+      if (
+        !navigator.isCurrent(transition) ||
+        workspace.getSnapshot().activeFileKey !== fileKey
+      )
+        return;
       replaceDocument(value, file.name);
       navigator.commit(transition, {
         kind: "editor",
@@ -542,24 +557,26 @@ export function useProjectNavigationController({
             },
             saved,
           );
-          runtime.checkpoint(
-            t("history.saved", { name: saved.descriptor.name }),
-          );
+          if (
+            runtime.getSnapshot().document.revision ===
+            current.document.revision
+          ) {
+            runtime.checkpoint(
+              t("history.saved", { name: saved.descriptor.name }),
+            );
+          }
           return;
         }
 
-        const result = await window.desktop?.saveDesignFile({
-          suggestedName: activeFileName,
-          contents: JSON.stringify(current.document, null, 2),
-          ...(saveAs ? { saveAs: true } : {}),
-        });
-        if (!result) return;
-        workspace.renameFile(
-          workspaceSnapshot.activeProjectId,
-          workspaceSnapshot.activeDesignFileId,
-          result.name,
+        const file =
+          workspace.getSnapshot().files[workspaceSnapshot.activeFileKey];
+        if (!window.desktop || !file) return;
+        await saveStandaloneFile(
+          workspace,
+          file,
+          window.desktop.saveDesignFile,
+          saveAs,
         );
-        runtime.checkpoint(t("history.saved", { name: result.name }));
       } catch (error) {
         setEditorError(
           reportRendererError(
@@ -576,12 +593,12 @@ export function useProjectNavigationController({
     },
     [
       applySavedProjectFile,
-      activeFileName,
       projectsById,
       runtime,
       setEditorError,
       t,
       workspace,
+      workspaceSnapshot.activeFileKey,
       workspaceSnapshot.activeDesignFileId,
       workspaceSnapshot.activeProjectId,
     ],

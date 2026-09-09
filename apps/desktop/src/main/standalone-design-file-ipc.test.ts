@@ -33,10 +33,101 @@ afterEach(async () => {
 });
 
 describe("StandaloneDesignFileIpcHost", () => {
+  it("requires a native choice when opened copies share document identity", async () => {
+    const directory = await temporaryDirectory();
+    const firstPath = join(directory, "First.opendesign");
+    const secondPath = join(directory, "Copy.opendesign");
+    const original = '{"documentId":"same","revision":1}';
+    await writeFile(firstPath, original);
+    await writeFile(secondPath, original);
+    const fixture = setup({
+      openDialog: vi
+        .fn()
+        .mockResolvedValueOnce({ canceled: false, filePaths: [firstPath] })
+        .mockResolvedValueOnce({ canceled: false, filePaths: [secondPath] }),
+      saveDialog: vi
+        .fn()
+        .mockResolvedValueOnce({ canceled: true, filePath: "" })
+        .mockResolvedValueOnce({ canceled: false, filePath: firstPath }),
+    });
+    await invoke(fixture, channels.openDesignFile);
+    await invoke(fixture, channels.openDesignFile);
+    const request = {
+      suggestedName: "First",
+      contents: '{"documentId":"same","revision":2}',
+    };
+    expect(await invoke(fixture, channels.saveDesignFile, request)).toBeNull();
+    expect(await readFile(firstPath, "utf8")).toBe(original);
+    expect(await readFile(secondPath, "utf8")).toBe(original);
+    await invoke(fixture, channels.saveDesignFile, request);
+    expect(fixture.saveDialog).toHaveBeenCalledTimes(2);
+    expect(await readFile(firstPath, "utf8")).toBe(request.contents);
+    expect(await readFile(secondPath, "utf8")).toBe(original);
+  });
+
+  it("keeps save paths bound to document identity after another file opens", async () => {
+    const directory = await temporaryDirectory();
+    const firstPath = join(directory, "First.opendesign");
+    const secondPath = join(directory, "Second.opendesign");
+    await writeFile(firstPath, '{"documentId":"first","revision":1}');
+    await writeFile(secondPath, '{"documentId":"second","revision":1}');
+    const fixture = setup({
+      openDialog: vi
+        .fn()
+        .mockResolvedValueOnce({ canceled: false, filePaths: [firstPath] })
+        .mockResolvedValueOnce({ canceled: false, filePaths: [secondPath] }),
+    });
+    await invoke(fixture, channels.openDesignFile);
+    await invoke(fixture, channels.openDesignFile);
+    await invoke(fixture, channels.saveDesignFile, {
+      suggestedName: "First",
+      contents: '{"documentId":"first","revision":2}',
+    });
+    expect(await readFile(firstPath, "utf8")).toContain('"revision":2');
+    expect(await readFile(secondPath, "utf8")).toContain('"revision":1');
+    expect(fixture.saveDialog).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [0, "save"],
+    [1, "discard"],
+    [2, "cancel"],
+  ] as const)(
+    "returns native unsaved decision %s",
+    async (response, decision) => {
+      const confirmUnsaved = vi
+        .fn()
+        .mockResolvedValue({ response, checkboxChecked: false });
+      const fixture = setup({ confirmUnsaved });
+      expect(
+        await invoke(
+          fixture,
+          channels.confirmUnsavedDesign,
+          "Draft.opendesign",
+        ),
+      ).toBe(decision);
+      expect(confirmUnsaved).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          defaultId: 0,
+          cancelId: 2,
+          buttons: ["保存", "不保存", "取消"],
+        }),
+      );
+      expect(() =>
+        invoke(fixture, channels.confirmUnsavedDesign, "../bad"),
+      ).toThrow();
+    },
+  );
+
   it("opens, tracks and atomically saves one standalone document", async () => {
     const directory = await temporaryDirectory();
     const filePath = join(directory, "Opened.opendesign");
-    await writeFile(filePath, '{"revision":1}', "utf8");
+    await writeFile(
+      filePath,
+      '{"documentId":"document_test","revision":1}',
+      "utf8",
+    );
     const fixture = setup({
       openDialog: vi.fn(() =>
         Promise.resolve({ canceled: false, filePaths: [filePath] }),
@@ -45,7 +136,7 @@ describe("StandaloneDesignFileIpcHost", () => {
 
     await expect(invoke(fixture, channels.openDesignFile)).resolves.toEqual({
       name: "Opened.opendesign",
-      contents: '{"revision":1}',
+      contents: '{"documentId":"document_test","revision":1}',
     });
     expect(fixture.openDialog.mock.calls[0]?.[1]).toMatchObject({
       properties: ["openFile"],
@@ -55,18 +146,20 @@ describe("StandaloneDesignFileIpcHost", () => {
     await expect(
       invoke(fixture, channels.saveDesignFile, {
         suggestedName: "Ignored.opendesign",
-        contents: '{"revision":2}',
+        contents: '{"documentId":"document_test","revision":2}',
       }),
     ).resolves.toEqual({ name: "Opened.opendesign" });
     expect(fixture.saveDialog).not.toHaveBeenCalled();
-    await expect(readFile(filePath, "utf8")).resolves.toBe('{"revision":2}');
+    await expect(readFile(filePath, "utf8")).resolves.toBe(
+      '{"documentId":"document_test","revision":2}',
+    );
     expect(await temporaryArtifacts(directory)).toEqual([]);
 
     fixture.host.clear();
     await expect(
       invoke(fixture, channels.saveDesignFile, {
         suggestedName: "New.opendesign",
-        contents: '{"revision":3}',
+        contents: '{"documentId":"document_test","revision":3}',
       }),
     ).resolves.toBeNull();
     expect(fixture.saveDialog).toHaveBeenCalledOnce();
@@ -84,7 +177,7 @@ describe("StandaloneDesignFileIpcHost", () => {
     await expect(
       invoke(fixture, channels.saveDesignFile, {
         suggestedName: "Brand.OPENDESIGN",
-        contents: '{"revision":1}',
+        contents: '{"documentId":"document_test","revision":1}',
         saveAs: true,
       }),
     ).resolves.toEqual({ name: "Brand.opendesign" });
@@ -93,26 +186,32 @@ describe("StandaloneDesignFileIpcHost", () => {
       filters: [{ extensions: ["opendesign"] }],
     });
     const savedPath = `${selectedPath}.opendesign`;
-    await expect(readFile(savedPath, "utf8")).resolves.toBe('{"revision":1}');
+    await expect(readFile(savedPath, "utf8")).resolves.toBe(
+      '{"documentId":"document_test","revision":1}',
+    );
 
     await expect(
       invoke(fixture, channels.saveDesignFile, {
         suggestedName: "Unused.opendesign",
-        contents: '{"revision":2}',
+        contents: '{"documentId":"document_test","revision":2}',
       }),
     ).resolves.toEqual({ name: "Brand.opendesign" });
     expect(saveDialog).toHaveBeenCalledOnce();
-    await expect(readFile(savedPath, "utf8")).resolves.toBe('{"revision":2}');
+    await expect(readFile(savedPath, "utf8")).resolves.toBe(
+      '{"documentId":"document_test","revision":2}',
+    );
 
     await expect(
       invoke(fixture, channels.saveDesignFile, {
         suggestedName: "Cancelled.opendesign",
-        contents: '{"revision":3}',
+        contents: '{"documentId":"document_test","revision":3}',
         saveAs: true,
       }),
     ).resolves.toBeNull();
     expect(saveDialog).toHaveBeenCalledTimes(2);
-    await expect(readFile(savedPath, "utf8")).resolves.toBe('{"revision":2}');
+    await expect(readFile(savedPath, "utf8")).resolves.toBe(
+      '{"documentId":"document_test","revision":2}',
+    );
     expect(await temporaryArtifacts(directory)).toEqual([]);
   });
 
@@ -145,7 +244,7 @@ describe("StandaloneDesignFileIpcHost", () => {
     await expect(
       invoke(fixture, channels.saveDesignFile, {
         suggestedName: "Fresh.opendesign",
-        contents: '{"revision":1}',
+        contents: '{"documentId":"document_test","revision":1}',
       }),
     ).resolves.toBeNull();
     expect(fixture.saveDialog).toHaveBeenCalledOnce();
@@ -223,6 +322,7 @@ function setup(
     assertRenderer?: (event: IpcMainInvokeEvent) => void;
     openDialog?: StandaloneDesignFileIpcHostOptions["openDialog"];
     saveDialog?: StandaloneDesignFileIpcHostOptions["saveDialog"];
+    confirmUnsaved?: StandaloneDesignFileIpcHostOptions["confirmUnsaved"];
   } = {},
 ) {
   const handlers = new Map<string, Handler>();
@@ -241,6 +341,7 @@ function setup(
     getWindow: () => window,
     openDialog,
     saveDialog,
+    confirmUnsaved: overrides.confirmUnsaved,
   });
   host.registerIpc({
     assertRenderer,

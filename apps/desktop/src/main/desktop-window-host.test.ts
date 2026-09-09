@@ -15,6 +15,73 @@ import {
 import { channels } from "@/shared/desktop-api.js";
 
 describe("DesktopWindowHost", () => {
+  it("restores a missing window and delivers menu commands only after subscription", () => {
+    const fixture = setup();
+    const handlers = new Map<
+      string,
+      Parameters<DesktopWindowIpcRegistrar["handle"]>[1]
+    >();
+    fixture.host.registerIpc({
+      handle: (channel, listener) => {
+        handlers.set(channel, listener);
+      },
+    });
+    fixture.host.sendCommand(channels.openSettings);
+    expect(fixture.createWindow).toHaveBeenCalledOnce();
+    expect(fixture.webContents.send).not.toHaveBeenCalled();
+    const event = {
+      sender: fixture.browserWindow.webContents,
+    } as IpcMainInvokeEvent;
+    const ready = handlers.get(channels.windowCommandReady)!;
+    expect(() =>
+      ready({ sender: {} } as IpcMainInvokeEvent, channels.openSettings),
+    ).toThrow();
+    ready(event, channels.openSettings);
+    expect(fixture.webContents.send).toHaveBeenCalledWith(
+      channels.openSettings,
+    );
+    fixture.handlers.closed?.();
+    fixture.host.sendCommand(channels.importSvgCommand);
+    expect(fixture.createWindow).toHaveBeenCalledTimes(2);
+    expect(fixture.webContents.send).not.toHaveBeenCalledWith(
+      channels.importSvgCommand,
+    );
+    ready(event, channels.importSvgCommand);
+    expect(fixture.webContents.send).toHaveBeenCalledWith(
+      channels.importSvgCommand,
+    );
+  });
+
+  it("reports native maximize and restore including initial state", () => {
+    const fixture = setup({ platform: "win32" });
+    fixture.host.create();
+    const handlers = new Map<
+      string,
+      Parameters<DesktopWindowIpcRegistrar["handle"]>[1]
+    >();
+    fixture.host.registerIpc({
+      handle: (channel, listener) => {
+        handlers.set(channel, listener);
+      },
+    });
+    fixture.window.isMaximized.mockReturnValue(true);
+    expect(
+      handlers.get(channels.getWindowMaximized)!({
+        sender: fixture.browserWindow.webContents,
+      } as IpcMainInvokeEvent),
+    ).toBe(true);
+    fixture.handlers.maximize?.();
+    fixture.handlers.unmaximize?.();
+    expect(fixture.webContents.send.mock.calls).toContainEqual([
+      channels.windowMaximized,
+      true,
+    ]);
+    expect(fixture.webContents.send.mock.calls).toContainEqual([
+      channels.windowMaximized,
+      false,
+    ]);
+  });
+
   it("creates one secure desktop workbench and loads the development renderer", () => {
     const fixture = setup({
       environment: { VITE_DEV_SERVER_URL: "http://127.0.0.1:5173/editor" },
@@ -308,6 +375,8 @@ function setup(
 ) {
   const handlers: {
     closed?: () => void;
+    maximize?: () => void;
+    unmaximize?: () => void;
     navigate?: (event: { preventDefault(): void }, url: string) => void;
     openWindow?: (details: { url: string }) => { action: "deny" };
     permissionCheck?: (
@@ -367,6 +436,8 @@ function setup(
     minimize: vi.fn(),
     on: vi.fn((event: string, handler: () => void) => {
       if (event === "closed") handlers.closed = handler;
+      if (event === "maximize") handlers.maximize = handler;
+      if (event === "unmaximize") handlers.unmaximize = handler;
     }),
     once: vi.fn((event: string, handler: () => void) => {
       if (event === "ready-to-show") handlers.ready = handler;

@@ -1,4 +1,9 @@
 export const nativeDialogMessages = {
+  "main.unsavedDesignMessage": "Save changes to “{{name}}”?",
+  "main.unsavedDesignDetail":
+    "Your changes will be lost if you do not save them.",
+  "main.discardDesign": "Don’t Save",
+  "main.cancelDesign": "Cancel",
   "main.createProjectTitle": "Create OpenDesign Project",
   "main.createHere": "Create Here",
   "main.openProjectTitle": "Open Project",
