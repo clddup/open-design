@@ -41,7 +41,7 @@ function payload(elements: unknown[]) {
 describe("single authored generation hierarchy", () => {
   it.each([
     { opacity: 0 },
-    { kind: "frame" },
+    { kind: "frame", fills: [] },
     { fills: [{ type: "solid", color: "#336699", opacity: 0 }] },
     {
       fills: [],
@@ -65,6 +65,21 @@ describe("single authored generation hierarchy", () => {
       );
     },
   );
+
+  it("accepts a painted module Frame as visible layout progress", () => {
+    const parsed = DesignGenerationContract.parse(
+      payload([
+        { ...shape("header"), kind: "frame" },
+        { ...shape("footer"), kind: "frame" },
+      ]),
+      { target },
+    );
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) throw new Error(JSON.stringify(parsed.issues));
+    expect(
+      parsed.value.designGeneration.elements.map((element) => element.kind),
+    ).toEqual(["frame", "frame"]);
+  });
   it("rejects properties from a different element kind in both projections", () => {
     const input = payload([{ ...shape("rectangle"), clipsContent: true }]);
     expect(

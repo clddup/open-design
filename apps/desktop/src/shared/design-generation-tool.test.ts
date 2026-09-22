@@ -1036,6 +1036,23 @@ describe("design-generation tool", () => {
     ];
 
     const modelInput = providerInput(input);
+    const layout = structuredClone(input);
+    layout.designGeneration.elements = layout.designGeneration.elements.map(
+      (element) => ({
+        id: element.id,
+        parentId: element.parentId,
+        name: element.name,
+        kind: "frame",
+        x: element.x,
+        y: element.y,
+        width: element.width,
+        height: element.height,
+        fills: element.fills,
+        strokes: element.strokes,
+        strokeWidth: element.strokeWidth,
+      }),
+    );
+    expect(parseCanonicalProjection(layout).ok).toBe(true);
     const normalized = parsedDesignGeneration(modelInput);
     expect(normalized?.skillRefs).toEqual(BUILTIN_LOGO_DESIGN_SKILL_REFS);
     expect(

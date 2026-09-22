@@ -1,4 +1,5 @@
 import { designWorkflowError } from "@/shared/design-workflow-failure-classification.js";
+import { subtreeHasContentLayer } from "@/shared/design-material.js";
 import type { TrustedToolContext } from "@opendesign/agent-contracts";
 import type { DesignLayoutQualityReport } from "@opendesign/editor-runtime";
 import { designTargetQualityProfilesEqual } from "@opendesign/design-contracts";
@@ -34,19 +35,29 @@ export function assertDeliveryTargetStructure(
     );
   }
   if (target.planned.artboard.mode === "existing") {
-    if (!inspectedSubtreeHasMaterialNode(inspection.nodesById, artboardId)) {
+    if (!subtreeHasContentLayer(inspection.nodesById, artboardId)) {
       throw designWorkflowError(
         "delivery_structure_incomplete",
-        `Existing delivery artboard ${artboardId} has no real editable content; add or refine material layers inside the artboard before capturing again`,
+        `Existing delivery artboard ${artboardId} has no real editable content; it still contains only Frame/Group containers`,
+        {
+          nodeId: artboardId,
+          recovery:
+            "Fill the inspected artboard with actual editable content layers. Named section Frames with visible fills are layout progress, but a framework alone cannot pass review; keep the existing Frame and module IDs when refining them.",
+        },
       );
     }
     assertLogoExplorationEvidence(inspection, target, plan);
     return inspectDeclaredComponentStrategy(inspection, target, plan);
   }
-  if (!inspectedSubtreeHasMaterialNode(inspection.nodesById, artboardId)) {
+  if (!subtreeHasContentLayer(inspection.nodesById, artboardId)) {
     throw designWorkflowError(
       "delivery_structure_incomplete",
-      `Delivery artboard ${artboardId} has no real editable content`,
+      `Delivery artboard ${artboardId} has no real editable content; it still contains only Frame/Group containers`,
+      {
+        nodeId: artboardId,
+        recovery:
+          "Fill the planned artboard with actual editable content layers. Section Frames with visible fills establish layout progress, but capture verifies content; continue with ordinary edits inside the existing modules instead of rebuilding the framework.",
+      },
     );
   }
   assertLogoExplorationEvidence(inspection, target, plan);
@@ -88,6 +99,21 @@ function assertLogoExplorationEvidence(
       throw designWorkflowError(
         "logo_exploration_incomplete",
         `Logo concept ${direction.conceptId} requires its authored master ${direction.masterNodeId} beneath ${direction.rootNodeId}`,
+      );
+    }
+    const master = inspection.nodesById.get(direction.masterNodeId)!;
+    if (
+      (master.kind === "frame" || master.kind === "group") &&
+      !subtreeHasContentLayer(inspection.nodesById, master.id)
+    ) {
+      throw designWorkflowError(
+        "logo_exploration_incomplete",
+        `Logo concept ${direction.conceptId} still contains only its layout framework; fill master ${master.id} with actual editable artwork before final review`,
+        {
+          nodeId: master.id,
+          recovery:
+            "Keep the authored concept and master Frame IDs, then draw the direction's actual editable artwork inside that master before capturing the final Logo evidence.",
+        },
       );
     }
   }
@@ -241,22 +267,4 @@ export function assertLayoutQualityMatchesCapture(
       "The deterministic layout-quality report does not match the current delivery document, revision, Page, and Frame; inspect and capture the current target again",
     );
   }
-}
-
-function inspectedSubtreeHasMaterialNode(
-  nodesById: InspectedHierarchy["nodesById"],
-  rootId: string,
-): boolean {
-  const pending = [...(nodesById.get(rootId)?.childIds ?? [])];
-  const visited = new Set<string>();
-  while (pending.length > 0) {
-    const nodeId = pending.pop();
-    if (!nodeId || visited.has(nodeId)) continue;
-    visited.add(nodeId);
-    const node = nodesById.get(nodeId);
-    if (!node) continue;
-    if (node.kind !== "group" && node.kind !== "frame") return true;
-    pending.push(...node.childIds);
-  }
-  return false;
 }

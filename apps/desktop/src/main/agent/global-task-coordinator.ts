@@ -1,4 +1,4 @@
-import { isVisibleDesignMaterial } from "@/shared/design-material";
+import { isVisibleDesignProgress } from "@/shared/design-material";
 import { isNodeRelocation } from "./design-node-relocation.js";
 import {
   visualCriticUserRequirements,
@@ -2866,7 +2866,7 @@ function assertPlannedArtboardWrite(
     if (artboard.mode === "create") {
       assertPlannedRegionWrites(inserts, state.planned);
     }
-    assertInitialArtboardMaterial(inserts, state.planned);
+    assertInitialArtboardProgress(inserts, state.planned);
     return;
   }
   const insertedParents = new Map(
@@ -2934,21 +2934,22 @@ function assertPlannedRegionWrites(
   }
 }
 
-function assertInitialArtboardMaterial(
+function assertInitialArtboardProgress(
   inserts: readonly Extract<
     DesignApplyToolInput["commands"][number],
     { type: "insert_element" }
   >[],
   target: DesignPlanTarget,
 ): void {
-  if (insertedSubtreeHasMaterialNode(inserts, target.artboard.frameId)) return;
+  if (insertedSubtreeHasVisibleProgress(inserts, target.artboard.frameId))
+    return;
   throw designWorkflowError(
     "empty_artboard_draft",
-    `The first transaction for ${target.artboard.frameId} must include at least one real editable content layer; do not commit an empty artboard and defer all visible content to a later call`,
+    `The first transaction for ${target.artboard.frameId} must include visible layout or content inside the artboard. Section Frames with visible fills or borders can establish the layout before their content is filled in.`,
   );
 }
 
-function insertedSubtreeHasMaterialNode(
+function insertedSubtreeHasVisibleProgress(
   inserts: readonly Extract<
     DesignApplyToolInput["commands"][number],
     { type: "insert_element" }
@@ -2961,7 +2962,7 @@ function insertedSubtreeHasMaterialNode(
   return inserts.some(
     (command) =>
       command.node.id !== rootNodeId &&
-      isVisibleDesignMaterial(command.node) &&
+      isVisibleDesignProgress(command.node) &&
       parentChainReaches(
         command.parentId,
         rootNodeId,

@@ -336,6 +336,14 @@ describe("Agent design inspection component strategy", () => {
     ).not.toThrow();
   });
 
+  it("does not verify an overall framework before its modules contain actual content", () => {
+    const inspection = completeInspection();
+    for (const node of inspection.nodesById.values()) node.kind = "frame";
+    expect(() =>
+      assertDeliveryTargetStructure(inspection, targetState(homeTarget), plan),
+    ).toThrow("design_workflow.delivery_structure_incomplete");
+  });
+
   it("blocks final logo verification when a declared concept lacks real optical evidence", () => {
     const inspection = completeInspection();
     const logoPlan: DesignPlanToolInput = {
@@ -398,6 +406,19 @@ describe("Agent design inspection component strategy", () => {
       ),
     ).not.toThrow();
 
+    const typeMaster = requiredNode(inspection, "type_master");
+    inspection.nodesById.set("type_master", {
+      ...typeMaster,
+      kind: "frame",
+      childIds: [],
+    });
+    expect(() =>
+      assertDeliveryTargetStructure(
+        inspection,
+        targetState(logoPlan.targets[0]),
+        logoPlan,
+      ),
+    ).toThrow("design_workflow.logo_exploration_incomplete");
     inspection.nodesById.delete("type_master");
     expect(() =>
       assertDeliveryTargetStructure(

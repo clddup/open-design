@@ -116,7 +116,13 @@ export async function setupDesignEditing(
 export async function generateDesign(
   fixture: DesignEditingFixture,
   metadata: Partial<
-    Pick<DesignGenerationModelInput, "referenceStrategy" | "rasterAssetRoles">
+    Pick<
+      DesignGenerationModelInput,
+      | "referenceStrategy"
+      | "rasterAssetRoles"
+      | "designGeneration"
+      | "deliverable"
+    >
   > = {},
 ) {
   await fixture.inspect();
@@ -127,7 +133,6 @@ export async function generateDesign(
       deliverable: "poster",
       targets: [{ frame: { width: 800, height: 600 } }],
       rasterAssetRoles: [],
-      ...metadata,
       designGeneration: {
         label: "Create poster",
         elements: [
@@ -143,6 +148,7 @@ export async function generateDesign(
           },
         ],
       },
+      ...metadata,
     },
   };
   const parsed = parseDesignToolInput(

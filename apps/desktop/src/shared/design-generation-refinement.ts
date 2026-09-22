@@ -3,7 +3,7 @@ import {
   compileQualityProfile,
 } from "./design-generation-compiler";
 import { DesignTargetQualityProfileContract } from "@opendesign/design-contracts";
-import { isVisibleDesignMaterial } from "./design-material";
+import { isVisibleDesignProgress } from "./design-material";
 import { isBuiltinDesignSkillRefsForDeliverable } from "@opendesign/design-skills";
 import type {
   ValidationIssue,
@@ -114,12 +114,12 @@ export function refineDesignGeneration(
       parentById.set(element.id, element.parentId);
     }
   }
-  if (!input.designGeneration.elements.some(isMaterialElement)) {
+  if (!input.designGeneration.elements.some(isProgressElement)) {
     issues.push(
       issue(
         "design_generation.material_required",
         "/designGeneration/elements",
-        "The batch must contain visible editable material, not only empty containers",
+        "The batch must make visible design progress: section Frames with visible fills or borders are sufficient for the initial layout; invisible containers alone are not",
       ),
     );
   }
@@ -339,25 +339,25 @@ function refineLogoExploration(
         ),
       );
     }
-    const hasMaterial =
-      (master ? isMaterialElement(master) : false) ||
+    const hasProgress =
+      (master ? isProgressElement(master) : false) ||
       [...elementsById.values()].some(
         (element) =>
           element.id !== direction.masterNodeId &&
-          isMaterialElement(element) &&
+          isProgressElement(element) &&
           parentChainReaches(
             element.parentId,
             direction.masterNodeId,
             parentById,
           ),
       );
-    if (!hasMaterial) {
+    if (!hasProgress) {
       issues.push(
         issue(
           "design_generation.logo_direction_material_required",
           `${path}/masterNodeId`,
-          "Logo master must contain editable material in this design generation",
-          "visible editable master geometry",
+          "Establish visible master geometry or a painted master Frame now, then fill each direction before final review",
+          "visible editable master or layout Frame",
           direction.masterNodeId,
         ),
       );
@@ -425,8 +425,8 @@ function issue(
   };
 }
 
-function isMaterialElement(element: DesignGenerationElementInput): boolean {
-  return isVisibleDesignMaterial(compileDesignGenerationElement(element));
+function isProgressElement(element: DesignGenerationElementInput): boolean {
+  return isVisibleDesignProgress(compileDesignGenerationElement(element));
 }
 
 function parentChainReaches(

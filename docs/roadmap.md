@@ -86,6 +86,8 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 
 - [x] 设计生成收敛为 `opendesign_generate_design` 与普通连续编辑：删除公开 Plan、首切片工具和模型 stage 元数据；单目标直接生成，多目标只保留一次真实画板 Scope。每个完整可见批次立即原子提交并渲染 revision，后续批次继续写入同一目标；实现步骤在材料写入期间保持进行中，只有 capture 才以精确 revision 结束实现并进入审核，避免一笔写入后计划提前变绿或阻塞后续编辑。Provider Schema、Main 解析与错误路径来自同一 `DesignGenerationContract`，同指纹错误有界停止当前 Run且不污染后续 Conversation。见 [ADR-0315](adr/0315-progressive-design-generation.md)。真实打包产品的首个 revision 时延、失败率与视觉质量仍需持续验收。
 
+- [x] 批次边界交回模型判断：删除“首批必须是完整实质内容”和“UI 首次可见 revision 必须完成视觉细节”的隐含工序，首批可以是整体可见布局、代表性区域或完整的简单设计。生成契约与 Main 首次写入门禁共用可见进展判定（带可见填充或描边的模块 Frame 计入，隐形、透明、零尺寸、零宽描边与空白 Text 不计入），最终 capture 与 Logo master 校验仍要求真实内容层，并返回保留已提交模块 ID、就地填充内容的恢复动作；子树内容判定收敛为唯一 `subtreeHasContentLayer`。Provider 提示词、生成工具 schema、工具目录与四个设计 skill 同步。见 [ADR-0320 提案](adr/0320-layout-first-progressive-design.md)。模型是否实际选择框架先行、首屏时延收益与 macOS/Windows 产品验收仍未测量。
+
 - [x] 图片生成、历史图片放置/替换/参考图和人工图片导入统一从真实文件头读取 PNG/JPEG/GIF/WebP 尺寸，不再用只保证 PNG/JPEG 的 Electron `nativeImage` 误判合法 lossless WebP 为 `0×0`。生成结果在写入附件与 Design File asset 前验证并使用真实格式/尺寸，Provider 返回非图片字节时零 revision、零孤儿附件；真实 `1536×1024` VP8L 回归通过。
 
 - [x] Run 在启动阶段取消时，即使 terminal journal 写入中途失败，也只尝试记录一次用户消息；持久化异常显式记录后仍完成 Global Task 与 scheduler 清理，不再由外层取消分支二次进入收尾、重复消息或残留 active Run。

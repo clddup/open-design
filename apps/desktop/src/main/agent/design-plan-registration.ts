@@ -20,6 +20,7 @@ import {
   type DesignVisualReviewToolInput,
 } from "@/shared/design-agent-tools.js";
 import { createInitialPlanExecution } from "@/shared/design-plan-execution.js";
+import { subtreeHasContentLayer } from "@/shared/design-material.js";
 import type { DesignSystemComponentCatalogEntry } from "@/shared/design-system-component-catalog.js";
 
 export type InspectedHierarchy = {
@@ -525,10 +526,7 @@ function createTargetState(
     inspection.revision,
     target.artboard.mode === "existing" || recoveredAllocation,
     target.artboard.mode === "existing" &&
-      inspectedSubtreeHasMaterialNode(
-        inspection.nodesById,
-        target.artboard.frameId,
-      ),
+      subtreeHasContentLayer(inspection.nodesById, target.artboard.frameId),
     reservedNodeIds,
   );
   return {
@@ -970,24 +968,6 @@ function rectanglesOverlap(
     left.y < right.y + right.height &&
     left.y + left.height > right.y
   );
-}
-
-function inspectedSubtreeHasMaterialNode(
-  nodesById: InspectedHierarchy["nodesById"],
-  rootId: string,
-): boolean {
-  const pending = [...(nodesById.get(rootId)?.childIds ?? [])];
-  const visited = new Set<string>();
-  while (pending.length > 0) {
-    const nodeId = pending.pop();
-    if (!nodeId || visited.has(nodeId)) continue;
-    visited.add(nodeId);
-    const node = nodesById.get(nodeId);
-    if (!node) continue;
-    if (node.kind !== "group" && node.kind !== "frame") return true;
-    pending.push(...node.childIds);
-  }
-  return false;
 }
 
 function isMaterialDelivery(target: DesignDeliveryTarget): boolean {
