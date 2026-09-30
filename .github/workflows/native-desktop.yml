@@ -33,7 +33,6 @@ jobs:
             verify-command: verify:package:win
             artifact-pattern: |
               apps/desktop/release/*.exe
-              apps/desktop/release/*.blockmap
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     env:
@@ -82,11 +81,27 @@ jobs:
           & "apps/desktop/release/win-unpacked/OpenDesign.exe"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Locate native installer
+        if: github.event_name != 'pull_request'
+        id: installer
+        shell: bash
+        env:
+          INSTALLER_PATTERN: ${{ matrix.artifact-pattern }}
+        run: |
+          shopt -s nullglob
+          installers=( $INSTALLER_PATTERN )
+          if [[ ${#installers[@]} -ne 1 ]]; then
+            echo "Expected exactly one native installer, found ${#installers[@]}" >&2
+            exit 1
+          fi
+          echo "path=${installers[0]}" >> "$GITHUB_OUTPUT"
+          echo "name=$(basename "${installers[0]}")" >> "$GITHUB_OUTPUT"
+
       - name: Remove previous native installer artifact
         if: github.event_name != 'pull_request'
         shell: bash
         env:
-          ARTIFACT_NAME: OpenDesign-${{ runner.os }}-${{ runner.arch }}
+          ARTIFACT_NAME: ${{ steps.installer.outputs.name }}
           GH_TOKEN: ${{ github.token }}
         run: |
           artifact_ids="$(
@@ -103,10 +118,9 @@ jobs:
 
       - name: Upload native installers
         if: github.event_name != 'pull_request'
-        continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: OpenDesign-${{ runner.os }}-${{ runner.arch }}
-          path: ${{ matrix.artifact-pattern }}
+          path: ${{ steps.installer.outputs.path }}
+          archive: false
           if-no-files-found: error
           retention-days: 1
