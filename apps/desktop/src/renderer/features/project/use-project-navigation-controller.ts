@@ -140,7 +140,7 @@ export function useProjectNavigationController({
         projectId,
       });
       if (!manifest) {
-        navigator.cancel(transition);
+        if (navigator.cancel(transition)) setWorkspaceBusy(false);
         return false;
       }
       if (!showProject(manifest, transition)) return false;
@@ -177,7 +177,7 @@ export function useProjectNavigationController({
     try {
       const manifest = await window.desktop.openProject();
       if (!manifest) {
-        navigator.cancel(transition);
+        if (navigator.cancel(transition)) setWorkspaceBusy(false);
         return;
       }
       if (!showProject(manifest, transition)) return;
