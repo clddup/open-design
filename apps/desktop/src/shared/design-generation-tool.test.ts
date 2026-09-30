@@ -69,6 +69,9 @@ describe("design-generation tool", () => {
     expect(properties.targets.items.properties.qualityProfile).toEqual(
       JSON.parse(JSON.stringify(DesignTargetQualityProfileSchema)) as unknown,
     );
+    expect(properties.targets.items.description).toContain(
+      "omission means deterministic geometry checks are not evaluated",
+    );
     expect(JSON.stringify(properties)).not.toContain('"briefFidelity"');
     expect(JSON.stringify(properties)).not.toContain('"skillRefs"');
     const elementSchema = properties.designGeneration.properties.elements.items;
@@ -108,6 +111,9 @@ describe("design-generation tool", () => {
     expect(properties.targets.items.properties.layout).toBeUndefined();
     expect(properties.targets.items.properties.regions).toBeUndefined();
     expect(elementSchema.required).not.toContain("parentId");
+    expect(elementSchema.description).toContain(
+      "cornerRadius is valid only on Frame/Rectangle/Image",
+    );
     expect(properties.designGeneration.properties.elements.maxItems).toBe(
       MAX_TRANSACTION_COMMANDS - 1,
     );
@@ -516,6 +522,9 @@ describe("design-generation tool", () => {
       code: "design_generation.schema_invalid",
       path: "/designGeneration/elements/0/fills",
     });
+    expect(result.issues[0]?.recovery).toContain(
+      "cornerRadius is valid on Frame/Rectangle/Image",
+    );
     expect(result.issues[0]?.message).not.toContain("union");
   });
 

@@ -96,6 +96,34 @@ describe("parseDesignToolInput", () => {
     },
   );
 
+  it("attributes unexpected parser exceptions as a structured recoverable issue", () => {
+    const host = coordinator();
+    host.authoritativeDesignPrompt.mockImplementation(() => {
+      throw new TypeError("host binding failed");
+    });
+
+    const result = parseDesignToolInput(
+      host as never,
+      {
+        toolCallId: "parser_exception",
+        toolName: DESIGN_GENERATION_TOOL_NAME,
+        input: {},
+      },
+      context,
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      issues: [
+        expect.objectContaining({
+          code: "design_tool.parser_exception",
+          path: "/",
+          actual: "TypeError",
+        }),
+      ],
+    });
+  });
+
   it("binds one Design Generation to trusted Run identity before dispatch", () => {
     const host = coordinator();
     const result = parseDesignToolInput(

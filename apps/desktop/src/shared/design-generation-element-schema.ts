@@ -87,7 +87,11 @@ function elementKinds<TBase extends typeof ELEMENT_BASE_PROPERTIES>(
       ...baseProperties,
       kind: Type.Literal("group"),
     },
-    CLOSED,
+    {
+      ...CLOSED,
+      description:
+        "Group container. It has no cornerRadius; put appearance on child shapes or use a Frame.",
+    },
   );
 
   const FRAME_ELEMENT_SCHEMA = Type.Object(
@@ -100,7 +104,11 @@ function elementKinds<TBase extends typeof ELEMENT_BASE_PROPERTIES>(
       clipsContent: Type.Optional(Type.Boolean()),
       autoLayout: Type.Optional(LinearAutoLayoutSchema),
     },
-    CLOSED,
+    {
+      ...CLOSED,
+      description:
+        "Frame container. cornerRadius is valid here; use this for a rounded container with children.",
+    },
   );
 
   const RECTANGLE_ELEMENT_SCHEMA = Type.Object(
@@ -111,7 +119,10 @@ function elementKinds<TBase extends typeof ELEMENT_BASE_PROPERTIES>(
         Type.Number({ minimum: 0, maximum: 100_000 }),
       ),
     },
-    CLOSED,
+    {
+      ...CLOSED,
+      description: "Rectangle shape. cornerRadius is valid here.",
+    },
   );
 
   const ELLIPSE_ELEMENT_SCHEMA = Type.Object(
@@ -119,7 +130,11 @@ function elementKinds<TBase extends typeof ELEMENT_BASE_PROPERTIES>(
       ...baseProperties,
       kind: Type.Literal("ellipse"),
     },
-    CLOSED,
+    {
+      ...CLOSED,
+      description:
+        "Ellipse shape. It is already circular/oval; cornerRadius is not a valid field.",
+    },
   );
 
   const PATH_ELEMENT_SCHEMA = Type.Object(
@@ -212,7 +227,7 @@ function executableElementSchema<TBranches extends TObject[]>(
   return executableJsonSchema({
     type: "object",
     description:
-      "One editable document node. Author parents before children and omit parentId for an artboard child. Frames and Groups are containers; appearance and kind-specific properties follow their declared branch.",
+      "One editable document node. Author parents before children and omit parentId for an artboard child. Frames and Groups are containers; appearance and kind-specific properties follow their declared branch. cornerRadius is valid only on Frame/Rectangle/Image, never on Ellipse.",
     properties: {
       ...properties,
       kind: Type.Union(schema.anyOf.map((branch) => branch.properties.kind)),

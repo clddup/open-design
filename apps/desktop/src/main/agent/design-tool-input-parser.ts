@@ -87,26 +87,62 @@ export function parseDesignToolInput(
 ): ValidationResult<unknown> {
   assertActiveDesignContext(coordinator, context);
   if (call.toolName === DESIGN_GENERATION_TOOL_NAME) {
-    return DesignGenerationContract.parse(call.input, {
-      authoritativePrompt: coordinator.authoritativeDesignPrompt(context),
-      newNodeIdPrefix: agentDesignNodeIdPrefix(context.runId),
-      target: coordinator.designGenerationTargetBinding(context),
-    });
+    return parseContract(DESIGN_GENERATION_TOOL_NAME, () =>
+      DesignGenerationContract.parse(call.input, {
+        authoritativePrompt: coordinator.authoritativeDesignPrompt(context),
+        newNodeIdPrefix: agentDesignNodeIdPrefix(context.runId),
+        target: coordinator.designGenerationTargetBinding(context),
+      }),
+    );
   }
   const contract = CONTRACTS.get(call.toolName);
-  if (contract) return contract.parse(call.input);
-  if (EMPTY_INPUT_TOOLS.has(call.toolName)) {
-    const issues = designAgentToolInputIssues(call.toolName, call.input);
-    return issues.length === 0
-      ? { ok: true, value: {} }
-      : { ok: false, issues: requiredCodes(issues) };
+  if (contract) {
+    return parseContract(call.toolName, () => contract.parse(call.input));
   }
-  return {
+  if (EMPTY_INPUT_TOOLS.has(call.toolName)) {
+    return parseContract(call.toolName, () => {
+      const issues = designAgentToolInputIssues(call.toolName, call.input);
+      return issues.length === 0
+        ? { ok: true, value: {} }
+        : { ok: false, issues: requiredCodes(issues) };
+    });
+  }
+  return parseContract(call.toolName, () => ({
     ok: false,
     issues: requiredCodes(
       designAgentToolInputIssues(call.toolName, call.input),
     ),
-  };
+  }));
+}
+
+function parseContract(
+  toolName: string,
+  parse: () => ValidationResult<unknown>,
+): ValidationResult<unknown> {
+  try {
+    return parse();
+  } catch (error) {
+    if (
+      error instanceof FatalAgentRunError ||
+      (error instanceof Error && isTrustedToolFailure(error.cause))
+    ) {
+      throw error;
+    }
+    return {
+      ok: false,
+      issues: [
+        {
+          code: "design_tool.parser_exception",
+          path: "/",
+          message: `The ${toolName} input could not be parsed safely`,
+          expected: "valid tool input",
+          actual: error instanceof Error ? error.name : typeof error,
+          recovery:
+            "Retry with a newly constructed tool call; do not repeat the same malformed arguments.",
+        },
+      ],
+    };
+  }
 }
 
 function assertActiveDesignContext(

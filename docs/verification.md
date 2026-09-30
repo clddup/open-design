@@ -1,6 +1,6 @@
 # OpenDesign 验证状态
 
-- 日期：2026-09-04
+- 日期：2026-09-30
 
 - 环境基线：Node.js 24.14.0、pnpm 10.32.1、Electron 43.3.0、Vite 8.2.1
 - 文档协议：`DesignDocument 1.57.0`
@@ -17,6 +17,16 @@
 - 生产画布：`leafer-editor 2.2.9`
 
 本文只记录当前工作树实际执行的证据。计划命令、历史会话结果和第三方能力说明不算通过。
+
+## 2026-09-30 本轮本机闭环
+
+本轮只处理当前工作区的非跨平台问题；macOS/Windows 安装、升级、卸载和像素基线仍保持未验收。
+
+- `pnpm verify`：格式、lint、typecheck、根测试、桌面测试、build 全部通过；修复后桌面全量测试为 `224` 个文件、`1658` 个用例，全部通过。
+- 本机 Electron（Vite `5174`）已打开固定 `OD-POSTER-01`、`OD-PENGUIN-01`、`OD-BRAND-01`，三份文档均从生产 Leafer 渲染并显示已保存的 Revision 1；未把截图或设计文件复制进仓库。
+- `OD-POSTER-01` 的选区在放大与适配页面后仍与标题 editBox 对齐；从工作台返回项目页再打开相同 `documentId` 的加载副本不再触发 `Design document is already open`，当前文件替换回归由 `WorkspaceRuntime` 测试覆盖。
+- Agent 工具解析异常现在统一返回 `design_tool.parser_exception` 的结构化字段路径；`read_image` 未授权/非法本地引用返回 `design_reference_unavailable` 和 `/source` 恢复信息，不再降级为无上下文 `tool_error`。
+- 尚未声称真实 Agent 生成质量、双截图 refinement、服务端模型元数据探测或万级节点帧时间达标；这些仍需后续可重放证据。
 
 ## 平台支持矩阵
 

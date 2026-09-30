@@ -80,7 +80,7 @@ const TARGET_MODEL_SCHEMA = Type.Object(
   {
     ...CLOSED,
     description:
-      "Artboard size for the one Main-bound current target. The editable element hierarchy is the only authored structure; do not submit a parallel region plan.",
+      "Artboard size and optional executable quality policy for the one Main-bound current target. When supplied for UI, declare platform, safe-area insets, and authored safe/interactive node IDs; omission means deterministic geometry checks are not evaluated. The editable element hierarchy is the only authored structure; do not submit a parallel region plan.",
   },
 );
 

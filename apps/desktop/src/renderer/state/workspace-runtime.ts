@@ -175,7 +175,11 @@ export class WorkspaceRuntime {
         `Design file identity is already registered: ${identity.designFileId}`,
       );
     }
-    this.#assertDocumentIdentityAvailable(document.documentId, key);
+    this.#assertDocumentIdentityAvailable(
+      document.documentId,
+      key,
+      this.#activeFileKey,
+    );
     active.unsubscribeRuntime();
     this.#files.delete(this.#activeFileKey);
     const record: WorkspaceFileRecord = {
@@ -308,10 +312,12 @@ export class WorkspaceRuntime {
   #assertDocumentIdentityAvailable(
     documentId: string,
     targetKey: string,
+    excludedKey?: string,
   ): void {
     for (const [key, file] of this.#files) {
       if (
         key !== targetKey &&
+        key !== excludedKey &&
         file.runtime.getSnapshot().document.documentId === documentId
       ) {
         throw new Error(`Design document is already open: ${documentId}`);

@@ -243,4 +243,41 @@ describe("Edit Design contract", () => {
     });
     expect(EditDesignContract.schema).toBe(DESIGN_EDIT_TOOL_INPUT_SCHEMA);
   });
+
+  it("explains the command/property boundary for malformed node patches", () => {
+    const invalid = EditDesignContract.parse({
+      label: "Move geometry",
+      edits: [
+        {
+          kind: "node",
+          input: {
+            label: "Move card",
+            commands: [
+              {
+                commandId: "move_card",
+                type: "update_properties",
+                nodeId: "card",
+                properties: {
+                  size: { width: 240, height: 120 },
+                },
+              },
+            ],
+          },
+        },
+      ],
+    });
+    expect(invalid).toMatchObject({
+      ok: false,
+      issues: [
+        expect.objectContaining({
+          path: "/edits/0/input/commands/0/properties/size",
+        }),
+      ],
+    });
+    if (invalid.ok) throw new Error("Expected malformed property patch");
+    expect(invalid.issues[0]?.recovery).toContain("command-level siblings");
+    expect(JSON.stringify(DESIGN_EDIT_TOOL_INPUT_SCHEMA)).toContain(
+      "never nest those command-level fields here",
+    );
+  });
 });

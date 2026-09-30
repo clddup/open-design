@@ -10,6 +10,7 @@ import {
 import { basename, isAbsolute } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ReadImageToolInput } from "@/shared/design-agent-tools";
+import { designWorkflowError } from "@/shared/design-workflow-failure-classification";
 import type { AgentAttachmentHost } from "./agent-attachment-host";
 
 type RunStartRequest = Extract<AgentRequest, { type: "run.start" }>;
@@ -105,8 +106,8 @@ export class AgentReferenceHost {
       sourceKind = "attachment";
     } else {
       if (!references.prompt.includes(source)) {
-        throw new Error(
-          "Image source was not explicitly referenced by the user in this run",
+        throw referenceUnavailable(
+          "Image source was not explicitly referenced by the user in this Run",
         );
       }
       const url = parseHttpUrl(source);
@@ -114,16 +115,30 @@ export class AgentReferenceHost {
         selected = await this.fetchImage(url, signal);
         sourceKind = "url";
       } else {
-        const path = source.startsWith("file:")
-          ? fileURLToPath(new URL(source))
-          : source;
-        if (!isAbsolute(path)) {
-          throw new TypeError("Local image references must be absolute paths");
+        let path: string;
+        try {
+          path = source.startsWith("file:")
+            ? fileURLToPath(new URL(source))
+            : source;
+        } catch {
+          throw referenceUnavailable("The file URL is invalid");
         }
-        const imported = await this.attachments.importFiles([path]);
+        if (!isAbsolute(path)) {
+          throw referenceUnavailable(
+            "Local image references must use an absolute path",
+          );
+        }
+        let imported: AgentAttachment[];
+        try {
+          imported = await this.attachments.importFiles([path]);
+        } catch {
+          throw referenceUnavailable("Local image could not be read");
+        }
         const importedImage = imported[0];
         if (!importedImage || !isImageAttachment(importedImage)) {
-          throw new TypeError("The referenced local file is not an image");
+          throw referenceUnavailable(
+            "The referenced local file is not an image",
+          );
         }
         selected = importedImage;
         sourceKind = "local-path";
@@ -266,6 +281,12 @@ export class AgentReferenceHost {
     }
     throw new Error("Image URL could not be resolved");
   }
+}
+
+function referenceUnavailable(detail: string): Error {
+  return designWorkflowError("reference_unavailable", detail, {
+    path: "/source",
+  });
 }
 
 function isImageAttachment(

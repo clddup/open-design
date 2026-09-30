@@ -60,6 +60,8 @@ function parseDesignEdit(
     code: "design_edit.schema_invalid",
     subject: "Edit Design",
     maximum: 64,
+    recovery:
+      "For update_properties, keep size, transform, opacity, name, visible, effects, and blendMode as command-level siblings. Put only the inspected node's kind-specific appearance or text fields inside properties. Correct every reported path and submit a newly constructed call.",
   });
   if (structureIssues.length > 0) {
     return { ok: false, issues: structureIssues };

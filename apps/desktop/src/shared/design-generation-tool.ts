@@ -71,6 +71,8 @@ export const DesignGenerationContract = defineContract<
     code: "design_generation.schema_invalid",
     subject: "Design Generation",
     maximum: 32,
+    recovery:
+      "Correct every reported path using the selected kind branch. For example, cornerRadius is valid on Frame/Rectangle/Image, not Ellipse; update-style geometry keeps size/transform/opacity at command level. Submit a newly constructed call.",
     canonical: {
       schema: DESIGN_GENERATION_CANONICAL_INPUT_SCHEMA,
       code: "design_generation.host_binding_invalid",

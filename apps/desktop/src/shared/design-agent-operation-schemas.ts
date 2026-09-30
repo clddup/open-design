@@ -495,7 +495,7 @@ const MODEL_NODE_PROPERTIES_SCHEMA = {
 const MODEL_NODE_PROPERTY_PATCH_SCHEMA = {
   ...MODEL_NODE_PROPERTIES_SCHEMA,
   description:
-    "A partial property patch. Use only fields supported by the inspected target kind; the host validates the patch against that current node before writing.",
+    "A partial kind-specific appearance/text patch. Use only fields supported by the inspected target kind. Keep size, transform, opacity, name, visible, locked, effects, blendMode, maskMode, extensions, and exportSettings as update_properties siblings; never nest those command-level fields here. The host validates the patch against the current node before writing.",
 } as const;
 
 const MODEL_SHAPE_PROPERTY_KEYS = Object.keys(MODEL_SHAPE_PROPERTIES);
@@ -771,10 +771,24 @@ const MODEL_NODE_OPERATION_SCHEMA = {
         name: { type: "string" },
         visible: { type: "boolean" },
         locked: { type: "boolean" },
-        transform: MODEL_TRANSFORM_SCHEMA,
-        size: MODEL_SIZE_SCHEMA,
+        transform: {
+          ...MODEL_TRANSFORM_SCHEMA,
+          description:
+            "Command-level geometry. Keep this beside properties, never inside properties.",
+        },
+        size: {
+          ...MODEL_SIZE_SCHEMA,
+          description:
+            "Command-level dimensions. Keep this beside properties, never inside properties.",
+        },
         exportSettings: MODEL_EXPORT_SETTINGS_SCHEMA,
-        opacity: { type: "number", minimum: 0, maximum: 1 },
+        opacity: {
+          type: "number",
+          minimum: 0,
+          maximum: 1,
+          description:
+            "Command-level opacity. Keep this beside properties, never inside properties.",
+        },
         blendMode: { enum: MODEL_BLEND_MODES },
         effects: { type: "array", items: MODEL_EFFECT_SCHEMA },
         maskMode: {

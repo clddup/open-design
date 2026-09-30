@@ -346,6 +346,31 @@ describe("WorkspaceRuntime", () => {
     ).toThrow("Design document is already open");
   });
 
+  it("replaces the active file when the loaded copy keeps its document identity", () => {
+    const workspace = createWorkspace();
+    const replacement = createEmptyDesignDocument(
+      "document_welcome",
+      "page_replacement",
+    );
+
+    const runtime = workspace.replaceActiveFile(
+      {
+        projectId: "project_acme",
+        designFileId: "design_replay",
+        name: "Replay",
+      },
+      replacement,
+    );
+
+    expect(runtime.getSnapshot().document.documentId).toBe("document_welcome");
+    expect(workspace.getRuntimeByDocumentId("document_welcome")?.runtime).toBe(
+      runtime,
+    );
+    expect(workspace.getSnapshot().openFileKeys).toEqual([
+      workspaceFileKey("project_acme", "design_replay"),
+    ]);
+  });
+
   it("publishes immutable snapshots when workspace identity changes", () => {
     const workspace = createWorkspace();
     const listener = vi.fn();

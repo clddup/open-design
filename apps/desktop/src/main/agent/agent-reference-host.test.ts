@@ -113,13 +113,22 @@ describe("AgentReferenceHost", () => {
       attachment: { mimeType: "image/png", byteSize: png.byteLength },
       attachments: [{ mimeType: "image/png" }],
     });
-    await expect(
-      host.readImage(
+    const failure = await host
+      .readImage(
         { source: join(root, "other.png") },
         context,
         new AbortController().signal,
-      ),
-    ).rejects.toThrow("not explicitly referenced");
+      )
+      .catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(Error);
+    const cause = failure instanceof Error ? failure.cause : undefined;
+    expect(cause).toMatchObject({
+      code: "design_reference_unavailable",
+      details: {
+        kind: "design-workflow",
+        issues: [expect.objectContaining({ path: "/source" })],
+      },
+    });
   });
 
   it("materializes an attached SVG only inside its registered run", async () => {
