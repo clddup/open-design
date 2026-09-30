@@ -12,6 +12,13 @@ import type {
   LeaferTextStyleUpdate,
 } from "./types.js";
 
+import {
+  applyTextRunDomStyle,
+  observeTextEditDomScale,
+  writeStyledTextEditDom,
+  writeTextEditDom,
+} from "./text-edit-dom-rendering.js";
+
 export interface TextEditDomControllerEnvironment<
   Element extends TextRunEditElement,
 > {
@@ -35,6 +42,7 @@ export class TextEditDomController<Element extends TextRunEditElement> {
   readonly #onSelectionChange = () => this.publishSelection();
   #composing = false;
   #root: HTMLDivElement | null = null;
+  #styleObserver: MutationObserver | null = null;
 
   constructor(environment: TextEditDomControllerEnvironment<Element>) {
     this.#environment = environment;
@@ -58,11 +66,23 @@ export class TextEditDomController<Element extends TextRunEditElement> {
     const snapshot = textEditDomSnapshot(root);
     this.#environment.editor.selection(snapshot.selection);
     this.#renderCharacterStyles(root, snapshot.selection, true);
+    const nodeId = this.#environment.editor.activeNodeId;
+    const node = nodeId
+      ? this.#environment.currentDocument()?.nodesById[nodeId]
+      : undefined;
+    if (node?.kind === "text") {
+      this.#styleObserver = observeTextEditDomScale(
+        root,
+        node.properties.fontSize,
+      );
+    }
   }
 
   detach(sync: boolean): void {
     const root = this.#root;
     if (!root) return;
+    this.#styleObserver?.disconnect();
+    this.#styleObserver = null;
     if (sync) this.#sync(root, false);
     root.removeEventListener("input", this.#onInput);
     root.removeEventListener("compositionstart", this.#onCompositionStart);
@@ -398,44 +418,6 @@ function normalizedTextDomOffset(rawContent: string, offset: number): number {
   return rawContent.slice(0, offset).replaceAll("\u200B", "").length;
 }
 
-function writeTextEditDom(root: HTMLDivElement, content: string): void {
-  const fragment = root.ownerDocument.createDocumentFragment();
-  content.split("\n").forEach((line, index, lines) => {
-    if (index > 0) fragment.appendChild(root.ownerDocument.createElement("br"));
-    if (line.length > 0 || lines.length === 1) {
-      fragment.appendChild(root.ownerDocument.createTextNode(line));
-    }
-  });
-  root.replaceChildren(fragment);
-}
-
-function writeStyledTextEditDom(
-  root: HTMLDivElement,
-  content: string,
-  runs: readonly { end: number; start: number; style: TextRunStyle }[],
-): void {
-  if (content.length === 0) {
-    writeTextEditDom(root, content);
-    return;
-  }
-  const fragment = root.ownerDocument.createDocumentFragment();
-  for (const run of runs) {
-    const pieces = content.slice(run.start, run.end).split("\n");
-    pieces.forEach((piece, index) => {
-      if (piece.length > 0) {
-        const span = root.ownerDocument.createElement("span");
-        span.textContent = piece;
-        applyTextRunDomStyle(span, run.style);
-        fragment.appendChild(span);
-      }
-      if (index < pieces.length - 1) {
-        fragment.appendChild(root.ownerDocument.createElement("br"));
-      }
-    });
-  }
-  root.replaceChildren(fragment);
-}
-
 const TEXT_EDIT_TYPING_STYLE_ATTRIBUTE = "data-opendesign-typing-style";
 
 function installTextEditTypingStyleMarker(
@@ -582,33 +564,6 @@ function shouldRestoreTextEditDomSelection(root: HTMLDivElement): boolean {
     active === root ||
     root.contains(active)
   );
-}
-
-function applyTextRunDomStyle(
-  element: HTMLSpanElement,
-  style: TextRunStyle,
-): void {
-  element.style.fontFamily = style.fontFamily;
-  element.style.fontSize = `${style.fontSize}px`;
-  element.style.fontStyle = style.fontSlant;
-  element.style.fontWeight = String(style.fontWeight);
-  element.style.letterSpacing = `${style.letterSpacing}px`;
-  element.style.lineHeight = `${style.lineHeight}px`;
-  element.style.textDecorationLine =
-    style.textDecoration === "strikethrough"
-      ? "line-through"
-      : style.textDecoration;
-  element.style.textTransform =
-    style.textCase === "title-case"
-      ? "capitalize"
-      : style.textCase === "small-caps" || style.textCase === "original"
-        ? "none"
-        : style.textCase;
-  element.style.fontVariantCaps =
-    style.textCase === "small-caps" ? "small-caps" : "normal";
-  const fill = style.fills.find((paint) => paint.type === "solid");
-  element.style.color = fill?.color ?? "";
-  element.style.opacity = fill ? String(fill.opacity) : "";
 }
 
 function setTextEditDomSelection(
