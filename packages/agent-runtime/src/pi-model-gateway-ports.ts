@@ -50,6 +50,7 @@ export interface PiContextFailure {
 export interface PiModelContextProjectionPort {
   beforeProviderTurn(): PiContextFailure | undefined;
   attachmentsFor(message: Message): readonly AgentAttachment[];
+  isExecutionContextMessage?(message: Message): boolean;
   recoverProviderContextOverflow?(
     request: ModelRequest,
     failure: ModelError,

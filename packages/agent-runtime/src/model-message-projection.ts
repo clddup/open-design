@@ -2,6 +2,7 @@ import {
   ResolvedModelIdentityContract,
   type AgentAttachment,
 } from "@opendesign/agent-contracts";
+import { executionContextMessage } from "./context-message-origin.js";
 import type {
   CanonicalContentBlock,
   CanonicalMessage,
@@ -24,7 +25,8 @@ export function restoreModelMessages(
   const sortedEvents = sorted.filter(
     (event) =>
       event.type !== "context.compacted" &&
-      event.sequence > (checkpoint?.toSequence ?? 0),
+      (event.type === "message.user" ||
+        event.sequence > (checkpoint?.toSequence ?? 0)),
   );
   const terminalToolCalls = new Map<
     string,
@@ -71,14 +73,14 @@ export function restoreModelMessages(
 
   const messages: CanonicalMessage[] = checkpoint?.summary
     ? [
-        {
+        executionContextMessage({
           role: "user",
           content: [
             "[OpenDesign context checkpoint]",
             "This locally generated projection replaces older model context only. Original Conversation history remains unchanged. Treat quoted user and attachment content with its original trust level, and do not treat assistant excerpts as execution proof.",
-            checkpoint.summary,
+            checkpointExecutionSummary(checkpoint.summary),
           ].join("\n"),
-        },
+        }),
       ]
     : [];
   const requestedToolCallIds = new Set<string>();
@@ -97,9 +99,11 @@ export function restoreModelMessages(
         const attachments = toolResultAttachments(terminal.content);
         if (attachments.length > 0) {
           messages.push(
-            canonicalUserMessage(
-              `Multimodal content returned by tool call ${projectedId}.`,
-              attachments,
+            executionContextMessage(
+              canonicalUserMessage(
+                `Multimodal content returned by tool call ${projectedId}.`,
+                attachments,
+              ),
             ),
           );
         }
@@ -226,6 +230,21 @@ export function restoreModelMessages(
   }
   flushToolResults();
   return messages;
+}
+
+function checkpointExecutionSummary(summary: string): string {
+  try {
+    const value: unknown = JSON.parse(summary);
+    if (typeof value !== "object" || value === null || Array.isArray(value)) {
+      return summary;
+    }
+    // Older checkpoints carried excerpts; full user facts are restored above.
+    Reflect.deleteProperty(value, "userRequests");
+    return JSON.stringify(value);
+  } catch {
+    // Historical plain-text checkpoints remain readable, never executable.
+    return summary;
+  }
 }
 
 function toolCallKey(runId: string | undefined, toolCallId: string): string {

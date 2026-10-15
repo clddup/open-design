@@ -2,6 +2,7 @@ import {
   isAgentAttachment,
   type AgentAttachment,
 } from "@opendesign/agent-contracts";
+import { isExecutionContextMessage as isExecutionProjection } from "./context-message-origin.js";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { Api, Message, Model, UserMessage } from "@earendil-works/pi-ai";
 import type {
@@ -178,6 +179,7 @@ export class OpenDesignPiContextAdapter
   implements PiModelContextProjectionPort, PiContextFailurePort
 {
   readonly #attachments = new WeakMap<object, readonly AgentAttachment[]>();
+  readonly #executionMessages = new WeakSet<object>();
   #budget: ContextBudget;
   readonly #maxContextCharacters: number;
   readonly #model: Model<Api>;
@@ -282,6 +284,10 @@ export class OpenDesignPiContextAdapter
     return this.#attachments.get(message) ?? [];
   }
 
+  isExecutionContextMessage(message: Message): boolean {
+    return this.#executionMessages.has(message);
+  }
+
   recoverProviderContextOverflow(
     request: ModelRequest,
     failure: ModelError,
@@ -376,6 +382,8 @@ export class OpenDesignPiContextAdapter
     if (message.role === "user") {
       const { attachments, text } = canonicalUserParts(message);
       const projected: UserMessage = { role: "user", content: text, timestamp };
+      if (isExecutionProjection(message))
+        this.#executionMessages.add(projected);
       if (attachments.length > 0) {
         this.#attachments.set(
           projected,

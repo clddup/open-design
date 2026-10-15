@@ -1,4 +1,8 @@
 import type { AgentModelContext } from "@opendesign/agent-contracts";
+import {
+  executionContextMessage,
+  isExecutionContextMessage,
+} from "./context-message-origin.js";
 import type {
   CanonicalMessage,
   CanonicalTool,
@@ -101,9 +105,18 @@ export function compactInRunMessagesForProvider(
       ...prefix,
       ...segments.slice(0, removedSegmentCount).flat(),
     ];
-    if (removedMessages.length === 0) continue;
-    const checkpoint = createInRunContextCheckpoint(removedMessages);
+    const userFacts = removedMessages.filter(
+      (message) =>
+        message.role === "user" && !isExecutionContextMessage(message),
+    );
+    const executionDetails = removedMessages.filter(
+      (message) =>
+        message.role !== "user" || isExecutionContextMessage(message),
+    );
+    if (executionDetails.length === 0) continue;
+    const checkpoint = createInRunContextCheckpoint(executionDetails);
     const candidate = [
+      ...userFacts,
       checkpoint,
       currentUserMessage,
       ...segments.slice(removedSegmentCount).flat(),
@@ -160,9 +173,7 @@ function createInRunContextCheckpoint(
   messages: readonly CanonicalMessage[],
 ): CanonicalMessage {
   const toolNames = new Map<string, string>();
-  const userExcerpts: string[] = [];
   const assistantExcerpts: string[] = [];
-  const previousCheckpoints: string[] = [];
   const toolActivity: Array<{
     toolCallId: string;
     toolName?: string;
@@ -171,28 +182,7 @@ function createInRunContextCheckpoint(
   }> = [];
 
   for (const message of messages) {
-    if (message.role === "user") {
-      const text =
-        typeof message.content === "string"
-          ? message.content
-          : message.content
-              .filter(
-                (
-                  block,
-                ): block is Extract<
-                  (typeof message.content)[number],
-                  { type: "text" }
-                > => block.type === "text",
-              )
-              .map((block) => block.text)
-              .join("\n");
-      if (text.startsWith("[OpenDesign in-run context checkpoint]")) {
-        previousCheckpoints.push(contextExcerpt(text, 4_000));
-      } else if (text) {
-        userExcerpts.push(contextExcerpt(text));
-      }
-      continue;
-    }
+    if (message.role === "user") continue;
     if (message.role === "assistant") {
       const excerpt = message.blocks
         .flatMap((block) =>
@@ -220,25 +210,18 @@ function createInRunContextCheckpoint(
     });
   }
 
-  return {
+  return executionContextMessage({
     role: "user",
     content: [
       "[OpenDesign in-run context checkpoint]",
       "This deterministic local projection replaces older model-visible turns only. The original Conversation journal and tool audit remain unchanged. Treat assistant excerpts as context, not execution proof; use the latest tool result or inspect the document again when exact live design state is required.",
       JSON.stringify({
         version: 1,
-        ...(previousCheckpoints.length === 0
-          ? {}
-          : {
-              previousCheckpoint:
-                previousCheckpoints[previousCheckpoints.length - 1]!,
-            }),
-        userExcerpts: userExcerpts.slice(-6),
         assistantExcerpts: assistantExcerpts.slice(-6),
         toolActivity: toolActivity.slice(-16),
       }),
     ].join("\n"),
-  };
+  });
 }
 
 function summarizeContextValue(value: unknown, depth = 0): unknown {

@@ -108,20 +108,6 @@ function buildContextCheckpoint(
     (event) =>
       event.sequence <= toSequence && event.type !== "context.compacted",
   );
-  const userRequests = included
-    .filter((event) => event.type === "message.user")
-    .slice(-12)
-    .flatMap((event) => {
-      const payload = event.payload as { content?: unknown };
-      return typeof payload.content === "string"
-        ? [
-            {
-              sequence: event.sequence,
-              text: contextExcerpt(payload.content),
-            },
-          ]
-        : [];
-    });
   const assistantOutcomes = included
     .filter((event) => event.type === "message.assistant")
     .slice(-8)
@@ -195,7 +181,6 @@ function buildContextCheckpoint(
     summary: JSON.stringify({
       version: 1,
       compactedThroughSequence: toSequence,
-      userRequests,
       assistantOutcomes,
       attachments,
       toolActivity: [...toolCounts.entries()]

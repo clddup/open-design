@@ -181,7 +181,7 @@ describe("OpenDesign Pi context adapter", () => {
       systemPrompt: "OpenDesign context recovery",
       toolDefinitions: [],
       model,
-      maxContextCharacters: 2_500,
+      maxContextCharacters: 8_000,
       now: () => new Date(10),
     });
 
@@ -192,7 +192,9 @@ describe("OpenDesign Pi context adapter", () => {
     expect(JSON.stringify(prepared.initialMessages)).toContain(
       "OpenDesign context checkpoint",
     );
-    expect(JSON.stringify(prepared.initialMessages)).not.toContain(priorPrompt);
+    expect(JSON.stringify(prepared.initialMessages)).toContain(priorPrompt);
+    expect(JSON.stringify(prepared.initialMessages)).not.toContain(priorResult);
+    expect(prepared.context.consumeFailure()).toBeUndefined();
     expect(JSON.stringify(store.events)).toContain(priorPrompt);
     expect(JSON.stringify(store.events)).toContain(priorResult);
 
@@ -202,7 +204,7 @@ describe("OpenDesign Pi context adapter", () => {
       systemPrompt: "OpenDesign context recovery",
       toolDefinitions: [],
       model,
-      maxContextCharacters: 2_500,
+      maxContextCharacters: 8_000,
     });
     expect(JSON.stringify(restarted.initialMessages)).toContain(
       "OpenDesign context checkpoint",

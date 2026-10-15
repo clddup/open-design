@@ -5,10 +5,14 @@ import type {
 } from "@opendesign/model-gateway";
 import type { Api, Message, Tool } from "@earendil-works/pi-ai";
 import type { PiModelContextProjectionPort } from "./pi-model-gateway-ports.js";
+import { executionContextMessage } from "./context-message-origin.js";
 
 export function projectPiMessagesToCanonical(
   messages: readonly Message[],
-  attachments?: Pick<PiModelContextProjectionPort, "attachmentsFor">,
+  attachments?: Pick<
+    PiModelContextProjectionPort,
+    "attachmentsFor" | "isExecutionContextMessage"
+  >,
 ): CanonicalMessage[] {
   return messages.flatMap((message, messageIndex) =>
     projectPiMessageToCanonical(message, messageIndex, attachments),
@@ -18,9 +22,15 @@ export function projectPiMessagesToCanonical(
 export function projectPiMessageToCanonical(
   message: Message,
   messageIndex: number,
-  attachments?: Pick<PiModelContextProjectionPort, "attachmentsFor">,
+  attachments?: Pick<
+    PiModelContextProjectionPort,
+    "attachmentsFor" | "isExecutionContextMessage"
+  >,
 ): CanonicalMessage[] {
   const projected = toCanonicalMessage(message, messageIndex);
+  const isExecution =
+    attachments?.isExecutionContextMessage?.(message) === true;
+  if (isExecution) executionContextMessage(projected);
   const references = attachments?.attachmentsFor(message) ?? [];
   if (references.length === 0) return [projected];
   if (
@@ -59,6 +69,8 @@ export function projectPiMessageToCanonical(
       ),
     ],
   };
+  if (message.role === "toolResult" || isExecution)
+    executionContextMessage(referenceMessage);
   return message.role === "toolResult"
     ? [projected, referenceMessage]
     : [referenceMessage];
