@@ -135,6 +135,12 @@ export async function startAgentRun(
       trustedRequest,
       globalTaskCoordinator.referenceAttachmentsForRun(request.runId),
     );
+    if (initialDesignInspection) {
+      continuationScheduler.recordInitialInspection(
+        request.runId,
+        initialDesignInspection,
+      );
+    }
     conversationIdByRunId.set(request.runId, request.sessionId);
     agentHost.send({
       ...trustedRequest,

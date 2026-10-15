@@ -1,5 +1,6 @@
 import { isVisibleDesignProgress } from "@/shared/design-material";
 import { isNodeRelocation } from "./design-node-relocation.js";
+import { DesignVisualReviewController } from "./design-visual-review-controller.js";
 import {
   visualCriticUserRequirements,
   type VisualCriticUserRequirement,
@@ -168,6 +169,7 @@ function requireFailedCriticReview(
 
 export class GlobalTaskCoordinator {
   readonly #tasksByRunId = new Map<string, GlobalTaskProjection>();
+  readonly #visualReviews = new DesignVisualReviewController();
   readonly #toolBindingsByRunId = new Map<string, RunToolBinding>();
   readonly #designPlansByRunId = new Map<string, DesignWorkflowState>();
   readonly #generatedRasterRolesByRunId = new Map<
@@ -2230,6 +2232,7 @@ export class GlobalTaskCoordinator {
   }
 
   disposeRun(runId: string): void {
+    this.#visualReviews.disposeRun(runId);
     this.#tasksByRunId.delete(runId);
     this.#toolBindingsByRunId.delete(runId);
     this.#designPlansByRunId.delete(runId);
@@ -2239,6 +2242,24 @@ export class GlobalTaskCoordinator {
     this.#deliveryScopesByRunId.delete(runId);
     this.#deliveryScopeReservationsByRunId.delete(runId);
     this.#continuationTransfersByRunId.delete(runId);
+  }
+
+  reviewVisualCapture(
+    context: TrustedToolContext,
+    evidence: DesignVisualCriticContext,
+    signal: AbortSignal,
+    execute: () => Promise<DesignVisualCriticResult>,
+  ): Promise<DesignVisualCriticResult> {
+    this.assertDesignToolContext(context);
+    if (evidence.runId !== context.runId) {
+      throw new TypeError("Visual review evidence belongs to another Run");
+    }
+    return this.#visualReviews.review(
+      context.documentId,
+      evidence,
+      signal,
+      execute,
+    );
   }
 
   #interruptActiveTasks(): void {

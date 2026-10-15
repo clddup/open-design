@@ -179,6 +179,12 @@ export const agentConversationMessages = {
     "The Provider request reached its {{duration}} total time limit.",
   "agent.providerConnectionInterrupted": "Model connection interrupted",
   "agent.reconnecting": "Reconnecting {{attempt}}/{{total}}",
+  "agent.continuingTask": "Continuing design {{attempt}}/{{total}}",
+  "agent.continuationPaused":
+    "Automatic continuation paused; existing work is preserved",
+  "agent.visualReviewPaused": "Automatic visual review paused",
+  "agent.visualReviewPausedDetail":
+    "Repeated review or several refinements did not produce sufficient improvement. The design and findings are retained, not marked as verified; editing and review in the next message remain available.",
   "agent.connectionRecovered": "Model connection recovered",
   "agent.failureRetryable": "This request can be retried.",
   "agent.failureNeedsChange":
@@ -193,7 +199,8 @@ export const agentConversationMessages = {
     "The canvas changed before this step could be applied. The Agent can inspect it and retry.",
   "agent.canvasScopeConflict":
     "This change did not match the active canvas scope. The Agent can inspect the canvas and try again.",
-  "agent.contextLimitDetail": "Start a new message to continue.",
+  "agent.contextLimitDetail":
+    "The complete requirements exceed this model's available context. Committed design changes are preserved; use a larger-context model or split the work into a new conversation.",
   "agent.tryAgain": "Try again or continue with a new instruction.",
   "agent.taskCompleted": "Task completed",
   "agent.taskStopped": "Task stopped",

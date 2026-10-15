@@ -346,11 +346,14 @@ function collapseTerminalFailureDuplicates(
 function isDesignCorrectionFailure(
   code: string,
   details?: AgentToolFailureDetails,
+  toolName?: string,
 ): boolean {
+  if (code === "design_visual_review_no_progress") return false;
   return (
-    !code.startsWith("renderer_") &&
-    (code.startsWith("design") ||
-      isRoutineRecoverableToolFailure(code, details))
+    isNativeDesignTool(toolName) ||
+    (!code.startsWith("renderer_") &&
+      (code.startsWith("design") ||
+        isRoutineRecoverableToolFailure(code, details)))
   );
 }
 
@@ -430,7 +433,7 @@ function projectDurableTimeline(
           routine: item.runId === stoppingRunId,
           state: "done",
           kind: "system",
-          title: `${t("agent.reconnecting", {
+          title: `${t("agent.continuingTask", {
             attempt: continuation.attempt,
             total: continuation.maxAttempts,
           })} · ${t("agent.workingDesign")}`,
@@ -486,8 +489,11 @@ function projectDurableTimeline(
         recoverableFailure:
           item.status === "failed" &&
           item.error?.recoverable === true &&
-          (isNativeDesignTool(item.toolName) ||
-            isDesignCorrectionFailure(item.error.code, item.error.details)),
+          isDesignCorrectionFailure(
+            item.error.code,
+            item.error.details,
+            item.toolName,
+          ),
         ...(item.error?.code ? { failureCode: item.error.code } : {}),
         ...(item.error?.message ? { failureMessage: item.error.message } : {}),
         routine:
@@ -578,7 +584,7 @@ function projectDurableTimeline(
       title:
         item.status === "started"
           ? item.continuation
-            ? `${t("agent.reconnecting", {
+            ? `${t("agent.continuingTask", {
                 attempt: item.continuation.attempt,
                 total: item.continuation.maxAttempts,
               })} · ${t("agent.workingDesign")}`
@@ -729,7 +735,7 @@ function projectLiveEvents(
           kind: "run",
           time: eventTime(event.startedAt, locale, t),
           title: event.continuation
-            ? `${t("agent.reconnecting", {
+            ? `${t("agent.continuingTask", {
                 attempt: event.continuation.attempt,
                 total: event.continuation.maxAttempts,
               })} · ${t("agent.workingDesign")}`
@@ -751,11 +757,11 @@ function projectLiveEvents(
           time: t("common.now"),
           title:
             event.status === "scheduled"
-              ? `${t("agent.reconnecting", {
+              ? `${t("agent.continuingTask", {
                   attempt: event.attempt,
                   total: event.maxAttempts,
                 })} · ${t("agent.workingDesign")}`
-              : t("agent.requestFailed"),
+              : t("agent.continuationPaused"),
         },
       );
     }
@@ -902,8 +908,11 @@ function projectLiveEvents(
         routine,
         recoverableFailure:
           event.recoverable === true &&
-          (isNativeDesignTool(existingTool?.toolName) ||
-            isDesignCorrectionFailure(event.code, event.details)),
+          isDesignCorrectionFailure(
+            event.code,
+            event.details,
+            existingTool?.toolName,
+          ),
         failureCode: event.code,
         failureMessage: event.message,
         state: "error",

@@ -1463,7 +1463,7 @@ describe("Agent continuation timeline projection", () => {
         expect.objectContaining({
           id: "message:auto",
           kind: "system",
-          title: "正在重新连接 1/3 · 正在处理设计",
+          title: "继续处理设计 1/3 · 正在处理设计",
         }),
       ]),
     );

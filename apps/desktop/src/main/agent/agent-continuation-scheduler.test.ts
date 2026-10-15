@@ -57,12 +57,112 @@ function recordDelivery(
   scheduler.record({
     type: "tool.completed",
     runId,
-    toolCallId: `inspect_${runId}`,
+    toolCallId: `apply_${runId}`,
+    revision: 5,
+    transactionId: `transaction_${runId}`,
     result: { delivery },
   });
 }
 
 describe("AgentContinuationScheduler", () => {
+  it("does not count repeated verification of an inherited revision as new progress", () => {
+    const scheduler = new AgentContinuationScheduler();
+    const active = { ...request(), revision: 6 };
+    scheduler.registerRun(active);
+    const delivery: DesignDeliveryLedger = {
+      ...incomplete,
+      activeTargetId: "target_2",
+      targets: [
+        {
+          ...incomplete.targets[0],
+          status: "verified",
+          captureRevision: 6,
+          reviewRevision: 6,
+          refinementRevision: 6,
+          verifiedRevision: 6,
+        },
+        {
+          ...incomplete.targets[0],
+          targetId: "target_2",
+          rootNodeId: "frame_2",
+          reservedNodeIds: ["frame_2"],
+        },
+      ],
+    };
+    scheduler.recordInitialInspection(active.runId, {
+      version: 1,
+      observedRevision: 6,
+      content: {
+        inspection: { pageId: "page_1" },
+        unfinishedDelivery: delivery,
+      },
+    });
+    scheduler.record({
+      type: "tool.completed",
+      runId: active.runId,
+      toolCallId: "repeat_capture",
+      revision: 6,
+      result: { delivery, reviewWorkflow: { verified: true } },
+    });
+    expect(scheduler.record(completed(active.runId, "budget"))).toMatchObject({
+      kind: "needs-attention",
+    });
+  });
+
+  it("pauses a budget-limited Run that only read an inherited delivery", () => {
+    const scheduler = new AgentContinuationScheduler();
+    const active = { ...request(), revision: 5 };
+    scheduler.registerRun(active);
+    recordDelivery(scheduler, active.runId);
+    expect(scheduler.record(completed(active.runId, "budget"))).toMatchObject({
+      kind: "needs-attention",
+      reason: "budget",
+    });
+    expect(scheduler.activeRunIds()).toEqual([]);
+  });
+
+  it("does not treat an inspection's higher observed revision as a write", () => {
+    const scheduler = new AgentContinuationScheduler();
+    const active = request();
+    scheduler.registerRun(active);
+    scheduler.record({
+      type: "tool.completed",
+      runId: active.runId,
+      toolCallId: "inspect_external_change",
+      revision: 100,
+      result: { delivery: incomplete },
+    });
+    expect(scheduler.record(completed(active.runId, "budget"))).toMatchObject({
+      kind: "needs-attention",
+    });
+  });
+
+  it("does not count reading an inherited delivery as new continuation progress", () => {
+    const scheduler = new AgentContinuationScheduler(() => 1000);
+    const initial = request();
+    scheduler.registerRun(initial);
+    recordDelivery(scheduler, initial.runId);
+    const decision = scheduler.record(completed(initial.runId, "budget"));
+    if (!decision || decision.kind !== "schedule")
+      throw new Error("Expected continuation");
+    const next = {
+      ...decision.source,
+      runId: decision.nextRunId,
+      revision: 5,
+      continuation: decision.continuation,
+    };
+    scheduler.registerRun(next);
+    scheduler.record({
+      type: "tool.completed",
+      runId: next.runId,
+      toolCallId: "repeat_read",
+      result: { delivery: incomplete },
+    });
+    expect(scheduler.record(completed(next.runId, "budget"))).toMatchObject({
+      kind: "needs-attention",
+    });
+  });
+
   it("lets an explicit user Run supersede queued and active automatic continuations", () => {
     const scheduler = new AgentContinuationScheduler();
     const automatic = request({
@@ -262,6 +362,7 @@ describe("AgentContinuationScheduler", () => {
       toolCallId: "verify_stage_1",
       revision: 6,
       result: {
+        reviewWorkflow: { verified: true, capturedRevision: 6 },
         delivery: {
           ...incomplete,
           activeTargetId: null,

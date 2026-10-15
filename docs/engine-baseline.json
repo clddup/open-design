@@ -1,6 +1,6 @@
 {
-  "schemaVersion": 92,
-  "recordedAt": "2026-09-03",
+  "schemaVersion": 93,
+  "recordedAt": "2026-10-14",
   "policy": {
     "allowFloatingRefs": false,
     "upgradeRequiresCompatibilityReview": true
@@ -9,7 +9,7 @@
     "documentFormat": "dev.opendesign.document",
     "documentSchemaVersion": "1.57.0",
     "runtimeProtocolVersion": "0.1.0",
-    "agentProtocolVersion": "3.13.0",
+    "agentProtocolVersion": "3.14.0",
     "geometryServiceContractVersion": 42,
     "textLayoutServiceContractVersion": 5,
     "textRangeServiceContractVersion": 1,

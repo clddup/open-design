@@ -31,6 +31,7 @@ describe("design workflow failure contract", () => {
     ["inspection_required", "inspection", "applying-draft"],
     ["material_write_required", "material-write", "applying-draft"],
     ["capture_required", "capture", "capturing-canvas"],
+    ["visual_review_no_progress", "capture", "review-paused"],
     [
       "component_strategy_incomplete",
       "component-repair",

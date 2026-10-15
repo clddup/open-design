@@ -235,6 +235,8 @@ function workflowFailurePresentation(
   presentation: DesignWorkflowFailurePresentation,
   t: Translate,
 ): string {
+  if (presentation === "review-paused")
+    return t("agent.visualReviewPausedDetail");
   if (presentation === "capturing-canvas")
     return t("agent.workflowCapturingCanvas");
   if (presentation === "repairing-components")
@@ -276,6 +278,7 @@ export function isRoutineRecoverableToolFailure(
   code: string,
   details?: AgentToolFailureDetails,
 ): boolean {
+  if (code === "design_visual_review_no_progress") return false;
   if (details?.kind === "design-workflow") return true;
   if (details?.kind === "design-transaction") {
     return ROUTINE_DESIGN_TRANSACTION_CODES.has(code);
@@ -296,6 +299,8 @@ const ROUTINE_DESIGN_TRANSACTION_CODES = new Set([
 ]);
 
 export function toolFailureTitle(code: string, t: Translate): string {
+  if (code === "design_visual_review_no_progress")
+    return t("agent.visualReviewPaused");
   if (code === "tool_protocol_no_progress") {
     return t("agent.toolProtocolNoProgress");
   }

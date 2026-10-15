@@ -6,6 +6,33 @@ import {
 } from "./system-prompt";
 
 describe("OpenDesign Agent system prompt", () => {
+  it("reports review limits without forcing more writes, repeated capture or an unfinished Run", () => {
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "visual_review_no_progress limit pauses independent review, not ordinary editing or response completion",
+    );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "do not repeat the blocked capture",
+    );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "never redraw a committed design solely to retry an unavailable critic",
+    );
+  });
+
+  it("distinguishes generated call-local IDs from ordinary edit namespaces", () => {
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "generate_design uses short call-local IDs",
+    );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "Main binds their stable identities",
+    );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "For ordinary edits that create new entities, use the exact new-node namespace from inspection",
+    );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).not.toContain(
+      "Use the exact new-node namespace from inspection for newly authored IDs",
+    );
+  });
+
   it("offers declared design methods without classifying user messages", () => {
     for (const skill of BUILTIN_DESIGN_PLANNING_SKILLS) {
       expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(`id="${skill.id}"`);

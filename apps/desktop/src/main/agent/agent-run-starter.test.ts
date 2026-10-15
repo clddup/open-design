@@ -552,7 +552,9 @@ describe("Agent Run starter", () => {
     scheduler.record({
       type: "tool.completed",
       runId: source.runId,
-      toolCallId: "inspect_source",
+      toolCallId: "apply_source",
+      revision: 5,
+      transactionId: "transaction_source",
       result: { delivery: incomplete },
     });
     const decision = scheduler.record({

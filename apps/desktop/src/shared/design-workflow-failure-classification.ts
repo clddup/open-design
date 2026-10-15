@@ -18,6 +18,7 @@ export type DesignWorkflowFailurePresentation =
   | "repairing-components"
   | "repairing-plan"
   | "repairing-layout"
+  | "review-paused"
   | "canvas-changed"
   | "scope-conflict";
 
@@ -145,6 +146,7 @@ function workflowPresentation(
   code: DesignWorkflowFailureCode,
   phase: DesignWorkflowFailurePhase,
 ): DesignWorkflowFailurePresentation {
+  if (code === "visual_review_no_progress") return "review-paused";
   if (code === "revision_conflict") return "canvas-changed";
   if (code === "scope_conflict") return "scope-conflict";
   if (phase === "capture") return "capturing-canvas";

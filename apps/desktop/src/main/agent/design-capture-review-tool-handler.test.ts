@@ -12,7 +12,10 @@ import {
 import {
   requireDesignVisualCriticAttachment,
   runIndependentDesignVisualCritic,
+  type DesignVisualCriticContext,
 } from "./design-visual-critic.js";
+import { DesignVisualReviewController } from "./design-visual-review-controller.js";
+import type { GlobalTaskCoordinator } from "./global-task-coordinator.js";
 import { requireCanvasCaptureLayoutQuality } from "./canvas-capture-quality.js";
 import {
   createDesignCaptureReviewSession,
@@ -90,6 +93,9 @@ function setup(options: { inspectionRevision?: number } = {}) {
       ),
     );
   const coordinator = {
+    reviewVisualCapture: vi.fn<GlobalTaskCoordinator["reviewVisualCapture"]>(
+      (_context, _evidence, _signal, execute) => execute(),
+    ),
     resolveCanvasCaptureTarget: vi.fn(() => captureTarget),
     recordDocumentInspection: vi.fn(),
     resolveVisualCriticContext: vi.fn(),
@@ -106,13 +112,14 @@ function setup(options: { inspectionRevision?: number } = {}) {
     resolveVisualCriticSelection: vi.fn(() => criticSelection),
   };
   const getModelProviderHost = vi.fn(() => modelProviderHost as never);
-  const session = createDesignCaptureReviewSession({
+  const sessionInput = {
     context,
     signal: new AbortController().signal,
     coordinator: coordinator as never,
     execute,
     getModelProviderHost,
-  });
+  };
+  const session = createDesignCaptureReviewSession(sessionInput);
 
   vi.mocked(requireCanvasCaptureLayoutQuality).mockReturnValue(
     layoutQuality as never,
@@ -131,12 +138,99 @@ function setup(options: { inspectionRevision?: number } = {}) {
     modelProviderHost,
     reviewWorkflow,
     session,
+    sessionInput,
   };
+}
+
+function enableCachedCritic(state: ReturnType<typeof setup>) {
+  const controller = new DesignVisualReviewController();
+  const attachment = {
+    attachmentId: "image_" + "a".repeat(64),
+    name: "capture.jpg",
+    mimeType: "image/jpeg" as const,
+    byteSize: 128,
+  };
+  const evidence: DesignVisualCriticContext = {
+    runId: context.runId,
+    observedRevision: 7,
+    modelSelection: state.criticSelection,
+    userRequest: "Design an editable poster",
+    plan: { deliverable: "poster", objective: "Poster", skillRefs: [] },
+    target: {
+      targetId: "frame_delivery",
+      label: "Poster",
+      objective: "Poster",
+    },
+    phase: "draft",
+    attachment,
+    referenceAttachments: [],
+  };
+  vi.mocked(requireDesignVisualCriticAttachment).mockReturnValue(attachment);
+  state.coordinator.resolveVisualCriticContext.mockReturnValue(evidence);
+  state.coordinator.reviewVisualCapture.mockImplementation(
+    (_context, evidence, signal, execute) =>
+      controller.review(context.documentId, evidence, signal, execute),
+  );
+  vi.mocked(runIndependentDesignVisualCritic).mockResolvedValue({
+    version: 1,
+    observedRevision: 7,
+    passed: true,
+    averageScore: 8,
+    summary: "Ready",
+    criteria: {},
+    failedCriteria: [],
+    refinements: [],
+    review: null,
+  });
 }
 
 describe("Design capture/review Main session", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it("shares exact-evidence review across separately created tool sessions", async () => {
+    const state = setup();
+    enableCachedCritic(state);
+    await state.session.capture(captureCall);
+    await createDesignCaptureReviewSession(state.sessionInput).capture(
+      captureCall,
+    );
+    expect(runIndependentDesignVisualCritic).toHaveBeenCalledOnce();
+    expect(state.execute).toHaveBeenCalledTimes(6);
+    expect(state.coordinator.recordCanvasCapture).toHaveBeenCalledTimes(2);
+    await expect(
+      createDesignCaptureReviewSession(state.sessionInput).capture(captureCall),
+    ).rejects.toMatchObject({
+      cause: { code: "design_visual_review_no_progress" },
+    });
+    expect(runIndependentDesignVisualCritic).toHaveBeenCalledOnce();
+    expect(state.coordinator.recordCanvasCapture).toHaveBeenCalledTimes(2);
+  });
+
+  it("rechecks current revision even for a cached successful review", async () => {
+    const state = setup();
+    enableCachedCritic(state);
+    await state.session.capture(captureCall);
+    state.coordinator.getDeliveryLedger.mockClear();
+    Object.assign(state.coordinator, { invalidateCanvasReview: vi.fn() });
+    state.execute
+      .mockResolvedValueOnce(state.captureResult)
+      .mockResolvedValueOnce(state.inspection)
+      .mockResolvedValueOnce({ ...state.inspection, observedRevision: 8 });
+    const result = await createDesignCaptureReviewSession(
+      state.sessionInput,
+    ).capture(captureCall);
+    expect(runIndependentDesignVisualCritic).toHaveBeenCalledOnce();
+    expect(result.content).toMatchObject({
+      reviewWorkflow: {
+        capturedRevision: 7,
+        currentRevision: 8,
+        verified: false,
+        nextAction: "inspect-and-recapture",
+      },
+    });
+    expect(state.coordinator.recordCanvasCapture).toHaveBeenCalledTimes(1);
   });
 
   it("returns null for another tool family without touching Run services", async () => {
@@ -290,7 +384,7 @@ describe("Design capture/review Main session", () => {
     await state.session.capture(captureCall, reportProgress);
 
     expect(reportProgress).toHaveBeenCalledWith(
-      "Running independent visual critic",
+      "Checking exact-revision visual review",
       0.94,
     );
     expect(state.coordinator.resolveVisualCriticContext).toHaveBeenCalledWith(

@@ -4,6 +4,7 @@ import type {
   TrustedToolContext,
   TrustedToolResult,
 } from "@opendesign/agent-contracts";
+import { isTrustedToolFailure } from "@opendesign/agent-contracts";
 import {
   DESIGN_CAPTURE_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
@@ -202,28 +203,36 @@ async function runVisualReview(
   context: DesignVisualCriticContext,
   reportProgress?: ReportProgress,
 ): Promise<VisualReview> {
-  reportProgress?.("Running independent visual critic", 0.94);
+  reportProgress?.("Checking exact-revision visual review", 0.94);
   const host = input.getModelProviderHost();
   try {
-    const critic = await runIndependentDesignVisualCritic(
-      host,
-      {
-        ...context,
-        ...(captured.layoutQuality?.checkedQualityNodeCount !== undefined
-          ? {
-              checkedQualityNodeCount:
-                captured.layoutQuality.checkedQualityNodeCount,
-            }
-          : {}),
-        modelSelection: host.resolveVisualCriticSelection(
-          context.modelSelection,
-        ),
-      },
+    const evidence = {
+      ...context,
+      ...(captured.layoutQuality?.checkedQualityNodeCount !== undefined
+        ? {
+            checkedQualityNodeCount:
+              captured.layoutQuality.checkedQualityNodeCount,
+          }
+        : {}),
+      modelSelection: host.resolveVisualCriticSelection(context.modelSelection),
+    };
+    const critic = await input.coordinator.reviewVisualCapture(
+      input.context,
+      evidence,
       input.signal,
+      () => runIndependentDesignVisualCritic(host, evidence, input.signal),
     );
     return { critic };
   } catch (error) {
     if (input.signal.aborted) throw error;
+    if (error instanceof DOMException && error.name === "AbortError")
+      throw error;
+    if (
+      error instanceof Error &&
+      isTrustedToolFailure(error.cause) &&
+      error.cause.code === "design_visual_review_no_progress"
+    )
+      throw error;
     return { unavailable: { message: errorMessage(error) } };
   }
 }

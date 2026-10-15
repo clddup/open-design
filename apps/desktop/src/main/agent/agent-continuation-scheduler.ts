@@ -34,6 +34,7 @@ export class AgentContinuationScheduler {
   readonly #requestsByRunId = new Map<string, RunStartRequest>();
   readonly #nextRunIdByParentRunId = new Map<string, string>();
   readonly #pendingConversationIdByRunId = new Map<string, string>();
+  readonly #progressingRunIds = new Set<string>();
   #sequence = 0;
 
   constructor(private readonly now: () => number = () => Date.now()) {}
@@ -43,7 +44,17 @@ export class AgentContinuationScheduler {
       throw new Error(`Agent Run is already registered: ${request.runId}`);
     }
     this.#requestsByRunId.set(request.runId, structuredClone(request));
+    this.#progressingRunIds.delete(request.runId);
     this.#pendingConversationIdByRunId.delete(request.runId);
+  }
+
+  recordInitialInspection(
+    runId: string,
+    inspection: NonNullable<RunStartRequest["initialDesignInspection"]>,
+  ): void {
+    if (!this.#requestsByRunId.has(runId)) return;
+    const delivery = inspection.content.unfinishedDelivery;
+    if (delivery) this.#deliveryByRunId.set(runId, structuredClone(delivery));
   }
 
   hasActiveConversationRun(conversationId: string): boolean {
@@ -111,6 +122,7 @@ export class AgentContinuationScheduler {
   }
 
   forgetRun(runId: string): void {
+    this.#progressingRunIds.delete(runId);
     this.#cancellationRequestedRunIds.delete(runId);
     this.#requestsByRunId.delete(runId);
     this.#deliveryByRunId.delete(runId);
@@ -127,11 +139,23 @@ export class AgentContinuationScheduler {
   record(event: AgentEvent): AgentContinuationDecision | null {
     const runId = "runId" in event ? event.runId : undefined;
     if (!runId) return null;
+    const source = this.#requestsByRunId.get(runId);
     if (deliveryWasSuperseded(event)) {
       this.#deliveryByRunId.delete(runId);
       this.#remainingScopeByRunId.delete(runId);
     } else {
       const delivery = deliveryFromEvent(event);
+      if (
+        source &&
+        runMadeProgress(
+          event,
+          source,
+          this.#deliveryByRunId.get(runId),
+          delivery,
+        )
+      ) {
+        this.#progressingRunIds.add(runId);
+      }
       if (delivery) this.#deliveryByRunId.set(runId, structuredClone(delivery));
       const remainingScope = remainingScopeFromEvent(event);
       if (remainingScope !== undefined) {
@@ -140,8 +164,8 @@ export class AgentContinuationScheduler {
     }
     if (event.type !== "run.completed") return null;
 
-    const source = this.#requestsByRunId.get(runId);
     const currentDelivery = this.#deliveryByRunId.get(runId);
+    const madeProgress = this.#progressingRunIds.delete(runId);
     const hasRemainingScope = this.#remainingScopeByRunId.get(runId) === true;
     const cancellationRequested =
       this.#cancellationRequestedRunIds.delete(runId);
@@ -159,7 +183,7 @@ export class AgentContinuationScheduler {
     const reason = "budget" as const;
     const previousAttempt = source.continuation?.attempt ?? 0;
     const nextAttempt = previousAttempt + 1;
-    if (nextAttempt > MAX_CONTINUATION_ATTEMPTS) {
+    if (!madeProgress || nextAttempt > MAX_CONTINUATION_ATTEMPTS) {
       return {
         kind: "needs-attention",
         attempt: clampAttempt(Math.max(previousAttempt, 1)),
@@ -185,6 +209,34 @@ export class AgentContinuationScheduler {
       },
     };
   }
+}
+
+function runMadeProgress(
+  event: AgentEvent,
+  source: RunStartRequest,
+  previous: DesignDeliveryLedger | undefined,
+  current: DesignDeliveryLedger | undefined,
+): boolean {
+  if (event.type !== "tool.completed") return false;
+  if (
+    event.transactionId &&
+    event.revision !== undefined &&
+    event.revision > source.revision
+  )
+    return true;
+  if (!isRecord(event.result) || !isRecord(event.result.reviewWorkflow))
+    return false;
+  if (event.result.reviewWorkflow.verified !== true || !current) return false;
+  return current.targets.some((target) => {
+    if (target.status !== "verified") return false;
+    const prior = previous?.targets.find(
+      (candidate) => candidate.targetId === target.targetId,
+    );
+    return (
+      prior?.status !== "verified" ||
+      prior.verifiedRevision !== target.verifiedRevision
+    );
+  });
 }
 
 function deliveryWasSuperseded(event: AgentEvent): boolean {

@@ -363,7 +363,9 @@ describe("AgentRunCoordinator", () => {
     fixture.coordinator.handleEvent({
       type: "tool.completed",
       runId: source.runId,
-      toolCallId: "inspect_1",
+      toolCallId: "apply_1",
+      revision: 5,
+      transactionId: "transaction_1",
       result: {
         delivery: {
           version: 4,

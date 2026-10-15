@@ -169,6 +169,11 @@ export const agentConversationMessages = {
   "agent.timeoutTotalDetail": "Provider 请求已达到 {{duration}} 的总处理时限。",
   "agent.providerConnectionInterrupted": "模型连接已中断",
   "agent.reconnecting": "正在重新连接 {{attempt}}/{{total}}",
+  "agent.continuingTask": "继续处理设计 {{attempt}}/{{total}}",
+  "agent.continuationPaused": "自动推进已暂停，已有成果保留",
+  "agent.visualReviewPaused": "自动视觉审核已暂停",
+  "agent.visualReviewPausedDetail":
+    "重复审核或多轮调整未取得足够改善。已有设计和审核发现保留，当前结果不代表审核通过；仍可继续编辑或在下一条消息中重新审核。",
   "agent.connectionRecovered": "模型连接已恢复",
   "agent.failureRetryable": "可直接重试本次请求。",
   "agent.failureNeedsChange": "调整请求或配置后再重试。",
@@ -181,7 +186,8 @@ export const agentConversationMessages = {
   "agent.canvasChanged": "应用前画布已发生变化，Agent 可重新读取后重试。",
   "agent.canvasScopeConflict":
     "这次修改与当前画布作用域不匹配，Agent 可重新读取画布后重试。",
-  "agent.contextLimitDetail": "发送新消息即可继续。",
+  "agent.contextLimitDetail":
+    "完整需求超出当前模型的可用上下文。已提交设计仍保留；可换用更大上下文模型，或在新会话中分批处理。",
   "agent.tryAgain": "请重试，或发送新的修改要求。",
   "agent.taskCompleted": "任务已完成",
   "agent.taskStopped": "任务已停止",
