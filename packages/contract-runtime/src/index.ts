@@ -1,5 +1,8 @@
-import type { TSchema } from "@sinclair/typebox";
+import { Type, type TSchema } from "@sinclair/typebox";
+import type { ValueErrorType } from "@sinclair/typebox/errors";
 import { Value } from "@sinclair/typebox/value";
+import { schemaErrorDiagnostics } from "./schema-diagnostics.js";
+export { validationFailureFingerprint } from "./validation-fingerprint.js";
 
 export type ValidationIssueScalar = string | number | boolean | null;
 export type ValidationIssueValue =
@@ -219,9 +222,14 @@ export function contractSchemaIssues(
       code: options.code,
       path,
       message: issue.message,
+      ...(issue.expected === undefined ? {} : { expected: issue.expected }),
+      ...(issue.actual === undefined ? {} : { actual: issue.actual }),
       recovery:
-        options.recovery ??
-        `Correct the reported ${options.subject} field and submit one revised call; do not repeat unchanged arguments.`,
+        issue.recovery && options.recovery
+          ? `${issue.recovery} ${options.recovery}`
+          : (options.recovery ??
+            issue.recovery ??
+            `Correct the reported ${options.subject} field and submit one revised call; do not repeat unchanged arguments.`),
     });
     if (issues.length >= (options.maximum ?? 64)) break;
   }
@@ -264,7 +272,10 @@ function formatFailure(
   return `${prefix} ${details}`.slice(0, 20_000);
 }
 
-export type SchemaValidationIssue = { path: string; message: string };
+export type SchemaValidationIssue = Pick<
+  ValidationIssue,
+  "path" | "message" | "expected" | "actual" | "recovery"
+>;
 
 export function schemaValidationIssues(
   schema: TSchema,
@@ -275,6 +286,7 @@ export function schemaValidationIssues(
       actionableSchemaErrors(error).map((actionable) => ({
         path: actionable.path,
         message: actionable.message,
+        ...schemaErrorDiagnostics(actionable),
       })),
     );
   } catch (error) {
@@ -293,6 +305,7 @@ export function schemaValidationIssues(
 }
 
 type NestedSchemaError = {
+  type: ValueErrorType;
   path: string;
   message: string;
   schema: TSchema;
@@ -321,18 +334,8 @@ function actionableSchemaErrors(error: NestedSchemaError): NestedSchemaError[] {
     error.value !== null &&
     !Array.isArray(error.value)
   ) {
-    const unknownDiscriminant = unknownSchemaDiscriminant(
-      variants,
-      error.value as Record<string, unknown>,
-    );
-    if (unknownDiscriminant) {
-      const path = `${error.path}/${escapeSchemaPointer(unknownDiscriminant)}`;
-      const discriminatorIssues = branches
-        .flat()
-        .filter((issue) => issue.path === path);
-      if (discriminatorIssues.length > 0)
-        return discriminatorIssues.slice(0, 1);
-    }
+    const unknown = unknownDiscriminantError(variants, error, branches);
+    if (unknown) return [unknown];
     return (
       branches
         .filter((branch) => branch.length > 0)
@@ -340,6 +343,34 @@ function actionableSchemaErrors(error: NestedSchemaError): NestedSchemaError[] {
     );
   }
   return [error];
+}
+
+function unknownDiscriminantError(
+  variants: readonly TSchema[],
+  error: NestedSchemaError,
+  branches: readonly NestedSchemaError[][],
+): NestedSchemaError | undefined {
+  const value = recordValue(error.value);
+  const discriminant = value
+    ? unknownSchemaDiscriminant(variants, value)
+    : null;
+  if (!discriminant) return undefined;
+  const path = `${error.path}/${escapeSchemaPointer(discriminant)}`;
+  const first = branches.flat().find((issue) => issue.path === path);
+  if (!first) return undefined;
+  const fields = variants
+    .map(
+      (variant) =>
+        (variant as { properties?: Record<string, TSchema> }).properties?.[
+          discriminant
+        ],
+    )
+    .filter((field): field is TSchema => field !== undefined);
+  return {
+    ...first,
+    schema: Type.Union(fields),
+    message: "Expected a declared discriminator value",
+  };
 }
 
 function unknownSchemaDiscriminant(

@@ -8,6 +8,7 @@ import {
   DesignGenerationContract,
   compileDesignGenerationToolInput,
 } from "./design-generation-tool";
+import { DESIGN_GENERATION_ELEMENT_SCHEMA } from "./design-generation-element-schema";
 
 const target = {
   targetId: "poster",
@@ -39,6 +40,96 @@ function payload(elements: unknown[]) {
 }
 
 describe("single authored generation hierarchy", () => {
+  it("publishes Group restrictions in the serialized Provider branch", () => {
+    const group = DESIGN_GENERATION_ELEMENT_SCHEMA.anyOf[0];
+    expect(JSON.parse(JSON.stringify(group))).toMatchObject({
+      properties: {
+        kind: { const: "group" },
+        fills: { type: "array", maxItems: 0 },
+        strokes: { type: "array", maxItems: 0 },
+        strokeWidth: { type: "number", minimum: 0, maximum: 0 },
+      },
+    });
+  });
+
+  it("accepts a Group with empty appearance and a visible child", () => {
+    const input = payload([
+      {
+        ...shape("group"),
+        kind: "group",
+        fills: [],
+        strokes: [],
+        strokeWidth: 0,
+        blendMode: "multiply",
+        effects: [{ type: "layer-blur", radius: 4 }],
+      },
+      shape("child", "group"),
+    ]);
+    expect(
+      schemaValidationIssues(DesignGenerationContract.schema, input),
+    ).toEqual([]);
+    expect(DesignGenerationContract.modelIssues(input)).toEqual([]);
+    expect(DesignGenerationContract.parse(input, { target }).ok).toBe(true);
+  });
+
+  it.each([
+    {
+      field: "fills",
+      value: [{ type: "solid", color: "#336699", opacity: 1 }],
+    },
+    {
+      field: "strokes",
+      value: [{ type: "solid", color: "#336699", opacity: 1 }],
+    },
+    { field: "strokeWidth", value: 1 },
+    { field: "cornerRadius", value: 8 },
+  ])(
+    "rejects Group $field in Provider and Main before binding",
+    ({ field, value }) => {
+      const input = payload([
+        { ...shape("group"), kind: "group", fills: [], [field]: value },
+        shape("child", "group"),
+      ]);
+      const path = `/designGeneration/elements/0/${field}`;
+      expect(
+        schemaValidationIssues(DesignGenerationContract.schema, input),
+      ).toContainEqual(expect.objectContaining({ path }));
+      expect(DesignGenerationContract.modelIssues(input)).toContainEqual(
+        expect.objectContaining({
+          code: "design_generation.schema_invalid",
+          path,
+        }),
+      );
+      expect(DesignGenerationContract.parse(input, { target })).toMatchObject({
+        ok: false,
+        issues: expect.arrayContaining([
+          expect.objectContaining({ path }),
+        ]) as unknown,
+      });
+    },
+  );
+
+  it("reports an unknown kind at the discriminant, not another branch's fields", () => {
+    const issues = DesignGenerationContract.modelIssues(
+      payload([{ ...shape("unknown"), kind: "unknown" }]),
+    );
+    expect(issues).toEqual([
+      expect.objectContaining({
+        path: "/designGeneration/elements/0/kind",
+        expected: [
+          "group",
+          "frame",
+          "rectangle",
+          "ellipse",
+          "path",
+          "text",
+          "image",
+        ],
+        actual: "unknown",
+      }),
+    ]);
+  });
+
   it.each([
     { opacity: 0 },
     { kind: "frame", fills: [] },

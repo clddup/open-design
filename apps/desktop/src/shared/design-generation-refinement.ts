@@ -93,7 +93,6 @@ export function refineDesignGeneration(
   const elementIds = new Map<string, string>();
   for (const [index, element] of input.designGeneration.elements.entries()) {
     const path = `/designGeneration/elements/${index}`;
-    refineElementAppearance(element, path, issues);
     refineElementParent(
       element,
       path,
@@ -177,47 +176,6 @@ function refineQualityProfile(
         );
       }
     }
-  }
-}
-
-function refineElementAppearance(
-  element: DesignGenerationElementInput,
-  path: string,
-  issues: ValidationIssue[],
-): void {
-  if (element.kind !== "group") return;
-  if (element.fills.length > 0) {
-    issues.push(
-      issue(
-        "design_generation.group_fills_unsupported",
-        `${path}/fills`,
-        "Group does not own shape fills; apply appearance to a child shape or use a Frame",
-        0,
-        element.fills.length,
-      ),
-    );
-  }
-  if (element.strokes.length > 0) {
-    issues.push(
-      issue(
-        "design_generation.group_strokes_unsupported",
-        `${path}/strokes`,
-        "Group does not own shape strokes; apply appearance to a child shape or use a Frame",
-        0,
-        element.strokes.length,
-      ),
-    );
-  }
-  if (element.strokeWidth !== 0) {
-    issues.push(
-      issue(
-        "design_generation.group_stroke_width_unsupported",
-        `${path}/strokeWidth`,
-        "Group strokeWidth must remain zero because Group has no shape stroke",
-        0,
-        element.strokeWidth,
-      ),
-    );
   }
 }
 

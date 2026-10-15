@@ -6,6 +6,7 @@ import {
   formatValidationFailure,
   type ValidationIssue,
 } from "@/shared/contract-validation.js";
+import { validationFailureFingerprint } from "@opendesign/contract-runtime";
 
 export function contractValidationError(
   subject: string,
@@ -24,15 +25,7 @@ export function contractValidationError(
     recoverable: true,
     details: {
       kind: "tool-validation",
-      fingerprint: [
-        "contract",
-        subject,
-        first.code ?? "invalid",
-        first.path,
-        fingerprintValue(first.actual),
-      ]
-        .join(":")
-        .slice(0, 256),
+      fingerprint: validationFailureFingerprint(subject, [first]),
       issues: projectedIssues.length > 0 ? projectedIssues : [first],
       recovery: { action: "correct-and-retry", required: false },
     },
@@ -41,15 +34,6 @@ export function contractValidationError(
     throw new TypeError("Host created an invalid contract failure");
   }
   return new Error(failure.value.message, { cause: failure.value });
-}
-
-function fingerprintValue(value: unknown): string {
-  if (value === undefined) return "unknown";
-  try {
-    return (JSON.stringify(value) ?? typeof value).slice(0, 96);
-  } catch {
-    return typeof value;
-  }
 }
 
 function projectIssue(issue: ValidationIssue): AgentToolFailureIssue {

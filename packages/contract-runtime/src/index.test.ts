@@ -7,6 +7,118 @@ import {
 } from "./index.js";
 
 describe("contract runtime", () => {
+  it.each([
+    {
+      input: { width: "wide" },
+      expected: { type: "number", minimum: 1, maximum: 20 },
+      actual: "wide",
+    },
+    {
+      input: { width: 21 },
+      expected: { type: "number", minimum: 1, maximum: 20 },
+      actual: 21,
+    },
+  ])(
+    "derives bounded type and range diagnostics from Schema: $input",
+    ({ input, expected, actual }) => {
+      const contract = defineContract<{ width: number }>({
+        schema: Type.Object({
+          width: Type.Number({ minimum: 1, maximum: 20 }),
+        }),
+        code: "example.schema_invalid",
+        subject: "example",
+      });
+      expect(contract.parse(input)).toMatchObject({
+        ok: false,
+        issues: [
+          {
+            path: "/width",
+            expected,
+            actual,
+            recovery: expect.any(String) as unknown,
+          },
+        ],
+      });
+    },
+  );
+
+  it("lists every allowed enum value without unrelated union branch errors", () => {
+    const schema = Type.Object({
+      mode: Type.Union([Type.Literal("read"), Type.Literal("write")]),
+    });
+    expect(schemaValidationIssues(schema, { mode: "execute" })).toEqual([
+      expect.objectContaining({
+        path: "/mode",
+        expected: ["read", "write"],
+        actual: "execute",
+      }),
+    ]);
+  });
+
+  it.each(["x".repeat(10000), { token: "never-disclose" }])(
+    "bounds unknown discriminants without exposing object contents",
+    (kind) => {
+      const schema = Type.Union([
+        Type.Object({ kind: Type.Literal("text"), text: Type.String() }),
+        Type.Object({ kind: Type.Literal("image"), assetId: Type.String() }),
+      ]);
+      const issues = schemaValidationIssues(schema, { kind });
+      expect(issues).toEqual([
+        expect.objectContaining({ path: "/kind", expected: ["text", "image"] }),
+      ]);
+      expect(JSON.stringify(issues)).not.toContain("never-disclose");
+      expect(JSON.stringify(issues).length).toBeLessThan(1000);
+    },
+  );
+
+  it("reports removal of additional fields without exposing object contents", () => {
+    const contract = defineContract<{ width: number }>({
+      schema: Type.Object(
+        { width: Type.Number() },
+        { additionalProperties: false },
+      ),
+      code: "example.schema_invalid",
+      subject: "example",
+    });
+    const result = contract.parse({
+      width: 1,
+      "secret/data": { token: "never-disclose", huge: "x".repeat(10000) },
+    });
+    expect(result).toMatchObject({
+      ok: false,
+      issues: [
+        {
+          path: "/secret~1data",
+          expected: "absent",
+          actual: { type: "object" },
+          recovery: expect.stringContaining("Remove") as unknown,
+        },
+      ],
+    });
+    expect(JSON.stringify(result)).not.toContain("never-disclose");
+    expect(JSON.stringify(result).length).toBeLessThan(1000);
+  });
+
+  it("bounds invalid strings and summarizes arrays instead of copying payloads", () => {
+    const schema = Type.Object({
+      label: Type.Number(),
+      items: Type.Array(Type.Unknown(), { maxItems: 0 }),
+    });
+    const issues = schemaValidationIssues(schema, {
+      label: "x".repeat(10000),
+      items: [{ token: "never-disclose" }],
+    });
+    expect(issues).toContainEqual(
+      expect.objectContaining({
+        path: "/items",
+        expected: { type: "array", maxItems: 0 },
+        actual: { type: "array", length: 1 },
+      }),
+    );
+    expect(JSON.stringify(issues)).not.toContain("never-disclose");
+    expect(JSON.stringify(issues).length).toBeLessThan(1000);
+  });
+
   it("returns the actionable field for a discriminated union", () => {
     const schema = Type.Union([
       Type.Object(

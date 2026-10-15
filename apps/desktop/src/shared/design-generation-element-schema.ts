@@ -84,13 +84,13 @@ function elementKinds<TBase extends typeof ELEMENT_BASE_PROPERTIES>(
 ) {
   const GROUP_ELEMENT_SCHEMA = Type.Object(
     {
-      ...baseProperties,
+      ...groupAppearanceProperties(baseProperties),
       kind: Type.Literal("group"),
     },
     {
       ...CLOSED,
       description:
-        "Group container. It has no cornerRadius; put appearance on child shapes or use a Frame.",
+        "Group container. fills and strokes must be empty; strokeWidth must be zero. It has no cornerRadius; put appearance on child shapes or use a Frame.",
     },
   );
 
@@ -213,6 +213,17 @@ function elementKinds<TBase extends typeof ELEMENT_BASE_PROPERTIES>(
   ]);
 }
 
+function groupAppearanceProperties<
+  TBase extends typeof ELEMENT_BASE_PROPERTIES,
+>(baseProperties: TBase): TBase {
+  return {
+    ...baseProperties,
+    fills: { ...baseProperties.fills, maxItems: 0 },
+    strokes: { ...baseProperties.strokes, maxItems: 0 },
+    strokeWidth: { ...baseProperties.strokeWidth, maximum: 0 },
+  };
+}
+
 function executableElementSchema<TBranches extends TObject[]>(
   schema: TUnion<TBranches>,
 ): TUnion<TBranches> {
@@ -238,9 +249,11 @@ function executableElementSchema<TBranches extends TObject[]>(
       type: "object",
       properties: {
         ...Object.fromEntries(
-          Object.keys(branch.properties).map((key) => [key, {}]),
+          Object.entries(branch.properties).map(([key, property]) => [
+            key,
+            key !== "kind" && property === properties[key] ? {} : property,
+          ]),
         ),
-        kind: branch.properties.kind,
       },
       required: branch.required,
       additionalProperties: false,

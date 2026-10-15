@@ -6,6 +6,7 @@ import {
   type ToolRisk,
 } from "@opendesign/agent-contracts";
 import type { AgentRunRequest } from "./run-request.js";
+import { validationFailureFingerprint } from "@opendesign/contract-runtime";
 import type { AgentToolDefinition } from "./runtime-ports.js";
 import type { toolResultAttachments } from "./tool-execution-semantics.js";
 
@@ -161,7 +162,7 @@ function invalidInputFailure(
     ...base,
     details: {
       kind: "tool-validation",
-      fingerprint: validationFingerprint(definition.name, issues),
+      fingerprint: validationFailureFingerprint(definition.name, issues),
       issues: issues.map((issue) => structuredClone(issue)),
       recovery: { action: "correct-and-retry", required: false },
     },
@@ -181,35 +182,6 @@ function validationIssuesMessage(
     })
     .join(" ");
   return `Invalid ${toolName} input. ${detail}`.slice(0, 20_000);
-}
-
-function validationFingerprint(
-  toolName: string,
-  issues: readonly {
-    code?: string;
-    path: string;
-    actual?: unknown;
-  }[],
-): string {
-  const first = issues[0];
-  return [
-    "validation",
-    toolName,
-    first?.code ?? "invalid",
-    first?.path || "/",
-    compactFingerprintValue(first?.actual),
-  ]
-    .join(":")
-    .slice(0, 256);
-}
-
-function compactFingerprintValue(value: unknown): string {
-  if (value === undefined) return "unknown";
-  try {
-    return (JSON.stringify(value) ?? typeof value).slice(0, 96);
-  } catch {
-    return typeof value;
-  }
 }
 
 function toolResultErrorText(value: unknown): string {

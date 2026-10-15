@@ -552,16 +552,19 @@ describe("design-generation tool", () => {
     expect(result.issues).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          code: "design_generation.group_fills_unsupported",
+          code: "design_generation.schema_invalid",
           path: "/designGeneration/elements/1/fills",
+          expected: { type: "array", maxItems: 0 },
         }),
         expect.objectContaining({
-          code: "design_generation.group_strokes_unsupported",
+          code: "design_generation.schema_invalid",
           path: "/designGeneration/elements/1/strokes",
+          expected: { type: "array", maxItems: 0 },
         }),
         expect.objectContaining({
-          code: "design_generation.group_stroke_width_unsupported",
+          code: "design_generation.schema_invalid",
           path: "/designGeneration/elements/1/strokeWidth",
+          expected: { type: "number", minimum: 0, maximum: 0 },
         }),
       ]),
     );

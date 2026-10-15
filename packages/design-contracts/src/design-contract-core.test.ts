@@ -166,10 +166,12 @@ describe("design contract core", () => {
 
     const issues = schemaValidationIssues(DesignNodeSchema, invalidFrame);
 
-    expect(issues).toContainEqual({
-      path: "/properties/clipsContent",
-      message: "Expected required property",
-    });
+    expect(issues).toContainEqual(
+      expect.objectContaining({
+        path: "/properties/clipsContent",
+        message: "Expected required property",
+      }),
+    );
     expect(
       issues.some((issue) => issue.message === "Expected union value"),
     ).toBe(false);
@@ -190,10 +192,12 @@ describe("design contract core", () => {
         },
       ],
     });
-    expect(transactionIssues).toContainEqual({
-      path: "/commands/0/node/properties/clipsContent",
-      message: "Expected required property",
-    });
+    expect(transactionIssues).toContainEqual(
+      expect.objectContaining({
+        path: "/commands/0/node/properties/clipsContent",
+        message: "Expected required property",
+      }),
+    );
     expect(
       transactionIssues.some(
         (issue) => issue.message === "Expected union value",

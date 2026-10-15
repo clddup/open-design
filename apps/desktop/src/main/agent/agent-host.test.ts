@@ -272,7 +272,7 @@ describe("AgentHost model bridge", () => {
       type: "agent.error",
       code: "invalid_event",
       message:
-        "Agent returned an invalid event: Invalid Agent event. agent_event.schema_invalid at /blocks: Expected array. Correct the reported Agent event field before retrying.",
+        'Agent returned an invalid event: Invalid Agent event. agent_event.schema_invalid at /blocks: Expected array. Expected {"type":"array","maxItems":1024}. Actual "invalid". Correct the reported Agent event field before retrying.',
       runId: "run_invalid_event",
     });
     expect(electron.child.postMessage).toHaveBeenCalledWith({
